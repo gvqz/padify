@@ -1,5 +1,5 @@
-Notepad
-========
+Padify
+======
 
 An offline-capable, no-frills notepad. Quick, distraction-free, dark-mode enabled, mobile-compatible and minimalist in nature. Runs entirely in your browser — your notes never leave your device.
 
@@ -20,13 +20,13 @@ Built as a Progressive Web App using the [Service Worker API](https://developer.
 - Floating window (Picture-in-Picture) to take notes on top of other apps
 - Download notes as **plain text**, **PDF**, **HTML**, and **DOCX**
 - Monospaced, serif and dyslexic fonts
-- Optional typewriter sound, break reminders, and 20+ ambient sounds
+- Optional typewriter sound, break reminders, and a built-in music player with generative ambient tracks plus a 25-sound ambience mixer
 - Unicode character picker — 5,400+ symbols, math, arrows, currency, box drawing, braille and emoji with search, favorites and recents (`Ctrl/Cmd + Shift + O`)
 - Privacy-focused — nothing you type is ever collected or sent anywhere
 
 ## Mini tools
 
-The notepad ships with a small suite of companion tools:
+The app ships with a small suite of companion tools:
 
 - [Rich Text Notes](/rich-text-notes/) — write with formatting, export as PDF
 - [Markdown Editor](/markdown-editor/) — two-pane markdown editor with live preview
@@ -37,7 +37,6 @@ The notepad ships with a small suite of companion tools:
 - [Text Tools](/text-tools/) — line operations, cleanup, find & replace, data extraction
 - [Text Diff](/text-diff/) — compare two blocks of text
 - [Teleprompter](/teleprompter/) — scrolling text with adjustable speed and styling
-- [Deep Breath](/deep-breath/) — a simple guided breathing exercise
 - [Drawingpad](/drawingpad/) — freehand drawing/sketching (beta)
 - [Tasks](/tasks/) — a dead simple todo manager
 

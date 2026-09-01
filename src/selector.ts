@@ -22,8 +22,7 @@ export interface NotepadUI {
   preferencesModal: JQuery;
   resetPreferences: JQuery;
   showWordCountPill: JQuery;
-  transparentWordCountPill: JQuery;
-  frostedGlassPillPref: JQuery;
+  clearTabIndentation: JQuery;
   wordCount: JQuery;
   installAppButtonContainer: JQuery;
   wordCountContainer: JQuery;
@@ -34,7 +33,6 @@ export interface NotepadUI {
   shareNotes: JQuery;
   dyslexic: JQuery;
   spellCheck: JQuery;
-  tabIndentation: JQuery;
   breakReminders: JQuery;
   explodingEffect: JQuery;
   bottomLine: JQuery;
@@ -80,8 +78,6 @@ export interface EditorConfig {
   defaultOptimalLineLength: boolean;
   defaultOptimalLineLengthPadding: string;
   defaultSpellCheck: boolean;
-  defaultTabIndentation: boolean;
-  defaultTransparentWordCountPillSelected: boolean;
   defaultTypewriterSound: boolean;
   defaultTypewriterVolume: number;
   defaultBreakReminders: boolean;
@@ -146,8 +142,7 @@ export function selector(): AppSelector {
       preferencesModal: selectById('preferencesModal'),
       resetPreferences: selectById('resetPreferences'),
       showWordCountPill: selectById('showWordCountPill'),
-      transparentWordCountPill: selectById('transparentWordCountPill'),
-      frostedGlassPillPref: selectById('frostedGlassPillPref'),
+      clearTabIndentation: selectById('clearTabIndentation'),
       wordCount: selectById('wordCount'),
       installAppButtonContainer: selectByClassName('install-app-btn-container'),
       wordCountContainer: selectByClassName('word-count-container'),
@@ -158,7 +153,6 @@ export function selector(): AppSelector {
       shareNotes: selectById('shareNotes'),
       dyslexic: selectById('dyslexic'),
       spellCheck: selectById('spellCheck'),
-      tabIndentation: selectById('tabIndentation'),
       breakReminders: selectById('breakReminders'),
       explodingEffect: selectById('explodingEffect'),
       bottomLine: selectByClassName('bottom-line'),
@@ -202,8 +196,6 @@ export function selector(): AppSelector {
       defaultOptimalLineLength: false,
       defaultOptimalLineLengthPadding: '15px 24px 80px',
       defaultSpellCheck: true,
-      defaultTabIndentation: false,
-      defaultTransparentWordCountPillSelected: false,
       defaultTypewriterSound: false,
       defaultTypewriterVolume: 25,
       defaultBreakReminders: false,

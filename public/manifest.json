@@ -1,7 +1,7 @@
 {
-  "short_name": "Notepad",
-  "name": "Notepad",
-  "description": "An offline-capable, quick, and distraction-free Notepad",
+  "short_name": "Padify",
+  "name": "Padify",
+  "description": "An offline-capable, quick, and distraction-free notepad",
   "display": "standalone",
   "icons": [
     {
@@ -135,18 +135,6 @@
       ]
     },
     {
-      "name": "Deep Breath",
-      "short_name": "Deep Breath",
-      "description": "A simple breathing exercise to help you de-stress yourself.",
-      "url": "/deep-breath/",
-      "icons": [
-        {
-          "src": "img/minitools/deep-breathe.png",
-          "sizes": "96x96"
-        }
-      ]
-    },
-    {
       "name": "Drawingpad",
       "short_name": "Drawingpad",
       "description": "A simple drawing pad to draw/write notes freehand.",
@@ -174,5 +162,7 @@
   "start_url": "index.html",
   "theme_color": "#3F51B5",
   "background_color": "#EEEEEE",
-  "display_override": ["minimal-ui"]
+  "display_override": [
+    "minimal-ui"
+  ]
 }

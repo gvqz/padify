@@ -237,10 +237,10 @@ export class WhiteNoisePlayer {
             });
         });
 
-        // Handle modal close
-        $('#whiteNoiseModal').on('hidden.bs.modal', () => {
-            // Optional: pause all sounds when modal is closed
-            // this.pauseAll();
+        // Handle modal close (the ambient mixer now lives inside the music
+        // player modal; playback intentionally continues after closing).
+        $('#musicPlayerModal').on('hidden.bs.modal', () => {
+            // Intentionally empty: sounds keep playing when the modal closes.
         });
 
         this.initializePresetsUI();

@@ -33,6 +33,7 @@ import {
         getDocxFileName,
         getHtmlFileName
 } from './utils';
+import Swal from 'sweetalert2';
 import { initUnicodePicker } from './unicode/picker';
 import { timerConfig, stopTimer } from './timer';
 
@@ -293,7 +294,7 @@ $(document).ready(function () {
                 closeBreakReminderPopup();
         });
 
-        const welcomeText = `Welcome! This is an offline-capable Notepad which is a Progressive Web App.
+        const welcomeText = `Welcome! Padify is an offline-capable notepad which is a Progressive Web App.
 
 The app serves the following features:
 
@@ -303,7 +304,7 @@ The app serves the following features:
 - Dark mode.
 - Privacy-focused - Never collects your precious data.
 - Light-weight - Loads almost instantly.
-- Writing timer.
+- Writing sessions with a pick-a-duration timer.
 - View Note Statistics.
 - Snapshots.
 - Ability to mimic typewriter sound when typing.
@@ -313,7 +314,7 @@ The app serves the following features:
 - Full-screen mode for a distraction-free writing experience.
 - Floating window (in supported browsers) to effectively take notes across other apps.
 - Download notes as plain text, PDF, HTML, and DOCX file.
-- Ability to play 20+ ambient sounds to help you focus.
+- Ability to play generative ambient music and mix 25 ambience sounds to help you focus.
 
 CAUTION: Since the app uses the browser's localStorage to store your notes,
 it's recommended that you take a backup of your notes more often using the
@@ -733,27 +734,17 @@ it's recommended that you take a backup of your notes more often using the
         if (userChosenWordCountPillSelected) {
                 if (userChosenWordCountPillSelected === 'Yes') {
                         notepad.wordCountContainer.show();
-                        notepad.frostedGlassPillPref.show();
                 } else {
                         notepad.wordCountContainer.hide();
-                        notepad.frostedGlassPillPref.hide();
                 }
                 notepad.showWordCountPill.prop('checked', userChosenWordCountPillSelected === 'Yes');
         } else {
                 notepad.wordCountContainer.show();
-                notepad.frostedGlassPillPref.show();
                 notepad.showWordCountPill.prop('checked', true);
         }
 
-        const userChosenTransparentWordCountPillSelected = state.userChosenTransparentWordCountPillSelected;
-
-        if (userChosenTransparentWordCountPillSelected) {
-                userChosenTransparentWordCountPillSelected === 'Yes' ? notepad.wordCountContainer.addClass('transparency') : notepad.wordCountContainer.removeClass('transparency');
-                notepad.transparentWordCountPill.prop('checked', userChosenTransparentWordCountPillSelected === 'Yes');
-        } else {
-                notepad.wordCountContainer.removeClass('transparency');
-                notepad.transparentWordCountPill.prop('checked', false);
-        }
+        // The word count pill always uses the frosted glass style.
+        notepad.wordCountContainer.addClass('transparency');
 
         if (state.userChosenWriteDirection) {
                 notepad.note.css('direction', state.userChosenWriteDirection);
@@ -821,12 +812,6 @@ it's recommended that you take a backup of your notes more often using the
                 notepad.spellCheck.prop('checked', true);
         }
 
-        if (state.userChosenTabIndentation) {
-                notepad.tabIndentation.prop('checked', state.userChosenTabIndentation === 'Yes');
-        } else {
-                notepad.tabIndentation.prop('checked', false);
-        }
-
         if (state.userChosenBreakReminders) {
                 const isBreakRemindersEnabled = state.userChosenBreakReminders === 'Yes';
                 notepad.breakReminders.prop('checked', isBreakRemindersEnabled);
@@ -879,9 +864,7 @@ it's recommended that you take a backup of your notes more often using the
         }, 500));
 
         notepad.note.keydown(function (e) {
-                const tabIndentation = notepad.tabIndentation.prop('checked');
-
-                if (e.key === "Tab" && tabIndentation) {
+                if (e.key === "Tab") {
                         e.preventDefault();
 
                         let textarea = e.target as HTMLTextAreaElement;
@@ -1052,23 +1035,47 @@ it's recommended that you take a backup of your notes more often using the
         notepad.showWordCountPill.on('change', function (e) {
                 if ($(this).is(':checked')) {
                         notepad.wordCountContainer.show();
-                        notepad.frostedGlassPillPref.show();
                         setState('userChosenWordCountPillSelected', 'Yes');
                 } else {
                         notepad.wordCountContainer.hide();
-                        notepad.frostedGlassPillPref.hide();
                         setState('userChosenWordCountPillSelected', 'No');
                 }
         });
 
-        notepad.transparentWordCountPill.on('change', function (e) {
-                if ($(this).is(':checked')) {
-                        notepad.wordCountContainer.addClass('transparency');
-                        setState('userChosenTransparentWordCountPillSelected', 'Yes');
-                } else {
-                        notepad.wordCountContainer.removeClass('transparency');
-                        setState('userChosenTransparentWordCountPillSelected', 'No');
+        notepad.clearTabIndentation.on('click', function () {
+                const noteText = notepad.note.val() as string;
+                const tabCount = (noteText.match(/\t/g) || []).length;
+
+                if (tabCount === 0) {
+                        showToast('No tab indentation found in your notes.');
+                        return;
                 }
+
+                Swal.fire({
+                        title: 'Remove all tabs?',
+                        text: `This will remove ${tabCount} tab${tabCount === 1 ? '' : 's'} of indentation from your notes. You can undo it with Ctrl/Cmd + Z.`,
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Remove tabs',
+                        confirmButtonColor: '#d9534f'
+                }).then((result) => {
+                        if (!result.isConfirmed) {
+                                return;
+                        }
+
+                        const textarea = notepad.note.get(0) as HTMLTextAreaElement;
+                        const cleanedText = noteText.replace(/\t/g, '');
+
+                        // Replace the whole content through insertText so the
+                        // browser keeps the edit on its native undo stack.
+                        textarea.focus();
+                        textarea.setSelectionRange(0, textarea.value.length);
+                        document.execCommand('insertText', false, cleanedText);
+
+                        setState('note', cleanedText);
+                        updateWordCountPill(cleanedText);
+                        showToast(`Removed ${tabCount} tab${tabCount === 1 ? '' : 's'} from your notes.`);
+                });
         });
 
         notepad.optimalLineLength.on('change', function (e) {
@@ -1090,14 +1097,6 @@ it's recommended that you take a backup of your notes more often using the
                 } else {
                         notepad.note.attr('spellcheck', false as unknown as string);
                         setState('userChosenSpellCheck', 'No');
-                }
-        })
-
-        notepad.tabIndentation.on('change', function (e) {
-                if ($(this).is(':checked')) {
-                        setState('userChosenTabIndentation', 'Yes');
-                } else {
-                        setState('userChosenTabIndentation', 'No');
                 }
         })
 
@@ -1159,15 +1158,9 @@ it's recommended that you take a backup of your notes more often using the
                         notepad.spellCheck.prop('checked', editorConfig.defaultSpellCheck);
                 }
 
+                // Tab indentation is always enabled now — drop any legacy state.
                 if (selector().state.userChosenTabIndentation) {
                         removeState('userChosenTabIndentation');
-                        notepad.tabIndentation.prop('checked', editorConfig.defaultTabIndentation);
-                }
-
-                if (selector().state.userChosenTransparentWordCountPillSelected) {
-                        removeState('userChosenTransparentWordCountPillSelected');
-                        notepad.wordCountContainer.removeClass('transparency')
-                        notepad.transparentWordCountPill.prop('checked', editorConfig.defaultTransparentWordCountPillSelected);
                 }
 
                 if (selector().state.userChosenTypewriterSound) {
@@ -1509,7 +1502,7 @@ installApp.addEventListener('click', async () => {
                         deferredPrompt = null;
                 }
         } else {
-                showToast('Notepad is already installed.')
+                showToast('Padify is already installed.')
         }
 });
 
