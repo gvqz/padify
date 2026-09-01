@@ -1066,15 +1066,33 @@ it's recommended that you take a backup of your notes more often using the
                         const textarea = notepad.note.get(0) as HTMLTextAreaElement;
                         const cleanedText = noteText.replace(/\t/g, '');
 
-                        // Replace the whole content through insertText so the
-                        // browser keeps the edit on its native undo stack.
-                        textarea.focus();
-                        textarea.setSelectionRange(0, textarea.value.length);
-                        document.execCommand('insertText', false, cleanedText);
+                        const applyEdit = () => {
+                                // Replace the whole content through insertText so the
+                                // browser keeps the edit on its native undo stack.
+                                textarea.focus();
+                                textarea.setSelectionRange(0, textarea.value.length);
+                                const inserted = document.execCommand('insertText', false, cleanedText);
 
-                        setState('note', cleanedText);
-                        updateWordCountPill(cleanedText);
-                        showToast(`Removed ${tabCount} tab${tabCount === 1 ? '' : 's'} from your notes.`);
+                                // execCommand can fail silently while a Bootstrap modal
+                                // holds the focus — verify the result and repair.
+                                if (!inserted || textarea.value !== cleanedText) {
+                                        textarea.setRangeText(cleanedText, 0, textarea.value.length, 'end');
+                                        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                                }
+
+                                setState('note', cleanedText);
+                                updateWordCountPill(cleanedText);
+                                showToast(`Removed ${tabCount} tab${tabCount === 1 ? '' : 's'} from your notes.`);
+                        };
+
+                        // Bootstrap modals trap focus, which corrupts execCommand's
+                        // selection. Let the preferences dialog fade out first.
+                        if ($('#preferencesModal').hasClass('in')) {
+                                $('#preferencesModal').one('hidden.bs.modal', applyEdit);
+                                $('#preferencesModal').modal('hide');
+                        } else {
+                                applyEdit();
+                        }
                 });
         });
 
