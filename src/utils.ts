@@ -1,6 +1,5 @@
 import $ from 'jquery';
 import Swal from 'sweetalert2';
-import type { SweetAlertIcon } from 'sweetalert2';
 import { get, setState, selector } from './selector';
 import type { NotepadUI } from './selector';
 
@@ -374,7 +373,7 @@ export function copyNotesToClipboard(note: string): void {
         Swal.fire({
             toast: true,
             position: 'bottom',
-            icon: 'failure' as unknown as SweetAlertIcon,
+            icon: 'error',
             title: 'Fail to copy. Check permissions for clipboard.',
             showConfirmButton: false,
             timer: 2000,

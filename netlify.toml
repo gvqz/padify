@@ -1,0 +1,17 @@
+# Netlify build configuration.
+#
+# The site is a Vite + TypeScript project: sources live in src/ and static
+# assets in public/, so Netlify must run the build step and publish dist/.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Keep the service worker fresh so PWA updates roll out immediately.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

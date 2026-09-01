@@ -51,10 +51,6 @@ declare global {
 // working without emitting any runtime code.
 declare const note: HTMLTextAreaElement;
 
-// Google Analytics was removed from index.html, but app.js still calls `ga`
-// directly; the ambient declaration preserves that exact (throwing) behavior.
-declare function ga(...args: unknown[]): void;
-
 // `beforeinstallprompt` is not part of lib.dom's WindowEventMap.
 declare global {
         interface BeforeInstallPromptEvent extends Event {
@@ -1491,47 +1487,27 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 }
 
 let deferredPrompt: BeforeInstallPromptEvent | null;
-let installSource: string;
 
 window.addEventListener('beforeinstallprompt', (e) => {
         selector().notepad.installAppButtonContainer.show();
         deferredPrompt = e;
-        installSource = 'nativeInstallCard';
 
         e.userChoice.then(function (choiceResult) {
                 if (choiceResult.outcome === 'accepted') {
                         deferredPrompt = null;
                 }
-
-                ga('send', {
-                        hitType: 'event',
-                        eventCategory: 'pwa-install',
-                        eventAction: 'native-installation-card-prompted',
-                        eventLabel: installSource,
-                        eventValue: choiceResult.outcome === 'accepted' ? 1 : 0
-                });
         });
 });
 
 const installApp = document.getElementById('installApp')!;
 
 installApp.addEventListener('click', async () => {
-        installSource = 'customInstallationButton';
-
         if (deferredPrompt !== null) {
                 deferredPrompt.prompt();
                 const { outcome } = await deferredPrompt.userChoice;
                 if (outcome === 'accepted') {
                         deferredPrompt = null;
                 }
-
-                ga('send', {
-                        hitType: 'event',
-                        eventCategory: 'pwa-install',
-                        eventAction: 'custom-installation-button-clicked',
-                        eventLabel: installSource,
-                        eventValue: outcome === 'accepted' ? 1 : 0
-                });
         } else {
                 showToast('Notepad is already installed.')
         }
@@ -1539,8 +1515,4 @@ installApp.addEventListener('click', async () => {
 
 window.addEventListener('appinstalled', () => {
         deferredPrompt = null;
-
-        const source = installSource || 'browser';
-
-        ga('send', 'event', 'pwa-install', 'installed', source);
 });
