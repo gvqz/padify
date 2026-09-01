@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta name="description" content="A simple case converter tool to convert text to different cases">
+    <meta name="keywords" content="case,converter,tool,text,case converter" />
+    <meta name="application-name" content="Case Converter" />
+    <meta name="theme-color" content="#343a40">
+    
+    <meta property="og:title" content="Case Converter" />
+    <meta property="og:type" content="article" />
+    <meta property="og:description" content="A simple case converter tool to convert text to different cases" />
+    
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Case Converter" />
+    <meta name="twitter:description" content="A simple case converter tool to convert text to different cases" />
+    <meta name="twitter:card" content="summary_large_image">
+
+    <title>Case Converter</title>
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="flex-navbar">
+            <span class="navbar-brand generic-flex">
+                <a href="/" class="brand-title">Notepad</a>
+                <img src="img/icons/slash.svg" />
+                <span>Case Converter</span>
+            </span>
+            <div class="generic-flex">
+                <button type="button" id="themeToggle" class="btn btn-link text-white navbar-icon-button" title="Toggle dark mode" aria-label="Toggle dark mode" aria-pressed="false">
+                    <span class="theme-icon theme-icon-dark" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.599.748-3.752A9.753 9.753 0 1 0 21.752 15.002Z" />
+                        </svg>
+                    </span>
+                    <span class="theme-icon theme-icon-light" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25M12 18.75V21M4.97 4.97l1.591 1.591M17.439 17.439l1.591 1.591M3 12h2.25M18.75 12H21M4.97 19.03l1.591-1.591M17.439 6.561l1.591-1.591M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+                        </svg>
+                    </span>
+                </button>
+                <button class="btn btn-link text-white" data-toggle="modal" href="#aboutModal">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="size-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+                    </svg> 
+                </button>
+            </div> 
+        </div>
+    </nav>
+
+    <div class="select-case-container">
+        <select id="caseSelect" class="form-control w-25 my-3">
+            <option value="">Select a case</option>
+            <option value="lower">Lower Case</option>
+            <option value="upper">UPPER CASE</option>
+            <option value="sentence">Sentence case</option>
+            <option value="capitalized">Capitalized Case</option>
+            <option value="alternating">aLtErNaTiNg cAsE</option>
+            <option value="title">Title Case</option>
+            <option value="inverse">InVeRsE CaSe</option>
+        </select>
+        <button class="btn btn-primary" onclick="convertCase()">Convert</button>
+    </div>
+    
+    <div class="container">
+        <textarea id="inputText" class="form-control" placeholder="Enter text here and select a case to convert..." autofocus></textarea>
+        <button id="copyButton" class="btn btn-outline-secondary" type="button" onclick="copyToClipboard()">Copy</button>
+    </div>
+
+    <!-- About Modal -->
+    <div class="modal fade" id="aboutModal" tabindex="-1" role="dialog" aria-labelledby="aboutModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="aboutModalLabel">Case Converter</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p>This simple case converter tool allows you to convert any text between various letter cases, including...</p> 
+                    <ul>
+                        <li>Lower case</li>
+                        <li>Upper case</li>
+                        <li>Sentence case</li>
+                        <li>Capitalized case</li>
+                        <li>Alternating case</li>
+                        <li>Title case</li>
+                        <li>Inverse case</li>
+                    </ul>
+                    <p>Simply <b>enter your text</b>, <b>select the desired case</b>, and click <b>"Convert"</b>.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast">
+        <div class="toast-body">
+        </div>
+    </div>
+    
+    <script>
+        const themeToggle = document.getElementById('themeToggle');
+        const themeMeta = document.querySelector('meta[name="theme-color"]');
+        const themeStorageKey = 'notepad_case_converter_theme_v1';
+        const lightThemeColor = '#343a40';
+        const darkThemeColor = '#0e141a';
+
+        function applyTheme(theme) {
+            const isDark = theme === 'dark';
+            document.body.classList.toggle('dark', isDark);
+
+            if (themeToggle) {
+                themeToggle.setAttribute('aria-pressed', String(isDark));
+                themeToggle.setAttribute('title', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+                themeToggle.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+            }
+
+            if (themeMeta) {
+                themeMeta.setAttribute('content', isDark ? darkThemeColor : lightThemeColor);
+            }
+        }
+
+        function loadThemePreference() {
+            try {
+                const storedTheme = localStorage.getItem(themeStorageKey);
+                if (storedTheme === 'dark' || storedTheme === 'light') {
+                    return storedTheme;
+                }
+            } catch (error) {}
+
+            return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+
+        function toggleTheme() {
+            const nextTheme = document.body.classList.contains('dark') ? 'light' : 'dark';
+            try {
+                localStorage.setItem(themeStorageKey, nextTheme);
+            } catch (error) {}
+            applyTheme(nextTheme);
+        }
+
+        applyTheme(loadThemePreference());
+
+        if (themeToggle) {
+            themeToggle.addEventListener('click', toggleTheme);
+        }
+
+        function copyToClipboard() {
+            const inputText = document.getElementById('inputText');
+
+            if (!inputText.value) {
+                return;
+            }
+            
+            navigator.clipboard.writeText(inputText.value);
+
+            // Change the button state to indicate copied
+            const copyButton = document.getElementById('copyButton');
+            copyButton.textContent = 'Copied!';
+            copyButton.classList.add('btn-success');
+            copyButton.classList.remove('btn-outline-secondary');
+
+            // Reset button text after a short delay
+            setTimeout(() => {
+                copyButton.textContent = 'Copy';
+                copyButton.classList.remove('btn-success');
+                copyButton.classList.add('btn-outline-secondary');
+            }, 2000);
+        }
+
+        function convertCase() {
+            const inputText = document.getElementById('inputText');
+            const caseType = document.getElementById('caseSelect').value;
+            let outputText = '';
+
+            if (!inputText.value) {
+                showToast('Please enter text to convert.');
+                return;
+            }
+        
+            if (!caseType) {
+                showToast('Please select a case to convert.');
+                return;
+            }            
+        
+            switch (caseType) {
+                case 'lower':
+                    outputText = inputText.value.toLowerCase();
+                    break;
+                case 'upper':
+                    outputText = inputText.value.toUpperCase();
+                    break;
+                case 'sentence':
+                    const paragraphs = inputText.value.split('\n');
+                    outputText = paragraphs.map(paragraph => {
+                        const sentences = paragraph.split('. ');
+                        const capitalizedSentences = sentences.map(sentence => 
+                            sentence.charAt(0).toUpperCase() + sentence.slice(1).toLowerCase()
+                        ).join('. ');
+                        return capitalizedSentences.charAt(0).toUpperCase() + capitalizedSentences.slice(1);
+                    }).join('\n');
+                    break;
+                case 'capitalized':
+                    outputText = inputText.value.split(' ').map(word => 
+                        word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                    ).join(' ');
+                    break;
+                case 'alternating':
+                    outputText = inputText.value.split('').map((char, index) => 
+                        index % 2 === 0 ? char.toUpperCase() : char.toLowerCase()
+                    ).join('');
+                    break;
+                case 'title':
+                    const smallWords = ['a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'of'];
+                    const paragraphsTitle = inputText.value.split('\n').map(paragraph => {
+                        return paragraph.split(' ').map((word, index) => {
+                            const lowerCaseWord = word.toLowerCase();
+                            if (index === 0 || index === paragraph.split(' ').length - 1 || !smallWords.includes(lowerCaseWord)) {
+                                return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+                            }
+                            return lowerCaseWord;
+                        }).join(' ');
+                    }).join('\n');
+                    outputText = paragraphsTitle;
+                    break;
+                case 'inverse':
+                    outputText = inputText.value.split('').map(char => 
+                        char === char.toUpperCase() ? char.toLowerCase() : char.toUpperCase()
+                    ).join('');
+                    break;
+            }
+        
+            // Update the input field with the converted text
+            inputText.value = outputText;
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.querySelector('.toast-body').textContent = message;
+            toast.style.display = 'block';
+
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 2000);
+        }
+    </script>
+
+    <script src="js/jquery-3.5.1.slim.min.js"></script>
+    <script src="js/popper.min.js"></script>
+    <script src="js/bootstrap.min.js"></script>
+
+</body>
+</html>

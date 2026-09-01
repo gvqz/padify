@@ -1,0 +1,178 @@
+{
+  "short_name": "Notepad",
+  "name": "Notepad",
+  "description": "An offline-capable, quick, and distraction-free Notepad",
+  "display": "standalone",
+  "icons": [
+    {
+      "src": "img/icon-48.png",
+      "sizes": "48x48",
+      "type": "image/png"
+    },
+    {
+      "src": "img/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    },
+    {
+      "src": "img/icon-144.png",
+      "sizes": "144x144",
+      "type": "image/png"
+    },
+    {
+      "src": "img/icon-196.png",
+      "sizes": "196x196",
+      "type": "image/png"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "img/screenshot1.png",
+      "type": "image/png",
+      "sizes": "540x720"
+    },
+    {
+      "src": "img/screenshot2.png",
+      "type": "image/png",
+      "sizes": "540x720"
+    },
+    {
+      "src": "img/screenshot-desktop-dark.png",
+      "type": "image/png",
+      "form_factor": "wide",
+      "sizes": "2460x1674"
+    },
+    {
+      "src": "img/screenshot-desktop-light.png",
+      "type": "image/png",
+      "form_factor": "wide",
+      "sizes": "2460x1674"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Rich Text Notes",
+      "short_name": "Rich Text Notes",
+      "description": "A simple tool to write in rich text with a bunch of formatting options.",
+      "url": "/rich-text-notes/",
+      "icons": [
+        {
+          "src": "img/minitools/rich-text-notes.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Markdown Editor",
+      "short_name": "Markdown Editor",
+      "description": "A simple Markdown editor with two pane layout.",
+      "url": "/markdown-editor/",
+      "icons": [
+        {
+          "src": "img/minitools/markdown-editor.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Voice Notes",
+      "short_name": "Voice Notes",
+      "description": "A simple and efficient tool to record and manage your voice notes directly in the browser.",
+      "url": "/voice-notes/",
+      "icons": [
+        {
+          "src": "img/minitools/voice-notes.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Simple Kanban",
+      "short_name": "Simple Kanban",
+      "description": "A simple Kanban board to manage your tasks.",
+      "url": "/kanban/",
+      "icons": [
+        {
+          "src": "img/minitools/simple-kanban.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Case Converter",
+      "short_name": "Case Converter",
+      "description": "A simple tool to convert text to different cases.",
+      "url": "/case-converter/",
+      "icons": [
+        {
+          "src": "img/minitools/case-converter.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Tabbypad",
+      "short_name": "Tabbypad",
+      "description": "A convenient tool that allows you to jot down multiple notes without any fuss.",
+      "url": "/tabbypad/",
+      "icons": [
+        {
+          "src": "img/minitools/tabbypad.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Text Tools",
+      "short_name": "Text Tools",
+      "description": "Extract emails, URLs, and numbers from any text.",
+      "url": "/text-tools/",
+      "icons": [
+        {
+          "src": "img/icon-96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Deep Breath",
+      "short_name": "Deep Breath",
+      "description": "A simple breathing exercise to help you de-stress yourself.",
+      "url": "/deep-breath/",
+      "icons": [
+        {
+          "src": "img/minitools/deep-breathe.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Drawingpad",
+      "short_name": "Drawingpad",
+      "description": "A simple drawing pad to draw/write notes freehand.",
+      "url": "/drawingpad/",
+      "icons": [
+        {
+          "src": "img/minitools/drawing-pad.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Tasks",
+      "short_name": "Tasks",
+      "description": "A dead simple tool to jot down your important tasks and todos.",
+      "url": "/tasks/",
+      "icons": [
+        {
+          "src": "img/minitools/tasks.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ],
+  "start_url": "index.html",
+  "theme_color": "#3F51B5",
+  "background_color": "#EEEEEE",
+  "display_override": ["minimal-ui"]
+}

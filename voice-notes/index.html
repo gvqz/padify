@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A simple app to record voice notes">
+    <meta name="theme-color" content="#f5f5f5">
+    <title>Voice Notes</title>
+    <meta name="keywords" content="voice,notes,recorder,player,notepad" />
+    <meta name="application-name" content="Voice Notes" />
+
+    <meta property="og:title" content="Voice Notes" />
+    <meta property="og:type" content="article" />
+    <meta property="og:description" content="A simple app to record voice notes" />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Voice Notes" />
+    <meta name="twitter:description" content="A simple app to record voice notes" />
+    <meta name="twitter:card" content="summary_large_image">
+
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="js/libs/lame.min.js"></script>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <div class="navbar-brand generic-flex">
+                <a href="/" class="text-white text-decoration-none text-bold">Notepad</a>
+                <img src="img/icons/slash.svg" />
+                <span class="text-white text-bold">Voice Notes</span>
+            </div>
+            <div class="header-actions">
+                <button type="button" id="themeToggle" class="navbar-icon-button" title="Toggle dark mode" aria-label="Toggle dark mode" aria-pressed="false">
+                    <span class="theme-icon theme-icon-dark" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.599.748-3.752A9.753 9.753 0 1 0 21.752 15.002Z" />
+                        </svg>
+                    </span>
+                    <span class="theme-icon theme-icon-light" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25M12 18.75V21M4.97 4.97l1.591 1.591M17.439 17.439l1.591 1.591M3 12h2.25M18.75 12H21M4.97 19.03l1.591-1.591M17.439 6.561l1.591-1.591M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+                        </svg>
+                    </span>
+                </button>
+                <button type="button" class="navbar-icon-button" data-bs-toggle="modal" data-bs-target="#aboutModal" title="About" aria-label="About">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="size-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+                    </svg> 
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="recorder-container mt-5 pt-4">
+        <h1>Voice Notes</h1>
+        <div class="recorder-controls">
+            <button id="recordButton" class="btn record-btn">
+                <span class="bi bi-mic-fill record-icon">
+                    <svg width="20" height="20" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="size-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                    </svg> 
+                </span>
+                <span class="bi bi-stop-fill stop-icon">
+                    <svg width="20" height="20" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="size-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 9.563C9 9.252 9.252 9 9.563 9h4.874c.311 0 .563.252.563.563v4.874c0 .311-.252.563-.563.563H9.564A.562.562 0 0 1 9 14.437V9.564Z" />
+                    </svg>
+                </span>
+                <span class="button-text">Start recording</span>
+            </button>
+        </div>
+        <div class="recording-status text-center">
+            <div class="recording-time">
+                <span class="recording-dot"></span>
+                <span id="recordingTime">00:00</span>
+            </div>
+        </div>
+        <div id="recordings" class="recordings-list">
+            <!-- Recorded audio items will be added here -->
+            <div id="emptyState" class="empty-state">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" class="bi bi-mic" viewBox="0 0 16 16">
+                    <path d="M3.5 6.5A.5.5 0 0 1 4 7v1a4 4 0 0 0 8 0V7a.5.5 0 0 1 1 0v1a5 5 0 0 1-4.5 4.975V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 .5-.5"/>
+                    <path d="M10 8a2 2 0 1 1-4 0V3a2 2 0 1 1 4 0zM8 0a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V3a3 3 0 0 0-3-3"/>
+                </svg>
+                <p>Start recording voice notes</p>
+            </div>
+        </div>
+        <div id="processingLoader" class="processing-loader hidden">
+            <div class="spinner"></div>
+            <div class="processing-text">Processing voice note...</div>
+        </div>
+    </div>
+
+    <!-- About Modal -->
+    <div class="modal fade" id="aboutModal" tabindex="-1" aria-labelledby="aboutModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title custom-modal-title">Voice Notes</h4>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body modal-container">
+                    <div class="tab-content">
+                        <p>A simple and efficient tool to record and manage your voice notes directly in the browser.</p>
+                        <p>Key features:</p>
+                        <ul>
+                            <li>Record <b>high-quality voice notes</b> with one click</li>
+                            <li>Add <b>text notes</b> to your recordings</li>
+                            <li>Automatic MP3 conversion for better compatibility</li>
+                            <li>Stores voice notes <b>on-device</b> for privacy and offline usage</li>
+                            <li><b>Download recordings</b> to your device</li>
+                            <li>Clean, intuitive interface</li>
+                            <li>No account or sign-up required</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/libs/bootstrap.bundle.min.js"></script>
+    <script src="recorder.js"></script>
+
+</body>
+</html>

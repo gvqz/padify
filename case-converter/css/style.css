@@ -1,0 +1,307 @@
+html, body {
+	height: 100%;
+	margin: 0;
+	overflow: hidden; /* Prevent scrolling */
+}
+
+:root {
+	--page-bg: #f4f4f4;
+	--page-text: #1b1f23;
+	--control-bg: #ffffff;
+	--control-text: #212529;
+	--control-border: #ced4da;
+	--icon-hover-bg: rgba(255, 255, 255, 0.12);
+	--toast-bg: #333333;
+	--toast-text: #ffffff;
+	--modal-bg: #ffffff;
+	--modal-text: #212529;
+	--modal-border: rgba(0, 0, 0, 0.15);
+}
+
+body.dark {
+	--page-bg: #0e141a;
+	--page-text: #e6edf3;
+	--control-bg: #131c24;
+	--control-text: #e6edf3;
+	--control-border: #2d3a45;
+	--icon-hover-bg: rgba(255, 255, 255, 0.12);
+	--toast-bg: #1b222d;
+	--toast-text: #e6edf3;
+	--modal-bg: #0f1720;
+	--modal-text: #e6edf3;
+	--modal-border: rgba(255, 255, 255, 0.12);
+}
+
+a:focus {
+  outline: revert;
+  outline-offset: revert;
+}
+
+.btn.active.focus,
+.btn.active:focus,
+.btn.focus,
+.btn:active.focus,
+.btn:active:focus,
+.btn:focus {
+  outline: revert;
+  outline-offset: revert;
+  box-shadow: none;
+}
+
+input[type=file]:focus,
+input[type=checkbox]:focus,
+input[type=radio]:focus {
+  outline: revert;
+  outline-offset: revert;
+}
+
+body {
+	font-family: Arial, sans-serif;
+	background-color: var(--page-bg);
+	color: var(--page-text);
+}
+
+.toast {
+	background-color: var(--toast-bg);
+	color: var(--toast-text);
+	padding: 10px;
+	border-radius: 5px;
+	opacity: 0.9;
+	display: none; 
+    position: fixed; 
+    bottom: 6px; 
+    right: 20px; 
+    z-index: 1000;
+}
+
+.container {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    gap: 30px;
+    height: calc(100vh - 200px);
+    height: calc(100dvh - 200px);
+}
+
+	.container textarea {
+	    width: 100%;
+	    height: 100%;
+	}
+
+	.form-control {
+	    background-color: var(--control-bg);
+	    color: var(--control-text);
+	}
+
+	body.dark .form-control {
+	    border-color: var(--control-border);
+	}
+
+	body.dark .form-control::placeholder {
+	    color: rgba(230, 237, 243, 0.55);
+	}
+
+	body.dark .form-control:focus {
+	    background-color: var(--control-bg);
+	    color: var(--control-text);
+	    border-color: rgba(108, 99, 255, 0.65);
+	    box-shadow: 0 0 0 0.2rem rgba(108, 99, 255, 0.25);
+	}
+
+	body.dark .btn-outline-secondary {
+	    color: rgba(230, 237, 243, 0.9);
+	    border-color: rgba(230, 237, 243, 0.35);
+	}
+
+	body.dark .btn-outline-secondary:hover,
+	body.dark .btn-outline-secondary:focus {
+	    background-color: rgba(230, 237, 243, 0.12);
+	}
+
+	body.dark .modal-content {
+	    background-color: var(--modal-bg);
+	    color: var(--modal-text);
+	    border-color: var(--modal-border);
+	}
+
+	body.dark .modal-header,
+	body.dark .modal-footer {
+	    border-color: var(--modal-border);
+	}
+
+	body.dark .modal-header .close {
+	    color: var(--modal-text);
+	    opacity: 0.85;
+	}
+
+	body.dark .modal-body a {
+	    color: rgba(138, 180, 248, 0.95);
+	}
+
+	body.dark .modal-body a:hover,
+	body.dark .modal-body a:focus {
+	    color: rgba(170, 204, 255, 1);
+	}
+
+	.select-case-container select {
+	    width: 35% !important;
+	}
+
+#copyButton {
+    position: absolute; 
+    right: 25px; 
+    bottom: 10px;
+    font-size: 0.7em;
+    font-weight: bold;
+}
+
+@media (max-width: 768px) {
+    .select-case-container select {
+        width: 50% !important;
+    }
+}
+
+h2 {
+    text-align: center;
+    color: #4b4a4a;
+    font-size: 1.2rem;
+    margin: .3rem 0;
+    font-weight: bold;
+}
+
+body.dark h2 {
+    color: rgba(230, 237, 243, 0.82);
+}
+
+.kanban-board {
+    display: flex;
+    justify-content: space-around;
+    height: 100%; /* Allow the board to take full height */
+    padding: 20px;
+    box-sizing: border-box; /* Include padding in height calculation */
+}
+
+.column {
+    background-color: white;
+    border: 1px solid #ccc;
+    width: 30%;
+    padding: 10px;
+    display: flex;
+    flex-direction: column; /* Stack children vertically */
+    height: calc(100% - 55px); /* Adjust height to fit within the board */
+    border-radius: 10px;
+}
+
+input[type="text"] {
+    padding: 10px 15px; /* Add padding */
+    font-size: 16px; /* Increase font size */
+    border: 1px solid #ccc; /* Border color */
+    border-radius: 5px; /* Rounded corners */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+    transition: border-color 0.3s; /* Smooth transition for focus effect */
+}
+
+input[type="text"]:focus {
+    border-color: #6c63ff; /* Change border color on focus */
+    outline: none; /* Remove default outline */
+}
+
+.drop-target {
+    background-color: #e0e7ff; /* Light blue background for drop target */
+    border: 2px dashed #6c63ff; /* Dashed border to indicate drop area */
+}
+
+.navbar-dark .navbar-brand {
+    font-weight: bold;
+    font-size: 1rem;
+}
+
+.brand-title, .brand-title:hover {
+    text-decoration: none;
+    color: inherit;
+}
+
+.flex-navbar {
+    display: flex;
+    color: white;
+    font-weight: bold;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.generic-flex {
+    display: flex;
+    align-items: center;
+}
+
+.navbar-icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 49px;
+    width: 38px;
+    border-radius: 10px;
+    padding: 0;
+    transition: background-color 160ms ease, color 160ms ease;
+}
+
+.navbar-icon-button:hover,
+.navbar-icon-button:focus {
+    background-color: transparent;
+    outline: none;
+}
+
+.theme-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+}
+
+.theme-icon svg {
+    display: block;
+}
+
+.theme-icon-light {
+    display: none;
+}
+
+body.dark .theme-icon-dark {
+    display: none;
+}
+
+body.dark .theme-icon-light {
+    display: inline-flex;
+}
+
+.select-case-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    margin: 20px 0;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+    .kanban-board {
+        flex-direction: column; /* Stack columns vertically on small screens */
+        gap: 10px;
+    }
+
+    .column {
+        width: 100%; /* Full width on small screens */
+    }
+
+    html, body {
+        height: 100%;
+        margin: 0;
+        overflow: auto; /* Prevent scrolling */
+    }
+}
+
+.bg-dark {
+    background-color: #1b222d !important;
+}
