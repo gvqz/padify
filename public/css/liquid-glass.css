@@ -703,6 +703,15 @@ body.dark .timer-pill.timer-ending {
   animation: lg-pill-blink 1.2s ease-in-out infinite;
 }
 
+/* Mobile: give the bottom pills breathing room + respect iOS safe area */
+@media (max-width: 540px) {
+  .bottom-line {
+    bottom: calc(1em + env(safe-area-inset-bottom, 0px));
+    right: 1em;
+    gap: 8px;
+  }
+}
+
 @keyframes lg-pill-blink {
   0%, 100% {
     box-shadow:
