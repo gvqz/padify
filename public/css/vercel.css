@@ -1,0 +1,2763 @@
+/* ==========================================================================
+   Padify — Vercel design system.
+
+   Applied to the MAIN PAGE only (loaded from index.html, never from the
+   mini-tools). One consistent visual language for every surface:
+
+     • Monochrome palette — white / near-black / grays, no mixed hues.
+       Black is the primary color, red is the only semantic tint (danger).
+     • 1px borders (#eaeaea light / #262626 dark) instead of glows.
+     • A single elevation scale (menu, dialog, pill).
+     • A single radius scale — 6px controls, 8px cards, 12px dialogs.
+     • 150ms ease transitions, scale-in popups, 0.98 press feedback.
+
+   This file loads LAST so equal-specificity rules below intentionally
+   override style.css / music-player.css / unicode-picker.css /
+   snapshots.css.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Design tokens
+   -------------------------------------------------------------------------- */
+
+:root {
+  /* surfaces */
+  --vz-bg: #ffffff;            /* page */
+  --vz-bg-navbar: #ffffff;     /* top bar */
+  --vz-bg-elevated: #ffffff;   /* dialogs, menus, cards */
+  --vz-bg-subtle: #fafafa;     /* hover rows, wells, secondary */
+  --vz-bg-chip: #f1f1f1;       /* chips, badges, switch track */
+
+  /* ink */
+  --vz-fg: #171717;
+  --vz-fg-muted: #666666;
+  --vz-fg-subtle: #888888;
+
+  /* lines */
+  --vz-border: #eaeaea;
+  --vz-border-strong: #999999;
+
+  /* primary (black) */
+  --vz-primary: #171717;
+  --vz-primary-hover: #383838;
+  --vz-primary-fg: #ffffff;
+
+  /* danger (the single semantic color) */
+  --vz-danger: #ee0000;
+  --vz-danger-hover: #c00000;
+  --vz-danger-soft: rgba(238, 0, 0, 0.08);
+
+  /* semantic status + starred content (kept deliberately small) */
+  --vz-success: #0e9f6e;
+  --vz-star: #d9a03c;
+
+  /* elevation */
+  --vz-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --vz-shadow-pill: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --vz-shadow-menu: 0 4px 12px rgba(0, 0, 0, 0.08), 0 12px 28px rgba(0, 0, 0, 0.10);
+  --vz-shadow-dialog: 0 24px 48px -12px rgba(0, 0, 0, 0.24);
+
+  /* radii */
+  --vz-radius: 6px;
+  --vz-radius-md: 8px;
+  --vz-radius-lg: 12px;
+
+  /* motion */
+  --vz-dur: 150ms;
+  --vz-ease: cubic-bezier(0.25, 0.8, 0.35, 1);
+  --vz-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+body.dark {
+  --vz-bg: #000000;
+  --vz-bg-navbar: #0a0a0a;
+  --vz-bg-elevated: #111111;
+  --vz-bg-subtle: #1a1a1a;
+  --vz-bg-chip: #1a1a1a;
+
+  --vz-fg: #ededed;
+  --vz-fg-muted: #a1a1a1;
+  --vz-fg-subtle: #787878;
+
+  --vz-border: #262626;
+  --vz-border-strong: #525252;
+
+  --vz-primary: #ededed;
+  --vz-primary-hover: #ffffff;
+  --vz-primary-fg: #0a0a0a;
+
+  --vz-danger: #ff4d4d;
+  --vz-danger-hover: #ff7575;
+  --vz-danger-soft: rgba(255, 77, 77, 0.12);
+
+  --vz-success: #0e9f6e;
+  --vz-star: #e3b341;
+
+  --vz-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --vz-shadow-pill: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.5);
+  --vz-shadow-menu: 0 4px 12px rgba(0, 0, 0, 0.5), 0 12px 28px rgba(0, 0, 0, 0.6);
+  --vz-shadow-dialog: 0 24px 48px -12px rgba(0, 0, 0, 0.7);
+}
+
+/* --------------------------------------------------------------------------
+   2. Base
+   -------------------------------------------------------------------------- */
+
+body {
+  background-color: var(--vz-bg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body.dark {
+  background-color: var(--vz-bg);
+}
+
+::selection {
+  background: rgba(0, 0, 0, 0.14);
+}
+
+body.dark ::selection {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Slim, quiet scrollbars everywhere */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d4 transparent;
+}
+
+body.dark * {
+  scrollbar-color: #2e2e2e transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d4d4d4;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #b8b8b8;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+body.dark ::-webkit-scrollbar-thumb {
+  background: #2e2e2e;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+body.dark ::-webkit-scrollbar-thumb:hover {
+  background: #444444;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Editor canvas */
+textarea {
+  border-color: var(--vz-border);
+  caret-color: var(--vz-fg);
+}
+
+body.dark textarea {
+  color: var(--vz-fg);
+  border-color: var(--vz-border);
+  border-left-color: var(--vz-border);
+  border-right-color: var(--vz-border);
+}
+
+body.dark textarea::placeholder {
+  color: var(--vz-fg-subtle);
+}
+
+textarea::placeholder {
+  color: var(--vz-fg-subtle);
+  opacity: 1;
+}
+
+/* Keyboard chips — flat, quiet, monospace */
+kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  border-radius: 4px;
+  box-shadow: none;
+  text-shadow: none;
+  line-height: 1.5;
+  margin: 0 3px;
+  white-space: nowrap;
+  transition: none;
+}
+
+body.dark kbd {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg-muted);
+}
+
+kbd > span {
+  font-size: 11.5px;
+}
+
+/* Global focus ring — monochrome, visible only for keyboard users */
+:focus-visible {
+  outline: 2px solid var(--vz-fg);
+  outline-offset: 2px;
+  border-radius: var(--vz-radius);
+}
+
+body.dark :focus-visible {
+  outline-color: var(--vz-fg);
+}
+
+/* --------------------------------------------------------------------------
+   3. Top bar — solid, crisp, 1px hairline
+   -------------------------------------------------------------------------- */
+
+.navbar.navbar-fixed-top {
+  background: var(--vz-bg-navbar);
+  border: none;
+  border-bottom: 1px solid var(--vz-border);
+  box-shadow: none;
+  min-height: 50px;
+  transition: background-color var(--vz-dur) ease;
+}
+
+/* Brand */
+.navbar.navbar-fixed-top .app-heading,
+.navbar-inverse .app-heading,
+.navbar-default .app-heading {
+  color: var(--vz-fg);
+  text-shadow: none;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  transition: opacity var(--vz-dur) ease;
+}
+
+.navbar.navbar-fixed-top .app-heading:hover {
+  text-decoration: none;
+}
+
+body.dark .app-heading,
+body.dark .glow-text,
+body.dark .navbar-inverse .app-heading,
+body.dark .navbar-default .app-heading {
+  animation: none;
+  text-shadow: none;
+  color: var(--vz-fg);
+}
+
+/* Navbar icons (dark artwork on dark navbar) — flip for the light bar */
+.navbar.navbar-fixed-top .icon-container img,
+.navbar.navbar-fixed-top .navbar-header > span > a img,
+.navbar.navbar-fixed-top #pipContainer img {
+  filter: invert(1);
+  opacity: 0.72;
+  transition: opacity var(--vz-dur) ease, filter var(--vz-dur) ease;
+}
+
+.navbar.navbar-fixed-top .icon-container a:hover img,
+.navbar.navbar-fixed-top .icon-container a:focus img,
+.navbar.navbar-fixed-top .navbar-header > span > a:hover img,
+.navbar.navbar-fixed-top #pipContainer a:hover img {
+  filter: invert(1);
+  opacity: 1;
+}
+
+body.dark .navbar.navbar-fixed-top .icon-container img,
+body.dark .navbar.navbar-fixed-top .navbar-header > span > a img,
+body.dark .navbar.navbar-fixed-top #pipContainer img {
+  filter: none;
+  opacity: 0.72;
+}
+
+body.dark .navbar.navbar-fixed-top .icon-container a:hover img,
+body.dark .navbar.navbar-fixed-top .icon-container a:focus img,
+body.dark .navbar.navbar-fixed-top .navbar-header > span > a:hover img,
+body.dark .navbar.navbar-fixed-top #pipContainer a:hover img {
+  filter: none;
+  opacity: 1;
+}
+
+/* The desktop tool row uses inline white SVGs — flip them in light mode */
+.navbar.navbar-fixed-top .navbar-nav svg {
+  filter: invert(1);
+}
+
+body.dark .navbar.navbar-fixed-top .navbar-nav svg {
+  filter: none;
+}
+
+/* Icon hover = a quiet square chip, not a glow */
+.icon-container a,
+.navbar-header > span > a {
+  border-radius: var(--vz-radius-md);
+}
+
+.icon-container a {
+  padding: 6px;
+  margin: -6px;
+  transition: background-color var(--vz-dur) ease;
+}
+
+.icon-container a:hover,
+.icon-container a:focus {
+  background-color: var(--vz-bg-subtle);
+}
+
+/* Kill the old blue drop-shadow hovers */
+.dark .icon-container span > a:hover {
+  -webkit-filter: none;
+  filter: none;
+}
+
+/* Hamburger */
+.navbar.navbar-fixed-top .navbar-toggle {
+  border-color: var(--vz-border);
+  background: transparent;
+  transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease;
+}
+
+.navbar.navbar-fixed-top .navbar-toggle:hover,
+.navbar.navbar-fixed-top .navbar-toggle:focus {
+  background-color: var(--vz-bg-subtle) !important;
+  border-color: var(--vz-border-strong);
+}
+
+.navbar.navbar-fixed-top .navbar-toggle .icon-bar {
+  background-color: var(--vz-fg);
+}
+
+/* Mobile expanded menu */
+.navbar.navbar-fixed-top .navbar-collapse {
+  border-color: var(--vz-border);
+}
+
+.navbar.navbar-fixed-top .navbar-nav > li > a {
+  color: var(--vz-fg-muted);
+  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease;
+  border-radius: var(--vz-radius);
+}
+
+.navbar.navbar-fixed-top .navbar-nav > li > a:hover,
+.navbar.navbar-fixed-top .navbar-nav > li > a:focus {
+  color: var(--vz-fg);
+  background-color: var(--vz-bg-subtle);
+}
+
+.navbar.navbar-fixed-top .navbar-nav > li > a .snapshot-text {
+  color: inherit;
+}
+
+.navbar.navbar-fixed-top .navbar-nav .about-link {
+  color: var(--vz-fg-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.navbar.navbar-fixed-top .navbar-nav .about-link:hover,
+.navbar.navbar-fixed-top .navbar-nav .about-link:focus {
+  color: var(--vz-fg);
+}
+
+/* Music playing indicator — a small green status dot */
+.ambient-noise-icon .ambient-noise-status-dot {
+  background: var(--vz-success);
+  box-shadow: 0 0 0 2px var(--vz-bg-navbar);
+}
+
+/* Unicode favorites badge — mono chip */
+.unicode-icon-badge {
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg-muted);
+  border: 1px solid var(--vz-border);
+  transition: background-color var(--vz-dur) ease, color var(--vz-dur) ease,
+    border-color var(--vz-dur) ease;
+}
+
+.unicode-icon a:hover .unicode-icon-badge,
+.unicode-icon a:focus .unicode-icon-badge {
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+  border-color: var(--vz-border-strong);
+}
+
+body.dark .unicode-icon-badge {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg-muted);
+  border-color: var(--vz-border);
+}
+
+body.dark .unicode-icon a:hover .unicode-icon-badge,
+body.dark .unicode-icon a:focus .unicode-icon-badge {
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg);
+  border-color: var(--vz-border-strong);
+}
+
+/* --------------------------------------------------------------------------
+   4. Dropdown menus — Vercel popovers
+   -------------------------------------------------------------------------- */
+
+.navbar .dropdown-menu {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  box-shadow: var(--vz-shadow-menu);
+  padding: 4px;
+  margin-top: 6px;
+  min-width: 230px;
+  animation: vz-menu-in 130ms var(--vz-ease);
+  transform-origin: top center;
+}
+
+.navbar .dropdown-menu > li > a {
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 10px;
+  line-height: 1.5;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+.navbar .dropdown-menu > li > a:hover,
+.navbar .dropdown-menu > li > a:focus {
+  background-color: var(--vz-bg-subtle);
+  color: var(--vz-fg);
+  outline: none;
+}
+
+.navbar .dropdown-menu > li > a .dropdown-item span,
+.navbar .dropdown-menu .dropdown-item > span {
+  /* BETA chip */
+  background: transparent;
+  border: 1px solid var(--vz-border);
+  color: var(--vz-fg-muted);
+  padding: 1px 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  margin-left: auto;
+  line-height: 1.5;
+}
+
+.navbar .dropdown-menu > li > a .dropdown-item,
+.navbar .dropdown-menu .dropdown-item {
+  gap: 9px;
+}
+
+.navbar .dropdown-menu > li > a .new-tag,
+.navbar .dropdown-menu .dropdown-item .new-tag,
+.navbar .dropdown-menu .new-tag {
+  background: var(--vz-bg-subtle) !important;
+  border: 1px solid var(--vz-border);
+  color: var(--vz-fg-muted) !important;
+  padding: 1px 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  margin-left: auto;
+  line-height: 1.5;
+}
+
+@keyframes vz-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   5. Dialog frames — one recipe for every popup
+   -------------------------------------------------------------------------- */
+
+body .modal-content,
+body #snapshotsModal .modal-content,
+body #musicPlayerModal .modal-content,
+body .ucp-modal .modal-content {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-lg) !important;
+  box-shadow: var(--vz-shadow-dialog);
+  color: var(--vz-fg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+body.dark .modal-content,
+body.dark #snapshotsModal .modal-content,
+body.dark #musicPlayerModal .modal-content,
+body.dark .ucp-modal .modal-content {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-border);
+  color: var(--vz-fg);
+}
+
+/* Enter animation: rise + settle, no bootstrap slide */
+.modal.fade .modal-dialog {
+  transform: translate(0, 14px) scale(0.98);
+  opacity: 0;
+  transition: transform 200ms var(--vz-ease), opacity 200ms var(--vz-ease);
+}
+
+.modal.in .modal-dialog {
+  transform: translate(0, 0) scale(1);
+  opacity: 1;
+}
+
+/* Header / footer — quiet dividers */
+body .modal-header,
+body #snapshotsModal .modal-header {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--vz-border);
+  border-top-left-radius: var(--vz-radius-lg);
+  border-top-right-radius: var(--vz-radius-lg);
+  padding: 16px 20px 12px;
+}
+
+body .modal-footer,
+body #snapshotsModal .modal-footer {
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--vz-border);
+  padding: 14px 20px 16px;
+}
+
+body .modal-title,
+body .custom-modal-title,
+body #snapshotsModal .modal-title,
+body.dark .modal-title,
+body.dark .custom-modal-title {
+  color: var(--vz-fg);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
+body .modal-body,
+body.dark .modal-body {
+  color: var(--vz-fg);
+}
+
+/* Body copy stays one step calmer */
+body .modal-body p,
+body .modal-body ul,
+body .modal-body li {
+  color: var(--vz-fg-muted);
+}
+
+body .modal-body b {
+  color: var(--vz-fg);
+}
+
+/* Modal links — quiet underline that sharpens on hover */
+body .modal-body a,
+body.dark .modal-body a {
+  color: var(--vz-fg);
+  text-decoration: underline;
+  text-decoration-color: var(--vz-border-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--vz-dur) ease, color var(--vz-dur) ease;
+}
+
+body .modal-body a:hover,
+body .modal-body a:focus,
+body.dark .modal-body a:hover,
+body.dark .modal-body a:focus {
+  color: var(--vz-fg);
+  text-decoration-color: var(--vz-fg);
+}
+
+/* Close button — a real target, not a floating glyph */
+body .modal-header .close,
+body.dark .modal-header .close,
+body.dark .modal-header .close:hover {
+  width: 32px;
+  height: 32px;
+  margin: -4px -6px 0 0;
+  padding: 0;
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg-muted);
+  opacity: 1;
+  font-size: 20px;
+  line-height: 32px;
+  text-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+body .modal-header .close:hover,
+body .modal-header .close:focus,
+body.dark .modal-header .close:hover,
+body.dark .modal-header .close:focus {
+  color: var(--vz-fg);
+  background: var(--vz-bg-subtle);
+  opacity: 1;
+}
+
+/* Backdrop */
+body .modal-backdrop,
+body.dark .modal-backdrop {
+  background: #000000;
+  opacity: 0.55;
+}
+
+@media (max-width: 768px) {
+  body .modal-backdrop,
+  body.dark .modal-backdrop {
+    opacity: 0.65;
+  }
+}
+
+/* Modal footer buttons sit right, gap consistent */
+body .modal-footer .btn + .btn {
+  margin-left: 8px;
+}
+
+/* Keyboard shortcuts table */
+body .modal-body table tr,
+body.dark .modal-body table tr {
+  background: transparent;
+  border-top: 1px solid var(--vz-border);
+  padding: 12px 10px;
+}
+
+body .modal-body table tr:first-child {
+  border-top: none;
+}
+
+body .modal-body table tr td,
+body.dark .modal-body table tr td,
+body.dark .modal-body table td {
+  color: var(--vz-fg-muted);
+  font-size: 13px;
+}
+
+body .modal-body table tr td:first-child,
+body.dark .modal-body table tr td:first-child {
+  color: var(--vz-fg);
+}
+
+/* About modal details */
+body .about-tabs,
+body.dark .about-tabs,
+body.dark .nav-tabs {
+  border-bottom: 1px solid var(--vz-border);
+}
+
+body .about-tabs .nav-link,
+body.dark .about-tabs .nav-link,
+body.dark .about-tabs > li > a {
+  color: var(--vz-fg-muted);
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  transition: color var(--vz-dur) ease;
+  padding: 8px 14px;
+  margin-bottom: -1px;
+}
+
+body .about-tabs .nav-link:hover,
+body.dark .about-tabs .nav-link:hover {
+  color: var(--vz-fg);
+}
+
+body .about-tabs .nav-link.active,
+body.dark .about-tabs .nav-link.active,
+body.dark .about-tabs > li.active > a,
+body.dark .about-tabs > li.active > a:focus,
+body.dark .about-tabs > li.active > a:hover {
+  color: var(--vz-fg);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--vz-fg);
+}
+
+body .about-notice {
+  color: var(--vz-fg-muted);
+  font-size: 12px;
+}
+
+body .about-modal-logo {
+  border-radius: var(--vz-radius-md);
+}
+
+/* Install button — primary */
+body .install-app-btn {
+  background: var(--vz-primary);
+  color: var(--vz-primary-fg) !important;
+  font-weight: 500;
+  font-size: 12.5px;
+  padding: 5px 14px;
+  border-radius: var(--vz-radius);
+  border: 1px solid var(--vz-primary);
+  transition: background-color var(--vz-dur) ease, transform 100ms ease;
+}
+
+body .install-app-btn:hover,
+body .install-app-btn:focus {
+  background: var(--vz-primary-hover);
+  text-decoration: none;
+  transform: none;
+}
+
+body .install-app-btn:active {
+  transform: scale(0.98);
+}
+
+/* PWA update notice — inverted bar */
+body .sticky-notice {
+  background: var(--vz-primary);
+  color: var(--vz-primary-fg);
+  border-radius: var(--vz-radius);
+  box-shadow: var(--vz-shadow-pill);
+  font-weight: 500;
+  border: none;
+}
+
+body .sticky-notice a {
+  color: var(--vz-primary-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+body.dark .sticky-notice {
+  background: var(--vz-primary);
+  color: var(--vz-primary-fg);
+}
+
+body.dark .sticky-notice a {
+  color: var(--vz-primary-fg);
+}
+
+/* --------------------------------------------------------------------------
+   6. Buttons — black primary, bordered secondary, red danger
+   -------------------------------------------------------------------------- */
+
+.btn {
+  border-radius: var(--vz-radius);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 14px;
+  transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease,
+    color var(--vz-dur) ease, transform 100ms ease;
+  box-shadow: none;
+  text-shadow: none;
+  background-image: none;
+}
+
+.btn:active,
+.btn.active {
+  transform: scale(0.98);
+  box-shadow: none;
+}
+
+.btn:focus,
+.btn:active:focus,
+.btn.active:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.btn-primary,
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-primary.active,
+.open > .dropdown-toggle.btn-primary {
+  background: var(--vz-primary) !important;
+  border: 1px solid var(--vz-primary) !important;
+  color: var(--vz-primary-fg) !important;
+}
+
+.btn-primary:hover {
+  background: var(--vz-primary-hover) !important;
+  border-color: var(--vz-primary-hover) !important;
+}
+
+.btn-default,
+.btn-default:hover,
+.btn-default:focus,
+.btn-default:active,
+.btn-default.active,
+.open > .dropdown-toggle.btn-default {
+  background: var(--vz-bg-elevated) !important;
+  border: 1px solid var(--vz-border) !important;
+  color: var(--vz-fg) !important;
+}
+
+.btn-default:hover,
+.btn-default:focus {
+  background: var(--vz-bg-subtle) !important;
+  border-color: var(--vz-border-strong) !important;
+}
+
+.btn-danger,
+.btn-danger:hover,
+.btn-danger:focus,
+.btn-danger:active,
+.btn-danger.active,
+.open > .dropdown-toggle.btn-danger {
+  background: var(--vz-danger) !important;
+  border: 1px solid var(--vz-danger) !important;
+  color: #ffffff !important;
+}
+
+.btn-danger:hover,
+.btn-danger:focus {
+  background: var(--vz-danger-hover) !important;
+  border-color: var(--vz-danger-hover) !important;
+}
+
+.btn[disabled],
+.btn.disabled {
+  opacity: 0.45;
+  transform: none;
+}
+
+/* Form controls */
+.form-control {
+  background-color: var(--vz-bg-elevated) !important;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  box-shadow: none !important;
+  color: var(--vz-fg);
+  font-size: 13px;
+  height: 34px;
+  transition: border-color var(--vz-dur) ease, box-shadow var(--vz-dur) ease;
+}
+
+.form-control:focus,
+body.dark .form-control:focus {
+  border-color: var(--vz-border-strong);
+  box-shadow: none !important;
+  outline: none;
+}
+
+.form-control::placeholder,
+body.dark .form-control::placeholder {
+  color: var(--vz-fg-subtle);
+}
+
+body.dark .form-control {
+  background-color: var(--vz-bg-subtle) !important;
+  border-color: var(--vz-border);
+  color: var(--vz-fg);
+}
+
+body.dark .form-control option {
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+}
+
+/* --------------------------------------------------------------------------
+   7. Switches — global (Settings + Writing Session chime)
+   -------------------------------------------------------------------------- */
+
+body .checkbox.checbox-switch label span,
+body .checkbox-inline.checbox-switch span,
+body.dark .modal .checkbox.checbox-switch label span,
+body.dark .modal .checkbox-inline.checbox-switch span {
+  width: 40px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--vz-bg-chip);
+  border: 1px solid var(--vz-border);
+  box-shadow: none;
+  transition: background-color 200ms var(--vz-ease), border-color 200ms var(--vz-ease);
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 5px;
+  position: relative;
+}
+
+body .checkbox.checbox-switch label span::before,
+body .checkbox-inline.checbox-switch span::before,
+body.dark .modal .checkbox.checbox-switch label span::before,
+body.dark .modal .checkbox-inline.checbox-switch span::before {
+  content: " ";
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: none;
+  top: 2px;
+  left: 2px;
+  position: absolute;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: left 220ms var(--vz-spring), background-color 200ms ease;
+}
+
+body .checkbox.checbox-switch label > input:checked + span,
+body .checkbox-inline.checbox-switch > input:checked + span,
+body.dark .modal .checkbox.checbox-switch label > input:checked + span,
+body.dark .modal .checkbox-inline.checbox-switch > input:checked + span {
+  background: var(--vz-primary);
+  border-color: var(--vz-primary);
+  box-shadow: none;
+}
+
+body .checkbox.checbox-switch label > input:checked + span::before,
+body .checkbox-inline.checbox-switch > input:checked + span::before,
+body.dark .modal .checkbox.checbox-switch label > input:checked + span::before,
+body.dark .modal .checkbox-inline.checbox-switch > input:checked + span::before {
+  left: 18px;
+  background: #ffffff;
+}
+
+body.dark .modal .checkbox.checbox-switch label > input:checked + span::before,
+body.dark .modal .checkbox-inline.checbox-switch > input:checked + span::before {
+  background: var(--vz-primary-fg);
+}
+
+body .checkbox.checbox-switch label > input:disabled + span,
+body.dark .modal .checkbox.checbox-switch label > input:disabled + span {
+  background: var(--vz-bg-chip);
+  border-color: var(--vz-border);
+  opacity: 0.6;
+}
+
+/* Legacy native sliders (accent-color) */
+body .volume-slider,
+body.dark .volume-slider {
+  accent-color: var(--vz-fg);
+}
+
+/* Keyboard focus on the switch */
+body .checkbox.checbox-switch label:focus-within span {
+  outline: 2px solid var(--vz-fg);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   8. Toasts & transient popups
+   -------------------------------------------------------------------------- */
+
+/* Fallback toast — inverted (black on white UI, white on black UI) */
+body #toast {
+  background: #171717;
+  color: #fafafa;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--vz-radius-md);
+  box-shadow: var(--vz-shadow-menu);
+  font-weight: 500;
+  font-size: 13px;
+  padding: 10px 18px;
+  bottom: 34px;
+}
+
+body.dark #toast {
+  background: #ededed;
+  color: #171717;
+  border-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Re-time the classic show/hide keyframes with a small rise */
+@keyframes fadein {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeout {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* Break reminder + install notice cards */
+body .toast-popup {
+  background: var(--vz-bg-elevated);
+  background-image: none;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-lg);
+  box-shadow: var(--vz-shadow-dialog);
+  color: var(--vz-fg);
+}
+
+body.dark .toast-popup {
+  background: var(--vz-bg-elevated);
+  background-image: none;
+  border-color: var(--vz-border);
+  color: var(--vz-fg);
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+body .toast-content a {
+  color: var(--vz-fg);
+}
+
+body .toast-content a:hover {
+  color: var(--vz-fg);
+}
+
+body .close-popup {
+  color: var(--vz-fg-muted);
+  border-radius: var(--vz-radius);
+  transition: color 100ms ease, background-color 100ms ease;
+}
+
+body .close-popup:hover {
+  color: var(--vz-fg);
+  background: var(--vz-bg-subtle);
+}
+
+body.dark .toast-content a {
+  color: var(--vz-fg);
+}
+
+body.dark .toast-content a:hover {
+  color: var(--vz-fg);
+}
+
+body.dark .close-popup {
+  color: var(--vz-fg-muted);
+}
+
+body.dark .close-popup:hover {
+  color: var(--vz-fg);
+}
+
+/* Break reminder buttons */
+body .break-reminder-button {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  color: var(--vz-fg);
+  border-radius: var(--vz-radius);
+  font-weight: 500;
+  font-size: 12.5px;
+  padding: 6px 12px;
+  transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease,
+    transform 100ms ease;
+}
+
+body .break-reminder-button:hover {
+  border-color: var(--vz-border-strong);
+  background: var(--vz-bg-subtle);
+}
+
+body .break-reminder-button:active {
+  transform: scale(0.98);
+}
+
+body .break-reminder-button-primary {
+  background: var(--vz-primary);
+  border-color: var(--vz-primary);
+  color: var(--vz-primary-fg);
+}
+
+body .break-reminder-button-primary:hover {
+  background: var(--vz-primary-hover);
+  border-color: var(--vz-primary-hover);
+}
+
+body .break-reminder-copy strong {
+  color: var(--vz-fg);
+  font-size: 13.5px;
+}
+
+body .break-reminder-copy p,
+body .break-reminder-popup p {
+  color: var(--vz-fg-muted);
+  font-size: 12.5px;
+}
+
+/* SweetAlert2 — same dialog recipe */
+body .swal2-popup {
+  background: var(--vz-bg-elevated) !important;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-lg) !important;
+  box-shadow: var(--vz-shadow-dialog) !important;
+  color: var(--vz-fg) !important;
+  font-family: inherit;
+  padding: 20px 24px 22px;
+}
+
+body.dark .swal2-popup:not(.swal-toast-bottom-offset) {
+  background: var(--vz-bg-elevated) !important;
+  border-color: var(--vz-border);
+  color: var(--vz-fg) !important;
+}
+
+body .swal2-title {
+  color: var(--vz-fg) !important;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+body .swal2-html-container {
+  color: var(--vz-fg-muted) !important;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+body .swal2-styled {
+  border-radius: var(--vz-radius) !important;
+  font-weight: 500;
+  font-size: 13px;
+  box-shadow: none !important;
+  transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease,
+    color var(--vz-dur) ease, transform 100ms ease;
+  padding: 8px 18px;
+}
+
+body .swal2-styled:active {
+  transform: scale(0.98);
+}
+
+body .swal2-styled.swal2-confirm {
+  background: var(--vz-primary) !important;
+  border: 1px solid var(--vz-primary) !important;
+  color: var(--vz-primary-fg) !important;
+}
+
+body .swal2-styled.swal2-confirm:hover {
+  background: var(--vz-primary-hover) !important;
+}
+
+body .swal2-styled.swal2-confirm.swal-btn-danger {
+  background: var(--vz-danger) !important;
+  border-color: var(--vz-danger) !important;
+  color: #ffffff !important;
+}
+
+body .swal2-styled.swal2-confirm.swal-btn-danger:hover {
+  background: var(--vz-danger-hover) !important;
+}
+
+body .swal2-styled.swal2-cancel {
+  background: var(--vz-bg-elevated) !important;
+  border: 1px solid var(--vz-border-strong) !important;
+  color: var(--vz-fg) !important;
+}
+
+body .swal2-styled.swal2-cancel:hover {
+  background: var(--vz-bg-subtle) !important;
+}
+
+/* Warning icon becomes the danger tint so the palette stays 2-color */
+body .swal2-warning {
+  border-color: rgba(238, 0, 0, 0.3) !important;
+  color: var(--vz-danger) !important;
+}
+
+body .swal2-warning::before,
+body .swal2-warning::after {
+  background: var(--vz-danger) !important;
+  color: var(--vz-danger) !important;
+}
+
+body.dark .swal2-warning {
+  border-color: rgba(255, 77, 77, 0.35) !important;
+  color: var(--vz-danger) !important;
+}
+
+body.dark .swal2-warning::before,
+body.dark .swal2-warning::after {
+  background: var(--vz-danger) !important;
+  color: var(--vz-danger) !important;
+}
+
+/* Swal toast variant (bottom) */
+body .swal-toast-bottom-offset {
+  background: var(--vz-bg-elevated) !important;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md) !important;
+  box-shadow: var(--vz-shadow-menu) !important;
+  color: var(--vz-fg) !important;
+}
+
+body.dark .swal-toast-bottom-offset {
+  background: var(--vz-bg-elevated) !important;
+  color: var(--vz-fg) !important;
+}
+
+body.dark .swal-toast-bottom-offset .swal2-title {
+  color: var(--vz-fg) !important;
+}
+
+body .swal-toast-bottom-offset .swal2-title,
+body.dark .swal-toast-bottom-offset .swal2-title {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+body .swal2-timer-progress-bar {
+  background: rgba(0, 0, 0, 0.12) !important;
+}
+
+body.dark .swal2-timer-progress-bar {
+  background: rgba(255, 255, 255, 0.18) !important;
+}
+
+/* Swal inputs (preset naming inside the music player) */
+body .swal2-input,
+body .swal2-popup .swal2-input {
+  background: var(--vz-bg-elevated) !important;
+  border: 1px solid var(--vz-border) !important;
+  border-radius: var(--vz-radius) !important;
+  box-shadow: none !important;
+  color: var(--vz-fg) !important;
+  font-size: 13px;
+  height: 36px;
+  transition: border-color var(--vz-dur) ease;
+}
+
+body .swal2-input:focus,
+body .swal2-popup .swal2-input:focus {
+  border-color: var(--vz-border-strong) !important;
+  outline: none;
+}
+
+body .swal2-input::placeholder {
+  color: var(--vz-fg-subtle);
+}
+
+body .swal2-validation-message {
+  background: var(--vz-danger-soft) !important;
+  color: var(--vz-danger) !important;
+  border-radius: var(--vz-radius);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Focus-mode exit bead */
+body .focus-mode-close-btn button,
+body.dark .focus-mode-close-btn button {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  color: var(--vz-fg-muted);
+  box-shadow: var(--vz-shadow-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--vz-dur) ease, border-color var(--vz-dur) ease,
+    transform 100ms ease;
+}
+
+body .focus-mode-close-btn button:hover,
+body .focus-mode-close-btn button:focus,
+body.dark .focus-mode-close-btn button:hover,
+body.dark .focus-mode-close-btn button:focus {
+  color: var(--vz-fg);
+  border-color: var(--vz-border-strong);
+  background: var(--vz-bg-elevated);
+}
+
+body .focus-mode-close-btn button:active,
+body.dark .focus-mode-close-btn button:active {
+  transform: scale(0.96);
+}
+
+/* Tooltips — inverted chips */
+body .tooltip-inner {
+  background: #171717;
+  color: #fafafa;
+  border-radius: var(--vz-radius);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  box-shadow: var(--vz-shadow-card);
+}
+
+body.dark .tooltip-inner {
+  background: #ededed;
+  color: #171717;
+}
+
+body .tooltip.top .tooltip-arrow {
+  border-top-color: #171717;
+}
+
+body .tooltip.bottom .tooltip-arrow {
+  border-bottom-color: #171717;
+}
+
+body .tooltip.left .tooltip-arrow {
+  border-left-color: #171717;
+}
+
+body .tooltip.right .tooltip-arrow {
+  border-right-color: #171717;
+}
+
+body.dark .tooltip.top .tooltip-arrow {
+  border-top-color: #ededed;
+}
+
+body.dark .tooltip.bottom .tooltip-arrow {
+  border-bottom-color: #ededed;
+}
+
+body.dark .tooltip.left .tooltip-arrow {
+  border-left-color: #ededed;
+}
+
+body.dark .tooltip.right .tooltip-arrow {
+  border-right-color: #ededed;
+}
+
+/* Tooltip icons inside modal titles / stat labels */
+body .modal-header a img,
+body .stat-label a img {
+  opacity: 0.45;
+  transition: opacity var(--vz-dur) ease;
+}
+
+body .modal-header a:hover img,
+body .stat-label a:hover img {
+  opacity: 0.9;
+}
+
+/* --------------------------------------------------------------------------
+   9. Bottom pills — quiet bordered capsules
+   -------------------------------------------------------------------------- */
+
+body .bottom-line .transparency.word-count-container {
+  background: var(--vz-bg-elevated) !important;
+  border: 1px solid var(--vz-border);
+  border-radius: 999px;
+  box-shadow: var(--vz-shadow-pill) !important;
+  color: var(--vz-fg-muted);
+  font-weight: 500;
+  font-size: 12px;
+  padding: 6px 14px;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transition: border-color var(--vz-dur) ease, color var(--vz-dur) ease;
+}
+
+body .bottom-line .transparency.word-count-container:hover {
+  border-color: var(--vz-border-strong);
+  color: var(--vz-fg);
+}
+
+body .bottom-line .transparency.word-count-container p {
+  color: inherit;
+}
+
+body .bottom-line .transparency.word-count-container a,
+body .bottom-line .transparency.word-count-container a svg {
+  color: var(--vz-fg-subtle);
+  transition: color var(--vz-dur) ease;
+}
+
+body .bottom-line .transparency.word-count-container a:hover,
+body .bottom-line .transparency.word-count-container a:focus {
+  color: var(--vz-fg);
+}
+
+body.dark .bottom-line .transparency.word-count-container {
+  background: var(--vz-bg-elevated) !important;
+  border-color: var(--vz-border);
+  box-shadow: var(--vz-shadow-pill) !important;
+  color: var(--vz-fg-muted);
+}
+
+body.dark .bottom-line .transparency.word-count-container:hover {
+  border-color: var(--vz-border-strong);
+  color: var(--vz-fg);
+}
+
+body.dark .bottom-line .transparency.word-count-container a,
+body.dark .bottom-line .transparency.word-count-container a svg {
+  color: var(--vz-fg-subtle);
+}
+
+body.dark .bottom-line .transparency.word-count-container a:hover,
+body.dark .bottom-line .transparency.word-count-container a:focus {
+  color: var(--vz-fg);
+}
+
+/* Timer pill — same capsule */
+body .timer-pill {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: 999px;
+  box-shadow: var(--vz-shadow-pill);
+  color: var(--vz-fg-muted);
+  font-weight: 500;
+  font-size: 12px;
+  padding: 5px 12px;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+body .timer-pill .timer-display {
+  color: var(--vz-fg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+body .timer-pill a,
+body .timer-pill a svg {
+  color: var(--vz-fg-subtle);
+  transition: color var(--vz-dur) ease;
+}
+
+body .timer-pill a:hover,
+body .timer-pill a:focus {
+  color: var(--vz-danger);
+}
+
+body.dark .timer-pill {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-border);
+  box-shadow: var(--vz-shadow-pill);
+  color: var(--vz-fg-muted);
+}
+
+body.dark .timer-pill .timer-display {
+  color: var(--vz-fg);
+}
+
+body.dark .timer-pill a,
+body.dark .timer-pill a svg {
+  color: var(--vz-fg-subtle);
+}
+
+body.dark .timer-pill a:hover,
+body.dark .timer-pill a:focus {
+  color: var(--vz-danger);
+}
+
+/* Ending state — a calm red pulse */
+body .timer-pill.timer-ending,
+body.dark .timer-pill.timer-ending {
+  animation: vz-pill-blink 1.2s ease-in-out infinite;
+}
+
+@keyframes vz-pill-blink {
+  0%,
+  100% {
+    box-shadow: var(--vz-shadow-pill);
+    border-color: var(--vz-border);
+  }
+  50% {
+    box-shadow: 0 0 0 3px var(--vz-danger-soft), var(--vz-shadow-pill);
+    border-color: var(--vz-danger);
+  }
+}
+
+/* Mobile: breathing room + iOS safe area */
+@media (max-width: 540px) {
+  .bottom-line {
+    bottom: calc(1em + env(safe-area-inset-bottom, 0px));
+    right: 1em;
+    gap: 8px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   10. Statistics — bordered stat cards
+   -------------------------------------------------------------------------- */
+
+body .statistics-grid {
+  gap: 12px;
+  margin: 18px 0;
+}
+
+body .stat-item,
+body.dark .statistics-grid .stat-item {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  box-shadow: var(--vz-shadow-card);
+  padding: 16px 12px;
+  transition: border-color var(--vz-dur) ease;
+}
+
+body .stat-item:hover,
+body.dark .statistics-grid .stat-item:hover {
+  border-color: var(--vz-border-strong);
+  box-shadow: var(--vz-shadow-card);
+}
+
+body .stat-label,
+body.dark .statistics-grid .stat-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--vz-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+
+body .stat-value,
+body.dark .statistics-grid .stat-value {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--vz-fg);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+/* --------------------------------------------------------------------------
+   11. Snapshots — list with dividers, ghost icon buttons
+   -------------------------------------------------------------------------- */
+
+body #snapshotsModal .modal-header {
+  background: transparent;
+}
+
+body #snapshotsModal .modal-footer {
+  background: transparent;
+}
+
+body .snapshots-list-container {
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  background: var(--vz-bg-elevated);
+}
+
+body #searchSnapshots {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg);
+  height: 34px;
+  font-size: 13px;
+  box-shadow: none;
+}
+
+body #searchSnapshots:focus {
+  border-color: var(--vz-border-strong);
+  box-shadow: none;
+  outline: none;
+}
+
+body #searchSnapshots::placeholder {
+  color: var(--vz-fg-subtle);
+}
+
+body.dark #searchSnapshots {
+  background: var(--vz-bg-subtle);
+  border-color: var(--vz-border);
+  color: var(--vz-fg);
+}
+
+body.dark #searchSnapshots::placeholder {
+  color: var(--vz-fg-subtle);
+}
+
+body .snapshot-item {
+  border-bottom: 1px solid var(--vz-border);
+  transition: background-color 100ms ease;
+}
+
+body .snapshot-item:last-child {
+  border-bottom: none;
+}
+
+body .snapshot-item:hover {
+  background: var(--vz-bg-subtle);
+}
+
+body .snapshot-title {
+  color: var(--vz-fg);
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+body .snapshot-preview {
+  color: var(--vz-fg-muted);
+  font-size: 12.5px;
+}
+
+body .snapshot-meta {
+  color: var(--vz-fg-subtle);
+  font-size: 11.5px;
+}
+
+body .snapshots-stats {
+  color: var(--vz-fg-muted);
+  font-size: 12.5px;
+}
+
+body #snapshotsCount {
+  color: var(--vz-fg);
+  font-weight: 600;
+}
+
+body .no-snapshots {
+  color: var(--vz-fg-muted);
+}
+
+body .no-snapshots svg path {
+  stroke: var(--vz-border-strong);
+}
+
+body .no-snapshots p {
+  color: var(--vz-fg-muted);
+  font-size: 13.5px;
+}
+
+/* Ghost icon buttons — mono; delete reads as danger */
+body .snapshot-btn {
+  color: var(--vz-fg-muted);
+  border-radius: var(--vz-radius);
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+body .snapshot-btn:hover {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg);
+}
+
+body .snapshot-btn.restore,
+body .snapshot-btn.copy {
+  color: var(--vz-fg-muted);
+}
+
+body .snapshot-btn.restore:hover {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg);
+}
+
+body .snapshot-btn.copy:hover {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg);
+}
+
+body .snapshot-btn.delete {
+  color: var(--vz-danger);
+}
+
+body .snapshot-btn.delete:hover {
+  background: var(--vz-danger-soft);
+  color: var(--vz-danger);
+}
+
+body.dark .snapshot-btn.delete {
+  color: var(--vz-danger);
+}
+
+/* --------------------------------------------------------------------------
+   12. Writing session (timer modal)
+   -------------------------------------------------------------------------- */
+
+body .timer-subtitle {
+  color: var(--vz-fg-muted);
+  font-size: 13.5px;
+  margin: 14px 4px 16px;
+}
+
+body .timer-presets {
+  gap: 10px;
+  margin: 0 4px 18px;
+}
+
+body .timer-preset {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  padding: 14px 8px 12px;
+  transition: border-color var(--vz-dur) ease, transform var(--vz-dur) ease,
+    box-shadow var(--vz-dur) ease, background-color var(--vz-dur) ease;
+}
+
+body .timer-preset:hover,
+body .timer-preset:focus-visible {
+  border-color: var(--vz-border-strong);
+  background: var(--vz-bg-elevated);
+  transform: translateY(-1px);
+  box-shadow: var(--vz-shadow-card);
+  outline: none;
+}
+
+body .timer-preset:focus-visible {
+  border-color: var(--vz-fg);
+}
+
+body .timer-preset:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+body .timer-preset-clock {
+  color: var(--vz-fg-subtle);
+}
+
+body .timer-preset-minutes {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--vz-fg);
+}
+
+body .timer-preset-minutes small,
+body .timer-preset-label {
+  color: var(--vz-fg-muted);
+  font-weight: 500;
+}
+
+body .timer-custom {
+  margin: 0 4px 16px;
+}
+
+body .timer-custom-label {
+  font-size: 13px;
+  color: var(--vz-fg-muted);
+}
+
+body .timer-stepper {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  padding: 4px 8px;
+}
+
+body .timer-stepper-btn {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--vz-border);
+  border-radius: 4px;
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg);
+  font-size: 15px;
+  font-weight: 600;
+  transition: border-color var(--vz-dur) ease, background-color var(--vz-dur) ease;
+}
+
+body .timer-stepper-btn:hover,
+body .timer-stepper-btn:focus-visible {
+  background: var(--vz-bg-chip);
+  border-color: var(--vz-border-strong);
+  outline: none;
+}
+
+body .timer-stepper input[type="number"] {
+  color: var(--vz-fg);
+}
+
+body .timer-stepper-unit {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--vz-fg-muted);
+}
+
+body .timer-start-btn {
+  border-radius: var(--vz-radius);
+}
+
+body .timer-running-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vz-fg-muted);
+  margin: 18px 0 6px;
+}
+
+body .timer-running-clock {
+  font-size: 46px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--vz-fg);
+  font-variant-numeric: tabular-nums;
+  margin: 0 0 14px;
+}
+
+body .timer-modal .timer-ending + * .timer-running-clock,
+body .timer-running-clock.timer-ending {
+  color: var(--vz-danger);
+}
+
+body .timer-running-progress {
+  height: 6px;
+  background: var(--vz-bg-chip);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 0 22px 12px;
+}
+
+body .timer-running-progress-fill {
+  background: var(--vz-fg);
+  border-radius: 999px;
+  transition: width 0.9s linear;
+}
+
+body .timer-running-hint {
+  font-size: 12.5px;
+  color: var(--vz-fg-muted);
+}
+
+body .timer-running-actions .btn {
+  border-radius: var(--vz-radius);
+}
+
+body .chime-container .chime-label {
+  color: var(--vz-fg-muted);
+  font-size: 13px;
+}
+
+body.dark .chime-label {
+  color: var(--vz-fg-muted);
+}
+
+/* dark-mode timer leftovers from the old warm theme */
+body.dark .timer-preset {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-border);
+}
+
+body.dark .timer-preset:hover,
+body.dark .timer-preset:focus-visible {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-border-strong);
+}
+
+body.dark .timer-preset-minutes {
+  color: var(--vz-fg);
+}
+
+body.dark .timer-preset-minutes small,
+body.dark .timer-preset-label,
+body.dark .timer-preset-clock {
+  color: var(--vz-fg-muted);
+}
+
+body.dark .timer-stepper {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-border);
+}
+
+body.dark .timer-stepper-btn {
+  background: var(--vz-bg-subtle);
+  border-color: var(--vz-border);
+  color: var(--vz-fg);
+}
+
+body.dark .timer-stepper-btn:hover,
+body.dark .timer-stepper-btn:focus-visible {
+  background: var(--vz-bg-chip);
+  border-color: var(--vz-border-strong);
+}
+
+body.dark .timer-stepper input[type="number"] {
+  color: var(--vz-fg);
+}
+
+body.dark .timer-running-clock {
+  color: var(--vz-fg);
+}
+
+body.dark .timer-running-progress {
+  background: var(--vz-bg-chip);
+}
+
+body.dark .timer-running-progress-fill {
+  background: var(--vz-fg);
+}
+
+body.dark .timer-subtitle,
+body.dark .timer-running-hint,
+body.dark .timer-custom-label,
+body.dark .timer-stepper-unit {
+  color: var(--vz-fg-muted);
+}
+
+body.dark .timer-running-eyebrow {
+  color: var(--vz-fg-muted);
+}
+
+/* --------------------------------------------------------------------------
+   13. Settings — Vercel-style preferences
+   -------------------------------------------------------------------------- */
+
+#preferencesModal .modal-dialog {
+  width: min(560px, calc(100vw - 24px));
+}
+
+#preferencesModal .modal-header {
+  padding: 20px 24px 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#preferencesModal .modal-header .close {
+  margin: 0;
+}
+
+#preferencesModal .modal-body {
+  padding: 6px 20px 18px;
+  max-height: calc(100vh - 190px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+#preferencesModal .modal-footer {
+  padding: 14px 24px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Header */
+.pref-header-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pref-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--vz-fg-subtle);
+}
+
+#preferencesModal .custom-modal-title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--vz-fg);
+}
+
+.pref-subtitle {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--vz-fg-muted);
+  line-height: 1.5;
+}
+
+/* Sections */
+.pref-section {
+  margin: 10px 0;
+}
+
+.pref-section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 6px;
+  margin: 14px 2px 8px;
+}
+
+.pref-section-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  box-shadow: none;
+}
+
+.pref-section-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.pref-section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vz-fg);
+  letter-spacing: -0.005em;
+}
+
+.pref-section-hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--vz-fg-muted);
+  line-height: 1.4;
+}
+
+/* Cards — bordered rows with hairline dividers */
+.pref-card {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+body.dark .pref-card {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-border);
+  box-shadow: none;
+}
+
+/* Rows */
+.pref-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 16px;
+  border-top: 1px solid var(--vz-border);
+  transition: background-color 100ms ease;
+}
+
+.pref-row:first-child {
+  border-top: none;
+}
+
+.pref-row:hover {
+  background-color: var(--vz-bg-subtle);
+}
+
+body.dark .pref-row:hover {
+  background-color: var(--vz-bg-subtle);
+}
+
+.pref-row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.pref-row-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--vz-fg);
+  line-height: 1.35;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.pref-row-hint {
+  font-size: 11.5px;
+  color: var(--vz-fg-muted);
+  line-height: 1.45;
+}
+
+.pref-row-control {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.pref-row-control .form-control {
+  min-width: 168px;
+}
+
+/* NEW badge — mono */
+.pref-new-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  box-shadow: none;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+/* Segmented theme control */
+.pref-theme-seg {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  padding: 3px;
+  box-shadow: none;
+  position: relative;
+}
+
+.pref-theme-seg input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pref-theme-seg label {
+  margin: 0;
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--vz-fg-muted);
+  cursor: pointer;
+  transition: background-color var(--vz-dur) ease, color var(--vz-dur) ease,
+    box-shadow var(--vz-dur) ease;
+  white-space: nowrap;
+}
+
+.pref-theme-seg label svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.pref-theme-seg label:hover {
+  color: var(--vz-fg);
+}
+
+.pref-theme-seg input:checked + label {
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+  box-shadow: 0 0 0 1px var(--vz-border), var(--vz-shadow-card);
+}
+
+body.dark .pref-theme-seg input:checked + label {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg);
+  box-shadow: 0 0 0 1px var(--vz-border);
+}
+
+/* Custom select */
+#preferencesModal select.form-control {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--vz-bg-elevated);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23888888' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  box-shadow: none;
+  color: var(--vz-fg);
+  font-size: 12.5px;
+  font-weight: 500;
+  height: 34px;
+  padding: 0 30px 0 12px;
+  cursor: pointer;
+  transition: border-color var(--vz-dur) ease, box-shadow var(--vz-dur) ease;
+}
+
+#preferencesModal select.form-control:hover {
+  border-color: var(--vz-border-strong);
+}
+
+#preferencesModal select.form-control:focus {
+  border-color: var(--vz-border-strong);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
+  outline: none;
+}
+
+body.dark #preferencesModal select.form-control {
+  background-color: var(--vz-bg-subtle);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23a1a1a1' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  border-color: var(--vz-border);
+  color: var(--vz-fg);
+}
+
+#preferencesModal select.form-control:focus-visible {
+  outline: none;
+}
+
+body.dark #preferencesModal select.form-control option {
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+}
+
+/* Volume slider */
+#preferencesModal .pref-volume-row .pref-row-control {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 190px;
+}
+
+#preferencesModal .volume-control {
+  width: 100%;
+}
+
+#preferencesModal .volume-slider {
+  width: 100%;
+  height: 22px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+#preferencesModal .volume-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--vz-bg-chip);
+  box-shadow: none;
+}
+
+#preferencesModal .volume-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid var(--vz-border-strong);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: box-shadow var(--vz-dur) ease, border-color var(--vz-dur) ease;
+}
+
+#preferencesModal .volume-slider::-webkit-slider-thumb:hover {
+  border-color: var(--vz-fg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+#preferencesModal .volume-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--vz-bg-chip);
+  box-shadow: none;
+}
+
+#preferencesModal .volume-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid var(--vz-border-strong);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+body.dark #preferencesModal .volume-slider::-webkit-slider-runnable-track,
+body.dark #preferencesModal .volume-slider::-moz-range-track {
+  background: var(--vz-bg-chip);
+}
+
+body.dark #preferencesModal .volume-slider::-webkit-slider-thumb,
+body.dark #preferencesModal .volume-slider::-moz-range-thumb {
+  background: #ededed;
+  border-color: var(--vz-border-strong);
+}
+
+#typewriterVolumeValue {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vz-fg-muted);
+  min-width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Always on" pill — mono status */
+.pref-always-on {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.pref-always-on::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--vz-fg-muted);
+  box-shadow: none;
+}
+
+body.dark .pref-always-on {
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-chip);
+  border-color: var(--vz-border);
+}
+
+body.dark .pref-always-on::before {
+  background: var(--vz-fg-muted);
+}
+
+/* Action row (Clear formatting) — danger-secondary */
+.pref-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 16px;
+  border-top: 1px solid var(--vz-border);
+}
+
+.pref-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: var(--vz-radius);
+  border: 1px solid var(--vz-border);
+  background: var(--vz-bg-elevated);
+  color: var(--vz-danger);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease,
+    transform 100ms ease;
+}
+
+.pref-action-btn svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.pref-action-btn:hover,
+.pref-action-btn:focus {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-danger);
+  transform: none;
+  box-shadow: none;
+  color: var(--vz-danger);
+  text-decoration: none;
+  outline: none;
+}
+
+.pref-action-btn:active {
+  transform: scale(0.98);
+}
+
+body.dark .pref-action-btn {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-border);
+  color: var(--vz-danger);
+  box-shadow: none;
+}
+
+body.dark .pref-action-btn:hover,
+body.dark .pref-action-btn:focus {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-danger);
+  color: var(--vz-danger);
+  box-shadow: none;
+}
+
+/* Footer */
+#resetPreferences {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--vz-fg-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border-radius: var(--vz-radius);
+  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease;
+}
+
+#resetPreferences svg {
+  width: 14px;
+  height: 14px;
+}
+
+#resetPreferences:hover,
+#resetPreferences:focus {
+  color: var(--vz-fg);
+  background: var(--vz-bg-subtle);
+  text-decoration: none;
+  outline: none;
+}
+
+.pref-done-btn {
+  border: 1px solid var(--vz-primary);
+  border-radius: var(--vz-radius);
+  padding: 8px 22px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vz-primary-fg);
+  background: var(--vz-primary);
+  box-shadow: none;
+  cursor: pointer;
+  transition: background-color var(--vz-dur) ease, transform 100ms ease;
+}
+
+.pref-done-btn:hover,
+.pref-done-btn:focus {
+  background: var(--vz-primary-hover);
+  transform: none;
+  box-shadow: none;
+  color: var(--vz-primary-fg);
+  outline: none;
+}
+
+.pref-done-btn:active {
+  transform: scale(0.98);
+}
+
+body.dark .pref-done-btn {
+  background: var(--vz-primary);
+  border-color: var(--vz-primary);
+  color: var(--vz-primary-fg);
+  box-shadow: none;
+}
+
+body.dark .pref-done-btn:hover {
+  background: var(--vz-primary-hover);
+  color: var(--vz-primary-fg);
+}
+
+/* Settings mobile layout */
+@media (max-width: 540px) {
+  #preferencesModal .modal-header {
+    padding: 16px 18px 12px;
+  }
+
+  #preferencesModal .modal-body {
+    padding: 4px 12px 14px;
+    max-height: calc(100vh - 170px);
+  }
+
+  #preferencesModal .modal-footer {
+    padding: 12px 18px 16px;
+    flex-wrap: wrap;
+  }
+
+  .pref-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 13px 14px;
+  }
+
+  .pref-row-control,
+  .pref-row-control .form-control {
+    width: 100%;
+  }
+
+  #preferencesModal select.form-control {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .pref-theme-seg {
+    width: 100%;
+  }
+
+  .pref-theme-seg label {
+    padding: 8px 6px;
+    font-size: 11px;
+  }
+
+  .pref-theme-seg label svg {
+    display: none;
+  }
+
+  #preferencesModal .pref-volume-row .pref-row-control {
+    align-items: stretch;
+    min-width: 0;
+  }
+
+  #preferencesModal .pref-volume-row .volume-control {
+    width: 100%;
+  }
+
+  .pref-action-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .pref-action-btn {
+    justify-content: center;
+  }
+
+  .pref-section-head {
+    padding: 2px 4px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   14. Music player & Unicode picker — align controls to the mono system
+      (palettes are re-tokened inside music-player.css / unicode-picker.css)
+   -------------------------------------------------------------------------- */
+
+/* Genre tags collapse to one quiet badge style */
+body #musicPlayerModal .mp-np-tag--focus,
+body #musicPlayerModal .mp-np-tag--calm,
+body #musicPlayerModal .mp-np-tag--sleep,
+body #musicPlayerModal .mp-np-tag--uplift {
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+}
+
+/* Radius + control alignment */
+body #musicPlayerModal .mp-btn {
+  border-radius: var(--vz-radius);
+  font-weight: 500;
+  padding: 7px 16px;
+}
+
+body #musicPlayerModal .mp-btn-primary,
+body #musicPlayerModal .mp-btn-primary:hover,
+body #musicPlayerModal .mp-btn-primary:focus {
+  color: var(--mp-accent-contrast);
+}
+
+body #musicPlayerModal .mp-tabs {
+  border-radius: var(--vz-radius);
+  gap: 2px;
+  padding: 3px;
+}
+
+body #musicPlayerModal .mp-tab {
+  border-radius: 4px;
+  font-weight: 500;
+  padding: 6px 16px;
+}
+
+body #musicPlayerModal .mp-tab.is-active {
+  background: var(--vz-bg-elevated);
+  box-shadow: 0 0 0 1px var(--vz-border), var(--vz-shadow-card);
+}
+
+body.dark #musicPlayerModal .mp-tab.is-active {
+  background: var(--vz-bg-chip);
+  box-shadow: 0 0 0 1px var(--vz-border);
+}
+
+body #musicPlayerModal .mp-now-playing {
+  border-radius: var(--vz-radius-md);
+}
+
+body #musicPlayerModal .mp-row-main {
+  border-radius: var(--vz-radius) 0 0 var(--vz-radius);
+}
+
+body #musicPlayerModal .mp-row-star {
+  border-radius: 0 var(--vz-radius) var(--vz-radius) 0;
+}
+
+body #musicPlayerModal .mp-row-star:hover {
+  color: var(--vz-star);
+  background: transparent;
+}
+
+body.dark #musicPlayerModal .mp-row-star:hover {
+  color: var(--vz-star);
+  background: transparent;
+}
+
+body #musicPlayerModal .mp-play {
+  box-shadow: var(--vz-shadow-pill);
+}
+
+body #musicPlayerModal .mp-play:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--vz-shadow-menu);
+}
+
+body #musicPlayerModal .mp-title svg {
+  color: var(--vz-fg-muted);
+}
+
+body #musicPlayerModal .mp-title {
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+/* Unicode picker — align controls (palette re-tokened in unicode-picker.css) */
+
+body .ucp-modal .modal-content {
+  box-shadow: var(--vz-shadow-dialog);
+}
+
+body .ucp-btn {
+  border-radius: var(--vz-radius);
+}
+
+body .ucp-btn-primary,
+body .ucp-btn-primary:hover {
+  color: #ffffff;
+}
+
+body.dark .ucp-btn-primary,
+body.dark .ucp-btn-primary:hover {
+  color: #0a0a0a;
+}
+
+/* --------------------------------------------------------------------------
+   15. Paper textures — neutral gray (not warm cream)
+   -------------------------------------------------------------------------- */
+
+body.dotted-paper {
+  background-image: radial-gradient(#d4d4d480 1px, #0000 1px);
+  background-size: 24px 24px;
+}
+
+body.dark.dotted-paper {
+  background-image: radial-gradient(#30303080 1px, #0000 1px);
+}
+
+body.graph-paper {
+  background-image: linear-gradient(#e5e5e580 1px, transparent 1px),
+    linear-gradient(90deg, #e5e5e580 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+body.dark.graph-paper {
+  background-image: linear-gradient(#26262680 1px, transparent 1px),
+    linear-gradient(90deg, #26262680 1px, transparent 1px);
+}
+
+body.chessboard-paper {
+  background-image: conic-gradient(#f1f1f1 25%, #ffffff 0 50%, #f1f1f1 0 75%, #ffffff 0);
+  background-size: 42px 42px;
+}
+
+body.dark.chessboard-paper {
+  background-image: conic-gradient(#141414 25%, #000000 0 50%, #141414 0 75%, #000000 0);
+}
+
+body.starfield-paper {
+  background-image: radial-gradient(#d4d4d4 1px, transparent 1.4px),
+    radial-gradient(#b8b8b8 1px, transparent 1.4px);
+  background-position: 0 0, 14px 18px;
+  background-size: 52px 52px;
+}
+
+body.dark.starfield-paper {
+  background-image: radial-gradient(#3a3a3a 1px, transparent 1.4px),
+    radial-gradient(#555555 1px, transparent 1.4px);
+}
+
+body.grain-paper {
+  background-color: var(--vz-bg);
+}
+
+body.newspaper-paper {
+  background-color: #f6f6f4;
+}
+
+body.dark.newspaper-paper {
+  background-color: #0a0a0a;
+}
+
+/* linen / recycled / marble keep their imagery but sit on neutral paper */
+body.linen-paper,
+body.recycled-paper,
+body.marble-paper {
+  background-color: var(--vz-bg);
+}
+
+/* --------------------------------------------------------------------------
+   16. Accessibility
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .navbar.navbar-fixed-top,
+  .icon-container a,
+  .navbar .dropdown-menu,
+  .btn,
+  .pref-theme-seg label,
+  .pref-action-btn,
+  .pref-done-btn,
+  body .checkbox.checbox-switch label span,
+  body .checkbox.checbox-switch label span::before,
+  .modal.fade .modal-dialog {
+    transition: none;
+    animation: none;
+  }
+
+  .navbar .dropdown-menu {
+    animation: none;
+  }
+
+  .timer-pill.timer-ending,
+  body.dark .timer-pill.timer-ending {
+    animation: none;
+  }
+}

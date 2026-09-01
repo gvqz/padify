@@ -411,8 +411,9 @@ export function deleteNotes(): void {
         text: "You won't be able to revert this!",
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
+        customClass: {
+            confirmButton: 'swal-btn-danger'
+        },
         confirmButtonText: 'Yes, Delete!',
         cancelButtonText: 'No, keep it.'
     }).then((result) => {

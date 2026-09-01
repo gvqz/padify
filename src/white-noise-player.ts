@@ -461,7 +461,6 @@ export class WhiteNoisePlayer {
             showCancelButton: true,
             confirmButtonText,
             cancelButtonText: 'Cancel',
-            confirmButtonColor: '#3085d6',
             reverseButtons: true,
             allowOutsideClick: false,
             allowEscapeKey: true,
@@ -502,8 +501,6 @@ export class WhiteNoisePlayer {
             showCancelButton: true,
             confirmButtonText: 'Overwrite',
             cancelButtonText: 'Cancel',
-            confirmButtonColor: '#3085d6',
-            cancelButtonColor: '#7f8c8d',
             reverseButtons: true,
             allowOutsideClick: false,
             allowEscapeKey: true
@@ -525,8 +522,6 @@ export class WhiteNoisePlayer {
             showCancelButton: true,
             confirmButtonText: 'Delete',
             cancelButtonText: 'Cancel',
-            confirmButtonColor: '#d33',
-            cancelButtonColor: '#3085d6',
             reverseButtons: true,
             allowOutsideClick: false,
             allowEscapeKey: true

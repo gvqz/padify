@@ -1,41 +1,41 @@
 /* ==========================================================================
-   Unicode character picker ("ucp") — standalone design, light + dark.
-   Scoped to #unicodePickerModal so it can never leak into other UI.
+   Unicode character picker ("ucp") — shares the app-wide Vercel-style
+   palette. Scoped to #unicodePickerModal so it can never leak into other UI.
    ========================================================================== */
 
 .ucp-modal {
-  --ucp-accent: #1a7f37;
-  --ucp-accent-strong: #116329;
-  --ucp-accent-soft: rgba(26, 127, 55, 0.09);
-  --ucp-accent-ring: rgba(26, 127, 55, 0.22);
+  --ucp-accent: #171717;
+  --ucp-accent-strong: #000000;
+  --ucp-accent-soft: rgba(0, 0, 0, 0.06);
+  --ucp-accent-ring: rgba(0, 0, 0, 0.18);
 
   --ucp-bg: #ffffff;
-  --ucp-bg-subtle: #f6f7f9;
-  --ucp-border: #e3e6ea;
-  --ucp-border-strong: #b7c0c9;
-  --ucp-text: #1f2328;
-  --ucp-muted: #6b7280;
-  --ucp-chip: #eef1f4;
-  --ucp-star: #e3b341;
+  --ucp-bg-subtle: #fafafa;
+  --ucp-border: #eaeaea;
+  --ucp-border-strong: #999999;
+  --ucp-text: #171717;
+  --ucp-muted: #666666;
+  --ucp-chip: #f1f1f1;
+  --ucp-star: #d9a03c;
 
   --ucp-card: 86px;
   --ucp-gap: 8px;
 }
 
 body.dark .ucp-modal {
-  --ucp-accent: #57ab5a;
-  --ucp-accent-strong: #7ee787;
-  --ucp-accent-soft: rgba(63, 185, 80, 0.14);
-  --ucp-accent-ring: rgba(63, 185, 80, 0.30);
+  --ucp-accent: #ededed;
+  --ucp-accent-strong: #ffffff;
+  --ucp-accent-soft: rgba(255, 255, 255, 0.12);
+  --ucp-accent-ring: rgba(255, 255, 255, 0.3);
 
-  --ucp-bg: #151a21;
-  --ucp-bg-subtle: #1a212b;
-  --ucp-border: #2c3947;
-  --ucp-border-strong: #47566a;
-  --ucp-text: #e6edf3;
-  --ucp-muted: #8b949e;
-  --ucp-chip: #212934;
-  --ucp-star: #d29922;
+  --ucp-bg: #111111;
+  --ucp-bg-subtle: #1a1a1a;
+  --ucp-border: #262626;
+  --ucp-border-strong: #525252;
+  --ucp-text: #ededed;
+  --ucp-muted: #a1a1a1;
+  --ucp-chip: #1a1a1a;
+  --ucp-star: #e3b341;
 }
 
 /* ---- dialog frame ------------------------------------------------------ */
@@ -53,13 +53,13 @@ body.dark .ucp-modal {
   background: var(--ucp-bg);
   color: var(--ucp-text);
   border: 1px solid var(--ucp-border);
-  border-radius: 14px;
+  border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.24);
 }
 
 body.dark .ucp-modal .modal-content {
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.7);
 }
 
 .ucp-modal .modal-header,
@@ -505,7 +505,7 @@ body.dark .ucp-modal .modal-content {
 .ucp-btn-primary {
   border-color: transparent;
   background: var(--ucp-accent);
-  color: #fff;
+  color: #ffffff;
   font-weight: 600;
 }
 
@@ -515,7 +515,7 @@ body.dark .ucp-modal .modal-content {
 }
 
 body.dark .ucp-btn-primary {
-  color: #0d1117;
+  color: #0a0a0a;
 }
 
 .ucp-btn-star .ucp-btn-star-icon {

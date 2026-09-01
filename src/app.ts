@@ -324,8 +324,8 @@ it's recommended that you take a backup of your notes more often using the
 
         const darkmodeText = 'Enable dark mode [Ctrl/Cmd + M]';
         const lightmodeText = 'Enable light mode [Ctrl/Cmd + M]';
-        const darkMetaColor = '#0d1117';
-        const lightMetaColor = '#4d4d4d';
+        const darkMetaColor = '#0a0a0a';
+        const lightMetaColor = '#ffffff';
         const metaThemeColor = document.querySelector('meta[name=theme-color]') as HTMLElement | null;
         const { notepad, state, setState, removeState, get } = selector();
         const optimalLineLengthPadding = '15px 15vw 40px';
@@ -743,7 +743,7 @@ it's recommended that you take a backup of your notes more often using the
                 notepad.showWordCountPill.prop('checked', true);
         }
 
-        // The word count pill always uses the frosted glass style.
+        // The word count pill always uses the counter pill style.
         notepad.wordCountContainer.addClass('transparency');
 
         if (state.userChosenWriteDirection) {
@@ -1056,8 +1056,7 @@ it's recommended that you take a backup of your notes more often using the
                         text: `This will remove ${tabCount} tab${tabCount === 1 ? '' : 's'} of indentation from your notes. You can undo it with Ctrl/Cmd + Z.`,
                         icon: 'warning',
                         showCancelButton: true,
-                        confirmButtonText: 'Remove tabs',
-                        confirmButtonColor: '#d9534f'
+                        confirmButtonText: 'Remove tabs'
                 }).then((result) => {
                         if (!result.isConfirmed) {
                                 return;

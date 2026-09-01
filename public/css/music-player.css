@@ -1,62 +1,65 @@
 /* ==========================================================================
-   Padify music player ("mp") — standalone design system, light + dark.
+   Padify music player ("mp") — shares the app-wide Vercel-style palette.
    Scoped to #musicPlayerModal so it never leaks into other app UI.
 
-   Palette: warm cream paper / dark slate, terracotta accent
-   (#b4532c light, #e7845a dark) with sage / sand / plum support tones.
+   Monochrome surfaces (white / #fafafa light, #111 / #1a1a1a dark) with a
+   black primary, one gold star tone for favorites, and generative album
+   art as the only color content.
    ========================================================================== */
 
 #musicPlayerModal {
-  --mp-accent: #b4532c;
-  --mp-accent-strong: #94401f;
-  --mp-accent-soft: rgba(180, 83, 44, 0.09);
-  --mp-accent-ring: rgba(180, 83, 44, 0.26);
+  --mp-accent: #171717;
+  --mp-accent-strong: #383838;
+  --mp-accent-contrast: #ffffff;
+  --mp-accent-soft: rgba(0, 0, 0, 0.06);
+  --mp-accent-ring: rgba(0, 0, 0, 0.16);
 
-  --mp-sage: #5d7a55;
-  --mp-sage-soft: rgba(93, 122, 85, 0.12);
-  --mp-sand: #a8874f;
-  --mp-sand-soft: rgba(168, 135, 79, 0.14);
-  --mp-plum: #6d5d7a;
-  --mp-plum-soft: rgba(109, 93, 122, 0.14);
+  --mp-sage: #666666;
+  --mp-sage-soft: #f1f1f1;
+  --mp-sand: #666666;
+  --mp-sand-soft: #f1f1f1;
+  --mp-plum: #666666;
+  --mp-plum-soft: #f1f1f1;
   --mp-star: #d9a03c;
 
-  --mp-bg: #fbfaf5;
-  --mp-card: #ffffff;
-  --mp-well: #f4f2ea;
-  --mp-border: #e2ded4;
-  --mp-border-strong: #cfc9bb;
-  --mp-text: #33322e;
-  --mp-muted: #857f72;
-  --mp-track: #e7e2d5;
-  --mp-shadow: 0 1px 2px rgba(43, 37, 28, 0.06), 0 10px 30px rgba(43, 37, 28, 0.07);
+  --mp-bg: #ffffff;
+  --mp-card: #fafafa;
+  --mp-well: #f1f1f1;
+  --mp-border: #eaeaea;
+  --mp-border-strong: #999999;
+  --mp-text: #171717;
+  --mp-muted: #666666;
+  --mp-track: #e5e5e5;
+  --mp-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   color: var(--mp-text);
 }
 
 body.dark #musicPlayerModal {
-  --mp-accent: #e7845a;
-  --mp-accent-strong: #f0986f;
-  --mp-accent-soft: rgba(231, 132, 90, 0.13);
-  --mp-accent-ring: rgba(231, 132, 90, 0.3);
+  --mp-accent: #ededed;
+  --mp-accent-strong: #ffffff;
+  --mp-accent-contrast: #0a0a0a;
+  --mp-accent-soft: rgba(255, 255, 255, 0.1);
+  --mp-accent-ring: rgba(255, 255, 255, 0.22);
 
-  --mp-sage: #8fbf85;
-  --mp-sage-soft: rgba(143, 191, 133, 0.14);
-  --mp-sand: #d3b077;
-  --mp-sand-soft: rgba(211, 176, 119, 0.15);
-  --mp-plum: #b1a1c4;
-  --mp-plum-soft: rgba(177, 161, 196, 0.15);
+  --mp-sage: #a1a1a1;
+  --mp-sage-soft: #1f1f1f;
+  --mp-sand: #a1a1a1;
+  --mp-sand-soft: #1f1f1f;
+  --mp-plum: #a1a1a1;
+  --mp-plum-soft: #1f1f1f;
   --mp-star: #e3b341;
 
-  --mp-bg: #2d3748;
-  --mp-card: #39465a;
-  --mp-well: #1a2332;
-  --mp-border: #4a5568;
-  --mp-border-strong: #5f6c80;
-  --mp-text: #e2e8f0;
-  --mp-muted: #99a5b7;
-  --mp-track: #47556b;
-  --mp-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 12px 34px rgba(0, 0, 0, 0.3);
+  --mp-bg: #111111;
+  --mp-card: #1a1a1a;
+  --mp-well: #212121;
+  --mp-border: #262626;
+  --mp-border-strong: #525252;
+  --mp-text: #ededed;
+  --mp-muted: #a1a1a1;
+  --mp-track: #303030;
+  --mp-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 /* ---- dialog frame ------------------------------------------------------ */
@@ -69,13 +72,13 @@ body.dark #musicPlayerModal {
 #musicPlayerModal .modal-content {
   background: var(--mp-bg);
   border: 1px solid var(--mp-border);
-  border-radius: 14px;
+  border-radius: 12px;
   color: var(--mp-text);
-  box-shadow: 0 26px 64px rgba(35, 28, 18, 0.24);
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.24);
 }
 
 body.dark #musicPlayerModal .modal-content {
-  box-shadow: 0 26px 64px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.7);
 }
 
 #musicPlayerModal .modal-header {
@@ -173,14 +176,14 @@ body.dark #musicPlayerModal .modal-content {
 .mp-btn-primary {
   background: var(--mp-accent);
   border-color: var(--mp-accent);
-  color: #fff;
+  color: var(--mp-accent-contrast);
 }
 
 .mp-btn-primary:hover,
 .mp-btn-primary:focus {
   background: var(--mp-accent-strong);
   border-color: var(--mp-accent-strong);
-  color: #fff;
+  color: var(--mp-accent-contrast);
 }
 
 /* ---- segmented tabs ------------------------------------------------------ */
@@ -223,7 +226,7 @@ body.dark #musicPlayerModal .modal-content {
 .mp-tab.is-active {
   background: var(--mp-card);
   color: var(--mp-text);
-  box-shadow: 0 1px 3px rgba(35, 28, 18, 0.14);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
 }
 
 body.dark .mp-tab.is-active {
@@ -264,7 +267,7 @@ body.dark .mp-tab.is-active {
   width: 120px;
   height: 120px;
   border-radius: 10px;
-  box-shadow: 0 10px 24px rgba(30, 24, 16, 0.2);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
 }
 
 .mp-eq-overlay {
@@ -420,7 +423,7 @@ body.dark .mp-tab.is-active {
   height: 13px;
   border-radius: 50%;
   background: var(--mp-accent);
-  color: #fff;
+  color: var(--mp-accent-contrast);
   font-size: 8.5px;
   font-weight: 700;
   line-height: 1;
@@ -440,7 +443,7 @@ body.dark .mp-tab.is-active {
   border: none;
   border-radius: 50%;
   background: var(--mp-accent);
-  color: #fff;
+  color: var(--mp-accent-contrast);
   cursor: pointer;
   box-shadow: 0 6px 16px var(--mp-accent-ring);
   transition: background 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
@@ -615,7 +618,7 @@ body.dark .mp-row-star:hover {
   width: 40px;
   height: 40px;
   border-radius: 8px;
-  box-shadow: 0 2px 6px rgba(30, 24, 16, 0.18);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
 }
 
 .mp-row-title {
@@ -794,7 +797,7 @@ body.dark .mp-row-star:hover {
   border-radius: 50%;
   background: var(--mp-accent);
   border: 2.5px solid var(--mp-card);
-  box-shadow: 0 1px 3px rgba(35, 28, 18, 0.3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   transition: box-shadow 0.15s ease, transform 0.12s ease;
 }
 
@@ -829,7 +832,7 @@ body.dark .mp-row-star:hover {
   border-radius: 50%;
   background: var(--mp-accent);
   border: 2.5px solid var(--mp-card);
-  box-shadow: 0 1px 3px rgba(35, 28, 18, 0.3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 #musicPlayerModal .mp-range:focus,
@@ -946,7 +949,7 @@ body.dark .mp-row-star:hover {
   background: var(--mp-card);
   border: 1px solid var(--mp-border);
   border-radius: 12px;
-  box-shadow: 0 18px 44px rgba(35, 28, 18, 0.2);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.2);
 }
 
 body.dark #musicPlayerModal .ambient-noise-preset-menu {
@@ -1054,8 +1057,8 @@ body.dark #musicPlayerModal .ambient-noise-preset-menu {
 
 #musicPlayerModal .ambient-noise-preset-icon-button.delete:hover,
 #musicPlayerModal .ambient-noise-preset-icon-button.delete:focus {
-  color: #c54545;
-  background: rgba(197, 69, 69, 0.12);
+  color: #ee0000;
+  background: rgba(238, 0, 0, 0.08);
 }
 
 #musicPlayerModal .ambient-noise-preset-empty {
@@ -1112,7 +1115,7 @@ body.dark #musicPlayerModal .ambient-noise-preset-menu {
 #musicPlayerModal .sound-button:hover {
   border-color: var(--mp-border-strong);
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(35, 28, 18, 0.1);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
 }
 
 body.dark #musicPlayerModal .sound-button:hover {
@@ -1185,7 +1188,7 @@ body.dark #musicPlayerModal .sound-button:hover {
   padding: 3px 7px;
   border-radius: 999px;
   background: var(--mp-accent) !important;
-  color: #fff;
+  color: var(--mp-accent-contrast);
   font-size: 8.5px;
   font-weight: 700;
   letter-spacing: 0.05em;
