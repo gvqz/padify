@@ -1,48 +1,70 @@
-function getFileName() {
+import $ from 'jquery';
+import Swal from 'sweetalert2';
+import type { SweetAlertIcon } from 'sweetalert2';
+import { get, setState, selector } from './selector';
+import type { NotepadUI } from './selector';
+
+// Bootstrap 3's jQuery modal plugin (registered globally by the `bootstrap`
+// import in main.ts) is not covered by @types/jquery.
+declare global {
+  interface JQuery {
+    modal(action: string | { [key: string]: unknown }): JQuery;
+  }
+}
+
+export function getFileName(): string {
     return 'Notes-' + getCurrentDate() + '.txt';
 }
 
-function getPdfFileName() {
+export function getPdfFileName(): string {
     return 'Notes-' + getCurrentDate() + '.pdf';
 }
 
-function getDocxFileName() {
+export function getDocxFileName(): string {
     return 'Notes-' + getCurrentDate() + '.docx';
 }
 
-function getHtmlFileName() {
+export function getHtmlFileName(): string {
     return 'Notes-' + getCurrentDate() + '.html';
 }
 
-function getCurrentDate() {
+export function getCurrentDate(): string {
     const currentDate = new Date();
 
     return currentDate.getDate() + '-' + (currentDate.getMonth() + 1) + '-' + currentDate.getFullYear();
 }
 
-function showToast(message) {
-    let toast = document.getElementById('toast');
+export function showToast(message: string): void {
+    const toast = document.getElementById('toast')!;
     toast.className = 'show';
     toast.innerHTML = message;
-    
+
     setTimeout(function () {
         toast.className = toast.className.replace('show', '');
     }, 2000);
 }
 
-function debounce(func, wait, immediate) {
-    let timeout;
-    return function () {
-        let context = this;
-        let args = arguments;
-        let later = function () {
-            timeout = null;
+/**
+ * Debounce wrapper. The returned function forwards its `this` value and all
+ * arguments to `func` (the original implementation captured `this`/`arguments`
+ * and re-applied them), so it can be used as a drop-in event handler.
+ */
+export function debounce<T extends (...args: never[]) => void>(
+    func: T,
+    wait: number,
+    immediate?: boolean
+): (...args: Parameters<T>) => void {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    return function (this: unknown, ...args: Parameters<T>) {
+        const context = this;
+        const later = function () {
+            timeout = undefined;
             if (!immediate) {
                 func.apply(context, args);
             }
         };
 
-        let callNow = immediate && !timeout;
+        const callNow = immediate && !timeout;
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
         if (callNow) {
@@ -51,14 +73,15 @@ function debounce(func, wait, immediate) {
     };
 }
 
-function saveTextAsFile(textToWrite, fileNameToSaveAs) {
-    let textFileAsBlob = new Blob([textToWrite], { type: 'text/plain' });
-    let downloadLink = document.createElement('a');
+export function saveTextAsFile(textToWrite: string, fileNameToSaveAs: string): void {
+    const textFileAsBlob = new Blob([textToWrite], { type: 'text/plain' });
+    const downloadLink = document.createElement('a');
     downloadLink.download = fileNameToSaveAs;
     downloadLink.innerHTML = 'Download File';
 
-    if (window.webkitURL != null) {
-        downloadLink.href = window.webkitURL.createObjectURL(textFileAsBlob);
+    const webkitURL = (window as Window & { webkitURL?: typeof URL }).webkitURL;
+    if (webkitURL != null) {
+        downloadLink.href = webkitURL.createObjectURL(textFileAsBlob);
     } else {
         downloadLink.href = window.URL.createObjectURL(textFileAsBlob);
         downloadLink.style.display = 'none';
@@ -68,37 +91,45 @@ function saveTextAsFile(textToWrite, fileNameToSaveAs) {
     downloadLink.click();
 }
 
-function getPWADisplayMode() {
+export function getPWADisplayMode(): 'twa' | 'standalone' | 'browser' {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
 
     if (document.referrer.startsWith('android-app://')) {
         return 'twa';
-    } else if (navigator.standalone || isStandalone) {
+    } else if ((navigator as Navigator & { standalone?: boolean }).standalone || isStandalone) {
         return 'standalone';
     }
 
     return 'browser';
 }
 
-function enableDarkMode(lightmodeText, darkMetaColor, metaThemeColor) {
+export function enableDarkMode(lightmodeText: string, darkMetaColor: string, metaThemeColor: HTMLElement | null): void {
     $(document.body).addClass('dark');
     $('.navbar').removeClass('navbar-default');
     $('#mode').attr('title', lightmodeText);
-    $('#themeIcon').attr('src', 'img/navbar/light-theme.svg')
-    metaThemeColor.setAttribute('content', darkMetaColor);
+    $('#themeIcon').attr('src', 'img/navbar/light-theme.svg');
+    metaThemeColor!.setAttribute('content', darkMetaColor);
     localStorage.setItem('mode', 'dark');
 }
 
-function enableLightMode(darkmodeText, lightMetaColor, metaThemeColor) {
+export function enableLightMode(darkmodeText: string, lightMetaColor: string, metaThemeColor: HTMLElement | null): void {
     $(document.body).removeClass('dark');
     $('.navbar').addClass('navbar-default');
     $('#mode').attr('title', darkmodeText);
-    $('#themeIcon').attr('src', 'img/navbar/dark-theme.svg')
-    metaThemeColor.setAttribute('content', lightMetaColor);
+    $('#themeIcon').attr('src', 'img/navbar/dark-theme.svg');
+    metaThemeColor!.setAttribute('content', lightMetaColor);
     localStorage.setItem('mode', 'light');
 }
 
-function enableDeviceTheme(themeConfig) {
+export interface ThemeConfig {
+    lightmodeText: string;
+    darkmodeText: string;
+    lightMetaColor: string;
+    darkMetaColor: string;
+    metaThemeColor: HTMLElement | null;
+}
+
+export function enableDeviceTheme(themeConfig: ThemeConfig): void {
     if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
         enableDarkMode(themeConfig.lightmodeText, themeConfig.darkMetaColor, themeConfig.metaThemeColor)
     } else {
@@ -108,32 +139,32 @@ function enableDeviceTheme(themeConfig) {
     localStorage.setItem('mode', 'device');
 }
 
-function resetFontSize(defaultFontSize) {
+export function resetFontSize(defaultFontSize: number): void {
     $('#note').css('font-size', defaultFontSize + "px");
     $('#fontSize').val(defaultFontSize);
 }
 
-function resetLineHeight(defaultLineHeight) {
+export function resetLineHeight(defaultLineHeight: number): void {
     $('#note').css('line-height', defaultLineHeight + "px");
     $('#lineHeight').val(defaultLineHeight);
 }
 
-function resetFontWeight(defaultFontWeight) {
+export function resetFontWeight(defaultFontWeight: string): void {
     $('#note').css('font-weight', defaultFontWeight);
     $('#fontWeight').val(defaultFontWeight);
 }
 
-function resetShowWordCountPill(defaultShowWordCountPill) {
+export function resetShowWordCountPill(defaultShowWordCountPill: string): void {
     defaultShowWordCountPill === 'Yes' ? $('.word-count-container').show() : $('.word-count-container').hide();
     $('#showWordCountPill').prop('checked', defaultShowWordCountPill === 'Yes');
 }
 
-function resetWriteDirection(defaultWriteDirection) {
+export function resetWriteDirection(defaultWriteDirection: string): void {
     $('#note').css('direction', defaultWriteDirection);
     $('#writeDirection').val(defaultWriteDirection);
 }
 
-function resetTexture(defaultTexture) {
+export function resetTexture(defaultTexture: string): void {
     $(document.body).removeClass('dotted-paper');
     $(document.body).removeClass('graph-paper');
     $(document.body).removeClass('chessboard-paper');
@@ -146,18 +177,18 @@ function resetTexture(defaultTexture) {
     $('#texture').val(defaultTexture);
 }
 
-function resetFont(defaultFont) {
+export function resetFont(defaultFont: string): void {
     $('#note').removeClass('dyslexic monospaced serif handwritten humanist pixel typewriter crayon');
     $('#font').val(defaultFont);
 }
 
-function resetOptimalLineLength(defaultEditorPadding, defaultOption) {
-    const textArea = document.getElementById('note');
+export function resetOptimalLineLength(defaultEditorPadding: string, defaultOption: boolean): void {
+    const textArea = document.getElementById('note')!;
     textArea.style.padding = defaultEditorPadding;
     $('#optimalLineLength').prop('checked', defaultOption);
 }
 
-function countWords(str) {
+export function countWords(str: string): number {
     const trimmedText = str.trim();
 
     if (trimmedText === '') {
@@ -167,38 +198,52 @@ function countWords(str) {
     return trimmedText.split(/\s+/).length;
 }
 
-function extractWordTokens(str) {
+export function extractWordTokens(str: string): string[] {
     return str.toLowerCase().match(/\b[a-z']+\b/g) || [];
 }
 
-function countSyllables(word) {
+export function countSyllables(word: string): number {
     const cleanedWord = word.toLowerCase().replace(/[^a-z']/g, '');
 
     if (cleanedWord.length === 0) {
         return 0;
     }
 
-    let syllableCount = cleanedWord
+    const syllableMatches = cleanedWord
         .replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '')
         .replace(/^y/, '')
         .match(/[aeiouy]{1,2}/g);
 
-    syllableCount = syllableCount ? syllableCount.length : 1;
-
-    return syllableCount;
+    return syllableMatches ? syllableMatches.length : 1;
 }
 
-function calculateCharactersAndWords(str) {
+export function calculateCharactersAndWords(str: string): string {
     const characterCount = str.length;
     const wordCount = str !== '' ? countWords(str) : 0;
     const characterString = characterCount > 1 ? 'characters' : 'character';
     const wordString = wordCount > 1 ? 'words' : 'word';
     const wordCountText = `${characterCount} ${characterString} • ${wordCount} ${wordString}`;
-    
+
     return wordCountText;
 }
 
-function calculateNoteStatistics(str) {
+export interface NoteStatistics {
+    characters: number;
+    words: number;
+    sentences: number;
+    paragraphs: number;
+    averageWordLength: string | number;
+    readingTime: string;
+    uniqueWords: number;
+    lexicalDensity: string;
+    lexicalDensityScore: string;
+    mostCommonWord: string;
+    readabilityScore: string;
+    estimatedPages: string;
+    estimatedSpeakingTime: string;
+}
+
+export function calculateNoteStatistics(str: string): NoteStatistics {
     if (!str || str.trim() === '') {
         return {
             characters: 0,
@@ -220,30 +265,30 @@ function calculateNoteStatistics(str) {
     const characters = str.length;
     const words = countWords(str);
     const wordTokens = extractWordTokens(str);
-    
+
     // Count sentences (split by . ! ?)
     const sentences = str.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
-    
+
     // Count paragraphs (split by double newlines or multiple line breaks)
     const paragraphs = str.split(/\n\n+/).filter(p => p.trim().length > 0).length;
-    
+
     // Calculate average word length
     const averageWordLength = words > 0 ? (characters / words).toFixed(2) : 0;
-    
+
     // Calculate reading time (average 200 words per minute)
     const readingTimeMinutes = Math.ceil(words / 200);
     const readingTime = readingTimeMinutes === 1 ? '1 min' : `${readingTimeMinutes} mins`;
-    
+
     const contentWords = wordTokens.filter(word => !STOP_WORDS.has(word));
 
     // Calculate unique words from the full token set
-    const wordFrequency = {};
+    const wordFrequency: Record<string, number> = {};
     wordTokens.forEach(word => {
         wordFrequency[word] = (wordFrequency[word] || 0) + 1;
     });
 
     // Calculate most common content word separately so stop words are excluded
-    const contentWordFrequency = {};
+    const contentWordFrequency: Record<string, number> = {};
     let maxCount = 0;
     let mostCommonWord = 'N/A';
 
@@ -272,7 +317,7 @@ function calculateNoteStatistics(str) {
 
     const speakingTimeMinutes = Math.ceil(words / 130);
     const estimatedSpeakingTime = speakingTimeMinutes === 1 ? '1 min' : `${speakingTimeMinutes} mins`;
-    
+
     return {
         characters,
         words,
@@ -290,7 +335,7 @@ function calculateNoteStatistics(str) {
     };
 }
 
-const STOP_WORDS = new Set([
+export const STOP_WORDS = new Set([
     'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 'any', 'are', 'as', 'at',
     'be', 'because', 'been', 'before', 'being', 'below', 'between', 'both', 'but', 'by',
     'can', 'cannot', 'could',
@@ -312,7 +357,7 @@ const STOP_WORDS = new Set([
     'you', 'your', 'yours', 'yourself', 'yourselves'
 ]);
 
-function copyNotesToClipboard(note) {
+export function copyNotesToClipboard(note: string): void {
     navigator.clipboard.writeText(note).then(function () {
         Swal.fire({
             toast: true,
@@ -329,7 +374,7 @@ function copyNotesToClipboard(note) {
         Swal.fire({
             toast: true,
             position: 'bottom',
-            icon: 'failure',
+            icon: 'failure' as unknown as SweetAlertIcon,
             title: 'Fail to copy. Check permissions for clipboard.',
             showConfirmButton: false,
             timer: 2000,
@@ -340,15 +385,15 @@ function copyNotesToClipboard(note) {
     });
 }
 
-function toggleTheme({
-    lightmodeText, 
-    darkmodeText, 
-    lightMetaColor, 
-    darkMetaColor, 
+export function toggleTheme({
+    lightmodeText,
+    darkmodeText,
+    lightMetaColor,
+    darkMetaColor,
     metaThemeColor
-}) {
+}: ThemeConfig): void {
     get(document.body).toggleClass('dark');
-    let bodyClass = get(document.body).attr('class');
+    const bodyClass = get(document.body).attr('class');
 
     if (bodyClass === 'dark') {
         enableDarkMode(lightmodeText, darkMetaColor, metaThemeColor)
@@ -359,9 +404,9 @@ function toggleTheme({
     setState('isUserPreferredTheme', 'true');
 }
 
-function deleteNotes() {
+export function deleteNotes(): void {
     const { notepad } = selector();
-    
+
     Swal.fire({
         title: 'Want to delete notes?',
         text: "You won't be able to revert this!",
@@ -374,7 +419,7 @@ function deleteNotes() {
     }).then((result) => {
         if (result.value) {
             // save a snapshot before deleting it
-            window.snapshotsManager.createSnapshot();
+            window.snapshotsManager!.createSnapshot();
 
             notepad.note.val('').focus();
             setState('note', '');
@@ -388,17 +433,17 @@ function deleteNotes() {
     })
 }
 
-let focusModeHoverTimer = null;
+export let focusModeHoverTimer: ReturnType<typeof setTimeout> | null = null;
 
-function toggleFocusMode(notepad) {
-    const navbar = document.querySelector('.navbar');
+export function toggleFocusMode(notepad: NotepadUI): void {
+    const navbar = document.querySelector('.navbar') as HTMLElement;
     const bodyElement = document.body;
-    const textArea = document.getElementById('note');
-    const closeButton = document.getElementById('focusModeCloseButton');
-    
+    const textArea = document.getElementById('note')!;
+    const closeButton = document.getElementById('focusModeCloseButton') as HTMLElement;
+
     // Check if focus mode is currently active
     const isFocusMode = document.documentElement.hasAttribute('data-focus-mode');
-    
+
     if (!isFocusMode) {
         // Entering focus mode
         document.documentElement.setAttribute('data-focus-mode', 'true');
@@ -406,7 +451,7 @@ function toggleFocusMode(notepad) {
         bodyElement.style.paddingTop = '0';
         textArea.style.borderRight = 'none';
         textArea.style.borderLeft = 'none';
-        
+
         // Show close button
         closeButton.style.display = 'block';
 
@@ -415,7 +460,7 @@ function toggleFocusMode(notepad) {
         if (toastPopup) {
             toastPopup.classList.remove('show');
         }
-        
+
         notepad.bottomLine.hide();
 
         // Keep focus on textarea
@@ -427,24 +472,24 @@ function toggleFocusMode(notepad) {
 }
 
 // a function for turning off focus mode
-function turnOffFocusMode(notepad) {
-    const navbar = document.querySelector('.navbar');
+export function turnOffFocusMode(notepad: NotepadUI): void {
+    const navbar = document.querySelector('.navbar') as HTMLElement;
     const bodyElement = document.body;
-    const textArea = document.getElementById('note');
-    const closeButton = document.getElementById('focusModeCloseButton');
-    
+    const textArea = document.getElementById('note')!;
+    const closeButton = document.getElementById('focusModeCloseButton') as HTMLElement;
+
     // Remove focus mode
     document.documentElement.removeAttribute('data-focus-mode');
-    
+
     // Hide close button
     closeButton.style.display = 'none';
-    
+
     // Reset styles
     navbar.style.display = '';
     bodyElement.style.paddingTop = '';
     textArea.style.borderRight = '';
     textArea.style.borderLeft = '';
-    
+
     if (localStorage.getItem('userChosenWordCountPillSelected') === 'Yes' || selector().defaultConfig.defaultShowWordCountPill === 'Yes') {
         notepad.bottomLine.show();
     }
@@ -453,7 +498,7 @@ function turnOffFocusMode(notepad) {
     textArea.focus();
 }
 
-function toggleFullScreen() {
+export function toggleFullScreen(): void {
     if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen();
         $('#arrowPointsOut').hide();
@@ -467,64 +512,70 @@ function toggleFullScreen() {
     }
 }
 
-function exportNotesAsPDF(textToWrite, fileNameToSaveAs) {
-    const pdf = new window.jspdf.jsPDF();
-    const marginLeft = 10;
-    const marginTop = 10;
+export function exportNotesAsPDF(textToWrite: string, fileNameToSaveAs: string): void {
+    // jsPDF is heavy, so it is only fetched when a PDF export is requested.
+    void import('jspdf').then(({ jsPDF }) => {
+        const pdf = new jsPDF();
+        const marginLeft = 10;
+        const marginTop = 10;
 
-    // Width of text area
-    const maxWidth = 180; 
-    
-    const lineHeight = 10;
+        // Width of text area
+        const maxWidth = 180;
 
-    // Height of a single page
-    const pageHeight = pdf.internal.pageSize.height; 
+        const lineHeight = 10;
 
-    // Initial Y position for text
-    let yPosition = marginTop; 
+        // Height of a single page
+        const pageHeight = pdf.internal.pageSize.height;
 
-    // Split content into lines that fit within maxWidth
-    const lines = pdf.splitTextToSize(textToWrite, maxWidth);
+        // Initial Y position for text
+        let yPosition = marginTop;
 
-    lines.forEach(line => {
-        if (yPosition + lineHeight > pageHeight) {
-            pdf.addPage();  // Add a new page if content exceeds page height
-            yPosition = marginTop; // Reset Y position for new page
-        }
-        pdf.text(line, marginLeft, yPosition);
-        yPosition += lineHeight;
-    });
-    
-    pdf.save(fileNameToSaveAs);
-}
+        // Split content into lines that fit within maxWidth
+        const lines = pdf.splitTextToSize(textToWrite, maxWidth);
 
-function exportNotesAsDocx(textToWrite, fileNameToSaveAs) {
-    const doc = new docx.Document({
-        sections: [{
-            properties: {},
-            children: [
-                new docx.Paragraph({
-                    children: [
-                        new docx.TextRun({
-                            text: textToWrite,
-                        }),
-                    ],
-                }),
-            ],
-        }]
-    });
+        lines.forEach((line: string) => {
+            if (yPosition + lineHeight > pageHeight) {
+                pdf.addPage();  // Add a new page if content exceeds page height
+                yPosition = marginTop; // Reset Y position for new page
+            }
+            pdf.text(line, marginLeft, yPosition);
+            yPosition += lineHeight;
+        });
 
-    docx.Packer.toBlob(doc).then(blob => {
-        const downloadLink = document.createElement('a');
-        downloadLink.href = window.URL.createObjectURL(blob);
-        downloadLink.download = fileNameToSaveAs;
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        document.body.removeChild(downloadLink);
+        pdf.save(fileNameToSaveAs);
     });
 }
 
-function shareNotes(textToShare) {
+export function exportNotesAsDocx(textToWrite: string, fileNameToSaveAs: string): void {
+    // The docx bundle is heavy, so it is only fetched on demand.
+    void import('docx').then(({ Document, Paragraph, TextRun, Packer }) => {
+        const doc = new Document({
+            sections: [{
+                properties: {},
+                children: [
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: textToWrite,
+                            }),
+                        ],
+                    }),
+                ],
+            }]
+        });
+
+        Packer.toBlob(doc).then(blob => {
+            const downloadLink = document.createElement('a');
+            downloadLink.href = window.URL.createObjectURL(blob);
+            downloadLink.download = fileNameToSaveAs;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        });
+    });
+}
+
+export function shareNotes(textToShare: string): void {
     if (navigator.share) {
         navigator.share({
             text: textToShare,
@@ -535,14 +586,14 @@ function shareNotes(textToShare) {
     }
 }
 
-function downloadHTML(textToWrite, fileNameToSaveAs) {
+export function downloadHTML(textToWrite: string, fileNameToSaveAs: string): void {
     const htmlContent = `<html>
         <head><title>Downloaded HTML</title></head>
         <body>
             <pre style="white-space: pre-wrap; word-wrap: break-word;">${textToWrite}</pre>
         </body>
     </html>`;
-    
+
     const blob = new Blob([htmlContent], { type: "text/html" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -553,7 +604,7 @@ function downloadHTML(textToWrite, fileNameToSaveAs) {
 }
 
 
-function updateWordCountPill (note = '') {
+export function updateWordCountPill(note: string = ''): void {
     const { notepad } = selector();
     const characterAndWordCountText = calculateCharactersAndWords(note);
     notepad.wordCount.text(characterAndWordCountText);

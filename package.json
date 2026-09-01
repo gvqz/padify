@@ -1,0 +1,26 @@
+{
+  "name": "notepad",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline-capable notepad with a suite of mini tools, built with TypeScript and Vite",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build && node scripts/build-sw.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "gen:unicode": "node scripts/gen-unicode-data.mjs"
+  },
+  "dependencies": {
+    "bootstrap": "3.4.1",
+    "docx": "^8.5.0",
+    "jquery": "^3.7.1",
+    "jspdf": "^2.5.2",
+    "sweetalert2": "^11.14.5"
+  },
+  "devDependencies": {
+    "@types/jquery": "^3.5.32",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

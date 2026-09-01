@@ -21,6 +21,7 @@ Built as a Progressive Web App using the [Service Worker API](https://developer.
 - Download notes as **plain text**, **PDF**, **HTML**, and **DOCX**
 - Monospaced, serif and dyslexic fonts
 - Optional typewriter sound, break reminders, and 20+ ambient sounds
+- Unicode character picker — 5,400+ symbols, math, arrows, currency, box drawing, braille and emoji with search, favorites and recents (`Ctrl/Cmd + Shift + O`)
 - Privacy-focused — nothing you type is ever collected or sent anywhere
 
 ## Mini tools
@@ -57,3 +58,31 @@ The app is fully static — no build step required.
 ## License
 
 MIT — see [LICENSE.txt](LICENSE.txt)
+
+## Development
+
+The app is built with [TypeScript](https://www.typescriptlang.org/) and [Vite](https://vitejs.dev/).
+
+```
+bun install        # install dependencies (or: npm install)
+bun run dev        # dev server with HMR at http://localhost:5173
+bun run build      # typecheck + production build into dist/ (+ service worker)
+bun run preview    # serve the production build locally
+bun run typecheck  # strict TypeScript check only
+```
+
+### Project layout
+
+- `index.html` — main app entry, references `/src/main.ts`
+- `src/` — application code as strict TypeScript modules
+  - `src/unicode/` — the character picker (`picker.ts`) and the generated symbol database
+- `public/` — static assets copied verbatim to the build (css, fonts, sounds, images, mini tools)
+- `scripts/build-sw.mjs` — post-build step that generates `dist/sw.js` with a precache manifest of every build artifact
+- `scripts/gen-unicode-data.mjs` — regenerates `src/unicode/symbols-data.ts` from the Unicode Character Database (`bun run gen:unicode`)
+
+The service worker is generated from the build output, so every hashed asset is
+precached automatically. Code-split chunks (the Unicode database, PDF/DOCX
+exporters) are fetched on first use, keeping the initial payload small.
+
+The mini tools under `public/` are self-contained static pages; they can be
+migrated into TypeScript modules incrementally over time.

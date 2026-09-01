@@ -1,1 +1,3 @@
-blog-src/node_modules/
+node_modules/
+dist/
+scripts/.unicode-cache/

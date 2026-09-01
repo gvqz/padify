@@ -1,4 +1,41 @@
-class WhiteNoisePlayer {
+import $ from 'jquery';
+import Swal from 'sweetalert2';
+import type { SweetAlertResult } from 'sweetalert2';
+
+interface SoundEntry {
+    url: string;
+    audio: HTMLAudioElement | null;
+    playing: boolean;
+    loading: boolean;
+}
+
+interface PresetSoundState {
+    volume: number;
+    playing: boolean;
+}
+
+type PresetMix = Record<string, PresetSoundState>;
+
+interface PromptPresetNameOptions {
+    title: string;
+    value?: string;
+    confirmButtonText: string;
+}
+
+export class WhiteNoisePlayer {
+    presetsStorageKey: string;
+    sounds: Record<string, SoundEntry>;
+    presetToggleButton: HTMLElement | null;
+    presetLabel: HTMLElement | null;
+    presetMenu: HTMLElement | null;
+    presetList: HTMLElement | null;
+    presetEmptyState: HTMLElement | null;
+    createPresetButton: HTMLElement | null;
+    presets: Record<string, PresetMix>;
+    activePresetName: string;
+    isApplyingPreset: boolean;
+    isPresetDialogOpen: boolean;
+
     constructor() {
         this.presetsStorageKey = 'ambient-noise-presets';
         this.sounds = {
@@ -166,15 +203,15 @@ class WhiteNoisePlayer {
         this.isPresetDialogOpen = false;
         this.handlePresetMenuDocumentClick = this.handlePresetMenuDocumentClick.bind(this);
         this.handlePresetMenuEscape = this.handlePresetMenuEscape.bind(this);
-        
+
         this.init();
     }
 
-    init() {
+    init(): void {
         // Add click event listeners to sound buttons
-        document.querySelectorAll('.sound-button').forEach(button => {
-            const soundKey = button.dataset.sound;
-            
+        document.querySelectorAll<HTMLElement>('.sound-button').forEach(button => {
+            const soundKey = button.dataset.sound as string;
+
             // Play/pause on button click
             button.addEventListener('click', () => {
                 if (this.sounds[soundKey].playing) {
@@ -187,10 +224,10 @@ class WhiteNoisePlayer {
             });
 
             // Volume control
-            const volumeSlider = button.querySelector('.volume-slider');
+            const volumeSlider = button.querySelector('.volume-slider') as HTMLInputElement;
             volumeSlider.addEventListener('input', (e) => {
                 e.stopPropagation(); // Prevent button click
-                this.setVolume(soundKey, e.target.value / 100);
+                this.setVolume(soundKey, Number((e.target as HTMLInputElement).value) / 100);
                 this.handleMixUpdated();
             });
 
@@ -209,18 +246,18 @@ class WhiteNoisePlayer {
         this.initializePresetsUI();
     }
 
-    loadPresets() {
+    loadPresets(): Record<string, PresetMix> {
         try {
             const rawPresets = localStorage.getItem(this.presetsStorageKey);
             const parsedPresets = JSON.parse(rawPresets || '{}');
-            return parsedPresets && typeof parsedPresets === 'object' ? parsedPresets : {};
+            return parsedPresets && typeof parsedPresets === 'object' ? parsedPresets as Record<string, PresetMix> : {};
         } catch (error) {
             console.error('Error loading ambient noise presets:', error);
             return {};
         }
     }
 
-    persistPresets() {
+    persistPresets(): void {
         try {
             localStorage.setItem(this.presetsStorageKey, JSON.stringify(this.presets));
         } catch (error) {
@@ -228,7 +265,7 @@ class WhiteNoisePlayer {
         }
     }
 
-    initializePresetsUI() {
+    initializePresetsUI(): void {
         if (!this.presetToggleButton || !this.presetMenu || !this.presetList || !this.createPresetButton) {
             return;
         }
@@ -247,21 +284,21 @@ class WhiteNoisePlayer {
         });
 
         this.presetMenu.addEventListener('click', (event) => {
-            const renameButton = event.target.closest('[data-preset-rename]');
+            const renameButton = (event.target as HTMLElement).closest('[data-preset-rename]');
             if (renameButton) {
                 event.stopPropagation();
                 this.renamePreset(renameButton.getAttribute('data-preset-rename'));
                 return;
             }
 
-            const deleteButton = event.target.closest('[data-preset-delete]');
+            const deleteButton = (event.target as HTMLElement).closest('[data-preset-delete]');
             if (deleteButton) {
                 event.stopPropagation();
                 this.deletePreset(deleteButton.getAttribute('data-preset-delete'));
                 return;
             }
 
-            const presetRow = event.target.closest('[data-preset-name]');
+            const presetRow = (event.target as HTMLElement).closest('[data-preset-name]');
             if (presetRow) {
                 event.stopPropagation();
                 this.applyPreset(presetRow.getAttribute('data-preset-name'));
@@ -269,7 +306,7 @@ class WhiteNoisePlayer {
         });
 
         this.presetMenu.addEventListener('keydown', (event) => {
-            const presetRow = event.target.closest('[data-preset-name]');
+            const presetRow = (event.target as HTMLElement).closest('[data-preset-name]');
             if (!presetRow) {
                 return;
             }
@@ -284,7 +321,7 @@ class WhiteNoisePlayer {
         document.addEventListener('keydown', this.handlePresetMenuEscape);
     }
 
-    togglePresetMenu(forceState) {
+    togglePresetMenu(forceState?: boolean): void {
         if (!this.presetMenu || !this.presetToggleButton) {
             return;
         }
@@ -302,20 +339,20 @@ class WhiteNoisePlayer {
         this.presetToggleButton.classList.toggle('open', shouldOpen);
     }
 
-    handlePresetMenuDocumentClick(event) {
+    handlePresetMenuDocumentClick(event: MouseEvent): void {
         if (!this.presetMenu || !this.presetToggleButton || this.isPresetDialogOpen) {
             return;
         }
 
-        const clickedInsideMenu = this.presetMenu.contains(event.target);
-        const clickedToggle = this.presetToggleButton.contains(event.target);
+        const clickedInsideMenu = this.presetMenu.contains(event.target as Node | null);
+        const clickedToggle = this.presetToggleButton.contains(event.target as Node | null);
 
         if (!clickedInsideMenu && !clickedToggle) {
             this.togglePresetMenu(false);
         }
     }
 
-    handlePresetMenuEscape(event) {
+    handlePresetMenuEscape(event: KeyboardEvent): void {
         if (this.isPresetDialogOpen || Swal.isVisible()) {
             return;
         }
@@ -325,7 +362,7 @@ class WhiteNoisePlayer {
         }
     }
 
-    handleMixUpdated() {
+    handleMixUpdated(): void {
         if (this.isApplyingPreset) {
             return;
         }
@@ -335,11 +372,11 @@ class WhiteNoisePlayer {
         this.renderPresetMenu();
     }
 
-    getCurrentMixState() {
-        const mix = {};
+    getCurrentMixState(): PresetMix {
+        const mix: PresetMix = {};
 
         Object.keys(this.sounds).forEach((soundKey) => {
-            const slider = document.getElementById(`${soundKey}-volume`);
+            const slider = document.getElementById(`${soundKey}-volume`) as HTMLInputElement | null;
             mix[soundKey] = {
                 volume: slider ? Number(slider.value) : 0,
                 playing: Boolean(this.sounds[soundKey].playing)
@@ -349,13 +386,13 @@ class WhiteNoisePlayer {
         return mix;
     }
 
-    updatePresetTriggerLabel() {
+    updatePresetTriggerLabel(): void {
         if (this.presetLabel) {
             this.presetLabel.textContent = this.activePresetName || 'Custom';
         }
     }
 
-    renderPresetMenu() {
+    renderPresetMenu(): void {
         if (!this.presetList || !this.presetEmptyState) {
             return;
         }
@@ -394,13 +431,13 @@ class WhiteNoisePlayer {
                 </span>
             `;
 
-            this.presetList.appendChild(row);
+            this.presetList!.appendChild(row);
         });
 
         this.presetEmptyState.hidden = presetNames.length > 0;
     }
 
-    isDialogConfirmed(result) {
+    isDialogConfirmed(result: SweetAlertResult | null): boolean {
         if (!result) {
             return false;
         }
@@ -412,7 +449,7 @@ class WhiteNoisePlayer {
         return !result.dismiss;
     }
 
-    async promptPresetName({ title, value = '', confirmButtonText }) {
+    async promptPresetName({ title, value = '', confirmButtonText }: PromptPresetNameOptions): Promise<string | null> {
         this.isPresetDialogOpen = true;
 
         const result = await Swal.fire({
@@ -454,7 +491,7 @@ class WhiteNoisePlayer {
         return String(result.value || '').trim();
     }
 
-    async confirmPresetOverwrite(presetName) {
+    async confirmPresetOverwrite(presetName: string): Promise<boolean> {
         this.isPresetDialogOpen = true;
 
         const result = await Swal.fire({
@@ -477,7 +514,7 @@ class WhiteNoisePlayer {
         return this.isDialogConfirmed(result);
     }
 
-    async confirmPresetDeletion(presetName) {
+    async confirmPresetDeletion(presetName: string): Promise<boolean> {
         this.isPresetDialogOpen = true;
 
         const result = await Swal.fire({
@@ -500,8 +537,8 @@ class WhiteNoisePlayer {
         return this.isDialogConfirmed(result);
     }
 
-    async applyPreset(presetName) {
-        const preset = this.presets[presetName];
+    async applyPreset(presetName: string | null): Promise<void> {
+        const preset = presetName !== null ? this.presets[presetName] : undefined;
 
         if (!preset) {
             this.activePresetName = '';
@@ -515,10 +552,10 @@ class WhiteNoisePlayer {
         try {
             for (const soundKey of Object.keys(this.sounds)) {
                 const soundState = preset[soundKey] || { volume: 0, playing: false };
-                const slider = document.getElementById(`${soundKey}-volume`);
+                const slider = document.getElementById(`${soundKey}-volume`) as HTMLInputElement | null;
 
                 if (slider) {
-                    slider.value = soundState.volume;
+                    slider.value = String(soundState.volume);
                 }
 
                 this.setVolume(soundKey, soundState.volume / 100);
@@ -530,7 +567,7 @@ class WhiteNoisePlayer {
                 }
             }
 
-            this.activePresetName = presetName;
+            this.activePresetName = presetName!;
         } finally {
             this.isApplyingPreset = false;
             this.updatePresetTriggerLabel();
@@ -539,7 +576,7 @@ class WhiteNoisePlayer {
         }
     }
 
-    async createPreset() {
+    async createPreset(): Promise<void> {
         const presetName = await this.promptPresetName({
             title: 'Create preset',
             value: this.activePresetName || '',
@@ -566,7 +603,7 @@ class WhiteNoisePlayer {
         this.togglePresetMenu(true);
     }
 
-    async renamePreset(presetName) {
+    async renamePreset(presetName: string | null): Promise<void> {
         if (!presetName || !Object.prototype.hasOwnProperty.call(this.presets, presetName)) {
             return;
         }
@@ -606,7 +643,7 @@ class WhiteNoisePlayer {
         this.togglePresetMenu(true);
     }
 
-    async deletePreset(presetName) {
+    async deletePreset(presetName: string | null): Promise<void> {
         if (!presetName || !Object.prototype.hasOwnProperty.call(this.presets, presetName)) {
             return;
         }
@@ -626,15 +663,15 @@ class WhiteNoisePlayer {
 
         this.updatePresetTriggerLabel();
         this.renderPresetMenu();
-        this.togglePresetMenu(Object.keys(this.presets).length > 0 || this.presetMenu.hidden === false);
+        this.togglePresetMenu(Object.keys(this.presets).length > 0 || this.presetMenu!.hidden === false);
     }
 
-    async loadSound(soundKey) {
+    async loadSound(soundKey: string): Promise<void> {
         const sound = this.sounds[soundKey];
         if (!sound || sound.audio || sound.loading) return;
 
         sound.loading = true;
-        const button = document.querySelector(`.sound-button[data-sound="${soundKey}"]`);
+        const button = document.querySelector(`.sound-button[data-sound="${soundKey}"]`) as HTMLElement;
         button.classList.add('loading');
 
         try {
@@ -655,11 +692,11 @@ class WhiteNoisePlayer {
         }
     }
 
-    async playSound(soundKey) {
+    async playSound(soundKey: string): Promise<void> {
         const sound = this.sounds[soundKey];
         if (!sound) return;
 
-        const button = document.querySelector(`.sound-button[data-sound="${soundKey}"]`);
+        const button = document.querySelector(`.sound-button[data-sound="${soundKey}"]`) as HTMLElement;
 
         // If the sound is not loaded yet, load it
         if (!sound.audio) {
@@ -671,7 +708,7 @@ class WhiteNoisePlayer {
             }
         }
 
-        const defaultVolume = document.getElementById(soundKey + '-volume').value / 100;
+        const defaultVolume = Number((document.getElementById(soundKey + '-volume') as HTMLInputElement).value) / 100;
 
         if (sound.audio) {
             sound.audio.play();
@@ -683,7 +720,7 @@ class WhiteNoisePlayer {
         this.updateMuteButtonVisibility();
     }
 
-    pauseSound(soundKey) {
+    pauseSound(soundKey: string): void {
         const sound = this.sounds[soundKey];
         if (!sound) return;
 
@@ -694,19 +731,19 @@ class WhiteNoisePlayer {
         sound.playing = false;
 
         // Update UI
-        const button = document.querySelector(`.sound-button[data-sound="${soundKey}"]`);
+        const button = document.querySelector(`.sound-button[data-sound="${soundKey}"]`) as HTMLElement;
         button.classList.remove('playing');
 
         this.updateMuteButtonVisibility();
     }
 
-    pauseAll() {
+    pauseAll(): void {
         Object.keys(this.sounds).forEach(soundKey => {
             this.pauseSound(soundKey);
         });
     }
 
-    stopAll() {
+    stopAll(): void {
         Object.keys(this.sounds).forEach(soundKey => {
             const sound = this.sounds[soundKey];
 
@@ -718,7 +755,7 @@ class WhiteNoisePlayer {
         });
     }
 
-    setVolume(soundKey, volume) {
+    setVolume(soundKey: string, volume: number): void {
         const sound = this.sounds[soundKey];
         if (!sound) return;
 
@@ -727,20 +764,20 @@ class WhiteNoisePlayer {
         }
     }
 
-    isAnySoundPlaying() {
-		return Object.values(this.sounds).some(sound => sound.playing);
-	}
+    isAnySoundPlaying(): boolean {
+        return Object.values(this.sounds).some(sound => sound.playing);
+    }
 
-    updateMuteButtonVisibility() {
-		const muteButton = document.getElementById('globalMuteButton');
-        const stopButton = document.getElementById('globalStopButton');
+    updateMuteButtonVisibility(): void {
+        const muteButton = document.getElementById('globalMuteButton') as HTMLElement;
+        const stopButton = document.getElementById('globalStopButton') as HTMLElement;
         const ambientNoiseIcon = document.querySelector('.ambient-noise-icon');
         const isPlaying = this.isAnySoundPlaying();
 
-		muteButton.style.display = isPlaying ? 'block' : 'none';
+        muteButton.style.display = isPlaying ? 'block' : 'none';
         stopButton.style.display = isPlaying ? 'block' : 'none';
         ambientNoiseIcon?.classList.toggle('is-playing', isPlaying);
-	}
+    }
 }
 
 // Initialize the player when the document is ready
@@ -748,45 +785,45 @@ $(document).ready(() => {
     window.whiteNoisePlayer = new WhiteNoisePlayer();
 
     // Global mute state
-	let isGlobalMuted = false;
+    let isGlobalMuted = false;
 
-	// Function to toggle global mute
-	function toggleGlobalMute() {
-		console.log('Toggling global mute');
-		isGlobalMuted = !isGlobalMuted;
-		const playingIcon = document.getElementById('globalPlayingIcon');
-        const globalMuteIcon = document.getElementById('globalMuteIcon');
+    // Function to toggle global mute
+    function toggleGlobalMute(): void {
+        console.log('Toggling global mute');
+        isGlobalMuted = !isGlobalMuted;
+        const playingIcon = document.getElementById('globalPlayingIcon') as HTMLElement;
+        const globalMuteIcon = document.getElementById('globalMuteIcon') as HTMLElement;
 
-		const player = window.whiteNoisePlayer;
-		
-		// Mute/unmute all sounds
-		Object.values(player.sounds).forEach(sound => {
-			if (sound.audio) {
-				sound.audio.muted = isGlobalMuted;
-			}
-		});
-		
-		if (isGlobalMuted) {
+        const player = window.whiteNoisePlayer!;
+
+        // Mute/unmute all sounds
+        Object.values(player.sounds).forEach(sound => {
+            if (sound.audio) {
+                sound.audio.muted = isGlobalMuted;
+            }
+        });
+
+        if (isGlobalMuted) {
             playingIcon.style.display = 'none';
             globalMuteIcon.style.display = 'block';
         } else {
             playingIcon.style.display = 'block';
             globalMuteIcon.style.display = 'none';
         }
-	}
+    }
 
-	// Add event listener for global mute button
-	const muteButton = document.getElementById('globalMuteButton');
-	if (muteButton) {
-		muteButton.addEventListener('click', toggleGlobalMute);
-		// Initially hide the mute button
-		muteButton.style.display = 'none';
-	}
+    // Add event listener for global mute button
+    const muteButton = document.getElementById('globalMuteButton');
+    if (muteButton) {
+        muteButton.addEventListener('click', toggleGlobalMute);
+        // Initially hide the mute button
+        muteButton.style.display = 'none';
+    }
 
     const stopButton = document.getElementById('globalStopButton');
     if (stopButton) {
         stopButton.addEventListener('click', () => {
-            window.whiteNoisePlayer.stopAll();
+            window.whiteNoisePlayer!.stopAll();
         });
         stopButton.style.display = 'none';
     }

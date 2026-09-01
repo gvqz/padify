@@ -1,5 +1,21 @@
+import $ from 'jquery';
+
 // Timer configuration
-const timerConfig = {
+interface TimerPeriod {
+    value: number;
+    label: string;
+}
+
+interface TimerConfig {
+    periods: TimerPeriod[];
+    timer: ReturnType<typeof setInterval> | null;
+    isRunning: boolean;
+    remainingTime: number;
+    endTime: number | null;
+    alarmSound: HTMLAudioElement | null;
+}
+
+export const timerConfig: TimerConfig = {
     periods: [
         { value: 15, label: '15 minutes' },
         { value: 30, label: '30 minutes' },
@@ -9,7 +25,8 @@ const timerConfig = {
     timer: null,
     isRunning: false,
     remainingTime: 0,
-    endTime: null
+    endTime: null,
+    alarmSound: null
 };
 
 const timerPillRightPositionWithoutWordCount = '1.4em';
@@ -24,9 +41,9 @@ const timerModalHtml = `
                     <h4 class="modal-title custom-modal-title generic-gap">
                         Select Writing Duration
                         <a href="#" data-placement="bottom" data-toggle="tooltip" title="Once selected, the timer will start ticking at the bottom right corner.">
-                            <img src="img/tooltip.svg" alt="Tooltip Icon" />                
+                            <img src="img/tooltip.svg" alt="Tooltip Icon" />
                         </a>
-                    </h4>    
+                    </h4>
                 </div>
                 <div class="modal-body">
                     <div class="timer-options">
@@ -49,13 +66,14 @@ const timerModalHtml = `
 // Add timer HTML to the DOM
 $(document.body).append(timerModalHtml);
 
-$(document).ready(function() {
+$(document).ready(function () {
     if (localStorage.getItem('timerChime') && localStorage.getItem('timerChime') == 'true') {
         $('#timerChime').prop('checked', true);
     }
 
-    $('#timerChime').change(function() {
-        if (this.checked) {
+    $('#timerChime').change(function (this: HTMLElement) {
+        const checkbox = this as HTMLInputElement;
+        if (checkbox.checked) {
             localStorage.setItem('timerChime', 'true');
         } else {
             localStorage.setItem('timerChime', 'false');
@@ -64,7 +82,7 @@ $(document).ready(function() {
 })
 
 // Timer functions
-function startTimer(minutes) {
+export function startTimer(minutes: number): void {
     if (timerConfig.timer) {
         stopTimer();
     }
@@ -74,19 +92,19 @@ function startTimer(minutes) {
     timerConfig.remainingTime = durationInSeconds;
     timerConfig.isRunning = true;
     timerConfig.timer = setInterval(updateTimer, 1000);
-    
+
     // Show timer pill
     $('.timer-pill').show().removeClass('timer-ending');
     updateTimerDisplay();
 
-    // check if word-count-container is hidden and 
+    // check if word-count-container is hidden and
     // based on that change right position of timer pill
     if ($('.word-count-container').is(':hidden')) {
         $('.timer-pill').css('right', timerPillRightPositionWithoutWordCount);
     }
 }
 
-function stopTimer() {
+export function stopTimer(): void {
     if (timerConfig.timer) {
         clearInterval(timerConfig.timer);
     }
@@ -98,20 +116,20 @@ function stopTimer() {
     $('.timer-display').text('00:00');
 }
 
-function updateTimer() {
+export function updateTimer(): void {
     // Interval callbacks can be throttled while the tab is in the background.
     // Calculate the remaining time from the deadline so that throttling only
     // delays the display update; it does not pause the timer itself.
     timerConfig.remainingTime = Math.max(
         0,
-        Math.ceil((timerConfig.endTime - Date.now()) / 1000)
+        Math.ceil((timerConfig.endTime! - Date.now()) / 1000)
     );
 
     if (timerConfig.remainingTime <= 0) {
         if (localStorage.getItem('timerChime') && localStorage.getItem('timerChime') == 'true') {
             playChimeSound();
         }
-        
+
         stopTimer();
         return;
     }
@@ -120,7 +138,7 @@ function updateTimer() {
     updateTimerDisplay();
 }
 
-function updateTimerDisplay() {
+export function updateTimerDisplay(): void {
     const minutes = Math.floor(timerConfig.remainingTime / 60);
     const seconds = timerConfig.remainingTime % 60;
     const display = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
@@ -128,26 +146,26 @@ function updateTimerDisplay() {
 }
 
 // Initialize alarm sound
-function playChimeSound() {
+export function playChimeSound(): void {
     timerConfig.alarmSound = new Audio('sounds/short-alarm-beep.mp3');
     timerConfig.alarmSound.loop = false;
     timerConfig.alarmSound.play();
 }
 
 // Event listeners
-$(document).on('click', '.timer-option', function() {
-    const minutes = $(this).data('minutes');
+$(document).on('click', '.timer-option', function (this: HTMLElement) {
+    const minutes = $(this).data('minutes') as number;
     startTimer(minutes);
     $('#timerModal').modal('hide');
 });
 
-$(document).on('click', '#stopTimer', function() {
+$(document).on('click', '#stopTimer', function () {
     stopTimer();
 });
 
 // Refresh immediately when returning to the tab. Browsers may pause or
 // heavily throttle interval callbacks while a page is hidden.
-document.addEventListener('visibilitychange', function() {
+document.addEventListener('visibilitychange', function () {
     if (!document.hidden && timerConfig.isRunning) {
         updateTimer();
     }

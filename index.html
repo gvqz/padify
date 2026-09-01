@@ -1,6 +1,7 @@
 <html lang="en">
 
 <head>
+  <meta charset="utf-8">
   <title>Notepad - Offline capable</title>
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,13 +10,14 @@
     content="An offline capable notepad powered by ServiceWorker. It's quick, distraction-free, dark mode enabled, mobile compatible(Android, iOS) and minimalist in nature.">
   <meta name="keywords" content="note,offline,mobile,web,notepad,android,ios,desktop" />
   <meta name="application-name" content="Notepad" />
-  <link href="css/bootstrap.min.css" rel="stylesheet">
-  <link href="css/style.css" rel="stylesheet">
-  <link href="css/snapshots.css" rel="stylesheet">
-  <link rel="icon" href="favicon.ico">
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="img/notepad-apple-icon.png">
-  <link rel="mask-icon" href="img/icon-mask.svg" color="black">
+  <link href="/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/css/style.css" rel="stylesheet">
+  <link href="/css/snapshots.css" rel="stylesheet">
+  <link href="/css/unicode-picker.css" rel="stylesheet">
+  <link rel="icon" href="/favicon.ico">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/img/notepad-apple-icon.png">
+  <link rel="mask-icon" href="/img/icon-mask.svg" color="black">
   <!-- for Facebook -->
   <meta property="og:title" content="Notepad - Offline capable" />
   <meta property="og:type" content="appliction" />
@@ -45,7 +47,7 @@
         <span class="icon-container">
           <span class="more-tools-container">
             <a id="moreTools" class="dropdown-icon" title="More Tools">
-              <img src="img/navbar/dropdown.svg" alt="More Tools" />
+              <img src="/img/navbar/dropdown.svg" alt="More Tools" />
             </a>
             <!-- 
               Dropdown Menu 
@@ -69,12 +71,12 @@
           </span>
           <span>
             <a id="clearNotes" class="trash-icon" title="Delete Notes [ctrl/command + delete]">
-              <img src="img/navbar/delete.svg" alt="Delete Icon" />
+              <img src="/img/navbar/delete.svg" alt="Delete Icon" />
             </a>
           </span>
           <span class="downaload-notes-container">
             <a id="downloadNotes" class="download-icon" title="Download Notes">
-              <img src="img/navbar/download.svg" alt="Download Icon" />
+              <img src="/img/navbar/download.svg" alt="Download Icon" />
             </a>
             <!-- Dropdown Menu -->
             <div id="iconDropdown" class="dropdown-menu">
@@ -86,13 +88,13 @@
           </span>
           <span>
             <a href="javascript:void(0);" id="copyToClipboard" class="" title="Copy notes to clipboard [alt/option + C]">
-              <img src="img/navbar/copy.svg" alt="Copy Icon" />
+              <img src="/img/navbar/copy.svg" alt="Copy Icon" />
             </a>
           </span>
           <span title="Preferences [ctrl/command + ,]">
             <a href="#preferences" data-toggle="modal" data-target="#preferencesModal" id="preferences" class="preference-icon">
               <img
-                src="img/navbar/preferences.svg"
+                src="/img/navbar/preferences.svg"
                 alt="Preferences"
                 id="Preferences"
               />
@@ -102,7 +104,7 @@
             <a href="#white-noise" data-toggle="modal" data-target="#whiteNoiseModal" title="Play Ambient Noise">
               <span class="ambient-noise-icon">
                 <img
-                  src="img/navbar/music.svg"
+                  src="/img/navbar/music.svg"
                   alt="Play Ambient Noise"
                 />
                 <span class="ambient-noise-status-dot" aria-hidden="true"></span>
@@ -113,7 +115,7 @@
             <a href="#timerModal" data-toggle="modal" data-target="#timerModal" title="Play Writing Timer">
               <span>
                 <img
-                  src="img/navbar/timer.svg"
+                  src="/img/navbar/timer.svg"
                   alt="Play Writing Timer"
                 />
               </span>
@@ -123,7 +125,7 @@
             <a id="shareNotes" title="Share Notes across system apps">
               <span>
                 <img
-                  src="img/navbar/share.svg"
+                  src="/img/navbar/share.svg"
                   alt="Share Notes across system apps"
                 />
               </span>
@@ -136,7 +138,7 @@
           <li class="keyboard-icon" id="pipContainer" title="Activate Floating Window">
             <a id="pip" class="pip-icon">
               <img
-                  src="img/navbar/pip.svg"
+                  src="/img/navbar/pip.svg"
                   alt="Activate Floating Window"
                 />
             </a>
@@ -270,7 +272,7 @@
           </div>
           <div class="tab-content">
             <div id="about" class="about-modal container tab-pane active in">
-              <img class="about-modal-logo" src="img/icon-196.png" alt="Notepad logo" width="160" height="160">
+              <img class="about-modal-logo" src="/img/icon-196.png" alt="Notepad logo" width="160" height="160">
               <p>This is an offline-capable, no-frills Notepad which is a Progressive Web App as well.</p>
               <p>The app serves the following features:</p>
               <ul>
@@ -315,7 +317,7 @@
           <h4 class="modal-title">
             Snapshots
             <a href="#" data-toggle="tooltip" data-placement="right" title="Snapshots are manually saved versions of your notes that you can restore later.">
-              <img src="img/tooltip.svg" alt="Tooltip Icon" />               
+              <img src="/img/tooltip.svg" alt="Tooltip Icon" />               
             </a>
           </h4>
         </div>
@@ -412,27 +414,37 @@
     </div>
   </div>
 
-  <div id="unicodePickerModal" class="modal fade" role="dialog">
-    <div class="modal-dialog modal-lg unicode-picker-dialog">
-      <div class="modal-content unicode-picker-modal">
-        <div class="modal-header unicode-picker-header">
-          <button type="button" class="close" data-dismiss="modal">&times;</button>
-          <div class="unicode-picker-header-row">
-            <div>
-              <h4 class="modal-title custom-modal-title">Insert Unicode Symbol <span class="new-badge">NEW</span></h4>
-            </div>
-            <div class="unicode-picker-controls">
-              <input type="search" id="unicodePickerSearch" class="form-control unicode-picker-search" placeholder="Search symbols, names, or keywords" autocomplete="off" spellcheck="false">
-              <select id="unicodePickerCategory" class="form-control unicode-picker-category" aria-label="Filter unicode symbols by category"></select>
-            </div>
+  <div id="unicodePickerModal" class="modal fade ucp-modal" role="dialog" aria-hidden="true" aria-labelledby="unicodePickerTitle">
+    <div class="modal-dialog modal-lg ucp-dialog">
+      <div class="modal-content ucp-content">
+        <div class="modal-header ucp-header">
+          <button type="button" class="close ucp-close" data-dismiss="modal" aria-label="Close">&times;</button>
+          <h4 class="modal-title ucp-title" id="unicodePickerTitle">Insert character</h4>
+          <div class="ucp-search">
+            <svg class="ucp-search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="search" id="unicodeSearch" class="ucp-search-input" placeholder="Search characters — try “arrow”, “heart”, “chess”, “superscript”…" autocomplete="off" spellcheck="false" aria-label="Search characters by name, category, or code point">
+            <button type="button" id="unicodeSearchClear" class="ucp-search-clear" aria-label="Clear search" hidden>&times;</button>
           </div>
         </div>
-        <div class="modal-body unicode-picker-body">
-          <div id="unicodePickerGrid" class="unicode-picker-body-grid" aria-live="polite"></div>
+        <div class="modal-body ucp-body">
+          <nav class="ucp-cats" id="unicodeCategories" aria-label="Character categories"></nav>
+          <div class="ucp-main">
+            <div class="ucp-grid" id="unicodeGrid" role="listbox" aria-label="Characters" tabindex="0">
+              <div class="ucp-grid-inner" id="unicodeGridInner"></div>
+            </div>
+            <aside class="ucp-detail" id="unicodeDetail" aria-live="polite"></aside>
+          </div>
         </div>
-        <div class="modal-footer unicode-picker-footer">
-          <div class="unicode-picker-hint">Use arrow keys to navigate. Enter to insert, or click a symbol.</div>
-          <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
+        <div class="modal-footer ucp-footer">
+          <div class="ucp-status" id="unicodeStatus">Loading characters…</div>
+          <div class="ucp-hints">
+            <span class="ucp-hint"><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> move</span>
+            <span class="ucp-hint"><kbd>Enter</kbd> insert</span>
+            <span class="ucp-hint"><kbd>Shift</kbd>+<kbd>Enter</kbd> insert, keep open</span>
+            <span class="ucp-hint"><kbd>F</kbd> favorite</span>
+            <span class="ucp-hint"><kbd>C</kbd> copy</span>
+            <span class="ucp-hint"><kbd>/</kbd> search</span>
+          </div>
         </div>
       </div>
     </div>
@@ -491,7 +503,7 @@
                 <label class="control-label col-sm-6 col-md-6 generic-flex">
                   Texture
                   <a href="#" data-toggle="tooltip" title="Textures to add a unique feel to your notes area.">
-                    <img src="img/tooltip.svg" alt="Tooltip Icon" />               
+                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />               
                   </a>
                 </label>
                 <div class="col-sm-6 col-md-5">
@@ -567,7 +579,7 @@
                 <label class="control-label col-sm-6 col-md-6 generic-flex" for="lineHeight">
                   Line height
                   <a href="#" data-toggle="tooltip" title="Line height is a typographic term that refers to the vertical space between lines of text.">
-                    <img src="img/tooltip.svg" alt="Tooltip Icon" />               
+                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />               
                   </a>
                 </label>
                 <div class="col-sm-6 col-md-5">
@@ -592,7 +604,7 @@
                 <label class="control-label col-sm-6 col-md-6 generic-flex">
                   Optimal line length
                   <a href="#" data-toggle="tooltip" title="Optimal line length refers to the ideal number of characters (including spaces) per line of text that maximizes readability and comfort for readers.">
-                    <img src="img/tooltip.svg" alt="Tooltip Icon" />                
+                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
                   </a>
                 </label>
                 <div class="col-sm-6 col-md-5">
@@ -624,7 +636,7 @@
                 <label class="control-label col-sm-6 col-md-6 generic-flex">
                   Spellcheck
                   <a href="#" data-toggle="tooltip" title="Uses your system's spell-checker">
-                    <img src="img/tooltip.svg" alt="Tooltip Icon" />                
+                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
                   </a>
                 </label>
                 <div class="col-sm-6 col-md-5">
@@ -641,7 +653,7 @@
                 <label class="control-label col-sm-6 col-md-6 generic-flex">
                   Tab Indentation
                   <a href="#" data-toggle="tooltip" title="Enables tab indentation for structured writing like lists, tables, code, etc.">
-                    <img src="img/tooltip.svg" alt="Tooltip Icon" />                
+                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
                   </a>
                 </label>
                 <div class="col-sm-6 col-md-5">
@@ -658,7 +670,7 @@
                 <label class="control-label col-sm-6 col-md-6 generic-flex">
                   Break Reminders
                   <a href="#" data-toggle="tooltip" title="Gently suggests a short break after long, active writing sessions. Disabled by default and tracked locally only.">
-                    <img src="img/tooltip.svg" alt="Tooltip" />
+                    <img src="/img/tooltip.svg" alt="Tooltip" />
                   </a>
                   <span class="new-badge">NEW</span>
                 </label>
@@ -710,7 +722,7 @@
                 <label class="control-label col-sm-6 col-md-6 generic-flex">
                   Typewriter sound
                   <a href="#" data-toggle="tooltip" title="Enable or disable the typewriter (Hermes Precisa 305 model) sound effect when typing">
-                    <img src="img/tooltip.svg" alt="Tooltip" />
+                    <img src="/img/tooltip.svg" alt="Tooltip" />
                   </a>
                 </label>
                 <div class="col-sm-6 col-md-5">
@@ -733,7 +745,7 @@
                 <label class="control-label col-sm-6 col-md-6 generic-flex">
                   Typing explosion effect
                   <a href="#" data-toggle="tooltip" title="Adds a playful explosion burst on each keystroke (Power Mode-style).">
-                    <img src="img/tooltip.svg" alt="Tooltip" />
+                    <img src="/img/tooltip.svg" alt="Tooltip" />
                   </a>
                 </label>
                 <div class="col-sm-6 col-md-5">
@@ -1097,7 +1109,7 @@
               <div class="stat-label">
                 Avg Word Length
                 <a href="#" data-toggle="tooltip" title="This signifies the complexity and readability of your writing. The more the average word length, the more complex and challenging the reading experience.">
-                  <img src="img/tooltip.svg" alt="Tooltip Icon" />                
+                  <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
                 </a>
               </div>
               <div class="stat-value" id="statAvgWordLength">0</div>
@@ -1106,7 +1118,7 @@
               <div class="stat-label">
                 Reading Time
                 <a href="#" data-toggle="tooltip" title="The time it takes for an average adult to read the text which is 200 words per minute.">
-                  <img src="img/tooltip.svg" alt="Tooltip Icon" />                
+                  <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
                 </a>
               </div>
               <div class="stat-value" id="statReadingTime">0 min</div>
@@ -1115,7 +1127,7 @@
               <div class="stat-label">
                 Unique Words
                 <a href="#" data-toggle="tooltip" title="Unique words refer to the distinct words in a text, excluding duplicates. This metric helps in assessing the diversity of vocabulary used in the text.">
-                  <img src="img/tooltip.svg" alt="Tooltip Icon" />                
+                  <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
                 </a>
               </div>
               <div class="stat-value" id="statUniqueWords">0</div>
@@ -1124,7 +1136,7 @@
               <div class="stat-label">
                 Most Common Word
                 <a href="#" data-toggle="tooltip" title="Most common content word refers to the non-stop word that appears most frequently in the text. This helps highlight the words that carry meaning.">
-                  <img src="img/tooltip.svg" alt="Tooltip Icon" />                
+                  <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
                 </a>
               </div>
               <div class="stat-value" id="statMostCommonWord">N/A</div>
@@ -1133,7 +1145,7 @@
               <div class="stat-label">
                 Lexical Density
                 <a href="#" data-toggle="tooltip" title="The percentage of content words in the text. Higher lexical density usually means the writing is more information-rich.">
-                  <img src="img/tooltip.svg" alt="Tooltip Icon" />                
+                  <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
                 </a>
               </div>
               <div class="stat-value" id="statLexicalDensity">0%</div>
@@ -1142,7 +1154,7 @@
               <div class="stat-label">
                 Readability Score
                 <a href="#" data-toggle="tooltip" title="A Flesch Reading Ease score. Higher values mean easier text; lower values usually mean more complex text.">
-                  <img src="img/tooltip.svg" alt="Tooltip Icon" />                
+                  <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
                 </a>
               </div>
               <div class="stat-value" id="statReadabilityScore">0.0</div>
@@ -1151,7 +1163,7 @@
               <div class="stat-label">
                 Estimated Pages
                 <a href="#" data-toggle="tooltip" title="An approximate page count based on standard formatting and about 250 words per page.">
-                  <img src="img/tooltip.svg" alt="Tooltip Icon" />                
+                  <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
                 </a>
               </div>
               <div class="stat-value" id="statEstimatedPages">0 pages</div>
@@ -1160,7 +1172,7 @@
               <div class="stat-label">
                 Estimated Speaking Time
                 <a href="#" data-toggle="tooltip" title="A rough speaking-time estimate based on a normal pace of about 130 words per minute.">
-                  <img src="img/tooltip.svg" alt="Tooltip Icon" />                
+                  <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
                 </a>
               </div>
               <div class="stat-value" id="statEstimatedSpeakingTime">0 min</div>
@@ -1192,28 +1204,9 @@
         document.querySelector('.navbar').classList.add("navbar-default");
       }
     }
-
-    const favicon = document.querySelector('link[rel="icon"]')
-
-    document.addEventListener("visibilitychange", () => {
-      const hidden = document.hidden
-      favicon.setAttribute("href", `/favicon${hidden ? "-hidden" : ""}.ico`)
-    })
   </script>
 
-  <script src="js/libraries/jquery.min.js"></script>
-  <script src="js/libraries/bootstrap.min.js"></script>
-  <script src="js/libraries/sweetalert2.all.min.js"></script>
-  <script src="js/libraries/jspdf.umd.min.js"></script>
-  <script src="js/libraries/docx.min.js"></script>
-  <script src="js/utils.js"></script>
-  <script src="js/selector.js"></script>
-  <script src="js/unicode-symbols.js"></script>
-  <script src="js/unicode-picker.js"></script>
-  <script src="js/app.js"></script>
-  <script src="js/snapshots.js"></script>
-  <script src="js/timer.js"></script>
-  <script src="js/white-noise-player.js"></script>
+  <script type="module" src="/src/main.ts"></script>
   
 </body>
 
