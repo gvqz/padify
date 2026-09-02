@@ -52,6 +52,39 @@ const clockIconSvg = `
     <path d="M12 7v5l3.5 2"></path>
 </svg>`;
 
+// Chime sounds (loudness-normalized to the same perceived volume).
+interface ChimeDef {
+    id: string;
+    name: string;
+    file: string;
+}
+
+const CHIMES: ChimeDef[] = [
+    { id: 'attention', name: 'Attention', file: 'sounds/chimes/attention.mp3' },
+    { id: 'success', name: 'Success', file: 'sounds/chimes/success.mp3' },
+    { id: 'melody', name: 'Melody', file: 'sounds/chimes/melody.mp3' },
+    { id: 'melancholy', name: 'Melancholy', file: 'sounds/chimes/melancholy.mp3' }
+];
+
+const CHIME_STORAGE_KEY = 'timerChimeSound';
+const DEFAULT_CHIME = 'attention';
+
+const bellIconSvg = `
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+    <path d="M13.7 21a2 2 0 0 1-3.4 0"></path>
+</svg>`;
+
+const buildChimeOptions = (): string =>
+    CHIMES.map(
+        chime => `
+        <button type="button" class="chime-option" data-chime="${chime.id}" role="radio" aria-checked="false" title="Select ${chime.name} chime">
+            <span class="chime-option-icon" aria-hidden="true">${bellIconSvg}</span>
+            <span class="chime-option-name">${chime.name}</span>
+            <span class="chime-option-wave" aria-hidden="true"><span></span><span></span><span></span></span>
+        </button>`
+    ).join('');
+
 // Timer modal HTML
 const timerModalHtml = `
     <div class="timer-modal modal fade" id="timerModal" tabindex="-1" role="dialog">
@@ -97,6 +130,9 @@ const timerModalHtml = `
                             </div>
                             <label for="timerChime" class="chime-label">Chime when the session ends</label>
                         </div>
+                        <div class="chime-picker" id="chimePicker" role="radiogroup" aria-label="Session chime sound" hidden>
+                            ${buildChimeOptions()}
+                        </div>
                     </div>
                     <div id="timerRunningView" hidden>
                         <p class="timer-running-eyebrow">Session in progress</p>
@@ -131,7 +167,19 @@ $(document).ready(function () {
         } else {
             localStorage.setItem('timerChime', 'false');
         }
+        refreshChimePicker();
     });
+
+    // Chime sound selection — clicking a chime picks it and plays a preview.
+    $(document).on('click', '.chime-option', function (this: HTMLElement) {
+        const chimeId = $(this).data('chime') as string;
+        localStorage.setItem(CHIME_STORAGE_KEY, chimeId);
+        refreshChimeSelection();
+        playChime(chimeId);
+    });
+
+    refreshChimeSelection();
+    refreshChimePicker();
 
     const lastCustom = Number(localStorage.getItem(LAST_CUSTOM_DURATION_KEY));
     if (Number.isFinite(lastCustom) && lastCustom >= CUSTOM_MIN_MINUTES && lastCustom <= CUSTOM_MAX_MINUTES) {
@@ -143,6 +191,52 @@ $(document).ready(function () {
         refreshTimerViews();
     });
 });
+
+// ---------------------------------------------------------------------------
+// Chime helpers
+// ---------------------------------------------------------------------------
+
+function getSelectedChime(): ChimeDef {
+    const stored = localStorage.getItem(CHIME_STORAGE_KEY);
+    return CHIMES.find(chime => chime.id === stored) || CHIMES[0];
+}
+
+function refreshChimeSelection(): void {
+    const selected = getSelectedChime().id;
+    document.querySelectorAll<HTMLElement>('.chime-option').forEach(option => {
+        const isSelected = option.dataset.chime === selected;
+        option.classList.toggle('is-selected', isSelected);
+        option.setAttribute('aria-checked', String(isSelected));
+    });
+}
+
+function refreshChimePicker(): void {
+    const enabled = $('#timerChime').prop('checked');
+    $('#chimePicker').prop('hidden', !enabled);
+}
+
+function playChime(chimeId: string): void {
+    const chime = CHIMES.find(entry => entry.id === chimeId) || CHIMES[0];
+    if (timerConfig.alarmSound) {
+        timerConfig.alarmSound.pause();
+        timerConfig.alarmSound.onended = null;
+    }
+    document.querySelectorAll<HTMLElement>('.chime-option.is-playing').forEach(option => {
+        option.classList.remove('is-playing');
+    });
+    const optionEl = document.querySelector<HTMLElement>(`.chime-option[data-chime="${chime.id}"]`);
+    timerConfig.alarmSound = new Audio(chime.file);
+    timerConfig.alarmSound.loop = false;
+    if (optionEl) {
+        timerConfig.alarmSound.onended = () => optionEl.classList.remove('is-playing');
+        timerConfig.alarmSound.onpause = () => optionEl.classList.remove('is-playing');
+        optionEl.classList.add('is-playing');
+    }
+    timerConfig.alarmSound.play().catch(() => {
+        /* Autoplay policy — the session-end chime retried after user gesture. */
+        optionEl?.classList.remove('is-playing');
+    });
+}
 
 // Timer functions
 export function startTimer(minutes: number): void {
@@ -244,9 +338,7 @@ function refreshTimerViews(): void {
 
 // Initialize alarm sound
 export function playChimeSound(): void {
-    timerConfig.alarmSound = new Audio('sounds/short-alarm-beep.mp3');
-    timerConfig.alarmSound.loop = false;
-    timerConfig.alarmSound.play();
+    playChime(getSelectedChime().id);
 }
 
 function clampCustomMinutes(value: number): number {

@@ -8,6 +8,7 @@ import './snapshots';
 import './timer';
 import './white-noise-player';
 import './music-player';
+import './context-menu';
 
 // Expose Swal for any legacy code paths that still reference the global.
 (window as unknown as { Swal: typeof Swal }).Swal = Swal;

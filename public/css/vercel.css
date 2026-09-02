@@ -430,7 +430,7 @@ body.dark .unicode-icon a:focus .unicode-icon-badge {
   box-shadow: var(--vz-shadow-menu);
   padding: 4px;
   margin-top: 6px;
-  min-width: 230px;
+  min-width: 216px;
   animation: vz-menu-in 130ms var(--vz-ease);
   transform-origin: top center;
 }
@@ -1871,6 +1871,131 @@ body.dark .chime-label {
   color: var(--vz-fg-muted);
 }
 
+/* --------------------------------------------------------------------------
+   Chime picker — four selectable sound cards under the chime toggle
+   -------------------------------------------------------------------------- */
+
+body .chime-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+  animation: vz-menu-in 180ms var(--vz-ease) both;
+}
+
+@media (max-width: 560px) {
+  body .chime-picker {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+body .chime-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  color: var(--vz-fg);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--vz-dur) var(--vz-ease),
+    background-color var(--vz-dur) var(--vz-ease),
+    box-shadow var(--vz-dur) var(--vz-ease),
+    transform var(--vz-dur) var(--vz-ease);
+}
+
+body .chime-option:hover {
+  border-color: var(--vz-border-strong);
+  background: var(--vz-bg-subtle);
+}
+
+body .chime-option:active {
+  transform: scale(0.98);
+}
+
+body .chime-option:focus-visible {
+  outline: none;
+  border-color: var(--vz-primary);
+  box-shadow: 0 0 0 2px var(--vz-bg), 0 0 0 4px var(--vz-primary);
+}
+
+body .chime-option.is-selected {
+  border-color: var(--vz-primary);
+  background: var(--vz-bg-subtle);
+  box-shadow: var(--vz-shadow-card);
+}
+
+body.dark .chime-option.is-selected {
+  background: var(--vz-bg-subtle);
+}
+
+body .chime-option-icon {
+  display: inline-flex;
+  color: var(--vz-fg-muted);
+  transition: color var(--vz-dur) var(--vz-ease);
+}
+
+body .chime-option.is-selected .chime-option-icon {
+  color: var(--vz-fg);
+}
+
+body .chime-option-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+body .chime-option-name {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* three-bar wave that animates while the preview plays */
+body .chime-option-wave {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  visibility: hidden;
+}
+
+body .chime-option.is-playing .chime-option-wave {
+  visibility: visible;
+}
+
+body .chime-option-wave span {
+  width: 2px;
+  border-radius: 1px;
+  background: var(--vz-fg);
+  height: 4px;
+}
+
+body .chime-option.is-playing .chime-option-wave span {
+  animation: chime-wave 700ms ease-in-out infinite;
+}
+
+body .chime-option.is-playing .chime-option-wave span:nth-child(2) {
+  animation-delay: 140ms;
+}
+
+body .chime-option.is-playing .chime-option-wave span:nth-child(3) {
+  animation-delay: 280ms;
+}
+
+@keyframes chime-wave {
+  0%, 100% { height: 4px; }
+  50% { height: 12px; }
+}
+
+body .chime-option.is-playing {
+  border-color: var(--vz-primary);
+}
+
 /* dark-mode timer leftovers from the old warm theme */
 body.dark .timer-preset {
   background: var(--vz-bg-elevated);
@@ -2559,95 +2684,10 @@ body.dark .pref-done-btn:hover {
 }
 
 /* --------------------------------------------------------------------------
-   14. Music player & Unicode picker — align controls to the mono system
-      (palettes are re-tokened inside music-player.css / unicode-picker.css)
+   14. Unicode picker — align controls (the music player v2 styles live
+       entirely in music-player.css, built on the same --vz-* tokens)
    -------------------------------------------------------------------------- */
 
-/* Genre tags collapse to one quiet badge style */
-body #musicPlayerModal .mp-np-tag--focus,
-body #musicPlayerModal .mp-np-tag--calm,
-body #musicPlayerModal .mp-np-tag--sleep,
-body #musicPlayerModal .mp-np-tag--uplift {
-  color: var(--vz-fg-muted);
-  background: var(--vz-bg-subtle);
-  border: 1px solid var(--vz-border);
-}
-
-/* Radius + control alignment */
-body #musicPlayerModal .mp-btn {
-  border-radius: var(--vz-radius);
-  font-weight: 500;
-  padding: 7px 16px;
-}
-
-body #musicPlayerModal .mp-btn-primary,
-body #musicPlayerModal .mp-btn-primary:hover,
-body #musicPlayerModal .mp-btn-primary:focus {
-  color: var(--mp-accent-contrast);
-}
-
-body #musicPlayerModal .mp-tabs {
-  border-radius: var(--vz-radius);
-  gap: 2px;
-  padding: 3px;
-}
-
-body #musicPlayerModal .mp-tab {
-  border-radius: 4px;
-  font-weight: 500;
-  padding: 6px 16px;
-}
-
-body #musicPlayerModal .mp-tab.is-active {
-  background: var(--vz-bg-elevated);
-  box-shadow: 0 0 0 1px var(--vz-border), var(--vz-shadow-card);
-}
-
-body.dark #musicPlayerModal .mp-tab.is-active {
-  background: var(--vz-bg-chip);
-  box-shadow: 0 0 0 1px var(--vz-border);
-}
-
-body #musicPlayerModal .mp-now-playing {
-  border-radius: var(--vz-radius-md);
-}
-
-body #musicPlayerModal .mp-row-main {
-  border-radius: var(--vz-radius) 0 0 var(--vz-radius);
-}
-
-body #musicPlayerModal .mp-row-star {
-  border-radius: 0 var(--vz-radius) var(--vz-radius) 0;
-}
-
-body #musicPlayerModal .mp-row-star:hover {
-  color: var(--vz-star);
-  background: transparent;
-}
-
-body.dark #musicPlayerModal .mp-row-star:hover {
-  color: var(--vz-star);
-  background: transparent;
-}
-
-body #musicPlayerModal .mp-play {
-  box-shadow: var(--vz-shadow-pill);
-}
-
-body #musicPlayerModal .mp-play:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--vz-shadow-menu);
-}
-
-body #musicPlayerModal .mp-title svg {
-  color: var(--vz-fg-muted);
-}
-
-body #musicPlayerModal .mp-title {
-  font-weight: 600;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-}
 
 /* Unicode picker — align controls (palette re-tokened in unicode-picker.css) */
 
@@ -2731,6 +2771,194 @@ body.linen-paper,
 body.recycled-paper,
 body.marble-paper {
   background-color: var(--vz-bg);
+}
+
+/* --------------------------------------------------------------------------
+   15b. Custom right-click menu (editor context menu + case converter)
+   -------------------------------------------------------------------------- */
+
+.padify-ctx {
+  position: fixed;
+  z-index: 3000;
+  min-width: 232px;
+  max-width: 264px;
+  padding: 5px;
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  box-shadow: var(--vz-shadow-menu);
+  animation: vz-menu-in 130ms var(--vz-ease) both;
+}
+
+.padify-ctx[hidden] {
+  display: none;
+}
+
+.padify-ctx-scroll {
+  display: flex;
+  flex-direction: column;
+}
+
+.padify-ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: none;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--vz-dur) var(--vz-ease);
+}
+
+.padify-ctx-item:hover:not([disabled]) {
+  background: var(--vz-bg-subtle);
+}
+
+.padify-ctx-item:focus-visible {
+  outline: none;
+  background: var(--vz-bg-subtle);
+}
+
+.padify-ctx-item[disabled] {
+  color: var(--vz-fg-subtle);
+  cursor: default;
+}
+
+.padify-ctx-item > svg {
+  flex: none;
+  color: var(--vz-fg-muted);
+}
+
+.padify-ctx-item:hover:not([disabled]) > svg {
+  color: var(--vz-fg);
+}
+
+.padify-ctx-item span {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.padify-ctx-item kbd {
+  flex: none;
+  display: inline-block;
+  min-width: 3.5ch;
+  padding: 2px 5px;
+  border: 1px solid var(--vz-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.padify-ctx-sep {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--vz-border);
+}
+
+/* parent row that owns the flyout */
+.padify-ctx-parent {
+  position: relative;
+  padding: 0;
+  border-radius: var(--vz-radius);
+}
+
+.padify-ctx-parent:hover {
+  background: var(--vz-bg-subtle);
+}
+
+.padify-ctx-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: none;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.padify-ctx-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--vz-bg-elevated), 0 0 0 4px var(--vz-primary);
+}
+
+.padify-ctx-trigger > svg:first-child {
+  flex: none;
+  color: var(--vz-fg-muted);
+}
+
+.padify-ctx-trigger > svg:last-child {
+  flex: none;
+  color: var(--vz-fg-muted);
+  margin-left: auto;
+}
+
+/* flyout submenu */
+.padify-ctx-submenu {
+  position: absolute;
+  top: -5px;
+  left: calc(100% + 4px);
+  z-index: 1;
+  min-width: 230px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 5px;
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  box-shadow: var(--vz-shadow-menu);
+  animation: vz-menu-in 130ms var(--vz-ease) both;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vz-border-strong) transparent;
+}
+
+.padify-ctx-submenu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.padify-ctx-submenu::-webkit-scrollbar-thumb {
+  background: var(--vz-border-strong);
+  border-radius: 3px;
+}
+
+.padify-ctx-submenu.is-flipped {
+  left: auto;
+  right: calc(100% + 4px);
+}
+
+.padify-ctx-submenu[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .padify-ctx,
+  .padify-ctx-submenu {
+    animation: none;
+  }
 }
 
 /* --------------------------------------------------------------------------

@@ -39,18 +39,6 @@ export class WhiteNoisePlayer {
     constructor() {
         this.presetsStorageKey = 'ambient-noise-presets';
         this.sounds = {
-            'coffee-shop': {
-                url: 'sounds/coffee-shop.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'airport': {
-                url: 'sounds/airport.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
             'winter-morning': {
                 url: 'sounds/winter-morning.mp3',
                 audio: null,
@@ -81,12 +69,6 @@ export class WhiteNoisePlayer {
                 playing: false,
                 loading: false
             },
-            'waves': {
-                url: 'sounds/waves.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
             'fireside': {
                 url: 'sounds/fireside.mp3',
                 audio: null,
@@ -99,50 +81,8 @@ export class WhiteNoisePlayer {
                 playing: false,
                 loading: false
             },
-            'singing-bowl': {
-                url: 'sounds/singing-bowl.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'train': {
-                url: 'sounds/train.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'inside-a-train': {
-                url: 'sounds/inside-a-train.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'morse-code': {
-                url: 'sounds/morse-code.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
             'rain-on-umbrella': {
                 url: 'sounds/rain-on-umbrella.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'walk-in-snow': {
-                url: 'sounds/walk-in-snow.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'white-noise': {
-                url: 'sounds/white-noise.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'keyboard': {
-                url: 'sounds/keyboard.mp3',
                 audio: null,
                 playing: false,
                 loading: false
@@ -161,24 +101,6 @@ export class WhiteNoisePlayer {
             },
             'ceiling-fan': {
                 url: 'sounds/ceiling-fan.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'tuning-radio': {
-                url: 'sounds/tuning-radio.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'fireworks': {
-                url: 'sounds/fireworks.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'owl': {
-                url: 'sounds/owl.mp3',
                 audio: null,
                 playing: false,
                 loading: false

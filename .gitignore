@@ -1,3 +1,9 @@
 node_modules/
 dist/
 scripts/.unicode-cache/
+upload/
+
+# sandbox infra (local only)
+.env
+dev.log
+worklog.md
