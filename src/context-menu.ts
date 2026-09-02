@@ -177,30 +177,39 @@ const ICONS = {
 // Menu markup
 // ---------------------------------------------------------------------------
 
+/** macOS uses ⌘/⌥ symbols and ⇧⌘Z for redo; everything else shows Ctrl. */
+const IS_APPLE = /Mac|iPhone|iPad|iPod/.test(
+    typeof navigator !== 'undefined'
+        ? `${navigator.platform || ''} ${navigator.userAgent}`
+        : ''
+);
+const MOD = IS_APPLE ? '⌘' : 'Ctrl+';
+const REDO_HINT = IS_APPLE ? '⇧⌘Z' : 'Ctrl+Y';
+
 const menuMarkup = `
 <div class="padify-ctx" id="padifyCtxMenu" role="menu" aria-label="Text actions" hidden>
     <div class="padify-ctx-scroll">
         <button type="button" class="padify-ctx-item" role="menuitem" data-action="undo">
-            ${ICONS.undo}<span>Undo</span><kbd>Ctrl+Z</kbd>
+            ${ICONS.undo}<span>Undo</span><kbd>${MOD}Z</kbd>
         </button>
         <button type="button" class="padify-ctx-item" role="menuitem" data-action="redo">
-            ${ICONS.redo}<span>Redo</span><kbd>Ctrl+Y</kbd>
+            ${ICONS.redo}<span>Redo</span><kbd>${REDO_HINT}</kbd>
         </button>
         <div class="padify-ctx-sep" role="separator"></div>
         <button type="button" class="padify-ctx-item" role="menuitem" data-action="cut">
-            ${ICONS.cut}<span>Cut</span><kbd>Ctrl+X</kbd>
+            ${ICONS.cut}<span>Cut</span><kbd>${MOD}X</kbd>
         </button>
         <button type="button" class="padify-ctx-item" role="menuitem" data-action="copy">
-            ${ICONS.copy}<span>Copy</span><kbd>Ctrl+C</kbd>
+            ${ICONS.copy}<span>Copy</span><kbd>${MOD}C</kbd>
         </button>
         <button type="button" class="padify-ctx-item" role="menuitem" data-action="paste">
-            ${ICONS.paste}<span>Paste</span><kbd>Ctrl+V</kbd>
+            ${ICONS.paste}<span>Paste</span><kbd>${MOD}V</kbd>
         </button>
         <button type="button" class="padify-ctx-item" role="menuitem" data-action="delete">
             ${ICONS.delete}<span>Delete</span><kbd>Del</kbd>
         </button>
         <button type="button" class="padify-ctx-item" role="menuitem" data-action="select-all">
-            ${ICONS.selectAll}<span>Select all</span><kbd>Ctrl+A</kbd>
+            ${ICONS.selectAll}<span>Select all</span><kbd>${MOD}A</kbd>
         </button>
         <div class="padify-ctx-sep" role="separator"></div>
         <div class="padify-ctx-item padify-ctx-parent" data-action="case-menu">
@@ -231,12 +240,15 @@ document.body.insertAdjacentHTML('beforeend', menuMarkup);
 class ContextMenu {
     private menu: HTMLElement;
     private submenu: HTMLElement;
+    private trigger: HTMLElement;
     private textarea: HTMLTextAreaElement | null = null;
     private reopenGesture = false;
+    private submenuHoverTimer: ReturnType<typeof setTimeout> | null = null;
 
     constructor() {
         this.menu = document.getElementById('padifyCtxMenu') as HTMLElement;
         this.submenu = this.menu.querySelector('.padify-ctx-submenu') as HTMLElement;
+        this.trigger = this.menu.querySelector('.padify-ctx-trigger') as HTMLElement;
 
         document.addEventListener(
             'contextmenu',
@@ -258,7 +270,59 @@ class ContextMenu {
         });
         window.addEventListener('blur', () => this.close());
         window.addEventListener('resize', () => this.close());
-        document.addEventListener('scroll', () => this.close(), true);
+        // Close when anything behind the menu scrolls, but let the submenu's
+        // own list scroll freely (it overflows its max-height).
+        document.addEventListener('scroll', event => {
+            if (event.target instanceof Node && this.menu.contains(event.target)) {
+                return;
+            }
+            this.close();
+        }, true);
+
+        this.registerSubmenuHover();
+    }
+
+    /** Desktop menus open the flyout while hovering the parent row. */
+    private registerSubmenuHover(): void {
+        const parentRow = this.menu.querySelector('.padify-ctx-parent') as HTMLElement;
+        if (!parentRow) return;
+
+        parentRow.addEventListener('mouseenter', () => {
+            this.cancelSubmenuHoverTimer();
+            if (!this.menu.hidden && this.submenu.hidden) {
+                this.submenuHoverTimer = setTimeout(() => this.openSubmenu(false), 120);
+            }
+        });
+        parentRow.addEventListener('mouseleave', () => {
+            this.scheduleSubmenuClose();
+        });
+        this.submenu.addEventListener('mouseenter', () => this.cancelSubmenuHoverTimer());
+        this.submenu.addEventListener('mouseleave', () => this.scheduleSubmenuClose());
+
+        // Hovering any other row dismisses an open flyout (native menu feel).
+        this.menu.querySelectorAll<HTMLElement>(
+            '.padify-ctx-scroll > .padify-ctx-item:not(.padify-ctx-parent)'
+        ).forEach(item => {
+            item.addEventListener('mouseenter', () => {
+                this.cancelSubmenuHoverTimer();
+                if (!this.submenu.hidden) this.closeSubmenu();
+            });
+        });
+    }
+
+    private cancelSubmenuHoverTimer(): void {
+        if (this.submenuHoverTimer !== null) {
+            clearTimeout(this.submenuHoverTimer);
+            this.submenuHoverTimer = null;
+        }
+    }
+
+    private scheduleSubmenuClose(): void {
+        this.cancelSubmenuHoverTimer();
+        this.submenuHoverTimer = setTimeout(() => {
+            this.submenuHoverTimer = null;
+            if (!this.submenu.hidden) this.closeSubmenu();
+        }, 200);
     }
 
     // ---- open/close ---------------------------------------------------------
@@ -280,12 +344,13 @@ class ContextMenu {
     private open(x: number, y: number): void {
         this.refreshEnabledState();
         this.submenu.hidden = true;
+        this.trigger.setAttribute('aria-expanded', 'false');
         this.menu.hidden = false;
 
-        // Measure and flip when overflowing the viewport.
-        const rect = this.menu.getBoundingClientRect();
-        const width = rect.width || 232;
-        const height = rect.height || 386;
+        // Measure with layout offsets — getBoundingClientRect would report the
+        // vz-menu-in animation's scaled/translated box and skew the flip math.
+        const width = this.menu.offsetWidth || 232;
+        const height = this.menu.offsetHeight || 386;
         const margin = 8;
         let left = x + 2;
         let top = y + 2;
@@ -302,11 +367,10 @@ class ContextMenu {
     }
 
     private close(): void {
+        this.cancelSubmenuHoverTimer();
         this.menu.hidden = true;
         this.submenu.hidden = true;
-        this.menu.querySelectorAll('.padify-ctx-trigger').forEach(trigger => {
-            trigger.setAttribute('aria-expanded', 'false');
-        });
+        this.trigger.setAttribute('aria-expanded', 'false');
     }
 
     // ---- state ---------------------------------------------------------------
@@ -339,7 +403,12 @@ class ContextMenu {
         const trigger = target.closest('.padify-ctx-trigger') as HTMLButtonElement | null;
         if (trigger) {
             event.stopPropagation();
-            this.toggleSubmenu();
+            this.cancelSubmenuHoverTimer();
+            if (this.submenu.hidden) {
+                this.openSubmenu(true);
+            } else {
+                this.closeSubmenu(true);
+            }
             return;
         }
 
@@ -347,7 +416,12 @@ class ContextMenu {
         if (parent && !target.closest('.padify-ctx-submenu')) {
             // Clicking the parent row (outside the trigger button) opens the submenu too.
             event.stopPropagation();
-            this.toggleSubmenu();
+            this.cancelSubmenuHoverTimer();
+            if (this.submenu.hidden) {
+                this.openSubmenu(true);
+            } else {
+                this.closeSubmenu(true);
+            }
             return;
         }
 
@@ -366,9 +440,7 @@ class ContextMenu {
         if (event.key === 'Escape') {
             event.preventDefault();
             if (!this.submenu.hidden) {
-                this.submenu.hidden = true;
-                const trigger = this.menu.querySelector<HTMLElement>('.padify-ctx-trigger');
-                trigger?.focus();
+                this.closeSubmenu(true);
             } else {
                 this.close();
                 this.textarea?.focus();
@@ -376,18 +448,52 @@ class ContextMenu {
             return;
         }
 
+        // Tab leaves the menu entirely instead of landing in a random focus sink.
+        if (event.key === 'Tab') {
+            event.preventDefault();
+            this.close();
+            this.textarea?.focus();
+            return;
+        }
+
+        const active = document.activeElement as HTMLElement;
+
+        // Left/right arrows drive the flyout from the trigger row.
+        if (event.key === 'ArrowRight') {
+            if (active === this.trigger && this.submenu.hidden) {
+                event.preventDefault();
+                this.openSubmenu(true);
+            }
+            return;
+        }
+        if (event.key === 'ArrowLeft') {
+            if (!this.submenu.hidden && this.submenu.contains(active)) {
+                event.preventDefault();
+                this.closeSubmenu(true);
+            }
+            return;
+        }
+
+        // Walk the visible items: top-level rows plus, when the flyout is
+        // open, the trigger button and its items. The trigger (a real button)
+        // is included so keyboard users can reach the Case converter row.
         const items = Array.from(
             this.menu.querySelectorAll<HTMLElement>(
-                '.padify-ctx-scroll > .padify-ctx-item, .padify-ctx-submenu[hidden="false"] .padify-ctx-item, .padify-ctx-submenu:not([hidden]) .padify-ctx-item'
+                '.padify-ctx-scroll > .padify-ctx-item:not(.padify-ctx-parent), .padify-ctx-scroll > .padify-ctx-parent > .padify-ctx-trigger, .padify-ctx-submenu:not([hidden]) .padify-ctx-item'
             )
         ).filter(el => !(el as HTMLButtonElement).disabled);
-        const active = document.activeElement as HTMLElement;
         const index = items.indexOf(active);
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault();
             const delta = event.key === 'ArrowDown' ? 1 : -1;
             const next = items[(index + delta + items.length) % items.length];
             next?.focus();
+        } else if (event.key === 'Home') {
+            event.preventDefault();
+            items[0]?.focus();
+        } else if (event.key === 'End') {
+            event.preventDefault();
+            items[items.length - 1]?.focus();
         } else if (event.key === 'Enter' || event.key === ' ') {
             if (active instanceof HTMLButtonElement && !active.disabled) {
                 event.preventDefault();
@@ -396,31 +502,59 @@ class ContextMenu {
         }
     }
 
-    private toggleSubmenu(): void {
-        const willOpen = this.submenu.hidden;
-        this.submenu.hidden = !willOpen;
-        const trigger = this.menu.querySelector<HTMLElement>('.padify-ctx-trigger');
-        trigger?.setAttribute('aria-expanded', String(willOpen));
-        if (willOpen) {
-            // Reset any previous shift, then flip horizontally if needed.
-            this.submenu.style.top = '';
-            this.submenu.classList.remove('is-flipped');
-            const menuRect = this.menu.getBoundingClientRect();
-            const subRect = this.submenu.getBoundingClientRect();
-            if (menuRect.right + subRect.width > window.innerWidth - 8) {
-                this.submenu.classList.add('is-flipped');
+    private openSubmenu(focusFirstItem: boolean): void {
+        if (!this.submenu.hidden) return;
+        this.submenu.hidden = false;
+        this.trigger.setAttribute('aria-expanded', 'true');
+
+        // Reset any previous flip/shift, then recompute using layout offsets
+        // (immune to the open animation's transform, unlike getBoundingClientRect).
+        this.submenu.style.top = '';
+        this.submenu.style.maxHeight = '';
+        this.submenu.classList.remove('is-flipped');
+
+        const menuLeft = this.menu.offsetLeft;
+        const menuTop = this.menu.offsetTop;
+        const menuWidth = this.menu.offsetWidth;
+        const subWidth = this.submenu.offsetWidth;
+        const subHeight = this.submenu.offsetHeight;
+
+        // Flip to the left edge when the flyout would leave the viewport and
+        // there is actually room on the left (never on narrow/mobile screens).
+        const opensRightEdge = menuLeft + menuWidth + 4 + subWidth;
+        if (opensRightEdge > window.innerWidth - 8 && menuLeft - 4 - subWidth >= 8) {
+            this.submenu.classList.add('is-flipped');
+        }
+
+        // Viewport Y of the flyout: menu top + the parent row's offset + CSS top.
+        const parentRow = this.trigger.parentElement as HTMLElement;
+        const rowTop = parentRow.offsetTop;
+        const cssTop = parseFloat(getComputedStyle(this.submenu).top) || 0;
+        const subTop = menuTop + rowTop + cssTop;
+
+        // Shift the flyout up when it would run past the viewport bottom.
+        const overflow = subTop + subHeight - (window.innerHeight - 8);
+        if (overflow > 0) {
+            this.submenu.style.top = `${Math.round(cssTop - overflow)}px`;
+            // Extremely short viewports: cap the flyout so it stays reachable.
+            if (subTop - overflow < 8) {
+                this.submenu.style.maxHeight = `${Math.max(160, window.innerHeight - 16)}px`;
             }
-            // Shift the flyout up when it would run past the viewport bottom.
-            const overflow = subRect.bottom - (window.innerHeight - 8);
-            if (overflow > 0) {
-                const currentCssTop = parseFloat(getComputedStyle(this.submenu).top) || 0;
-                this.submenu.style.top = `${Math.round(currentCssTop - overflow)}px`;
-            }
+        }
+
+        if (focusFirstItem) {
             const first = this.submenu.querySelector<HTMLElement>('.padify-ctx-item');
             first?.focus();
-        } else {
-            const triggerBtn = this.menu.querySelector<HTMLElement>('.padify-ctx-trigger');
-            triggerBtn?.focus();
+        }
+    }
+
+    private closeSubmenu(refocusTrigger = false): void {
+        if (this.submenu.hidden) return;
+        const focusWasInside = this.submenu.contains(document.activeElement);
+        this.submenu.hidden = true;
+        this.trigger.setAttribute('aria-expanded', 'false');
+        if (refocusTrigger || focusWasInside) {
+            this.trigger.focus();
         }
     }
 
@@ -439,7 +573,7 @@ class ContextMenu {
                 this.restoreFocus();
                 break;
             case 'cut':
-                void this.cutSelection();
+                this.cutSelection();
                 break;
             case 'copy':
                 void this.copySelection();
@@ -532,19 +666,34 @@ class ContextMenu {
         }
     }
 
-    private async cutSelection(): Promise<void> {
+    private cutSelection(): void {
         const text = this.selection;
-        if (!text) {
+        const note = this.textarea;
+        if (!text || !note) {
             this.close();
             return;
         }
+
+        // Never block the cut on the async Clipboard API: in several browsers
+        // (no permission, unfocused document, Firefox/Safari quirks) writeText
+        // either rejects or hangs forever, which used to leave the selection
+        // untouched and the menu stuck open. Copy synchronously through
+        // execCommand first, fall back to the async API in the background,
+        // and always delete the selection like a native cut would.
+        note.focus({ preventScroll: true });
+        let copied = false;
         try {
-            await navigator.clipboard.writeText(text);
+            copied = this.execCommand('copy');
         } catch {
-            /* cut still proceeds; worst case the clipboard keeps old content */
+            copied = false;
+        }
+        if (!copied) {
+            void navigator.clipboard?.writeText(text).catch(() => {
+                /* clipboard unavailable — the cut still proceeds */
+            });
         }
         this.replaceSelection('');
-        showToast('Cut to clipboard.');
+        showToast(copied ? 'Cut to clipboard.' : 'Cut. Clipboard unavailable in this browser.');
     }
 
     private async pasteFromClipboard(): Promise<void> {

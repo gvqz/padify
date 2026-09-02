@@ -2954,6 +2954,25 @@ body.marble-paper {
   display: none;
 }
 
+/* Narrow screens: the flyout can't fit beside the menu, so overlay it. */
+@media (max-width: 520px) {
+  .padify-ctx-submenu,
+  .padify-ctx-submenu.is-flipped {
+    top: 0;
+    right: 5px;
+    left: 5px;
+    min-width: 0;
+  }
+}
+
+/* Roomier rows for touch input. */
+@media (pointer: coarse) {
+  .padify-ctx-item,
+  .padify-ctx-trigger {
+    min-height: 40px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .padify-ctx,
   .padify-ctx-submenu {

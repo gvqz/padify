@@ -1330,7 +1330,12 @@ it's recommended that you take a backup of your notes more often using the
                         $('.modal').modal('hide');
                         $('#iconDropdown').removeClass('show');
                         $('#moreToolsDropdown').removeClass('show');
-                        turnOffFocusMode(notepad);
+                        // Only exit focus mode when it is actually on — otherwise
+                        // every Escape keypress (context menu, dialogs, etc.)
+                        // yanked focus back to the note textarea.
+                        if (document.documentElement.hasAttribute('data-focus-mode')) {
+                                turnOffFocusMode(notepad);
+                        }
                 }
 
                 if ((event.ctrlKey || event.metaKey) && event.code === 'KeyS') {
