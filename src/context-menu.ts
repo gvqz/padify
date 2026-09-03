@@ -5,12 +5,24 @@
  * Vercel-styled menu carrying the important editing actions:
  *
  *   Undo · Redo · Cut · Copy · Paste · Delete · Select All
+ *   Bold · Italic · Underline · Strikethrough (one-row format group)
+ *   Remove Formatting (strips every valid marker pair in the selection)
  *   Case Converter (12 transformations, in a submenu — no more separate tab)
- *   Remove Tabs (the "clear formatting" action)
+ *   Remove Tabs
+ *
+ * The notes textarea is plain text, so formatting is stored as markdown-style
+ * wrappers: **bold**, *italic*, __underline__ and ~~strikethrough~~. Every
+ * format is a toggle — applying it to already-formatted text removes the
+ * markers instead, including when the caret sits inside a formatted span or
+ * the selection itself covers the markers. Bold and italic share the `*`
+ * stack (`***text***` = bold + italic) and toggle one layer at a time.
  *
  * Edits are applied through document.execCommand('insertText') so the native
  * Ctrl/Cmd + Z undo stack keeps working; a setRangeText fallback covers
  * browsers where execCommand is unavailable.
+ *
+ * Shortcuts: Ctrl/Cmd + B, Ctrl/Cmd + I, Ctrl/Cmd + U and
+ * Ctrl/Cmd + Shift + X while typing in the note.
  */
 
 import { showToast } from './utils';
@@ -33,6 +45,90 @@ function splitWords(text: string): string[] {
         .split(/[\s_\-.]+/)
         .filter(Boolean);
 }
+
+interface FormatDef {
+    id: 'bold' | 'italic' | 'underline' | 'strike';
+    label: string;
+    /** Wrapper inserted around the selection, e.g. `**`. */
+    marker: string;
+    /**
+     * True when the marker shares a character stack with another format:
+     * bold (`**`) and italic (`*`) both use `*`, so a run of N asterisks
+     * means floor(N/2) bold layers plus N%2 italic layers.
+     */
+    stack: boolean;
+    glyph: string;
+}
+
+const FORMATS: FormatDef[] = [
+    { id: 'bold', label: 'Bold', marker: '**', stack: true, glyph: 'B' },
+    { id: 'italic', label: 'Italic', marker: '*', stack: true, glyph: 'I' },
+    { id: 'underline', label: 'Underline', marker: '__', stack: false, glyph: 'U' },
+    { id: 'strike', label: 'Strikethrough', marker: '~~', stack: false, glyph: 'S' }
+];
+
+/** Counts the consecutive `ch` characters at the start or end of `text`. */
+function countMarkerRun(text: string, from: 'start' | 'end', ch: string): number {
+    let count = 0;
+    if (from === 'start') {
+        while (count < text.length && text.charAt(count) === ch) count += 1;
+    } else {
+        while (count < text.length && text.charAt(text.length - 1 - count) === ch) count += 1;
+    }
+    return count;
+}
+
+/**
+ * Is the format currently active around a position whose flanking marker
+ * runs are `leadRun` / `trailRun`? Both sides must agree before we treat
+ * loose characters (like a lone `*` bullet) as formatting.
+ */
+function isFormatActive(def: FormatDef, leadRun: number, trailRun: number): boolean {
+    if (leadRun === 0 || trailRun === 0) return false;
+    if (def.stack) {
+        if (def.id === 'bold') {
+            return Math.floor(leadRun / 2) >= 1 && Math.floor(trailRun / 2) >= 1;
+        }
+        return leadRun % 2 === 1 && trailRun % 2 === 1;
+    }
+    const markerLength = def.marker.length;
+    return leadRun >= markerLength && trailRun >= markerLength;
+}
+
+/**
+ * Strips every valid formatting pair from `text` (single line at a time so a
+ * stray opener can never eat half the note). `*` bullets survive because
+ * they are unpaired; `snake_case` survives because underline needs `__`.
+ */
+function stripAllFormatting(text: string): { text: string; removed: number } {
+    const patterns: RegExp[] = [
+        /\*\*([^*\n]+?)\*\*/g,
+        /__([^_\n]+?)__/g,
+        /~~([^~\n]+?)~~/g,
+        /\*([^*\n]+?)\*/g
+    ];
+    let result = text;
+    let removed = 0;
+    // Nested wrappers (`**_x_**`) need a handful of passes to unwind.
+    for (let pass = 0; pass < 6; pass += 1) {
+        let changed = false;
+        for (const pattern of patterns) {
+            result = result.replace(pattern, (_match, inner: string) => {
+                removed += 1;
+                changed = true;
+                return inner;
+            });
+        }
+        if (!changed) break;
+    }
+    return { text: result, removed };
+}
+
+/**
+ * Balanced wrapper pairs the toggle can hop over when looking for its own
+ * markers around a selection — longest first so `**` wins over `*`.
+ */
+const WRAPPER_PAIRS = ['**', '__', '~~', '*'];
 
 const CASES: CaseDef[] = [
     {
@@ -170,7 +266,8 @@ const ICONS = {
     selectAll: icon('<rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M8 8h8v8H8z" fill="currentColor" stroke="none" opacity="0.25"/><path d="M8 8h8v8H8z"/>'),
     case: icon('<path d="M4 18 9 6l5 12"/><path d="M5.6 14h6.8"/><path d="M19 10.5a3 3 0 1 0 0 5"/><path d="M19 10.5V18"/>'),
     chevron: '<svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><path d="M5.25 3 9 6.75 5.25 10.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    tabs: icon('<path d="M3 7h5v5"/><path d="M3 12h5v5"/>') // custom simple
+    tabs: icon('<path d="M3 7h5v5"/><path d="M3 12h5v5"/>'), // custom simple
+    erase: icon('<path d="m7 21-4.3-4.3a2.4 2.4 0 0 1 0-3.4l9.6-9.6a2.4 2.4 0 0 1 3.4 0l5.6 5.6a2.4 2.4 0 0 1 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/>')
 };
 
 // ---------------------------------------------------------------------------
@@ -185,6 +282,14 @@ const IS_APPLE = /Mac|iPhone|iPad|iPod/.test(
 );
 const MOD = IS_APPLE ? '⌘' : 'Ctrl+';
 const REDO_HINT = IS_APPLE ? '⇧⌘Z' : 'Ctrl+Y';
+const STRIKE_HINT = IS_APPLE ? '⌘⇧X' : 'Ctrl+⇧X';
+
+const FORMAT_META: Record<FormatDef['id'], { hint: string }> = {
+    bold: { hint: `${MOD}B` },
+    italic: { hint: `${MOD}I` },
+    underline: { hint: `${MOD}U` },
+    strike: { hint: STRIKE_HINT }
+};
 
 const menuMarkup = `
 <div class="padify-ctx" id="padifyCtxMenu" role="menu" aria-label="Text actions" hidden>
@@ -210,6 +315,16 @@ const menuMarkup = `
         </button>
         <button type="button" class="padify-ctx-item" role="menuitem" data-action="select-all">
             ${ICONS.selectAll}<span>Select all</span><kbd>${MOD}A</kbd>
+        </button>
+        <div class="padify-ctx-sep" role="separator"></div>
+        <div class="padify-ctx-formats" role="group" aria-label="Text formatting">
+            ${FORMATS.map(
+                def => `
+            <button type="button" class="padify-ctx-item padify-ctx-fmt padify-fmt-${def.id}" role="menuitemcheckbox" aria-checked="false" data-action="format" data-format="${def.id}" aria-label="${def.label}" title="${def.label} (${FORMAT_META[def.id].hint})"><span aria-hidden="true">${def.glyph}</span></button>`
+            ).join('')}
+        </div>
+        <button type="button" class="padify-ctx-item" role="menuitem" data-action="remove-formatting">
+            ${ICONS.erase}<span>Remove formatting</span>
         </button>
         <div class="padify-ctx-sep" role="separator"></div>
         <div class="padify-ctx-item padify-ctx-parent" data-action="case-menu">
@@ -280,6 +395,7 @@ class ContextMenu {
         }, true);
 
         this.registerSubmenuHover();
+        this.registerShortcuts();
     }
 
     /** Desktop menus open the flyout while hovering the parent row. */
@@ -301,7 +417,7 @@ class ContextMenu {
 
         // Hovering any other row dismisses an open flyout (native menu feel).
         this.menu.querySelectorAll<HTMLElement>(
-            '.padify-ctx-scroll > .padify-ctx-item:not(.padify-ctx-parent)'
+            '.padify-ctx-scroll > .padify-ctx-item:not(.padify-ctx-parent), .padify-ctx-scroll > .padify-ctx-formats'
         ).forEach(item => {
             item.addEventListener('mouseenter', () => {
                 this.cancelSubmenuHoverTimer();
@@ -383,7 +499,7 @@ class ContextMenu {
 
     private refreshEnabledState(): void {
         const hasSelection = this.selection.length > 0;
-        const actions = ['cut', 'copy', 'delete'];
+        const actions = ['cut', 'copy', 'delete', 'remove-formatting'];
         for (const action of actions) {
             const item = this.menu.querySelector<HTMLButtonElement>(
                 `.padify-ctx-item[data-action="${action}"]`
@@ -392,6 +508,17 @@ class ContextMenu {
                 item.disabled = !hasSelection;
                 item.setAttribute('aria-disabled', String(!hasSelection));
             }
+        }
+
+        // Reflect which formats are active at the caret, so screen readers and
+        // the title tooltips tell the truth when the menu opens.
+        for (const def of FORMATS) {
+            const button = this.menu.querySelector<HTMLButtonElement>(
+                `.padify-ctx-fmt[data-format="${def.id}"]`
+            );
+            if (!button) continue;
+            const active = this.formatStateAtCaret(def)?.active ?? false;
+            button.setAttribute('aria-checked', String(active));
         }
     }
 
@@ -429,11 +556,12 @@ class ContextMenu {
         if (!item || item.disabled) return;
         const action = item.dataset.action;
         const caseId = item.dataset.case;
+        const formatId = item.dataset.format as FormatDef['id'] | undefined;
         if (!action) return;
 
         // Prevent the global click handler from closing before the action runs.
         event.stopPropagation();
-        this.runAction(action, caseId);
+        this.runAction(action, caseId, formatId);
     }
 
     private handleMenuKeydown(event: KeyboardEvent): void {
@@ -479,7 +607,7 @@ class ContextMenu {
         // is included so keyboard users can reach the Case converter row.
         const items = Array.from(
             this.menu.querySelectorAll<HTMLElement>(
-                '.padify-ctx-scroll > .padify-ctx-item:not(.padify-ctx-parent), .padify-ctx-scroll > .padify-ctx-parent > .padify-ctx-trigger, .padify-ctx-submenu:not([hidden]) .padify-ctx-item'
+                '.padify-ctx-scroll > .padify-ctx-item:not(.padify-ctx-parent), .padify-ctx-scroll > .padify-ctx-formats .padify-ctx-item, .padify-ctx-scroll > .padify-ctx-parent > .padify-ctx-trigger, .padify-ctx-submenu:not([hidden]) .padify-ctx-item'
             )
         ).filter(el => !(el as HTMLButtonElement).disabled);
         const index = items.indexOf(active);
@@ -560,7 +688,7 @@ class ContextMenu {
 
     // ---- actions ------------------------------------------------------------------
 
-    private runAction(action: string, caseId?: string): void {
+    private runAction(action: string, caseId?: string, formatId?: FormatDef['id']): void {
         switch (action) {
             case 'undo':
                 this.execCommand('undo');
@@ -587,6 +715,14 @@ class ContextMenu {
             case 'select-all':
                 this.selectAll();
                 break;
+            case 'format': {
+                const def = FORMATS.find(entry => entry.id === formatId);
+                if (def) this.applyFormat(def);
+                break;
+            }
+            case 'remove-formatting':
+                this.removeFormatting();
+                break;
             case 'case':
                 if (caseId) this.convertCase(caseId);
                 break;
@@ -607,6 +743,232 @@ class ContextMenu {
                 this.reopenGesture = false;
             });
         }
+    }
+
+    /**
+     * Ctrl/Cmd + B / I / U and Ctrl/Cmd + Shift + X while typing in the note.
+     * Bound in the capture phase so Ctrl + U never reaches the browser's
+     * view-source binding, and only when the note itself has focus — the open
+     * menu handles its own keys through handleMenuKeydown.
+     */
+    private registerShortcuts(): void {
+        document.addEventListener('keydown', (event: KeyboardEvent) => {
+            if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+            const target = event.target as HTMLElement | null;
+            if (!target || target.id !== 'note') return;
+
+            let formatId: FormatDef['id'] | null = null;
+            if (event.shiftKey && event.code === 'KeyX') {
+                formatId = 'strike';
+            } else if (!event.shiftKey) {
+                if (event.code === 'KeyB') formatId = 'bold';
+                else if (event.code === 'KeyI') formatId = 'italic';
+                else if (event.code === 'KeyU') formatId = 'underline';
+            }
+            if (!formatId) return;
+
+            const def = FORMATS.find(entry => entry.id === formatId);
+            if (!def) return;
+            event.preventDefault();
+            this.textarea = target as HTMLTextAreaElement;
+            this.applyFormat(def);
+        }, true);
+    }
+
+    /**
+     * Where are the format's markers relative to the current selection?
+     *
+     * Three layouts are supported:
+     *  - the selection itself starts AND ends with marker characters (the
+     *    user grabbed `**bold**` including the wrapper),
+     *  - the marker runs sit just outside the selection (the caret is inside
+     *    a formatted span, e.g. `I **lo|ve** it`), possibly skipping balanced
+     *    inner wrappers (inside `__~~word~~__` the underline markers sit one
+     *    `~~` pair away from the word),
+     *  - nothing found → the format is off and the selection gets wrapped.
+     *
+     * Returns null when the note is unavailable; `active` says whether the
+     * format is already applied, in which case applyFormat strips a layer.
+     */
+    private formatStateAtCaret(def: FormatDef): {
+        active: boolean;
+        useSelection: boolean;
+        start: number;
+        end: number;
+        selected: string;
+        stripStart: number;
+        stripEnd: number;
+        replaceText: string;
+    } | null {
+        const note = this.textarea ?? (document.getElementById('note') as HTMLTextAreaElement | null);
+        if (!note || typeof note.selectionStart !== 'number') return null;
+
+        const value = note.value;
+        const start = note.selectionStart;
+        const end = note.selectionEnd;
+        const selected = value.slice(start, end);
+        const markerChar = def.marker.charAt(0);
+
+        const selLead = countMarkerRun(selected, 'start', markerChar);
+        const selTrail = countMarkerRun(selected, 'end', markerChar);
+
+        // The wrapper was grabbed together with the text: strip from the
+        // selection itself.
+        if (selLead > 0 && selTrail > 0 && isFormatActive(def, selLead, selTrail)) {
+            return {
+                active: true,
+                useSelection: true,
+                start,
+                end,
+                selected,
+                stripStart: start,
+                stripEnd: end,
+                replaceText: selected
+            };
+        }
+
+        // Walk outwards from the selection. Each hop skips one balanced inner
+        // wrapper pair (e.g. the `~~` in `__~~word~~__`) before looking for
+        // this format's own markers again. The hopped spans are re-inserted
+        // when stripping so only the toggled format's markers disappear.
+        let before = value.slice(0, start);
+        let after = value.slice(end);
+        let skippedBefore = '';
+        let skippedAfter = '';
+        const MAX_HOPS = 4;
+        for (let hop = 0; ; hop += 1) {
+            const lead = countMarkerRun(before, 'end', markerChar);
+            const trail = countMarkerRun(after, 'start', markerChar);
+            if (isFormatActive(def, lead, trail)) {
+                const strip = def.stack ? (def.id === 'bold' ? 2 : 1) : def.marker.length;
+                return {
+                    active: true,
+                    useSelection: false,
+                    start,
+                    end,
+                    selected,
+                    stripStart: start - skippedBefore.length - strip,
+                    stripEnd: end + skippedAfter.length + strip,
+                    replaceText: skippedBefore + selected + skippedAfter
+                };
+            }
+            if (hop >= MAX_HOPS) break;
+            const pair = WRAPPER_PAIRS.find(
+                candidate => candidate.length <= before.length
+                    && candidate.length <= after.length
+                    && before.endsWith(candidate)
+                    && after.startsWith(candidate)
+            );
+            if (!pair) break;
+            before = before.slice(0, before.length - pair.length);
+            after = after.slice(pair.length);
+            skippedBefore = pair + skippedBefore;
+            skippedAfter = skippedAfter + pair;
+        }
+
+        return {
+            active: false,
+            useSelection: false,
+            start,
+            end,
+            selected,
+            stripStart: start,
+            stripEnd: end,
+            replaceText: selected
+        };
+    }
+
+    /**
+     * Toggles one formatting layer: wraps the selection when the format is
+     * off, peels one layer of markers when it is on. The text stays selected
+     * afterwards so a second format can be stacked right away (bold → italic
+     * turns `text` into `***text***` in two keystrokes).
+     */
+    private applyFormat(def: FormatDef): void {
+        const note = this.textarea ?? (document.getElementById('note') as HTMLTextAreaElement | null);
+        const state = this.formatStateAtCaret(def);
+        if (!note || !state) {
+            this.close();
+            return;
+        }
+
+        this.close();
+        note.focus({ preventScroll: true });
+
+        const { marker } = def;
+        const markerLength = marker.length;
+
+        if (!state.active) {
+            if (state.start === state.end) {
+                // No selection: drop an empty pair and leave the caret inside.
+                this.replaceRange(note, state.start, state.end, marker + marker);
+                note.setSelectionRange(state.start + markerLength, state.start + markerLength);
+                return;
+            }
+            this.replaceRange(note, state.start, state.end, marker + state.selected + marker);
+            note.setSelectionRange(
+                state.start + markerLength,
+                state.start + markerLength + state.selected.length
+            );
+            showToast(`${def.label} applied.`);
+            return;
+        }
+
+        if (state.useSelection) {
+            // Peel the markers the user selected together with the text.
+            const strip = def.stack ? (def.id === 'bold' ? 2 : 1) : markerLength;
+            const inner = state.selected.slice(strip, state.selected.length - strip);
+            this.replaceRange(note, state.start, state.end, inner);
+            note.setSelectionRange(state.start, state.start + inner.length);
+        } else {
+            // Delete the toggled markers flanking the selection (any hopped
+            // inner wrappers are re-inserted), keep the text itself untouched.
+            this.replaceRange(note, state.stripStart, state.stripEnd, state.replaceText);
+            note.setSelectionRange(
+                state.stripStart + (state.replaceText.length - state.selected.length) / 2,
+                state.stripStart + (state.replaceText.length + state.selected.length) / 2
+            );
+        }
+        showToast(`${def.label} removed.`);
+    }
+
+    /** Replaces [start, end) with `text`, keeping the native undo stack. */
+    private replaceRange(note: HTMLTextAreaElement, start: number, end: number, text: string): void {
+        note.setSelectionRange(start, end);
+        const ok = this.execCommand('insertText', text);
+        if (!ok) {
+            note.setRangeText(text, start, end, 'end');
+            note.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    }
+
+    private removeFormatting(): void {
+        const note = this.textarea;
+        if (!note) {
+            this.close();
+            return;
+        }
+        const start = note.selectionStart;
+        const end = note.selectionEnd;
+        if (start === end) {
+            this.close();
+            showToast('Select some text first, then remove its formatting.');
+            this.restoreFocus();
+            return;
+        }
+
+        const selected = note.value.slice(start, end);
+        const { text: cleaned, removed } = stripAllFormatting(selected);
+        if (removed === 0 || cleaned === selected) {
+            this.close();
+            showToast('No formatting markers in the selection.');
+            this.restoreFocus();
+            return;
+        }
+
+        this.replaceSelection(cleaned);
+        note.setSelectionRange(start, start + cleaned.length);
+        showToast(removed === 1 ? 'Removed 1 formatting marker.' : `Removed ${removed} formatting markers.`);
     }
 
     private execCommand(command: string, value?: string): boolean {
@@ -806,8 +1168,9 @@ new ContextMenu();
 
 // E2E probe.
 interface CtxDebugWindow {
-    __padifyContextMenu?: { cases: string[] };
+    __padifyContextMenu?: { cases: string[]; formats: string[] };
 }
 (window as unknown as CtxDebugWindow).__padifyContextMenu = {
-    cases: CASES.map(entry => entry.id)
+    cases: CASES.map(entry => entry.id),
+    formats: FORMATS.map(entry => entry.id)
 };

@@ -2872,6 +2872,49 @@ body.marble-paper {
   background: var(--vz-border);
 }
 
+/* one-row format group: Bold · Italic · Underline · Strikethrough */
+.padify-ctx-formats {
+  display: flex;
+  gap: 4px;
+  padding: 1px 0;
+}
+
+.padify-ctx-fmt {
+  flex: 1 1 0;
+  width: auto;
+  justify-content: center;
+  gap: 0;
+  padding: 6px 0;
+  font-size: 14.5px;
+}
+
+.padify-ctx-fmt > span {
+  flex: none;
+  min-width: 1.5ch;
+  overflow: visible;
+  text-align: center;
+}
+
+.padify-fmt-bold > span {
+  font-weight: 700;
+}
+
+.padify-fmt-italic > span {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+}
+
+.padify-fmt-underline > span {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+}
+
+.padify-fmt-strike > span {
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
 /* parent row that owns the flyout */
 .padify-ctx-parent {
   position: relative;
