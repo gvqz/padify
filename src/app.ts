@@ -36,6 +36,7 @@ import {
 import Swal from 'sweetalert2';
 import { initUnicodePicker } from './unicode/picker';
 import { timerConfig, stopTimer } from './timer';
+import { TabManager, setTabManager, getEditorText, getEditorHtml, sanitizeNoteHtml } from './tabs';
 
 // Bootstrap 3's jQuery plugins (registered globally by the `bootstrap` import
 // in main.ts) are not covered by @types/jquery. The `modal` member is also
@@ -47,10 +48,8 @@ declare global {
         }
 }
 
-// The original app.js relies on the browser's named-element global for the
-// `<textarea id="note">` element. The ambient declaration keeps `note.value`
-// working without emitting any runtime code.
-declare const note: HTMLTextAreaElement;
+// The editor is a contenteditable <div id="note"> — see tabs.ts for the tab
+// model and the storage format. Text readers go through getEditorText().
 
 // `beforeinstallprompt` is not part of lib.dom's WindowEventMap.
 declare global {
@@ -294,35 +293,6 @@ $(document).ready(function () {
                 closeBreakReminderPopup();
         });
 
-        const welcomeText = `Welcome! Padify is an offline-capable notepad which is a Progressive Web App.
-
-The app serves the following features:
-
-- Your notes are saved in real-time as you type.
-- Bold, italic, underline and strikethrough text formatting.
-- Installable on supported browsers for offline usage.
-- "Add To Home Screen" feature on Android-supported devices to launch the app from the home screen.
-- Dark mode.
-- Privacy-focused - Never collects your precious data.
-- Light-weight - Loads almost instantly.
-- Writing sessions with a pick-a-duration timer.
-- View Note Statistics.
-- Snapshots.
-- Ability to mimic typewriter sound when typing.
-- Optional break reminders after long writing sessions.
-- Keyboard shortcuts for common actions.
-- Focus mode to leave you with a barebones and pristine editor.
-- Full-screen mode for a distraction-free writing experience.
-- Floating window (in supported browsers) to effectively take notes across other apps.
-- Download notes as plain text, PDF, HTML, and DOCX file.
-- Ability to play generative ambient music and mix 25 ambience sounds to help you focus.
-
-CAUTION: Since the app uses the browser's localStorage to store your notes,
-it's recommended that you take a backup of your notes more often using the
-"Download Notes" button or by pressing the "ctrl/command + s" keys.
-
-** Delete this text and start writing your notes **`;
-
         const darkmodeText = 'Enable dark mode [Ctrl/Cmd + M]';
         const lightmodeText = 'Enable light mode [Ctrl/Cmd + M]';
         const darkMetaColor = '#0a0a0a';
@@ -343,8 +313,15 @@ it's recommended that you take a backup of your notes more often using the
 
         const unicodePicker = initUnicodePicker(notepad);
 
-        const noteItem = state.note && state.note != '' ? state.note : welcomeText;
-        const characterAndWordCountText = calculateCharactersAndWords(noteItem);
+        // Note tabs — multiple notes inside the one editor, wired together
+        // with the rich text formatting (see tabs.ts).
+        const tabManager = new TabManager(notepad.note);
+        setTabManager(tabManager);
+        tabManager.onActiveChanged = () => {
+                updateWordCountPill(tabManager.getActiveText());
+        };
+        tabManager.init();
+        const characterAndWordCountText = calculateCharactersAndWords(tabManager.getActiveText());
 
         let typewriterSoundEnabled: boolean;
         const typeSound = new Audio('/sounds/typewriter/typewriter-key-press-02.mp3');
@@ -368,106 +345,50 @@ it's recommended that you take a backup of your notes more often using the
 
         const keyburstColors = ['#ff4d6d', '#ffe66d', '#6bffb4', '#6bb7ff', '#d06bff', '#ff9f6b'];
         const keyburstParticleCount = 8;
-        const keyburstMirrorProps = [
-                'direction',
-                'boxSizing',
-                'overflowX',
-                'overflowY',
-                'borderTopWidth',
-                'borderRightWidth',
-                'borderBottomWidth',
-                'borderLeftWidth',
-                'borderTopStyle',
-                'borderRightStyle',
-                'borderBottomStyle',
-                'borderLeftStyle',
-                'paddingTop',
-                'paddingRight',
-                'paddingBottom',
-                'paddingLeft',
-                'fontStyle',
-                'fontVariant',
-                'fontWeight',
-                'fontStretch',
-                'fontSize',
-                'lineHeight',
-                'fontFamily',
-                'textAlign',
-                'textTransform',
-                'textIndent',
-                'letterSpacing',
-                'wordSpacing',
-                'tabSize',
-                'textRendering'
-        ] as const;
 
-        function getCaretClientPosition(textarea: HTMLTextAreaElement & { _caretMirror?: HTMLDivElement }): { left: number; top: number; height: number } | null {
-                if (!textarea || typeof textarea.selectionStart !== 'number') {
+        /**
+         * Where is the caret on screen? The contenteditable Selection gives
+         * us a client rect directly — no textarea mirror needed.
+         */
+        function getCaretClientPosition(): { left: number; top: number; height: number } | null {
+                const selection = window.getSelection();
+
+                if (!selection || selection.rangeCount === 0) {
                         return null;
                 }
 
-                let mirror = textarea._caretMirror;
+                const range = selection.getRangeAt(0).cloneRange();
+                let rect = range.getBoundingClientRect();
 
-                if (!mirror) {
-                        mirror = document.createElement('div');
-                        mirror.setAttribute('aria-hidden', 'true');
-                        document.body.appendChild(mirror);
-                        textarea._caretMirror = mirror;
+                // Collapsed ranges at line ends can report an empty rect;
+                // fall back to the last client rect or the editor's box.
+                if ((rect.width === 0 && rect.height === 0) || Number.isNaN(rect.top)) {
+                        const rects = range.getClientRects();
+                        if (rects.length > 0) {
+                                rect = rects[rects.length - 1];
+                        } else {
+                                const editorRect = notepad.note.get(0)?.getBoundingClientRect();
+                                if (!editorRect) return null;
+                                rect = editorRect;
+                        }
                 }
 
-                const computed = window.getComputedStyle(textarea);
-                const rect = textarea.getBoundingClientRect();
-
-                keyburstMirrorProps.forEach((prop) => {
-                        mirror.style[prop] = computed[prop];
-                });
-
-                mirror.style.position = 'absolute';
-                mirror.style.top = '0px';
-                mirror.style.left = '-9999px';
-                mirror.style.whiteSpace = 'pre-wrap';
-                mirror.style.wordWrap = 'break-word';
-                mirror.style.overflow = 'hidden';
-                mirror.style.visibility = 'hidden';
-                mirror.style.pointerEvents = 'none';
-                const paddingLeft = parseFloat(computed.paddingLeft) || 0;
-                const paddingRight = parseFloat(computed.paddingRight) || 0;
-                const contentWidth = Math.max(0, textarea.clientWidth - paddingLeft - paddingRight);
-
-                mirror.style.boxSizing = 'content-box';
-                mirror.style.width = `${contentWidth}px`;
-                mirror.style.height = `${textarea.clientHeight}px`;
-
-                const value = textarea.value;
-                const caretIndex = textarea.selectionStart;
-                const textBefore = value.substring(0, caretIndex);
-                const textAfter = value.substring(caretIndex);
-
-                mirror.textContent = textBefore;
-
-                const span = document.createElement('span');
-                span.textContent = textAfter || '.';
-                mirror.appendChild(span);
-
-                const borderLeft = parseFloat(computed.borderLeftWidth) || 0;
-                const borderTop = parseFloat(computed.borderTopWidth) || 0;
+                const computed = window.getComputedStyle(notepad.note.get(0) as HTMLElement);
                 const lineHeight = parseFloat(computed.lineHeight) || parseFloat(computed.fontSize) || 16;
-                const left = rect.left + span.offsetLeft + borderLeft - textarea.scrollLeft;
-                const top = rect.top + span.offsetTop + borderTop - textarea.scrollTop;
 
                 return {
-                        left,
-                        top,
-                        height: lineHeight
+                        left: rect.left,
+                        top: rect.top,
+                        height: rect.height || lineHeight
                 };
         }
 
-        function triggerKeyburst(textarea: HTMLTextAreaElement): void {
+        function triggerKeyburst(): void {
                 if (!keyburstLayer.length) {
                         return;
                 }
 
-                const caret = getCaretClientPosition(textarea);
+                const caret = getCaretClientPosition();
 
                 if (!caret) {
                         return;
@@ -599,25 +520,31 @@ it's recommended that you take a backup of your notes more often using the
         });
 
         // Handle editor auto-scroll for long notes
-        var styles = window.getComputedStyle(notepad.note[0]);
-        var paddingBottom = parseInt(styles.paddingBottom, 10) || 0;
-
         let pendingAutoScrollRaf: number | null = null;
-        let pendingAutoScrollEl: EventTarget | null = null;
 
-        notepad.note.on('input', (e) => {
-                pendingAutoScrollEl = e.target;
-
+        notepad.note.on('input', () => {
                 if (pendingAutoScrollRaf) return;
 
                 pendingAutoScrollRaf = requestAnimationFrame(() => {
                         pendingAutoScrollRaf = null;
 
-                        const textarea = pendingAutoScrollEl as HTMLTextAreaElement | null;
-                        if (!textarea) return;
+                        const editor = notepad.note.get(0) as HTMLElement | undefined;
+                        if (!editor) return;
 
-                        if (textarea.selectionStart >= textarea.value.length) {
-                                textarea.scrollTop = textarea.scrollHeight + paddingBottom;
+                        // Only follow the caret when it sits at the very end
+                        // of the note (same rule the textarea used).
+                        const selection = window.getSelection();
+                        if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) return;
+
+                        const range = selection.getRangeAt(0);
+                        if (!editor.contains(range.startContainer)) return;
+
+                        const tail = document.createRange();
+                        tail.selectNodeContents(editor);
+                        tail.setStart(range.endContainer, range.endOffset);
+
+                        if (tail.toString().length === 0) {
+                                editor.scrollTop = editor.scrollHeight;
                         }
                 });
         });
@@ -641,12 +568,12 @@ it's recommended that you take a backup of your notes more often using the
                         return;
                 }
 
-                const target = (pendingKeyburstTarget || e.target) as HTMLTextAreaElement;
+                const target = (pendingKeyburstTarget || e.target) as HTMLElement;
                 pendingKeyburst = false;
                 pendingKeyburstTarget = null;
 
                 requestAnimationFrame(() => {
-                        triggerKeyburst(target);
+                        triggerKeyburst();
                 });
         });
 
@@ -699,7 +626,43 @@ it's recommended that you take a backup of your notes more often using the
         });
 
         notepad.wordCount.text(characterAndWordCountText);
-        notepad.note.val(noteItem);
+
+        // Keep execCommand producing plain tags (b/i/u/strike) rather than
+        // inline CSS spans, so stored notes stay small and portable.
+        try {
+                document.execCommand('styleWithCSS', false, 'false');
+        } catch {
+                /* unsupported — tags are still the usual outcome */
+        }
+
+        // Paste always lands as plain text — the editor keeps its own
+        // formatting (bold/italic/underline/strike) and nothing else.
+        notepad.note.on('paste', (e) => {
+                const event = e.originalEvent as ClipboardEvent | undefined;
+                const text = event?.clipboardData?.getData('text/plain');
+                if (text === null || text === undefined) {
+                        return; // no plain text available — let the browser decide
+                }
+
+                e.preventDefault();
+                if (text.length === 0) {
+                        return;
+                }
+
+                if (!document.execCommand('insertText', false, text)) {
+                        // Fallback: splice a text node into the current range.
+                        const selection = window.getSelection();
+                        if (selection && selection.rangeCount > 0) {
+                                const range = selection.getRangeAt(0);
+                                range.deleteContents();
+                                range.insertNode(document.createTextNode(text));
+                                range.collapse(false);
+                                selection.removeAllRanges();
+                                selection.addRange(range);
+                                notepad.note.trigger('input');
+                        }
+                }
+        });
 
         $('[data-toggle="tooltip"]').tooltip({
                 container: 'body'
@@ -859,42 +822,48 @@ it's recommended that you take a backup of your notes more often using the
                 });
         });
 
-        notepad.note.on('input', debounce(function (this: HTMLElement) {
-                setState('note', get(this).val() as string);
-                updateWordCountPill(get(this).val() as string);
+        notepad.note.on('input', debounce(function () {
+                tabManager.saveActiveFromEditor();
+                updateWordCountPill(tabManager.getActiveText());
         }, 500));
 
         notepad.note.keydown(function (e) {
                 if (e.key === "Tab") {
                         e.preventDefault();
 
-                        let textarea = e.target as HTMLTextAreaElement;
-                        let start = textarea.selectionStart!;
-                        let end = textarea.selectionEnd!;
-                        let tabCharacter = "\t";
+                        const selection = window.getSelection();
+                        const tabCharacter = "\t";
 
-                        if (start === end) {
-                                // Single cursor position: Insert tab
+                        const selectedText = selection && selection.rangeCount > 0
+                                ? selection.toString()
+                                : '';
+
+                        if (!selection || selection.rangeCount === 0 || selectedText.indexOf('\n') === -1) {
+                                // Single caret/selection (no line spans): insert a tab.
                                 document.execCommand("insertText", false, tabCharacter);
-                                textarea.selectionStart = textarea.selectionEnd = start + tabCharacter.length;
-                        } else {
-                                // Multi-line selection: Add tab to each line
-                                let value = textarea.value;
-                                let selectedText = value.substring(start, end);
-                                let lines = selectedText.split("\n");
-
-                                if (e.shiftKey) {
-                                        // Shift+Tab: Remove leading tab if present
-                                        let unindentedLines = lines.map(line =>
-                                                line.startsWith(tabCharacter) ? line.substring(tabCharacter.length) : line
-                                        );
-                                        document.execCommand("insertText", false, unindentedLines.join("\n"));
-                                } else {
-                                        // Tab: Indent each line
-                                        let indentedLines = lines.map(line => tabCharacter + line);
-                                        document.execCommand("insertText", false, indentedLines.join("\n"));
-                                }
+                                return;
                         }
+
+                        // Multi-line selection: indent / outdent every line.
+                        const lines = selectedText.split("\n");
+                        const replacement = (e.shiftKey
+                                ? lines.map(line => line.startsWith(tabCharacter) ? line.substring(tabCharacter.length) : line)
+                                : lines.map(line => tabCharacter + line)
+                        ).join("\n");
+
+                        // Replace through a text node, then re-select it so
+                        // Tab/Shift+Tab can be applied repeatedly.
+                        const range = selection.getRangeAt(0);
+                        range.deleteContents();
+                        const inserted = document.createTextNode(replacement);
+                        range.insertNode(inserted);
+
+                        const reselect = document.createRange();
+                        reselect.setStart(inserted, 0);
+                        reselect.setEnd(inserted, replacement.length);
+                        selection.removeAllRanges();
+                        selection.addRange(reselect);
+                        notepad.note.trigger('input');
                 }
         });
 
@@ -903,7 +872,7 @@ it's recommended that you take a backup of your notes more often using the
         });
 
         notepad.copyToClipboard.click(function () {
-                copyNotesToClipboard(notepad.note.val() as string);
+                copyNotesToClipboard(getEditorText());
         })
 
         notepad.downloadNotes.click(function (e) {
@@ -919,25 +888,23 @@ it's recommended that you take a backup of your notes more often using the
         })
 
         notepad.downloadNotesPlain.click(function (e) {
-                saveTextAsFile(note.value, getFileName());
+                saveTextAsFile(getEditorText(), getFileName());
         });
 
         notepad.downloadNotesPdf.click(function (e) {
-                exportNotesAsPDF(note.value, getPdfFileName());
+                exportNotesAsPDF(getEditorText(), getPdfFileName());
         });
 
         notepad.downloadNotesDocx.click(function (e) {
-                const textToWrite = note.value;
+                const textToWrite = getEditorText();
                 const fileNameToSaveAs = getDocxFileName();
 
                 exportNotesAsDocx(textToWrite, fileNameToSaveAs);
         });
 
         notepad.downloadNotesHtml.click(function (e) {
-                const textToWrite = note.value;
-                const fileNameToSaveAs = getHtmlFileName();
-
-                downloadHTML(textToWrite, fileNameToSaveAs);
+                // HTML export keeps the formatting the editor rendered.
+                downloadHTML(sanitizeNoteHtml(getEditorHtml()), getHtmlFileName());
         });
 
         // Close dropdown if clicked outside
@@ -960,8 +927,7 @@ it's recommended that you take a backup of your notes more often using the
 
         // Update statistics when modal is shown
         notepad.statisticsModal.on('show.bs.modal', function () {
-                const noteText = notepad.note.val() as string;
-                const stats = calculateNoteStatistics(noteText);
+                const stats = calculateNoteStatistics(getEditorText());
 
                 $('#statWords').text(stats.words);
                 $('#statCharacters').text(stats.characters);
@@ -1044,7 +1010,7 @@ it's recommended that you take a backup of your notes more often using the
         });
 
         notepad.clearTabIndentation.on('click', function () {
-                const noteText = notepad.note.val() as string;
+                const noteText = getEditorText();
                 const tabCount = (noteText.match(/\t/g) || []).length;
 
                 if (tabCount === 0) {
@@ -1054,7 +1020,7 @@ it's recommended that you take a backup of your notes more often using the
 
                 Swal.fire({
                         title: 'Remove all tabs?',
-                        text: `This will remove ${tabCount} tab${tabCount === 1 ? '' : 's'} of indentation from your notes. You can undo it with Ctrl/Cmd + Z.`,
+                        text: `This will remove ${tabCount} tab${tabCount === 1 ? '' : 's'} of indentation from your notes.`,
                         icon: 'warning',
                         showCancelButton: true,
                         confirmButtonText: 'Remove tabs'
@@ -1063,30 +1029,32 @@ it's recommended that you take a backup of your notes more often using the
                                 return;
                         }
 
-                        const textarea = notepad.note.get(0) as HTMLTextAreaElement;
-                        const cleanedText = noteText.replace(/\t/g, '');
-
                         const applyEdit = () => {
-                                // Replace the whole content through insertText so the
-                                // browser keeps the edit on its native undo stack.
-                                textarea.focus();
-                                textarea.setSelectionRange(0, textarea.value.length);
-                                const inserted = document.execCommand('insertText', false, cleanedText);
+                                // Strip tab characters from every text node in
+                                // the editor (formatting tags are untouched).
+                                const editor = notepad.note.get(0) as HTMLElement;
+                                let removed = 0;
 
-                                // execCommand can fail silently while a Bootstrap modal
-                                // holds the focus — verify the result and repair.
-                                if (!inserted || textarea.value !== cleanedText) {
-                                        textarea.setRangeText(cleanedText, 0, textarea.value.length, 'end');
-                                        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                                const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+                                const textNodes: Text[] = [];
+                                while (walker.nextNode()) {
+                                        textNodes.push(walker.currentNode as Text);
                                 }
 
-                                setState('note', cleanedText);
-                                updateWordCountPill(cleanedText);
-                                showToast(`Removed ${tabCount} tab${tabCount === 1 ? '' : 's'} from your notes.`);
+                                textNodes.forEach((node) => {
+                                        if (node.nodeValue && node.nodeValue.indexOf('\t') !== -1) {
+                                                removed += (node.nodeValue.match(/\t/g) || []).length;
+                                                node.nodeValue = node.nodeValue.replace(/\t/g, '');
+                                        }
+                                });
+
+                                editor.dispatchEvent(new Event('input', { bubbles: true }));
+                                updateWordCountPill(getEditorText());
+                                showToast(`Removed ${removed} tab${removed === 1 ? '' : 's'} from your notes.`);
                         };
 
-                        // Bootstrap modals trap focus, which corrupts execCommand's
-                        // selection. Let the preferences dialog fade out first.
+                        // Bootstrap modals hold focus while fading out — wait
+                        // for the dialog to be gone before touching the DOM.
                         if ($('#preferencesModal').hasClass('in')) {
                                 $('#preferencesModal').one('hidden.bs.modal', applyEdit);
                                 $('#preferencesModal').modal('hide');
@@ -1218,8 +1186,7 @@ it's recommended that you take a backup of your notes more often using the
 
         notepad.shareNotes.click(function (e) {
                 e.stopPropagation();
-                const textToShare = note.value;
-                shareNotes(textToShare);
+                shareNotes(getEditorText());
         });
 
         const pipButton = document.getElementById('pip')!;
@@ -1260,12 +1227,14 @@ it's recommended that you take a backup of your notes more often using the
 
                         // Move the textarea to the Picture-in-Picture window.
                         pipWindow.document.body.append(appTextarea);
+                        pipWindow.document.body.classList.add('pip-host');
 
                         // Move the textarea back when the Picture-in-Picture window closes.
                         pipWindow.addEventListener("pagehide", (event) => {
                                 const mainContainer = document.querySelector("#mainContainer");
                                 const textareaContainer = (event.target as Document).querySelector("#textareaContainer");
                                 const overlay = document.querySelector(".overlay") as HTMLElement | null;
+                                (event.target as Document).body?.classList.remove('pip-host');
                                 mainContainer!.append(textareaContainer!);
                                 mainContainer!.classList.remove("pip");
 
@@ -1340,12 +1309,12 @@ it's recommended that you take a backup of your notes more often using the
                 }
 
                 if ((event.ctrlKey || event.metaKey) && event.code === 'KeyS') {
-                        saveTextAsFile(note.value, getFileName());
+                        saveTextAsFile(getEditorText(), getFileName());
                         event.preventDefault();
                 }
 
                 if (event.altKey && event.code === 'KeyS') {
-                        exportNotesAsPDF(note.value, getPdfFileName());
+                        exportNotesAsPDF(getEditorText(), getPdfFileName());
                         event.preventDefault();
                 }
 
@@ -1376,7 +1345,7 @@ it's recommended that you take a backup of your notes more often using the
 
                 if (event.altKey && event.code === 'KeyC') {
                         event.preventDefault();
-                        copyNotesToClipboard(notepad.note.val() as string);
+                        copyNotesToClipboard(getEditorText());
                 }
 
                 if (
@@ -1391,6 +1360,12 @@ it's recommended that you take a backup of your notes more often using the
                         event.preventDefault();
 
                         toggleFocusMode(notepad);
+                }
+
+                // Ctrl/Cmd + Alt + Arrow keys move between note tabs.
+                if ((event.ctrlKey || event.metaKey) && event.altKey && (event.key === 'ArrowRight' || event.key === 'ArrowLeft')) {
+                        event.preventDefault();
+                        tabManager.cycle(event.key === 'ArrowRight' ? 1 : -1);
                 }
         };
 

@@ -125,7 +125,8 @@ input[type=radio]:focus {
   gap: 5px;
 }
 
-textarea {
+textarea,
+#note {
   width: 100%;
   height: 100%;
   font-size: 18px;
@@ -678,7 +679,8 @@ table tr td {
   text-decoration: none;
 }
 
-textarea {
+textarea,
+#note {
   padding: 15px 24px 80px;
   border: 1px solid #e6e4e4;
 }
@@ -687,7 +689,8 @@ a {
   font-weight: bold;
 }
 
-.dark textarea {
+.dark textarea,
+.dark #note {
   border: #000000;
   color: #dedede;
 
@@ -1992,7 +1995,8 @@ a {
   background-size: 200px 200px;
 }
 
-.grain-paper textarea {
+.grain-paper textarea,
+.grain-paper #note {
   border-color: transparent;
 }
 
@@ -2008,7 +2012,8 @@ a {
   background-position: 0 0, 0 0, 3px 3px, 3px 3px;
 }
 
-.linen-paper textarea {
+.linen-paper textarea,
+.linen-paper #note {
   border-color: transparent;
 }
 
@@ -2030,7 +2035,8 @@ a {
   background-blend-mode: multiply;
 }
 
-.recycled-paper textarea {
+.recycled-paper textarea,
+.recycled-paper #note {
   border-color: transparent;
 }
 
@@ -2054,7 +2060,8 @@ a {
   background-repeat: repeat;
 }
 
-.newspaper-paper textarea {
+.newspaper-paper textarea,
+.newspaper-paper #note {
   border-color: transparent;
 }
 
@@ -2075,7 +2082,8 @@ a {
   background-blend-mode: multiply, normal;
 }
 
-.marble-paper textarea {
+.marble-paper textarea,
+.marble-paper #note {
   border-color: transparent;
 }
 
@@ -2093,7 +2101,8 @@ a {
   background-size: 12px 12px;
 }
 
-.graph-paper textarea {
+.graph-paper textarea,
+.graph-paper #note {
   border-color: transparent;
 }
 
@@ -2106,7 +2115,8 @@ a {
   background-size: 24px 24px;
 }
 
-.dotted-paper textarea {
+.dotted-paper textarea,
+.dotted-paper #note {
   border-color: transparent;
 }
 
@@ -2121,7 +2131,8 @@ a {
   background-size: 52px 52px;
 }
 
-.chessboard-paper textarea {
+.chessboard-paper textarea,
+.chessboard-paper #note {
   border-color: transparent;
 }
 
@@ -2139,7 +2150,8 @@ a {
   background-repeat: repeat;
 }
 
-.starfield-paper textarea {
+.starfield-paper textarea,
+.starfield-paper #note {
   border-color: transparent;
 }
 
@@ -2348,7 +2360,8 @@ a {
 }
 
 @media (max-width: 766px) {
-  .dark textarea {
+  .dark textarea,
+  .dark #note {
     border-right: 1px solid #0d1117;
     border-left: 1px solid #0d1117;
   }
@@ -3042,12 +3055,14 @@ body.dark .stat-value {
     display: none !important;
   }
 
-  .dark textarea {
+  .dark textarea,
+  .dark #note {
     border-left: none;
     border-right: none;
   }
 
-  textarea {
+  textarea,
+  #note {
     border: none;
     border-left: none;
     border-right: none;

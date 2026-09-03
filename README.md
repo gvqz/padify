@@ -18,6 +18,7 @@ Built as a Progressive Web App using the [Service Worker API](https://developer.
 - Focus mode and full-screen mode for distraction-free writing
 - Optimal line length for a better reading experience
 - Floating window (Picture-in-Picture) to take notes on top of other apps
+- Multiple notes in **tabs** on the main page, with **bold / italic / underline / strikethrough** formatting that renders right in the editor
 - Download notes as **plain text**, **PDF**, **HTML**, and **DOCX**
 - Monospaced, serif and dyslexic fonts
 - Optional typewriter sound, break reminders, and a built-in music player with generative ambient tracks plus a 25-sound ambience mixer
@@ -33,11 +34,10 @@ The app ships with a small suite of companion tools:
 - [Voice Notes](/voice-notes/) — record and manage voice notes in the browser
 - [Simple Kanban](/kanban/) — lightweight task board with CSV export
 - [Case Converter](/case-converter/) — convert text between letter cases
-- [Tabbypad](/tabbypad/) — take multiple notes at once
 - [Text Tools](/text-tools/) — line operations, cleanup, find & replace, data extraction
 - [Text Diff](/text-diff/) — compare two blocks of text
 - [Teleprompter](/teleprompter/) — scrolling text with adjustable speed and styling
-- [Drawingpad](/drawingpad/) — freehand drawing/sketching (beta)
+- [Drawingpad](/drawingpad/) — full drawing canvas with shapes, arrows, text, images and more
 - [Tasks](/tasks/) — a dead simple todo manager
 
 ## Running locally

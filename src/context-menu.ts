@@ -1,25 +1,24 @@
 /**
  * Padify custom right-click menu for the editor.
  *
- * Replaces the browser's default context menu on the notes textarea with a
- * Vercel-styled menu carrying the important editing actions:
+ * Replaces the browser's default context menu on the notes editor (the
+ * contenteditable #note surface) with a Vercel-styled menu carrying the
+ * important editing actions:
  *
  *   Undo · Redo · Cut · Copy · Paste · Delete · Select All
  *   Bold · Italic · Underline · Strikethrough (one-row format group)
- *   Remove Formatting (strips every valid marker pair in the selection)
+ *   Remove Formatting (clears formatting inside the selection)
  *   Case Converter (12 transformations, in a submenu — no more separate tab)
  *   Remove Tabs
  *
- * The notes textarea is plain text, so formatting is stored as markdown-style
- * wrappers: **bold**, *italic*, __underline__ and ~~strikethrough~~. Every
- * format is a toggle — applying it to already-formatted text removes the
- * markers instead, including when the caret sits inside a formatted span or
- * the selection itself covers the markers. Bold and italic share the `*`
- * stack (`***text***` = bold + italic) and toggle one layer at a time.
+ * The editor renders rich text, so formatting runs through the classic
+ * editing commands (document.execCommand bold/italic/underline/strikeThrough)
+ * and actually displays as bold/italic/underlined/struck text. Applying a
+ * format to formatted text toggles it off; the format buttons reflect the
+ * state at the caret through aria-checked.
  *
- * Edits are applied through document.execCommand('insertText') so the native
- * Ctrl/Cmd + Z undo stack keeps working; a setRangeText fallback covers
- * browsers where execCommand is unavailable.
+ * Edits are applied through execCommand so the native Ctrl/Cmd + Z undo
+ * stack keeps working.
  *
  * Shortcuts: Ctrl/Cmd + B, Ctrl/Cmd + I, Ctrl/Cmd + U and
  * Ctrl/Cmd + Shift + X while typing in the note.
@@ -49,86 +48,19 @@ function splitWords(text: string): string[] {
 interface FormatDef {
     id: 'bold' | 'italic' | 'underline' | 'strike';
     label: string;
-    /** Wrapper inserted around the selection, e.g. `**`. */
-    marker: string;
-    /**
-     * True when the marker shares a character stack with another format:
-     * bold (`**`) and italic (`*`) both use `*`, so a run of N asterisks
-     * means floor(N/2) bold layers plus N%2 italic layers.
-     */
-    stack: boolean;
+    /** The document.execCommand name that toggles this format. */
+    command: string;
+    /** The document.queryCommandState name that reports it. */
+    stateCommand: string;
     glyph: string;
 }
 
 const FORMATS: FormatDef[] = [
-    { id: 'bold', label: 'Bold', marker: '**', stack: true, glyph: 'B' },
-    { id: 'italic', label: 'Italic', marker: '*', stack: true, glyph: 'I' },
-    { id: 'underline', label: 'Underline', marker: '__', stack: false, glyph: 'U' },
-    { id: 'strike', label: 'Strikethrough', marker: '~~', stack: false, glyph: 'S' }
+    { id: 'bold', label: 'Bold', command: 'bold', stateCommand: 'bold', glyph: 'B' },
+    { id: 'italic', label: 'Italic', command: 'italic', stateCommand: 'italic', glyph: 'I' },
+    { id: 'underline', label: 'Underline', command: 'underline', stateCommand: 'underline', glyph: 'U' },
+    { id: 'strike', label: 'Strikethrough', command: 'strikeThrough', stateCommand: 'strikeThrough', glyph: 'S' }
 ];
-
-/** Counts the consecutive `ch` characters at the start or end of `text`. */
-function countMarkerRun(text: string, from: 'start' | 'end', ch: string): number {
-    let count = 0;
-    if (from === 'start') {
-        while (count < text.length && text.charAt(count) === ch) count += 1;
-    } else {
-        while (count < text.length && text.charAt(text.length - 1 - count) === ch) count += 1;
-    }
-    return count;
-}
-
-/**
- * Is the format currently active around a position whose flanking marker
- * runs are `leadRun` / `trailRun`? Both sides must agree before we treat
- * loose characters (like a lone `*` bullet) as formatting.
- */
-function isFormatActive(def: FormatDef, leadRun: number, trailRun: number): boolean {
-    if (leadRun === 0 || trailRun === 0) return false;
-    if (def.stack) {
-        if (def.id === 'bold') {
-            return Math.floor(leadRun / 2) >= 1 && Math.floor(trailRun / 2) >= 1;
-        }
-        return leadRun % 2 === 1 && trailRun % 2 === 1;
-    }
-    const markerLength = def.marker.length;
-    return leadRun >= markerLength && trailRun >= markerLength;
-}
-
-/**
- * Strips every valid formatting pair from `text` (single line at a time so a
- * stray opener can never eat half the note). `*` bullets survive because
- * they are unpaired; `snake_case` survives because underline needs `__`.
- */
-function stripAllFormatting(text: string): { text: string; removed: number } {
-    const patterns: RegExp[] = [
-        /\*\*([^*\n]+?)\*\*/g,
-        /__([^_\n]+?)__/g,
-        /~~([^~\n]+?)~~/g,
-        /\*([^*\n]+?)\*/g
-    ];
-    let result = text;
-    let removed = 0;
-    // Nested wrappers (`**_x_**`) need a handful of passes to unwind.
-    for (let pass = 0; pass < 6; pass += 1) {
-        let changed = false;
-        for (const pattern of patterns) {
-            result = result.replace(pattern, (_match, inner: string) => {
-                removed += 1;
-                changed = true;
-                return inner;
-            });
-        }
-        if (!changed) break;
-    }
-    return { text: result, removed };
-}
-
-/**
- * Balanced wrapper pairs the toggle can hop over when looking for its own
- * markers around a selection — longest first so `**` wins over `*`.
- */
-const WRAPPER_PAIRS = ['**', '__', '~~', '*'];
 
 const CASES: CaseDef[] = [
     {
@@ -356,7 +288,7 @@ class ContextMenu {
     private menu: HTMLElement;
     private submenu: HTMLElement;
     private trigger: HTMLElement;
-    private textarea: HTMLTextAreaElement | null = null;
+    private editor: HTMLElement | null = null;
     private reopenGesture = false;
     private submenuHoverTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -453,7 +385,7 @@ class ContextMenu {
         }
 
         event.preventDefault();
-        this.textarea = document.getElementById('note') as HTMLTextAreaElement;
+        this.editor = document.getElementById('note');
         this.open(Math.round(event.clientX), Math.round(event.clientY));
     }
 
@@ -492,9 +424,32 @@ class ContextMenu {
     // ---- state ---------------------------------------------------------------
 
     private get selection(): string {
-        const note = this.textarea;
-        if (!note) return '';
-        return note.value.slice(note.selectionStart, note.selectionEnd);
+        const editor = this.editor;
+        if (!editor) return '';
+
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return '';
+
+        const range = selection.getRangeAt(0);
+        if (!editor.contains(range.commonAncestorContainer)) return '';
+
+        return selection.toString();
+    }
+
+    /** Is the given format active at the current selection/caret? */
+    private isFormatActive(def: FormatDef): boolean {
+        const editor = this.editor;
+        if (!editor) return false;
+
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return false;
+        if (!editor.contains(selection.getRangeAt(0).commonAncestorContainer)) return false;
+
+        try {
+            return document.queryCommandState(def.stateCommand);
+        } catch {
+            return false;
+        }
     }
 
     private refreshEnabledState(): void {
@@ -517,8 +472,7 @@ class ContextMenu {
                 `.padify-ctx-fmt[data-format="${def.id}"]`
             );
             if (!button) continue;
-            const active = this.formatStateAtCaret(def)?.active ?? false;
-            button.setAttribute('aria-checked', String(active));
+            button.setAttribute('aria-checked', String(this.isFormatActive(def)));
         }
     }
 
@@ -571,7 +525,7 @@ class ContextMenu {
                 this.closeSubmenu(true);
             } else {
                 this.close();
-                this.textarea?.focus();
+                this.editor?.focus();
             }
             return;
         }
@@ -580,7 +534,7 @@ class ContextMenu {
         if (event.key === 'Tab') {
             event.preventDefault();
             this.close();
-            this.textarea?.focus();
+            this.editor?.focus();
             return;
         }
 
@@ -735,10 +689,10 @@ class ContextMenu {
     }
 
     private restoreFocus(): void {
-        // Re-focus the textarea so subsequent typing and Ctrl+Z work naturally.
-        if (this.textarea) {
+        // Re-focus the editor so subsequent typing and Ctrl+Z work naturally.
+        if (this.editor) {
             this.reopenGesture = true;
-            this.textarea.focus({ preventScroll: true });
+            this.editor.focus({ preventScroll: true });
             requestAnimationFrame(() => {
                 this.reopenGesture = false;
             });
@@ -755,7 +709,7 @@ class ContextMenu {
         document.addEventListener('keydown', (event: KeyboardEvent) => {
             if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
             const target = event.target as HTMLElement | null;
-            if (!target || target.id !== 'note') return;
+            if (!target || (target.id !== 'note' && target.closest('#note') === null)) return;
 
             let formatId: FormatDef['id'] | null = null;
             if (event.shiftKey && event.code === 'KeyX') {
@@ -770,205 +724,47 @@ class ContextMenu {
             const def = FORMATS.find(entry => entry.id === formatId);
             if (!def) return;
             event.preventDefault();
-            this.textarea = target as HTMLTextAreaElement;
+            this.editor = target.closest('#note');
             this.applyFormat(def);
         }, true);
     }
 
     /**
-     * Where are the format's markers relative to the current selection?
-     *
-     * Three layouts are supported:
-     *  - the selection itself starts AND ends with marker characters (the
-     *    user grabbed `**bold**` including the wrapper),
-     *  - the marker runs sit just outside the selection (the caret is inside
-     *    a formatted span, e.g. `I **lo|ve** it`), possibly skipping balanced
-     *    inner wrappers (inside `__~~word~~__` the underline markers sit one
-     *    `~~` pair away from the word),
-     *  - nothing found → the format is off and the selection gets wrapped.
-     *
-     * Returns null when the note is unavailable; `active` says whether the
-     * format is already applied, in which case applyFormat strips a layer.
-     */
-    private formatStateAtCaret(def: FormatDef): {
-        active: boolean;
-        useSelection: boolean;
-        start: number;
-        end: number;
-        selected: string;
-        stripStart: number;
-        stripEnd: number;
-        replaceText: string;
-    } | null {
-        const note = this.textarea ?? (document.getElementById('note') as HTMLTextAreaElement | null);
-        if (!note || typeof note.selectionStart !== 'number') return null;
-
-        const value = note.value;
-        const start = note.selectionStart;
-        const end = note.selectionEnd;
-        const selected = value.slice(start, end);
-        const markerChar = def.marker.charAt(0);
-
-        const selLead = countMarkerRun(selected, 'start', markerChar);
-        const selTrail = countMarkerRun(selected, 'end', markerChar);
-
-        // The wrapper was grabbed together with the text: strip from the
-        // selection itself.
-        if (selLead > 0 && selTrail > 0 && isFormatActive(def, selLead, selTrail)) {
-            return {
-                active: true,
-                useSelection: true,
-                start,
-                end,
-                selected,
-                stripStart: start,
-                stripEnd: end,
-                replaceText: selected
-            };
-        }
-
-        // Walk outwards from the selection. Each hop skips one balanced inner
-        // wrapper pair (e.g. the `~~` in `__~~word~~__`) before looking for
-        // this format's own markers again. The hopped spans are re-inserted
-        // when stripping so only the toggled format's markers disappear.
-        let before = value.slice(0, start);
-        let after = value.slice(end);
-        let skippedBefore = '';
-        let skippedAfter = '';
-        const MAX_HOPS = 4;
-        for (let hop = 0; ; hop += 1) {
-            const lead = countMarkerRun(before, 'end', markerChar);
-            const trail = countMarkerRun(after, 'start', markerChar);
-            if (isFormatActive(def, lead, trail)) {
-                const strip = def.stack ? (def.id === 'bold' ? 2 : 1) : def.marker.length;
-                return {
-                    active: true,
-                    useSelection: false,
-                    start,
-                    end,
-                    selected,
-                    stripStart: start - skippedBefore.length - strip,
-                    stripEnd: end + skippedAfter.length + strip,
-                    replaceText: skippedBefore + selected + skippedAfter
-                };
-            }
-            if (hop >= MAX_HOPS) break;
-            const pair = WRAPPER_PAIRS.find(
-                candidate => candidate.length <= before.length
-                    && candidate.length <= after.length
-                    && before.endsWith(candidate)
-                    && after.startsWith(candidate)
-            );
-            if (!pair) break;
-            before = before.slice(0, before.length - pair.length);
-            after = after.slice(pair.length);
-            skippedBefore = pair + skippedBefore;
-            skippedAfter = skippedAfter + pair;
-        }
-
-        return {
-            active: false,
-            useSelection: false,
-            start,
-            end,
-            selected,
-            stripStart: start,
-            stripEnd: end,
-            replaceText: selected
-        };
-    }
-
-    /**
-     * Toggles one formatting layer: wraps the selection when the format is
-     * off, peels one layer of markers when it is on. The text stays selected
-     * afterwards so a second format can be stacked right away (bold → italic
-     * turns `text` into `***text***` in two keystrokes).
+     * Toggles one formatting layer with the real rendering commands. With a
+     * selection the format is applied to (or removed from) the selection;
+     * with a collapsed caret it toggles the typing style, like Word does.
      */
     private applyFormat(def: FormatDef): void {
-        const note = this.textarea ?? (document.getElementById('note') as HTMLTextAreaElement | null);
-        const state = this.formatStateAtCaret(def);
-        if (!note || !state) {
+        if (!this.editor) {
             this.close();
             return;
         }
 
         this.close();
-        note.focus({ preventScroll: true });
+        this.editor.focus({ preventScroll: true });
 
-        const { marker } = def;
-        const markerLength = marker.length;
-
-        if (!state.active) {
-            if (state.start === state.end) {
-                // No selection: drop an empty pair and leave the caret inside.
-                this.replaceRange(note, state.start, state.end, marker + marker);
-                note.setSelectionRange(state.start + markerLength, state.start + markerLength);
-                return;
-            }
-            this.replaceRange(note, state.start, state.end, marker + state.selected + marker);
-            note.setSelectionRange(
-                state.start + markerLength,
-                state.start + markerLength + state.selected.length
-            );
-            showToast(`${def.label} applied.`);
-            return;
-        }
-
-        if (state.useSelection) {
-            // Peel the markers the user selected together with the text.
-            const strip = def.stack ? (def.id === 'bold' ? 2 : 1) : markerLength;
-            const inner = state.selected.slice(strip, state.selected.length - strip);
-            this.replaceRange(note, state.start, state.end, inner);
-            note.setSelectionRange(state.start, state.start + inner.length);
-        } else {
-            // Delete the toggled markers flanking the selection (any hopped
-            // inner wrappers are re-inserted), keep the text itself untouched.
-            this.replaceRange(note, state.stripStart, state.stripEnd, state.replaceText);
-            note.setSelectionRange(
-                state.stripStart + (state.replaceText.length - state.selected.length) / 2,
-                state.stripStart + (state.replaceText.length + state.selected.length) / 2
-            );
-        }
-        showToast(`${def.label} removed.`);
-    }
-
-    /** Replaces [start, end) with `text`, keeping the native undo stack. */
-    private replaceRange(note: HTMLTextAreaElement, start: number, end: number, text: string): void {
-        note.setSelectionRange(start, end);
-        const ok = this.execCommand('insertText', text);
-        if (!ok) {
-            note.setRangeText(text, start, end, 'end');
-            note.dispatchEvent(new Event('input', { bubbles: true }));
-        }
+        // execCommand keeps the native undo stack intact and fires an input
+        // event, which the app uses to autosave the note.
+        const ok = this.execCommand(def.command);
+        showToast(ok
+            ? (this.isFormatActive(def) ? `${def.label} on.` : `${def.label} off.`)
+            : `${def.label} unavailable in this browser.`);
     }
 
     private removeFormatting(): void {
-        const note = this.textarea;
-        if (!note) {
-            this.close();
-            return;
-        }
-        const start = note.selectionStart;
-        const end = note.selectionEnd;
-        if (start === end) {
+        const selection = window.getSelection();
+        if (!this.editor || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
             this.close();
             showToast('Select some text first, then remove its formatting.');
             this.restoreFocus();
             return;
         }
 
-        const selected = note.value.slice(start, end);
-        const { text: cleaned, removed } = stripAllFormatting(selected);
-        if (removed === 0 || cleaned === selected) {
-            this.close();
-            showToast('No formatting markers in the selection.');
-            this.restoreFocus();
-            return;
-        }
+        this.close();
+        this.editor.focus({ preventScroll: true });
 
-        this.replaceSelection(cleaned);
-        note.setSelectionRange(start, start + cleaned.length);
-        showToast(removed === 1 ? 'Removed 1 formatting marker.' : `Removed ${removed} formatting markers.`);
+        const ok = this.execCommand('removeFormat');
+        showToast(ok ? 'Formatting removed.' : 'Could not remove formatting in this browser.');
     }
 
     private execCommand(command: string, value?: string): boolean {
@@ -981,17 +777,25 @@ class ContextMenu {
 
     /** Replaces the current selection, keeping the native undo stack intact. */
     private replaceSelection(replacement: string): void {
-        const note = this.textarea;
-        if (!note) return;
+        const editor = this.editor;
+        if (!editor) return;
         this.close();
-        note.focus({ preventScroll: true });
+        editor.focus({ preventScroll: true });
 
         const ok = this.execCommand('insertText', replacement);
         if (!ok) {
-            const start = note.selectionStart;
-            const end = note.selectionEnd;
-            note.setRangeText(replacement, start, end, 'end');
-            note.dispatchEvent(new Event('input', { bubbles: true }));
+            const selection = window.getSelection();
+            if (selection && selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                range.deleteContents();
+                const node = document.createTextNode(replacement);
+                range.insertNode(node);
+                range.setStartAfter(node);
+                range.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(range);
+                editor.dispatchEvent(new Event('input', { bubbles: true }));
+            }
         }
     }
 
@@ -1001,48 +805,41 @@ class ContextMenu {
             this.close();
             return;
         }
+        // execCommand('copy') carries the rich rendering when the note is
+        // pasted elsewhere; the async API is the fallback.
+        let copied = false;
         try {
-            await navigator.clipboard.writeText(text);
-            showToast('Copied to clipboard.');
+            copied = this.execCommand('copy');
         } catch {
-            this.fallbackCopy(text);
+            copied = false;
         }
+        if (!copied) {
+            try {
+                await navigator.clipboard.writeText(text);
+                copied = true;
+            } catch {
+                copied = false;
+            }
+        }
+        showToast(copied ? 'Copied to clipboard.' : 'Copy blocked — press Ctrl/Cmd + C.');
         this.close();
         this.restoreFocus();
     }
 
-    private fallbackCopy(text: string): void {
-        const note = this.textarea;
-        if (!note) return;
-        // execCommand('copy') needs an active selection — borrow the textarea.
-        note.focus({ preventScroll: true });
-        const start = note.selectionStart;
-        const end = note.selectionEnd;
-        note.select();
-        const ok = this.execCommand('copy');
-        note.setSelectionRange(start, end);
-        if (ok) {
-            showToast('Copied to clipboard.');
-        } else {
-            showToast('Copy blocked — press Ctrl/Cmd + C.');
-        }
-    }
-
     private cutSelection(): void {
         const text = this.selection;
-        const note = this.textarea;
-        if (!text || !note) {
+        const editor = this.editor;
+        if (!text || !editor) {
             this.close();
             return;
         }
 
         // Never block the cut on the async Clipboard API: in several browsers
         // (no permission, unfocused document, Firefox/Safari quirks) writeText
-        // either rejects or hangs forever, which used to leave the selection
-        // untouched and the menu stuck open. Copy synchronously through
+        // either rejects or hangs forever. Copy synchronously through
         // execCommand first, fall back to the async API in the background,
         // and always delete the selection like a native cut would.
-        note.focus({ preventScroll: true });
+        editor.focus({ preventScroll: true });
         let copied = false;
         try {
             copied = this.execCommand('copy');
@@ -1059,10 +856,10 @@ class ContextMenu {
     }
 
     private async pasteFromClipboard(): Promise<void> {
-        const note = this.textarea;
-        if (!note) return;
+        const editor = this.editor;
+        if (!editor) return;
         this.close();
-        note.focus({ preventScroll: true });
+        editor.focus({ preventScroll: true });
         try {
             const text = await navigator.clipboard.readText();
             if (!text) {
@@ -1085,31 +882,45 @@ class ContextMenu {
     }
 
     private selectAll(): void {
-        const note = this.textarea;
+        const editor = this.editor;
         this.close();
-        if (!note) return;
-        note.focus({ preventScroll: true });
-        note.select();
+        if (!editor) return;
+
+        editor.focus({ preventScroll: true });
+
+        const selection = window.getSelection();
+        if (!selection) return;
+
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        selection.removeAllRanges();
+        selection.addRange(range);
     }
 
     private convertCase(caseId: string): void {
         const caseDef = CASES.find(entry => entry.id === caseId);
-        const note = this.textarea;
-        if (!caseDef || !note) {
+        const editor = this.editor;
+        if (!caseDef || !editor) {
             this.close();
             return;
         }
 
-        const start = note.selectionStart;
-        const end = note.selectionEnd;
-        if (start === end) {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) {
             this.close();
             showToast('Select some text first, then convert its case.');
             this.restoreFocus();
             return;
         }
 
-        const selected = note.value.slice(start, end);
+        const selected = this.selection;
+        if (!selected) {
+            this.close();
+            showToast('Select some text first, then convert its case.');
+            this.restoreFocus();
+            return;
+        }
+
         const converted = caseDef.convert(selected);
         if (converted === selected) {
             this.close();
@@ -1117,25 +928,134 @@ class ContextMenu {
             return;
         }
 
+        // execCommand mutations don't reliably preserve live Ranges, so
+        // remember the selection as absolute text offsets inside the note
+        // (text before the selection is untouched by insertText, so the
+        // replacement always lands at the same start offset).
+        const liveRange = selection.getRangeAt(0);
+        const absStart = this.absoluteTextOffset(editor, liveRange.startContainer, liveRange.startOffset);
+        const absEnd = this.absoluteTextOffset(editor, liveRange.endContainer, liveRange.endOffset);
+
         this.replaceSelection(converted);
-        // Keep the converted text selected so another case can be applied.
-        note.setSelectionRange(start, start + converted.length);
+
+        // Re-select exactly the converted text so another case (or format)
+        // can be applied right away.
+        try {
+            const restored = document.createRange();
+            this.setTextOffset(editor, restored, 'start', absStart);
+            this.setTextOffset(editor, restored, 'end', absStart + converted.length);
+            selection.removeAllRanges();
+            selection.addRange(restored);
+        } catch {
+            /* selection restore is best-effort */
+        }
+
         showToast(`Converted to ${caseDef.label}.`);
     }
 
+    /** Text offset of (node, offset) measured across the editor's text. */
+    private absoluteTextOffset(editor: HTMLElement, node: Node, offset: number): number {
+        if (node === editor) {
+            // Offset counts child nodes; sum the text they contain.
+            let total = 0;
+            const limit = Math.min(offset, editor.childNodes.length);
+            for (let i = 0; i < limit; i += 1) {
+                const child = editor.childNodes[i];
+                total += child.nodeType === Node.TEXT_NODE
+                    ? (child.nodeValue?.length ?? 0)
+                    : (child.textContent?.length ?? 0);
+            }
+            return total;
+        }
+
+        let total = 0;
+        const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+            const current = walker.currentNode as Text;
+            if (current === node) {
+                return total + Math.min(offset, current.nodeValue?.length ?? 0);
+            }
+            total += current.nodeValue?.length ?? 0;
+        }
+        return total;
+    }
+
+    /** Moves one boundary of `range` to the given absolute text offset. */
+    private setTextOffset(editor: HTMLElement, range: Range, boundary: 'start' | 'end', target: number): void {
+        let remaining = target;
+        const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+        let lastNode: Text | null = null;
+
+        while (walker.nextNode()) {
+            const current = walker.currentNode as Text;
+            const length = current.nodeValue?.length ?? 0;
+            lastNode = current;
+
+            if (remaining <= length) {
+                if (boundary === 'start') {
+                    range.setStart(current, remaining);
+                } else {
+                    range.setEnd(current, remaining);
+                }
+                return;
+            }
+            remaining -= length;
+        }
+
+        // Offset beyond the text (e.g. trailing newline quirks): clamp.
+        if (lastNode) {
+            const end = lastNode.nodeValue?.length ?? 0;
+            if (boundary === 'start') {
+                range.setStart(lastNode, end);
+            } else {
+                range.setEnd(lastNode, end);
+            }
+        } else {
+            range.selectNodeContents(editor);
+            range.collapse(boundary === 'start');
+        }
+    }
+
     private removeTabs(): void {
-        const note = this.textarea;
-        if (!note) {
+        const editor = this.editor;
+        if (!editor) {
             this.close();
             return;
         }
-        const start = note.selectionStart;
-        const end = note.selectionEnd;
-        const hasSelection = start !== end;
-        const target = hasSelection
-            ? note.value.slice(start, end)
-            : note.value;
-        const tabCount = (target.match(/\t/g) || []).length;
+
+        const selection = window.getSelection();
+        const hasSelection = !!selection && selection.rangeCount > 0 && !selection.isCollapsed
+            && editor.contains(selection.getRangeAt(0).commonAncestorContainer);
+
+        // Collect the text nodes inside the selection, or the whole note.
+        const scope = document.createRange();
+        if (hasSelection) {
+            const liveRange = selection!.getRangeAt(0);
+            scope.setStart(liveRange.startContainer, liveRange.startOffset);
+            scope.setEnd(liveRange.endContainer, liveRange.endOffset);
+        } else {
+            scope.selectNodeContents(editor);
+        }
+
+        const walker = document.createTreeWalker(
+            editor,
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode: (node) => scope.intersectsNode(node)
+                    ? NodeFilter.FILTER_ACCEPT
+                    : NodeFilter.FILTER_REJECT
+            }
+        );
+
+        const textNodes: Text[] = [];
+        while (walker.nextNode()) {
+            textNodes.push(walker.currentNode as Text);
+        }
+
+        const tabCount = textNodes.reduce(
+            (sum, node) => sum + ((node.nodeValue?.match(/\t/g) || []).length),
+            0
+        );
 
         if (tabCount === 0) {
             this.close();
@@ -1144,25 +1064,17 @@ class ContextMenu {
             return;
         }
 
-        const cleaned = target.replace(/\t/g, '');
-        if (hasSelection) {
-            this.replaceSelection(cleaned);
-            note.setSelectionRange(start, start + cleaned.length);
-        } else {
-            // Whole-note replacement: select everything so undo + execCommand stay coherent.
-            this.close();
-            note.focus({ preventScroll: true });
-            note.select();
-            const ok = this.execCommand('insertText', cleaned);
-            if (!ok) {
-                note.setRangeText(cleaned, 0, note.value.length, 'end');
-                note.dispatchEvent(new Event('input', { bubbles: true }));
+        textNodes.forEach((node) => {
+            if (node.nodeValue && node.nodeValue.indexOf('\t') !== -1) {
+                node.nodeValue = node.nodeValue.replace(/\t/g, '');
             }
-            note.setSelectionRange(0, cleaned.length);
-        }
+        });
+
+        editor.dispatchEvent(new Event('input', { bubbles: true }));
         showToast(`Removed ${tabCount} tab${tabCount === 1 ? '' : 's'}.`);
     }
 }
+
 
 new ContextMenu();
 

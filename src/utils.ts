@@ -2,6 +2,7 @@ import $ from 'jquery';
 import Swal from 'sweetalert2';
 import { get, setState, selector } from './selector';
 import type { NotepadUI } from './selector';
+import { getTabManager } from './tabs';
 
 // Bootstrap 3's jQuery modal plugin (registered globally by the `bootstrap`
 // import in main.ts) is not covered by @types/jquery.
@@ -404,8 +405,6 @@ export function toggleTheme({
 }
 
 export function deleteNotes(): void {
-    const { notepad } = selector();
-
     Swal.fire({
         title: 'Want to delete notes?',
         text: "You won't be able to revert this!",
@@ -421,8 +420,9 @@ export function deleteNotes(): void {
             // save a snapshot before deleting it
             window.snapshotsManager!.createSnapshot();
 
-            notepad.note.val('').focus();
-            setState('note', '');
+            // Clear the active tab (delete-notes only ever deleted the note
+            // that was on screen, so it stays per-tab now that tabs exist).
+            getTabManager()?.clearActiveTab();
 
             Swal.fire(
                 'Deleted!',
@@ -586,15 +586,16 @@ export function shareNotes(textToShare: string): void {
     }
 }
 
-export function downloadHTML(textToWrite: string, fileNameToSaveAs: string): void {
-    const htmlContent = `<html>
-        <head><title>Downloaded HTML</title></head>
+export function downloadHTML(htmlContent: string, fileNameToSaveAs: string): void {
+    // `htmlContent` arrives pre-sanitised from the editor's formatting subset.
+    const html = `<html>
+        <head><meta charset="utf-8"><title>Notes</title></head>
         <body>
-            <pre style="white-space: pre-wrap; word-wrap: break-word;">${textToWrite}</pre>
+            <div style="white-space: pre-wrap; word-wrap: break-word; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.55; padding: 24px;">${htmlContent}</div>
         </body>
     </html>`;
 
-    const blob = new Blob([htmlContent], { type: "text/html" });
+    const blob = new Blob([html], { type: "text/html" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = fileNameToSaveAs;

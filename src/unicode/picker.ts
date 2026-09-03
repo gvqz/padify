@@ -574,22 +574,36 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
   // ------------------------------------------------------------ insert/copy
 
   function insertSymbol(symbol: UnicodeSymbol, keepOpen = false): void {
-    const textarea = notepad.note.get(0) as HTMLTextAreaElement | undefined;
-    if (!textarea) return;
+    const editor = notepad.note.get(0) as HTMLElement | undefined;
+    if (!editor) return;
 
-    const start = textarea.selectionStart ?? textarea.value.length;
-    const end = textarea.selectionEnd ?? start;
+    editor.focus();
 
-    textarea.focus();
-    textarea.setSelectionRange(start, end);
+    const selection = window.getSelection();
+    const selectionLivesInEditor =
+      !!selection && selection.rangeCount > 0 && editor.contains(selection.getRangeAt(0).commonAncestorContainer);
+
+    if (!selectionLivesInEditor) {
+      // Park the caret at the end so the symbol lands in the note.
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      range.collapse(false);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
 
     let inserted = false;
     if (typeof document.execCommand === 'function') {
       inserted = document.execCommand('insertText', false, symbol.char);
     }
-    if (!inserted) {
-      textarea.setRangeText(symbol.char, start, end, 'end');
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    if (!inserted && selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(document.createTextNode(symbol.char));
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
     pushRecent(symbol.char);

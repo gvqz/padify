@@ -1,7 +1,7 @@
 // Snapshots Manager
 import $ from 'jquery';
 import Swal from 'sweetalert2';
-import { setState } from './selector';
+import { getEditorHtml, getEditorText, htmlToText, setEditorHtml } from './tabs';
 import { showToast, updateWordCountPill } from './utils';
 
 interface Snapshot {
@@ -108,8 +108,8 @@ export class SnapshotsManager {
             return;
         }
 
-        const noteContent = (document.getElementById('note') as HTMLTextAreaElement | null)?.value || '';
-        if (!noteContent.trim()) {
+        const noteContent = getEditorHtml();
+        if (!getEditorText().trim()) {
             Swal.fire({
                 toast: true,
                 position: 'bottom',
@@ -264,7 +264,7 @@ export class SnapshotsManager {
             const snapshot = (event.target as IDBRequest).result as Snapshot | undefined;
             if (snapshot) {
                 // Ask for confirmation if there's existing content
-                const noteContent = (document.getElementById('note') as HTMLTextAreaElement | null)?.value || '';
+                const noteContent = getEditorText();
 
                 let result: { value?: unknown } = {
                     value: true
@@ -285,10 +285,10 @@ export class SnapshotsManager {
                     return;
                 }
 
-                // Restore the content
-                (document.getElementById('note') as HTMLTextAreaElement).value = snapshot.content;
-                setState('note', snapshot.content);
-                updateWordCountPill(snapshot.content);
+                // Restore the content (old snapshots hold plain text — the
+                // editor renders it faithfully, newlines and all).
+                setEditorHtml(snapshot.content);
+                updateWordCountPill(getEditorText());
 
                 Swal.fire({
                     toast: true,
@@ -440,8 +440,8 @@ export class SnapshotsManager {
 
     // Generate a title from note content
     generateSnapshotTitle(content: string): string {
-        // Get the first non-empty line as title
-        const firstLine = content.split('\n').find(line => line.trim() !== '');
+        // Content is stored as HTML — derive the title from the plain text.
+        const firstLine = htmlToText(content).split('\n').find(line => line.trim() !== '');
         let title = firstLine || 'Untitled Snapshot';
 
         // Limit title length
@@ -454,15 +454,8 @@ export class SnapshotsManager {
 
     // Generate a preview of the note content
     generatePreview(content: string): string {
-        // Remove markdown headers, lists, etc.
-        let preview = content
-            .replace(/^#+\s+/gm, '') // Remove markdown headers
-            .replace(/^[-*+]\s+/gm, '') // Remove markdown list markers
-            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove markdown links
-            .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold
-            .replace(/\*([^*]+)\*/g, '$1') // Remove italics
-            .replace(/`([^`]+)`/g, '$1') // Remove inline code
-            .trim();
+        // Content is stored as HTML — preview the rendered text.
+        let preview = htmlToText(content).replace(/\s+\n/g, '\n').trim();
 
         // Get first 100 characters
         if (preview.length > 100) {
@@ -523,8 +516,7 @@ window.createSnapshot = function (title?: string): void {
 const originalClearNotes = window.clearNotes;
 window.clearNotes = function (): void {
     // Create a snapshot before clearing if there's content
-    const noteContent = (document.getElementById('note') as HTMLTextAreaElement | null)?.value || '';
-    if (noteContent.trim() && window.snapshotsManager) {
+    if (getEditorText().trim() && window.snapshotsManager) {
         window.snapshotsManager.createSnapshot('Before clearing notes');
     }
 

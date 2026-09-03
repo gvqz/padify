@@ -111,18 +111,6 @@
       ]
     },
     {
-      "name": "Tabbypad",
-      "short_name": "Tabbypad",
-      "description": "A convenient tool that allows you to jot down multiple notes without any fuss.",
-      "url": "/tabbypad/",
-      "icons": [
-        {
-          "src": "img/minitools/tabbypad.png",
-          "sizes": "96x96"
-        }
-      ]
-    },
-    {
       "name": "Text Tools",
       "short_name": "Text Tools",
       "description": "Extract emails, URLs, and numbers from any text.",
