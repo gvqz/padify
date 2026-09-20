@@ -22,7 +22,6 @@ import {
         toggleFocusMode,
         turnOffFocusMode,
         toggleFullScreen,
-        shareNotes,
         exportNotesAsPDF,
         exportNotesAsDocx,
         downloadHTML,
@@ -39,6 +38,9 @@ import { timerConfig, stopTimer } from './timer';
 import { TabManager, setTabManager, getEditorText, getEditorHtml, sanitizeNoteHtml } from './tabs';
 import { initCloudSync } from './cloud/sync';
 import { initCloudUI } from './cloud/ui';
+import { initCloudShare } from './cloud/share';
+import { initShareUI } from './cloud/share-ui';
+import { initVoiceTyping, toggleVoiceTyping, handleTabSwitchedWhileListening } from './voice';
 
 // Bootstrap 3's jQuery plugins (registered globally by the `bootstrap` import
 // in main.ts) are not covered by @types/jquery. The `modal` member is also
@@ -315,19 +317,28 @@ $(document).ready(function () {
 
         const unicodePicker = initUnicodePicker(notepad);
 
-        // Note tabs — multiple notes inside the one editor, wired together
-        // with the rich text formatting (see tabs.ts).
+        // Note tabs — multiple notes inside the one editor, shown as a rail
+        // on the left of the page (see tabs.ts).
         const tabManager = new TabManager(notepad.note);
         setTabManager(tabManager);
         tabManager.onActiveChanged = () => {
                 updateWordCountPill(tabManager.getActiveText());
+                handleTabSwitchedWhileListening();
         };
         tabManager.init();
+
+        // Share links stay fresh through the persist hook (no-op without a
+        // configured cloud project).
+        initCloudShare(tabManager);
+
+        // Voice typing (Web Speech API) — hides its own UI when unsupported.
+        initVoiceTyping();
 
         // Cloud sync boots only when a sync project is configured; the UI
         // (navbar icon, modal, settings section) stays hidden otherwise.
         void initCloudSync(tabManager).then(() => {
                 initCloudUI();
+                initShareUI();
         });
         const characterAndWordCountText = calculateCharactersAndWords(tabManager.getActiveText());
 
@@ -835,6 +846,61 @@ $(document).ready(function () {
                 updateWordCountPill(tabManager.getActiveText());
         }, 500));
 
+        // ---- save-state indicator ----------------------------------------
+        // "Saving…" appears while keystrokes are in flight, "Saved" flips on
+        // when the debounced persist actually ran, then quietly fades out.
+        const $saveState = $('#saveState');
+        let saveFadeTimer: ReturnType<typeof setTimeout> | null = null;
+        notepad.note.on('input', function () {
+                if (saveFadeTimer) {
+                        clearTimeout(saveFadeTimer);
+                        saveFadeTimer = null;
+                }
+                $saveState.removeClass('fade')
+                        .addClass('saving')
+                        .removeAttr('hidden')
+                        .find('.save-state-text').text('Saving…');
+        });
+        tabManager.addPersistListener(function () {
+                $saveState.removeClass('saving')
+                        .find('.save-state-text').text('Saved');
+                saveFadeTimer = setTimeout(function () {
+                        saveFadeTimer = null;
+                        $saveState.addClass('fade');
+                }, 2000);
+        });
+
+        // ---- left note rail (mobile drawer) --------------------------------
+        const rail = document.getElementById('tabRail');
+        const railBackdrop = document.getElementById('tabRailBackdrop');
+        const railToggle = document.getElementById('tabRailToggle');
+        if (rail && railBackdrop && railToggle) {
+                const setRailOpen = function (open: boolean) {
+                        rail.classList.toggle('open', open);
+                        railBackdrop.classList.toggle('show', open);
+                        railToggle.setAttribute('aria-expanded', String(open));
+                };
+
+                railToggle.addEventListener('click', function () {
+                        setRailOpen(!rail.classList.contains('open'));
+                });
+                railBackdrop.addEventListener('click', function () {
+                        setRailOpen(false);
+                });
+
+                // Picking a note (or adding one) closes the drawer on phones.
+                tabManager.addPersistListener(function () {
+                        if (rail.classList.contains('open') && window.matchMedia('(max-width: 820px)').matches) {
+                                setRailOpen(false);
+                        }
+                });
+                $(document).on('keydown', function (event) {
+                        if (event.key === 'Escape' && rail.classList.contains('open')) {
+                                setRailOpen(false);
+                        }
+                });
+        }
+
         notepad.note.keydown(function (e) {
                 if (e.key === "Tab") {
                         e.preventDefault();
@@ -1188,15 +1254,6 @@ $(document).ready(function () {
                 enableDeviceTheme(themeConfig);
         });
 
-        if (navigator.share !== undefined && window.self === window.top) {
-                $('#shareNotesContainer').show();
-        }
-
-        notepad.shareNotes.click(function (e) {
-                e.stopPropagation();
-                shareNotes(getEditorText());
-        });
-
         const pipButton = document.getElementById('pip')!;
 
         // Only show the Picture-in-Picture
@@ -1368,6 +1425,12 @@ $(document).ready(function () {
                         event.preventDefault();
 
                         toggleFocusMode(notepad);
+                }
+
+                // Alt/option + v toggles voice typing.
+                if (event.altKey && event.code === 'KeyV') {
+                        event.preventDefault();
+                        toggleVoiceTyping();
                 }
 
                 // Ctrl/Cmd + Alt + Arrow keys move between note tabs.

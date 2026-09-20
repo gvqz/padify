@@ -575,17 +575,6 @@ export function exportNotesAsDocx(textToWrite: string, fileNameToSaveAs: string)
     });
 }
 
-export function shareNotes(textToShare: string): void {
-    if (navigator.share) {
-        navigator.share({
-            text: textToShare,
-            url: window.location.href,
-        })
-        .then( () => console.log("Successful share"))
-        .catch(e => console.log("Error sharing:", e))
-    }
-}
-
 export function downloadHTML(htmlContent: string, fileNameToSaveAs: string): void {
     // `htmlContent` arrives pre-sanitised from the editor's formatting subset.
     const html = `<html>

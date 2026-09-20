@@ -605,3 +605,18 @@ export function getCloudSync(): CloudSync {
 export function isCloudSyncActive(): boolean {
   return configured;
 }
+
+// ---------------------------------------------------------------------------
+// Shared client access (the share-links feature reuses the same Supabase
+// project + session instead of keeping its own copy)
+// ---------------------------------------------------------------------------
+
+/** The shared client, or null before init / when cloud sync is unconfigured. */
+export function getSupabaseClient(): SupabaseClient | null {
+  return client;
+}
+
+/** Signed-in user id, or null when signed out. */
+export function getCloudUserId(): string | null {
+  return currentUserId;
+}

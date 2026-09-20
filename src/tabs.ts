@@ -49,6 +49,9 @@ export interface TabTombstone {
 
 const TOMBSTONES_KEY = 'padifyTabTombstones';
 
+/** Notifies the rail's count badge (and any other listener) about tab count. */
+const RAIL_COUNT_ID = 'tabRailCount';
+
 /** Everything the cloud sync layer needs after the model changed. */
 export interface TabsSyncPayload {
   /** Current tab list (already persisted to localStorage). */
@@ -68,10 +71,15 @@ export const WELCOME_HTML = [
   'The app serves the following features:',
   '',
   '- Your notes are saved in real-time as you type.',
-  '- Multiple notes via tabs — plus bold, italic, underline and strikethrough',
-  '  formatting that renders right inside the editor (right-click to try it).',
+  '- Multiple notes live in the sidebar on the left — plus bold, italic,',
+  '  underline and strikethrough formatting that renders right inside the',
+  '  editor (right-click to try it).',
+  '- Voice typing: click the mic in the top bar (or press alt/option + v)',
+  '  and just talk.',
   '- Optional cloud sync: click the cloud icon in the top bar to back up',
   '  your notes and pick them up on any other device.',
+  '- Signed in? Share any note with a read-only link that expires on its',
+  '  own and can be cancelled any time (share icon in the top bar).',
   '- Installable on supported browsers for offline usage.',
   '- "Add To Home Screen" feature on Android-supported devices to launch the app from the home screen.',
   '- Dark mode.',
@@ -254,6 +262,7 @@ export class TabManager {
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private tombstones: TabTombstone[] = [];
   private dirtyIds: Set<string> = new Set();
+  private persistListeners: Set<(payload: TabsSyncPayload) => void> = new Set();
 
   constructor(editor: JQuery) {
     this.editor = editor;
@@ -340,9 +349,23 @@ export class TabManager {
       localStorage.setItem(ACTIVE_KEY, this.activeId);
     }
 
+    const payload = this.exportForSync();
     if (this.onPersist) {
-      this.onPersist(this.exportForSync());
+      this.onPersist(payload);
     }
+    this.persistListeners.forEach(listener => listener(payload));
+  }
+
+  /**
+   * Extra persist listeners (save indicator, share-link freshness, …). The
+   * cloud sync layer keeps using the onPersist slot; everyone else registers
+   * here so features can coexist without chaining over each other.
+   */
+  addPersistListener(listener: (payload: TabsSyncPayload) => void): () => void {
+    this.persistListeners.add(listener);
+    return () => {
+      this.persistListeners.delete(listener);
+    };
   }
 
   // ---- sync support ---------------------------------------------------------
@@ -529,6 +552,15 @@ export class TabManager {
     this.tabs.forEach((tab) => {
       stripElement.appendChild(this.buildTabElement(tab));
     });
+
+    this.renderRailCount();
+  }
+
+  private renderRailCount(): void {
+    const count = document.getElementById(RAIL_COUNT_ID);
+    if (count) {
+      count.textContent = String(this.tabs.length);
+    }
   }
 
   private buildTabElement(tab: NoteTab): HTMLElement {
@@ -651,6 +683,7 @@ export class TabManager {
 
     this.strip.get(0)!.appendChild(this.buildTabElement(tab));
     this.setActiveClass();
+    this.renderRailCount();
     this.loadActiveIntoEditor();
     this.scrollTabIntoView(tab.id);
 

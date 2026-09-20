@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shared note — Padify</title>
+  <meta name="robots" content="noindex">
+  <meta name="description" content="A read-only note shared from Padify.">
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="./share.css">
+</head>
+
+<body>
+  <header class="share-top">
+    <a class="share-brand" href="/" aria-label="Padify home"><span class="share-brand-mark">P</span>adify</a>
+    <span class="share-readonly-badge">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="11" width="18" height="11" rx="2" />
+        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      </svg>
+      Read-only
+    </span>
+  </header>
+
+  <main class="share-page">
+    <div id="shareState" class="share-state" hidden>
+      <div class="share-state-icon" id="shareStateIcon" aria-hidden="true"></div>
+      <h1 class="share-state-title" id="shareStateTitle"></h1>
+      <p class="share-state-copy" id="shareStateCopy"></p>
+    </div>
+
+    <article id="shareArticle" class="share-note" hidden>
+      <h1 id="shareTitle" class="share-title"></h1>
+      <p class="share-meta" id="shareMeta"></p>
+      <div id="shareContent" class="share-content"></div>
+    </article>
+  </main>
+
+  <footer class="share-foot">
+    <p>
+      Shared with <a href="/">Padify</a> — a fast, offline-capable notepad.
+      <a class="share-cta" href="/">Make your own notes →</a>
+    </p>
+  </footer>
+
+  <script src="./config.js"></script>
+  <script src="./vendor/supabase.js"></script>
+  <script src="./share.js"></script>
+</body>
+
+</html>

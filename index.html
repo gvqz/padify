@@ -47,6 +47,12 @@
         </span>
         <span><a class="navbar-brand app-heading glow-text tilt-css" href="#"><span>P</span><span>a</span><span>d</span><span>i</span><span>f</span><span>y</span></a></span>
         <span class="icon-container">
+          <span title="Your notes" id="tabRailToggleContainer">
+            <a href="javascript:void(0);" id="tabRailToggle" class="nav-icon-btn" aria-controls="tabRail" aria-expanded="false" title="Your notes">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m15 10-2 2 2 2"/></svg>
+              <span class="sr-only">Your notes</span>
+            </a>
+          </span>
           <span class="more-tools-container">
             <a id="moreTools" class="dropdown-icon" title="More Tools">
               <img src="/img/navbar/dropdown.svg" alt="More Tools" />
@@ -90,6 +96,12 @@
               <img src="/img/navbar/copy.svg" alt="Copy Icon" />
             </a>
           </span>
+          <span title="Voice type [alt/option + v]" id="voiceTypeContainer" hidden>
+            <a href="javascript:void(0);" id="voiceTypeButton" class="nav-icon-btn voice-nav-button" aria-pressed="false" title="Voice type [alt/option + v]">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg>
+              <span class="sr-only">Voice type</span>
+            </a>
+          </span>
           <span title="Preferences [ctrl/command + ,]">
             <a href="#preferences" data-toggle="modal" data-target="#preferencesModal" id="preferences" class="preference-icon">
               <img
@@ -129,14 +141,15 @@
               <span class="sr-only">Cloud sync</span>
             </a>
           </span>
-          <span title="Share Notes across system apps" id="shareNotesContainer">
-            <a id="shareNotes" title="Share Notes across system apps">
+          <span title="Share this note" id="shareNotesContainer" hidden>
+            <a id="shareNotes" title="Share this note">
               <span>
                 <img
                   src="/img/navbar/share.svg"
-                  alt="Share Notes across system apps"
+                  alt="Share this note"
                 />
               </span>
+              <span class="sr-only">Share this note</span>
             </a>
           </span>
         </span>  
@@ -211,28 +224,54 @@
 
   <div id="breakVeil" class="break-veil" aria-hidden="true"></div>
 
+  <!-- Voice typing live bar (Web Speech API) -->
+  <div id="voiceBar" class="voice-bar" hidden role="status" aria-live="polite">
+    <span class="voice-bar-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+    <span class="voice-bar-text" id="voiceBarText">Listening…</span>
+    <button type="button" id="voiceBarStop" class="voice-bar-stop">
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+      Done
+    </button>
+  </div>
+
   <div id="mainContainer">
-    <div class="container" id="textareaContainer">
-      <div class="starter-template">
-        <div id="tabStrip" role="tablist" aria-label="Note tabs">
+    <div id="editorShell">
+      <aside id="tabRail" aria-label="Note tabs">
+        <div class="tab-rail-head">
+          <span class="tab-rail-eyebrow">Notes</span>
+          <span class="tab-rail-count" id="tabRailCount" title="Notes on this device">1</span>
+        </div>
+        <div id="tabStrip" role="tablist" aria-orientation="vertical" aria-label="Note tabs">
           <div id="tabStripTabs" class="tab-strip-tabs"></div>
-          <button type="button" id="addTab" class="tab-strip-add" title="New tab" aria-label="Add a new tab">
+        </div>
+        <div class="tab-rail-foot">
+          <button type="button" id="addTab" class="tab-rail-add" title="New tab" aria-label="Add a new tab">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            <span>New note</span>
           </button>
         </div>
-        <div id="note" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true"
-          aria-label="Your notes" data-placeholder="Type your notes here and when you come back all your notes will be right here..."></div>
-      </div>  
-      <div class="bottom-line">
-        <div class="timer-pill" style="display: none;">
-          <div class="timer-display">00:00</div>
-          <a href="javascript:void(0);" id="stopTimer" title="Stop the timer">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#000" class="size-6">
-              <path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-            </svg>          
-          </a>
+      </aside>
+      <div id="tabRailBackdrop" class="tab-rail-backdrop" aria-hidden="true"></div>
+      <div class="container" id="textareaContainer">
+        <div class="starter-template">
+          <div id="note" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true"
+            aria-label="Your notes" data-placeholder="Type your notes here and when you come back all your notes will be right here..."></div>
         </div>
-        <div class="word-count-container">
+        <div class="bottom-line">
+          <div class="save-state" id="saveState" hidden>
+            <span class="save-state-spinner" aria-hidden="true"></span>
+            <svg class="save-state-check" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 13 4 4L19 7"/></svg>
+            <span class="save-state-text">Saved</span>
+          </div>
+          <div class="timer-pill" style="display: none;">
+            <div class="timer-display">00:00</div>
+            <a href="javascript:void(0);" id="stopTimer" title="Stop the timer">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#000" class="size-6">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              </svg>
+            </a>
+          </div>
+          <div class="word-count-container">
           <p id="wordCount">0 character • 0 word</p>
           <a href="#statistics" data-toggle="modal" data-target="#statisticsModal"
               title="View Note Statistics">
@@ -254,6 +293,7 @@
               </g>
             </svg>
           </a>
+          </div>
         </div>
       </div>
     </div>
@@ -291,8 +331,10 @@
               <p>The app serves the following features:</p>
               <ul>
                 <li>Lets you <b>write notes</b> which are autosaved <a href="https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage" target="_blank">locally</a>.</li>
-                <li>Keep <b>multiple notes in tabs</b> on the main page.</li>
+                <li>Keep <b>multiple notes in tabs</b> in the sidebar of the main page.</li>
                 <li><b>Bold, italic, underline and strikethrough</b> formatting that renders right inside the editor.</li>
+                <li><b>Voice typing</b> — dictate with the mic in the top bar (or <b>alt/option + v</b>).</li>
+                <li><b>Share notes</b> with read-only links that expire on their own and can be cancelled any time (cloud accounts).</li>
                 <li><a href="https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Developer_guide/Installing" target="_blank">Installable</a> on supported browsers for offline usage.</li>
                 <li><b>Dark mode</b>.</li>
                 <li><b>Writing sessions</b> with a pick-a-duration timer.</li>
@@ -437,6 +479,10 @@
               <td>Strikethrough the selected text</td>
             </tr>
             <tr>
+              <td><kbd>alt</kbd> / <kbd><span>⌥</span>option</kbd> + <kbd>v</kbd></td>
+              <td>Start / stop voice typing</td>
+            </tr>
+            <tr>
               <td><kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>alt</kbd> / <kbd><span>⌥</span>option</kbd> + <kbd>←</kbd> / <kbd>→</kbd></td>
               <td>Switch to the previous / next note tab</td>
             </tr>
@@ -546,6 +592,75 @@
               </div>
             </form>
             <p class="cloud-hint">Your notes stay on this device until you sign in. After that they sync automatically — and anything you wrote offline uploads as soon as you connect.</p>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="shareModal" class="modal fade" role="dialog" aria-labelledby="shareModalTitle">
+    <div class="modal-dialog cloud-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div class="pref-header-copy">
+            <span class="pref-eyebrow">Padify</span>
+            <h4 class="modal-title custom-modal-title" id="shareModalTitle">Share this note</h4>
+            <p class="pref-subtitle">Publish a read-only link — you choose how long it stays up.</p>
+          </div>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close share">&times;</button>
+        </div>
+        <div class="modal-body">
+
+          <div id="shareSignedOutPane" hidden>
+            <div class="share-signedout">
+              <span class="share-lock-icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </span>
+              <h5 class="share-signedout-title">Sign in to share notes</h5>
+              <p class="share-signedout-copy">Sharing creates a private link to this note that you can cancel at any time. Sign in to your Padify account to create and manage your links.</p>
+              <button type="button" class="btn btn-primary" id="shareSignInCta">Sign in</button>
+            </div>
+          </div>
+
+          <div id="shareSignedInPane" hidden>
+            <div class="share-note-card">
+              <span class="share-note-eyebrow">Sharing</span>
+              <span class="share-note-title" id="shareNoteTitle">Untitled</span>
+              <span class="share-note-meta" id="shareNoteMeta"></span>
+            </div>
+
+            <div class="share-field">
+              <span class="share-field-label" id="shareDurationLabel">Link expires after</span>
+              <div class="pref-theme-seg share-duration-seg" role="radiogroup" aria-labelledby="shareDurationLabel">
+                <input type="radio" id="shareDur1" value="1" name="shareDuration" />
+                <label for="shareDur1">1 day</label>
+                <input type="radio" id="shareDur7" value="7" name="shareDuration" checked />
+                <label for="shareDur7">7 days</label>
+                <input type="radio" id="shareDur30" value="30" name="shareDuration" />
+                <label for="shareDur30">30 days</label>
+                <input type="radio" id="shareDur90" value="90" name="shareDuration" />
+                <label for="shareDur90">90 days</label>
+              </div>
+              <span class="share-expiry-preview" id="shareExpiryPreview"></span>
+            </div>
+
+            <button type="button" class="btn btn-primary share-create-btn" id="shareCreateBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              Create share link
+            </button>
+
+            <div class="share-links-head">
+              <span class="share-field-label">Your links</span>
+              <label class="share-all-toggle" for="shareAllToggle">
+                <input type="checkbox" id="shareAllToggle" />
+                <span>All notes</span>
+              </label>
+            </div>
+            <div class="share-links-list" id="shareLinksList">
+              <p class="share-links-empty" id="shareLinksEmpty">No links yet. Create one above — anyone with the link sees a read-only copy of this note.</p>
+            </div>
+            <p class="share-hint">Cancelling a link immediately cuts off access for everyone who has it.</p>
           </div>
 
         </div>

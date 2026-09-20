@@ -22,8 +22,8 @@ no server to run, no other service.
 1. In the project dashboard open **SQL Editor → New query**.
 2. Paste the contents of [`supabase/schema.sql`](../supabase/schema.sql) and
    click **Run**.
-3. You should see `Success. No rows returned` — the `notes` and `drawings`
-   tables now exist with row level security enabled.
+3. You should see `Success. No rows returned` — the `notes`, `drawings` and
+   `shares` tables now exist with row level security enabled.
 
 ## 3. Allow the app's origin (for password reset links)
 
@@ -67,6 +67,38 @@ gains a "Cloud sync" section, and users can create accounts and sync.
 > The anon key is *designed* to be public — it ships in every Supabase
 > client bundle. It cannot read or write anything without a signed-in user,
 > and row level security scopes every request to that user's own rows.
+
+## 4b. Enable share links (/share/)
+
+Share links let signed-in users publish a read-only copy of a note at
+`https://your-site/share/?t=<token>`, with a chosen expiry (1/7/30/90 days)
+and instant cancellation. The `shares` table created in step 2 is already
+configured for it (anonymous visitors may only `select` rows that are
+neither revoked nor expired).
+
+The share page is a static page the *viewer's* browser loads — it cannot read
+`src/cloud/config.ts`, so it has its own config file. Open
+`public/share/config.js` and fill in the same values:
+
+```js
+window.PADIFY_SHARE_CONFIG = {
+  url: 'https://your-project-ref.supabase.co',
+  anonKey: 'eyJhbGciOi…'
+};
+```
+
+Rebuild and deploy. Until this file is filled in, `/share/` links show a
+friendly "sharing isn't set up" state — everything else works normally.
+
+Behaviour reference:
+
+- The link holds a **copy** of the note; while the note is edited (and the
+  owner is signed in) the copy refreshes automatically in the background.
+- **Cancelling** a link (share modal → "Cancel link") cuts off access
+  immediately, and so does **closing the note** it belongs to.
+- Expired and cancelled rows become unreadable to anonymous visitors — they
+  see "This link isn't available". Owners keep seeing them in the modal so
+  they can audit and copy old links.
 
 ## 5. Verify
 

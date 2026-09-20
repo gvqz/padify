@@ -8,7 +8,10 @@ Built as a Progressive Web App using the [Service Worker API](https://developer.
 ## Notable features
 
 - Write notes in plain text or with rich formatting, autosaved [locally](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage)
+- Multiple notes in a sidebar — plus bold, italic, underline and strikethrough that render right in the editor
+- **Voice typing** — dictate into the note with the Web Speech API (mic icon or alt/option + v)
 - **Optional cloud sync** — create a free account and your notes back up automatically, restoring on any device you sign in on (see [docs/CLOUD_SETUP.md](docs/CLOUD_SETUP.md))
+- **Share links** — publish a read-only copy of a note with a chosen expiry (1–90 days) and cancel it at any time (cloud accounts; see [docs/CLOUD_SETUP.md](docs/CLOUD_SETUP.md))
 - [Installable](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Developer_guide/Installing) on supported browsers for offline usage
 - "Add To Home Screen" on supported mobile devices
 - Dark mode
