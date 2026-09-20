@@ -12,6 +12,7 @@
     "gen:unicode": "node scripts/gen-unicode-data.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "bootstrap": "3.4.1",
     "docx": "^8.5.0",
     "jquery": "^3.7.1",

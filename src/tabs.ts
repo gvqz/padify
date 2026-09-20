@@ -37,6 +37,28 @@ const TABS_KEY = 'padifyTabs';
 const ACTIVE_KEY = 'padifyActiveTab';
 const LEGACY_NOTE_KEY = 'note';
 
+/**
+ * Tabs closed on this device whose deletion has not been confirmed by the
+ * cloud yet. Persisted so closing a tab offline still deletes it remotely
+ * after the next sync.
+ */
+export interface TabTombstone {
+  id: string;
+  updatedAt: number;
+}
+
+const TOMBSTONES_KEY = 'padifyTabTombstones';
+
+/** Everything the cloud sync layer needs after the model changed. */
+export interface TabsSyncPayload {
+  /** Current tab list (already persisted to localStorage). */
+  tabs: NoteTab[];
+  /** Tab ids whose content/name changed since the last persist. */
+  dirty: string[];
+  /** Full tombstone list (pending deletions, some possibly old news). */
+  tombstones: TabTombstone[];
+}
+
 const MAX_TITLE_LENGTH = 42;
 
 /** Welcome note shown for brand-new installs (rich HTML). */
@@ -48,6 +70,8 @@ export const WELCOME_HTML = [
   '- Your notes are saved in real-time as you type.',
   '- Multiple notes via tabs — plus bold, italic, underline and strikethrough',
   '  formatting that renders right inside the editor (right-click to try it).',
+  '- Optional cloud sync: click the cloud icon in the top bar to back up',
+  '  your notes and pick them up on any other device.',
   '- Installable on supported browsers for offline usage.',
   '- "Add To Home Screen" feature on Android-supported devices to launch the app from the home screen.',
   '- Dark mode.',
@@ -228,6 +252,8 @@ export class TabManager {
   private readonly editor: JQuery;
   private readonly strip: JQuery;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private tombstones: TabTombstone[] = [];
+  private dirtyIds: Set<string> = new Set();
 
   constructor(editor: JQuery) {
     this.editor = editor;
@@ -237,6 +263,7 @@ export class TabManager {
   /** Loads (or bootstraps) the model and paints the strip + editor. */
   init(): void {
     this.tabs = this.load();
+    this.tombstones = this.loadTombstones();
     this.migrateLegacyNote();
 
     const savedActive = localStorage.getItem(ACTIVE_KEY);
@@ -312,6 +339,101 @@ export class TabManager {
     if (this.activeId) {
       localStorage.setItem(ACTIVE_KEY, this.activeId);
     }
+
+    if (this.onPersist) {
+      this.onPersist(this.exportForSync());
+    }
+  }
+
+  // ---- sync support ---------------------------------------------------------
+
+  private loadTombstones(): TabTombstone[] {
+    try {
+      const raw = localStorage.getItem(TOMBSTONES_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+      return parsed.filter(
+        entry => entry && typeof entry.id === 'string' && typeof entry.updatedAt === 'number'
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  private persistTombstones(): void {
+    localStorage.setItem(TOMBSTONES_KEY, JSON.stringify(this.tombstones));
+  }
+
+  /** Records a tab deletion so the cloud can mirror it (tombstone). */
+  private recordTombstone(tabId: string): void {
+    if (this.tombstones.some(entry => entry.id === tabId)) {
+      return;
+    }
+    this.tombstones.push({ id: tabId, updatedAt: Date.now() });
+    this.persistTombstones();
+  }
+
+  /** Snapshot of the model for the cloud sync layer. */
+  exportForSync(): TabsSyncPayload {
+    return {
+      tabs: this.tabs.map(tab => ({ ...tab })),
+      dirty: [...this.dirtyIds],
+      tombstones: this.tombstones.map(entry => ({ ...entry }))
+    };
+  }
+
+  /**
+   * Called by the cloud sync layer after a pull confirmed a tombstone is
+   * stored remotely — the local record is no longer needed.
+   */
+  confirmTombstones(ids: string[]): void {
+    if (ids.length === 0) {
+      return;
+    }
+    const confirmed = new Set(ids);
+    this.tombstones = this.tombstones.filter(entry => !confirmed.has(entry.id));
+    this.persistTombstones();
+  }
+
+  /**
+   * Replaces the model with a merged tab list coming from the sync layer.
+   * The editor only reloads when the user is not actively typing in it, so a
+   * background pull can never swallow keystrokes.
+   */
+  applyExternalMerge(nextTabs: NoteTab[]): void {
+    const activeBefore = this.getActive();
+
+    this.tabs = nextTabs.map(tab => ({
+      ...tab,
+      html: sanitizeNoteHtml(tab.html)
+    }));
+
+    if (!this.tabs.some(tab => tab.id === this.activeId)) {
+      this.activeId = this.tabs[0]?.id ?? null;
+      if (!this.activeId) {
+        const fresh = createTab(WELCOME_HTML);
+        this.tabs.push(fresh);
+        this.activeId = fresh.id;
+      }
+    }
+
+    this.persist();
+    this.renderStrip();
+
+    const active = this.getActive();
+    if (active) {
+      const editorFocused = document.activeElement === this.editor.get(0);
+      const contentChanged = !activeBefore || activeBefore.id !== active.id
+        ? true
+        : activeBefore.html !== active.html || activeBefore.name !== active.name;
+
+      if (contentChanged && !editorFocused) {
+        this.loadActiveIntoEditor();
+      }
+      this.notifyActiveChanged();
+    }
   }
 
   /** Debounced persistence for editor input — keeps typing smooth. */
@@ -343,6 +465,7 @@ export class TabManager {
 
     active.html = html;
     active.updatedAt = Date.now();
+    this.dirtyIds.add(active.id);
     this.schedulePersist();
     this.refreshTabLabel(active.id);
   }
@@ -356,6 +479,7 @@ export class TabManager {
 
     active.html = this.editor.html() ?? '';
     active.updatedAt = Date.now();
+    this.dirtyIds.add(active.id);
     this.persist();
     this.refreshTabLabel(active.id);
   }
@@ -385,6 +509,7 @@ export class TabManager {
     this.editor.html('');
     active.html = '';
     active.updatedAt = Date.now();
+    this.dirtyIds.add(active.id);
     this.persist();
     this.refreshTabLabel(active.id);
     this.editor.trigger('focus');
@@ -521,6 +646,7 @@ export class TabManager {
     const tab = createTab('');
     this.tabs.push(tab);
     this.activeId = tab.id;
+    this.dirtyIds.add(tab.id);
     this.persist();
 
     this.strip.get(0)!.appendChild(this.buildTabElement(tab));
@@ -557,6 +683,8 @@ export class TabManager {
 
       const index = this.tabs.findIndex(entry => entry.id === tabId);
       this.tabs = this.tabs.filter(entry => entry.id !== tabId);
+      this.dirtyIds.delete(tabId);
+      this.recordTombstone(tabId);
 
       if (this.tabs.length === 0) {
         const fresh = createTab('');
@@ -626,6 +754,7 @@ export class TabManager {
       if (keep && raw && raw !== currentName) {
         tab.name = raw;
         tab.updatedAt = Date.now();
+        this.dirtyIds.add(tab.id);
         this.persist();
         showToast('Tab renamed.');
       }
@@ -678,6 +807,9 @@ export class TabManager {
 
   /** Hook for app.ts to refresh the word-count pill on tab switches. */
   onActiveChanged: ((tab: NoteTab) => void) | null = null;
+
+  /** Hook for the cloud sync layer — fires after every model persist. */
+  onPersist: ((payload: TabsSyncPayload) => void) | null = null;
 
   private notifyActiveChanged(): void {
     if (this.onActiveChanged) {

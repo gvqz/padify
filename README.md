@@ -1,13 +1,14 @@
 Padify
 ======
 
-An offline-capable, no-frills notepad. Quick, distraction-free, dark-mode enabled, mobile-compatible and minimalist in nature. Runs entirely in your browser — your notes never leave your device.
+An offline-capable, no-frills notepad. Quick, distraction-free, dark-mode enabled, mobile-compatible and minimalist in nature. Runs entirely in your browser — notes are stored locally and keep working without a connection.
 
 Built as a Progressive Web App using the [Service Worker API](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API), so it keeps working even when you're offline.
 
 ## Notable features
 
-- Write notes in plain text, autosaved [locally](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage)
+- Write notes in plain text or with rich formatting, autosaved [locally](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage)
+- **Optional cloud sync** — create a free account and your notes back up automatically, restoring on any device you sign in on (see [docs/CLOUD_SETUP.md](docs/CLOUD_SETUP.md))
 - [Installable](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Developer_guide/Installing) on supported browsers for offline usage
 - "Add To Home Screen" on supported mobile devices
 - Dark mode
@@ -39,6 +40,10 @@ The app ships with a small suite of companion tools:
 - [Teleprompter](/teleprompter/) — scrolling text with adjustable speed and styling
 - [Drawingpad](/drawingpad/) — full drawing canvas with shapes, arrows, text, images and more
 - [Tasks](/tasks/) — a dead simple todo manager
+
+## Privacy
+
+Everything stays on your device by default: notes, snapshots, settings. Nothing is collected and no analytics exist. Cloud sync is strictly opt-in — when a user signs in, only their note tabs and drawing scene are stored in the app owner's sync project, locked to that account with row level security. Sign out and new edits never leave the device again.
 
 ## Running locally
 

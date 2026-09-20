@@ -37,6 +37,8 @@ import Swal from 'sweetalert2';
 import { initUnicodePicker } from './unicode/picker';
 import { timerConfig, stopTimer } from './timer';
 import { TabManager, setTabManager, getEditorText, getEditorHtml, sanitizeNoteHtml } from './tabs';
+import { initCloudSync } from './cloud/sync';
+import { initCloudUI } from './cloud/ui';
 
 // Bootstrap 3's jQuery plugins (registered globally by the `bootstrap` import
 // in main.ts) are not covered by @types/jquery. The `modal` member is also
@@ -321,6 +323,12 @@ $(document).ready(function () {
                 updateWordCountPill(tabManager.getActiveText());
         };
         tabManager.init();
+
+        // Cloud sync boots only when a sync project is configured; the UI
+        // (navbar icon, modal, settings section) stays hidden otherwise.
+        void initCloudSync(tabManager).then(() => {
+                initCloudUI();
+        });
         const characterAndWordCountText = calculateCharactersAndWords(tabManager.getActiveText());
 
         let typewriterSoundEnabled: boolean;

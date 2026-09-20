@@ -120,6 +120,15 @@
               </span>
             </a>
           </span>
+          <span title="Cloud sync" id="cloudNavContainer" hidden>
+            <a href="javascript:void(0);" id="cloudNavButton" class="cloud-nav-button">
+              <span class="cloud-nav-icon">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"/><path d="M12 12v6"/><path d="m9.5 15.5 2.5-2.5 2.5 2.5"/></svg>
+                <span class="cloud-status-dot off" id="cloudStatusDot" aria-hidden="true"></span>
+              </span>
+              <span class="sr-only">Cloud sync</span>
+            </a>
+          </span>
           <span title="Share Notes across system apps" id="shareNotesContainer">
             <a id="shareNotes" title="Share Notes across system apps">
               <span>
@@ -477,6 +486,73 @@
     </div>
   </div>
 
+  <div id="cloudModal" class="modal fade" role="dialog" aria-labelledby="cloudModalTitle">
+    <div class="modal-dialog cloud-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div class="pref-header-copy">
+            <span class="pref-eyebrow">Padify</span>
+            <h4 class="modal-title custom-modal-title" id="cloudModalTitle">Cloud sync</h4>
+            <p class="pref-subtitle">Back up your notes and pick them up on any device.</p>
+          </div>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close cloud sync">&times;</button>
+        </div>
+        <div class="modal-body">
+
+          <div id="cloudSignedInPane" hidden>
+            <div class="cloud-status-card">
+              <span class="cloud-status-dot off" id="cloudModalStatusDot" aria-hidden="true"></span>
+              <div class="cloud-status-copy">
+                <span class="cloud-status-line" id="cloudStatusLine">Everything is backed up</span>
+                <span class="cloud-status-meta" id="cloudLastSync">Syncing for the first time…</span>
+              </div>
+            </div>
+            <div class="cloud-account-row">
+              <span class="pref-row-title">Account</span>
+              <span class="cloud-account-email" id="cloudAccountEmail"></span>
+            </div>
+            <div class="cloud-actions">
+              <button type="button" class="pref-action-btn" id="cloudSyncNow">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                Sync now
+              </button>
+              <button type="button" class="pref-action-btn cloud-sign-out" id="cloudSignOut">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+                Sign out
+              </button>
+            </div>
+            <p class="cloud-hint">Notes sync automatically while you're signed in — even offline changes upload once you're back. Snapshots, settings and drawings stay on this device unless a tool says otherwise.</p>
+          </div>
+
+          <div id="cloudAuthPane">
+            <form id="cloudAuthForm" novalidate>
+              <h5 class="cloud-auth-title" id="cloudAuthTitle">Sign in to sync</h5>
+              <div class="cloud-field">
+                <label class="cloud-label" for="cloudAuthEmail">Email</label>
+                <input type="email" class="form-control cloud-input" id="cloudAuthEmail" name="email"
+                  autocomplete="email" placeholder="you@example.com" required />
+              </div>
+              <div class="cloud-field">
+                <label class="cloud-label" for="cloudAuthPassword">Password</label>
+                <input type="password" class="form-control cloud-input" id="cloudAuthPassword" name="password"
+                  autocomplete="current-password" placeholder="At least 6 characters" required minlength="6" />
+              </div>
+              <p class="cloud-feedback cloud-error hide" id="cloudAuthError" role="alert"></p>
+              <p class="cloud-feedback cloud-notice hide" id="cloudAuthNotice"></p>
+              <button type="submit" class="btn btn-primary cloud-submit" id="cloudAuthSubmit">Sign in</button>
+              <div class="cloud-auth-links">
+                <a href="#cloudAuthSwitch" id="cloudAuthSwitch">New here? Create an account</a>
+                <a href="#cloudAuthForgot" id="cloudAuthForgot">Forgot password?</a>
+              </div>
+            </form>
+            <p class="cloud-hint">Your notes stay on this device until you sign in. After that they sync automatically — and anything you wrote offline uploads as soon as you connect.</p>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="preferencesModal" class="modal fade" role="dialog" aria-labelledby="preferencesTitle">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -722,6 +798,29 @@
                       <span></span>
                     </label>
                   </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="pref-section" aria-label="Cloud sync" id="cloudSettingsSection" hidden>
+            <header class="pref-section-head">
+              <span class="pref-section-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"/><path d="M12 12v6"/><path d="m9.5 15.5 2.5-2.5 2.5 2.5"/></svg>
+              </span>
+              <div>
+                <h5 class="pref-section-title">Cloud sync</h5>
+                <p class="pref-section-hint">Your notes, safe in the cloud and on every device.</p>
+              </div>
+            </header>
+            <div class="pref-card">
+              <div class="pref-row">
+                <div class="pref-row-copy">
+                  <span class="pref-row-title">Backup &amp; sync</span>
+                  <span class="pref-row-hint" id="cloudSettingsSummary">Sign in to back up your notes and pick them up on any device.</span>
+                </div>
+                <div class="pref-row-control">
+                  <button type="button" class="pref-action-btn" id="cloudSettingsManage">Manage</button>
                 </div>
               </div>
             </div>

@@ -33,7 +33,8 @@
             if (!data || !Array.isArray(data.elements)) return null;
             return {
                 elements: data.elements,
-                appState: data.appState || {}
+                appState: data.appState || {},
+                savedAt: data.savedAt || 0
             };
         } catch (error) {
             return null;
@@ -79,12 +80,20 @@
                     }
                 });
 
-                localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                var payload = {
                     version: 1,
                     savedAt: Date.now(),
                     elements: elements,
                     appState: pickedAppState
-                }));
+                };
+
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+
+                // Cloud backup — quiet no-op unless the main app's sync
+                // session is available and fresh (see cloud.js).
+                if (window.PadifyDrawingCloud) {
+                    window.PadifyDrawingCloud.pushScene(payload);
+                }
             } catch (error) {
                 /* storage full or unavailable — drawing keeps working */
             }
@@ -96,7 +105,14 @@
     // ---------------------------------------------------------------------
 
     var rootElement = document.getElementById('drawingRoot');
-    var initialData = loadScene();
+    var localScene = loadScene();
+
+    // The cloud check races a short timeout inside getInitialScene, so the
+    // canvas opens with local data when offline or signed out, and with the
+    // newer cloud scene when one exists (e.g. a fresh browser).
+    var initialData = window.PadifyDrawingCloud
+        ? window.PadifyDrawingCloud.getInitialScene(localScene)
+        : Promise.resolve(localScene);
 
     function createElement(type, props) {
         return window.React.createElement(type, props);
