@@ -1,5 +1,5 @@
 /**
- * Padify cloud sync — notes (tabs) mirrored to a Supabase project.
+ * Padify cloud sync — notes (tabs) mirrored to the padify API (Turso).
  *
  * Design rules:
  *  • Local-first. localStorage stays the source of truth for the UI; the
@@ -13,12 +13,11 @@
  *  • Every cloud failure is non-fatal: the UI degrades to an error/offline
  *    state and retries on the next change, `online` event or 30s tick.
  *
- * The supabase-js client is loaded through a dynamic import so it never
- * touches the initial payload, and only when a project is configured.
+ * The API is a tiny bun service (see server/) backed by a Turso database;
+ * sessions are bearer tokens stored in localStorage under padifySession.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { getCloudConfig } from './config';
+import { api as apiCall, ApiError } from './api';
 import type { NoteTab, TabManager, TabTombstone, TabsSyncPayload } from '../tabs';
 
 // ---------------------------------------------------------------------------
@@ -36,8 +35,6 @@ export type SyncPhase = 'idle' | 'syncing' | 'pending' | 'offline';
 export interface AuthResult {
   ok: boolean;
   message?: string;
-  /** Sign-up completed but the project requires email confirmation first. */
-  needsConfirmation?: boolean;
 }
 
 export interface CloudSync {
@@ -46,13 +43,12 @@ export interface CloudSync {
   signIn(email: string, password: string): Promise<AuthResult>;
   signUp(email: string, password: string): Promise<AuthResult>;
   signOut(): Promise<void>;
-  sendPasswordReset(email: string): Promise<AuthResult>;
   /** Pull + push right now (used by "Sync now" and the online listener). */
   syncNow(): void;
 }
 
 // ---------------------------------------------------------------------------
-// Cloud row shape (supabase/public/notes — see supabase/schema.sql)
+// Cloud row shape (server/notes — see server/schema.sql)
 // ---------------------------------------------------------------------------
 
 interface NoteRow {
@@ -66,6 +62,13 @@ interface NoteRow {
   deleted: boolean;
 }
 
+interface StoredSession {
+  token: string;
+  userId: string;
+  email: string;
+}
+
+const SESSION_KEY = 'padifySession';
 const SYNC_INTERVAL_MS = 30_000;
 const PUSH_DEBOUNCE_MS = 1_200;
 
@@ -73,9 +76,8 @@ const PUSH_DEBOUNCE_MS = 1_200;
 // Module state
 // ---------------------------------------------------------------------------
 
-let client: SupabaseClient | null = null;
 let manager: TabManager | null = null;
-let configured = false;
+let session: StoredSession | null = null;
 
 let status: CloudStatus = { state: 'unconfigured' };
 const listeners = new Set<(status: CloudStatus) => void>();
@@ -93,59 +95,109 @@ let periodicTimer: ReturnType<typeof setInterval> | null = null;
 const pendingPush = new Set<string>();
 
 // ---------------------------------------------------------------------------
+// API plumbing
+// ---------------------------------------------------------------------------
+
+function api<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
+  return apiCall<T>(path, options);
+}
+
+function loadStoredSession(): StoredSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<StoredSession> | null;
+    if (parsed && typeof parsed.token === 'string' && parsed.token
+      && typeof parsed.userId === 'string' && parsed.userId
+      && typeof parsed.email === 'string') {
+      return { token: parsed.token, userId: parsed.userId, email: parsed.email };
+    }
+  } catch {
+    /* malformed session — treat as signed out */
+  }
+  return null;
+}
+
+function storeSession(next: StoredSession | null): void {
+  session = next;
+  try {
+    if (next) {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(next));
+    } else {
+      localStorage.removeItem(SESSION_KEY);
+    }
+  } catch {
+    /* storage unavailable — session lives for this page only */
+  }
+}
+
+function authErrorMessage(message: string): string {
+  if (/failed to fetch|networkerror|load failed/i.test(message)) {
+    return 'Could not reach the sync server. Check your connection and try again.';
+  }
+  if (/already exists/i.test(message)) {
+    return 'An account with this email already exists — sign in instead.';
+  }
+  if (/at least 6/i.test(message)) {
+    return 'Password must be at least 6 characters.';
+  }
+  if (/too many attempts|too many requests/i.test(message)) {
+    return 'Too many attempts — wait a moment and try again.';
+  }
+  return message || 'Something went wrong. Try again.';
+}
+
+// ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 
 /**
- * Wires the sync layer to the tab manager. Safe to call when cloud sync is
- * not configured — the app then behaves exactly like a local-only install.
+ * Wires the sync layer to the tab manager. Always safe to call: without a
+ * signed-in session the app behaves exactly like a local-only install.
  */
 export async function initCloudSync(tabManager: TabManager): Promise<void> {
   manager = tabManager;
-
-  const config = getCloudConfig();
-  if (!config) {
-    setStatus({ state: 'unconfigured' });
-    return;
-  }
-
-  configured = true;
-
-  try {
-    const supabase = await import('@supabase/supabase-js');
-    client = supabase.createClient(config.url, config.anonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: false
-      }
-    });
-  } catch (error) {
-    console.error('[cloud] failed to load the sync client', error);
-    setStatus({ state: 'unconfigured' });
-    configured = false;
-    return;
-  }
-
   manager.onPersist = (payload) => onLocalChange(payload);
 
-  client.auth.onAuthStateChange((event) => {
-    if (event === 'SIGNED_OUT') {
-      handleSignedOut();
-      return;
-    }
-    // INITIAL_SESSION fires once at startup, SIGNED_IN after every login —
-    // both funnel into the same guarded restore so the first sync starts
-    // exactly once per fresh session.
-    if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-      void handleSessionRestored();
-    }
-  });
+  session = loadStoredSession();
 
-  await handleSessionRestored();
+  // Validate any stored session against the API (this also slides the
+  // session's expiry forward on the server side).
+  if (session) {
+    setStatus(syncingStatus());
+    try {
+      const me = await api<{ user: { id: string; email: string } }>('/api/me');
+      currentUserId = me.user.id;
+      currentUserEmail = me.user.email;
+      if (me.user.email !== session.email) {
+        storeSession({ ...session, email: me.user.email });
+      }
+      setStatus(signedInStatus('syncing'));
+      void syncCycle('session-restored');
+    } catch (error) {
+      if (error instanceof ApiError && error.statusCode === 401) {
+        // Token expired or revoked — back to signed-out.
+        storeSession(null);
+        currentUserId = null;
+        currentUserEmail = null;
+        setStatus({ state: 'signed-out' });
+      } else {
+        setStatus({
+          state: 'error',
+          email: session.email,
+          message: offlineMessage(error),
+          retryable: true
+        });
+      }
+    }
+  } else {
+    setStatus({ state: 'signed-out' });
+  }
 
   periodicTimer = setInterval(() => {
-    if (document.visibilityState === 'visible' && navigator.onLine) {
+    if (document.visibilityState === 'visible' && navigator.onLine && currentUserId) {
       void syncCycle('periodic');
     }
   }, SYNC_INTERVAL_MS);
@@ -161,6 +213,14 @@ export async function initCloudSync(tabManager: TabManager): Promise<void> {
       void syncCycle('visible');
     }
   });
+}
+
+function offlineMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const offline = !navigator.onLine || /failed to fetch|networkerror|load failed/i.test(message);
+  return offline
+    ? 'Offline — changes are safe on this device and will sync later.'
+    : message;
 }
 
 // ---------------------------------------------------------------------------
@@ -198,130 +258,66 @@ function handleSignedOut(): void {
   setStatus({ state: 'signed-out' });
 }
 
-/**
- * Picks up the current auth session and kicks off the first sync when it is
- * new (fresh sign-in or a restored session from a previous visit).
- */
-async function handleSessionRestored(): Promise<void> {
-  if (!client) {
-    return;
-  }
-
-  const { data } = await client.auth.getSession();
-  const session = data.session;
-
-  if (session?.user) {
-    const isNewUser = currentUserId !== session.user.id;
-    currentUserId = session.user.id;
-    currentUserEmail = session.user.email ?? null;
-
-    // Kick the first sync for a fresh session — or for the same user signing
-    // in again after a failure (e.g. their token was revoked by a sign-out
-    // on another device, or the network was down when the page loaded).
-    if (isNewUser || status.state === 'error') {
-      setStatus(syncingStatus());
-      void syncCycle('session-restored');
-    }
-  } else if (currentUserId) {
-    handleSignedOut();
-  } else {
-    setStatus({ state: 'signed-out' });
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Auth actions (called from the cloud modal)
 // ---------------------------------------------------------------------------
 
-function authErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  if (/failed to fetch|networkerror|load failed/i.test(message)) {
-    return 'Could not reach the sync server. Check your connection and try again.';
-  }
-  if (/email not confirmed/i.test(message)) {
-    return 'This email is not confirmed yet — check your inbox for the confirmation link.';
-  }
-  if (/invalid login credentials/i.test(message)) {
-    return 'Wrong email or password.';
-  }
-  if (/user already registered|email_exists/i.test(message)) {
-    return 'An account with this email already exists — sign in instead.';
-  }
-  if (/password should be at least/i.test(message)) {
-    return 'Password must be at least 6 characters.';
-  }
-  if (/rate limit/i.test(message)) {
-    return 'Too many attempts — wait a moment and try again.';
-  }
-  return message || 'Something went wrong. Try again.';
+interface AuthResponse {
+  token: string;
+  user: { id: string; email: string };
 }
 
 export async function signIn(email: string, password: string): Promise<AuthResult> {
-  if (!client) {
-    return { ok: false, message: 'Cloud sync is not set up.' };
-  }
   setStatus({ state: 'signed-out' });
+  storeSession(null);
 
-  const { error } = await client.auth.signInWithPassword({
-    email: email.trim(),
-    password
-  });
-
-  if (error) {
-    return { ok: false, message: authErrorMessage(error) };
+  try {
+    const data = await api<AuthResponse>('/api/auth/signin', {
+      method: 'POST',
+      body: { email: email.trim(), password }
+    });
+    storeSession({ token: data.token, userId: data.user.id, email: data.user.email });
+    currentUserId = data.user.id;
+    currentUserEmail = data.user.email;
+    setStatus(syncingStatus());
+    void syncCycle('sign-in');
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, message: authErrorMessage(message) };
   }
-
-  // onAuthStateChange → session handling kicks the first sync off; keep the
-  // modal feedback instant by returning immediately.
-  return { ok: true };
 }
 
 export async function signUp(email: string, password: string): Promise<AuthResult> {
-  if (!client) {
-    return { ok: false, message: 'Cloud sync is not set up.' };
+  setStatus({ state: 'signed-out' });
+  storeSession(null);
+
+  try {
+    const data = await api<AuthResponse>('/api/auth/signup', {
+      method: 'POST',
+      body: { email: email.trim(), password }
+    });
+    storeSession({ token: data.token, userId: data.user.id, email: data.user.email });
+    currentUserId = data.user.id;
+    currentUserEmail = data.user.email;
+    setStatus(syncingStatus());
+    void syncCycle('sign-up');
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, message: authErrorMessage(message) };
   }
-
-  const { data, error } = await client.auth.signUp({
-    email: email.trim(),
-    password
-  });
-
-  if (error) {
-    return { ok: false, message: authErrorMessage(error) };
-  }
-
-  if (!data.session) {
-    return {
-      ok: true,
-      needsConfirmation: true,
-      message: 'Account created! Check your inbox for a confirmation link, then sign in.'
-    };
-  }
-
-  return { ok: true };
 }
 
 export async function signOut(): Promise<void> {
-  if (!client) {
-    return;
+  // Best effort: even if the API is unreachable, drop the local session.
+  try {
+    await api('/api/auth/signout', { method: 'POST' });
+  } catch {
+    /* server unreachable or already signed out */
   }
-  await client.auth.signOut();
+  storeSession(null);
   handleSignedOut();
-}
-
-export async function sendPasswordReset(email: string): Promise<AuthResult> {
-  if (!client) {
-    return { ok: false, message: 'Cloud sync is not set up.' };
-  }
-
-  const { error } = await client.auth.resetPasswordForEmail(email.trim(), {
-    redirectTo: `${window.location.origin}/`
-  });
-
-  if (error) {
-    return { ok: false, message: authErrorMessage(error) };
-  }
-  return { ok: true, message: 'Password reset link sent — check your inbox.' };
 }
 
 // ---------------------------------------------------------------------------
@@ -356,7 +352,7 @@ function onLocalChange(payload: TabsSyncPayload): void {
 // ---------------------------------------------------------------------------
 
 async function syncCycle(_reason: string): Promise<void> {
-  if (!client || !manager || !currentUserId) {
+  if (!manager || !currentUserId || !session) {
     return;
   }
   if (syncing) {
@@ -373,13 +369,19 @@ async function syncCycle(_reason: string): Promise<void> {
     setStatus(signedInStatus(pendingPush.size > 0 ? 'pending' : 'idle'));
   } catch (error) {
     console.warn('[cloud] sync failed', error);
-    const message = error instanceof Error ? error.message : String(error);
-    const offline = !navigator.onLine || /failed to fetch|networkerror|load failed/i.test(message);
+
+    if (error instanceof ApiError && error.statusCode === 401) {
+      // Session was revoked elsewhere — stop syncing, keep local notes.
+      storeSession(null);
+      handleSignedOut();
+      return;
+    }
+
     setStatus({
       state: 'error',
       email: currentUserEmail ?? '',
-      message: offline ? 'Offline — changes are safe on this device and will sync later.' : message,
-      retryable: offline
+      message: offlineMessage(error),
+      retryable: true
     });
   } finally {
     syncing = false;
@@ -391,7 +393,7 @@ async function syncCycle(_reason: string): Promise<void> {
 }
 
 async function runSyncOnce(): Promise<void> {
-  if (!client || !manager || !currentUserId) {
+  if (!manager || !currentUserId || !session) {
     return;
   }
 
@@ -416,21 +418,15 @@ async function runSyncOnce(): Promise<void> {
     });
 
     if (rows.length > 0) {
-      const { error } = await client.from('notes').upsert(rows);
-      if (error) {
-        throw new Error(error.message);
-      }
+      await api('/api/notes', { method: 'PUT', body: { rows } });
     }
     pendingPush.clear();
   }
 
   // 2. Pull the full remote list and merge.
-  const { data, error } = await client.from('notes').select('*');
-  if (error) {
-    throw new Error(error.message);
-  }
+  const data = await api<{ rows: NoteRow[] }>('/api/notes');
+  const remoteRows = (data.rows ?? []).map(row => ({ ...row, deleted: !!row.deleted }));
 
-  const remoteRows = (data ?? []) as NoteRow[];
   const payload = manager.exportForSync();
   const merge = mergeRemote(remoteRows, payload);
 
@@ -465,10 +461,7 @@ async function runSyncOnce(): Promise<void> {
   manager.confirmTombstones(confirmIds);
 
   if (diffRows.length > 0) {
-    const { error } = await client.from('notes').upsert(diffRows);
-    if (error) {
-      throw new Error(error.message);
-    }
+    await api('/api/notes', { method: 'PUT', body: { rows: diffRows } });
   }
 }
 
@@ -481,7 +474,6 @@ interface MergeResult {
 function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): MergeResult {
   const tabs: NoteTab[] = payload.tabs.map(tab => ({ ...tab }));
   const byId = new Map(tabs.map(tab => [tab.id, tab]));
-  const removedIds: string[] = [];
   const freshRemote: NoteTab[] = [];
   let touched = false;
 
@@ -493,7 +485,6 @@ function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): MergeResu
         if (index >= 0) {
           tabs.splice(index, 1);
         }
-        removedIds.push(row.id);
         touched = true;
       }
       return;
@@ -594,7 +585,6 @@ export function getCloudSync(): CloudSync {
       signIn,
       signUp,
       signOut,
-      sendPasswordReset,
       syncNow
     };
   }
@@ -603,17 +593,7 @@ export function getCloudSync(): CloudSync {
 
 /** Test hook — exposes whether the engine actually booted. */
 export function isCloudSyncActive(): boolean {
-  return configured;
-}
-
-// ---------------------------------------------------------------------------
-// Shared client access (the share-links feature reuses the same Supabase
-// project + session instead of keeping its own copy)
-// ---------------------------------------------------------------------------
-
-/** The shared client, or null before init / when cloud sync is unconfigured. */
-export function getSupabaseClient(): SupabaseClient | null {
-  return client;
+  return manager !== null;
 }
 
 /** Signed-in user id, or null when signed out. */

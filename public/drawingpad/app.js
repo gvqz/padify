@@ -88,12 +88,6 @@
                 };
 
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-
-                // Cloud backup — quiet no-op unless the main app's sync
-                // session is available and fresh (see cloud.js).
-                if (window.PadifyDrawingCloud) {
-                    window.PadifyDrawingCloud.pushScene(payload);
-                }
             } catch (error) {
                 /* storage full or unavailable — drawing keeps working */
             }
@@ -105,14 +99,7 @@
     // ---------------------------------------------------------------------
 
     var rootElement = document.getElementById('drawingRoot');
-    var localScene = loadScene();
-
-    // The cloud check races a short timeout inside getInitialScene, so the
-    // canvas opens with local data when offline or signed out, and with the
-    // newer cloud scene when one exists (e.g. a fresh browser).
-    var initialData = window.PadifyDrawingCloud
-        ? window.PadifyDrawingCloud.getInitialScene(localScene)
-        : Promise.resolve(localScene);
+    var initialData = loadScene();
 
     function createElement(type, props) {
         return window.React.createElement(type, props);

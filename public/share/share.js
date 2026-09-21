@@ -1,11 +1,11 @@
 /**
  * Padify share viewer — /share/?t=<token>
  *
- * Loads one active share row anonymously (RLS on public.shares only exposes
- * rows that are neither revoked nor expired) and renders it read-only with
- * the same formatting subset the editor produces. Any problem — bad token,
- * cancelled link, expired link, network failure — lands in the same calm
- * "this link isn't available" state.
+ * Loads one active share row anonymously from the padify API (the server
+ * only returns rows that are neither revoked nor expired) and renders it
+ * read-only with the same formatting subset the editor produces. Any
+ * problem — bad token, cancelled link, expired link, network failure —
+ * lands in the same calm "this link isn't available" state.
  */
 
 (function () {
@@ -162,37 +162,27 @@
     return;
   }
 
-  if (!config.url || !config.anonKey || !window.supabase || !window.supabase.createClient) {
-    fail('setup');
-    return;
-  }
+  var apiBase = String(config.apiBase || '').replace(/\/+$/, '');
 
   showLoading();
 
-  var client = window.supabase.createClient(config.url, config.anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-  });
-
-  client
-    .from('shares')
-    .select('title, html, created_at, expires_at')
-    .eq('token', token)
-    .maybeSingle()
-    .then(function (_a) {
-      var data = _a.data;
-      var error = _a.error;
-
-      if (error) {
-        console.error('[share] load failed', error);
-        fail('network');
-        return;
-      }
-      // RLS hides revoked/expired rows from anonymous reads: a null row
-      // covers cancelled, expired and never-existed alike on purpose.
-      if (!data) {
+  fetch(apiBase + '/api/share/' + encodeURIComponent(token))
+    .then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (data) {
+        return { ok: response.ok, data: data };
+      });
+    })
+    .then(function (result) {
+      if (!result.ok) {
+        // The API answers 404 for cancelled, expired and never-existed links
+        // alike — on purpose, so a dead link can't be probed for status.
         fail('unavailable');
         return;
       }
-      render(data);
+      render(result.data.row);
+    })
+    .catch(function (error) {
+      console.error('[share] load failed', error);
+      fail('network');
     });
 })();

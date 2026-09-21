@@ -1,0 +1,5 @@
+# Local development database and secrets — never commit these.
+local.db
+local.db-wal
+local.db-shm
+.env

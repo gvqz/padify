@@ -40,7 +40,7 @@ import { initCloudSync } from './cloud/sync';
 import { initCloudUI } from './cloud/ui';
 import { initCloudShare } from './cloud/share';
 import { initShareUI } from './cloud/share-ui';
-import { initVoiceTyping, toggleVoiceTyping, handleTabSwitchedWhileListening } from './voice';
+import { initVoiceTyping, toggleVoiceTyping, isListening, stopVoiceTyping, handleTabSwitchedWhileListening } from './voice';
 
 // Bootstrap 3's jQuery plugins (registered globally by the `bootstrap` import
 // in main.ts) are not covered by @types/jquery. The `modal` member is also
@@ -551,14 +551,16 @@ $(document).ready(function () {
                         if (!editor) return;
 
                         // Only follow the caret when it sits at the very end
-                        // of the note (same rule the textarea used).
-                        const selection = window.getSelection();
+                        // of the note (same rule the textarea used). While the
+                        // note floats in a Picture-in-Picture window, read the
+                        // selection from the document that owns the editor.
+                        const selection = editor.ownerDocument.getSelection();
                         if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) return;
 
                         const range = selection.getRangeAt(0);
                         if (!editor.contains(range.startContainer)) return;
 
-                        const tail = document.createRange();
+                        const tail = editor.ownerDocument.createRange();
                         tail.selectNodeContents(editor);
                         tail.setStart(range.endContainer, range.endOffset);
 
@@ -1261,77 +1263,197 @@ $(document).ready(function () {
         if ('documentPictureInPicture' in window) {
                 $('#pipContainer').show();
 
+                let pipWindow: Window | null = null;
+                let pipThemeObserver: MutationObserver | null = null;
+                let pipSwitching = false;
+
+                /** Mirrors the app's dark mode onto the floating editor. */
+                const applyPipTheme = () => {
+                        if (!pipWindow) return;
+                        pipWindow.document.body.classList.toggle('dark', document.body.classList.contains('dark'));
+                };
+
+                const syncPipButton = () => {
+                        $('#pip').attr('title', pipWindow ? 'Close Floating Window' : 'Activate Floating Window');
+                };
+
                 pipButton.addEventListener('click', async () => {
+                        if (pipSwitching) return;
+
+                        // The button toggles: while a floating window is open,
+                        // clicking again closes it instead of opening a second
+                        // one (which used to race the close handler and could
+                        // leave the editor stranded in the wrong document).
+                        if (pipWindow) {
+                                pipWindow.close();
+                                return;
+                        }
+
                         const appTextarea = document.getElementById("textareaContainer");
 
                         if (!appTextarea) return;
 
-                        // Open a Picture-in-Picture window.
-                        const pipWindow = await documentPictureInPicture!.requestWindow({
-                                width: 350,
-                                height: 500,
-                        });
-
-                        Array.from(document.styleSheets).forEach((styleSheet) => {
+                        pipSwitching = true;
+                        try {
+                                // Open a Picture-in-Picture window. The API can
+                                // reject (blocked iframe, too many windows, no
+                                // user gesture) — tell the user instead of
+                                // leaving a silent unhandled rejection.
+                                let newPipWindow: Window;
                                 try {
-                                        const cssRules = Array.from(styleSheet.cssRules).map((rule) => rule.cssText).join('');
-                                        const style = document.createElement('style');
-
-                                        style.textContent = cssRules;
-                                        pipWindow.document.head.appendChild(style);
-                                } catch (e) {
-                                        const link = document.createElement('link');
-
-                                        link.rel = 'stylesheet';
-                                        link.type = styleSheet.type;
-                                        link.media = styleSheet.media as unknown as string;
-                                        link.href = styleSheet.href!;
-                                        pipWindow.document.head.appendChild(link);
+                                        newPipWindow = await documentPictureInPicture!.requestWindow({
+                                                width: 350,
+                                                height: 500,
+                                        });
+                                } catch {
+                                        showToast('The floating window could not be opened. Try again.');
+                                        return;
                                 }
-                        });
+                                pipWindow = newPipWindow;
 
-                        // Move the textarea to the Picture-in-Picture window.
-                        pipWindow.document.body.append(appTextarea);
-                        pipWindow.document.body.classList.add('pip-host');
+                                // Move the editor back into the main window
+                                // when the floating window closes (X button,
+                                // Escape, or the PiP button again).
+                                newPipWindow.addEventListener('pagehide', () => {
+                                        pipWindow = null;
+                                        pipThemeObserver?.disconnect();
+                                        pipThemeObserver = null;
+                                        syncPipButton();
 
-                        // Move the textarea back when the Picture-in-Picture window closes.
-                        pipWindow.addEventListener("pagehide", (event) => {
-                                const mainContainer = document.querySelector("#mainContainer");
-                                const textareaContainer = (event.target as Document).querySelector("#textareaContainer");
-                                const overlay = document.querySelector(".overlay") as HTMLElement | null;
-                                (event.target as Document).body?.classList.remove('pip-host');
-                                mainContainer!.append(textareaContainer!);
-                                mainContainer!.classList.remove("pip");
+                                        const floatingEditor = newPipWindow.document.getElementById('textareaContainer');
+                                        newPipWindow.document.body?.classList.remove('pip-host', 'dark');
 
-                                overlay!.style.display = "none";
-                                overlay!.style.pointerEvents = "none";
+                                        if (floatingEditor) {
+                                                // Restore it to its exact original slot: the
+                                                // last child of #editorShell, next to the note
+                                                // rail (appending to #mainContainer used to drop
+                                                // it outside the shell's flex layout).
+                                                const editorShell = document.getElementById('editorShell');
+                                                (editorShell ?? document.getElementById('mainContainer'))?.append(floatingEditor);
+                                                floatingEditor.classList.remove('dark');
+                                        }
 
-                                textareaContainer!.classList.remove("dark");
-                        });
+                                        document.getElementById('mainContainer')?.classList.remove('pip');
+                                        const overlay = document.querySelector('.overlay') as HTMLElement | null;
+                                        if (overlay) {
+                                                overlay.style.display = 'none';
+                                                overlay.style.pointerEvents = 'none';
+                                        }
+
+                                        // Bring the caret back so typing can continue
+                                        // right where it left off.
+                                        const mainEditor = document.getElementById('note');
+                                        mainEditor?.focus({ preventScroll: true });
+                                });
+
+                                newPipWindow.document.title = 'Padify — Floating note';
+
+                                Array.from(document.styleSheets).forEach((styleSheet) => {
+                                        try {
+                                                const cssRules = Array.from(styleSheet.cssRules).map((rule) => rule.cssText).join('');
+                                                const style = document.createElement('style');
+
+                                                style.textContent = cssRules;
+                                                newPipWindow.document.head.appendChild(style);
+                                        } catch (e) {
+                                                const link = document.createElement('link');
+
+                                                link.rel = 'stylesheet';
+                                                link.type = styleSheet.type;
+                                                link.media = styleSheet.media as unknown as string;
+                                                link.href = styleSheet.href!;
+                                                newPipWindow.document.head.appendChild(link);
+                                        }
+                                });
+
+                                // Move the editor into the floating window.
+                                newPipWindow.document.body.append(appTextarea);
+                                newPipWindow.document.body.classList.add('pip-host');
+                                applyPipTheme();
+
+                                // Keep the theme in sync while floating (the
+                                // observer fires for every body class change,
+                                // so radio picks, reset and device theme all
+                                // propagate).
+                                pipThemeObserver = new MutationObserver(applyPipTheme);
+                                pipThemeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+
+                                // Keyboard support inside the floating window:
+                                // Escape closes it, the format shortcuts edit,
+                                // Ctrl/Cmd+S exports the note.
+                                newPipWindow.document.addEventListener('keydown', (event: KeyboardEvent) => {
+                                        if (event.key === 'Escape') {
+                                                event.preventDefault();
+                                                newPipWindow.close();
+                                                return;
+                                        }
+
+                                        const target = event.target as HTMLElement | null;
+                                        if (!target || (target.id !== 'note' && target.closest('#note') === null)) return;
+
+                                        if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+                                                let command: string | null = null;
+                                                if (event.shiftKey && event.code === 'KeyX') {
+                                                        command = 'strikeThrough';
+                                                } else if (!event.shiftKey) {
+                                                        if (event.code === 'KeyB') command = 'bold';
+                                                        else if (event.code === 'KeyI') command = 'italic';
+                                                        else if (event.code === 'KeyU') command = 'underline';
+                                                        else if (event.code === 'KeyS') {
+                                                                event.preventDefault();
+                                                                saveTextAsFile(getEditorText(), getFileName());
+                                                                return;
+                                                        }
+                                                }
+                                                if (command) {
+                                                        event.preventDefault();
+                                                        try {
+                                                                newPipWindow.document.execCommand(command);
+                                                        } catch {
+                                                                /* command unsupported in this browser */
+                                                        }
+                                                }
+                                        }
+                                });
+
+                                // Put the caret at the end of the note so the
+                                // floating window is immediately typeable.
+                                const editor = newPipWindow.document.getElementById('note');
+                                if (editor) {
+                                        editor.focus({ preventScroll: true });
+                                        const selection = newPipWindow.document.getSelection();
+                                        if (selection) {
+                                                const range = newPipWindow.document.createRange();
+                                                range.selectNodeContents(editor);
+                                                range.collapse(false);
+                                                selection.removeAllRanges();
+                                                selection.addRange(range);
+                                        }
+                                }
+
+                                syncPipButton();
+                        } finally {
+                                pipSwitching = false;
+                        }
                 });
 
                 documentPictureInPicture!.addEventListener("enter", (event) => {
-                        const playerContainer = document.querySelector("#mainContainer");
-                        const textareaContainer = document.querySelector("#textareaContainer");
+                        const mainContainer = document.querySelector("#mainContainer");
                         const overlay = document.querySelector(".overlay") as HTMLElement | null;
 
-                        playerContainer!.classList.add("pip");
-                        overlay!.style.display = "block";
-                        overlay!.style.pointerEvents = "all";
-
-                        // Stop the writing timer
-                        // if it is running (js/timer.js)
-                        if (timerConfig.timer) {
-                                stopTimer();
+                        mainContainer?.classList.add("pip");
+                        if (overlay) {
+                                overlay.style.display = "block";
+                                overlay.style.pointerEvents = "all";
                         }
 
-                        if (localStorage.getItem('mode') && localStorage.getItem('mode') == 'dark') {
-                                textareaContainer!.classList.add("dark");
+                        // Dictation drives the main window's selection — stop
+                        // it when the note moves into the floating window.
+                        if (isListening()) {
+                                stopVoiceTyping();
                         }
 
-                        if (localStorage.getItem('mode') && localStorage.getItem('mode') == 'device' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                                textareaContainer!.classList.add("dark");
-                        }
+                        applyPipTheme();
                 });
         }
 

@@ -120,22 +120,6 @@ export function initCloudUI(): void {
     setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in');
   });
 
-  $('#cloudAuthForgot').on('click', async (event) => {
-    event.preventDefault();
-    const email = String($email.val() ?? '').trim();
-    if (!email || !email.includes('@')) {
-      showError('Enter your email above first, then tap "Forgot password".');
-      return;
-    }
-
-    const result = await sync.sendPasswordReset(email);
-    if (result.ok) {
-      showNotice(result.message ?? 'Password reset link sent.');
-    } else {
-      showError(result.message ?? 'Could not send the reset link.');
-    }
-  });
-
   $form.on('submit', async (event) => {
     event.preventDefault();
 
@@ -164,12 +148,6 @@ export function initCloudUI(): void {
 
       if (!result.ok) {
         showError(result.message ?? 'Something went wrong. Try again.');
-        return;
-      }
-
-      if (result.needsConfirmation) {
-        showNotice(result.message ?? 'Check your inbox to confirm your email, then sign in.');
-        setMode('sign-in');
         return;
       }
 

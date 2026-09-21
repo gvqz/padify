@@ -4,8 +4,7 @@
  * The navbar share button opens a custom modal (no navigator.share): the
  * signed-in user picks how many days a read-only link stays live, creates
  * it, copies it, and can cancel any link at any time. Signed-out visitors
- * get a sign-in prompt — sharing is a cloud-account feature. On installs
- * without a configured Supabase project the whole surface stays hidden.
+ * get a sign-in prompt — sharing is a cloud-account feature.
  */
 
 import $ from 'jquery';

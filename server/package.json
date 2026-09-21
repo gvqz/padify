@@ -1,0 +1,11 @@
+{
+  "name": "padify-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Padify cloud API — auth, note sync and share links on Turso (libSQL). Zero runtime dependencies; runs on Bun.",
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts"
+  }
+}
