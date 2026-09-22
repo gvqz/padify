@@ -16,7 +16,7 @@ const enum DotState {
   OFF = 'off',
   BUSY = 'busy',
   OK = 'ok',
-  ERROR = 'error'
+  ERROR = 'error',
 }
 
 let mode: 'sign-in' | 'sign-up' = 'sign-in';
@@ -102,7 +102,6 @@ export function initCloudUI(): void {
   const $email = $('#cloudAuthEmail');
   const $password = $('#cloudAuthPassword');
   const $pane = $('#cloudAuthPane');
-  const $accountPane = $('#cloudAccountPane');
   const $form = $('#cloudAuthForm');
 
   const setMode = (next: 'sign-in' | 'sign-up'): void => {
@@ -111,7 +110,9 @@ export function initCloudUI(): void {
     $notice.text('').addClass('hide');
     $title.text(next === 'sign-in' ? 'Sign in to sync' : 'Create your sync account');
     $submit.text(next === 'sign-in' ? 'Sign in' : 'Create account');
-    $switch.text(next === 'sign-in' ? 'New here? Create an account' : 'Already have an account? Sign in');
+    $switch.text(
+      next === 'sign-in' ? 'New here? Create an account' : 'Already have an account? Sign in',
+    );
     $password.attr('autocomplete', next === 'sign-in' ? 'current-password' : 'new-password');
   };
 
@@ -142,9 +143,10 @@ export function initCloudUI(): void {
     $buttonEl.prop('disabled', true).text(busyLabel);
 
     try {
-      const result = mode === 'sign-in'
-        ? await sync.signIn(email, password)
-        : await sync.signUp(email, password);
+      const result =
+        mode === 'sign-in'
+          ? await sync.signIn(email, password)
+          : await sync.signUp(email, password);
 
       if (!result.ok) {
         showError(result.message ?? 'Something went wrong. Try again.');
@@ -185,11 +187,6 @@ export function initCloudUI(): void {
     $error.text(message).removeClass('hide');
   }
 
-  function showNotice(message: string): void {
-    $error.addClass('hide');
-    $notice.text(message).removeClass('hide');
-  }
-
   function renderModal(status: CloudStatus): void {
     const signedIn = status.state === 'signed-in';
     const $paneIn = $('#cloudSignedInPane');
@@ -199,9 +196,11 @@ export function initCloudUI(): void {
 
     if (signedIn) {
       $('#cloudAccountEmail').text(status.email);
-      $('#cloudLastSync').text(status.lastSyncAt
-        ? `Last sync ${formatTime(status.lastSyncAt)}`
-        : 'Syncing for the first time…');
+      $('#cloudLastSync').text(
+        status.lastSyncAt
+          ? `Last sync ${formatTime(status.lastSyncAt)}`
+          : 'Syncing for the first time…',
+      );
       $('#cloudStatusLine').text(statusLine(status));
     }
   }
@@ -209,15 +208,21 @@ export function initCloudUI(): void {
   function renderSettingsSummary(status: CloudStatus): void {
     const $summary = $('#cloudSettingsSummary');
     const signedIn = status.state === 'signed-in';
-    $summary.text(signedIn
-      ? `${statusLine(status)} — ${status.email}`
-      : 'Sign in to back up your notes and pick them up on any device.');
+    $summary.text(
+      signedIn
+        ? `${statusLine(status)} — ${status.email}`
+        : 'Sign in to back up your notes and pick them up on any device.',
+    );
   }
 
   function dotFor(status: CloudStatus): string {
     switch (status.state) {
       case 'signed-in':
-        return status.sync === 'idle' ? DotState.OK : status.sync === 'offline' ? DotState.ERROR : DotState.BUSY;
+        return status.sync === 'idle'
+          ? DotState.OK
+          : status.sync === 'offline'
+            ? DotState.ERROR
+            : DotState.BUSY;
       case 'error':
         return DotState.ERROR;
       default:
@@ -263,9 +268,9 @@ function formatTime(timestamp: number): string {
   return sameDay
     ? date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
     : date.toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
 }

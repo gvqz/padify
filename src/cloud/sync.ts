@@ -89,7 +89,6 @@ let lastSyncAt: number | null = null;
 let syncing = false;
 let syncQueued = false;
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
-let periodicTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Local tab ids that changed and still need a push. */
 const pendingPush = new Set<string>();
@@ -109,9 +108,14 @@ function loadStoredSession(): StoredSession | null {
       return null;
     }
     const parsed = JSON.parse(raw) as Partial<StoredSession> | null;
-    if (parsed && typeof parsed.token === 'string' && parsed.token
-      && typeof parsed.userId === 'string' && parsed.userId
-      && typeof parsed.email === 'string') {
+    if (
+      parsed &&
+      typeof parsed.token === 'string' &&
+      parsed.token &&
+      typeof parsed.userId === 'string' &&
+      parsed.userId &&
+      typeof parsed.email === 'string'
+    ) {
       return { token: parsed.token, userId: parsed.userId, email: parsed.email };
     }
   } catch {
@@ -188,7 +192,7 @@ export async function initCloudSync(tabManager: TabManager): Promise<void> {
           state: 'error',
           email: session.email,
           message: offlineMessage(error),
-          retryable: true
+          retryable: true,
         });
       }
     }
@@ -196,7 +200,10 @@ export async function initCloudSync(tabManager: TabManager): Promise<void> {
     setStatus({ state: 'signed-out' });
   }
 
-  periodicTimer = setInterval(() => {
+  // Runs for the page lifetime: the currentUserId guard makes each tick a
+  // no-op while signed out. (Tearing it down on sign-out can be wired in
+  // when the storage/sync refactor lands.)
+  setInterval(() => {
     if (document.visibilityState === 'visible' && navigator.onLine && currentUserId) {
       void syncCycle('periodic');
     }
@@ -218,9 +225,7 @@ export async function initCloudSync(tabManager: TabManager): Promise<void> {
 function offlineMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   const offline = !navigator.onLine || /failed to fetch|networkerror|load failed/i.test(message);
-  return offline
-    ? 'Offline — changes are safe on this device and will sync later.'
-    : message;
+  return offline ? 'Offline — changes are safe on this device and will sync later.' : message;
 }
 
 // ---------------------------------------------------------------------------
@@ -229,7 +234,7 @@ function offlineMessage(error: unknown): string {
 
 function setStatus(next: CloudStatus): void {
   status = next;
-  listeners.forEach(listener => listener(next));
+  listeners.forEach((listener) => listener(next));
 }
 
 function syncingStatus(): CloudStatus {
@@ -237,7 +242,7 @@ function syncingStatus(): CloudStatus {
     state: 'signed-in',
     email: currentUserEmail ?? '',
     sync: 'syncing',
-    lastSyncAt
+    lastSyncAt,
   };
 }
 
@@ -246,7 +251,7 @@ function signedInStatus(phase: SyncPhase): CloudStatus {
     state: 'signed-in',
     email: currentUserEmail ?? '',
     sync: phase,
-    lastSyncAt
+    lastSyncAt,
   };
 }
 
@@ -274,7 +279,7 @@ export async function signIn(email: string, password: string): Promise<AuthResul
   try {
     const data = await api<AuthResponse>('/api/auth/signin', {
       method: 'POST',
-      body: { email: email.trim(), password }
+      body: { email: email.trim(), password },
     });
     storeSession({ token: data.token, userId: data.user.id, email: data.user.email });
     currentUserId = data.user.id;
@@ -295,7 +300,7 @@ export async function signUp(email: string, password: string): Promise<AuthResul
   try {
     const data = await api<AuthResponse>('/api/auth/signup', {
       method: 'POST',
-      body: { email: email.trim(), password }
+      body: { email: email.trim(), password },
     });
     storeSession({ token: data.token, userId: data.user.id, email: data.user.email });
     currentUserId = data.user.id;
@@ -329,8 +334,8 @@ function onLocalChange(payload: TabsSyncPayload): void {
     return;
   }
 
-  payload.dirty.forEach(id => pendingPush.add(id));
-  payload.tombstones.forEach(tombstone => pendingPush.add(tombstone.id));
+  payload.dirty.forEach((id) => pendingPush.add(id));
+  payload.tombstones.forEach((tombstone) => pendingPush.add(tombstone.id));
 
   if (pendingPush.size === 0) {
     return;
@@ -381,7 +386,7 @@ async function syncCycle(_reason: string): Promise<void> {
       state: 'error',
       email: currentUserEmail ?? '',
       message: offlineMessage(error),
-      retryable: true
+      retryable: true,
     });
   } finally {
     syncing = false;
@@ -403,15 +408,15 @@ async function runSyncOnce(): Promise<void> {
   if (pendingPush.size > 0) {
     const payload = manager.exportForSync();
     const rows: NoteRow[] = [];
-    const byId = new Map(payload.tabs.map(tab => [tab.id, tab]));
+    const byId = new Map(payload.tabs.map((tab) => [tab.id, tab]));
 
-    pendingPush.forEach(id => {
+    pendingPush.forEach((id) => {
       const tab = byId.get(id);
       if (tab) {
         rows.push(tabToRow(tab, userId, payload.tabs.indexOf(tab)));
         return;
       }
-      const tombstone = payload.tombstones.find(entry => entry.id === id);
+      const tombstone = payload.tombstones.find((entry) => entry.id === id);
       if (tombstone) {
         rows.push(tombstoneToRow(tombstone, userId));
       }
@@ -425,7 +430,7 @@ async function runSyncOnce(): Promise<void> {
 
   // 2. Pull the full remote list and merge.
   const data = await api<{ rows: NoteRow[] }>('/api/notes');
-  const remoteRows = (data.rows ?? []).map(row => ({ ...row, deleted: !!row.deleted }));
+  const remoteRows = (data.rows ?? []).map((row) => ({ ...row, deleted: !!row.deleted }));
 
   const payload = manager.exportForSync();
   const merge = mergeRemote(remoteRows, payload);
@@ -439,7 +444,7 @@ async function runSyncOnce(): Promise<void> {
   //    position drift), and confirm tombstones the cloud already has.
   const confirmIds: string[] = [];
   const diffRows: NoteRow[] = [];
-  const remoteById = new Map(remoteRows.map(row => [row.id, row]));
+  const remoteById = new Map(remoteRows.map((row) => [row.id, row]));
   const mergedTabs = manager.exportForSync().tabs;
 
   mergedTabs.forEach((tab, index) => {
@@ -449,7 +454,7 @@ async function runSyncOnce(): Promise<void> {
     }
   });
 
-  payload.tombstones.forEach(tombstone => {
+  payload.tombstones.forEach((tombstone) => {
     const remote = remoteById.get(tombstone.id);
     if (remote?.deleted) {
       confirmIds.push(tombstone.id);
@@ -472,16 +477,16 @@ interface MergeResult {
 
 /** Last-write-wins merge of remote rows into the local tab list. */
 function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): MergeResult {
-  const tabs: NoteTab[] = payload.tabs.map(tab => ({ ...tab }));
-  const byId = new Map(tabs.map(tab => [tab.id, tab]));
+  const tabs: NoteTab[] = payload.tabs.map((tab) => ({ ...tab }));
+  const byId = new Map(tabs.map((tab) => [tab.id, tab]));
   const freshRemote: NoteTab[] = [];
   let touched = false;
 
-  remoteRows.forEach(row => {
+  remoteRows.forEach((row) => {
     if (row.deleted) {
       if (byId.has(row.id)) {
         byId.delete(row.id);
-        const index = tabs.findIndex(tab => tab.id === row.id);
+        const index = tabs.findIndex((tab) => tab.id === row.id);
         if (index >= 0) {
           tabs.splice(index, 1);
         }
@@ -497,14 +502,13 @@ function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): MergeResu
         name: row.name,
         html: row.html ?? '',
         createdAt: typeof row.created_at === 'number' ? row.created_at : Date.now(),
-        updatedAt: typeof row.updated_at === 'number' ? row.updated_at : Date.now()
+        updatedAt: typeof row.updated_at === 'number' ? row.updated_at : Date.now(),
       });
       touched = true;
       return;
     }
 
-    if (row.updated_at > local.updatedAt
-      && (row.html !== local.html || row.name !== local.name)) {
+    if (row.updated_at > local.updatedAt && (row.html !== local.html || row.name !== local.name)) {
       local.name = row.name;
       local.html = row.html ?? '';
       local.createdAt = typeof row.created_at === 'number' ? row.created_at : local.createdAt;
@@ -514,7 +518,7 @@ function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): MergeResu
   });
 
   // Remote-only tabs join the end of the strip, in their stored order.
-  const positionById = new Map(remoteRows.map(row => [row.id, row.position]));
+  const positionById = new Map(remoteRows.map((row) => [row.id, row.position]));
   freshRemote.sort((a, b) => (positionById.get(a.id) ?? 0) - (positionById.get(b.id) ?? 0));
   tabs.push(...freshRemote);
 
@@ -530,7 +534,7 @@ function tabToRow(tab: NoteTab, userId: string, position: number): NoteRow {
     position,
     created_at: tab.createdAt,
     updated_at: tab.updatedAt,
-    deleted: false
+    deleted: false,
   };
 }
 
@@ -543,7 +547,7 @@ function tombstoneToRow(tombstone: TabTombstone, userId: string): NoteRow {
     position: 0,
     created_at: tombstone.updatedAt,
     updated_at: tombstone.updatedAt,
-    deleted: true
+    deleted: true,
   };
 }
 
@@ -585,7 +589,7 @@ export function getCloudSync(): CloudSync {
       signIn,
       signUp,
       signOut,
-      syncNow
+      syncNow,
     };
   }
   return instance;

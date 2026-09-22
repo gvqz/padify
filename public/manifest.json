@@ -99,18 +99,6 @@
       ]
     },
     {
-      "name": "Case Converter",
-      "short_name": "Case Converter",
-      "description": "A simple tool to convert text to different cases.",
-      "url": "/case-converter/",
-      "icons": [
-        {
-          "src": "img/minitools/case-converter.png",
-          "sizes": "96x96"
-        }
-      ]
-    },
-    {
       "name": "Text Tools",
       "short_name": "Text Tools",
       "description": "Extract emails, URLs, and numbers from any text.",
