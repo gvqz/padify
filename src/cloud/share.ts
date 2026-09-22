@@ -64,7 +64,10 @@ interface ShareRowResponse {
   row: ShareRecord;
 }
 
-async function shareApi<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
+async function shareApi<T>(
+  path: string,
+  options: { method?: string; body?: unknown } = {},
+): Promise<T> {
   const { api } = await import('./api');
   return api<T>(path, options);
 }
@@ -77,7 +80,7 @@ export async function createShare(
   noteId: string,
   title: string,
   html: string,
-  days: number
+  days: number,
 ): Promise<ShareActionResult> {
   if (!signedIn()) {
     return { ok: false, message: 'Sign in to share notes.' };
@@ -86,14 +89,17 @@ export async function createShare(
   try {
     const data = await shareApi<ShareRowResponse>('/api/shares', {
       method: 'POST',
-      body: { note_id: noteId, title: title.slice(0, 200), html, days }
+      body: { note_id: noteId, title: title.slice(0, 200), html, days },
     });
     return { ok: true, token: data.row.token, url: shareUrlFor(data.row.token) };
   } catch (error) {
     console.error('[share] create failed', error);
     const message = error instanceof Error ? error.message : String(error);
     if (/failed to fetch|networkerror|load failed/i.test(message)) {
-      return { ok: false, message: 'Could not reach the sync server. Check your connection and try again.' };
+      return {
+        ok: false,
+        message: 'Could not reach the sync server. Check your connection and try again.',
+      };
     }
     if (/not signed in/i.test(message)) {
       return { ok: false, message: 'Sign in to share notes.' };
@@ -109,7 +115,7 @@ export async function listOwnedShares(): Promise<ShareRecord[]> {
 
   try {
     const data = await shareApi<{ rows: ShareRecord[] }>('/api/shares');
-    return (data.rows ?? []).map(row => ({ ...row, revoked: !!row.revoked }));
+    return (data.rows ?? []).map((row) => ({ ...row, revoked: !!row.revoked }));
   } catch (error) {
     console.error('[share] list failed', error);
     return [];
@@ -131,8 +137,8 @@ export async function revokeShare(token: string): Promise<ShareActionResult> {
 // ---------------------------------------------------------------------------
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-let pendingNoteIds: Set<string> = new Set();
-let pendingTombstoneIds: Set<string> = new Set();
+const pendingNoteIds: Set<string> = new Set();
+const pendingTombstoneIds: Set<string> = new Set();
 
 async function flushShareUpdates(): Promise<void> {
   debounceTimer = null;
@@ -153,19 +159,19 @@ async function flushShareUpdates(): Promise<void> {
     if (tombstones.length > 0) {
       await shareApi('/api/shares', {
         method: 'PATCH',
-        body: { note_ids: tombstones, revoked: true }
+        body: { note_ids: tombstones, revoked: true },
       });
     }
 
     // Edited notes: refresh title + content on every still-active link.
     if (noteIds.length > 0 && lastPayload) {
       const refresh = noteIds
-        .map(noteId => lastPayload?.tabs.find(entry => entry.id === noteId))
+        .map((noteId) => lastPayload?.tabs.find((entry) => entry.id === noteId))
         .filter((tab): tab is NonNullable<typeof tab> => !!tab)
-        .map(tab => ({
+        .map((tab) => ({
           note_id: tab.id,
           title: deriveTabTitle(tab).slice(0, 200),
-          html: tab.html
+          html: tab.html,
         }));
 
       if (refresh.length > 0) {
@@ -186,8 +192,8 @@ function onModelPersisted(payload: TabsSyncPayload): void {
 
   lastPayload = payload;
 
-  payload.dirty.forEach(id => pendingNoteIds.add(id));
-  payload.tombstones.forEach(entry => pendingTombstoneIds.add(entry.id));
+  payload.dirty.forEach((id) => pendingNoteIds.add(id));
+  payload.tombstones.forEach((entry) => pendingTombstoneIds.add(entry.id));
 
   if (pendingNoteIds.size === 0 && pendingTombstoneIds.size === 0) {
     return;

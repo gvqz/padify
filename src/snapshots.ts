@@ -5,216 +5,217 @@ import { getEditorHtml, getEditorText, htmlToText, setEditorHtml } from './tabs'
 import { showToast, updateWordCountPill } from './utils';
 
 interface Snapshot {
-    id?: number;
-    title: string;
-    content: string;
-    preview: string;
-    timestamp: number;
-    formattedDate: string;
+  id?: number;
+  title: string;
+  content: string;
+  preview: string;
+  timestamp: number;
+  formattedDate: string;
 }
 
 export class SnapshotsManager {
-    dbName: string;
-    storeName: string;
-    db: IDBDatabase | null;
+  dbName: string;
+  storeName: string;
+  db: IDBDatabase | null;
 
-    constructor() {
-        this.dbName = 'NotepadSnapshotsDB';
-        this.storeName = 'snapshots';
-        this.db = null;
-        this.initializeDB();
-        this.setupEventListeners();
+  constructor() {
+    this.dbName = 'NotepadSnapshotsDB';
+    this.storeName = 'snapshots';
+    this.db = null;
+    this.initializeDB();
+    this.setupEventListeners();
+  }
+
+  // Initialize IndexedDB
+  initializeDB(): void {
+    const request = indexedDB.open(this.dbName, 1);
+
+    request.onerror = (event) => {
+      console.error('Error opening database', event);
+    };
+
+    request.onsuccess = (event) => {
+      this.db = (event.target as IDBRequest).result;
+      this.updateSnapshotsCount();
+      this.loadSnapshots();
+    };
+
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBRequest).result as IDBDatabase;
+      if (!db.objectStoreNames.contains(this.storeName)) {
+        const store = db.createObjectStore(this.storeName, {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+
+        // Create indexes for efficient querying
+        store.createIndex('timestamp', 'timestamp', { unique: false });
+        store.createIndex('title', 'title', { unique: false });
+      }
+    };
+  }
+
+  // Setup event listeners
+  setupEventListeners(): void {
+    // Open snapshots modal
+    document.getElementById('snapshotsButton')?.addEventListener('click', () => {
+      $('#snapshotsModal').modal('show');
+      this.loadSnapshots();
+    });
+
+    // Create snapshot button
+    document.getElementById('createSnapshotBtn')?.addEventListener('click', () => {
+      this.createSnapshot();
+    });
+
+    // Delete all snapshots button
+    document.getElementById('deleteAllSnapshotsBtn')?.addEventListener('click', () => {
+      Swal.fire({
+        title: 'Want to delete all snapshots?',
+        text: "You won't be able to revert this!",
+        icon: 'warning',
+        showCancelButton: true,
+        customClass: {
+          confirmButton: 'swal-btn-danger',
+        },
+        confirmButtonText: 'Yes, Delete!',
+        cancelButtonText: 'No, keep it.',
+      }).then((result) => {
+        if (result.value) {
+          this.deleteAllSnapshots();
+        }
+      });
+    });
+
+    // Search snapshots
+    document.getElementById('searchSnapshots')?.addEventListener('input', (e) => {
+      this.searchSnapshots((e.target as HTMLInputElement).value);
+    });
+
+    // Keyboard shortcut: Ctrl/Cmd + U to create snapshot
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyU') {
+        e.preventDefault();
+        this.createSnapshot();
+      }
+    });
+  }
+
+  // Create a new snapshot
+  createSnapshot(title?: string): void {
+    if (!this.db) {
+      console.error('Database not initialized');
+      return;
     }
 
-    // Initialize IndexedDB
-    initializeDB(): void {
-        const request = indexedDB.open(this.dbName, 1);
-
-        request.onerror = (event) => {
-            console.error('Error opening database', event);
-        };
-
-        request.onsuccess = (event) => {
-            this.db = (event.target as IDBRequest).result;
-            this.updateSnapshotsCount();
-            this.loadSnapshots();
-        };
-
-        request.onupgradeneeded = (event) => {
-            const db = (event.target as IDBRequest).result as IDBDatabase;
-            if (!db.objectStoreNames.contains(this.storeName)) {
-                const store = db.createObjectStore(this.storeName, {
-                    keyPath: 'id',
-                    autoIncrement: true
-                });
-
-                // Create indexes for efficient querying
-                store.createIndex('timestamp', 'timestamp', { unique: false });
-                store.createIndex('title', 'title', { unique: false });
-            }
-        };
+    const noteContent = getEditorHtml();
+    if (!getEditorText().trim()) {
+      Swal.fire({
+        toast: true,
+        position: 'bottom',
+        icon: 'success',
+        title: 'Note is empty. Nothing to save as snapshot.',
+        showConfirmButton: false,
+        timer: 2000,
+        customClass: {
+          popup: 'swal-toast-bottom-offset',
+        },
+      });
+      return;
     }
 
-    // Setup event listeners
-    setupEventListeners(): void {
-        // Open snapshots modal
-        document.getElementById('snapshotsButton')?.addEventListener('click', () => {
-            $('#snapshotsModal').modal('show');
-            this.loadSnapshots();
-        });
+    // Generate a title from the first line of the note if not provided
+    const noteTitle = title || this.generateSnapshotTitle(noteContent);
 
-        // Create snapshot button
-        document.getElementById('createSnapshotBtn')?.addEventListener('click', () => {
-            this.createSnapshot();
-        });
+    const timestamp = Date.now();
+    const snapshot: Snapshot = {
+      title: noteTitle,
+      content: noteContent,
+      preview: this.generatePreview(noteContent),
+      timestamp: timestamp,
+      formattedDate: this.formatDate(timestamp),
+    };
 
-        // Delete all snapshots button
-        document.getElementById('deleteAllSnapshotsBtn')?.addEventListener('click', () => {
-            Swal.fire({
-                title: 'Want to delete all snapshots?',
-                text: "You won't be able to revert this!",
-                icon: 'warning',
-                showCancelButton: true,
-                customClass: {
-                    confirmButton: 'swal-btn-danger'
-                },
-                confirmButtonText: 'Yes, Delete!',
-                cancelButtonText: 'No, keep it.'
-            }).then((result) => {
-                if (result.value) {
-                    this.deleteAllSnapshots();
-                }
-            })
-        });
+    const transaction = this.db.transaction([this.storeName], 'readwrite');
+    const store = transaction.objectStore(this.storeName);
 
-        // Search snapshots
-        document.getElementById('searchSnapshots')?.addEventListener('input', (e) => {
-            this.searchSnapshots((e.target as HTMLInputElement).value);
-        });
+    const request = store.add(snapshot);
 
-        // Keyboard shortcut: Ctrl/Cmd + U to create snapshot
-        document.addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.code === 'KeyU') {
-                e.preventDefault();
-                this.createSnapshot();
-            }
-        });
-    }
+    request.onsuccess = () => {
+      Swal.fire({
+        toast: true,
+        position: 'bottom',
+        icon: 'success',
+        title: 'Snapshot created successfully!',
+        showConfirmButton: false,
+        timer: 2000,
+        customClass: {
+          popup: 'swal-toast-bottom-offset',
+        },
+      });
 
-    // Create a new snapshot
-    createSnapshot(title?: string): void {
-        if (!this.db) {
-            console.error('Database not initialized');
-            return;
+      this.loadSnapshots();
+      this.updateSnapshotsCount();
+    };
+
+    request.onerror = (event) => {
+      console.error('Error creating snapshot', event);
+      this.showToast('Error creating snapshot');
+    };
+  }
+
+  // Load all snapshots
+  loadSnapshots(searchTerm: string = ''): void {
+    if (!this.db) return;
+
+    const transaction = this.db.transaction([this.storeName], 'readonly');
+    const store = transaction.objectStore(this.storeName);
+    const request = store.index('timestamp').openCursor(null, 'prev');
+    const snapshotsList = document.getElementById('snapshotsList');
+    const noSnapshots = document.getElementById('noSnapshots');
+
+    if (!snapshotsList) return;
+
+    snapshotsList.innerHTML = '';
+    let hasSnapshots = false;
+    const searchLower = searchTerm.toLowerCase();
+
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
+
+      if (cursor) {
+        const snapshot = cursor.value as Snapshot;
+
+        // Filter by search term if provided
+        if (
+          !searchTerm ||
+          snapshot.title.toLowerCase().includes(searchLower) ||
+          snapshot.content.toLowerCase().includes(searchLower)
+        ) {
+          hasSnapshots = true;
+          const snapshotElement = this.createSnapshotElement(snapshot);
+          snapshotsList.appendChild(snapshotElement);
         }
 
-        const noteContent = getEditorHtml();
-        if (!getEditorText().trim()) {
-            Swal.fire({
-                toast: true,
-                position: 'bottom',
-                icon: 'success',
-                title: 'Note is empty. Nothing to save as snapshot.',
-                showConfirmButton: false,
-                timer: 2000,
-                customClass: {
-                    popup: 'swal-toast-bottom-offset'
-                }
-            });
-            return;
-        }
+        cursor.continue();
+      } else {
+        // No more snapshots
+        snapshotsList.style.display = hasSnapshots ? 'block' : 'none';
+        noSnapshots!.style.display = hasSnapshots ? 'none' : 'flex';
+      }
+    };
 
-        // Generate a title from the first line of the note if not provided
-        const noteTitle = title || this.generateSnapshotTitle(noteContent);
+    request.onerror = (event) => {
+      console.error('Error loading snapshots', event);
+    };
+  }
 
-        const timestamp = Date.now();
-        const snapshot: Snapshot = {
-            title: noteTitle,
-            content: noteContent,
-            preview: this.generatePreview(noteContent),
-            timestamp: timestamp,
-            formattedDate: this.formatDate(timestamp)
-        };
+  // Create a snapshot element for the UI
+  createSnapshotElement(snapshot: Snapshot): HTMLLIElement {
+    const li = document.createElement('li');
+    li.className = 'snapshot-item';
 
-        const transaction = this.db.transaction([this.storeName], 'readwrite');
-        const store = transaction.objectStore(this.storeName);
-
-        const request = store.add(snapshot);
-
-        request.onsuccess = () => {
-            Swal.fire({
-                toast: true,
-                position: 'bottom',
-                icon: 'success',
-                title: 'Snapshot created successfully!',
-                showConfirmButton: false,
-                timer: 2000,
-                customClass: {
-                    popup: 'swal-toast-bottom-offset'
-                }
-            });
-
-            this.loadSnapshots();
-            this.updateSnapshotsCount();
-        };
-
-        request.onerror = (event) => {
-            console.error('Error creating snapshot', event);
-            this.showToast('Error creating snapshot');
-        };
-    }
-
-    // Load all snapshots
-    loadSnapshots(searchTerm: string = ''): void {
-        if (!this.db) return;
-
-        const transaction = this.db.transaction([this.storeName], 'readonly');
-        const store = transaction.objectStore(this.storeName);
-        const request = store.index('timestamp').openCursor(null, 'prev');
-        const snapshotsList = document.getElementById('snapshotsList');
-        const noSnapshots = document.getElementById('noSnapshots');
-
-        if (!snapshotsList) return;
-
-        snapshotsList.innerHTML = '';
-        let hasSnapshots = false;
-        const searchLower = searchTerm.toLowerCase();
-
-        request.onsuccess = (event) => {
-            const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
-
-            if (cursor) {
-                const snapshot = cursor.value as Snapshot;
-
-                // Filter by search term if provided
-                if (!searchTerm ||
-                    snapshot.title.toLowerCase().includes(searchLower) ||
-                    snapshot.content.toLowerCase().includes(searchLower)) {
-
-                    hasSnapshots = true;
-                    const snapshotElement = this.createSnapshotElement(snapshot);
-                    snapshotsList.appendChild(snapshotElement);
-                }
-
-                cursor.continue();
-            } else {
-                // No more snapshots
-                snapshotsList.style.display = hasSnapshots ? 'block' : 'none';
-                noSnapshots!.style.display = hasSnapshots ? 'none' : 'flex';
-            }
-        };
-
-        request.onerror = (event) => {
-            console.error('Error loading snapshots', event);
-        };
-    }
-
-    // Create a snapshot element for the UI
-    createSnapshotElement(snapshot: Snapshot): HTMLLIElement {
-        const li = document.createElement('li');
-        li.className = 'snapshot-item';
-
-        li.innerHTML = `
+    li.innerHTML = `
             <div class="snapshot-info">
                 <h4 class="snapshot-title" title="${this.escapeHtml(snapshot.title)}">${this.escapeHtml(snapshot.title)}</h4>
                 <p class="snapshot-preview" title="${this.escapeHtml(snapshot.preview)}">${this.escapeHtml(snapshot.preview)}</p>
@@ -240,288 +241,296 @@ export class SnapshotsManager {
             </div>
         `;
 
-        // Add event listeners
-        const restoreBtn = li.querySelector('.restore')!;
-        const copyBtn = li.querySelector('.copy')!;
-        const deleteBtn = li.querySelector('.delete')!;
+    // Add event listeners
+    const restoreBtn = li.querySelector('.restore')!;
+    const copyBtn = li.querySelector('.copy')!;
+    const deleteBtn = li.querySelector('.delete')!;
 
-        restoreBtn.addEventListener('click', () => this.restoreSnapshot(snapshot.id));
-        copyBtn.addEventListener('click', () => this.copySnapshot(snapshot.id, copyBtn));
-        deleteBtn.addEventListener('click', () => this.deleteSnapshot(snapshot.id));
+    restoreBtn.addEventListener('click', () => this.restoreSnapshot(snapshot.id));
+    copyBtn.addEventListener('click', () => this.copySnapshot(snapshot.id, copyBtn));
+    deleteBtn.addEventListener('click', () => this.deleteSnapshot(snapshot.id));
 
-        return li;
-    }
+    return li;
+  }
 
-    // Restore a snapshot
-    restoreSnapshot(snapshotId: number | undefined): void {
-        if (!this.db) return;
+  // Restore a snapshot
+  restoreSnapshot(snapshotId: number | undefined): void {
+    if (!this.db) return;
 
-        const transaction = this.db.transaction([this.storeName], 'readonly');
-        const store = transaction.objectStore(this.storeName);
-        const request = store.get(snapshotId!);
+    const transaction = this.db.transaction([this.storeName], 'readonly');
+    const store = transaction.objectStore(this.storeName);
+    const request = store.get(snapshotId!);
 
-        request.onsuccess = async (event) => {
-            const snapshot = (event.target as IDBRequest).result as Snapshot | undefined;
-            if (snapshot) {
-                // Ask for confirmation if there's existing content
-                const noteContent = getEditorText();
+    request.onsuccess = async (event) => {
+      const snapshot = (event.target as IDBRequest).result as Snapshot | undefined;
+      if (snapshot) {
+        // Ask for confirmation if there's existing content
+        const noteContent = getEditorText();
 
-                let result: { value?: unknown } = {
-                    value: true
-                };
-
-                if (noteContent.trim() != '') {
-                    result = await Swal.fire({
-                        title: 'Restore this snapshot?',
-                        text: "This will replace your current note. Are you sure?",
-                        icon: 'warning',
-                        showCancelButton: true,
-                        confirmButtonText: 'Yes, Restore!',
-                        cancelButtonText: 'No, leave it.'
-                    });
-                }
-
-                if (!result.value) {
-                    return;
-                }
-
-                // Restore the content (old snapshots hold plain text — the
-                // editor renders it faithfully, newlines and all).
-                setEditorHtml(snapshot.content);
-                updateWordCountPill(getEditorText());
-
-                Swal.fire({
-                    toast: true,
-                    position: 'bottom',
-                    icon: 'success',
-                    title: 'Snapshot restored!',
-                    showConfirmButton: false,
-                    timer: 2000,
-                    customClass: {
-                        popup: 'swal-toast-bottom-offset'
-                    }
-                });
-
-                // Close the modal after a short delay
-                setTimeout(() => {
-                    $('#snapshotsModal').modal('hide');
-                }, 150);
-            }
+        let result: { value?: unknown } = {
+          value: true,
         };
 
-        request.onerror = (event) => {
-            console.error('Error restoring snapshot', event);
-            this.showToast('Error restoring snapshot');
-        };
-    }
-
-    // Copy a snapshot content to clipboard
-    copySnapshot(snapshotId: number | undefined, buttonElement: Element): void {
-        if (!this.db) return;
-
-        const transaction = this.db.transaction([this.storeName], 'readonly');
-        const store = transaction.objectStore(this.storeName);
-        const request = store.get(snapshotId!);
-
-        request.onsuccess = (event) => {
-            const snapshot = (event.target as IDBRequest).result as Snapshot | undefined;
-            if (snapshot) {
-                // Use the Clipboard API
-                navigator.clipboard.writeText(snapshot.content).then(() => {
-                    this.showCopySuccess(buttonElement);
-                }).catch((err) => {
-                    console.error('Failed to copy text: ', err);
-                    // Fallback for older browsers
-                    const textArea = document.createElement('textarea');
-                    textArea.value = snapshot.content;
-                    document.body.appendChild(textArea);
-                    textArea.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(textArea);
-
-                    this.showCopySuccess(buttonElement);
-                });
-            }
-        };
-
-        request.onerror = (event) => {
-            console.error('Error copying snapshot', event);
-            this.showToast('Error copying snapshot');
-        };
-    }
-
-    // Show copy success feedback
-    showCopySuccess(button: Element): void {
-        const originalHTML = button.innerHTML;
-        button.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <polyline points="20 6 9 17 4 12"></polyline> </g></svg>';
-
-        setTimeout(() => {
-            button.innerHTML = originalHTML;
-        }, 700);
-    }
-
-    // Delete a snapshot
-    deleteSnapshot(snapshotId: number | undefined): void {
-        Swal.fire({
-            title: 'Want to delete this snapshot?',
-            text: "You won't be able to revert this!",
+        if (noteContent.trim() != '') {
+          result = await Swal.fire({
+            title: 'Restore this snapshot?',
+            text: 'This will replace your current note. Are you sure?',
             icon: 'warning',
             showCancelButton: true,
-            customClass: {
-                confirmButton: 'swal-btn-danger'
-            },
-            confirmButtonText: 'Yes, Delete!',
-            cancelButtonText: 'No, keep it.'
-        }).then((result) => {
-            if (result.value) {
-                if (!this.db) return;
-                const transaction = this.db.transaction([this.storeName], 'readwrite');
-                const store = transaction.objectStore(this.storeName);
-                const request = store.delete(snapshotId!);
+            confirmButtonText: 'Yes, Restore!',
+            cancelButtonText: 'No, leave it.',
+          });
+        }
 
-                request.onsuccess = () => {
-                    this.loadSnapshots();
-                    this.updateSnapshotsCount();
-                };
+        if (!result.value) {
+          return;
+        }
 
-                request.onerror = (event) => {
-                    console.error('Error deleting snapshot', event);
-                    this.showToast('Error deleting snapshot');
-                };
-            }
-        })
-    }
+        // Restore the content (old snapshots hold plain text — the
+        // editor renders it faithfully, newlines and all).
+        setEditorHtml(snapshot.content);
+        updateWordCountPill(getEditorText());
 
-    // Delete all snapshots
-    deleteAllSnapshots(): void {
+        Swal.fire({
+          toast: true,
+          position: 'bottom',
+          icon: 'success',
+          title: 'Snapshot restored!',
+          showConfirmButton: false,
+          timer: 2000,
+          customClass: {
+            popup: 'swal-toast-bottom-offset',
+          },
+        });
+
+        // Close the modal after a short delay
+        setTimeout(() => {
+          $('#snapshotsModal').modal('hide');
+        }, 150);
+      }
+    };
+
+    request.onerror = (event) => {
+      console.error('Error restoring snapshot', event);
+      this.showToast('Error restoring snapshot');
+    };
+  }
+
+  // Copy a snapshot content to clipboard
+  copySnapshot(snapshotId: number | undefined, buttonElement: Element): void {
+    if (!this.db) return;
+
+    const transaction = this.db.transaction([this.storeName], 'readonly');
+    const store = transaction.objectStore(this.storeName);
+    const request = store.get(snapshotId!);
+
+    request.onsuccess = (event) => {
+      const snapshot = (event.target as IDBRequest).result as Snapshot | undefined;
+      if (snapshot) {
+        // Use the Clipboard API
+        navigator.clipboard
+          .writeText(snapshot.content)
+          .then(() => {
+            this.showCopySuccess(buttonElement);
+          })
+          .catch((err) => {
+            console.error('Failed to copy text: ', err);
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = snapshot.content;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+
+            this.showCopySuccess(buttonElement);
+          });
+      }
+    };
+
+    request.onerror = (event) => {
+      console.error('Error copying snapshot', event);
+      this.showToast('Error copying snapshot');
+    };
+  }
+
+  // Show copy success feedback
+  showCopySuccess(button: Element): void {
+    const originalHTML = button.innerHTML;
+    button.innerHTML =
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <polyline points="20 6 9 17 4 12"></polyline> </g></svg>';
+
+    setTimeout(() => {
+      button.innerHTML = originalHTML;
+    }, 700);
+  }
+
+  // Delete a snapshot
+  deleteSnapshot(snapshotId: number | undefined): void {
+    Swal.fire({
+      title: 'Want to delete this snapshot?',
+      text: "You won't be able to revert this!",
+      icon: 'warning',
+      showCancelButton: true,
+      customClass: {
+        confirmButton: 'swal-btn-danger',
+      },
+      confirmButtonText: 'Yes, Delete!',
+      cancelButtonText: 'No, keep it.',
+    }).then((result) => {
+      if (result.value) {
         if (!this.db) return;
-
         const transaction = this.db.transaction([this.storeName], 'readwrite');
         const store = transaction.objectStore(this.storeName);
-        const request = store.clear();
+        const request = store.delete(snapshotId!);
 
         request.onsuccess = () => {
-            this.loadSnapshots();
-            this.updateSnapshotsCount();
+          this.loadSnapshots();
+          this.updateSnapshotsCount();
         };
 
         request.onerror = (event) => {
-            console.error('Error deleting all snapshots', event);
-            this.showToast('Error deleting snapshots');
+          console.error('Error deleting snapshot', event);
+          this.showToast('Error deleting snapshot');
         };
+      }
+    });
+  }
+
+  // Delete all snapshots
+  deleteAllSnapshots(): void {
+    if (!this.db) return;
+
+    const transaction = this.db.transaction([this.storeName], 'readwrite');
+    const store = transaction.objectStore(this.storeName);
+    const request = store.clear();
+
+    request.onsuccess = () => {
+      this.loadSnapshots();
+      this.updateSnapshotsCount();
+    };
+
+    request.onerror = (event) => {
+      console.error('Error deleting all snapshots', event);
+      this.showToast('Error deleting snapshots');
+    };
+  }
+
+  // Search snapshots by title or content
+  searchSnapshots(searchTerm: string): void {
+    this.loadSnapshots(searchTerm);
+  }
+
+  // Update the snapshots count in the UI
+  updateSnapshotsCount(): void {
+    if (!this.db) return;
+
+    const transaction = this.db.transaction([this.storeName], 'readonly');
+    const store = transaction.objectStore(this.storeName);
+    const countRequest = store.count();
+
+    countRequest.onsuccess = () => {
+      const countElement = document.getElementById('snapshotsCount');
+      const deleteAllBtn = document.getElementById(
+        'deleteAllSnapshotsBtn',
+      ) as HTMLButtonElement | null;
+
+      if (countElement) {
+        countElement.textContent = String(countRequest.result);
+      }
+
+      if (deleteAllBtn) {
+        deleteAllBtn.disabled = countRequest.result === 0;
+      }
+    };
+  }
+
+  // Generate a title from note content
+  generateSnapshotTitle(content: string): string {
+    // Content is stored as HTML — derive the title from the plain text.
+    const firstLine = htmlToText(content)
+      .split('\n')
+      .find((line) => line.trim() !== '');
+    let title = firstLine || 'Untitled Snapshot';
+
+    // Limit title length
+    if (title.length > 50) {
+      title = title.substring(0, 47) + '...';
     }
 
-    // Search snapshots by title or content
-    searchSnapshots(searchTerm: string): void {
-        this.loadSnapshots(searchTerm);
+    return title;
+  }
+
+  // Generate a preview of the note content
+  generatePreview(content: string): string {
+    // Content is stored as HTML — preview the rendered text.
+    let preview = htmlToText(content).replace(/\s+\n/g, '\n').trim();
+
+    // Get first 100 characters
+    if (preview.length > 100) {
+      preview = preview.substring(0, 97) + '...';
     }
 
-    // Update the snapshots count in the UI
-    updateSnapshotsCount(): void {
-        if (!this.db) return;
+    return preview || 'No content';
+  }
 
-        const transaction = this.db.transaction([this.storeName], 'readonly');
-        const store = transaction.objectStore(this.storeName);
-        const countRequest = store.count();
+  // Format timestamp to readable date
+  formatDate(timestamp: number): string {
+    const date = new Date(timestamp);
+    return date.toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
 
-        countRequest.onsuccess = () => {
-            const countElement = document.getElementById('snapshotsCount');
-            const deleteAllBtn = document.getElementById('deleteAllSnapshotsBtn') as HTMLButtonElement | null;
+  // Show toast message
+  showToast(message: string): void {
+    showToast(message);
+  }
 
-            if (countElement) {
-                countElement.textContent = String(countRequest.result);
-            }
-
-            if (deleteAllBtn) {
-                deleteAllBtn.disabled = countRequest.result === 0;
-            }
-        };
-    }
-
-    // Generate a title from note content
-    generateSnapshotTitle(content: string): string {
-        // Content is stored as HTML — derive the title from the plain text.
-        const firstLine = htmlToText(content).split('\n').find(line => line.trim() !== '');
-        let title = firstLine || 'Untitled Snapshot';
-
-        // Limit title length
-        if (title.length > 50) {
-            title = title.substring(0, 47) + '...';
-        }
-
-        return title;
-    }
-
-    // Generate a preview of the note content
-    generatePreview(content: string): string {
-        // Content is stored as HTML — preview the rendered text.
-        let preview = htmlToText(content).replace(/\s+\n/g, '\n').trim();
-
-        // Get first 100 characters
-        if (preview.length > 100) {
-            preview = preview.substring(0, 97) + '...';
-        }
-
-        return preview || 'No content';
-    }
-
-    // Format timestamp to readable date
-    formatDate(timestamp: number): string {
-        const date = new Date(timestamp);
-        return date.toLocaleString(undefined, {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    }
-
-    // Show toast message
-    showToast(message: string): void {
-        showToast(message);
-    }
-
-    // Helper to escape HTML
-    escapeHtml(unsafe: string | null | undefined): string {
-        if (!unsafe) return '';
-        return unsafe
-            .toString()
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-    }
+  // Helper to escape HTML
+  escapeHtml(unsafe: string | null | undefined): string {
+    if (!unsafe) return '';
+    return unsafe
+      .toString()
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
 }
 
 // Initialize the snapshots manager when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    // Only initialize if the snapshots button exists
-    if (document.getElementById('snapshotsButton')) {
-        window.snapshotsManager = new SnapshotsManager();
-    }
+  // Only initialize if the snapshots button exists
+  if (document.getElementById('snapshotsButton')) {
+    window.snapshotsManager = new SnapshotsManager();
+  }
 });
 
 // Add a global function to create a snapshot (can be called from other parts of the app)
 window.createSnapshot = function (title?: string): void {
-    if (window.snapshotsManager) {
-        window.snapshotsManager.createSnapshot(title);
-    } else {
-        console.warn('Snapshots manager not initialized');
-    }
+  if (window.snapshotsManager) {
+    window.snapshotsManager.createSnapshot(title);
+  } else {
+    console.warn('Snapshots manager not initialized');
+  }
 };
 
 // Add a function to create a snapshot before clearing notes
 const originalClearNotes = window.clearNotes;
 window.clearNotes = function (): void {
-    // Create a snapshot before clearing if there's content
-    if (getEditorText().trim() && window.snapshotsManager) {
-        window.snapshotsManager.createSnapshot('Before clearing notes');
-    }
+  // Create a snapshot before clearing if there's content
+  if (getEditorText().trim() && window.snapshotsManager) {
+    window.snapshotsManager.createSnapshot('Before clearing notes');
+  }
 
-    // Call the original clearNotes function
-    if (originalClearNotes) {
-        originalClearNotes();
-    }
+  // Call the original clearNotes function
+  if (originalClearNotes) {
+    originalClearNotes();
+  }
 };

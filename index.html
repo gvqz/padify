@@ -1,1186 +1,2257 @@
 <html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Padify — Offline capable</title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta
+      name="description"
+      content="Padify is an offline-capable notepad powered by ServiceWorker. It's quick, distraction-free, dark mode enabled, mobile compatible(Android, iOS) and minimalist in nature."
+    />
+    <meta name="keywords" content="padify,note,offline,mobile,web,notepad,android,ios,desktop" />
+    <meta name="application-name" content="Padify" />
+    <link href="/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="/css/style.css" rel="stylesheet" />
+    <link href="/css/snapshots.css" rel="stylesheet" />
+    <link href="/css/unicode-picker.css" rel="stylesheet" />
+    <link href="/css/music-player.css" rel="stylesheet" />
+    <link href="/css/vercel.css" rel="stylesheet" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/img/padify-apple-icon.png" />
+    <link rel="mask-icon" href="/img/icon-mask.svg" color="black" />
+    <!-- for Facebook -->
+    <meta property="og:title" content="Padify — Offline capable" />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:description"
+      content="Padify is an offline-capable notepad powered by ServiceWorker. It's quick, distraction-free, dark mode enabled, mobile compatible(Android, iOS) and minimalist in nature."
+    />
+    <!-- for Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:title" content="Padify — Offline capable" />
+    <meta
+      property="twitter:description"
+      content="Padify is an offline-capable notepad powered by ServiceWorker. It's quick, distraction-free, dark mode enabled, mobile compatible(Android, iOS) and minimalist in nature."
+    />
+  </head>
 
-<head>
-  <meta charset="utf-8">
-  <title>Padify — Offline capable</title>
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#ffffff">
-  <meta name="description"
-    content="Padify is an offline-capable notepad powered by ServiceWorker. It's quick, distraction-free, dark mode enabled, mobile compatible(Android, iOS) and minimalist in nature.">
-  <meta name="keywords" content="padify,note,offline,mobile,web,notepad,android,ios,desktop" />
-  <meta name="application-name" content="Padify" />
-  <link href="/css/bootstrap.min.css" rel="stylesheet">
-  <link href="/css/style.css" rel="stylesheet">
-  <link href="/css/snapshots.css" rel="stylesheet">
-  <link href="/css/unicode-picker.css" rel="stylesheet">
-  <link href="/css/music-player.css" rel="stylesheet">
-  <link href="/css/vercel.css" rel="stylesheet">
-  <link rel="icon" type="image/png" href="/favicon.png">
-  <link rel="icon" href="/favicon.ico" sizes="48x48">
-  <link rel="manifest" href="/manifest.json">
-  <link rel="apple-touch-icon" href="/img/padify-apple-icon.png">
-  <link rel="mask-icon" href="/img/icon-mask.svg" color="black">
-  <!-- for Facebook -->
-  <meta property="og:title" content="Padify — Offline capable" />
-  <meta property="og:type" content="website" />
-  <meta property="og:description"
-    content="Padify is an offline-capable notepad powered by ServiceWorker. It's quick, distraction-free, dark mode enabled, mobile compatible(Android, iOS) and minimalist in nature." />
-  <!-- for Twitter -->
-  <meta property="twitter:card" content="summary_large_image" />
-  <meta property="twitter:title" content="Padify — Offline capable" />
-  <meta property="twitter:description"
-    content="Padify is an offline-capable notepad powered by ServiceWorker. It's quick, distraction-free, dark mode enabled, mobile compatible(Android, iOS) and minimalist in nature." />
-</head>
-
-<body>
-  <nav class="navbar navbar-default navbar-inverse navbar-fixed-top">
-    <div class="container">
-      <div class="navbar-header">
-        <span>
-          <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar"
-            aria-expanded="false" aria-controls="navbar">
-            <span class="sr-only">Toggle navigation</span>
-            <span class="icon-bar"></span>
-            <span class="icon-bar"></span>
-            <span class="icon-bar"></span>
-          </button>
-        </span>
-        <span><a class="navbar-brand app-heading glow-text tilt-css" href="#"><span>P</span><span>a</span><span>d</span><span>i</span><span>f</span><span>y</span></a></span>
-        <span class="icon-container">
-          <span title="Your notes" id="tabRailToggleContainer">
-            <a href="javascript:void(0);" id="tabRailToggle" class="nav-icon-btn" aria-controls="tabRail" aria-expanded="false" title="Your notes">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m15 10-2 2 2 2"/></svg>
-              <span class="sr-only">Your notes</span>
-            </a>
+  <body>
+    <nav class="navbar navbar-default navbar-inverse navbar-fixed-top">
+      <div class="container">
+        <div class="navbar-header">
+          <span>
+            <button
+              type="button"
+              class="navbar-toggle collapsed"
+              data-toggle="collapse"
+              data-target="#navbar"
+              aria-expanded="false"
+              aria-controls="navbar"
+            >
+              <span class="sr-only">Toggle navigation</span>
+              <span class="icon-bar"></span>
+              <span class="icon-bar"></span>
+              <span class="icon-bar"></span>
+            </button>
           </span>
-          <span class="more-tools-container">
-            <a id="moreTools" class="dropdown-icon" title="More Tools">
-              <img src="/img/navbar/dropdown.svg" alt="More Tools" />
-            </a>
-            <!-- 
+          <span
+            ><a class="navbar-brand app-heading glow-text tilt-css" href="#"
+              ><span>P</span><span>a</span><span>d</span><span>i</span><span>f</span
+              ><span>y</span></a
+            ></span
+          >
+          <span class="icon-container">
+            <span title="Your notes" id="tabRailToggleContainer">
+              <a
+                href="javascript:void(0);"
+                id="tabRailToggle"
+                class="nav-icon-btn"
+                aria-controls="tabRail"
+                aria-expanded="false"
+                title="Your notes"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.9"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <path d="M9 4v16" />
+                  <path d="m15 10-2 2 2 2" />
+                </svg>
+                <span class="sr-only">Your notes</span>
+              </a>
+            </span>
+            <span class="more-tools-container">
+              <a id="moreTools" class="dropdown-icon" title="More Tools">
+                <img src="/img/navbar/dropdown.svg" alt="More Tools" />
+              </a>
+              <!-- 
               Dropdown Menu 
               Use this to add "New" tag on any feature: <span class="new-tag">NEW</span>
             -->
-            <div id="moreToolsDropdown" class="dropdown-menu">
-              <li><a class="dropdown-item" href="/rich-text-notes/"><svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" width="16" height="14" viewBox="0 0 52 52" enable-background="new 0 0 52 52" xml:space="preserve"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="M4.1,43.1h43.9c0.9,0,1.6,0.7,1.6,1.6v3.1c0,0.9-0.7,1.6-1.6,1.6H4.1c-0.9,0-1.6-0.7-1.6-1.6v-3.1 C2.5,43.8,3.2,43.1,4.1,43.1z"></path> <path d="M4.1,29h43.9c0.9,0,1.6,0.7,1.6,1.6v3.1c0,0.9-0.7,1.6-1.6,1.6H4.1c-0.9,0-1.6-0.7-1.6-1.6v-3.1 C2.5,29.7,3.2,29,4.1,29z"></path> <path d="M32,14.9h16c0.9,0,1.6,0.7,1.6,1.6v3.1c0,0.9-0.7,1.6-1.6,1.6H32c-0.9,0-1.6-0.7-1.6-1.6v-3.1 C30.4,15.6,31.1,14.9,32,14.9z"></path> <path d="M24.1,21.6L16.7,3.3c-0.2-0.3-0.5-0.6-0.9-0.6h-5.7c-0.3,0-0.7,0.2-0.8,0.6L2.5,21.6 c-0.1,0.3,0.1,0.8,0.5,0.8h3.6c0.3,0,0.7-0.3,0.8-0.6l1.4-3.9l8.7,0l1.5,3.9c0.1,0.3,0.5,0.6,0.8,0.6h3.6 C23.9,22.4,24.2,22,24.1,21.6z M10.5,13.1l2.3-5.8h0.5l2.5,5.8H10.5z"></path> </g></svg>Rich Text Notes</a></li>
-              <li><a class="dropdown-item" href="/markdown-editor"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor" class="bi bi-markdown"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="M14 3a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h12zM2 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H2z"></path> <path fill-rule="evenodd" d="M9.146 8.146a.5.5 0 0 1 .708 0L11.5 9.793l1.646-1.647a.5.5 0 0 1 .708.708l-2 2a.5.5 0 0 1-.708 0l-2-2a.5.5 0 0 1 0-.708z"></path> <path fill-rule="evenodd" d="M11.5 5a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-1 0v-4a.5.5 0 0 1 .5-.5z"></path> <path d="M3.56 11V7.01h.056l1.428 3.239h.774l1.42-3.24h.056V11h1.073V5.001h-1.2l-1.71 3.894h-.039l-1.71-3.894H2.5V11h1.06z"></path> </g></svg>Markdown Editor</a></li>
-                            <li><a class="dropdown-item" href="/voice-notes/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path fill-rule="evenodd" clip-rule="evenodd" d="M8.29455 5.32435C8.46362 3.40732 10.0991 2 12 2C13.9009 2 15.5364 3.40732 15.7054 5.32435C15.794 6.3283 15.871 7.46841 15.871 8.41026C15.871 9.3521 15.794 10.4922 15.7054 11.4962C15.5364 13.4132 13.9009 14.8205 12 14.8205C10.0991 14.8205 8.46362 13.4132 8.29455 11.4962C8.20602 10.4922 8.12903 9.3521 8.12903 8.41026C8.12903 7.46841 8.20602 6.3283 8.29455 5.32435ZM12 3.53846C10.8657 3.53846 9.93291 4.37146 9.83703 5.45864C9.74967 6.44919 9.67742 7.53634 9.67742 8.41026C9.67742 9.28417 9.74967 10.3713 9.83703 11.3619C9.93291 12.4491 10.8657 13.2821 12 13.2821C13.1343 13.2821 14.0671 12.4491 14.163 11.3619C14.2503 10.3713 14.3226 9.28417 14.3226 8.41026C14.3226 7.53634 14.2503 6.44919 14.163 5.45865C14.0671 4.37146 13.1343 3.53846 12 3.53846Z" fill="currentColor"></path> <path fill-rule="evenodd" clip-rule="evenodd" d="M4.77419 8.15385C5.20177 8.15385 5.54839 8.49824 5.54839 8.92308C5.54839 9.84241 5.61777 10.9078 5.7222 11.9868C6.02346 15.0996 8.76916 17.3846 12 17.3846C15.2308 17.3846 17.9765 15.0996 18.2778 11.9868C18.3822 10.9078 18.4516 9.84241 18.4516 8.92308C18.4516 8.49824 18.7982 8.15385 19.2258 8.15385C19.6534 8.15385 20 8.49824 20 8.92308C20 9.91081 19.9259 11.0299 19.8191 12.134C19.459 15.8542 16.3909 18.5475 12.7742 18.8869V21.2308C12.7742 21.6556 12.4276 22 12 22C11.5724 22 11.2258 21.6556 11.2258 21.2308V18.8869C7.60911 18.5475 4.54095 15.8542 4.18092 12.134C4.07407 11.0299 4 9.91081 4 8.92308C4 8.49824 4.34662 8.15385 4.77419 8.15385Z" fill="currentColor"></path> </g></svg>Voice Notes</a></li>
-              <li><a class="dropdown-item" href="/kanban/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="M9.6 4H4.4C3.6268 4 3 4.6268 3 5.4V19.6C3 20.3732 3.6268 21 4.4 21H9.6C10.3732 21 11 20.3732 11 19.6V5.4C11 4.6268 10.3732 4 9.6 4Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path> <path d="M19.6 4H15.4C14.6268 4 14 4.6268 14 5.4V14.6C14 15.3732 14.6268 16 15.4 16H19.6C20.3732 16 21 15.3732 21 14.6V5.4C21 4.6268 20.3732 4 19.6 4Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path> </g></svg>Simple Kanban</a></li>
-              <li><a class="dropdown-item" href="/text-tools/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><path d="M7 3.75h7.5L19 8.25V19a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5.75a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path><path d="M14 3.75V8h4.25" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path><path d="M8.75 12.5h6.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path><path d="M8.75 16h4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path></g></svg>Text Tools <span class="new-tag">NEW</span></a></li>
-              <li><a class="dropdown-item" href="/text-diff/"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" version="1.1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="m3.75 13.75h8m0-7.5h-8m4-4v8"></path> </g></svg>Text Diff</a></li>
-              <li><a class="dropdown-item" href="/teleprompter/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="M12 20.5H16M12 20.5H8M12 20.5V16.5M12 16.5C16 16.5 19.5 16.1667 20 15.8333C20.5 15.5 21 12.6667 21 10C21 7.33333 20.5 4.5 20 4.16667C19.5 3.83333 16 3.5 12 3.5C8 3.5 4.5 3.83333 4 4.16667C3.5 4.5 3 7.33333 3 10C3 12.6667 3.5 15.5 4 15.8333C4.5 16.1667 8 16.5 12 16.5Z" stroke="currentColor" stroke-width="1.7759999999999998" stroke-linecap="round" stroke-linejoin="round"></path> </g></svg>Teleprompter</a></li>
-              <li><a class="dropdown-item" href="/drawingpad/"><svg width="16" height="16" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="M1.5 4.99998C3 1.99999 7.3 0.499944 6.5 2.49994C5.5 4.99994 -0.5 9.49995 3 10.9999C4.34326 11.5756 6.05476 11.4496 7.65399 10.9493M7.65399 10.9493C10.2217 10.146 12.5 8.37782 12.5 6.99995C12.5 4.5 9 5.5 8 9C7.79358 9.72248 7.67238 10.381 7.65399 10.9493ZM7.65399 10.9493C7.58329 13.1339 9.03211 13.9839 13 12" stroke="currentColor"></path> </g></svg> Drawingpad</a></li>
-              <li><a class="dropdown-item" href="/tasks/"><svg fill="currentColor" width="16" height="16" viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><path d="M0 0h192v192H0z" style="fill:none"></path><path d="m67.033 149.837-.002-.002s-.072-.065.002.002c4.696 4.475 12.141 4.404 16.753-.208l80.702-80.702c4.68-4.683 4.68-12.287 0-16.97l-9.58-9.586c-4.689-4.683-12.293-4.683-16.976 0L75.3 105.003 54.044 83.746c-4.683-4.683-12.287-4.683-16.971 0l-9.585 9.586c-4.683 4.683-4.683 12.287 0 16.97l39.545 39.535Zm-31.06-48.02 9.586-9.585 25.499 25.499a6 6 0 0 0 8.485 0l66.874-66.875 9.581 9.586L74.3 141.144l-38.327-39.327Z"></path></g></svg>Tasks</a></li>
-            </div>
-          </span>
-          <span>
-            <a id="clearNotes" class="trash-icon" title="Delete Notes [ctrl/command + delete]">
-              <img src="/img/navbar/delete.svg" alt="Delete Icon" />
-            </a>
-          </span>
-          <span class="downaload-notes-container">
-            <a id="downloadNotes" class="download-icon" title="Download Notes">
-              <img src="/img/navbar/download.svg" alt="Download Icon" />
-            </a>
-            <!-- Dropdown Menu -->
-            <div id="iconDropdown" class="dropdown-menu">
-              <li><a class="dropdown-item" id="downloadNotesPlain">Download as plain text</a></li>
-              <li><a class="dropdown-item" id="downloadNotesPdf">Download as PDF</a></li>
-              <li><a class="dropdown-item" id="downloadNotesDocx">Download as DOCX</a></li>
-              <li><a class="dropdown-item" id="downloadNotesHtml">Download as HTML</a></li>
-            </div>
-          </span>
-          <span>
-            <a href="javascript:void(0);" id="copyToClipboard" class="" title="Copy notes to clipboard [alt/option + C]">
-              <img src="/img/navbar/copy.svg" alt="Copy Icon" />
-            </a>
-          </span>
-          <span title="Voice type [alt/option + v]" id="voiceTypeContainer" hidden>
-            <a href="javascript:void(0);" id="voiceTypeButton" class="nav-icon-btn voice-nav-button" aria-pressed="false" title="Voice type [alt/option + v]">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg>
-              <span class="sr-only">Voice type</span>
-            </a>
-          </span>
-          <span title="Preferences [ctrl/command + ,]">
-            <a href="#preferences" data-toggle="modal" data-target="#preferencesModal" id="preferences" class="preference-icon">
-              <img
-                src="/img/navbar/preferences.svg"
-                alt="Preferences"
-                id="Preferences"
-              />
-            </a>
-          </span>
-          <span title="Open Music Player">
-            <a href="#music" data-toggle="modal" data-target="#musicPlayerModal" title="Open Music Player">
-              <span class="ambient-noise-icon">
-                <img
-                  src="/img/navbar/music.svg"
-                  alt="Open Music Player"
-                />
-                <span class="ambient-noise-status-dot" aria-hidden="true"></span>
-              </span>
-            </a>
-          </span>
-          <span title="Start a Writing Session" id="timerContainer">
-            <a href="#timerModal" data-toggle="modal" data-target="#timerModal" title="Start a Writing Session">
-              <span>
-                <img
-                  src="/img/navbar/timer.svg"
-                  alt="Start a Writing Session"
-                />
-              </span>
-            </a>
-          </span>
-          <span title="Cloud sync" id="cloudNavContainer" hidden>
-            <a href="javascript:void(0);" id="cloudNavButton" class="cloud-nav-button">
-              <span class="cloud-nav-icon">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"/><path d="M12 12v6"/><path d="m9.5 15.5 2.5-2.5 2.5 2.5"/></svg>
-                <span class="cloud-status-dot off" id="cloudStatusDot" aria-hidden="true"></span>
-              </span>
-              <span class="sr-only">Cloud sync</span>
-            </a>
-          </span>
-          <span title="Share this note" id="shareNotesContainer" hidden>
-            <a id="shareNotes" title="Share this note">
-              <span>
-                <img
-                  src="/img/navbar/share.svg"
-                  alt="Share this note"
-                />
-              </span>
-              <span class="sr-only">Share this note</span>
-            </a>
-          </span>
-        </span>  
-      </div>
-      <div id="navbar" class="collapse navbar-collapse">
-        <ul class="nav navbar-nav navbar-flex">
-          <li class="keyboard-icon" id="pipContainer" title="Activate Floating Window">
-            <a id="pip" class="pip-icon">
-              <img
-                  src="/img/navbar/pip.svg"
-                  alt="Activate Floating Window"
-                />
-            </a>
-          </li>
-          <li class="snapshots-icon">
-            <a href="javascript:void(0);" id="snapshotsButton" title="View Snapshots">
-              <svg class="snapshot-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="#000000"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <g id="System / Save"> <path id="Vector" d="M17 21.0002L7 21M17 21.0002L17.8031 21C18.921 21 19.48 21 19.9074 20.7822C20.2837 20.5905 20.5905 20.2843 20.7822 19.908C21 19.4806 21 18.921 21 17.8031V9.21955C21 8.77072 21 8.54521 20.9521 8.33105C20.9095 8.14 20.8393 7.95652 20.7432 7.78595C20.6366 7.59674 20.487 7.43055 20.1929 7.10378L17.4377 4.04241C17.0969 3.66374 16.9242 3.47181 16.7168 3.33398C16.5303 3.21 16.3242 3.11858 16.1073 3.06287C15.8625 3 15.5998 3 15.075 3H6.2002C5.08009 3 4.51962 3 4.0918 3.21799C3.71547 3.40973 3.40973 3.71547 3.21799 4.0918C3 4.51962 3 5.08009 3 6.2002V17.8002C3 18.9203 3 19.4796 3.21799 19.9074C3.40973 20.2837 3.71547 20.5905 4.0918 20.7822C4.5192 21 5.07899 21 6.19691 21H7M17 21.0002V17.1969C17 16.079 17 15.5192 16.7822 15.0918C16.5905 14.7155 16.2837 14.4097 15.9074 14.218C15.4796 14 14.9203 14 13.8002 14H10.2002C9.08009 14 8.51962 14 8.0918 14.218C7.71547 14.4097 7.40973 14.7155 7.21799 15.0918C7 15.5196 7 16.0801 7 17.2002V21M15 7H9" stroke="#ffffff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"></path> </g> </g></svg>
-              <span class="snapshot-text">Snapshots</span>
-            </a>
-          </li>
-          <li class="focus-mode-icon">
-            <a href="javascript:void(0);" id="focusModeButton" title="Turn On Focus Mode [alt/option + f]">
-              <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="#ffffff" stroke="#ffffff"
-                stroke-width="0.72">
-                <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
-                <g id="SVGRepo_iconCarrier">
-                  <g>
-                    <path
-                      d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm0 2C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-8a2 2 0 1 1 0-4 2 2 0 0 1 0 4z">
-                    </path>
-                  </g>
-                </g>
-              </svg>
-            </a>
-          </li>
-          <li class="keyboard-icon">
-            <a href="#keyboard-shortcuts" data-toggle="modal" data-target="#keyboardShortcutsModal" title="Keyboard Shortcuts [ctrl/command + K]">
-              <svg fill="#ffffff" width="20" viewBox="0 -32 576 576" xmlns="http://www.w3.org/2000/svg" stroke="#ffffff" stroke-width="8.064000000000002"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><path d="M528 64H48C21.49 64 0 85.49 0 112v288c0 26.51 21.49 48 48 48h480c26.51 0 48-21.49 48-48V112c0-26.51-21.49-48-48-48zm8 336c0 4.411-3.589 8-8 8H48c-4.411 0-8-3.589-8-8V112c0-4.411 3.589-8 8-8h480c4.411 0 8 3.589 8 8v288zM170 270v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm96 0v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm96 0v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm96 0v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm-336 82v-28c0-6.627-5.373-12-12-12H82c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm384 0v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zM122 188v-28c0-6.627-5.373-12-12-12H82c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm96 0v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm96 0v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm96 0v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm96 0v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm-98 158v-16c0-6.627-5.373-12-12-12H180c-6.627 0-12 5.373-12 12v16c0 6.627 5.373 12 12 12h216c6.627 0 12-5.373 12-12z"></path></g></svg>
-            </a>
-          </li>
-          <li class="unicode-icon" title="Insert Unicode Symbol [ctrl/command + shift + o]">
-            <a href="javascript:void(0);" id="unicodePickerTrigger" aria-label="Insert Unicode Symbol">
-              <svg fill="#ffffff" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="16" height="16" viewBox="0 0 98.82 98.82" xml:space="preserve" stroke="#ffffff"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <g> <path d="M96.82,85.474H86.357c6.945-9.213,10.77-20.733,10.77-32.438c0-28.343-21.406-51.402-47.72-51.402 c-26.313,0-47.72,23.06-47.72,51.402c0,11.707,3.823,23.227,10.767,32.438H2c-1.104,0-2,0.896-2,2v7.714c0,1.104,0.896,2,2,2 h28.551c1.104,0,2-0.896,2-2v-8.593c0-0.476-0.169-0.935-0.477-1.296l-0.111-0.131c-0.112-0.133-0.242-0.25-0.385-0.348 c-9.826-6.81-15.931-18.988-15.931-31.785c0-20.646,15.145-37.442,33.76-37.442c18.614,0,33.759,16.797,33.759,37.442 c0,12.851-6.143,25.055-16.029,31.851c-0.543,0.373-0.867,0.989-0.867,1.647v8.653c0,1.104,0.896,2,2,2H96.82c1.104,0,2-0.896,2-2 v-7.714C98.82,86.369,97.926,85.474,96.82,85.474z"></path> </g> </g></svg>
-            </a>
-          </li>
-          <li class="fullscreen-icon">
-            <a href="javascript:void(0);" id="fullScreenButton" title="Toggle Full Screen">
-              <svg xmlns="http://www.w3.org/2000/svg" id="arrowPointsOut" height="18px" width="18px" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="#fff" class="size-6">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-              </svg>
-              <svg xmlns="http://www.w3.org/2000/svg" id="arrowPointsIn" height="18px" width="18px" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="#fff" class="size-6" style="display: none;">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5 5.25 5.25" />
-              </svg>              
-            </a>
-          </li>
-          <li><a href="#about" data-toggle="modal" data-target="#aboutModal" class="about-link">About</a></li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="overlay"></div>
-  </nav>
-
-  <div id="focusModeCloseButton" class="focus-mode-close-btn" style="display: none;">
-    <button id="closeFocusMode" title="Exit Focus Mode [Press Escape]">
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-      </svg>
-    </button>
-  </div>
-
-  <div id="breakVeil" class="break-veil" aria-hidden="true"></div>
-
-  <!-- Voice typing live bar (Web Speech API) -->
-  <div id="voiceBar" class="voice-bar" hidden role="status" aria-live="polite">
-    <span class="voice-bar-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
-    <span class="voice-bar-text" id="voiceBarText">Listening…</span>
-    <button type="button" id="voiceBarStop" class="voice-bar-stop">
-      Done
-    </button>
-  </div>
-
-  <div id="mainContainer">
-    <div id="editorShell">
-      <aside id="tabRail" aria-label="Note tabs">
-        <div class="tab-rail-head">
-          <span class="tab-rail-eyebrow">Notes</span>
-          <span class="tab-rail-count" id="tabRailCount" title="Notes on this device">1</span>
-        </div>
-        <div id="tabStrip" role="tablist" aria-orientation="vertical" aria-label="Note tabs">
-          <div id="tabStripTabs" class="tab-strip-tabs"></div>
-        </div>
-        <div class="tab-rail-foot">
-          <button type="button" id="addTab" class="tab-rail-add" title="New tab" aria-label="Add a new tab">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-            <span>New note</span>
-          </button>
-        </div>
-      </aside>
-      <div id="tabRailBackdrop" class="tab-rail-backdrop" aria-hidden="true"></div>
-      <div class="container" id="textareaContainer">
-        <div class="starter-template">
-          <div id="note" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true"
-            aria-label="Your notes" data-placeholder="Type your notes here and when you come back all your notes will be right here..."></div>
-        </div>
-        <div class="bottom-line">
-          <div class="save-state" id="saveState" hidden>
-            <span class="save-state-spinner" aria-hidden="true"></span>
-            <svg class="save-state-check" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 13 4 4L19 7"/></svg>
-            <span class="save-state-text">Saved</span>
-          </div>
-          <div class="timer-pill" style="display: none;">
-            <div class="timer-display">00:00</div>
-            <a href="javascript:void(0);" id="stopTimer" title="Stop the timer">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#000" class="size-6">
-                <path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-              </svg>
-            </a>
-          </div>
-          <div class="word-count-container">
-          <p id="wordCount">0 character • 0 word</p>
-          <a href="#statistics" data-toggle="modal" data-target="#statisticsModal"
-              title="View Note Statistics">
-            <svg width="10" height="10" viewBox="-3 0 32 32" version="1.1" xmlns="http://www.w3.org/2000/svg"
-              xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns" fill="currentColor"
-              stroke="#000000">
-              <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-              <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
-              <g id="SVGRepo_iconCarrier">
-                <title>View Note Statistics</title>
-                <defs> </defs>
-                <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd" sketch:type="MSPage">
-                  <g id="Icon-Set-Filled" sketch:type="MSLayerGroup" transform="translate(-314.000000, -673.000000)" fill="currentColor">
-                    <path
-                      d="M328,673 L326,673 C324.896,673 324,673.896 324,675 L324,703 C324,704.104 324.896,705 326,705 L328,705 C329.104,705 330,704.104 330,703 L330,675 C330,673.896 329.104,673 328,673 L328,673 Z M338,689 L336,689 C334.896,689 334,689.896 334,691 L334,703 C334,704.104 334.896,705 336,705 L338,705 C339.104,705 340,704.104 340,703 L340,691 C340,689.896 339.104,689 338,689 L338,689 Z M318,682 L316,682 C314.896,682 314,682.896 314,684 L314,703 C314,704.104 314.896,705 316,705 L318,705 C319.104,705 320,704.104 320,703 L320,684 C320,682.896 319.104,682 318,682 L318,682 Z"
-                      id="stats" sketch:type="MSShapeGroup"> </path>
-                  </g>
-                </g>
-              </g>
-            </svg>
-          </a>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="aboutModal" class="modal fade" role="dialog">
-    <div class="modal-dialog">
-
-      <!-- Modal content-->
-      <div class="modal-content">
-        <div class="modal-header">
-          <button type="button" class="close" data-dismiss="modal">&times;</button>
-          <div class="brand-container">
-            <h4 class="modal-title custom-modal-title">Padify — Offline capable</h4>
-            <span class="install-app-btn-container">
-              <a id="installApp" class="install-app-btn" href="javascript:void(0);">Install</a>
+              <div id="moreToolsDropdown" class="dropdown-menu">
+                <li>
+                  <a class="dropdown-item" href="/rich-text-notes/"
+                    ><svg
+                      fill="currentColor"
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="14"
+                      viewBox="0 0 52 52"
+                      enable-background="new 0 0 52 52"
+                      xml:space="preserve"
+                    >
+                      <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                      <g
+                        id="SVGRepo_tracerCarrier"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      ></g>
+                      <g id="SVGRepo_iconCarrier">
+                        <path
+                          d="M4.1,43.1h43.9c0.9,0,1.6,0.7,1.6,1.6v3.1c0,0.9-0.7,1.6-1.6,1.6H4.1c-0.9,0-1.6-0.7-1.6-1.6v-3.1 C2.5,43.8,3.2,43.1,4.1,43.1z"
+                        ></path>
+                        <path
+                          d="M4.1,29h43.9c0.9,0,1.6,0.7,1.6,1.6v3.1c0,0.9-0.7,1.6-1.6,1.6H4.1c-0.9,0-1.6-0.7-1.6-1.6v-3.1 C2.5,29.7,3.2,29,4.1,29z"
+                        ></path>
+                        <path
+                          d="M32,14.9h16c0.9,0,1.6,0.7,1.6,1.6v3.1c0,0.9-0.7,1.6-1.6,1.6H32c-0.9,0-1.6-0.7-1.6-1.6v-3.1 C30.4,15.6,31.1,14.9,32,14.9z"
+                        ></path>
+                        <path
+                          d="M24.1,21.6L16.7,3.3c-0.2-0.3-0.5-0.6-0.9-0.6h-5.7c-0.3,0-0.7,0.2-0.8,0.6L2.5,21.6 c-0.1,0.3,0.1,0.8,0.5,0.8h3.6c0.3,0,0.7-0.3,0.8-0.6l1.4-3.9l8.7,0l1.5,3.9c0.1,0.3,0.5,0.6,0.8,0.6h3.6 C23.9,22.4,24.2,22,24.1,21.6z M10.5,13.1l2.3-5.8h0.5l2.5,5.8H10.5z"
+                        ></path>
+                      </g></svg
+                    >Rich Text Notes</a
+                  >
+                </li>
+                <li>
+                  <a class="dropdown-item" href="/markdown-editor"
+                    ><svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 16 16"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="currentColor"
+                      class="bi bi-markdown"
+                    >
+                      <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                      <g
+                        id="SVGRepo_tracerCarrier"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      ></g>
+                      <g id="SVGRepo_iconCarrier">
+                        <path
+                          d="M14 3a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h12zM2 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H2z"
+                        ></path>
+                        <path
+                          fill-rule="evenodd"
+                          d="M9.146 8.146a.5.5 0 0 1 .708 0L11.5 9.793l1.646-1.647a.5.5 0 0 1 .708.708l-2 2a.5.5 0 0 1-.708 0l-2-2a.5.5 0 0 1 0-.708z"
+                        ></path>
+                        <path
+                          fill-rule="evenodd"
+                          d="M11.5 5a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-1 0v-4a.5.5 0 0 1 .5-.5z"
+                        ></path>
+                        <path
+                          d="M3.56 11V7.01h.056l1.428 3.239h.774l1.42-3.24h.056V11h1.073V5.001h-1.2l-1.71 3.894h-.039l-1.71-3.894H2.5V11h1.06z"
+                        ></path>
+                      </g></svg
+                    >Markdown Editor</a
+                  >
+                </li>
+                <li>
+                  <a class="dropdown-item" href="/voice-notes/"
+                    ><svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                      <g
+                        id="SVGRepo_tracerCarrier"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      ></g>
+                      <g id="SVGRepo_iconCarrier">
+                        <path
+                          fill-rule="evenodd"
+                          clip-rule="evenodd"
+                          d="M8.29455 5.32435C8.46362 3.40732 10.0991 2 12 2C13.9009 2 15.5364 3.40732 15.7054 5.32435C15.794 6.3283 15.871 7.46841 15.871 8.41026C15.871 9.3521 15.794 10.4922 15.7054 11.4962C15.5364 13.4132 13.9009 14.8205 12 14.8205C10.0991 14.8205 8.46362 13.4132 8.29455 11.4962C8.20602 10.4922 8.12903 9.3521 8.12903 8.41026C8.12903 7.46841 8.20602 6.3283 8.29455 5.32435ZM12 3.53846C10.8657 3.53846 9.93291 4.37146 9.83703 5.45864C9.74967 6.44919 9.67742 7.53634 9.67742 8.41026C9.67742 9.28417 9.74967 10.3713 9.83703 11.3619C9.93291 12.4491 10.8657 13.2821 12 13.2821C13.1343 13.2821 14.0671 12.4491 14.163 11.3619C14.2503 10.3713 14.3226 9.28417 14.3226 8.41026C14.3226 7.53634 14.2503 6.44919 14.163 5.45865C14.0671 4.37146 13.1343 3.53846 12 3.53846Z"
+                          fill="currentColor"
+                        ></path>
+                        <path
+                          fill-rule="evenodd"
+                          clip-rule="evenodd"
+                          d="M4.77419 8.15385C5.20177 8.15385 5.54839 8.49824 5.54839 8.92308C5.54839 9.84241 5.61777 10.9078 5.7222 11.9868C6.02346 15.0996 8.76916 17.3846 12 17.3846C15.2308 17.3846 17.9765 15.0996 18.2778 11.9868C18.3822 10.9078 18.4516 9.84241 18.4516 8.92308C18.4516 8.49824 18.7982 8.15385 19.2258 8.15385C19.6534 8.15385 20 8.49824 20 8.92308C20 9.91081 19.9259 11.0299 19.8191 12.134C19.459 15.8542 16.3909 18.5475 12.7742 18.8869V21.2308C12.7742 21.6556 12.4276 22 12 22C11.5724 22 11.2258 21.6556 11.2258 21.2308V18.8869C7.60911 18.5475 4.54095 15.8542 4.18092 12.134C4.07407 11.0299 4 9.91081 4 8.92308C4 8.49824 4.34662 8.15385 4.77419 8.15385Z"
+                          fill="currentColor"
+                        ></path>
+                      </g></svg
+                    >Voice Notes</a
+                  >
+                </li>
+                <li>
+                  <a class="dropdown-item" href="/kanban/"
+                    ><svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                      <g
+                        id="SVGRepo_tracerCarrier"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      ></g>
+                      <g id="SVGRepo_iconCarrier">
+                        <path
+                          d="M9.6 4H4.4C3.6268 4 3 4.6268 3 5.4V19.6C3 20.3732 3.6268 21 4.4 21H9.6C10.3732 21 11 20.3732 11 19.6V5.4C11 4.6268 10.3732 4 9.6 4Z"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                          stroke-linecap="round"
+                        ></path>
+                        <path
+                          d="M19.6 4H15.4C14.6268 4 14 4.6268 14 5.4V14.6C14 15.3732 14.6268 16 15.4 16H19.6C20.3732 16 21 15.3732 21 14.6V5.4C21 4.6268 20.3732 4 19.6 4Z"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                          stroke-linecap="round"
+                        ></path>
+                      </g></svg
+                    >Simple Kanban</a
+                  >
+                </li>
+                <li>
+                  <a class="dropdown-item" href="/text-tools/"
+                    ><svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                      <g
+                        id="SVGRepo_tracerCarrier"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      ></g>
+                      <g id="SVGRepo_iconCarrier">
+                        <path
+                          d="M7 3.75h7.5L19 8.25V19a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5.75a2 2 0 0 1 2-2Z"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        ></path>
+                        <path
+                          d="M14 3.75V8h4.25"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        ></path>
+                        <path
+                          d="M8.75 12.5h6.5"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        ></path>
+                        <path
+                          d="M8.75 16h4.5"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        ></path>
+                      </g></svg
+                    >Text Tools <span class="new-tag">NEW</span></a
+                  >
+                </li>
+                <li>
+                  <a class="dropdown-item" href="/text-diff/"
+                    ><svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 16 16"
+                      xmlns="http://www.w3.org/2000/svg"
+                      version="1.1"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="1.5"
+                    >
+                      <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                      <g
+                        id="SVGRepo_tracerCarrier"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      ></g>
+                      <g id="SVGRepo_iconCarrier">
+                        <path d="m3.75 13.75h8m0-7.5h-8m4-4v8"></path>
+                      </g></svg
+                    >Text Diff</a
+                  >
+                </li>
+                <li>
+                  <a class="dropdown-item" href="/teleprompter/"
+                    ><svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                      <g
+                        id="SVGRepo_tracerCarrier"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      ></g>
+                      <g id="SVGRepo_iconCarrier">
+                        <path
+                          d="M12 20.5H16M12 20.5H8M12 20.5V16.5M12 16.5C16 16.5 19.5 16.1667 20 15.8333C20.5 15.5 21 12.6667 21 10C21 7.33333 20.5 4.5 20 4.16667C19.5 3.83333 16 3.5 12 3.5C8 3.5 4.5 3.83333 4 4.16667C3.5 4.5 3 7.33333 3 10C3 12.6667 3.5 15.5 4 15.8333C4.5 16.1667 8 16.5 12 16.5Z"
+                          stroke="currentColor"
+                          stroke-width="1.7759999999999998"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        ></path>
+                      </g></svg
+                    >Teleprompter</a
+                  >
+                </li>
+                <li>
+                  <a class="dropdown-item" href="/drawingpad/"
+                    ><svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 15 15"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                      <g
+                        id="SVGRepo_tracerCarrier"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      ></g>
+                      <g id="SVGRepo_iconCarrier">
+                        <path
+                          d="M1.5 4.99998C3 1.99999 7.3 0.499944 6.5 2.49994C5.5 4.99994 -0.5 9.49995 3 10.9999C4.34326 11.5756 6.05476 11.4496 7.65399 10.9493M7.65399 10.9493C10.2217 10.146 12.5 8.37782 12.5 6.99995C12.5 4.5 9 5.5 8 9C7.79358 9.72248 7.67238 10.381 7.65399 10.9493ZM7.65399 10.9493C7.58329 13.1339 9.03211 13.9839 13 12"
+                          stroke="currentColor"
+                        ></path>
+                      </g>
+                    </svg>
+                    Drawingpad</a
+                  >
+                </li>
+                <li>
+                  <a class="dropdown-item" href="/tasks/"
+                    ><svg
+                      fill="currentColor"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 192 192"
+                      xmlns="http://www.w3.org/2000/svg"
+                      xml:space="preserve"
+                      style="
+                        fill-rule: evenodd;
+                        clip-rule: evenodd;
+                        stroke-linejoin: round;
+                        stroke-miterlimit: 2;
+                      "
+                    >
+                      <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                      <g
+                        id="SVGRepo_tracerCarrier"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      ></g>
+                      <g id="SVGRepo_iconCarrier">
+                        <path d="M0 0h192v192H0z" style="fill: none"></path>
+                        <path
+                          d="m67.033 149.837-.002-.002s-.072-.065.002.002c4.696 4.475 12.141 4.404 16.753-.208l80.702-80.702c4.68-4.683 4.68-12.287 0-16.97l-9.58-9.586c-4.689-4.683-12.293-4.683-16.976 0L75.3 105.003 54.044 83.746c-4.683-4.683-12.287-4.683-16.971 0l-9.585 9.586c-4.683 4.683-4.683 12.287 0 16.97l39.545 39.535Zm-31.06-48.02 9.586-9.585 25.499 25.499a6 6 0 0 0 8.485 0l66.874-66.875 9.581 9.586L74.3 141.144l-38.327-39.327Z"
+                        ></path>
+                      </g></svg
+                    >Tasks</a
+                  >
+                </li>
+              </div>
             </span>
-          </div>
+            <span>
+              <a id="clearNotes" class="trash-icon" title="Delete Notes [ctrl/command + delete]">
+                <img src="/img/navbar/delete.svg" alt="Delete Icon" />
+              </a>
+            </span>
+            <span class="downaload-notes-container">
+              <a id="downloadNotes" class="download-icon" title="Download Notes">
+                <img src="/img/navbar/download.svg" alt="Download Icon" />
+              </a>
+              <!-- Dropdown Menu -->
+              <div id="iconDropdown" class="dropdown-menu">
+                <li><a class="dropdown-item" id="downloadNotesPlain">Download as plain text</a></li>
+                <li><a class="dropdown-item" id="downloadNotesPdf">Download as PDF</a></li>
+                <li><a class="dropdown-item" id="downloadNotesDocx">Download as DOCX</a></li>
+                <li><a class="dropdown-item" id="downloadNotesHtml">Download as HTML</a></li>
+              </div>
+            </span>
+            <span>
+              <a
+                href="javascript:void(0);"
+                id="copyToClipboard"
+                class=""
+                title="Copy notes to clipboard [alt/option + C]"
+              >
+                <img src="/img/navbar/copy.svg" alt="Copy Icon" />
+              </a>
+            </span>
+            <span title="Voice type [alt/option + v]" id="voiceTypeContainer" hidden>
+              <a
+                href="javascript:void(0);"
+                id="voiceTypeButton"
+                class="nav-icon-btn voice-nav-button"
+                aria-pressed="false"
+                title="Voice type [alt/option + v]"
+              >
+                <svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.9"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <path d="M12 19v3" />
+                </svg>
+                <span class="sr-only">Voice type</span>
+              </a>
+            </span>
+            <span title="Preferences [ctrl/command + ,]">
+              <a
+                href="#preferences"
+                data-toggle="modal"
+                data-target="#preferencesModal"
+                id="preferences"
+                class="preference-icon"
+              >
+                <img src="/img/navbar/preferences.svg" alt="Preferences" id="Preferences" />
+              </a>
+            </span>
+            <span title="Open Music Player">
+              <a
+                href="#music"
+                data-toggle="modal"
+                data-target="#musicPlayerModal"
+                title="Open Music Player"
+              >
+                <span class="ambient-noise-icon">
+                  <img src="/img/navbar/music.svg" alt="Open Music Player" />
+                  <span class="ambient-noise-status-dot" aria-hidden="true"></span>
+                </span>
+              </a>
+            </span>
+            <span title="Start a Writing Session" id="timerContainer">
+              <a
+                href="#timerModal"
+                data-toggle="modal"
+                data-target="#timerModal"
+                title="Start a Writing Session"
+              >
+                <span>
+                  <img src="/img/navbar/timer.svg" alt="Start a Writing Session" />
+                </span>
+              </a>
+            </span>
+            <span title="Cloud sync" id="cloudNavContainer" hidden>
+              <a href="javascript:void(0);" id="cloudNavButton" class="cloud-nav-button">
+                <span class="cloud-nav-icon">
+                  <svg
+                    width="19"
+                    height="19"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    stroke="currentColor"
+                    stroke-width="1.9"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"
+                    />
+                    <path d="M12 12v6" />
+                    <path d="m9.5 15.5 2.5-2.5 2.5 2.5" />
+                  </svg>
+                  <span class="cloud-status-dot off" id="cloudStatusDot" aria-hidden="true"></span>
+                </span>
+                <span class="sr-only">Cloud sync</span>
+              </a>
+            </span>
+            <span title="Share this note" id="shareNotesContainer" hidden>
+              <a id="shareNotes" title="Share this note">
+                <span>
+                  <img src="/img/navbar/share.svg" alt="Share this note" />
+                </span>
+                <span class="sr-only">Share this note</span>
+              </a>
+            </span>
+          </span>
         </div>
-        <div class="modal-body modal-container">
-          <div class="about-tabs-wrap">
-            <ul class="nav nav-tabs about-tabs" role="tablist">
-              <li class="nav-item active">
-                <a class="nav-link active" data-toggle="tab" href="#about">
-                  <svg width="16" height="16" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" fill="currentColor"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <title>about</title> <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd"> <g id="about-white" fill="currentColor" transform="translate(42.666667, 42.666667)"> <path d="M213.333333,3.55271368e-14 C95.51296,3.55271368e-14 3.55271368e-14,95.51168 3.55271368e-14,213.333333 C3.55271368e-14,331.153707 95.51296,426.666667 213.333333,426.666667 C331.154987,426.666667 426.666667,331.153707 426.666667,213.333333 C426.666667,95.51168 331.154987,3.55271368e-14 213.333333,3.55271368e-14 Z M213.333333,384 C119.227947,384 42.6666667,307.43872 42.6666667,213.333333 C42.6666667,119.227947 119.227947,42.6666667 213.333333,42.6666667 C307.44,42.6666667 384,119.227947 384,213.333333 C384,307.43872 307.44,384 213.333333,384 Z M240.04672,128 C240.04672,143.46752 228.785067,154.666667 213.55008,154.666667 C197.698773,154.666667 186.713387,143.46752 186.713387,127.704107 C186.713387,112.5536 197.99616,101.333333 213.55008,101.333333 C228.785067,101.333333 240.04672,112.5536 240.04672,128 Z M192.04672,192 L234.713387,192 L234.713387,320 L192.04672,320 L192.04672,192 Z" id="Shape"> </path> </g> </g> </g></svg>
-                  About
-                </a>
-              </li>
-            </ul>
-          </div>
-          <div class="tab-content">
-            <div id="about" class="about-modal container tab-pane active in">
-              <img class="about-modal-logo" src="/img/icon-196.png" alt="Padify logo" width="160" height="160">
-              <p>Padify is an offline-capable, no-frills notepad which is a Progressive Web App as well.</p>
-              <p>The app serves the following features:</p>
-              <ul>
-                <li>Lets you <b>write notes</b> which are autosaved <a href="https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage" target="_blank">locally</a>.</li>
-                <li>Keep <b>multiple notes in tabs</b> in the sidebar of the main page.</li>
-                <li><b>Bold, italic, underline and strikethrough</b> formatting that renders right inside the editor.</li>
-                <li><b>Voice typing</b> — dictate with the mic in the top bar (or <b>alt/option + v</b>).</li>
-                <li><b>Share notes</b> with read-only links that expire on their own and can be cancelled any time (cloud accounts).</li>
-                <li><a href="https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Developer_guide/Installing" target="_blank">Installable</a> on supported browsers for offline usage.</li>
-                <li><b>Dark mode</b>.</li>
-                <li><b>Writing sessions</b> with a pick-a-duration timer.</li>
-                <li><b>Privacy-focused</b> — Never collect your precious data.</li>
-                <li><b>Light-weight</b> — Loads almost instantly.</li>
-                <li><b>Focus mode</b> to leave you with a barebones and pristine editor.</li>
-                <li><b>Full-screen mode</b> for a distraction-free writing experience.</li>
-                <li><b>Optimal line length</b> for better reading experience.</li>
-                <li><b>Note Statistics</b> and <b>Snapshots</b>.</li>
-                <li>Ability to mimic <b>typewriter (Hermes Precisa 305 model) sound</b> when typing.</li>
-                <li>Optional <b>Break Reminders</b> to gently suggest short breaks after long writing sessions.</li>
-                <li>Supports <b>monospaced</b> and <b>dyslexic fonts</b>.</li>
-                <li><b>Floating window</b> (in supported browsers) to effectively take notes across other apps.</li>
-                <li>Download notes as <b>plain text</b>, <b>PDF</b>, <b>HTML</b>, and <b>DOCX</b>.</li>
-                <li>Built-in <b>music player</b> with generative ambient tracks, plus a 25-sound ambience mixer.</li>
-              </ul>
-              <p>
-                <b>CAUTION:</b> Take a backup of your notes more often since it's all stored on your browser.
-              </p>
-              <p class="about-notice">Icons from <a href="https://heroicons.com/" target="_blank">heroicons</a>, <a href="https://www.flaticon.com/" target="_blank">Flaticon</a>, <a href="https://www.svgrepo.com">SVGRepo</a> and <a href="https://iconduck.com" target="_blank">Iconduck</a>. Sounds from <a href="https://pixabay.com" target="_blank">Pixabay</a>.</p>
-            </div>
-          </div>    
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
+        <div id="navbar" class="collapse navbar-collapse">
+          <ul class="nav navbar-nav navbar-flex">
+            <li class="keyboard-icon" id="pipContainer" title="Activate Floating Window">
+              <a id="pip" class="pip-icon">
+                <img src="/img/navbar/pip.svg" alt="Activate Floating Window" />
+              </a>
+            </li>
+            <li class="snapshots-icon">
+              <a href="javascript:void(0);" id="snapshotsButton" title="View Snapshots">
+                <svg
+                  class="snapshot-icon"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  stroke="#000000"
+                >
+                  <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                  <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
+                  <g id="SVGRepo_iconCarrier">
+                    <g id="System / Save">
+                      <path
+                        id="Vector"
+                        d="M17 21.0002L7 21M17 21.0002L17.8031 21C18.921 21 19.48 21 19.9074 20.7822C20.2837 20.5905 20.5905 20.2843 20.7822 19.908C21 19.4806 21 18.921 21 17.8031V9.21955C21 8.77072 21 8.54521 20.9521 8.33105C20.9095 8.14 20.8393 7.95652 20.7432 7.78595C20.6366 7.59674 20.487 7.43055 20.1929 7.10378L17.4377 4.04241C17.0969 3.66374 16.9242 3.47181 16.7168 3.33398C16.5303 3.21 16.3242 3.11858 16.1073 3.06287C15.8625 3 15.5998 3 15.075 3H6.2002C5.08009 3 4.51962 3 4.0918 3.21799C3.71547 3.40973 3.40973 3.71547 3.21799 4.0918C3 4.51962 3 5.08009 3 6.2002V17.8002C3 18.9203 3 19.4796 3.21799 19.9074C3.40973 20.2837 3.71547 20.5905 4.0918 20.7822C4.5192 21 5.07899 21 6.19691 21H7M17 21.0002V17.1969C17 16.079 17 15.5192 16.7822 15.0918C16.5905 14.7155 16.2837 14.4097 15.9074 14.218C15.4796 14 14.9203 14 13.8002 14H10.2002C9.08009 14 8.51962 14 8.0918 14.218C7.71547 14.4097 7.40973 14.7155 7.21799 15.0918C7 15.5196 7 16.0801 7 17.2002V21M15 7H9"
+                        stroke="#ffffff"
+                        stroke-width="2.3"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      ></path>
+                    </g>
+                  </g>
+                </svg>
+                <span class="snapshot-text">Snapshots</span>
+              </a>
+            </li>
+            <li class="focus-mode-icon">
+              <a
+                href="javascript:void(0);"
+                id="focusModeButton"
+                title="Turn On Focus Mode [alt/option + f]"
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="#ffffff"
+                  stroke="#ffffff"
+                  stroke-width="0.72"
+                >
+                  <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                  <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
+                  <g id="SVGRepo_iconCarrier">
+                    <g>
+                      <path
+                        d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm0 2C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-8a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"
+                      ></path>
+                    </g>
+                  </g>
+                </svg>
+              </a>
+            </li>
+            <li class="keyboard-icon">
+              <a
+                href="#keyboard-shortcuts"
+                data-toggle="modal"
+                data-target="#keyboardShortcutsModal"
+                title="Keyboard Shortcuts [ctrl/command + K]"
+              >
+                <svg
+                  fill="#ffffff"
+                  width="20"
+                  viewBox="0 -32 576 576"
+                  xmlns="http://www.w3.org/2000/svg"
+                  stroke="#ffffff"
+                  stroke-width="8.064000000000002"
+                >
+                  <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                  <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
+                  <g id="SVGRepo_iconCarrier">
+                    <path
+                      d="M528 64H48C21.49 64 0 85.49 0 112v288c0 26.51 21.49 48 48 48h480c26.51 0 48-21.49 48-48V112c0-26.51-21.49-48-48-48zm8 336c0 4.411-3.589 8-8 8H48c-4.411 0-8-3.589-8-8V112c0-4.411 3.589-8 8-8h480c4.411 0 8 3.589 8 8v288zM170 270v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm96 0v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm96 0v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm96 0v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm-336 82v-28c0-6.627-5.373-12-12-12H82c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm384 0v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zM122 188v-28c0-6.627-5.373-12-12-12H82c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm96 0v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm96 0v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm96 0v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm96 0v-28c0-6.627-5.373-12-12-12h-28c-6.627 0-12 5.373-12 12v28c0 6.627 5.373 12 12 12h28c6.627 0 12-5.373 12-12zm-98 158v-16c0-6.627-5.373-12-12-12H180c-6.627 0-12 5.373-12 12v16c0 6.627 5.373 12 12 12h216c6.627 0 12-5.373 12-12z"
+                    ></path>
+                  </g>
+                </svg>
+              </a>
+            </li>
+            <li class="unicode-icon" title="Insert Unicode Symbol [ctrl/command + shift + o]">
+              <a
+                href="javascript:void(0);"
+                id="unicodePickerTrigger"
+                aria-label="Insert Unicode Symbol"
+              >
+                <svg
+                  fill="#ffffff"
+                  version="1.1"
+                  id="Capa_1"
+                  xmlns="http://www.w3.org/2000/svg"
+                  xmlns:xlink="http://www.w3.org/1999/xlink"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 98.82 98.82"
+                  xml:space="preserve"
+                  stroke="#ffffff"
+                >
+                  <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                  <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
+                  <g id="SVGRepo_iconCarrier">
+                    <g>
+                      <path
+                        d="M96.82,85.474H86.357c6.945-9.213,10.77-20.733,10.77-32.438c0-28.343-21.406-51.402-47.72-51.402 c-26.313,0-47.72,23.06-47.72,51.402c0,11.707,3.823,23.227,10.767,32.438H2c-1.104,0-2,0.896-2,2v7.714c0,1.104,0.896,2,2,2 h28.551c1.104,0,2-0.896,2-2v-8.593c0-0.476-0.169-0.935-0.477-1.296l-0.111-0.131c-0.112-0.133-0.242-0.25-0.385-0.348 c-9.826-6.81-15.931-18.988-15.931-31.785c0-20.646,15.145-37.442,33.76-37.442c18.614,0,33.759,16.797,33.759,37.442 c0,12.851-6.143,25.055-16.029,31.851c-0.543,0.373-0.867,0.989-0.867,1.647v8.653c0,1.104,0.896,2,2,2H96.82c1.104,0,2-0.896,2-2 v-7.714C98.82,86.369,97.926,85.474,96.82,85.474z"
+                      ></path>
+                    </g>
+                  </g>
+                </svg>
+              </a>
+            </li>
+            <li class="fullscreen-icon">
+              <a href="javascript:void(0);" id="fullScreenButton" title="Toggle Full Screen">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  id="arrowPointsOut"
+                  height="18px"
+                  width="18px"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="2.5"
+                  stroke="#fff"
+                  class="size-6"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"
+                  />
+                </svg>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  id="arrowPointsIn"
+                  height="18px"
+                  width="18px"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="2.5"
+                  stroke="#fff"
+                  class="size-6"
+                  style="display: none"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5 5.25 5.25"
+                  />
+                </svg>
+              </a>
+            </li>
+            <li>
+              <a href="#about" data-toggle="modal" data-target="#aboutModal" class="about-link"
+                >About</a
+              >
+            </li>
+          </ul>
         </div>
       </div>
 
-    </div>
-  </div>
+      <div class="overlay"></div>
+    </nav>
 
-  <!-- Snapshots Modal -->
-  <div id="snapshotsModal" class="modal fade" role="dialog">
-    <div class="modal-dialog modal-lg">
-      <div class="modal-content">
-        <div class="modal-header">
-          <button type="button" class="close" data-dismiss="modal">&times;</button>
-          <h4 class="modal-title">
-            Snapshots
-            <a href="#" data-toggle="tooltip" data-placement="right" title="Snapshots are manually saved versions of your notes that you can restore later.">
-              <img src="/img/tooltip.svg" alt="Tooltip Icon" />               
-            </a>
-          </h4>
-        </div>
-        <div class="modal-body">
-          <div class="snapshots-actions search-container">
-            <button id="createSnapshotBtn" class="btn btn-primary">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <div id="focusModeCloseButton" class="focus-mode-close-btn" style="display: none">
+      <button id="closeFocusMode" title="Exit Focus Mode [Press Escape]">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="18"
+          height="18"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="2"
+          stroke="currentColor"
+        >
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <div id="breakVeil" class="break-veil" aria-hidden="true"></div>
+
+    <!-- Voice typing live bar (Web Speech API) -->
+    <div id="voiceBar" class="voice-bar" hidden role="status" aria-live="polite">
+      <span class="voice-bar-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+      <span class="voice-bar-text" id="voiceBarText">Listening…</span>
+      <button type="button" id="voiceBarStop" class="voice-bar-stop">Done</button>
+    </div>
+
+    <div id="mainContainer">
+      <div id="editorShell">
+        <aside id="tabRail" aria-label="Note tabs">
+          <div class="tab-rail-head">
+            <span class="tab-rail-eyebrow">Notes</span>
+            <span class="tab-rail-count" id="tabRailCount" title="Notes on this device">1</span>
+          </div>
+          <div id="tabStrip" role="tablist" aria-orientation="vertical" aria-label="Note tabs">
+            <div id="tabStripTabs" class="tab-strip-tabs"></div>
+          </div>
+          <div class="tab-rail-foot">
+            <button
+              type="button"
+              id="addTab"
+              class="tab-rail-add"
+              title="New tab"
+              aria-label="Add a new tab"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="M12 5v14M5 12h14" />
               </svg>
-              Take Snapshot [ctrl/command + u]
+              <span>New note</span>
             </button>
-            <div class="search-snapshots">
-              <input type="text" id="searchSnapshots" class="form-control" placeholder="Search snapshots...">
+          </div>
+        </aside>
+        <div id="tabRailBackdrop" class="tab-rail-backdrop" aria-hidden="true"></div>
+        <div class="container" id="textareaContainer">
+          <div class="starter-template">
+            <div
+              id="note"
+              contenteditable="true"
+              spellcheck="true"
+              role="textbox"
+              aria-multiline="true"
+              aria-label="Your notes"
+              data-placeholder="Type your notes here and when you come back all your notes will be right here..."
+            ></div>
+          </div>
+          <div class="bottom-line">
+            <div class="save-state" id="saveState" hidden>
+              <span class="save-state-spinner" aria-hidden="true"></span>
+              <svg
+                class="save-state-check"
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m5 13 4 4L19 7" />
+              </svg>
+              <span class="save-state-text">Saved</span>
+            </div>
+            <div class="timer-pill" style="display: none">
+              <div class="timer-display">00:00</div>
+              <a href="javascript:void(0);" id="stopTimer" title="Stop the timer">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="#000"
+                  class="size-6"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                  />
+                </svg>
+              </a>
+            </div>
+            <div class="word-count-container">
+              <p id="wordCount">0 character • 0 word</p>
+              <a
+                href="#statistics"
+                data-toggle="modal"
+                data-target="#statisticsModal"
+                title="View Note Statistics"
+              >
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="-3 0 32 32"
+                  version="1.1"
+                  xmlns="http://www.w3.org/2000/svg"
+                  xmlns:xlink="http://www.w3.org/1999/xlink"
+                  xmlns:sketch="http://www.bohemiancoding.com/sketch/ns"
+                  fill="currentColor"
+                  stroke="#000000"
+                >
+                  <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                  <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
+                  <g id="SVGRepo_iconCarrier">
+                    <title>View Note Statistics</title>
+                    <defs></defs>
+                    <g
+                      id="Page-1"
+                      stroke="none"
+                      stroke-width="1"
+                      fill="none"
+                      fill-rule="evenodd"
+                      sketch:type="MSPage"
+                    >
+                      <g
+                        id="Icon-Set-Filled"
+                        sketch:type="MSLayerGroup"
+                        transform="translate(-314.000000, -673.000000)"
+                        fill="currentColor"
+                      >
+                        <path
+                          d="M328,673 L326,673 C324.896,673 324,673.896 324,675 L324,703 C324,704.104 324.896,705 326,705 L328,705 C329.104,705 330,704.104 330,703 L330,675 C330,673.896 329.104,673 328,673 L328,673 Z M338,689 L336,689 C334.896,689 334,689.896 334,691 L334,703 C334,704.104 334.896,705 336,705 L338,705 C339.104,705 340,704.104 340,703 L340,691 C340,689.896 339.104,689 338,689 L338,689 Z M318,682 L316,682 C314.896,682 314,682.896 314,684 L314,703 C314,704.104 314.896,705 316,705 L318,705 C319.104,705 320,704.104 320,703 L320,684 C320,682.896 319.104,682 318,682 L318,682 Z"
+                          id="stats"
+                          sketch:type="MSShapeGroup"
+                        ></path>
+                      </g>
+                    </g>
+                  </g>
+                </svg>
+              </a>
             </div>
           </div>
-          <div class="snapshots-list-container">
-            <div id="noSnapshots" class="no-snapshots">
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="M4 12H20M12 4V20" stroke="#6b6b6b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path> </g></svg>
-              <p>No snapshots yet.</p>
-            </div>
-            <ul id="snapshotsList" class="snapshots-list">
-              <!-- Snapshots will be populated here -->
-            </ul>
-          </div>
         </div>
-        <div class="modal-footer">
-          <div class="snapshots-stats">
-            <span id="snapshotsCount">0</span> snapshots
+      </div>
+    </div>
+
+    <div id="aboutModal" class="modal fade" role="dialog">
+      <div class="modal-dialog">
+        <!-- Modal content-->
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal">&times;</button>
+            <div class="brand-container">
+              <h4 class="modal-title custom-modal-title">Padify — Offline capable</h4>
+              <span class="install-app-btn-container">
+                <a id="installApp" class="install-app-btn" href="javascript:void(0);">Install</a>
+              </span>
+            </div>
           </div>
-          <div class="snapshots-actions delete-all-container">
-            <button id="deleteAllSnapshotsBtn" class="btn btn-danger" disabled>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94208 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              Delete All
-            </button>
+          <div class="modal-body modal-container">
+            <div class="about-tabs-wrap">
+              <ul class="nav nav-tabs about-tabs" role="tablist">
+                <li class="nav-item active">
+                  <a class="nav-link active" data-toggle="tab" href="#about">
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 512 512"
+                      version="1.1"
+                      xmlns="http://www.w3.org/2000/svg"
+                      xmlns:xlink="http://www.w3.org/1999/xlink"
+                      fill="currentColor"
+                    >
+                      <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                      <g
+                        id="SVGRepo_tracerCarrier"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      ></g>
+                      <g id="SVGRepo_iconCarrier">
+                        <title>about</title>
+                        <g
+                          id="Page-1"
+                          stroke="none"
+                          stroke-width="1"
+                          fill="none"
+                          fill-rule="evenodd"
+                        >
+                          <g
+                            id="about-white"
+                            fill="currentColor"
+                            transform="translate(42.666667, 42.666667)"
+                          >
+                            <path
+                              d="M213.333333,3.55271368e-14 C95.51296,3.55271368e-14 3.55271368e-14,95.51168 3.55271368e-14,213.333333 C3.55271368e-14,331.153707 95.51296,426.666667 213.333333,426.666667 C331.154987,426.666667 426.666667,331.153707 426.666667,213.333333 C426.666667,95.51168 331.154987,3.55271368e-14 213.333333,3.55271368e-14 Z M213.333333,384 C119.227947,384 42.6666667,307.43872 42.6666667,213.333333 C42.6666667,119.227947 119.227947,42.6666667 213.333333,42.6666667 C307.44,42.6666667 384,119.227947 384,213.333333 C384,307.43872 307.44,384 213.333333,384 Z M240.04672,128 C240.04672,143.46752 228.785067,154.666667 213.55008,154.666667 C197.698773,154.666667 186.713387,143.46752 186.713387,127.704107 C186.713387,112.5536 197.99616,101.333333 213.55008,101.333333 C228.785067,101.333333 240.04672,112.5536 240.04672,128 Z M192.04672,192 L234.713387,192 L234.713387,320 L192.04672,320 L192.04672,192 Z"
+                              id="Shape"
+                            ></path>
+                          </g>
+                        </g>
+                      </g>
+                    </svg>
+                    About
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <div class="tab-content">
+              <div id="about" class="about-modal container tab-pane active in">
+                <img
+                  class="about-modal-logo"
+                  src="/img/icon-196.png"
+                  alt="Padify logo"
+                  width="160"
+                  height="160"
+                />
+                <p>
+                  Padify is an offline-capable, no-frills notepad which is a Progressive Web App as
+                  well.
+                </p>
+                <p>The app serves the following features:</p>
+                <ul>
+                  <li>
+                    Lets you <b>write notes</b> which are autosaved
+                    <a
+                      href="https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage"
+                      target="_blank"
+                      >locally</a
+                    >.
+                  </li>
+                  <li>Keep <b>multiple notes in tabs</b> in the sidebar of the main page.</li>
+                  <li>
+                    <b>Bold, italic, underline and strikethrough</b> formatting that renders right
+                    inside the editor.
+                  </li>
+                  <li>
+                    <b>Voice typing</b> — dictate with the mic in the top bar (or
+                    <b>alt/option + v</b>).
+                  </li>
+                  <li>
+                    <b>Share notes</b> with read-only links that expire on their own and can be
+                    cancelled any time (cloud accounts).
+                  </li>
+                  <li>
+                    <a
+                      href="https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Developer_guide/Installing"
+                      target="_blank"
+                      >Installable</a
+                    >
+                    on supported browsers for offline usage.
+                  </li>
+                  <li><b>Dark mode</b>.</li>
+                  <li><b>Writing sessions</b> with a pick-a-duration timer.</li>
+                  <li><b>Privacy-focused</b> — Never collect your precious data.</li>
+                  <li><b>Light-weight</b> — Loads almost instantly.</li>
+                  <li><b>Focus mode</b> to leave you with a barebones and pristine editor.</li>
+                  <li><b>Full-screen mode</b> for a distraction-free writing experience.</li>
+                  <li><b>Optimal line length</b> for better reading experience.</li>
+                  <li><b>Note Statistics</b> and <b>Snapshots</b>.</li>
+                  <li>
+                    Ability to mimic <b>typewriter (Hermes Precisa 305 model) sound</b> when typing.
+                  </li>
+                  <li>
+                    Optional <b>Break Reminders</b> to gently suggest short breaks after long
+                    writing sessions.
+                  </li>
+                  <li>Supports <b>monospaced</b> and <b>dyslexic fonts</b>.</li>
+                  <li>
+                    <b>Floating window</b> (in supported browsers) to effectively take notes across
+                    other apps.
+                  </li>
+                  <li>
+                    Download notes as <b>plain text</b>, <b>PDF</b>, <b>HTML</b>, and <b>DOCX</b>.
+                  </li>
+                  <li>
+                    Built-in <b>music player</b> with generative ambient tracks, plus a 25-sound
+                    ambience mixer.
+                  </li>
+                </ul>
+                <p>
+                  <b>CAUTION:</b> Take a backup of your notes more often since it's all stored on
+                  your browser.
+                </p>
+                <p class="about-notice">
+                  Icons from <a href="https://heroicons.com/" target="_blank">heroicons</a>,
+                  <a href="https://www.flaticon.com/" target="_blank">Flaticon</a>,
+                  <a href="https://www.svgrepo.com">SVGRepo</a> and
+                  <a href="https://iconduck.com" target="_blank">Iconduck</a>. Sounds from
+                  <a href="https://pixabay.com" target="_blank">Pixabay</a>.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
             <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
           </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <div id="keyboardShortcutsModal" class="modal fade" role="dialog">
-    <div class="modal-dialog modal-lg">
-
-      <!-- Modal content-->
-      <div class="modal-content">
-        <div class="modal-header">
-          <button type="button" class="close" data-dismiss="modal">&times;</button>
-          <h4 class="modal-title custom-modal-title">Keyboard Shortcuts</h4>
-        </div>
-        <div class="modal-body modal-container">
-          <table>
-            <tr>
-              <td><kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>s</kbd></td>
-              <td>Save notes as plain text</td>
-            </tr>
-            <tr>
-              <td><kbd>alt</kbd> / <kbd><span>⌥</span>option</kbd> + <kbd>s</kbd></td>
-              <td>Save notes as PDF</td>
-            </tr>
-            <tr>
-              <td><kbd>alt</kbd> / <kbd><span>⌥</span>option</kbd> + <kbd>c</kbd></td>
-              <td>Copy notes to system clipboard</td>
-            </tr>
-            <tr>
-              <td><kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>,</kbd></td>
-              <td>Preferences</td>
-            </tr>
-            <tr>
-              <td><kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>k</kbd></td>
-              <td>Open list of Keyboard Shortcuts</td>
-            </tr>
-            <tr>
-              <td><kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>shift</kbd> + <kbd>o</kbd></td>
-              <td>Insert Unicode symbol</td>
-            </tr>
-            <tr>
-              <td><kbd>alt</kbd> / <kbd><span>⌥</span>option</kbd> + <kbd>f</kbd></td>
-              <td>Toggle focus mode</td>
-            </tr>
-            <tr>
-              <td><kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>shift</kbd> + <kbd>delete</kbd></td>
-              <td>Delete notes</td>
-            </tr>
-            <tr>
-              <td><kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>b</kbd></td>
-              <td>Bold the selected text</td>
-            </tr>
-            <tr>
-              <td><kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>i</kbd></td>
-              <td>Italicize the selected text</td>
-            </tr>
-            <tr>
-              <td><kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>u</kbd></td>
-              <td>Underline the selected text</td>
-            </tr>
-            <tr>
-              <td><kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>shift</kbd> + <kbd>x</kbd></td>
-              <td>Strikethrough the selected text</td>
-            </tr>
-            <tr>
-              <td><kbd>alt</kbd> / <kbd><span>⌥</span>option</kbd> + <kbd>v</kbd></td>
-              <td>Start / stop voice typing</td>
-            </tr>
-            <tr>
-              <td><kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>alt</kbd> / <kbd><span>⌥</span>option</kbd> + <kbd>←</kbd> / <kbd>→</kbd></td>
-              <td>Switch to the previous / next note tab</td>
-            </tr>
-          </table>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
-  <div id="unicodePickerModal" class="modal fade ucp-modal" role="dialog" aria-hidden="true" aria-labelledby="unicodePickerTitle">
-    <div class="modal-dialog modal-lg ucp-dialog">
-      <div class="modal-content ucp-content">
-        <div class="modal-header ucp-header">
-          <button type="button" class="close ucp-close" data-dismiss="modal" aria-label="Close">&times;</button>
-          <h4 class="modal-title ucp-title" id="unicodePickerTitle">Insert character</h4>
-          <div class="ucp-search">
-            <svg class="ucp-search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <input type="search" id="unicodeSearch" class="ucp-search-input" placeholder="Search characters — try “arrow”, “heart”, “chess”, “superscript”…" autocomplete="off" spellcheck="false" aria-label="Search characters by name, category, or code point">
-            <button type="button" id="unicodeSearchClear" class="ucp-search-clear" aria-label="Clear search" hidden>&times;</button>
+    <!-- Snapshots Modal -->
+    <div id="snapshotsModal" class="modal fade" role="dialog">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal">&times;</button>
+            <h4 class="modal-title">
+              Snapshots
+              <a
+                href="#"
+                data-toggle="tooltip"
+                data-placement="right"
+                title="Snapshots are manually saved versions of your notes that you can restore later."
+              >
+                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+              </a>
+            </h4>
           </div>
-        </div>
-        <div class="modal-body ucp-body">
-          <nav class="ucp-cats" id="unicodeCategories" aria-label="Character categories"></nav>
-          <div class="ucp-main">
-            <div class="ucp-grid" id="unicodeGrid" role="listbox" aria-label="Characters" tabindex="0">
-              <div class="ucp-grid-inner" id="unicodeGridInner"></div>
-            </div>
-            <aside class="ucp-detail" id="unicodeDetail" aria-live="polite"></aside>
-          </div>
-        </div>
-        <div class="modal-footer ucp-footer">
-          <div class="ucp-status" id="unicodeStatus">Loading characters…</div>
-          <div class="ucp-hints">
-            <span class="ucp-hint"><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> move</span>
-            <span class="ucp-hint"><kbd>Enter</kbd> insert</span>
-            <span class="ucp-hint"><kbd>Shift</kbd>+<kbd>Enter</kbd> insert, keep open</span>
-            <span class="ucp-hint"><kbd>F</kbd> favorite</span>
-            <span class="ucp-hint"><kbd>C</kbd> copy</span>
-            <span class="ucp-hint"><kbd>/</kbd> search</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="cloudModal" class="modal fade" role="dialog" aria-labelledby="cloudModalTitle">
-    <div class="modal-dialog cloud-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <div class="pref-header-copy">
-            <span class="pref-eyebrow">Padify</span>
-            <h4 class="modal-title custom-modal-title" id="cloudModalTitle">Cloud sync</h4>
-            <p class="pref-subtitle">Back up your notes and pick them up on any device.</p>
-          </div>
-          <button type="button" class="close" data-dismiss="modal" aria-label="Close cloud sync">&times;</button>
-        </div>
-        <div class="modal-body">
-
-          <div id="cloudSignedInPane" hidden>
-            <div class="cloud-status-card">
-              <span class="cloud-status-dot off" id="cloudModalStatusDot" aria-hidden="true"></span>
-              <div class="cloud-status-copy">
-                <span class="cloud-status-line" id="cloudStatusLine">Everything is backed up</span>
-                <span class="cloud-status-meta" id="cloudLastSync">Syncing for the first time…</span>
-              </div>
-            </div>
-            <div class="cloud-account-row">
-              <span class="pref-row-title">Account</span>
-              <span class="cloud-account-email" id="cloudAccountEmail"></span>
-            </div>
-            <div class="cloud-actions">
-              <button type="button" class="pref-action-btn" id="cloudSyncNow">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-                Sync now
+          <div class="modal-body">
+            <div class="snapshots-actions search-container">
+              <button id="createSnapshotBtn" class="btn btn-primary">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M12 5V19M5 12H19"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  />
+                </svg>
+                Take Snapshot [ctrl/command + u]
               </button>
-              <button type="button" class="pref-action-btn cloud-sign-out" id="cloudSignOut">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
-                Sign out
-              </button>
+              <div class="search-snapshots">
+                <input
+                  type="text"
+                  id="searchSnapshots"
+                  class="form-control"
+                  placeholder="Search snapshots..."
+                />
+              </div>
             </div>
-            <p class="cloud-hint">Notes sync automatically while you're signed in — even offline changes upload once you're back. Snapshots, settings and drawings stay on this device unless a tool says otherwise.</p>
+            <div class="snapshots-list-container">
+              <div id="noSnapshots" class="no-snapshots">
+                <svg
+                  width="64"
+                  height="64"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                  <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
+                  <g id="SVGRepo_iconCarrier">
+                    <path
+                      d="M4 12H20M12 4V20"
+                      stroke="#6b6b6b"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    ></path>
+                  </g>
+                </svg>
+                <p>No snapshots yet.</p>
+              </div>
+              <ul id="snapshotsList" class="snapshots-list">
+                <!-- Snapshots will be populated here -->
+              </ul>
+            </div>
           </div>
-
-          <div id="cloudAuthPane">
-            <form id="cloudAuthForm" novalidate>
-              <h5 class="cloud-auth-title" id="cloudAuthTitle">Sign in to sync</h5>
-              <div class="cloud-field">
-                <label class="cloud-label" for="cloudAuthEmail">Email</label>
-                <input type="email" class="form-control cloud-input" id="cloudAuthEmail" name="email"
-                  autocomplete="email" placeholder="you@example.com" required />
-              </div>
-              <div class="cloud-field">
-                <label class="cloud-label" for="cloudAuthPassword">Password</label>
-                <input type="password" class="form-control cloud-input" id="cloudAuthPassword" name="password"
-                  autocomplete="current-password" placeholder="At least 6 characters" required minlength="6" />
-              </div>
-              <p class="cloud-feedback cloud-error hide" id="cloudAuthError" role="alert"></p>
-              <p class="cloud-feedback cloud-notice hide" id="cloudAuthNotice"></p>
-              <button type="submit" class="btn btn-primary cloud-submit" id="cloudAuthSubmit">Sign in</button>
-              <div class="cloud-auth-links">
-                <a href="#cloudAuthSwitch" id="cloudAuthSwitch">New here? Create an account</a>
-              </div>
-            </form>
-            <p class="cloud-hint">Your notes stay on this device until you sign in. After that they sync automatically — and anything you wrote offline uploads as soon as you connect.</p>
+          <div class="modal-footer">
+            <div class="snapshots-stats"><span id="snapshotsCount">0</span> snapshots</div>
+            <div class="snapshots-actions delete-all-container">
+              <button id="deleteAllSnapshotsBtn" class="btn btn-danger" disabled>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94208 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                Delete All
+              </button>
+              <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
+            </div>
           </div>
-
         </div>
       </div>
     </div>
-  </div>
 
-  <div id="shareModal" class="modal fade" role="dialog" aria-labelledby="shareModalTitle">
-    <div class="modal-dialog cloud-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <div class="pref-header-copy">
-            <span class="pref-eyebrow">Padify</span>
-            <h4 class="modal-title custom-modal-title" id="shareModalTitle">Share this note</h4>
-            <p class="pref-subtitle">Publish a read-only link — you choose how long it stays up.</p>
+    <div id="keyboardShortcutsModal" class="modal fade" role="dialog">
+      <div class="modal-dialog modal-lg">
+        <!-- Modal content-->
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal">&times;</button>
+            <h4 class="modal-title custom-modal-title">Keyboard Shortcuts</h4>
           </div>
-          <button type="button" class="close" data-dismiss="modal" aria-label="Close share">&times;</button>
+          <div class="modal-body modal-container">
+            <table>
+              <tr>
+                <td>
+                  <kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>s</kbd>
+                </td>
+                <td>Save notes as plain text</td>
+              </tr>
+              <tr>
+                <td>
+                  <kbd>alt</kbd> / <kbd><span>⌥</span>option</kbd> + <kbd>s</kbd>
+                </td>
+                <td>Save notes as PDF</td>
+              </tr>
+              <tr>
+                <td>
+                  <kbd>alt</kbd> / <kbd><span>⌥</span>option</kbd> + <kbd>c</kbd>
+                </td>
+                <td>Copy notes to system clipboard</td>
+              </tr>
+              <tr>
+                <td>
+                  <kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>,</kbd>
+                </td>
+                <td>Preferences</td>
+              </tr>
+              <tr>
+                <td>
+                  <kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>k</kbd>
+                </td>
+                <td>Open list of Keyboard Shortcuts</td>
+              </tr>
+              <tr>
+                <td>
+                  <kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>shift</kbd> +
+                  <kbd>o</kbd>
+                </td>
+                <td>Insert Unicode symbol</td>
+              </tr>
+              <tr>
+                <td>
+                  <kbd>alt</kbd> / <kbd><span>⌥</span>option</kbd> + <kbd>f</kbd>
+                </td>
+                <td>Toggle focus mode</td>
+              </tr>
+              <tr>
+                <td>
+                  <kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>shift</kbd> +
+                  <kbd>delete</kbd>
+                </td>
+                <td>Delete notes</td>
+              </tr>
+              <tr>
+                <td>
+                  <kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>b</kbd>
+                </td>
+                <td>Bold the selected text</td>
+              </tr>
+              <tr>
+                <td>
+                  <kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>i</kbd>
+                </td>
+                <td>Italicize the selected text</td>
+              </tr>
+              <tr>
+                <td>
+                  <kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>u</kbd>
+                </td>
+                <td>Underline the selected text</td>
+              </tr>
+              <tr>
+                <td>
+                  <kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>shift</kbd> +
+                  <kbd>x</kbd>
+                </td>
+                <td>Strikethrough the selected text</td>
+              </tr>
+              <tr>
+                <td>
+                  <kbd>alt</kbd> / <kbd><span>⌥</span>option</kbd> + <kbd>v</kbd>
+                </td>
+                <td>Start / stop voice typing</td>
+              </tr>
+              <tr>
+                <td>
+                  <kbd>ctrl</kbd> / <kbd><span>⌘</span>command</kbd> + <kbd>alt</kbd> /
+                  <kbd><span>⌥</span>option</kbd> + <kbd>←</kbd> / <kbd>→</kbd>
+                </td>
+                <td>Switch to the previous / next note tab</td>
+              </tr>
+            </table>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
+          </div>
         </div>
-        <div class="modal-body">
+      </div>
+    </div>
 
-          <div id="shareSignedOutPane" hidden>
-            <div class="share-signedout">
-              <span class="share-lock-icon" aria-hidden="true">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              </span>
-              <h5 class="share-signedout-title">Sign in to share notes</h5>
-              <p class="share-signedout-copy">Sharing creates a private link to this note that you can cancel at any time. Sign in to your Padify account to create and manage your links.</p>
-              <button type="button" class="btn btn-primary" id="shareSignInCta">Sign in</button>
-            </div>
-          </div>
-
-          <div id="shareSignedInPane" hidden>
-            <div class="share-note-card">
-              <span class="share-note-eyebrow">Sharing</span>
-              <span class="share-note-title" id="shareNoteTitle">Untitled</span>
-              <span class="share-note-meta" id="shareNoteMeta"></span>
-            </div>
-
-            <div class="share-field">
-              <span class="share-field-label" id="shareDurationLabel">Link expires after</span>
-              <div class="pref-theme-seg share-duration-seg" role="radiogroup" aria-labelledby="shareDurationLabel">
-                <input type="radio" id="shareDur1" value="1" name="shareDuration" />
-                <label for="shareDur1">1 day</label>
-                <input type="radio" id="shareDur7" value="7" name="shareDuration" checked />
-                <label for="shareDur7">7 days</label>
-                <input type="radio" id="shareDur30" value="30" name="shareDuration" />
-                <label for="shareDur30">30 days</label>
-                <input type="radio" id="shareDur90" value="90" name="shareDuration" />
-                <label for="shareDur90">90 days</label>
-              </div>
-              <span class="share-expiry-preview" id="shareExpiryPreview"></span>
-            </div>
-
-            <button type="button" class="btn btn-primary share-create-btn" id="shareCreateBtn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-              Create share link
+    <div
+      id="unicodePickerModal"
+      class="modal fade ucp-modal"
+      role="dialog"
+      aria-hidden="true"
+      aria-labelledby="unicodePickerTitle"
+    >
+      <div class="modal-dialog modal-lg ucp-dialog">
+        <div class="modal-content ucp-content">
+          <div class="modal-header ucp-header">
+            <button type="button" class="close ucp-close" data-dismiss="modal" aria-label="Close">
+              &times;
             </button>
-
-            <div class="share-links-head">
-              <span class="share-field-label">Your links</span>
-              <label class="share-all-toggle" for="shareAllToggle">
-                <input type="checkbox" id="shareAllToggle" />
-                <span>All notes</span>
-              </label>
+            <h4 class="modal-title ucp-title" id="unicodePickerTitle">Insert character</h4>
+            <div class="ucp-search">
+              <svg
+                class="ucp-search-icon"
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input
+                type="search"
+                id="unicodeSearch"
+                class="ucp-search-input"
+                placeholder="Search characters — try “arrow”, “heart”, “chess”, “superscript”…"
+                autocomplete="off"
+                spellcheck="false"
+                aria-label="Search characters by name, category, or code point"
+              />
+              <button
+                type="button"
+                id="unicodeSearchClear"
+                class="ucp-search-clear"
+                aria-label="Clear search"
+                hidden
+              >
+                &times;
+              </button>
             </div>
-            <div class="share-links-list" id="shareLinksList">
-              <p class="share-links-empty" id="shareLinksEmpty">No links yet. Create one above — anyone with the link sees a read-only copy of this note.</p>
-            </div>
-            <p class="share-hint">Cancelling a link immediately cuts off access for everyone who has it.</p>
           </div>
-
+          <div class="modal-body ucp-body">
+            <nav class="ucp-cats" id="unicodeCategories" aria-label="Character categories"></nav>
+            <div class="ucp-main">
+              <div
+                class="ucp-grid"
+                id="unicodeGrid"
+                role="listbox"
+                aria-label="Characters"
+                tabindex="0"
+              >
+                <div class="ucp-grid-inner" id="unicodeGridInner"></div>
+              </div>
+              <aside class="ucp-detail" id="unicodeDetail" aria-live="polite"></aside>
+            </div>
+          </div>
+          <div class="modal-footer ucp-footer">
+            <div class="ucp-status" id="unicodeStatus">Loading characters…</div>
+            <div class="ucp-hints">
+              <span class="ucp-hint"><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> move</span>
+              <span class="ucp-hint"><kbd>Enter</kbd> insert</span>
+              <span class="ucp-hint"><kbd>Shift</kbd>+<kbd>Enter</kbd> insert, keep open</span>
+              <span class="ucp-hint"><kbd>F</kbd> favorite</span>
+              <span class="ucp-hint"><kbd>C</kbd> copy</span>
+              <span class="ucp-hint"><kbd>/</kbd> search</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <div id="preferencesModal" class="modal fade" role="dialog" aria-labelledby="preferencesTitle">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <div class="pref-header-copy">
-            <span class="pref-eyebrow">Padify</span>
-            <h4 class="modal-title custom-modal-title" id="preferencesTitle">Settings</h4>
-            <p class="pref-subtitle">Everything applies instantly and is saved on this device.</p>
+    <div id="cloudModal" class="modal fade" role="dialog" aria-labelledby="cloudModalTitle">
+      <div class="modal-dialog cloud-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <div class="pref-header-copy">
+              <span class="pref-eyebrow">Padify</span>
+              <h4 class="modal-title custom-modal-title" id="cloudModalTitle">Cloud sync</h4>
+              <p class="pref-subtitle">Back up your notes and pick them up on any device.</p>
+            </div>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close cloud sync">
+              &times;
+            </button>
           </div>
-          <button type="button" class="close" data-dismiss="modal" aria-label="Close settings">&times;</button>
-        </div>
-        <div class="modal-body">
-
-          <section class="pref-section" aria-label="Appearance">
-            <header class="pref-section-head">
-              <span class="pref-section-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.7 4.5L18.2 9.2l-4.5 1.7L12 15.4l-1.7-4.5L5.8 9.2l4.5-1.7L12 3z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"/></svg>
-              </span>
-              <div>
-                <h5 class="pref-section-title">Appearance</h5>
-                <p class="pref-section-hint">The overall look of your writing space.</p>
-              </div>
-            </header>
-            <div class="pref-card">
-              <div class="pref-row">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">Theme</span>
-                  <span class="pref-row-hint">Follow your device, or lock in a look.</span>
-                </div>
-                <div class="pref-row-control">
-                  <div class="pref-theme-seg" role="radiogroup" aria-label="Theme">
-                    <input type="radio" id="device-theme" value="device" name="themes" />
-                    <label for="device-theme">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 16v5"/></svg>
-                      Device
-                    </label>
-                    <input type="radio" id="light-theme" value="light" name="themes" checked />
-                    <label for="light-theme">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-                      Light
-                    </label>
-                    <input type="radio" id="dark-theme" value="dark" name="themes" />
-                    <label for="dark-theme">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-                      Dark
-                    </label>
-                  </div>
+          <div class="modal-body">
+            <div id="cloudSignedInPane" hidden>
+              <div class="cloud-status-card">
+                <span
+                  class="cloud-status-dot off"
+                  id="cloudModalStatusDot"
+                  aria-hidden="true"
+                ></span>
+                <div class="cloud-status-copy">
+                  <span class="cloud-status-line" id="cloudStatusLine"
+                    >Everything is backed up</span
+                  >
+                  <span class="cloud-status-meta" id="cloudLastSync"
+                    >Syncing for the first time…</span
+                  >
                 </div>
               </div>
-              <div class="pref-row">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">Texture</span>
-                  <span class="pref-row-hint">A subtle backdrop pattern behind the page.</span>
-                </div>
-                <div class="pref-row-control">
-                  <select name="texture" id="texture" class="form-control">
-                    <option value="normal">Normal Paper</option>
-                    <option value="dotted">Dotted Paper</option>
-                    <option value="graph">Graph Paper</option>
-                    <option value="chessboard">Chessboard</option>
-                    <option value="starfield">Starfield</option>
-                    <option value="grain">Grainy Paper</option>
-                    <option value="linen">Linen Weave</option>
-                    <option value="recycled">Recycled Paper</option>
-                    <option value="newspaper">Newspaper Print</option>
-                    <option value="marble">Marble</option>
-                  </select>
-                </div>
+              <div class="cloud-account-row">
+                <span class="pref-row-title">Account</span>
+                <span class="cloud-account-email" id="cloudAccountEmail"></span>
               </div>
-            </div>
-          </section>
-
-          <section class="pref-section" aria-label="Text">
-            <header class="pref-section-head">
-              <span class="pref-section-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
-              </span>
-              <div>
-                <h5 class="pref-section-title">Text</h5>
-                <p class="pref-section-hint">Typeface, size and rhythm of your notes.</p>
-              </div>
-            </header>
-            <div class="pref-card">
-              <div class="pref-row">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">Font</span>
-                  <span class="pref-row-hint">The typeface your notes are written in.</span>
-                </div>
-                <div class="pref-row-control">
-                  <select name="font" id="font" class="form-control">
-                    <option value="default">Default (System Font)</option>
-                    <option value="serif">Serif</option>
-                    <option value="monospaced">Monospaced</option>
-                    <option value="handwritten">Handwritten</option>
-                    <option value="humanist">Humanist</option>
-                    <option value="dyslexic">Dyslexic</option>
-                    <option value="pixel">Pixel</option>
-                    <option value="typewriter">Typewriter</option>
-                    <option value="crayon">Crayon</option>
-                  </select>
-                </div>
-              </div>
-              <div class="pref-row">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">Font size</span>
-                  <span class="pref-row-hint">Measured in points, from 10 to 30.</span>
-                </div>
-                <div class="pref-row-control">
-                  <select name="fontSize" id="fontSize" class="form-control">
-                    <option value="10">10</option>
-                    <option value="12">12</option>
-                    <option value="14">14</option>
-                    <option value="16">16</option>
-                    <option value="18">18</option>
-                    <option value="20">20</option>
-                    <option value="22">22</option>
-                    <option value="24">24</option>
-                    <option value="26">26</option>
-                    <option value="28">28</option>
-                    <option value="30">30</option>
-                  </select>
-                </div>
-              </div>
-              <div class="pref-row">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">Font style</span>
-                  <span class="pref-row-hint">Normal weight or bold.</span>
-                </div>
-                <div class="pref-row-control">
-                  <select name="fontWeight" id="fontWeight" class="form-control">
-                    <option value="normal">Normal</option>
-                    <option value="bold">Bold</option>
-                  </select>
-                </div>
-              </div>
-              <div class="pref-row">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">Line height</span>
-                  <span class="pref-row-hint">Vertical space between lines — 18 to 40.</span>
-                </div>
-                <div class="pref-row-control">
-                  <select name="lineHeight" id="lineHeight" class="form-control">
-                    <option value="18">18</option>
-                    <option value="20">20</option>
-                    <option value="22">22</option>
-                    <option value="24">24</option>
-                    <option value="26">26</option>
-                    <option value="28">28</option>
-                    <option value="30">30</option>
-                    <option value="32">32</option>
-                    <option value="34">34</option>
-                    <option value="36">36</option>
-                    <option value="38">38</option>
-                    <option value="40">40</option>
-                  </select>
-                </div>
-              </div>
-              <div class="pref-row">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">Optimal line length</span>
-                  <span class="pref-row-hint">Keeps lines around 66 characters for comfortable reading.</span>
-                </div>
-                <div class="pref-row-control">
-                  <div class="checkbox checbox-switch">
-                    <label>
-                      <input type="checkbox" name="optimalLineLength" id="optimalLineLength" checked="checked" />
-                      <span></span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section class="pref-section" aria-label="Writing">
-            <header class="pref-section-head">
-              <span class="pref-section-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-              </span>
-              <div>
-                <h5 class="pref-section-title">Writing</h5>
-                <p class="pref-section-hint">How the editor behaves while you type.</p>
-              </div>
-            </header>
-            <div class="pref-card">
-              <div class="pref-row">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">Writing direction</span>
-                  <span class="pref-row-hint">Left to right, or right to left.</span>
-                </div>
-                <div class="pref-row-control">
-                  <select name="writeDirection" id="writeDirection" class="form-control">
-                    <option value="ltr">Left to right</option>
-                    <option value="rtl">Right to left</option>
-                  </select>
-                </div>
-              </div>
-              <div class="pref-row">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">Spellcheck</span>
-                  <span class="pref-row-hint">Uses your system's spell-checker.</span>
-                </div>
-                <div class="pref-row-control">
-                  <div class="checkbox checbox-switch">
-                    <label>
-                      <input type="checkbox" name="spellCheck" id="spellCheck"/>
-                      <span></span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-              <div class="pref-row">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">Tab indentation</span>
-                  <span class="pref-row-hint">Always on — the Tab key indents your text.</span>
-                </div>
-                <div class="pref-row-control">
-                  <span class="pref-always-on">Always on</span>
-                </div>
-              </div>
-              <div class="pref-action-row">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">Clear formatting</span>
-                  <span class="pref-row-hint">Strips every tab from your notes in one go. You can undo with Ctrl/Cmd&nbsp;+&nbsp;Z.</span>
-                </div>
-                <button type="button" class="pref-action-btn" id="clearTabIndentation">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>
-                  Remove all tabs
+              <div class="cloud-actions">
+                <button type="button" class="pref-action-btn" id="cloudSyncNow">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                    <path d="M21 3v6h-6" />
+                  </svg>
+                  Sync now
+                </button>
+                <button type="button" class="pref-action-btn cloud-sign-out" id="cloudSignOut">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <path d="m16 17 5-5-5-5" />
+                    <path d="M21 12H9" />
+                  </svg>
+                  Sign out
                 </button>
               </div>
-              <div class="pref-row">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">
-                    Break reminders
-                    <span class="pref-new-badge">NEW</span>
-                  </span>
-                  <span class="pref-row-hint">Gently suggests a 2-minute break after long, active sessions. Tracked locally only.</span>
-                </div>
-                <div class="pref-row-control">
-                  <div class="checkbox checbox-switch">
-                    <label>
-                      <input type="checkbox" name="breakReminders" id="breakReminders"/>
-                      <span></span>
-                    </label>
-                  </div>
-                </div>
-              </div>
+              <p class="cloud-hint">
+                Notes sync automatically while you're signed in — even offline changes upload once
+                you're back. Snapshots, settings and drawings stay on this device unless a tool says
+                otherwise.
+              </p>
             </div>
-          </section>
 
-          <section class="pref-section" aria-label="Cloud sync" id="cloudSettingsSection" hidden>
-            <header class="pref-section-head">
-              <span class="pref-section-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"/><path d="M12 12v6"/><path d="m9.5 15.5 2.5-2.5 2.5 2.5"/></svg>
-              </span>
-              <div>
-                <h5 class="pref-section-title">Cloud sync</h5>
-                <p class="pref-section-hint">Your notes, safe in the cloud and on every device.</p>
-              </div>
-            </header>
-            <div class="pref-card">
-              <div class="pref-row">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">Backup &amp; sync</span>
-                  <span class="pref-row-hint" id="cloudSettingsSummary">Sign in to back up your notes and pick them up on any device.</span>
+            <div id="cloudAuthPane">
+              <form id="cloudAuthForm" novalidate>
+                <h5 class="cloud-auth-title" id="cloudAuthTitle">Sign in to sync</h5>
+                <div class="cloud-field">
+                  <label class="cloud-label" for="cloudAuthEmail">Email</label>
+                  <input
+                    type="email"
+                    class="form-control cloud-input"
+                    id="cloudAuthEmail"
+                    name="email"
+                    autocomplete="email"
+                    placeholder="you@example.com"
+                    required
+                  />
                 </div>
-                <div class="pref-row-control">
-                  <button type="button" class="pref-action-btn" id="cloudSettingsManage">Manage</button>
+                <div class="cloud-field">
+                  <label class="cloud-label" for="cloudAuthPassword">Password</label>
+                  <input
+                    type="password"
+                    class="form-control cloud-input"
+                    id="cloudAuthPassword"
+                    name="password"
+                    autocomplete="current-password"
+                    placeholder="At least 6 characters"
+                    required
+                    minlength="6"
+                  />
                 </div>
-              </div>
-            </div>
-          </section>
-
-          <section class="pref-section" aria-label="Interface">
-            <header class="pref-section-head">
-              <span class="pref-section-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
-              </span>
-              <div>
-                <h5 class="pref-section-title">Interface</h5>
-                <p class="pref-section-hint">What you see around the editor.</p>
-              </div>
-            </header>
-            <div class="pref-card">
-              <div class="pref-row">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">Character &amp; word count</span>
-                  <span class="pref-row-hint">The counter pill in the bottom corner.</span>
+                <p class="cloud-feedback cloud-error hide" id="cloudAuthError" role="alert"></p>
+                <p class="cloud-feedback cloud-notice hide" id="cloudAuthNotice"></p>
+                <button type="submit" class="btn btn-primary cloud-submit" id="cloudAuthSubmit">
+                  Sign in
+                </button>
+                <div class="cloud-auth-links">
+                  <a href="#cloudAuthSwitch" id="cloudAuthSwitch">New here? Create an account</a>
                 </div>
-                <div class="pref-row-control">
-                  <div class="checkbox checbox-switch">
-                    <label>
-                      <input type="checkbox" name="showWordCountPill" id="showWordCountPill" checked="checked" />
-                      <span></span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section class="pref-section" aria-label="Effects">
-            <header class="pref-section-head">
-              <span class="pref-section-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.7 4.5L18.2 9.2l-4.5 1.7L12 15.4l-1.7-4.5L5.8 9.2l4.5-1.7L12 3z"/></svg>
-              </span>
-              <div>
-                <h5 class="pref-section-title">Effects</h5>
-                <p class="pref-section-hint">Sound and sparkle while you type.</p>
-              </div>
-            </header>
-            <div class="pref-card">
-              <div class="pref-row">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">Typewriter sound</span>
-                  <span class="pref-row-hint">Mimics an Hermes Precisa 305 on each keystroke.</span>
-                </div>
-                <div class="pref-row-control">
-                  <div class="checkbox checbox-switch">
-                    <label>
-                      <input type="checkbox" name="typewriterSound" id="typewriterSound"/>
-                      <span></span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-              <div class="pref-row pref-volume-row typewriter-switch-volume">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">Typewriter volume</span>
-                  <span class="pref-row-hint">Play a short sample by dragging the slider.</span>
-                </div>
-                <div class="pref-row-control">
-                  <div class="volume-control" id="typewriterVolumeControl">
-                    <input type="range" min="0" max="100" value="4" class="volume-slider" id="typewriterVolume" aria-label="Typewriter volume" />
-                  </div>
-                  <span id="typewriterVolumeValue" title="Typewriter volume"></span>
-                </div>
-              </div>
-              <div class="pref-row">
-                <div class="pref-row-copy">
-                  <span class="pref-row-title">Typing explosion effect</span>
-                  <span class="pref-row-hint">A playful burst on each keystroke (Power Mode-style).</span>
-                </div>
-                <div class="pref-row-control">
-                  <div class="checkbox checbox-switch">
-                    <label>
-                      <input type="checkbox" name="explodingEffect" id="explodingEffect"/>
-                      <span></span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-        </div>
-        <div class="modal-footer">
-          <a href="javascript:void(0);" id="resetPreferences" title="Reset to default preferences">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
-            Reset to defaults
-          </a>
-          <button type="button" class="pref-done-btn" data-dismiss="modal">Done</button>
-        </div>
-      </div>
-    </div>
-  </div>
-  </div>
-
-  <div id="toast"></div>
-
-  <div id="breakReminderPopup" class="toast-popup break-reminder-popup" aria-live="polite">
-    <div class="toast-content break-reminder-content">
-      <div class="break-reminder-copy">
-        <strong id="breakReminderTitle">Time for a 2-minute break?</strong>
-        <p id="breakReminderText">Stand up, stretch, or look away from the screen for a minute.</p>
-      </div>
-      <button id="closeBreakReminderPopup" class="close-popup" aria-label="Close break reminder popup">&times;</button>
-    </div>
-    <div id="breakReminderActions" class="break-reminder-actions">
-      <button id="takeBreakAction" class="break-reminder-button break-reminder-button-primary" type="button">Take break</button>
-      <button id="snoozeBreakAction" class="break-reminder-button" type="button">Snooze 10m</button>
-      <button id="dismissBreakAction" class="break-reminder-button" type="button">Dismiss</button>
-    </div>
-  </div>
-
-  <!-- Stats modal -->
-  <div id="statisticsModal" class="modal fade" role="dialog">
-    <div class="modal-dialog modal-lg">
-      <!-- Modal content-->
-      <div class="modal-content">
-        <div class="modal-header">
-          <button type="button" class="close" data-dismiss="modal">&times;</button>
-          <h4 class="modal-title custom-modal-title">Statistics</h4>
-        </div>
-        <div class="modal-body modal-container">
-          <div class="statistics-grid">
-            <div class="stat-item">
-              <div class="stat-label">Words</div>
-              <div class="stat-value" id="statWords">0</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">Characters</div>
-              <div class="stat-value" id="statCharacters">0</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">Sentences</div>
-              <div class="stat-value" id="statSentences">0</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">Paragraphs</div>
-              <div class="stat-value" id="statParagraphs">0</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">
-                Avg Word Length
-                <a href="#" data-toggle="tooltip" title="This signifies the complexity and readability of your writing. The more the average word length, the more complex and challenging the reading experience.">
-                  <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
-                </a>
-              </div>
-              <div class="stat-value" id="statAvgWordLength">0</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">
-                Reading Time
-                <a href="#" data-toggle="tooltip" title="The time it takes for an average adult to read the text which is 200 words per minute.">
-                  <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
-                </a>
-              </div>
-              <div class="stat-value" id="statReadingTime">0 min</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">
-                Unique Words
-                <a href="#" data-toggle="tooltip" title="Unique words refer to the distinct words in a text, excluding duplicates. This metric helps in assessing the diversity of vocabulary used in the text.">
-                  <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
-                </a>
-              </div>
-              <div class="stat-value" id="statUniqueWords">0</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">
-                Most Common Word
-                <a href="#" data-toggle="tooltip" title="Most common content word refers to the non-stop word that appears most frequently in the text. This helps highlight the words that carry meaning.">
-                  <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
-                </a>
-              </div>
-              <div class="stat-value" id="statMostCommonWord">N/A</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">
-                Lexical Density
-                <a href="#" data-toggle="tooltip" title="The percentage of content words in the text. Higher lexical density usually means the writing is more information-rich.">
-                  <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
-                </a>
-              </div>
-              <div class="stat-value" id="statLexicalDensity">0%</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">
-                Readability Score
-                <a href="#" data-toggle="tooltip" title="A Flesch Reading Ease score. Higher values mean easier text; lower values usually mean more complex text.">
-                  <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
-                </a>
-              </div>
-              <div class="stat-value" id="statReadabilityScore">0.0</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">
-                Estimated Pages
-                <a href="#" data-toggle="tooltip" title="An approximate page count based on standard formatting and about 250 words per page.">
-                  <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
-                </a>
-              </div>
-              <div class="stat-value" id="statEstimatedPages">0 pages</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">
-                Estimated Speaking Time
-                <a href="#" data-toggle="tooltip" title="A rough speaking-time estimate based on a normal pace of about 130 words per minute.">
-                  <img src="/img/tooltip.svg" alt="Tooltip Icon" />                
-                </a>
-              </div>
-              <div class="stat-value" id="statEstimatedSpeakingTime">0 min</div>
+              </form>
+              <p class="cloud-hint">
+                Your notes stay on this device until you sign in. After that they sync automatically
+                — and anything you wrote offline uploads as soon as you connect.
+              </p>
             </div>
           </div>
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+
+    <div id="shareModal" class="modal fade" role="dialog" aria-labelledby="shareModalTitle">
+      <div class="modal-dialog cloud-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <div class="pref-header-copy">
+              <span class="pref-eyebrow">Padify</span>
+              <h4 class="modal-title custom-modal-title" id="shareModalTitle">Share this note</h4>
+              <p class="pref-subtitle">
+                Publish a read-only link — you choose how long it stays up.
+              </p>
+            </div>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close share">
+              &times;
+            </button>
+          </div>
+          <div class="modal-body">
+            <div id="shareSignedOutPane" hidden>
+              <div class="share-signedout">
+                <span class="share-lock-icon" aria-hidden="true">
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </span>
+                <h5 class="share-signedout-title">Sign in to share notes</h5>
+                <p class="share-signedout-copy">
+                  Sharing creates a private link to this note that you can cancel at any time. Sign
+                  in to your Padify account to create and manage your links.
+                </p>
+                <button type="button" class="btn btn-primary" id="shareSignInCta">Sign in</button>
+              </div>
+            </div>
+
+            <div id="shareSignedInPane" hidden>
+              <div class="share-note-card">
+                <span class="share-note-eyebrow">Sharing</span>
+                <span class="share-note-title" id="shareNoteTitle">Untitled</span>
+                <span class="share-note-meta" id="shareNoteMeta"></span>
+              </div>
+
+              <div class="share-field">
+                <span class="share-field-label" id="shareDurationLabel">Link expires after</span>
+                <div
+                  class="pref-theme-seg share-duration-seg"
+                  role="radiogroup"
+                  aria-labelledby="shareDurationLabel"
+                >
+                  <input type="radio" id="shareDur1" value="1" name="shareDuration" />
+                  <label for="shareDur1">1 day</label>
+                  <input type="radio" id="shareDur7" value="7" name="shareDuration" checked />
+                  <label for="shareDur7">7 days</label>
+                  <input type="radio" id="shareDur30" value="30" name="shareDuration" />
+                  <label for="shareDur30">30 days</label>
+                  <input type="radio" id="shareDur90" value="90" name="shareDuration" />
+                  <label for="shareDur90">90 days</label>
+                </div>
+                <span class="share-expiry-preview" id="shareExpiryPreview"></span>
+              </div>
+
+              <button type="button" class="btn btn-primary share-create-btn" id="shareCreateBtn">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                </svg>
+                Create share link
+              </button>
+
+              <div class="share-links-head">
+                <span class="share-field-label">Your links</span>
+                <label class="share-all-toggle" for="shareAllToggle">
+                  <input type="checkbox" id="shareAllToggle" />
+                  <span>All notes</span>
+                </label>
+              </div>
+              <div class="share-links-list" id="shareLinksList">
+                <p class="share-links-empty" id="shareLinksEmpty">
+                  No links yet. Create one above — anyone with the link sees a read-only copy of
+                  this note.
+                </p>
+              </div>
+              <p class="share-hint">
+                Cancelling a link immediately cuts off access for everyone who has it.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <script>
-    if (localStorage.getItem('mode')) {
-      if (localStorage.getItem('mode') == 'dark') {
-        document.body.classList.add("dark");
-        document.querySelector('.navbar').classList.remove("navbar-default");
-      } else  {
-        document.body.classList.remove("dark");
-        document.querySelector('.navbar').classList.add("navbar-default");
-      }
-    } else {
-      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        document.body.classList.add("dark");
-        document.querySelector('.navbar').classList.remove("navbar-default");
+    <div id="preferencesModal" class="modal fade" role="dialog" aria-labelledby="preferencesTitle">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <div class="pref-header-copy">
+              <span class="pref-eyebrow">Padify</span>
+              <h4 class="modal-title custom-modal-title" id="preferencesTitle">Settings</h4>
+              <p class="pref-subtitle">Everything applies instantly and is saved on this device.</p>
+            </div>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close settings">
+              &times;
+            </button>
+          </div>
+          <div class="modal-body">
+            <section class="pref-section" aria-label="Appearance">
+              <header class="pref-section-head">
+                <span class="pref-section-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path
+                      d="M12 3l1.7 4.5L18.2 9.2l-4.5 1.7L12 15.4l-1.7-4.5L5.8 9.2l4.5-1.7L12 3z"
+                    />
+                    <path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z" />
+                  </svg>
+                </span>
+                <div>
+                  <h5 class="pref-section-title">Appearance</h5>
+                  <p class="pref-section-hint">The overall look of your writing space.</p>
+                </div>
+              </header>
+              <div class="pref-card">
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Theme</span>
+                    <span class="pref-row-hint">Follow your device, or lock in a look.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <div class="pref-theme-seg" role="radiogroup" aria-label="Theme">
+                      <input type="radio" id="device-theme" value="device" name="themes" />
+                      <label for="device-theme">
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.8"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <rect x="2" y="3" width="20" height="13" rx="2" />
+                          <path d="M8 21h8" />
+                          <path d="M12 16v5" />
+                        </svg>
+                        Device
+                      </label>
+                      <input type="radio" id="light-theme" value="light" name="themes" checked />
+                      <label for="light-theme">
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.8"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <circle cx="12" cy="12" r="4" />
+                          <path
+                            d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
+                          />
+                        </svg>
+                        Light
+                      </label>
+                      <input type="radio" id="dark-theme" value="dark" name="themes" />
+                      <label for="dark-theme">
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.8"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                        </svg>
+                        Dark
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Texture</span>
+                    <span class="pref-row-hint">A subtle backdrop pattern behind the page.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <select name="texture" id="texture" class="form-control">
+                      <option value="normal">Normal Paper</option>
+                      <option value="dotted">Dotted Paper</option>
+                      <option value="graph">Graph Paper</option>
+                      <option value="chessboard">Chessboard</option>
+                      <option value="starfield">Starfield</option>
+                      <option value="grain">Grainy Paper</option>
+                      <option value="linen">Linen Weave</option>
+                      <option value="recycled">Recycled Paper</option>
+                      <option value="newspaper">Newspaper Print</option>
+                      <option value="marble">Marble</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="pref-section" aria-label="Text">
+              <header class="pref-section-head">
+                <span class="pref-section-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <polyline points="4 7 4 4 20 4 20 7" />
+                    <line x1="9" y1="20" x2="15" y2="20" />
+                    <line x1="12" y1="4" x2="12" y2="20" />
+                  </svg>
+                </span>
+                <div>
+                  <h5 class="pref-section-title">Text</h5>
+                  <p class="pref-section-hint">Typeface, size and rhythm of your notes.</p>
+                </div>
+              </header>
+              <div class="pref-card">
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Font</span>
+                    <span class="pref-row-hint">The typeface your notes are written in.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <select name="font" id="font" class="form-control">
+                      <option value="default">Default (System Font)</option>
+                      <option value="serif">Serif</option>
+                      <option value="monospaced">Monospaced</option>
+                      <option value="handwritten">Handwritten</option>
+                      <option value="humanist">Humanist</option>
+                      <option value="dyslexic">Dyslexic</option>
+                      <option value="pixel">Pixel</option>
+                      <option value="typewriter">Typewriter</option>
+                      <option value="crayon">Crayon</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Font size</span>
+                    <span class="pref-row-hint">Measured in points, from 10 to 30.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <select name="fontSize" id="fontSize" class="form-control">
+                      <option value="10">10</option>
+                      <option value="12">12</option>
+                      <option value="14">14</option>
+                      <option value="16">16</option>
+                      <option value="18">18</option>
+                      <option value="20">20</option>
+                      <option value="22">22</option>
+                      <option value="24">24</option>
+                      <option value="26">26</option>
+                      <option value="28">28</option>
+                      <option value="30">30</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Font style</span>
+                    <span class="pref-row-hint">Normal weight or bold.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <select name="fontWeight" id="fontWeight" class="form-control">
+                      <option value="normal">Normal</option>
+                      <option value="bold">Bold</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Line height</span>
+                    <span class="pref-row-hint">Vertical space between lines — 18 to 40.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <select name="lineHeight" id="lineHeight" class="form-control">
+                      <option value="18">18</option>
+                      <option value="20">20</option>
+                      <option value="22">22</option>
+                      <option value="24">24</option>
+                      <option value="26">26</option>
+                      <option value="28">28</option>
+                      <option value="30">30</option>
+                      <option value="32">32</option>
+                      <option value="34">34</option>
+                      <option value="36">36</option>
+                      <option value="38">38</option>
+                      <option value="40">40</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Optimal line length</span>
+                    <span class="pref-row-hint"
+                      >Keeps lines around 66 characters for comfortable reading.</span
+                    >
+                  </div>
+                  <div class="pref-row-control">
+                    <div class="checkbox checbox-switch">
+                      <label>
+                        <input
+                          type="checkbox"
+                          name="optimalLineLength"
+                          id="optimalLineLength"
+                          checked="checked"
+                        />
+                        <span></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="pref-section" aria-label="Writing">
+              <header class="pref-section-head">
+                <span class="pref-section-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  </svg>
+                </span>
+                <div>
+                  <h5 class="pref-section-title">Writing</h5>
+                  <p class="pref-section-hint">How the editor behaves while you type.</p>
+                </div>
+              </header>
+              <div class="pref-card">
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Writing direction</span>
+                    <span class="pref-row-hint">Left to right, or right to left.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <select name="writeDirection" id="writeDirection" class="form-control">
+                      <option value="ltr">Left to right</option>
+                      <option value="rtl">Right to left</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Spellcheck</span>
+                    <span class="pref-row-hint">Uses your system's spell-checker.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <div class="checkbox checbox-switch">
+                      <label>
+                        <input type="checkbox" name="spellCheck" id="spellCheck" />
+                        <span></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Tab indentation</span>
+                    <span class="pref-row-hint">Always on — the Tab key indents your text.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <span class="pref-always-on">Always on</span>
+                  </div>
+                </div>
+                <div class="pref-action-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Clear formatting</span>
+                    <span class="pref-row-hint"
+                      >Strips every tab from your notes in one go. You can undo with
+                      Ctrl/Cmd&nbsp;+&nbsp;Z.</span
+                    >
+                  </div>
+                  <button type="button" class="pref-action-btn" id="clearTabIndentation">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"
+                      />
+                      <path d="M22 21H7" />
+                      <path d="m5 11 9 9" />
+                    </svg>
+                    Remove all tabs
+                  </button>
+                </div>
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">
+                      Break reminders
+                      <span class="pref-new-badge">NEW</span>
+                    </span>
+                    <span class="pref-row-hint"
+                      >Gently suggests a 2-minute break after long, active sessions. Tracked locally
+                      only.</span
+                    >
+                  </div>
+                  <div class="pref-row-control">
+                    <div class="checkbox checbox-switch">
+                      <label>
+                        <input type="checkbox" name="breakReminders" id="breakReminders" />
+                        <span></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="pref-section" aria-label="Cloud sync" id="cloudSettingsSection" hidden>
+              <header class="pref-section-head">
+                <span class="pref-section-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path
+                      d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"
+                    />
+                    <path d="M12 12v6" />
+                    <path d="m9.5 15.5 2.5-2.5 2.5 2.5" />
+                  </svg>
+                </span>
+                <div>
+                  <h5 class="pref-section-title">Cloud sync</h5>
+                  <p class="pref-section-hint">
+                    Your notes, safe in the cloud and on every device.
+                  </p>
+                </div>
+              </header>
+              <div class="pref-card">
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Backup &amp; sync</span>
+                    <span class="pref-row-hint" id="cloudSettingsSummary"
+                      >Sign in to back up your notes and pick them up on any device.</span
+                    >
+                  </div>
+                  <div class="pref-row-control">
+                    <button type="button" class="pref-action-btn" id="cloudSettingsManage">
+                      Manage
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="pref-section" aria-label="Interface">
+              <header class="pref-section-head">
+                <span class="pref-section-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect width="18" height="18" x="3" y="3" rx="2" />
+                    <path d="M3 9h18" />
+                    <path d="M9 21V9" />
+                  </svg>
+                </span>
+                <div>
+                  <h5 class="pref-section-title">Interface</h5>
+                  <p class="pref-section-hint">What you see around the editor.</p>
+                </div>
+              </header>
+              <div class="pref-card">
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Character &amp; word count</span>
+                    <span class="pref-row-hint">The counter pill in the bottom corner.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <div class="checkbox checbox-switch">
+                      <label>
+                        <input
+                          type="checkbox"
+                          name="showWordCountPill"
+                          id="showWordCountPill"
+                          checked="checked"
+                        />
+                        <span></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="pref-section" aria-label="Effects">
+              <header class="pref-section-head">
+                <span class="pref-section-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path
+                      d="M12 2l1.7 4.5L18.2 9.2l-4.5 1.7L12 15.4l-1.7-4.5L5.8 9.2l4.5-1.7L12 3z"
+                    />
+                  </svg>
+                </span>
+                <div>
+                  <h5 class="pref-section-title">Effects</h5>
+                  <p class="pref-section-hint">Sound and sparkle while you type.</p>
+                </div>
+              </header>
+              <div class="pref-card">
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Typewriter sound</span>
+                    <span class="pref-row-hint"
+                      >Mimics an Hermes Precisa 305 on each keystroke.</span
+                    >
+                  </div>
+                  <div class="pref-row-control">
+                    <div class="checkbox checbox-switch">
+                      <label>
+                        <input type="checkbox" name="typewriterSound" id="typewriterSound" />
+                        <span></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div class="pref-row pref-volume-row typewriter-switch-volume">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Typewriter volume</span>
+                    <span class="pref-row-hint">Play a short sample by dragging the slider.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <div class="volume-control" id="typewriterVolumeControl">
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value="4"
+                        class="volume-slider"
+                        id="typewriterVolume"
+                        aria-label="Typewriter volume"
+                      />
+                    </div>
+                    <span id="typewriterVolumeValue" title="Typewriter volume"></span>
+                  </div>
+                </div>
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Typing explosion effect</span>
+                    <span class="pref-row-hint"
+                      >A playful burst on each keystroke (Power Mode-style).</span
+                    >
+                  </div>
+                  <div class="pref-row-control">
+                    <div class="checkbox checbox-switch">
+                      <label>
+                        <input type="checkbox" name="explodingEffect" id="explodingEffect" />
+                        <span></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+          <div class="modal-footer">
+            <a
+              href="javascript:void(0);"
+              id="resetPreferences"
+              title="Reset to default preferences"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                <path d="M21 3v5h-5" />
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                <path d="M3 21v-5h5" />
+              </svg>
+              Reset to defaults
+            </a>
+            <button type="button" class="pref-done-btn" data-dismiss="modal">Done</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <div id="breakReminderPopup" class="toast-popup break-reminder-popup" aria-live="polite">
+      <div class="toast-content break-reminder-content">
+        <div class="break-reminder-copy">
+          <strong id="breakReminderTitle">Time for a 2-minute break?</strong>
+          <p id="breakReminderText">
+            Stand up, stretch, or look away from the screen for a minute.
+          </p>
+        </div>
+        <button
+          id="closeBreakReminderPopup"
+          class="close-popup"
+          aria-label="Close break reminder popup"
+        >
+          &times;
+        </button>
+      </div>
+      <div id="breakReminderActions" class="break-reminder-actions">
+        <button
+          id="takeBreakAction"
+          class="break-reminder-button break-reminder-button-primary"
+          type="button"
+        >
+          Take break
+        </button>
+        <button id="snoozeBreakAction" class="break-reminder-button" type="button">
+          Snooze 10m
+        </button>
+        <button id="dismissBreakAction" class="break-reminder-button" type="button">Dismiss</button>
+      </div>
+    </div>
+
+    <!-- Stats modal -->
+    <div id="statisticsModal" class="modal fade" role="dialog">
+      <div class="modal-dialog modal-lg">
+        <!-- Modal content-->
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal">&times;</button>
+            <h4 class="modal-title custom-modal-title">Statistics</h4>
+          </div>
+          <div class="modal-body modal-container">
+            <div class="statistics-grid">
+              <div class="stat-item">
+                <div class="stat-label">Words</div>
+                <div class="stat-value" id="statWords">0</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">Characters</div>
+                <div class="stat-value" id="statCharacters">0</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">Sentences</div>
+                <div class="stat-value" id="statSentences">0</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">Paragraphs</div>
+                <div class="stat-value" id="statParagraphs">0</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">
+                  Avg Word Length
+                  <a
+                    href="#"
+                    data-toggle="tooltip"
+                    title="This signifies the complexity and readability of your writing. The more the average word length, the more complex and challenging the reading experience."
+                  >
+                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+                  </a>
+                </div>
+                <div class="stat-value" id="statAvgWordLength">0</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">
+                  Reading Time
+                  <a
+                    href="#"
+                    data-toggle="tooltip"
+                    title="The time it takes for an average adult to read the text which is 200 words per minute."
+                  >
+                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+                  </a>
+                </div>
+                <div class="stat-value" id="statReadingTime">0 min</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">
+                  Unique Words
+                  <a
+                    href="#"
+                    data-toggle="tooltip"
+                    title="Unique words refer to the distinct words in a text, excluding duplicates. This metric helps in assessing the diversity of vocabulary used in the text."
+                  >
+                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+                  </a>
+                </div>
+                <div class="stat-value" id="statUniqueWords">0</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">
+                  Most Common Word
+                  <a
+                    href="#"
+                    data-toggle="tooltip"
+                    title="Most common content word refers to the non-stop word that appears most frequently in the text. This helps highlight the words that carry meaning."
+                  >
+                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+                  </a>
+                </div>
+                <div class="stat-value" id="statMostCommonWord">N/A</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">
+                  Lexical Density
+                  <a
+                    href="#"
+                    data-toggle="tooltip"
+                    title="The percentage of content words in the text. Higher lexical density usually means the writing is more information-rich."
+                  >
+                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+                  </a>
+                </div>
+                <div class="stat-value" id="statLexicalDensity">0%</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">
+                  Readability Score
+                  <a
+                    href="#"
+                    data-toggle="tooltip"
+                    title="A Flesch Reading Ease score. Higher values mean easier text; lower values usually mean more complex text."
+                  >
+                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+                  </a>
+                </div>
+                <div class="stat-value" id="statReadabilityScore">0.0</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">
+                  Estimated Pages
+                  <a
+                    href="#"
+                    data-toggle="tooltip"
+                    title="An approximate page count based on standard formatting and about 250 words per page."
+                  >
+                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+                  </a>
+                </div>
+                <div class="stat-value" id="statEstimatedPages">0 pages</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">
+                  Estimated Speaking Time
+                  <a
+                    href="#"
+                    data-toggle="tooltip"
+                    title="A rough speaking-time estimate based on a normal pace of about 130 words per minute."
+                  >
+                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+                  </a>
+                </div>
+                <div class="stat-value" id="statEstimatedSpeakingTime">0 min</div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      if (localStorage.getItem('mode')) {
+        if (localStorage.getItem('mode') == 'dark') {
+          document.body.classList.add('dark');
+          document.querySelector('.navbar').classList.remove('navbar-default');
+        } else {
+          document.body.classList.remove('dark');
+          document.querySelector('.navbar').classList.add('navbar-default');
+        }
       } else {
-        document.body.classList.remove("dark");
-        document.querySelector('.navbar').classList.add("navbar-default");
+        if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.body.classList.add('dark');
+          document.querySelector('.navbar').classList.remove('navbar-default');
+        } else {
+          document.body.classList.remove('dark');
+          document.querySelector('.navbar').classList.add('navbar-default');
+        }
       }
-    }
-  </script>
+    </script>
 
-  <script type="module" src="/src/main.ts"></script>
-  
-</body>
-
+    <script type="module" src="/src/main.ts"></script>
+  </body>
 </html>

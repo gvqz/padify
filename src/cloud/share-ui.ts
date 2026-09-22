@@ -18,7 +18,7 @@ import {
   listOwnedShares,
   revokeShare,
   shareUrlFor,
-  type ShareRecord
+  type ShareRecord,
 } from './share';
 
 const DAY_MS = 86_400_000;
@@ -114,14 +114,16 @@ function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
-    year: 'numeric'
+    year: 'numeric',
   });
 }
 
 function renderExpiryPreview(): void {
   const days = selectedDays();
   const expiry = Date.now() + days * DAY_MS;
-  $('#shareExpiryPreview').text(`Link valid until ${formatDate(expiry)} — then it stops working on its own.`);
+  $('#shareExpiryPreview').text(
+    `Link valid until ${formatDate(expiry)} — then it stops working on its own.`,
+  );
 }
 
 // ---- link list ---------------------------------------------------------------
@@ -182,7 +184,7 @@ function renderLinks(): void {
   const note = activeNote();
   const showAll = $('#shareAllToggle').is(':checked');
 
-  const visible = shares.filter(record => {
+  const visible = shares.filter((record) => {
     if (showAll) {
       return true;
     }
@@ -229,7 +231,9 @@ function renderLinks(): void {
     actions.append(copy);
 
     if (isActive) {
-      const cancel = $('<button type="button" class="share-chip-btn danger"></button>').text('Cancel link');
+      const cancel = $('<button type="button" class="share-chip-btn danger"></button>').text(
+        'Cancel link',
+      );
       cancel.on('click', () => {
         void cancelShareLink(record);
       });
@@ -279,7 +283,9 @@ async function copyShareLink(record: ShareRecord): Promise<void> {
     scratch.select();
     const ok = document.execCommand('copy');
     scratch.remove();
-    showToast(ok ? 'Link copied to clipboard.' : 'Could not copy the link — copy it from the list.');
+    showToast(
+      ok ? 'Link copied to clipboard.' : 'Could not copy the link — copy it from the list.',
+    );
   }
 }
 
@@ -290,7 +296,7 @@ async function cancelShareLink(record: ShareRecord): Promise<void> {
     icon: 'warning',
     showCancelButton: true,
     confirmButtonText: 'Cancel link',
-    cancelButtonText: 'Keep it'
+    cancelButtonText: 'Keep it',
   });
 
   if (!confirmation.isConfirmed) {

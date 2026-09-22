@@ -212,12 +212,21 @@ function validate(byCategory) {
 
   for (const [category, list] of byCategory) {
     for (const sym of list) {
-      if (sym.name === '') problems.push(`U+${sym.codepoint.toString(16).toUpperCase()}: empty name`);
-      if (!categorySet.has(sym.category)) problems.push(`U+${sym.codepoint.toString(16).toUpperCase()}: unknown category "${sym.category}"`);
-      if (category !== sym.category) problems.push(`U+${sym.codepoint.toString(16).toUpperCase()}: stored under "${category}" but says "${sym.category}"`);
+      if (sym.name === '')
+        problems.push(`U+${sym.codepoint.toString(16).toUpperCase()}: empty name`);
+      if (!categorySet.has(sym.category))
+        problems.push(
+          `U+${sym.codepoint.toString(16).toUpperCase()}: unknown category "${sym.category}"`,
+        );
+      if (category !== sym.category)
+        problems.push(
+          `U+${sym.codepoint.toString(16).toUpperCase()}: stored under "${category}" but says "${sym.category}"`,
+        );
       const cps = [...sym.char].map((c) => c.codePointAt(0));
       if (cps.length !== 1 || cps[0] !== sym.codepoint) {
-        problems.push(`U+${sym.codepoint.toString(16).toUpperCase()}: char is not a single matching code point`);
+        problems.push(
+          `U+${sym.codepoint.toString(16).toUpperCase()}: char is not a single matching code point`,
+        );
       }
       if (seen.has(sym.codepoint)) problems.push(`duplicate codepoint ${sym.codepoint}`);
       seen.add(sym.codepoint);
@@ -225,7 +234,6 @@ function validate(byCategory) {
   }
   return problems;
 }
-
 
 /** Decode the escaped body of one of our single-quoted literals back to a string. */
 function unescapeSingleQuoted(raw) {
@@ -254,7 +262,8 @@ function unescapeSingleQuoted(raw) {
 /** Re-parse the written file (fixed one-entry-per-line shape) for a final check. */
 async function reValidateWrittenFile(count) {
   const written = await readFile(OUT_FILE, 'utf8');
-  const entryRe = /^  \{ char: '((?:[^'\\]|\\.)*)', name: '((?:[^'\\]|\\.)*)', category: '((?:[^'\\]|\\.)*)', codepoint: (\d+) \},$/gm;
+  const entryRe =
+    /^  \{ char: '((?:[^'\\]|\\.)*)', name: '((?:[^'\\]|\\.)*)', category: '((?:[^'\\]|\\.)*)', codepoint: (\d+) \},$/gm;
   const problems = [];
   const seen = new Set();
   let parsed = 0;
@@ -271,7 +280,8 @@ async function reValidateWrittenFile(count) {
       problems.push(`char/codepoint mismatch at ${cp} in written file`);
     }
   }
-  if (parsed !== count) problems.push(`written file has ${parsed} parseable entries, expected ${count}`);
+  if (parsed !== count)
+    problems.push(`written file has ${parsed} parseable entries, expected ${count}`);
   return { problems, parsed };
 }
 
@@ -324,7 +334,7 @@ function renderOutput(byCategory) {
     for (const sym of byCategory.get(category)) {
       count++;
       lines.push(
-        `  { char: ${jsSingleQuoted(sym.char)}, name: ${jsSingleQuoted(sym.name)}, category: ${jsSingleQuoted(sym.category)}, codepoint: ${sym.codepoint} },`
+        `  { char: ${jsSingleQuoted(sym.char)}, name: ${jsSingleQuoted(sym.name)}, category: ${jsSingleQuoted(sym.category)}, codepoint: ${sym.codepoint} },`,
       );
     }
   }

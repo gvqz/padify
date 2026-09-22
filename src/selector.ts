@@ -159,7 +159,7 @@ export function selector(): AppSelector {
       focusModeButton: selectById('focusModeButton'),
       focusModeCloseButton: selectById('focusModeCloseButton'),
       statisticsModal: selectById('statisticsModal'),
-      serif: selectById('serif')
+      serif: selectById('serif'),
     },
     state: {
       note: getState('note'),
@@ -178,12 +178,14 @@ export function selector(): AppSelector {
       isSerif: getState('serifFont'),
       userChosenSpellCheck: getState('userChosenSpellCheck'),
       userChosenTabIndentation: getState('userChosenTabIndentation'),
-      userChosenTransparentWordCountPillSelected: getState('userChosenTransparentWordCountPillSelected'),
+      userChosenTransparentWordCountPillSelected: getState(
+        'userChosenTransparentWordCountPillSelected',
+      ),
       userChosenTypewriterSound: getState('userChosenTypewriterSound'),
       userChosenTypewriterVolume: getState('userChosenTypewriterVolume'),
       userChosenBreakReminders: getState('userChosenBreakReminders'),
       userChosenExplodingEffect: getState('userChosenExplodingEffect'),
-      selectedFont: getState('selectedFont')
+      selectedFont: getState('selectedFont'),
     },
     defaultConfig: {
       defaultFontSize: 18,
@@ -199,13 +201,13 @@ export function selector(): AppSelector {
       defaultTypewriterSound: false,
       defaultTypewriterVolume: 25,
       defaultBreakReminders: false,
-      defaultExplodingEffect: false
+      defaultExplodingEffect: false,
     },
     get,
     getState,
     setState,
     removeState,
     selectById,
-    selectByClassName
+    selectByClassName,
   };
 }
