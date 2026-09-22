@@ -8,7 +8,10 @@
 import { getCloudConfig } from './config';
 
 export class ApiError extends Error {
-  constructor(readonly statusCode: number, message: string) {
+  constructor(
+    readonly statusCode: number,
+    message: string,
+  ) {
     super(message);
   }
 }
@@ -34,7 +37,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
     response = await fetch(`${getCloudConfig().apiBase}${path}`, {
       method: options.method ?? 'GET',
       headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body)
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });
   } catch (error) {
     throw new ApiError(0, error instanceof Error ? error.message : String(error));
@@ -44,7 +47,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   if (!response.ok) {
     throw new ApiError(
       response.status,
-      typeof data.error === 'string' ? data.error : `Request failed (${response.status})`
+      typeof data.error === 'string' ? data.error : `Request failed (${response.status})`,
     );
   }
   return data as T;

@@ -97,11 +97,11 @@ export const WELCOME_HTML = [
   '- Download notes as plain text, PDF, HTML, and DOCX file.',
   '- Ability to play generative ambient music and mix 25 ambience sounds to help you focus.',
   '',
-  'CAUTION: Since the app uses the browser\'s localStorage to store your notes,',
-  'it\'s recommended that you take a backup of your notes more often using the',
+  "CAUTION: Since the app uses the browser's localStorage to store your notes,",
+  "it's recommended that you take a backup of your notes more often using the",
   '"Download Notes" button or by pressing the "ctrl/command + s" keys.',
   '',
-  '<b>Delete this text and start writing your notes</b>'
+  '<b>Delete this text and start writing your notes</b>',
 ].join('\n');
 
 // ---------------------------------------------------------------------------
@@ -138,7 +138,18 @@ export function legacyTextToHtml(text: string): string {
 }
 
 const ALLOWED_TAGS = new Set([
-  'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'DEL', 'BR', 'DIV', 'SPAN', 'P'
+  'B',
+  'STRONG',
+  'I',
+  'EM',
+  'U',
+  'S',
+  'STRIKE',
+  'DEL',
+  'BR',
+  'DIV',
+  'SPAN',
+  'P',
 ]);
 
 /**
@@ -229,8 +240,8 @@ export function deriveTabTitle(tab: NoteTab): string {
 
   const firstLine = htmlToText(tab.html)
     .split('\n')
-    .map(line => line.trim())
-    .find(line => line.length > 0);
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
 
   if (!firstLine) {
     return 'Untitled';
@@ -276,9 +287,9 @@ export class TabManager {
     this.migrateLegacyNote();
 
     const savedActive = localStorage.getItem(ACTIVE_KEY);
-    this.activeId = this.tabs.some(tab => tab.id === savedActive)
+    this.activeId = this.tabs.some((tab) => tab.id === savedActive)
       ? savedActive
-      : this.tabs[0]?.id ?? null;
+      : (this.tabs[0]?.id ?? null);
 
     if (!this.activeId || !this.getActive()) {
       if (this.tabs.length === 0) {
@@ -309,13 +320,13 @@ export class TabManager {
       }
 
       return parsed
-        .filter(entry => entry && typeof entry === 'object' && typeof entry.id === 'string')
-        .map(entry => ({
+        .filter((entry) => entry && typeof entry === 'object' && typeof entry.id === 'string')
+        .map((entry) => ({
           id: entry.id as string,
           name: typeof entry.name === 'string' ? entry.name : null,
           html: typeof entry.html === 'string' ? sanitizeNoteHtml(entry.html) : '',
           createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : Date.now(),
-          updatedAt: typeof entry.updatedAt === 'number' ? entry.updatedAt : Date.now()
+          updatedAt: typeof entry.updatedAt === 'number' ? entry.updatedAt : Date.now(),
         }));
     } catch {
       return [];
@@ -353,7 +364,7 @@ export class TabManager {
     if (this.onPersist) {
       this.onPersist(payload);
     }
-    this.persistListeners.forEach(listener => listener(payload));
+    this.persistListeners.forEach((listener) => listener(payload));
   }
 
   /**
@@ -378,7 +389,7 @@ export class TabManager {
         return [];
       }
       return parsed.filter(
-        entry => entry && typeof entry.id === 'string' && typeof entry.updatedAt === 'number'
+        (entry) => entry && typeof entry.id === 'string' && typeof entry.updatedAt === 'number',
       );
     } catch {
       return [];
@@ -391,7 +402,7 @@ export class TabManager {
 
   /** Records a tab deletion so the cloud can mirror it (tombstone). */
   private recordTombstone(tabId: string): void {
-    if (this.tombstones.some(entry => entry.id === tabId)) {
+    if (this.tombstones.some((entry) => entry.id === tabId)) {
       return;
     }
     this.tombstones.push({ id: tabId, updatedAt: Date.now() });
@@ -401,9 +412,9 @@ export class TabManager {
   /** Snapshot of the model for the cloud sync layer. */
   exportForSync(): TabsSyncPayload {
     return {
-      tabs: this.tabs.map(tab => ({ ...tab })),
+      tabs: this.tabs.map((tab) => ({ ...tab })),
       dirty: [...this.dirtyIds],
-      tombstones: this.tombstones.map(entry => ({ ...entry }))
+      tombstones: this.tombstones.map((entry) => ({ ...entry })),
     };
   }
 
@@ -416,7 +427,7 @@ export class TabManager {
       return;
     }
     const confirmed = new Set(ids);
-    this.tombstones = this.tombstones.filter(entry => !confirmed.has(entry.id));
+    this.tombstones = this.tombstones.filter((entry) => !confirmed.has(entry.id));
     this.persistTombstones();
   }
 
@@ -428,12 +439,12 @@ export class TabManager {
   applyExternalMerge(nextTabs: NoteTab[]): void {
     const activeBefore = this.getActive();
 
-    this.tabs = nextTabs.map(tab => ({
+    this.tabs = nextTabs.map((tab) => ({
       ...tab,
-      html: sanitizeNoteHtml(tab.html)
+      html: sanitizeNoteHtml(tab.html),
     }));
 
-    if (!this.tabs.some(tab => tab.id === this.activeId)) {
+    if (!this.tabs.some((tab) => tab.id === this.activeId)) {
       this.activeId = this.tabs[0]?.id ?? null;
       if (!this.activeId) {
         const fresh = createTab(WELCOME_HTML);
@@ -448,9 +459,10 @@ export class TabManager {
     const active = this.getActive();
     if (active) {
       const editorFocused = document.activeElement === this.editor.get(0);
-      const contentChanged = !activeBefore || activeBefore.id !== active.id
-        ? true
-        : activeBefore.html !== active.html || activeBefore.name !== active.name;
+      const contentChanged =
+        !activeBefore || activeBefore.id !== active.id
+          ? true
+          : activeBefore.html !== active.html || activeBefore.name !== active.name;
 
       if (contentChanged && !editorFocused) {
         this.loadActiveIntoEditor();
@@ -471,7 +483,7 @@ export class TabManager {
   }
 
   getActive(): NoteTab | null {
-    return this.tabs.find(tab => tab.id === this.activeId) ?? null;
+    return this.tabs.find((tab) => tab.id === this.activeId) ?? null;
   }
 
   /** Saves the editor's current HTML into the active tab. */
@@ -581,14 +593,15 @@ export class TabManager {
     close.className = 'tab-strip-close';
     close.setAttribute('aria-label', `Close tab ${deriveTabTitle(tab)}`);
     close.title = 'Close tab';
-    close.innerHTML = '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    close.innerHTML =
+      '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
     button.appendChild(close);
 
     return button;
   }
 
   private refreshTabLabel(tabId: string): void {
-    const tab = this.tabs.find(entry => entry.id === tabId);
+    const tab = this.tabs.find((entry) => entry.id === tabId);
     const element = this.strip.find(`.tab-strip-tab[data-tab-id="${tabId}"]`);
     if (!tab || element.length === 0) {
       return;
@@ -696,7 +709,7 @@ export class TabManager {
   }
 
   private requestCloseTab(tabId: string): void {
-    const tab = this.tabs.find(entry => entry.id === tabId);
+    const tab = this.tabs.find((entry) => entry.id === tabId);
     if (!tab) {
       return;
     }
@@ -714,8 +727,8 @@ export class TabManager {
         }
       }
 
-      const index = this.tabs.findIndex(entry => entry.id === tabId);
-      this.tabs = this.tabs.filter(entry => entry.id !== tabId);
+      const index = this.tabs.findIndex((entry) => entry.id === tabId);
+      this.tabs = this.tabs.filter((entry) => entry.id !== tabId);
       this.dirtyIds.delete(tabId);
       this.recordTombstone(tabId);
 
@@ -759,7 +772,7 @@ export class TabManager {
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Close tab',
-      cancelButtonText: 'Keep it'
+      cancelButtonText: 'Keep it',
     }).then((result) => {
       if (result.isConfirmed) {
         closeNow();
@@ -768,7 +781,7 @@ export class TabManager {
   }
 
   private beginRename(tabId: string): void {
-    const tab = this.tabs.find(entry => entry.id === tabId);
+    const tab = this.tabs.find((entry) => entry.id === tabId);
     const element = this.strip.find(`.tab-strip-tab[data-tab-id="${tabId}"]`);
     if (!tab || element.length === 0 || element.find('.tab-strip-rename').length > 0) {
       return;
@@ -777,8 +790,9 @@ export class TabManager {
     const titleElement = element.find('.tab-strip-title');
     const currentName = tab.name ?? deriveTabTitle(tab);
 
-    const input = $('<input type="text" class="tab-strip-rename" maxlength="60" aria-label="Tab name">')
-      .val(currentName);
+    const input = $(
+      '<input type="text" class="tab-strip-rename" maxlength="60" aria-label="Tab name">',
+    ).val(currentName);
     titleElement.replaceWith(input);
     input.trigger('focus');
 
@@ -791,9 +805,9 @@ export class TabManager {
         this.persist();
         showToast('Tab renamed.');
       }
-      element.find('.tab-strip-rename').replaceWith(
-        $('<span class="tab-strip-title"></span>').text(deriveTabTitle(tab))
-      );
+      element
+        .find('.tab-strip-rename')
+        .replaceWith($('<span class="tab-strip-title"></span>').text(deriveTabTitle(tab)));
       element.attr('title', tab.name ? tab.name : 'Double-click to rename');
     };
 
@@ -819,13 +833,15 @@ export class TabManager {
       return;
     }
 
-    const index = this.tabs.findIndex(entry => entry.id === this.activeId);
+    const index = this.tabs.findIndex((entry) => entry.id === this.activeId);
     const next = this.tabs[(index + delta + this.tabs.length) % this.tabs.length];
     this.switchTo(next.id);
   }
 
   private scrollTabIntoView(tabId: string): void {
-    this.strip.find(`.tab-strip-tab[data-tab-id="${tabId}"]`).get(0)
+    this.strip
+      .find(`.tab-strip-tab[data-tab-id="${tabId}"]`)
+      .get(0)
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 

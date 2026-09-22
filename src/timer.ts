@@ -3,35 +3,35 @@ import { showToast } from './utils';
 
 // Timer configuration
 interface TimerPreset {
-    minutes: number;
-    label: string;
+  minutes: number;
+  label: string;
 }
 
 interface TimerConfig {
-    presets: TimerPreset[];
-    timer: ReturnType<typeof setInterval> | null;
-    isRunning: boolean;
-    totalDurationSec: number;
-    remainingTime: number;
-    endTime: number | null;
-    alarmSound: HTMLAudioElement | null;
+  presets: TimerPreset[];
+  timer: ReturnType<typeof setInterval> | null;
+  isRunning: boolean;
+  totalDurationSec: number;
+  remainingTime: number;
+  endTime: number | null;
+  alarmSound: HTMLAudioElement | null;
 }
 
 export const timerConfig: TimerConfig = {
-    presets: [
-        { minutes: 10, label: 'Quick sprint' },
-        { minutes: 15, label: 'Short focus' },
-        { minutes: 25, label: 'Classic focus' },
-        { minutes: 30, label: 'Half hour' },
-        { minutes: 45, label: 'Deep work' },
-        { minutes: 60, label: 'Full hour' }
-    ],
-    timer: null,
-    isRunning: false,
-    totalDurationSec: 0,
-    remainingTime: 0,
-    endTime: null,
-    alarmSound: null
+  presets: [
+    { minutes: 10, label: 'Quick sprint' },
+    { minutes: 15, label: 'Short focus' },
+    { minutes: 25, label: 'Classic focus' },
+    { minutes: 30, label: 'Half hour' },
+    { minutes: 45, label: 'Deep work' },
+    { minutes: 60, label: 'Full hour' },
+  ],
+  timer: null,
+  isRunning: false,
+  totalDurationSec: 0,
+  remainingTime: 0,
+  endTime: null,
+  alarmSound: null,
 };
 
 const CUSTOM_MIN_MINUTES = 1;
@@ -41,9 +41,9 @@ const LAST_CUSTOM_DURATION_KEY = 'lastCustomTimerMinutes';
 const timerPillRightPositionWithoutWordCount = '1.4em';
 
 function formatClock(totalSeconds: number): string {
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
 const clockIconSvg = `
@@ -54,20 +54,19 @@ const clockIconSvg = `
 
 // Chime sounds (loudness-normalized to the same perceived volume).
 interface ChimeDef {
-    id: string;
-    name: string;
-    file: string;
+  id: string;
+  name: string;
+  file: string;
 }
 
 const CHIMES: ChimeDef[] = [
-    { id: 'attention', name: 'Attention', file: 'sounds/chimes/attention.mp3' },
-    { id: 'success', name: 'Success', file: 'sounds/chimes/success.mp3' },
-    { id: 'melody', name: 'Melody', file: 'sounds/chimes/melody.mp3' },
-    { id: 'melancholy', name: 'Melancholy', file: 'sounds/chimes/melancholy.mp3' }
+  { id: 'attention', name: 'Attention', file: 'sounds/chimes/attention.mp3' },
+  { id: 'success', name: 'Success', file: 'sounds/chimes/success.mp3' },
+  { id: 'melody', name: 'Melody', file: 'sounds/chimes/melody.mp3' },
+  { id: 'melancholy', name: 'Melancholy', file: 'sounds/chimes/melancholy.mp3' },
 ];
 
 const CHIME_STORAGE_KEY = 'timerChimeSound';
-const DEFAULT_CHIME = 'attention';
 
 const bellIconSvg = `
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -76,14 +75,14 @@ const bellIconSvg = `
 </svg>`;
 
 const buildChimeOptions = (): string =>
-    CHIMES.map(
-        chime => `
+  CHIMES.map(
+    (chime) => `
         <button type="button" class="chime-option" data-chime="${chime.id}" role="radio" aria-checked="false" title="Select ${chime.name} chime">
             <span class="chime-option-icon" aria-hidden="true">${bellIconSvg}</span>
             <span class="chime-option-name">${chime.name}</span>
             <span class="chime-option-wave" aria-hidden="true"><span></span><span></span><span></span></span>
-        </button>`
-    ).join('');
+        </button>`,
+  ).join('');
 
 // Timer modal HTML
 const timerModalHtml = `
@@ -103,13 +102,17 @@ const timerModalHtml = `
                     <div id="timerSelectView">
                         <p class="timer-subtitle">How long do you want to write?</p>
                         <div class="timer-presets">
-                            ${timerConfig.presets.map(preset => `
+                            ${timerConfig.presets
+                              .map(
+                                (preset) => `
                                 <button type="button" class="timer-preset" data-minutes="${preset.minutes}">
                                     <span class="timer-preset-clock" aria-hidden="true">${clockIconSvg}</span>
                                     <span class="timer-preset-minutes">${preset.minutes}<small>min</small></span>
                                     <span class="timer-preset-label">${preset.label}</span>
                                 </button>
-                            `).join('')}
+                            `,
+                              )
+                              .join('')}
                         </div>
                         <div class="timer-custom">
                             <span class="timer-custom-label">Or set your own</span>
@@ -156,40 +159,44 @@ const timerModalHtml = `
 $(document.body).append(timerModalHtml);
 
 $(document).ready(function () {
-    if (localStorage.getItem('timerChime') && localStorage.getItem('timerChime') == 'true') {
-        $('#timerChime').prop('checked', true);
+  if (localStorage.getItem('timerChime') && localStorage.getItem('timerChime') == 'true') {
+    $('#timerChime').prop('checked', true);
+  }
+
+  $('#timerChime').change(function (this: HTMLElement) {
+    const checkbox = this as HTMLInputElement;
+    if (checkbox.checked) {
+      localStorage.setItem('timerChime', 'true');
+    } else {
+      localStorage.setItem('timerChime', 'false');
     }
-
-    $('#timerChime').change(function (this: HTMLElement) {
-        const checkbox = this as HTMLInputElement;
-        if (checkbox.checked) {
-            localStorage.setItem('timerChime', 'true');
-        } else {
-            localStorage.setItem('timerChime', 'false');
-        }
-        refreshChimePicker();
-    });
-
-    // Chime sound selection — clicking a chime picks it and plays a preview.
-    $(document).on('click', '.chime-option', function (this: HTMLElement) {
-        const chimeId = $(this).data('chime') as string;
-        localStorage.setItem(CHIME_STORAGE_KEY, chimeId);
-        refreshChimeSelection();
-        playChime(chimeId);
-    });
-
-    refreshChimeSelection();
     refreshChimePicker();
+  });
 
-    const lastCustom = Number(localStorage.getItem(LAST_CUSTOM_DURATION_KEY));
-    if (Number.isFinite(lastCustom) && lastCustom >= CUSTOM_MIN_MINUTES && lastCustom <= CUSTOM_MAX_MINUTES) {
-        $('#timerCustomMinutes').val(lastCustom);
-    }
+  // Chime sound selection — clicking a chime picks it and plays a preview.
+  $(document).on('click', '.chime-option', function (this: HTMLElement) {
+    const chimeId = $(this).data('chime') as string;
+    localStorage.setItem(CHIME_STORAGE_KEY, chimeId);
+    refreshChimeSelection();
+    playChime(chimeId);
+  });
 
-    // Reflect the running state every time the modal opens.
-    $('#timerModal').on('show.bs.modal', function () {
-        refreshTimerViews();
-    });
+  refreshChimeSelection();
+  refreshChimePicker();
+
+  const lastCustom = Number(localStorage.getItem(LAST_CUSTOM_DURATION_KEY));
+  if (
+    Number.isFinite(lastCustom) &&
+    lastCustom >= CUSTOM_MIN_MINUTES &&
+    lastCustom <= CUSTOM_MAX_MINUTES
+  ) {
+    $('#timerCustomMinutes').val(lastCustom);
+  }
+
+  // Reflect the running state every time the modal opens.
+  $('#timerModal').on('show.bs.modal', function () {
+    refreshTimerViews();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -197,202 +204,204 @@ $(document).ready(function () {
 // ---------------------------------------------------------------------------
 
 function getSelectedChime(): ChimeDef {
-    const stored = localStorage.getItem(CHIME_STORAGE_KEY);
-    return CHIMES.find(chime => chime.id === stored) || CHIMES[0];
+  const stored = localStorage.getItem(CHIME_STORAGE_KEY);
+  return CHIMES.find((chime) => chime.id === stored) || CHIMES[0];
 }
 
 function refreshChimeSelection(): void {
-    const selected = getSelectedChime().id;
-    document.querySelectorAll<HTMLElement>('.chime-option').forEach(option => {
-        const isSelected = option.dataset.chime === selected;
-        option.classList.toggle('is-selected', isSelected);
-        option.setAttribute('aria-checked', String(isSelected));
-    });
+  const selected = getSelectedChime().id;
+  document.querySelectorAll<HTMLElement>('.chime-option').forEach((option) => {
+    const isSelected = option.dataset.chime === selected;
+    option.classList.toggle('is-selected', isSelected);
+    option.setAttribute('aria-checked', String(isSelected));
+  });
 }
 
 function refreshChimePicker(): void {
-    const enabled = $('#timerChime').prop('checked');
-    $('#chimePicker').prop('hidden', !enabled);
+  const enabled = $('#timerChime').prop('checked');
+  $('#chimePicker').prop('hidden', !enabled);
 }
 
 function playChime(chimeId: string): void {
-    const chime = CHIMES.find(entry => entry.id === chimeId) || CHIMES[0];
-    if (timerConfig.alarmSound) {
-        timerConfig.alarmSound.pause();
-        timerConfig.alarmSound.onended = null;
-    }
-    document.querySelectorAll<HTMLElement>('.chime-option.is-playing').forEach(option => {
-        option.classList.remove('is-playing');
-    });
-    const optionEl = document.querySelector<HTMLElement>(`.chime-option[data-chime="${chime.id}"]`);
-    timerConfig.alarmSound = new Audio(chime.file);
-    timerConfig.alarmSound.loop = false;
-    if (optionEl) {
-        timerConfig.alarmSound.onended = () => optionEl.classList.remove('is-playing');
-        timerConfig.alarmSound.onpause = () => optionEl.classList.remove('is-playing');
-        optionEl.classList.add('is-playing');
-    }
-    timerConfig.alarmSound.play().catch(() => {
-        /* Autoplay policy — the session-end chime retried after user gesture. */
-        optionEl?.classList.remove('is-playing');
-    });
+  const chime = CHIMES.find((entry) => entry.id === chimeId) || CHIMES[0];
+  if (timerConfig.alarmSound) {
+    timerConfig.alarmSound.pause();
+    timerConfig.alarmSound.onended = null;
+  }
+  document.querySelectorAll<HTMLElement>('.chime-option.is-playing').forEach((option) => {
+    option.classList.remove('is-playing');
+  });
+  const optionEl = document.querySelector<HTMLElement>(`.chime-option[data-chime="${chime.id}"]`);
+  timerConfig.alarmSound = new Audio(chime.file);
+  timerConfig.alarmSound.loop = false;
+  if (optionEl) {
+    timerConfig.alarmSound.onended = () => optionEl.classList.remove('is-playing');
+    timerConfig.alarmSound.onpause = () => optionEl.classList.remove('is-playing');
+    optionEl.classList.add('is-playing');
+  }
+  timerConfig.alarmSound.play().catch(() => {
+    /* Autoplay policy — the session-end chime retried after user gesture. */
+    optionEl?.classList.remove('is-playing');
+  });
 }
 
 // Timer functions
 export function startTimer(minutes: number): void {
-    if (timerConfig.timer) {
-        stopTimer();
-    }
+  if (timerConfig.timer) {
+    stopTimer();
+  }
 
-    const durationInSeconds = minutes * 60;
-    timerConfig.endTime = Date.now() + (durationInSeconds * 1000);
-    timerConfig.remainingTime = durationInSeconds;
-    timerConfig.totalDurationSec = durationInSeconds;
-    timerConfig.isRunning = true;
-    timerConfig.timer = setInterval(updateTimer, 1000);
+  const durationInSeconds = minutes * 60;
+  timerConfig.endTime = Date.now() + durationInSeconds * 1000;
+  timerConfig.remainingTime = durationInSeconds;
+  timerConfig.totalDurationSec = durationInSeconds;
+  timerConfig.isRunning = true;
+  timerConfig.timer = setInterval(updateTimer, 1000);
 
-    // Show timer pill
-    $('.timer-pill').show().removeClass('timer-ending');
-    updateTimerDisplay();
+  // Show timer pill
+  $('.timer-pill').show().removeClass('timer-ending');
+  updateTimerDisplay();
 
-    // check if word-count-container is hidden and
-    // based on that change right position of timer pill
-    if ($('.word-count-container').is(':hidden')) {
-        $('.timer-pill').css('right', timerPillRightPositionWithoutWordCount);
-    }
+  // check if word-count-container is hidden and
+  // based on that change right position of timer pill
+  if ($('.word-count-container').is(':hidden')) {
+    $('.timer-pill').css('right', timerPillRightPositionWithoutWordCount);
+  }
 
-    refreshTimerViews();
+  refreshTimerViews();
 }
 
 export function stopTimer(): void {
-    if (timerConfig.timer) {
-        clearInterval(timerConfig.timer);
-    }
-    timerConfig.timer = null;
-    timerConfig.isRunning = false;
-    timerConfig.remainingTime = 0;
-    timerConfig.totalDurationSec = 0;
-    timerConfig.endTime = null;
-    $('.timer-pill').hide().removeClass('timer-ending');
-    $('.timer-display').text('00:00');
+  if (timerConfig.timer) {
+    clearInterval(timerConfig.timer);
+  }
+  timerConfig.timer = null;
+  timerConfig.isRunning = false;
+  timerConfig.remainingTime = 0;
+  timerConfig.totalDurationSec = 0;
+  timerConfig.endTime = null;
+  $('.timer-pill').hide().removeClass('timer-ending');
+  $('.timer-display').text('00:00');
 
-    refreshTimerViews();
+  refreshTimerViews();
 }
 
 function addFiveMinutes(): void {
-    if (!timerConfig.isRunning || timerConfig.endTime === null) {
-        return;
-    }
+  if (!timerConfig.isRunning || timerConfig.endTime === null) {
+    return;
+  }
 
-    timerConfig.endTime += 5 * 60 * 1000;
-    timerConfig.totalDurationSec += 5 * 60;
-    updateTimer();
-    showToast('Added 5 minutes to your session.');
+  timerConfig.endTime += 5 * 60 * 1000;
+  timerConfig.totalDurationSec += 5 * 60;
+  updateTimer();
+  showToast('Added 5 minutes to your session.');
 }
 
 export function updateTimer(): void {
-    // Interval callbacks can be throttled while the tab is in the background.
-    // Calculate the remaining time from the deadline so that throttling only
-    // delays the display update; it does not pause the timer itself.
-    timerConfig.remainingTime = Math.max(
-        0,
-        Math.ceil((timerConfig.endTime! - Date.now()) / 1000)
-    );
+  // Interval callbacks can be throttled while the tab is in the background.
+  // Calculate the remaining time from the deadline so that throttling only
+  // delays the display update; it does not pause the timer itself.
+  timerConfig.remainingTime = Math.max(0, Math.ceil((timerConfig.endTime! - Date.now()) / 1000));
 
-    if (timerConfig.remainingTime <= 0) {
-        if (localStorage.getItem('timerChime') && localStorage.getItem('timerChime') == 'true') {
-            playChimeSound();
-        }
-
-        stopTimer();
-        showToast('Writing session complete. Nice work!');
-        return;
+  if (timerConfig.remainingTime <= 0) {
+    if (localStorage.getItem('timerChime') && localStorage.getItem('timerChime') == 'true') {
+      playChimeSound();
     }
 
-    $('.timer-pill').toggleClass('timer-ending', timerConfig.remainingTime <= 10);
-    updateTimerDisplay();
+    stopTimer();
+    showToast('Writing session complete. Nice work!');
+    return;
+  }
+
+  $('.timer-pill').toggleClass('timer-ending', timerConfig.remainingTime <= 10);
+  updateTimerDisplay();
 }
 
 export function updateTimerDisplay(): void {
-    $('.timer-display').text(formatClock(timerConfig.remainingTime));
+  $('.timer-display').text(formatClock(timerConfig.remainingTime));
 
-    // Live session view inside the modal
-    $('#timerRunningClock').text(formatClock(timerConfig.remainingTime));
+  // Live session view inside the modal
+  $('#timerRunningClock').text(formatClock(timerConfig.remainingTime));
 
-    const progress = timerConfig.totalDurationSec > 0
-        ? Math.round(((timerConfig.totalDurationSec - timerConfig.remainingTime) / timerConfig.totalDurationSec) * 100)
-        : 0;
-    $('#timerProgressBar').css('width', `${progress}%`);
+  const progress =
+    timerConfig.totalDurationSec > 0
+      ? Math.round(
+          ((timerConfig.totalDurationSec - timerConfig.remainingTime) /
+            timerConfig.totalDurationSec) *
+            100,
+        )
+      : 0;
+  $('#timerProgressBar').css('width', `${progress}%`);
 }
 
 function refreshTimerViews(): void {
-    const isRunning = timerConfig.isRunning;
+  const isRunning = timerConfig.isRunning;
 
-    $('#timerSelectView').prop('hidden', isRunning);
-    $('#timerRunningView').prop('hidden', !isRunning);
+  $('#timerSelectView').prop('hidden', isRunning);
+  $('#timerRunningView').prop('hidden', !isRunning);
 
-    if (isRunning) {
-        updateTimerDisplay();
-    }
+  if (isRunning) {
+    updateTimerDisplay();
+  }
 }
 
 // Initialize alarm sound
 export function playChimeSound(): void {
-    playChime(getSelectedChime().id);
+  playChime(getSelectedChime().id);
 }
 
 function clampCustomMinutes(value: number): number {
-    if (!Number.isFinite(value)) {
-        return 25;
-    }
-    return Math.min(CUSTOM_MAX_MINUTES, Math.max(CUSTOM_MIN_MINUTES, Math.round(value)));
+  if (!Number.isFinite(value)) {
+    return 25;
+  }
+  return Math.min(CUSTOM_MAX_MINUTES, Math.max(CUSTOM_MIN_MINUTES, Math.round(value)));
 }
 
 // Event listeners
 $(document).on('click', '.timer-preset', function (this: HTMLElement) {
-    const minutes = $(this).data('minutes') as number;
-    startTimer(minutes);
-    $('#timerModal').modal('hide');
-    showToast(`Session started — ${minutes} minutes. Keep writing!`);
+  const minutes = $(this).data('minutes') as number;
+  startTimer(minutes);
+  $('#timerModal').modal('hide');
+  showToast(`Session started — ${minutes} minutes. Keep writing!`);
 });
 
 $(document).on('click', '#timerStartBtn', function () {
-    const rawValue = Number(($('#timerCustomMinutes').val() as string | number | undefined) ?? 25);
-    const minutes = clampCustomMinutes(rawValue);
-    $('#timerCustomMinutes').val(minutes);
-    localStorage.setItem(LAST_CUSTOM_DURATION_KEY, String(minutes));
-    startTimer(minutes);
-    $('#timerModal').modal('hide');
-    showToast(`Session started — ${minutes} minutes. Keep writing!`);
+  const rawValue = Number(($('#timerCustomMinutes').val() as string | number | undefined) ?? 25);
+  const minutes = clampCustomMinutes(rawValue);
+  $('#timerCustomMinutes').val(minutes);
+  localStorage.setItem(LAST_CUSTOM_DURATION_KEY, String(minutes));
+  startTimer(minutes);
+  $('#timerModal').modal('hide');
+  showToast(`Session started — ${minutes} minutes. Keep writing!`);
 });
 
 $(document).on('click', '#timerMinusBtn', function () {
-    const next = clampCustomMinutes(Number($('#timerCustomMinutes').val()) - 5);
-    $('#timerCustomMinutes').val(next);
+  const next = clampCustomMinutes(Number($('#timerCustomMinutes').val()) - 5);
+  $('#timerCustomMinutes').val(next);
 });
 
 $(document).on('click', '#timerPlusBtn', function () {
-    const next = clampCustomMinutes(Number($('#timerCustomMinutes').val()) + 5);
-    $('#timerCustomMinutes').val(next);
+  const next = clampCustomMinutes(Number($('#timerCustomMinutes').val()) + 5);
+  $('#timerCustomMinutes').val(next);
 });
 
 $(document).on('click', '#timerAddFiveBtn', function () {
-    addFiveMinutes();
+  addFiveMinutes();
 });
 
 $(document).on('click', '#timerStopBtn', function () {
-    stopTimer();
-    showToast('Session stopped.');
+  stopTimer();
+  showToast('Session stopped.');
 });
 
 $(document).on('click', '#stopTimer', function () {
-    stopTimer();
+  stopTimer();
 });
 
 // Refresh immediately when returning to the tab. Browsers may pause or
 // heavily throttle interval callbacks while a page is hidden.
 document.addEventListener('visibilitychange', function () {
-    if (!document.hidden && timerConfig.isRunning) {
-        updateTimer();
-    }
+  if (!document.hidden && timerConfig.isRunning) {
+    updateTimer();
+  }
 });

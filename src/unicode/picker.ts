@@ -52,21 +52,18 @@ function loadData(): Promise<LoadedData> {
           categoryGlyphs.set(symbol.category, symbol.char);
           categoryCounts.set(symbol.category, 0);
         }
-        categoryCounts.set(
-          symbol.category,
-          (categoryCounts.get(symbol.category) ?? 0) + 1
-        );
+        categoryCounts.set(symbol.category, (categoryCounts.get(symbol.category) ?? 0) + 1);
       }
 
       const categories: CategoryInfo[] = categoryLabels.map((label) => ({
         label,
         glyph: categoryGlyphs.get(label) ?? '•',
-        count: categoryCounts.get(label) ?? 0
+        count: categoryCounts.get(label) ?? 0,
       }));
 
       const haystacks = symbols.map(
         (symbol) =>
-          `${symbol.char} ${symbol.name} ${symbol.category} u+${symbol.codepoint.toString(16)}`
+          `${symbol.char} ${symbol.name} ${symbol.category} u+${symbol.codepoint.toString(16)}`,
       );
 
       return { symbols, categories, byChar, haystacks, totalCount: symbols.length };
@@ -89,10 +86,7 @@ function highlightName(name: string, tokens: string[]): string {
   for (const token of tokens) {
     if (!token) continue;
     const escaped = escapeHtml(token).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    html = html.replace(
-      new RegExp(`(${escaped})`, 'i'),
-      '<mark>$1</mark>'
-    );
+    html = html.replace(new RegExp(`(${escaped})`, 'i'), '<mark>$1</mark>');
   }
   return html;
 }
@@ -155,7 +149,7 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
       },
       insertSymbol() {
         /* no-op */
-      }
+      },
     };
   }
 
@@ -169,7 +163,7 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
     filtered: [] as UnicodeSymbol[],
     activeIndex: 0,
     favorites: loadFavorites(),
-    recents: loadRecents()
+    recents: loadRecents(),
   };
 
   // Virtualization metrics
@@ -318,7 +312,7 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
     const startRow = Math.max(0, Math.floor(scrollTop / rowHeight) - OVERSCAN_ROWS);
     const endRow = Math.min(
       rows,
-      Math.ceil((scrollTop + viewportHeight) / rowHeight) + OVERSCAN_ROWS
+      Math.ceil((scrollTop + viewportHeight) / rowHeight) + OVERSCAN_ROWS,
     );
 
     const chunks: string[] = [];
@@ -341,7 +335,7 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
       const column = i % columns;
       chunks.push(
         `<div class="ucp-card is-skeleton" aria-hidden="true" style="transform: translate(${column * (cardSize + gapSize)}px, ${row * rowHeight}px);">` +
-        `<span class="ucp-glyph"></span><span class="ucp-name"></span></div>`
+          `<span class="ucp-glyph"></span><span class="ucp-name"></span></div>`,
       );
     }
     gridInnerEl.innerHTML = chunks.join('');
@@ -393,14 +387,12 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
 
     const special: Array<[string, string, string, number]> = [
       [CATEGORY_FAVORITES, '★', 'Favorites', state.favorites.size],
-      [CATEGORY_RECENT, '↺', 'Recent', state.recents.length]
+      [CATEGORY_RECENT, '↺', 'Recent', state.recents.length],
     ];
     for (const [key, glyph, label, count] of special) {
       chips.push(catMarkup(key, glyph, label, count));
     }
-    chips.push(
-      `<div class="ucp-cats-divider" role="separator"></div>`
-    );
+    chips.push(`<div class="ucp-cats-divider" role="separator"></div>`);
     chips.push(catMarkup(CATEGORY_ALL, '☰', 'All characters', data.totalCount));
     chips.push(`<div class="ucp-cats-divider" role="separator"></div>`);
 
@@ -428,8 +420,7 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
     const symbol = state.filtered[state.activeIndex];
 
     if (!symbol) {
-      detailEl.innerHTML =
-        `<div class="ucp-detail-placeholder">Select a character to preview it here.<br>Press <b>/</b> to jump to search.</div>`;
+      detailEl.innerHTML = `<div class="ucp-detail-placeholder">Select a character to preview it here.<br>Press <b>/</b> to jump to search.</div>`;
       return;
     }
 
@@ -467,8 +458,7 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
         `${state.filtered.length.toLocaleString()} match${state.filtered.length === 1 ? '' : 'es'} for “${escapeHtml(state.query)}”` +
         ` of ${data.totalCount.toLocaleString()}${activeInfo}`;
     } else {
-      statusEl.innerHTML =
-        `${state.filtered.length.toLocaleString()} of ${data.totalCount.toLocaleString()} characters${activeInfo}`;
+      statusEl.innerHTML = `${state.filtered.length.toLocaleString()} of ${data.totalCount.toLocaleString()} characters${activeInfo}`;
     }
   }
 
@@ -581,7 +571,9 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
 
     const selection = window.getSelection();
     const selectionLivesInEditor =
-      !!selection && selection.rangeCount > 0 && editor.contains(selection.getRangeAt(0).commonAncestorContainer);
+      !!selection &&
+      selection.rangeCount > 0 &&
+      editor.contains(selection.getRangeAt(0).commonAncestorContainer);
 
     if (!selectionLivesInEditor) {
       // Park the caret at the end so the symbol lands in the note.
@@ -671,7 +663,7 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
       try {
         succeeded = document.execCommand('copy');
       } catch {
-        succeeded = false;
+        // execCommand threw — succeeded stays false.
       }
       scratch.remove();
       return succeeded;
@@ -904,7 +896,19 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
 
     searchInput.addEventListener('keydown', (event) => {
       // While typing in search, arrows navigate the grid; Enter inserts.
-      if (['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'PageDown', 'PageUp', 'Home', 'End', 'Enter'].includes(event.key)) {
+      if (
+        [
+          'ArrowDown',
+          'ArrowUp',
+          'ArrowLeft',
+          'ArrowRight',
+          'PageDown',
+          'PageUp',
+          'Home',
+          'End',
+          'Enter',
+        ].includes(event.key)
+      ) {
         handleNavigation(event);
       }
     });
@@ -975,7 +979,7 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
 
   return {
     open,
-    insertSymbol
+    insertSymbol,
   };
 }
 

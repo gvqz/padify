@@ -31,7 +31,7 @@ export interface CloudConfig {
 
 /** Shipped default: same-origin /api (see docs/CLOUD_SETUP.md). */
 export const CLOUD_BUILD_CONFIG: CloudConfig = {
-  apiBase: ''
+  apiBase: '',
 };
 
 function normalizeBase(base: string): string {

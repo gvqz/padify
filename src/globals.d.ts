@@ -20,7 +20,7 @@ interface DocumentPictureInPicture {
   addEventListener(
     type: 'enter',
     listener: (event: DocumentPictureInPictureEvent) => void,
-    options?: boolean | AddEventListenerOptions
+    options?: boolean | AddEventListenerOptions,
   ): void;
 }
 

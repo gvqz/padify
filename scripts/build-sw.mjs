@@ -44,9 +44,7 @@ const precacheUrls = ['/', ...files.map((file) => `/${file.split('\\').join('/')
 // Hash the CONTENT of every precached file (not just URLs) so that edits to
 // public/ assets (css, images, sounds) bump the cache version even when
 // their URLs stay stable.
-const hash = createHash('sha256')
-  .update(precacheUrls.join('|'))
-  .update(indexHtml);
+const hash = createHash('sha256').update(precacheUrls.join('|')).update(indexHtml);
 for (const file of files) {
   hash.update(readFileSync(join(distDir, file)));
 }

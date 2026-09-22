@@ -3,336 +3,343 @@ import Swal from 'sweetalert2';
 import type { SweetAlertResult } from 'sweetalert2';
 
 interface SoundEntry {
-    url: string;
-    audio: HTMLAudioElement | null;
-    playing: boolean;
-    loading: boolean;
+  url: string;
+  audio: HTMLAudioElement | null;
+  playing: boolean;
+  loading: boolean;
 }
 
 interface PresetSoundState {
-    volume: number;
-    playing: boolean;
+  volume: number;
+  playing: boolean;
 }
 
 type PresetMix = Record<string, PresetSoundState>;
 
 interface PromptPresetNameOptions {
-    title: string;
-    value?: string;
-    confirmButtonText: string;
+  title: string;
+  value?: string;
+  confirmButtonText: string;
 }
 
 export class WhiteNoisePlayer {
-    presetsStorageKey: string;
-    sounds: Record<string, SoundEntry>;
-    presetToggleButton: HTMLElement | null;
-    presetLabel: HTMLElement | null;
-    presetMenu: HTMLElement | null;
-    presetList: HTMLElement | null;
-    presetEmptyState: HTMLElement | null;
-    createPresetButton: HTMLElement | null;
-    presets: Record<string, PresetMix>;
-    activePresetName: string;
-    isApplyingPreset: boolean;
-    isPresetDialogOpen: boolean;
+  presetsStorageKey: string;
+  sounds: Record<string, SoundEntry>;
+  presetToggleButton: HTMLElement | null;
+  presetLabel: HTMLElement | null;
+  presetMenu: HTMLElement | null;
+  presetList: HTMLElement | null;
+  presetEmptyState: HTMLElement | null;
+  createPresetButton: HTMLElement | null;
+  presets: Record<string, PresetMix>;
+  activePresetName: string;
+  isApplyingPreset: boolean;
+  isPresetDialogOpen: boolean;
 
-    constructor() {
-        this.presetsStorageKey = 'ambient-noise-presets';
-        this.sounds = {
-            'winter-morning': {
-                url: 'sounds/winter-morning.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'suburban-street': {
-                url: 'sounds/suburban-street.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'rain': {
-                url: 'sounds/rain.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'rain-on-leaves': {
-                url: 'sounds/rain-on-leaves.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'thunder': {
-                url: 'sounds/thunder.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'fireside': {
-                url: 'sounds/fireside.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'crickets': {
-                url: 'sounds/crickets.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'rain-on-umbrella': {
-                url: 'sounds/rain-on-umbrella.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'wind-chimes': {
-                url: 'sounds/wind-chimes.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'clock': {
-                url: 'sounds/clock.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'ceiling-fan': {
-                url: 'sounds/ceiling-fan.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            },
-            'underwater': {
-                url: 'sounds/underwater.mp3',
-                audio: null,
-                playing: false,
-                loading: false
-            }
-        };
+  constructor() {
+    this.presetsStorageKey = 'ambient-noise-presets';
+    this.sounds = {
+      'winter-morning': {
+        url: 'sounds/winter-morning.mp3',
+        audio: null,
+        playing: false,
+        loading: false,
+      },
+      'suburban-street': {
+        url: 'sounds/suburban-street.mp3',
+        audio: null,
+        playing: false,
+        loading: false,
+      },
+      rain: {
+        url: 'sounds/rain.mp3',
+        audio: null,
+        playing: false,
+        loading: false,
+      },
+      'rain-on-leaves': {
+        url: 'sounds/rain-on-leaves.mp3',
+        audio: null,
+        playing: false,
+        loading: false,
+      },
+      thunder: {
+        url: 'sounds/thunder.mp3',
+        audio: null,
+        playing: false,
+        loading: false,
+      },
+      fireside: {
+        url: 'sounds/fireside.mp3',
+        audio: null,
+        playing: false,
+        loading: false,
+      },
+      crickets: {
+        url: 'sounds/crickets.mp3',
+        audio: null,
+        playing: false,
+        loading: false,
+      },
+      'rain-on-umbrella': {
+        url: 'sounds/rain-on-umbrella.mp3',
+        audio: null,
+        playing: false,
+        loading: false,
+      },
+      'wind-chimes': {
+        url: 'sounds/wind-chimes.mp3',
+        audio: null,
+        playing: false,
+        loading: false,
+      },
+      clock: {
+        url: 'sounds/clock.mp3',
+        audio: null,
+        playing: false,
+        loading: false,
+      },
+      'ceiling-fan': {
+        url: 'sounds/ceiling-fan.mp3',
+        audio: null,
+        playing: false,
+        loading: false,
+      },
+      underwater: {
+        url: 'sounds/underwater.mp3',
+        audio: null,
+        playing: false,
+        loading: false,
+      },
+    };
 
-        this.presetToggleButton = document.getElementById('ambientNoisePresetToggle');
-        this.presetLabel = document.getElementById('ambientNoisePresetLabel');
-        this.presetMenu = document.getElementById('ambientNoisePresetMenu');
-        this.presetList = document.getElementById('ambientNoisePresetList');
-        this.presetEmptyState = document.getElementById('ambientNoisePresetEmpty');
-        this.createPresetButton = document.getElementById('createAmbientNoisePreset');
-        this.presets = this.loadPresets();
-        this.activePresetName = '';
-        this.isApplyingPreset = false;
-        this.isPresetDialogOpen = false;
-        this.handlePresetMenuDocumentClick = this.handlePresetMenuDocumentClick.bind(this);
-        this.handlePresetMenuEscape = this.handlePresetMenuEscape.bind(this);
+    this.presetToggleButton = document.getElementById('ambientNoisePresetToggle');
+    this.presetLabel = document.getElementById('ambientNoisePresetLabel');
+    this.presetMenu = document.getElementById('ambientNoisePresetMenu');
+    this.presetList = document.getElementById('ambientNoisePresetList');
+    this.presetEmptyState = document.getElementById('ambientNoisePresetEmpty');
+    this.createPresetButton = document.getElementById('createAmbientNoisePreset');
+    this.presets = this.loadPresets();
+    this.activePresetName = '';
+    this.isApplyingPreset = false;
+    this.isPresetDialogOpen = false;
+    this.handlePresetMenuDocumentClick = this.handlePresetMenuDocumentClick.bind(this);
+    this.handlePresetMenuEscape = this.handlePresetMenuEscape.bind(this);
 
-        this.init();
+    this.init();
+  }
+
+  init(): void {
+    // Add click event listeners to sound buttons
+    document.querySelectorAll<HTMLElement>('.sound-button').forEach((button) => {
+      const soundKey = button.dataset.sound as string;
+
+      // Play/pause on button click
+      button.addEventListener('click', () => {
+        if (this.sounds[soundKey].playing) {
+          this.pauseSound(soundKey);
+        } else {
+          this.playSound(soundKey);
+        }
+
+        this.handleMixUpdated();
+      });
+
+      // Volume control
+      const volumeSlider = button.querySelector('.volume-slider') as HTMLInputElement;
+      volumeSlider.addEventListener('input', (e) => {
+        e.stopPropagation(); // Prevent button click
+        this.setVolume(soundKey, Number((e.target as HTMLInputElement).value) / 100);
+        this.handleMixUpdated();
+      });
+
+      // Prevent button click when adjusting volume
+      volumeSlider.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+    });
+
+    // Handle modal close (the ambient mixer now lives inside the music
+    // player modal; playback intentionally continues after closing).
+    $('#musicPlayerModal').on('hidden.bs.modal', () => {
+      // Intentionally empty: sounds keep playing when the modal closes.
+    });
+
+    this.initializePresetsUI();
+  }
+
+  loadPresets(): Record<string, PresetMix> {
+    try {
+      const rawPresets = localStorage.getItem(this.presetsStorageKey);
+      const parsedPresets = JSON.parse(rawPresets || '{}');
+      return parsedPresets && typeof parsedPresets === 'object'
+        ? (parsedPresets as Record<string, PresetMix>)
+        : {};
+    } catch (error) {
+      console.error('Error loading ambient noise presets:', error);
+      return {};
+    }
+  }
+
+  persistPresets(): void {
+    try {
+      localStorage.setItem(this.presetsStorageKey, JSON.stringify(this.presets));
+    } catch (error) {
+      console.error('Error saving ambient noise presets:', error);
+    }
+  }
+
+  initializePresetsUI(): void {
+    if (
+      !this.presetToggleButton ||
+      !this.presetMenu ||
+      !this.presetList ||
+      !this.createPresetButton
+    ) {
+      return;
     }
 
-    init(): void {
-        // Add click event listeners to sound buttons
-        document.querySelectorAll<HTMLElement>('.sound-button').forEach(button => {
-            const soundKey = button.dataset.sound as string;
+    this.renderPresetMenu();
+    this.updatePresetTriggerLabel();
 
-            // Play/pause on button click
-            button.addEventListener('click', () => {
-                if (this.sounds[soundKey].playing) {
-                    this.pauseSound(soundKey);
-                } else {
-                    this.playSound(soundKey);
-                }
+    this.presetToggleButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      this.togglePresetMenu();
+    });
 
-                this.handleMixUpdated();
-            });
+    this.createPresetButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      this.createPreset();
+    });
 
-            // Volume control
-            const volumeSlider = button.querySelector('.volume-slider') as HTMLInputElement;
-            volumeSlider.addEventListener('input', (e) => {
-                e.stopPropagation(); // Prevent button click
-                this.setVolume(soundKey, Number((e.target as HTMLInputElement).value) / 100);
-                this.handleMixUpdated();
-            });
+    this.presetMenu.addEventListener('click', (event) => {
+      const renameButton = (event.target as HTMLElement).closest('[data-preset-rename]');
+      if (renameButton) {
+        event.stopPropagation();
+        this.renamePreset(renameButton.getAttribute('data-preset-rename'));
+        return;
+      }
 
-            // Prevent button click when adjusting volume
-            volumeSlider.addEventListener('click', (e) => {
-                e.stopPropagation();
-            });
-        });
+      const deleteButton = (event.target as HTMLElement).closest('[data-preset-delete]');
+      if (deleteButton) {
+        event.stopPropagation();
+        this.deletePreset(deleteButton.getAttribute('data-preset-delete'));
+        return;
+      }
 
-        // Handle modal close (the ambient mixer now lives inside the music
-        // player modal; playback intentionally continues after closing).
-        $('#musicPlayerModal').on('hidden.bs.modal', () => {
-            // Intentionally empty: sounds keep playing when the modal closes.
-        });
+      const presetRow = (event.target as HTMLElement).closest('[data-preset-name]');
+      if (presetRow) {
+        event.stopPropagation();
+        this.applyPreset(presetRow.getAttribute('data-preset-name'));
+      }
+    });
 
-        this.initializePresetsUI();
+    this.presetMenu.addEventListener('keydown', (event) => {
+      const presetRow = (event.target as HTMLElement).closest('[data-preset-name]');
+      if (!presetRow) {
+        return;
+      }
+
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        this.applyPreset(presetRow.getAttribute('data-preset-name'));
+      }
+    });
+
+    document.addEventListener('click', this.handlePresetMenuDocumentClick);
+    document.addEventListener('keydown', this.handlePresetMenuEscape);
+  }
+
+  togglePresetMenu(forceState?: boolean): void {
+    if (!this.presetMenu || !this.presetToggleButton) {
+      return;
     }
 
-    loadPresets(): Record<string, PresetMix> {
-        try {
-            const rawPresets = localStorage.getItem(this.presetsStorageKey);
-            const parsedPresets = JSON.parse(rawPresets || '{}');
-            return parsedPresets && typeof parsedPresets === 'object' ? parsedPresets as Record<string, PresetMix> : {};
-        } catch (error) {
-            console.error('Error loading ambient noise presets:', error);
-            return {};
-        }
+    const presetNames = Object.keys(this.presets).sort((left, right) => left.localeCompare(right));
+    const shouldOpen = typeof forceState === 'boolean' ? forceState : this.presetMenu.hidden;
+
+    if (presetNames.length === 0 && shouldOpen) {
+      this.activePresetName = '';
+      this.updatePresetTriggerLabel();
     }
 
-    persistPresets(): void {
-        try {
-            localStorage.setItem(this.presetsStorageKey, JSON.stringify(this.presets));
-        } catch (error) {
-            console.error('Error saving ambient noise presets:', error);
-        }
+    this.presetMenu.hidden = !shouldOpen;
+    this.presetToggleButton.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+    this.presetToggleButton.classList.toggle('open', shouldOpen);
+  }
+
+  handlePresetMenuDocumentClick(event: MouseEvent): void {
+    if (!this.presetMenu || !this.presetToggleButton || this.isPresetDialogOpen) {
+      return;
     }
 
-    initializePresetsUI(): void {
-        if (!this.presetToggleButton || !this.presetMenu || !this.presetList || !this.createPresetButton) {
-            return;
-        }
+    const clickedInsideMenu = this.presetMenu.contains(event.target as Node | null);
+    const clickedToggle = this.presetToggleButton.contains(event.target as Node | null);
 
-        this.renderPresetMenu();
-        this.updatePresetTriggerLabel();
+    if (!clickedInsideMenu && !clickedToggle) {
+      this.togglePresetMenu(false);
+    }
+  }
 
-        this.presetToggleButton.addEventListener('click', (event) => {
-            event.stopPropagation();
-            this.togglePresetMenu();
-        });
-
-        this.createPresetButton.addEventListener('click', (event) => {
-            event.stopPropagation();
-            this.createPreset();
-        });
-
-        this.presetMenu.addEventListener('click', (event) => {
-            const renameButton = (event.target as HTMLElement).closest('[data-preset-rename]');
-            if (renameButton) {
-                event.stopPropagation();
-                this.renamePreset(renameButton.getAttribute('data-preset-rename'));
-                return;
-            }
-
-            const deleteButton = (event.target as HTMLElement).closest('[data-preset-delete]');
-            if (deleteButton) {
-                event.stopPropagation();
-                this.deletePreset(deleteButton.getAttribute('data-preset-delete'));
-                return;
-            }
-
-            const presetRow = (event.target as HTMLElement).closest('[data-preset-name]');
-            if (presetRow) {
-                event.stopPropagation();
-                this.applyPreset(presetRow.getAttribute('data-preset-name'));
-            }
-        });
-
-        this.presetMenu.addEventListener('keydown', (event) => {
-            const presetRow = (event.target as HTMLElement).closest('[data-preset-name]');
-            if (!presetRow) {
-                return;
-            }
-
-            if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                this.applyPreset(presetRow.getAttribute('data-preset-name'));
-            }
-        });
-
-        document.addEventListener('click', this.handlePresetMenuDocumentClick);
-        document.addEventListener('keydown', this.handlePresetMenuEscape);
+  handlePresetMenuEscape(event: KeyboardEvent): void {
+    if (this.isPresetDialogOpen || Swal.isVisible()) {
+      return;
     }
 
-    togglePresetMenu(forceState?: boolean): void {
-        if (!this.presetMenu || !this.presetToggleButton) {
-            return;
-        }
+    if (event.key === 'Escape') {
+      this.togglePresetMenu(false);
+    }
+  }
 
-        const presetNames = Object.keys(this.presets).sort((left, right) => left.localeCompare(right));
-        const shouldOpen = typeof forceState === 'boolean' ? forceState : this.presetMenu.hidden;
-
-        if (presetNames.length === 0 && shouldOpen) {
-            this.activePresetName = '';
-            this.updatePresetTriggerLabel();
-        }
-
-        this.presetMenu.hidden = !shouldOpen;
-        this.presetToggleButton.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
-        this.presetToggleButton.classList.toggle('open', shouldOpen);
+  handleMixUpdated(): void {
+    if (this.isApplyingPreset) {
+      return;
     }
 
-    handlePresetMenuDocumentClick(event: MouseEvent): void {
-        if (!this.presetMenu || !this.presetToggleButton || this.isPresetDialogOpen) {
-            return;
-        }
+    this.activePresetName = '';
+    this.updatePresetTriggerLabel();
+    this.renderPresetMenu();
+  }
 
-        const clickedInsideMenu = this.presetMenu.contains(event.target as Node | null);
-        const clickedToggle = this.presetToggleButton.contains(event.target as Node | null);
+  getCurrentMixState(): PresetMix {
+    const mix: PresetMix = {};
 
-        if (!clickedInsideMenu && !clickedToggle) {
-            this.togglePresetMenu(false);
-        }
+    Object.keys(this.sounds).forEach((soundKey) => {
+      const slider = document.getElementById(`${soundKey}-volume`) as HTMLInputElement | null;
+      mix[soundKey] = {
+        volume: slider ? Number(slider.value) : 0,
+        playing: Boolean(this.sounds[soundKey].playing),
+      };
+    });
+
+    return mix;
+  }
+
+  updatePresetTriggerLabel(): void {
+    if (this.presetLabel) {
+      this.presetLabel.textContent = this.activePresetName || 'Custom';
+    }
+  }
+
+  renderPresetMenu(): void {
+    if (!this.presetList || !this.presetEmptyState) {
+      return;
     }
 
-    handlePresetMenuEscape(event: KeyboardEvent): void {
-        if (this.isPresetDialogOpen || Swal.isVisible()) {
-            return;
-        }
+    const presetNames = Object.keys(this.presets).sort((left, right) => left.localeCompare(right));
+    this.presetList.innerHTML = '';
 
-        if (event.key === 'Escape') {
-            this.togglePresetMenu(false);
-        }
-    }
+    presetNames.forEach((presetName) => {
+      const row = document.createElement('div');
+      row.className = 'ambient-noise-preset-row';
+      row.setAttribute('data-preset-name', presetName);
+      row.setAttribute('role', 'button');
+      row.setAttribute('tabindex', '0');
 
-    handleMixUpdated(): void {
-        if (this.isApplyingPreset) {
-            return;
-        }
+      const isActivePreset = presetName === this.activePresetName;
+      row.classList.toggle('active', isActivePreset);
 
-        this.activePresetName = '';
-        this.updatePresetTriggerLabel();
-        this.renderPresetMenu();
-    }
-
-    getCurrentMixState(): PresetMix {
-        const mix: PresetMix = {};
-
-        Object.keys(this.sounds).forEach((soundKey) => {
-            const slider = document.getElementById(`${soundKey}-volume`) as HTMLInputElement | null;
-            mix[soundKey] = {
-                volume: slider ? Number(slider.value) : 0,
-                playing: Boolean(this.sounds[soundKey].playing)
-            };
-        });
-
-        return mix;
-    }
-
-    updatePresetTriggerLabel(): void {
-        if (this.presetLabel) {
-            this.presetLabel.textContent = this.activePresetName || 'Custom';
-        }
-    }
-
-    renderPresetMenu(): void {
-        if (!this.presetList || !this.presetEmptyState) {
-            return;
-        }
-
-        const presetNames = Object.keys(this.presets).sort((left, right) => left.localeCompare(right));
-        this.presetList.innerHTML = '';
-
-        presetNames.forEach((presetName) => {
-            const row = document.createElement('div');
-            row.className = 'ambient-noise-preset-row';
-            row.setAttribute('data-preset-name', presetName);
-            row.setAttribute('role', 'button');
-            row.setAttribute('tabindex', '0');
-
-            const isActivePreset = presetName === this.activePresetName;
-            row.classList.toggle('active', isActivePreset);
-
-            row.innerHTML = `
+      row.innerHTML = `
                 <span class="ambient-noise-preset-row-name">${presetName}</span>
                 <span class="ambient-noise-preset-row-actions">
                     <span class="ambient-noise-preset-check ${isActivePreset ? 'visible' : ''}" aria-hidden="true">
@@ -353,395 +360,405 @@ export class WhiteNoisePlayer {
                 </span>
             `;
 
-            this.presetList!.appendChild(row);
-        });
+      this.presetList!.appendChild(row);
+    });
 
-        this.presetEmptyState.hidden = presetNames.length > 0;
+    this.presetEmptyState.hidden = presetNames.length > 0;
+  }
+
+  isDialogConfirmed(result: SweetAlertResult | null): boolean {
+    if (!result) {
+      return false;
     }
 
-    isDialogConfirmed(result: SweetAlertResult | null): boolean {
-        if (!result) {
-            return false;
-        }
-
-        if (typeof result.isConfirmed === 'boolean') {
-            return result.isConfirmed;
-        }
-
-        return !result.dismiss;
+    if (typeof result.isConfirmed === 'boolean') {
+      return result.isConfirmed;
     }
 
-    async promptPresetName({ title, value = '', confirmButtonText }: PromptPresetNameOptions): Promise<string | null> {
-        this.isPresetDialogOpen = true;
+    return !result.dismiss;
+  }
 
-        const result = await Swal.fire({
-            title,
-            target: document.getElementById('whiteNoiseModal'),
-            input: 'text',
-            inputValue: value,
-            inputPlaceholder: 'Preset name',
-            showCancelButton: true,
-            confirmButtonText,
-            cancelButtonText: 'Cancel',
-            reverseButtons: true,
-            allowOutsideClick: false,
-            allowEscapeKey: true,
-            inputAutoTrim: true,
-            didOpen: () => {
-                const input = Swal.getInput();
-                if (input) {
-                    input.focus();
-                    input.select();
-                }
-            },
-            inputValidator: (inputValue) => {
-                if (!inputValue || !inputValue.trim()) {
-                    return 'Please enter a preset name.';
-                }
+  async promptPresetName({
+    title,
+    value = '',
+    confirmButtonText,
+  }: PromptPresetNameOptions): Promise<string | null> {
+    this.isPresetDialogOpen = true;
 
-                return undefined;
-            }
-        });
-
-        this.isPresetDialogOpen = false;
-
-        if (!this.isDialogConfirmed(result)) {
-            return null;
+    const result = await Swal.fire({
+      title,
+      target: document.getElementById('whiteNoiseModal'),
+      input: 'text',
+      inputValue: value,
+      inputPlaceholder: 'Preset name',
+      showCancelButton: true,
+      confirmButtonText,
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+      allowOutsideClick: false,
+      allowEscapeKey: true,
+      inputAutoTrim: true,
+      didOpen: () => {
+        const input = Swal.getInput();
+        if (input) {
+          input.focus();
+          input.select();
+        }
+      },
+      inputValidator: (inputValue) => {
+        if (!inputValue || !inputValue.trim()) {
+          return 'Please enter a preset name.';
         }
 
-        return String(result.value || '').trim();
+        return undefined;
+      },
+    });
+
+    this.isPresetDialogOpen = false;
+
+    if (!this.isDialogConfirmed(result)) {
+      return null;
     }
 
-    async confirmPresetOverwrite(presetName: string): Promise<boolean> {
-        this.isPresetDialogOpen = true;
+    return String(result.value || '').trim();
+  }
 
-        const result = await Swal.fire({
-            title: 'Overwrite preset?',
-            target: document.getElementById('whiteNoiseModal'),
-            text: `"${presetName}" already exists.`,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonText: 'Overwrite',
-            cancelButtonText: 'Cancel',
-            reverseButtons: true,
-            allowOutsideClick: false,
-            allowEscapeKey: true
-        });
+  async confirmPresetOverwrite(presetName: string): Promise<boolean> {
+    this.isPresetDialogOpen = true;
 
-        this.isPresetDialogOpen = false;
+    const result = await Swal.fire({
+      title: 'Overwrite preset?',
+      target: document.getElementById('whiteNoiseModal'),
+      text: `"${presetName}" already exists.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Overwrite',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+      allowOutsideClick: false,
+      allowEscapeKey: true,
+    });
 
-        return this.isDialogConfirmed(result);
+    this.isPresetDialogOpen = false;
+
+    return this.isDialogConfirmed(result);
+  }
+
+  async confirmPresetDeletion(presetName: string): Promise<boolean> {
+    this.isPresetDialogOpen = true;
+
+    const result = await Swal.fire({
+      title: 'Delete preset?',
+      target: document.getElementById('whiteNoiseModal'),
+      text: `"${presetName}" will be removed from your saved mixes.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Delete',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+      allowOutsideClick: false,
+      allowEscapeKey: true,
+    });
+
+    this.isPresetDialogOpen = false;
+
+    return this.isDialogConfirmed(result);
+  }
+
+  async applyPreset(presetName: string | null): Promise<void> {
+    const preset = presetName !== null ? this.presets[presetName] : undefined;
+
+    if (!preset) {
+      this.activePresetName = '';
+      this.updatePresetTriggerLabel();
+      this.renderPresetMenu();
+      return;
     }
 
-    async confirmPresetDeletion(presetName: string): Promise<boolean> {
-        this.isPresetDialogOpen = true;
+    this.isApplyingPreset = true;
 
-        const result = await Swal.fire({
-            title: 'Delete preset?',
-            target: document.getElementById('whiteNoiseModal'),
-            text: `"${presetName}" will be removed from your saved mixes.`,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonText: 'Delete',
-            cancelButtonText: 'Cancel',
-            reverseButtons: true,
-            allowOutsideClick: false,
-            allowEscapeKey: true
-        });
+    try {
+      for (const soundKey of Object.keys(this.sounds)) {
+        const soundState = preset[soundKey] || { volume: 0, playing: false };
+        const slider = document.getElementById(`${soundKey}-volume`) as HTMLInputElement | null;
 
-        this.isPresetDialogOpen = false;
+        if (slider) {
+          slider.value = String(soundState.volume);
+        }
 
-        return this.isDialogConfirmed(result);
+        this.setVolume(soundKey, soundState.volume / 100);
+
+        if (soundState.playing) {
+          await this.playSound(soundKey);
+        } else {
+          this.pauseSound(soundKey);
+        }
+      }
+
+      this.activePresetName = presetName!;
+    } finally {
+      this.isApplyingPreset = false;
+      this.updatePresetTriggerLabel();
+      this.renderPresetMenu();
+      this.togglePresetMenu(false);
+    }
+  }
+
+  async createPreset(): Promise<void> {
+    const presetName = await this.promptPresetName({
+      title: 'Create preset',
+      value: this.activePresetName || '',
+      confirmButtonText: 'Save',
+    });
+
+    if (!presetName) {
+      return;
     }
 
-    async applyPreset(presetName: string | null): Promise<void> {
-        const preset = presetName !== null ? this.presets[presetName] : undefined;
+    if (
+      Object.prototype.hasOwnProperty.call(this.presets, presetName) &&
+      presetName !== this.activePresetName
+    ) {
+      const shouldOverwrite = await this.confirmPresetOverwrite(presetName);
 
-        if (!preset) {
-            this.activePresetName = '';
-            this.updatePresetTriggerLabel();
-            this.renderPresetMenu();
-            return;
-        }
-
-        this.isApplyingPreset = true;
-
-        try {
-            for (const soundKey of Object.keys(this.sounds)) {
-                const soundState = preset[soundKey] || { volume: 0, playing: false };
-                const slider = document.getElementById(`${soundKey}-volume`) as HTMLInputElement | null;
-
-                if (slider) {
-                    slider.value = String(soundState.volume);
-                }
-
-                this.setVolume(soundKey, soundState.volume / 100);
-
-                if (soundState.playing) {
-                    await this.playSound(soundKey);
-                } else {
-                    this.pauseSound(soundKey);
-                }
-            }
-
-            this.activePresetName = presetName!;
-        } finally {
-            this.isApplyingPreset = false;
-            this.updatePresetTriggerLabel();
-            this.renderPresetMenu();
-            this.togglePresetMenu(false);
-        }
+      if (!shouldOverwrite) {
+        return;
+      }
     }
 
-    async createPreset(): Promise<void> {
-        const presetName = await this.promptPresetName({
-            title: 'Create preset',
-            value: this.activePresetName || '',
-            confirmButtonText: 'Save'
-        });
+    this.presets[presetName] = this.getCurrentMixState();
+    this.persistPresets();
+    this.activePresetName = presetName;
+    this.updatePresetTriggerLabel();
+    this.renderPresetMenu();
+    this.togglePresetMenu(true);
+  }
 
-        if (!presetName) {
-            return;
-        }
-
-        if (Object.prototype.hasOwnProperty.call(this.presets, presetName) && presetName !== this.activePresetName) {
-            const shouldOverwrite = await this.confirmPresetOverwrite(presetName);
-
-            if (!shouldOverwrite) {
-                return;
-            }
-        }
-
-        this.presets[presetName] = this.getCurrentMixState();
-        this.persistPresets();
-        this.activePresetName = presetName;
-        this.updatePresetTriggerLabel();
-        this.renderPresetMenu();
-        this.togglePresetMenu(true);
+  async renamePreset(presetName: string | null): Promise<void> {
+    if (!presetName || !Object.prototype.hasOwnProperty.call(this.presets, presetName)) {
+      return;
     }
 
-    async renamePreset(presetName: string | null): Promise<void> {
-        if (!presetName || !Object.prototype.hasOwnProperty.call(this.presets, presetName)) {
-            return;
-        }
+    const trimmedName = await this.promptPresetName({
+      title: 'Rename preset',
+      value: presetName,
+      confirmButtonText: 'Save',
+    });
 
-        const trimmedName = await this.promptPresetName({
-            title: 'Rename preset',
-            value: presetName,
-            confirmButtonText: 'Save'
-        });
-
-        if (!trimmedName) {
-            return;
-        }
-
-        if (trimmedName === presetName) {
-            return;
-        }
-
-        if (Object.prototype.hasOwnProperty.call(this.presets, trimmedName)) {
-            const shouldOverwrite = await this.confirmPresetOverwrite(trimmedName);
-
-            if (!shouldOverwrite) {
-                return;
-            }
-        }
-
-        this.presets[trimmedName] = this.presets[presetName];
-        delete this.presets[presetName];
-        this.persistPresets();
-
-        if (this.activePresetName === presetName) {
-            this.activePresetName = trimmedName;
-        }
-
-        this.updatePresetTriggerLabel();
-        this.renderPresetMenu();
-        this.togglePresetMenu(true);
+    if (!trimmedName) {
+      return;
     }
 
-    async deletePreset(presetName: string | null): Promise<void> {
-        if (!presetName || !Object.prototype.hasOwnProperty.call(this.presets, presetName)) {
-            return;
-        }
-
-        const shouldDelete = await this.confirmPresetDeletion(presetName);
-
-        if (!shouldDelete) {
-            return;
-        }
-
-        delete this.presets[presetName];
-        this.persistPresets();
-
-        if (this.activePresetName === presetName) {
-            this.activePresetName = '';
-        }
-
-        this.updatePresetTriggerLabel();
-        this.renderPresetMenu();
-        this.togglePresetMenu(Object.keys(this.presets).length > 0 || this.presetMenu!.hidden === false);
+    if (trimmedName === presetName) {
+      return;
     }
 
-    async loadSound(soundKey: string): Promise<void> {
-        const sound = this.sounds[soundKey];
-        if (!sound || sound.audio || sound.loading) return;
+    if (Object.prototype.hasOwnProperty.call(this.presets, trimmedName)) {
+      const shouldOverwrite = await this.confirmPresetOverwrite(trimmedName);
 
-        sound.loading = true;
-        const button = document.querySelector(`.sound-button[data-sound="${soundKey}"]`) as HTMLElement;
-        button.classList.add('loading');
-
-        try {
-            const audio = new Audio(sound.url);
-            await new Promise((resolve, reject) => {
-                audio.addEventListener('canplaythrough', resolve, { once: true });
-                audio.addEventListener('error', reject, { once: true });
-                audio.load();
-            });
-
-            audio.loop = true;
-            sound.audio = audio;
-        } catch (error) {
-            console.error(`Error loading sound ${soundKey}:`, error);
-        } finally {
-            sound.loading = false;
-            button.classList.remove('loading');
-        }
+      if (!shouldOverwrite) {
+        return;
+      }
     }
 
-    async playSound(soundKey: string): Promise<void> {
-        const sound = this.sounds[soundKey];
-        if (!sound) return;
+    this.presets[trimmedName] = this.presets[presetName];
+    delete this.presets[presetName];
+    this.persistPresets();
 
-        const button = document.querySelector(`.sound-button[data-sound="${soundKey}"]`) as HTMLElement;
-
-        // If the sound is not loaded yet, load it
-        if (!sound.audio) {
-            try {
-                await this.loadSound(soundKey);
-            } catch (error) {
-                console.error(`Failed to load sound ${soundKey}`);
-                return;
-            }
-        }
-
-        const defaultVolume = Number((document.getElementById(soundKey + '-volume') as HTMLInputElement).value) / 100;
-
-        if (sound.audio) {
-            sound.audio.play();
-            sound.playing = true;
-            sound.audio.volume = defaultVolume;
-            button.classList.add('playing');
-        }
-
-        this.updateMuteButtonVisibility();
+    if (this.activePresetName === presetName) {
+      this.activePresetName = trimmedName;
     }
 
-    pauseSound(soundKey: string): void {
-        const sound = this.sounds[soundKey];
-        if (!sound) return;
+    this.updatePresetTriggerLabel();
+    this.renderPresetMenu();
+    this.togglePresetMenu(true);
+  }
 
-        if (sound.audio) {
-            sound.audio.pause();
-        }
-
-        sound.playing = false;
-
-        // Update UI
-        const button = document.querySelector(`.sound-button[data-sound="${soundKey}"]`) as HTMLElement;
-        button.classList.remove('playing');
-
-        this.updateMuteButtonVisibility();
+  async deletePreset(presetName: string | null): Promise<void> {
+    if (!presetName || !Object.prototype.hasOwnProperty.call(this.presets, presetName)) {
+      return;
     }
 
-    pauseAll(): void {
-        Object.keys(this.sounds).forEach(soundKey => {
-            this.pauseSound(soundKey);
-        });
+    const shouldDelete = await this.confirmPresetDeletion(presetName);
+
+    if (!shouldDelete) {
+      return;
     }
 
-    stopAll(): void {
-        Object.keys(this.sounds).forEach(soundKey => {
-            const sound = this.sounds[soundKey];
+    delete this.presets[presetName];
+    this.persistPresets();
 
-            this.pauseSound(soundKey);
-
-            if (sound?.audio) {
-                sound.audio.currentTime = 0;
-            }
-        });
+    if (this.activePresetName === presetName) {
+      this.activePresetName = '';
     }
 
-    setVolume(soundKey: string, volume: number): void {
-        const sound = this.sounds[soundKey];
-        if (!sound) return;
+    this.updatePresetTriggerLabel();
+    this.renderPresetMenu();
+    this.togglePresetMenu(
+      Object.keys(this.presets).length > 0 || this.presetMenu!.hidden === false,
+    );
+  }
 
-        if (sound.audio) {
-            sound.audio.volume = volume;
-        }
+  async loadSound(soundKey: string): Promise<void> {
+    const sound = this.sounds[soundKey];
+    if (!sound || sound.audio || sound.loading) return;
+
+    sound.loading = true;
+    const button = document.querySelector(`.sound-button[data-sound="${soundKey}"]`) as HTMLElement;
+    button.classList.add('loading');
+
+    try {
+      const audio = new Audio(sound.url);
+      await new Promise((resolve, reject) => {
+        audio.addEventListener('canplaythrough', resolve, { once: true });
+        audio.addEventListener('error', reject, { once: true });
+        audio.load();
+      });
+
+      audio.loop = true;
+      sound.audio = audio;
+    } catch (error) {
+      console.error(`Error loading sound ${soundKey}:`, error);
+    } finally {
+      sound.loading = false;
+      button.classList.remove('loading');
+    }
+  }
+
+  async playSound(soundKey: string): Promise<void> {
+    const sound = this.sounds[soundKey];
+    if (!sound) return;
+
+    const button = document.querySelector(`.sound-button[data-sound="${soundKey}"]`) as HTMLElement;
+
+    // If the sound is not loaded yet, load it
+    if (!sound.audio) {
+      try {
+        await this.loadSound(soundKey);
+      } catch (error) {
+        console.error(`Failed to load sound ${soundKey}`);
+        return;
+      }
     }
 
-    isAnySoundPlaying(): boolean {
-        return Object.values(this.sounds).some(sound => sound.playing);
+    const defaultVolume =
+      Number((document.getElementById(soundKey + '-volume') as HTMLInputElement).value) / 100;
+
+    if (sound.audio) {
+      sound.audio.play();
+      sound.playing = true;
+      sound.audio.volume = defaultVolume;
+      button.classList.add('playing');
     }
 
-    updateMuteButtonVisibility(): void {
-        const muteButton = document.getElementById('globalMuteButton') as HTMLElement;
-        const stopButton = document.getElementById('globalStopButton') as HTMLElement;
-        const ambientNoiseIcon = document.querySelector('.ambient-noise-icon');
-        const isPlaying = this.isAnySoundPlaying();
+    this.updateMuteButtonVisibility();
+  }
 
-        muteButton.style.display = isPlaying ? 'block' : 'none';
-        stopButton.style.display = isPlaying ? 'block' : 'none';
-        ambientNoiseIcon?.classList.toggle('is-playing', isPlaying);
+  pauseSound(soundKey: string): void {
+    const sound = this.sounds[soundKey];
+    if (!sound) return;
+
+    if (sound.audio) {
+      sound.audio.pause();
     }
+
+    sound.playing = false;
+
+    // Update UI
+    const button = document.querySelector(`.sound-button[data-sound="${soundKey}"]`) as HTMLElement;
+    button.classList.remove('playing');
+
+    this.updateMuteButtonVisibility();
+  }
+
+  pauseAll(): void {
+    Object.keys(this.sounds).forEach((soundKey) => {
+      this.pauseSound(soundKey);
+    });
+  }
+
+  stopAll(): void {
+    Object.keys(this.sounds).forEach((soundKey) => {
+      const sound = this.sounds[soundKey];
+
+      this.pauseSound(soundKey);
+
+      if (sound?.audio) {
+        sound.audio.currentTime = 0;
+      }
+    });
+  }
+
+  setVolume(soundKey: string, volume: number): void {
+    const sound = this.sounds[soundKey];
+    if (!sound) return;
+
+    if (sound.audio) {
+      sound.audio.volume = volume;
+    }
+  }
+
+  isAnySoundPlaying(): boolean {
+    return Object.values(this.sounds).some((sound) => sound.playing);
+  }
+
+  updateMuteButtonVisibility(): void {
+    const muteButton = document.getElementById('globalMuteButton') as HTMLElement;
+    const stopButton = document.getElementById('globalStopButton') as HTMLElement;
+    const ambientNoiseIcon = document.querySelector('.ambient-noise-icon');
+    const isPlaying = this.isAnySoundPlaying();
+
+    muteButton.style.display = isPlaying ? 'block' : 'none';
+    stopButton.style.display = isPlaying ? 'block' : 'none';
+    ambientNoiseIcon?.classList.toggle('is-playing', isPlaying);
+  }
 }
 
 // Initialize the player when the document is ready
 $(document).ready(() => {
-    window.whiteNoisePlayer = new WhiteNoisePlayer();
+  window.whiteNoisePlayer = new WhiteNoisePlayer();
 
-    // Global mute state
-    let isGlobalMuted = false;
+  // Global mute state
+  let isGlobalMuted = false;
 
-    // Function to toggle global mute
-    function toggleGlobalMute(): void {
-        console.log('Toggling global mute');
-        isGlobalMuted = !isGlobalMuted;
-        const playingIcon = document.getElementById('globalPlayingIcon') as HTMLElement;
-        const globalMuteIcon = document.getElementById('globalMuteIcon') as HTMLElement;
+  // Function to toggle global mute
+  function toggleGlobalMute(): void {
+    console.log('Toggling global mute');
+    isGlobalMuted = !isGlobalMuted;
+    const playingIcon = document.getElementById('globalPlayingIcon') as HTMLElement;
+    const globalMuteIcon = document.getElementById('globalMuteIcon') as HTMLElement;
 
-        const player = window.whiteNoisePlayer!;
+    const player = window.whiteNoisePlayer!;
 
-        // Mute/unmute all sounds
-        Object.values(player.sounds).forEach(sound => {
-            if (sound.audio) {
-                sound.audio.muted = isGlobalMuted;
-            }
-        });
+    // Mute/unmute all sounds
+    Object.values(player.sounds).forEach((sound) => {
+      if (sound.audio) {
+        sound.audio.muted = isGlobalMuted;
+      }
+    });
 
-        if (isGlobalMuted) {
-            playingIcon.style.display = 'none';
-            globalMuteIcon.style.display = 'block';
-        } else {
-            playingIcon.style.display = 'block';
-            globalMuteIcon.style.display = 'none';
-        }
+    if (isGlobalMuted) {
+      playingIcon.style.display = 'none';
+      globalMuteIcon.style.display = 'block';
+    } else {
+      playingIcon.style.display = 'block';
+      globalMuteIcon.style.display = 'none';
     }
+  }
 
-    // Add event listener for global mute button
-    const muteButton = document.getElementById('globalMuteButton');
-    if (muteButton) {
-        muteButton.addEventListener('click', toggleGlobalMute);
-        // Initially hide the mute button
-        muteButton.style.display = 'none';
-    }
+  // Add event listener for global mute button
+  const muteButton = document.getElementById('globalMuteButton');
+  if (muteButton) {
+    muteButton.addEventListener('click', toggleGlobalMute);
+    // Initially hide the mute button
+    muteButton.style.display = 'none';
+  }
 
-    const stopButton = document.getElementById('globalStopButton');
-    if (stopButton) {
-        stopButton.addEventListener('click', () => {
-            window.whiteNoisePlayer!.stopAll();
-        });
-        stopButton.style.display = 'none';
-    }
+  const stopButton = document.getElementById('globalStopButton');
+  if (stopButton) {
+    stopButton.addEventListener('click', () => {
+      window.whiteNoisePlayer!.stopAll();
+    });
+    stopButton.style.display = 'none';
+  }
 });

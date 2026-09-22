@@ -125,8 +125,10 @@ function insertDictation(text: string): void {
   // If the caret drifted outside the editor (click on the bar, …), park it at
   // the end of the note so dictation never lands in the void.
   const selection = window.getSelection();
-  const caretInside = !!selection && selection.rangeCount > 0
-    && editor.contains(selection.getRangeAt(0).startContainer);
+  const caretInside =
+    !!selection &&
+    selection.rangeCount > 0 &&
+    editor.contains(selection.getRangeAt(0).startContainer);
   if (!caretInside) {
     const range = document.createRange();
     range.selectNodeContents(editor);
@@ -174,8 +176,7 @@ function setBarInterim(interim: string | null): void {
 }
 
 function renderListeningUI(active: boolean): void {
-  $('#voiceTypeButton').toggleClass('listening', active)
-    .attr('aria-pressed', String(active));
+  $('#voiceTypeButton').toggleClass('listening', active).attr('aria-pressed', String(active));
   voiceBar().attr('hidden', active ? null : 'hidden');
   if (active) {
     setBarInterim(null);
@@ -291,8 +292,10 @@ export function startVoiceTyping(): void {
   const editor = document.getElementById('note');
   if (editor && document.activeElement !== editor) {
     const selection = window.getSelection();
-    const caretInside = !!selection && selection.rangeCount > 0
-      && editor.contains(selection.getRangeAt(0).startContainer);
+    const caretInside =
+      !!selection &&
+      selection.rangeCount > 0 &&
+      editor.contains(selection.getRangeAt(0).startContainer);
     if (!caretInside) {
       editor.focus();
       const range = document.createRange();
@@ -378,11 +381,15 @@ export function initVoiceTyping(): void {
   });
 
   // Escape ends dictation without stealing focus from the editor.
-  document.addEventListener('keydown', (event) => {
-    if (listening && event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      stopVoiceTyping();
-    }
-  }, true);
+  document.addEventListener(
+    'keydown',
+    (event) => {
+      if (listening && event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        stopVoiceTyping();
+      }
+    },
+    true,
+  );
 }
