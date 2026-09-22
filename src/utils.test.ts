@@ -63,11 +63,8 @@ describe('calculateCharactersAndWords', () => {
     expect(calculateCharactersAndWords('a')).toBe('1 character • 1 word');
   });
 
-  // Pinned current behaviour: zero reads as singular ("0 character").
-  // Grammatically "0 characters" would be right — fix with the editor UI
-  // pass, then update this expectation.
-  it('formats zero counts (quirk: singular wording)', () => {
-    expect(calculateCharactersAndWords('')).toBe('0 character • 0 word');
+  it('formats zero counts as plural', () => {
+    expect(calculateCharactersAndWords('')).toBe('0 characters • 0 words');
   });
 });
 
