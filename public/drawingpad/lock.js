@@ -1,10 +1,10 @@
 /**
  * Padify Drawingpad — temporary PIN gate.
  *
- * The drawing pad is a work in progress, so it sits behind a 4-digit PIN
- * while the next version is being planned. The heavy canvas scripts are not
- * even requested until the right PIN is entered, so the pad never loads
- * (or renders) behind the gate.
+ * The drawing pad is being rebuilt, so the page currently carries only its
+ * shell (navbar + placeholder) behind this 4-digit PIN gate. When the new
+ * canvas lands, its scripts mount here again — the unlock flag and the
+ * session behaviour below are designed to carry over unchanged.
  *
  * Change the PIN here:
  */
@@ -19,22 +19,16 @@ var UNLOCK_FLAG = 'padifyDrawingpadUnlocked';
 (function () {
     'use strict';
 
-    var SCRIPTS = [
-        'vendor/react.production.min.js',
-        'vendor/react-dom.production.min.js',
-        'vendor/excalidraw.production.min.js',
-        'app.js'
-    ];
-
     var body = document.body;
     var overlay = document.getElementById('padLock');
     var dots = Array.prototype.slice.call(document.querySelectorAll('#padLockDots .padlock-dot'));
     var keypad = document.getElementById('padLockKeypad');
     var hint = document.getElementById('padLockHint');
     var entry = '';
-    var loadingScripts = false;
+    var unlocked = false;
 
     function unlock() {
+        unlocked = true;
         try { sessionStorage.setItem(UNLOCK_FLAG, '1'); } catch (e) { /* private mode */ }
         body.classList.remove('locked');
         if (overlay && overlay.parentNode) {
@@ -43,29 +37,6 @@ var UNLOCK_FLAG = 'padifyDrawingpadUnlocked';
                 if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
             }, 260);
         }
-        loadScripts();
-    }
-
-    function loadScripts() {
-        if (loadingScripts) return;
-        loadingScripts = true;
-        var index = 0;
-
-        function next() {
-            if (index >= SCRIPTS.length) return;
-            var src = SCRIPTS[index];
-            index += 1;
-            var script = document.createElement('script');
-            script.src = src;
-            script.onload = next;
-            script.onerror = function () {
-                var loading = document.getElementById('padLoading');
-                if (loading) loading.textContent = 'The drawing canvas failed to load. Try refreshing the page.';
-            };
-            document.body.appendChild(script);
-        }
-
-        next();
     }
 
     function renderDots() {
@@ -96,7 +67,7 @@ var UNLOCK_FLAG = 'padifyDrawingpadUnlocked';
     }
 
     function press(digit) {
-        if (loadingScripts) return;
+        if (unlocked) return;
         if (entry.length >= 4) return;
         entry += String(digit);
         renderDots();
@@ -107,7 +78,7 @@ var UNLOCK_FLAG = 'padifyDrawingpadUnlocked';
     }
 
     function backspace() {
-        if (loadingScripts) return;
+        if (unlocked) return;
         entry = entry.slice(0, -1);
         renderDots();
         setHint(' ', false);
@@ -135,12 +106,10 @@ var UNLOCK_FLAG = 'padifyDrawingpadUnlocked';
         }
     });
 
-    // Already unlocked this session — open straight into the canvas.
-    var unlocked = false;
-    try { unlocked = sessionStorage.getItem(UNLOCK_FLAG) === '1'; } catch (e) { /* private mode */ }
-    if (unlocked) {
-        if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
-        body.classList.remove('locked');
-        loadScripts();
+    // Already unlocked this session — open straight into the pad shell.
+    var wasUnlocked = false;
+    try { wasUnlocked = sessionStorage.getItem(UNLOCK_FLAG) === '1'; } catch (e) { /* private mode */ }
+    if (wasUnlocked) {
+        unlock();
     }
 })();

@@ -121,19 +121,9 @@
             font-size: 14px;
         }
 
-        /* Strip every outbound vendor link — the canvas stays fully usable
-           (file open/save/export/tools), it just carries no external links. */
-        .dropdown-menu .dropdown-menu-group:has(a[href*="excalidraw"]),
-        .dropdown-menu .dropdown-menu-group:has(a[href*="discord.gg"]),
-        .dropdown-menu .dropdown-menu-group:has(a[href*="twitter.com"]),
-        .HelpDialog .HelpDialog__header {
-            display: none !important;
-        }
-
         /* -----------------------------------------------------------------
            Temporary PIN gate — the drawing pad is a work in progress.
            ----------------------------------------------------------------- */
-        body.locked .pad-navbar .pad-actions,
         body.locked #drawingRoot {
             visibility: hidden;
         }
@@ -270,16 +260,10 @@
             <span class="slash">/</span>
             <span class="tool">Drawingpad</span>
         </a>
-        <div class="pad-actions">
-            <button type="button" class="pad-btn" id="clearCanvasBtn" title="Clear the whole canvas">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
-                Clear canvas
-            </button>
-        </div>
     </nav>
 
     <div id="drawingRoot">
-        <div class="pad-loading" id="padLoading">Loading the drawing canvas…</div>
+        <div class="pad-loading" id="padLoading">The drawing canvas is being rebuilt — it'll be back soon.</div>
     </div>
 
     <!-- Temporary PIN gate: the drawing pad is a work in progress. -->
@@ -289,7 +273,7 @@
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14.5v2.5"/></svg>
             </span>
             <h1 class="padlock-title">Drawingpad is locked</h1>
-            <p class="padlock-subtitle">This tool is being reworked — it's a work in progress.<br>Enter the PIN to use it anyway.</p>
+            <p class="padlock-subtitle">The canvas is being rebuilt from the ground up.<br>Enter the PIN to open the pad shell.</p>
             <div class="padlock-dots" id="padLockDots" aria-hidden="true">
                 <span class="padlock-dot"></span>
                 <span class="padlock-dot"></span>
@@ -316,12 +300,8 @@
         </div>
     </div>
 
-    <script>
-        // Serve every canvas asset (fonts, locale chunks) from this origin —
-        // nothing is fetched from the vendor's CDN.
-        window.EXCALIDRAW_ASSET_PATH = '/drawingpad/vendor/';
-    </script>
-    <!-- Canvas scripts are injected by lock.js after the PIN is accepted. -->
+    <!-- PIN gate — the drawing pad shell stays behind it while the canvas
+         is rebuilt. -->
     <script src="lock.js"></script>
 </body>
 </html>
