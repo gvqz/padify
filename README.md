@@ -37,11 +37,10 @@ The app ships with a small suite of companion tools:
 - [Markdown Editor](/markdown-editor/) — two-pane markdown editor with live preview
 - [Voice Notes](/voice-notes/) — record and manage voice notes in the browser
 - [Simple Kanban](/kanban/) — lightweight task board with CSV export
-- [Case Converter](/case-converter/) — convert text between letter cases
 - [Text Tools](/text-tools/) — line operations, cleanup, find & replace, data extraction
 - [Text Diff](/text-diff/) — compare two blocks of text
 - [Teleprompter](/teleprompter/) — scrolling text with adjustable speed and styling
-- [Drawingpad](/drawingpad/) — full drawing canvas with shapes, arrows, text, images and more
+- [Drawingpad](/drawingpad/) — drawing canvas (currently being rebuilt; the pad shell stays behind its PIN gate in the meantime)
 - [Tasks](/tasks/) — a dead simple todo manager
 
 ## Privacy
@@ -76,7 +75,13 @@ bun run dev        # dev server with HMR at http://localhost:5173
 bun run build      # typecheck + production build into dist/ (+ service worker)
 bun run preview    # serve the production build locally
 bun run typecheck  # strict TypeScript check only
+bun run lint       # eslint (or: bun run lint:fix)
+bun run test       # vitest, single run (or: bun run test:watch)
+bun run format     # prettier --write (or: bun run format:check)
 ```
+
+CI runs typecheck, lint, format check, tests and the production build on
+every push and pull request (`.github/workflows/ci.yml`).
 
 ### Project layout
 
