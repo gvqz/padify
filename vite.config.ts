@@ -7,14 +7,14 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        main: 'index.html'
+        main: 'index.html',
       },
       output: {
         entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',
-        assetFileNames: 'assets/[name]-[hash][extname]'
-      }
-    }
+        assetFileNames: 'assets/[name]-[hash][extname]',
+      },
+    },
   },
   server: {
     port: 3000,
@@ -24,12 +24,12 @@ export default defineConfig({
       // proxied to it so the app talks same-origin, exactly like production.
       '/api': {
         target: 'http://localhost:3041',
-        changeOrigin: true
-      }
-    }
+        changeOrigin: true,
+      },
+    },
   },
   preview: {
     port: 3000,
-    host: true
-  }
+    host: true,
+  },
 });

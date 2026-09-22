@@ -9,6 +9,12 @@
     "build": "tsc --noEmit && vite build && node scripts/build-sw.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "gen:unicode": "node scripts/gen-unicode-data.mjs"
   },
   "dependencies": {
@@ -19,8 +25,15 @@
     "sweetalert2": "^11.14.5"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/jquery": "^3.5.32",
+    "eslint": "^10.11.0",
+    "eslint-config-prettier": "^10.1.8",
+    "jsdom": "^30.1.0",
+    "prettier": "^3.9.8",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "typescript-eslint": "^8.70.1",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.9"
   }
 }

@@ -1,0 +1,18 @@
+# Never format: dependencies, build output, test coverage
+node_modules
+dist
+coverage
+
+# Legacy static islands (being folded into the main app or deleted)
+public
+
+# Separate Bun package with its own eventual tooling
+server
+
+# Generated / data files
+src/unicode/symbols-data.ts
+bun.lock
+
+# Prose stays as authored
+*.md
+docs
