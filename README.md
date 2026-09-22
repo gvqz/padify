@@ -76,7 +76,7 @@ bun run build      # typecheck + production build into dist/ (+ service worker)
 bun run preview    # serve the production build locally
 bun run typecheck  # strict TypeScript check only
 bun run lint       # eslint (or: bun run lint:fix)
-bun run test       # vitest, single run (or: bun run test:watch)
+npm run test       # vitest, single run (Node runtime — jsdom breaks on some Bun builds; or: npm run test:watch)
 bun run format     # prettier --write (or: bun run format:check)
 ```
 
