@@ -89,6 +89,7 @@ let lastSyncAt: number | null = null;
 let syncing = false;
 let syncQueued = false;
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
+let syncTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Local tab ids that changed and still need a push. */
 const pendingPush = new Set<string>();
@@ -179,6 +180,7 @@ export async function initCloudSync(tabManager: TabManager): Promise<void> {
         storeSession({ ...session, email: me.user.email });
       }
       setStatus(signedInStatus('syncing'));
+      startSyncTimer();
       void syncCycle('session-restored');
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
@@ -199,15 +201,6 @@ export async function initCloudSync(tabManager: TabManager): Promise<void> {
   } else {
     setStatus({ state: 'signed-out' });
   }
-
-  // Runs for the page lifetime: the currentUserId guard makes each tick a
-  // no-op while signed out. (Tearing it down on sign-out can be wired in
-  // when the storage/sync refactor lands.)
-  setInterval(() => {
-    if (document.visibilityState === 'visible' && navigator.onLine && currentUserId) {
-      void syncCycle('periodic');
-    }
-  }, SYNC_INTERVAL_MS);
 
   window.addEventListener('online', () => {
     if (currentUserId) {
@@ -260,6 +253,7 @@ function handleSignedOut(): void {
   currentUserEmail = null;
   lastSyncAt = null;
   pendingPush.clear();
+  stopSyncTimer();
   setStatus({ state: 'signed-out' });
 }
 
@@ -285,6 +279,7 @@ export async function signIn(email: string, password: string): Promise<AuthResul
     currentUserId = data.user.id;
     currentUserEmail = data.user.email;
     setStatus(syncingStatus());
+    startSyncTimer();
     void syncCycle('sign-in');
     return { ok: true };
   } catch (error) {
@@ -306,6 +301,7 @@ export async function signUp(email: string, password: string): Promise<AuthResul
     currentUserId = data.user.id;
     currentUserEmail = data.user.email;
     setStatus(syncingStatus());
+    startSyncTimer();
     void syncCycle('sign-up');
     return { ok: true };
   } catch (error) {
@@ -569,6 +565,30 @@ function syncNow(): void {
   if (currentUserId) {
     void syncCycle('manual');
   }
+}
+
+/**
+ * The 30s sync tick runs only while a session is live. Sign-in (or a
+ * restored session at boot) starts it; handleSignedOut tears it down, so
+ * signed-out pages leave zero sync timers behind.
+ */
+function startSyncTimer(): void {
+  if (syncTimer !== null) {
+    return;
+  }
+  syncTimer = setInterval(() => {
+    if (document.visibilityState === 'visible' && navigator.onLine && currentUserId) {
+      void syncCycle('periodic');
+    }
+  }, SYNC_INTERVAL_MS);
+}
+
+function stopSyncTimer(): void {
+  if (syncTimer === null) {
+    return;
+  }
+  clearInterval(syncTimer);
+  syncTimer = null;
 }
 
 // ---------------------------------------------------------------------------
