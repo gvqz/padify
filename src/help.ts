@@ -80,9 +80,9 @@ const steps: HelpStep[] = [
   {
     accent: 'amber',
     icon: ICONS.target,
-    title: 'Find your focus',
-    text: 'Focus mode strips the interface down to just you and the page, full screen hides everything else, and a session timer tracks your writing. Optional break reminders nudge you to rest.',
-    hints: [{ keys: 'alt + F', label: 'focus mode' }],
+    title: 'Stay in the zone',
+    text: 'Full screen hides everything but your words, a session timer tracks your writing sprints, and optional break reminders nudge you to rest.',
+    hints: [{ keys: 'ctrl + ,', label: 'preferences' }],
   },
   {
     accent: 'teal',

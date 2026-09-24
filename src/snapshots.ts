@@ -520,17 +520,3 @@ window.createSnapshot = function (title?: string): void {
     console.warn('Snapshots manager not initialized');
   }
 };
-
-// Add a function to create a snapshot before clearing notes
-const originalClearNotes = window.clearNotes;
-window.clearNotes = function (): void {
-  // Create a snapshot before clearing if there's content
-  if (getEditorText().trim() && window.snapshotsManager) {
-    window.snapshotsManager.createSnapshot('Before clearing notes');
-  }
-
-  // Call the original clearNotes function
-  if (originalClearNotes) {
-    originalClearNotes();
-  }
-};

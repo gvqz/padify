@@ -19,8 +19,6 @@ import {
   resetFont,
   resetOptimalLineLength,
   deleteNotes,
-  toggleFocusMode,
-  turnOffFocusMode,
   toggleFullScreen,
   exportNotesAsPDF,
   exportNotesAsDocx,
@@ -996,10 +994,6 @@ $(document).ready(async function () {
     }
   });
 
-  notepad.clearNotes.on('click', function () {
-    deleteNotes();
-  });
-
   notepad.copyToClipboard.click(function () {
     copyNotesToClipboard(getEditorText());
   });
@@ -1037,14 +1031,6 @@ $(document).ready(async function () {
 
   notepad.fullScreenButton.click(function () {
     toggleFullScreen();
-  });
-
-  notepad.focusModeButton.click(function () {
-    toggleFocusMode(notepad);
-  });
-
-  notepad.focusModeCloseButton.click(function () {
-    turnOffFocusMode(notepad);
   });
 
   // Update statistics when modal is shown
@@ -1540,12 +1526,6 @@ $(document).ready(async function () {
       $('.modal').modal('hide');
       $('#iconDropdown').removeClass('show');
       $('#brandMenu').removeClass('show');
-      // Only exit focus mode when it is actually on — otherwise
-      // every Escape keypress (context menu, dialogs, etc.)
-      // yanked focus back to the note textarea.
-      if (document.documentElement.hasAttribute('data-focus-mode')) {
-        turnOffFocusMode(notepad);
-      }
     }
 
     if ((event.ctrlKey || event.metaKey) && event.code === 'KeyS') {
@@ -1594,13 +1574,6 @@ $(document).ready(async function () {
       deleteNotes();
     }
 
-    if (event.altKey && event.code === 'KeyF') {
-      event.preventDefault();
-
-      toggleFocusMode(notepad);
-    }
-
-    // Alt/option + v toggles voice typing.
     if (event.altKey && event.code === 'KeyV') {
       event.preventDefault();
       toggleVoiceTyping();

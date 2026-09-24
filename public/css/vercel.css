@@ -1294,37 +1294,6 @@ body .swal2-validation-message {
   font-weight: 500;
 }
 
-/* Focus-mode exit bead */
-body .focus-mode-close-btn button,
-body.dark .focus-mode-close-btn button {
-  width: 38px;
-  height: 38px;
-  border-radius: 999px;
-  background: var(--vz-bg-elevated);
-  border: 1px solid var(--vz-border);
-  color: var(--vz-fg-muted);
-  box-shadow: var(--vz-shadow-pill);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--vz-dur) ease, border-color var(--vz-dur) ease,
-    transform 100ms ease;
-}
-
-body .focus-mode-close-btn button:hover,
-body .focus-mode-close-btn button:focus,
-body.dark .focus-mode-close-btn button:hover,
-body.dark .focus-mode-close-btn button:focus {
-  color: var(--vz-fg);
-  border-color: var(--vz-border-strong);
-  background: var(--vz-bg-elevated);
-}
-
-body .focus-mode-close-btn button:active,
-body.dark .focus-mode-close-btn button:active {
-  transform: scale(0.96);
-}
-
 /* Tooltips — inverted chips */
 body .tooltip-inner {
   background: #171717;
@@ -3323,12 +3292,6 @@ body.dark #note:has(> br:only-child)::before {
 /* Navbar rail toggle (mobile only — revealed in the media query below) */
 #tabRailToggleContainer {
   display: none;
-}
-
-/* Focus mode strips everything but the page itself */
-html[data-focus-mode] #tabRail,
-html[data-focus-mode] #tabRailBackdrop {
-  display: none !important;
 }
 
 /* Picture-in-Picture host window stays maximally compact */

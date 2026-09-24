@@ -1,9 +1,8 @@
 import $ from 'jquery';
 import Swal from 'sweetalert2';
 import { get, setState, selector } from './selector';
-import type { NotepadUI } from './selector';
 import { getTabManager } from './tabs';
-import { stateGet, stateSet } from './storage';
+import { stateSet } from './storage';
 
 // Bootstrap 3's jQuery modal plugin (registered globally by the `bootstrap`
 // import in main.ts) is not covered by @types/jquery.
@@ -568,74 +567,6 @@ export function deleteNotes(): void {
       Swal.fire('Deleted!', 'Your notes has been deleted.', 'success');
     }
   });
-}
-
-export const focusModeHoverTimer: ReturnType<typeof setTimeout> | null = null;
-
-export function toggleFocusMode(notepad: NotepadUI): void {
-  const navbar = document.querySelector('.navbar') as HTMLElement;
-  const bodyElement = document.body;
-  const textArea = document.getElementById('note')!;
-  const closeButton = document.getElementById('focusModeCloseButton') as HTMLElement;
-
-  // Check if focus mode is currently active
-  const isFocusMode = document.documentElement.hasAttribute('data-focus-mode');
-
-  if (!isFocusMode) {
-    // Entering focus mode
-    document.documentElement.setAttribute('data-focus-mode', 'true');
-    navbar.style.display = 'none';
-    bodyElement.style.paddingTop = '0';
-    textArea.style.borderRight = 'none';
-    textArea.style.borderLeft = 'none';
-
-    // Show close button
-    closeButton.style.display = 'block';
-
-    // Hide toast popup
-    const toastPopup = document.querySelector('.toast-popup');
-    if (toastPopup) {
-      toastPopup.classList.remove('show');
-    }
-
-    notepad.bottomLine.hide();
-
-    // Keep focus on textarea
-    textArea.focus();
-  } else {
-    // Exiting focus mode
-    turnOffFocusMode(notepad);
-  }
-}
-
-// a function for turning off focus mode
-export function turnOffFocusMode(notepad: NotepadUI): void {
-  const navbar = document.querySelector('.navbar') as HTMLElement;
-  const bodyElement = document.body;
-  const textArea = document.getElementById('note')!;
-  const closeButton = document.getElementById('focusModeCloseButton') as HTMLElement;
-
-  // Remove focus mode
-  document.documentElement.removeAttribute('data-focus-mode');
-
-  // Hide close button
-  closeButton.style.display = 'none';
-
-  // Reset styles
-  navbar.style.display = '';
-  bodyElement.style.paddingTop = '';
-  textArea.style.borderRight = '';
-  textArea.style.borderLeft = '';
-
-  if (
-    stateGet('userChosenWordCountPillSelected') === 'Yes' ||
-    selector().defaultConfig.defaultShowWordCountPill === 'Yes'
-  ) {
-    notepad.bottomLine.show();
-  }
-
-  // Keep focus on textarea
-  textArea.focus();
 }
 
 export function toggleFullScreen(): void {

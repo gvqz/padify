@@ -103,7 +103,6 @@ export const WELCOME_HTML = [
   '- Ability to mimic typewriter sound when typing.',
   '- Optional break reminders after long writing sessions.',
   '- Keyboard shortcuts for common actions.',
-  '- Focus mode to leave you with a barebones and pristine editor.',
   '- Full-screen mode for a distraction-free writing experience.',
   '- Floating window (in supported browsers) to effectively take notes across other apps.',
   '- Download notes as plain text, PDF, HTML, and DOCX file.',

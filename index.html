@@ -173,11 +173,6 @@
                 <span class="sr-only">Your notes</span>
               </a>
             </span>
-            <span>
-              <a id="clearNotes" class="trash-icon" title="Delete Notes [ctrl/command + delete]">
-                <img src="/img/navbar/delete.svg" alt="Delete Icon" />
-              </a>
-            </span>
             <span class="downaload-notes-container">
               <a id="downloadNotes" class="download-icon" title="Download Notes">
                 <img src="/img/navbar/download.svg" alt="Download Icon" />
@@ -334,33 +329,6 @@
                 <span class="snapshot-text">Snapshots</span>
               </a>
             </li>
-            <li class="focus-mode-icon">
-              <a
-                href="javascript:void(0);"
-                id="focusModeButton"
-                title="Turn On Focus Mode [alt/option + f]"
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="#ffffff"
-                  stroke="#ffffff"
-                  stroke-width="0.72"
-                >
-                  <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                  <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
-                  <g id="SVGRepo_iconCarrier">
-                    <g>
-                      <path
-                        d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm0 2C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-8a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"
-                      ></path>
-                    </g>
-                  </g>
-                </svg>
-              </a>
-            </li>
             <li class="keyboard-icon">
               <a
                 href="#keyboard-shortcuts"
@@ -461,22 +429,6 @@
 
       <div class="overlay"></div>
     </nav>
-
-    <div id="focusModeCloseButton" class="focus-mode-close-btn" style="display: none">
-      <button id="closeFocusMode" title="Exit Focus Mode [Press Escape]">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="18"
-          height="18"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke-width="2"
-          stroke="currentColor"
-        >
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
 
     <div id="breakVeil" class="break-veil" aria-hidden="true"></div>
 
@@ -829,12 +781,6 @@
                   <kbd>o</kbd>
                 </td>
                 <td>Insert Unicode symbol</td>
-              </tr>
-              <tr>
-                <td>
-                  <kbd>alt</kbd> / <kbd><span>⌥</span>option</kbd> + <kbd>f</kbd>
-                </td>
-                <td>Toggle focus mode</td>
               </tr>
               <tr>
                 <td>

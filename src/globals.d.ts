@@ -35,5 +35,4 @@ interface Window {
   whiteNoisePlayer?: import('./white-noise-player').WhiteNoisePlayer;
   snapshotsManager?: import('./snapshots').SnapshotsManager;
   createSnapshot?: (title?: string) => void;
-  clearNotes?: () => void;
 }

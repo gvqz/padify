@@ -5,7 +5,6 @@ export type StateKey = string;
 
 export interface NotepadUI {
   aboutModal: JQuery;
-  clearNotes: JQuery;
   copyToClipboard: JQuery;
   downloadNotes: JQuery;
   downloadNotesPlain: JQuery;
@@ -36,8 +35,6 @@ export interface NotepadUI {
   breakReminders: JQuery;
   explodingEffect: JQuery;
   bottomLine: JQuery;
-  focusModeButton: JQuery;
-  focusModeCloseButton: JQuery;
   statisticsModal: JQuery;
   serif: JQuery;
 }
@@ -127,7 +124,6 @@ export function selector(): AppSelector {
   return {
     notepad: {
       aboutModal: selectById('aboutModal'),
-      clearNotes: selectById('clearNotes'),
       copyToClipboard: selectById('copyToClipboard'),
       downloadNotes: selectById('downloadNotes'),
       downloadNotesPlain: selectById('downloadNotesPlain'),
@@ -158,8 +154,6 @@ export function selector(): AppSelector {
       breakReminders: selectById('breakReminders'),
       explodingEffect: selectById('explodingEffect'),
       bottomLine: selectByClassName('bottom-line'),
-      focusModeButton: selectById('focusModeButton'),
-      focusModeCloseButton: selectById('focusModeCloseButton'),
       statisticsModal: selectById('statisticsModal'),
       serif: selectById('serif'),
     },

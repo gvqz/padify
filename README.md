@@ -19,7 +19,7 @@ Built as a Progressive Web App using the [Service Worker API](https://developer.
 - Word and character count with note statistics
 - Snapshots — restore notes from previously saved versions
 - Keyboard shortcuts for common actions
-- Focus mode and full-screen mode for distraction-free writing
+- Full-screen mode for distraction-free writing
 - Optimal line length for a better reading experience
 - Floating window (Picture-in-Picture) to take notes on top of other apps
 - Multiple notes in **tabs** on the main page, with **bold / italic / underline / strikethrough** formatting that renders right in the editor
