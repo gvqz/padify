@@ -3,6 +3,9 @@ import 'bootstrap';
 import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
 
+// All app stylesheets load as ordered <link> tags from index.html (see the
+// note there) — the app's styles stay fully static, no bundler involved.
+
 import { storageReady } from './storage';
 
 // Kick the IndexedDB open + hydration at module evaluation — the earliest
