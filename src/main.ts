@@ -12,6 +12,7 @@ import { storageReady } from './storage';
 void storageReady();
 
 import './app';
+import './help';
 import './snapshots';
 import './timer';
 import './white-noise-player';

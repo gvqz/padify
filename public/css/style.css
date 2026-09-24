@@ -580,68 +580,8 @@ table tr td {
   box-shadow: none;
 }
 
-.about-tabs li a {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.about-tabs-wrap {
-  position: relative;
-}
-
-.about-tabs .nav-item {
-  flex: 0 0 auto;
-}
-
-.about-tabs .nav-link {
-  white-space: nowrap;
-}
-
-@media (max-width: 720px) {
-  .about-tabs {
-    display: flex;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    gap: 10px;
-    scrollbar-width: none;
-  }
-
-  .about-tabs::-webkit-scrollbar {
-    height: 0;
-  }
-
-  .about-tabs-wrap::before,
-  .about-tabs-wrap::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 28px;
-    pointer-events: none;
-    z-index: 2;
-  }
-
-  .about-tabs-wrap::before {
-    left: 0;
-    background: linear-gradient(90deg, var(--dough-white) 0%, rgba(255, 255, 255, 0) 100%);
-  }
-
-  .about-tabs-wrap::after {
-    right: 0;
-    background: linear-gradient(270deg, var(--dough-white) 0%, rgba(255, 255, 255, 0) 100%);
-  }
-}
-
 .dark .word-count-container {
   background: #9ed4ff;
-}
-
-.tab-content .container {
-  width: 100%;
-  padding: 20px 0px 12px;
 }
 
 .word-count-container p {
@@ -1621,6 +1561,8 @@ a {
 
 .about-modal {
   position: relative;
+  width: 100%;
+  padding: 20px 0 12px;
 }
 
 .about-modal-logo {
@@ -2446,10 +2388,6 @@ a {
 
 .ambient-noise-icon.is-playing .ambient-noise-status-dot {
   display: block;
-}
-
-.about-link {
-  padding-right: 0 !important;
 }
 
 .toast-popup {
@@ -3321,4 +3259,491 @@ body.dark .stat-value {
 .dark .modal-body table tr td,
 .dark .modal-body table td {
   color: #cbd5e0;
+}
+
+/* ---- brand (wordmark) menu -------------------------------------------------- */
+
+/* The wordmark menu rides on the same popover design system as the other
+   navbar dropdowns (vercel.css `.navbar .dropdown-menu` — background, border,
+   radius, shadow, entrance animation). The #brandMenu-scoped rules below only
+   tweak placement, widen the frame for the shortcut row and add the caret. */
+
+.brand-menu-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+#brandMenu {
+  top: calc(100% + 2px);
+  min-width: 248px;
+}
+
+/* two-layer caret: border-colored diamond underneath, background diamond on
+   top — a seamless tooltip pointer through the popover border */
+#brandMenu::before,
+#brandMenu::after {
+  content: "";
+  position: absolute;
+  transform: rotate(45deg);
+}
+
+#brandMenu::before {
+  top: -6.5px;
+  left: 19px;
+  width: 12px;
+  height: 12px;
+  background: var(--vz-border);
+}
+
+#brandMenu::after {
+  top: -5.5px;
+  left: 20px;
+  width: 10px;
+  height: 10px;
+  background: var(--vz-bg-elevated);
+}
+
+.brand-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+
+.brand-menu-item:hover,
+.brand-menu-item:focus {
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg);
+  text-decoration: none;
+  outline: none;
+}
+
+.brand-menu-item svg {
+  flex: none;
+  color: var(--vz-fg-muted);
+  transition: color 0.1s ease;
+}
+
+.brand-menu-item:hover svg,
+.brand-menu-item:focus svg {
+  color: var(--vz-fg);
+}
+
+.brand-menu-text {
+  flex: 1 1 auto;
+}
+
+.brand-menu-kbd {
+  flex: none;
+  padding: 2px 6px;
+  border: 1px solid var(--vz-border);
+  border-radius: 4px;
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg-muted);
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* ---- help tour modal -------------------------------------------------------- */
+
+.help-dialog {
+  width: 560px;
+  max-width: calc(100vw - 30px);
+}
+
+.help-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.help-close {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  z-index: 2;
+}
+
+.dark .help-close,
+.dark .help-close:hover {
+  color: #e2e8f0;
+}
+
+.help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px 0;
+}
+
+.help-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #98938a;
+}
+
+.help-counter {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: #a9a49a;
+}
+
+.help-body {
+  padding: 10px 24px 0;
+}
+
+.help-stage {
+  min-height: 264px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.help-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 8px 0 2px;
+}
+
+.help-stage[data-direction="forward"] .help-step {
+  animation: help-in-forward 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.help-stage[data-direction="backward"] .help-step {
+  animation: help-in-backward 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+@keyframes help-in-forward {
+  from {
+    opacity: 0;
+    transform: translateX(26px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes help-in-backward {
+  from {
+    opacity: 0;
+    transform: translateX(-26px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.help-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 19px;
+  margin-bottom: 18px;
+}
+
+.help-icon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.help-title {
+  margin: 0 0 9px;
+  font-size: 19px;
+  font-weight: 700;
+  color: #2e2c26;
+}
+
+.help-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.68;
+  color: #6b675e;
+}
+
+.help-hints {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 16px;
+  margin-top: 16px;
+}
+
+.help-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: #8a857b;
+}
+
+.help-hint kbd {
+  padding: 2px 8px;
+  font-size: 10.5px;
+  margin: 0;
+  border-width: 1px;
+  box-shadow: 0 2px #c9c5b9;
+}
+
+.help-more {
+  display: inline-block;
+  margin-top: 16px;
+  font-size: 13px;
+  color: #3574d8;
+}
+
+.help-more:hover,
+.help-more:focus {
+  color: #2a5cb2;
+  text-decoration: none;
+}
+
+.help-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px 22px 6px;
+  border-top: 1px solid #eeebe0;
+}
+
+.help-dots {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.help-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 99px;
+  background: #d8d4c8;
+  transition: width 0.2s ease, background 0.2s ease;
+}
+
+.help-dot:hover {
+  background: #b9b4a6;
+}
+
+.help-dot.active {
+  width: 22px;
+  background: #3b82f6;
+}
+
+.help-nav {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.help-btn {
+  min-width: 92px;
+}
+
+/* step accent tints */
+
+.help-step[data-accent="blue"] .help-icon {
+  background: rgba(59, 130, 246, 0.13);
+  color: #2f6fe4;
+}
+
+.help-step[data-accent="violet"] .help-icon {
+  background: rgba(139, 92, 246, 0.13);
+  color: #7c4df0;
+}
+
+.help-step[data-accent="rose"] .help-icon {
+  background: rgba(244, 63, 94, 0.12);
+  color: #e0446c;
+}
+
+.help-step[data-accent="amber"] .help-icon {
+  background: rgba(245, 158, 11, 0.16);
+  color: #d9820b;
+}
+
+.help-step[data-accent="teal"] .help-icon {
+  background: rgba(20, 184, 166, 0.14);
+  color: #0e9488;
+}
+
+.help-step[data-accent="emerald"] .help-icon {
+  background: rgba(16, 185, 129, 0.14);
+  color: #0d9668;
+}
+
+.help-step[data-accent="sky"] .help-icon {
+  background: rgba(14, 165, 233, 0.14);
+  color: #0b87c8;
+}
+
+.help-step[data-accent="indigo"] .help-icon {
+  background: rgba(99, 102, 241, 0.14);
+  color: #5457d8;
+}
+
+/* dark theme */
+
+.dark .help-eyebrow {
+  color: #8b98ab;
+}
+
+.dark .help-counter {
+  color: #74829a;
+}
+
+.dark .help-title {
+  color: #e2e8f0;
+}
+
+.dark .help-text {
+  color: #a9b4c2;
+}
+
+.dark .help-hint {
+  color: #9fb0c4;
+}
+
+.dark .help-hint kbd {
+  color: #cbd5e0;
+  background: #1a2332;
+  border-color: #4a5568;
+  box-shadow: 0 2px #10161f;
+}
+
+.dark .help-more {
+  color: #7cc5ff;
+}
+
+.dark .help-more:hover,
+.dark .help-more:focus {
+  color: #a8d9ff;
+}
+
+.dark .help-footer {
+  border-top-color: #4a5568;
+}
+
+.dark .help-dot {
+  background: #46566f;
+}
+
+.dark .help-dot:hover {
+  background: #56627a;
+}
+
+.dark .help-dot.active {
+  background: #60a5fa;
+}
+
+.dark .help-step[data-accent="blue"] .help-icon {
+  background: rgba(96, 165, 250, 0.16);
+  color: #93c5fd;
+}
+
+.dark .help-step[data-accent="violet"] .help-icon {
+  background: rgba(167, 139, 250, 0.16);
+  color: #c4b5fd;
+}
+
+.dark .help-step[data-accent="rose"] .help-icon {
+  background: rgba(251, 113, 133, 0.14);
+  color: #fda4af;
+}
+
+.dark .help-step[data-accent="amber"] .help-icon {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fcd34d;
+}
+
+.dark .help-step[data-accent="teal"] .help-icon {
+  background: rgba(45, 212, 191, 0.14);
+  color: #5eead4;
+}
+
+.dark .help-step[data-accent="emerald"] .help-icon {
+  background: rgba(52, 211, 153, 0.14);
+  color: #6ee7b7;
+}
+
+.dark .help-step[data-accent="sky"] .help-icon {
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+}
+
+.dark .help-step[data-accent="indigo"] .help-icon {
+  background: rgba(129, 140, 248, 0.15);
+  color: #a5b4fc;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .help-stage[data-direction="forward"] .help-step,
+  .help-stage[data-direction="backward"] .help-step {
+    animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .help-dialog {
+    width: auto;
+  }
+
+  .help-body {
+    padding: 8px 18px 0;
+  }
+
+  .help-stage {
+    min-height: 252px;
+  }
+
+  .help-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+  }
+
+  .help-icon svg {
+    width: 26px;
+    height: 26px;
+  }
+
+  .help-title {
+    font-size: 17.5px;
+  }
+
+  .help-text {
+    font-size: 13.5px;
+  }
+
+  .help-nav {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }

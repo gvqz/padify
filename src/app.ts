@@ -1032,6 +1032,7 @@ $(document).ready(async function () {
   // Close dropdown if clicked outside
   $(document).on('click', function () {
     $('#iconDropdown').removeClass('show');
+    $('#brandMenu').removeClass('show');
   });
 
   notepad.fullScreenButton.click(function () {
@@ -1538,6 +1539,7 @@ $(document).ready(async function () {
     if (event.key === 'Escape') {
       $('.modal').modal('hide');
       $('#iconDropdown').removeClass('show');
+      $('#brandMenu').removeClass('show');
       // Only exit focus mode when it is actually on — otherwise
       // every Escape keypress (context menu, dialogs, etc.)
       // yanked focus back to the note textarea.
