@@ -22,3 +22,15 @@ AggregateError [ECONNREFUSED]:
 11:03:33 PM [vite] page reload src/app.ts
 11:03:48 PM [vite] page reload src/help.ts
 11:04:12 PM [vite] page reload src/tabs.ts
+11:04:50 PM [vite] http proxy error: /api/music/capabilities
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1430:18)
+    at afterConnectMultiple (node:net:2099:7)
+11:04:50 PM [vite] http proxy error: /api/music/capabilities
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1430:18)
+    at afterConnectMultiple (node:net:2099:7)
+11:05:42 PM [vite] http proxy error: /api/music/capabilities
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1430:18)
+    at afterConnectMultiple (node:net:2099:7)
