@@ -115,6 +115,19 @@ function asBool(value: unknown, fallback = false): boolean {
 const RATE_WINDOW_MS = 60_000;
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 
+// Buckets for IPs that never come back would otherwise sit in the map for
+// the lifetime of the process; sweep expired entries so memory stays flat
+// on a long-lived always-data host.
+const rateSweep = setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateBuckets) {
+    if (entry.resetAt <= now) {
+      rateBuckets.delete(key);
+    }
+  }
+}, 5 * 60_000);
+rateSweep.unref?.();
+
 function rateLimited(request: Request, bucket: 'auth' | 'api'): boolean {
   const limit = bucket === 'auth' ? 30 : 300;
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
@@ -257,9 +270,11 @@ async function handleNotesPut(db: Db, request: Request, user: SessionUser): Prom
 
   // The owner comes from the session, never from the payload; the conflict
   // clause pins updates to rows the user already owns (no cross-user writes).
-  for (const row of rows) {
-    await db.run(
-      `insert into notes (id, user_id, name, html, position, created_at, updated_at, deleted)
+  // All rows go out as one batched write (single Turso pipeline request,
+  // single local transaction) instead of one round-trip per row.
+  await db.runMany(
+    rows.map(row => ({
+      sql: `insert into notes (id, user_id, name, html, position, created_at, updated_at, deleted)
        values (?, ?, ?, ?, ?, ?, ?, ?)
        on conflict(id) do update set
          name = excluded.name,
@@ -269,9 +284,9 @@ async function handleNotesPut(db: Db, request: Request, user: SessionUser): Prom
          updated_at = excluded.updated_at,
          deleted = excluded.deleted
        where notes.user_id = excluded.user_id`,
-      [row.id, user.id, row.name, row.html, row.position, row.created_at, row.updated_at, row.deleted ? 1 : 0]
-    );
-  }
+      args: [row.id, user.id, row.name, row.html, row.position, row.created_at, row.updated_at, row.deleted ? 1 : 0]
+    }))
+  );
 
   return json(request, { ok: true });
 }
@@ -484,6 +499,12 @@ await db.run('delete from sessions where expires_at <= ?', [Date.now()]);
 
 Bun.serve({
   port: PORT,
+  // Memory guardrails for small always-on hosts: cap request bodies at the
+  // runtime level (the default allows 128 MB to be buffered before any
+  // handler runs) and keep Bun's development error pages (with stack traces)
+  // out of responses. The handler already returns safe JSON errors itself.
+  maxRequestBodySize: MAX_BODY_BYTES,
+  development: false,
   async fetch(request) {
     const { pathname } = new URL(request.url);
     try {

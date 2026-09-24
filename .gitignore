@@ -4,6 +4,9 @@ coverage/
 scripts/.unicode-cache/
 upload/
 
+# dev-only SQLite database created by `bun index.ts` without TURSO_DATABASE_URL
+server/local.db
+
 # sandbox infra (local only)
 .env
 dev.log

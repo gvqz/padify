@@ -14,9 +14,22 @@
 export type SqlValue = string | number | null;
 export type Row = Record<string, unknown>;
 
+/** One parameterised statement; results are ignored (write path only). */
+export interface SqlStatement {
+  sql: string;
+  args?: SqlValue[];
+}
+
 export interface Db {
   all(sql: string, args?: SqlValue[]): Promise<Row[]>;
   run(sql: string, args?: SqlValue[]): Promise<void>;
+  /**
+   * Executes many statements in as few round-trips as possible — one Turso
+   * pipeline request (chunked to stay under per-request statement limits),
+   * one local transaction. Rows arrive in one network hop instead of one
+   * per row, which matters for sync pushes on an always-on host.
+   */
+  runMany(statements: SqlStatement[]): Promise<void>;
   /** Human-readable kind for boot logs. */
   readonly kind: string;
 }
@@ -49,6 +62,9 @@ function toTursoArg(value: SqlValue): TursoArg {
 
 class TursoHttpDb implements Db {
   readonly kind = 'turso';
+
+  /** Stay well under Turso's per-pipeline-request statement limit. */
+  private static readonly CHUNK = 100;
 
   constructor(private endpoint: string, private token: string) {}
 
@@ -116,6 +132,18 @@ class TursoHttpDb implements Db {
       { type: 'close' }
     ]);
   }
+
+  async runMany(statements: SqlStatement[]): Promise<void> {
+    for (let offset = 0; offset < statements.length; offset += TursoHttpDb.CHUNK) {
+      const chunk = statements.slice(offset, offset + TursoHttpDb.CHUNK);
+      const requests: TursoStmt[] = chunk.map(statement => ({
+        type: 'execute',
+        stmt: { sql: statement.sql, args: (statement.args ?? []).map(toTursoArg) }
+      }));
+      requests.push({ type: 'close' });
+      await this.pipeline(requests);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -127,6 +155,7 @@ class LocalSqliteDb implements Db {
 
   constructor(private db: {
     query: (sql: string) => { all: (...args: unknown[]) => unknown[]; run: (...args: unknown[]) => unknown };
+    transaction?: (fn: () => void) => () => void;
   }) {}
 
   private normalize(args: SqlValue[]): unknown[] {
@@ -139,6 +168,19 @@ class LocalSqliteDb implements Db {
 
   async run(sql: string, args: SqlValue[] = []): Promise<void> {
     this.db.query(sql).run(...this.normalize(args));
+  }
+
+  async runMany(statements: SqlStatement[]): Promise<void> {
+    const execute = (): void => {
+      for (const statement of statements) {
+        this.db.query(statement.sql).run(...this.normalize(statement.args ?? []));
+      }
+    };
+    if (this.db.transaction) {
+      this.db.transaction(execute)();
+    } else {
+      execute();
+    }
   }
 }
 

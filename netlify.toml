@@ -16,12 +16,11 @@
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
 
-# Route the cloud API (server/) under the same origin. Point this at
-# wherever you run the padify API — see docs/CLOUD_SETUP.md. Without this
-# redirect (or a matching apiBase in src/cloud/config.ts) sign-in will
-# report that the sync server can't be reached.
-# [[redirects]]
-#   from = "/api/*"
-#   to = "https://your-api-host.example/:splat"
-#   status = 200
-#   force = true
+# Route the cloud API (server/) under the same origin. The API runs on
+# AlwaysData (see docs/CLOUD_SETUP.md §2); replace the host below with your
+# AlwaysData domain before going live.
+[[redirects]]
+  from = "/api/*"
+  to = "https://YOUR-ACCOUNT.alwaysdata.net/:splat"
+  status = 200
+  force = true

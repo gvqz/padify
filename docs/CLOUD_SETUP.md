@@ -5,11 +5,14 @@ Cloud sync adds a durable backup on top: signed-in users get their notes
 restored on any device, and offline edits upload automatically once the
 device is back online.
 
-The stack has two pieces:
+The stack has three pieces:
 
+- **Netlify** — serves the built app (`dist/`) and proxies `/api/*` to the
+  API below, so everything is same-origin.
 - **The padify API** (`server/` in this repo) — a tiny zero-dependency Bun
   service that handles accounts (email + password), note sync and share
-  links.
+  links. It runs as one always-on process on **AlwaysData** (SSH + Bun;
+  see step 2).
 - **[Turso](https://turso.tech)** (libSQL/SQLite) — the database the API
   talks to. Free tier comfortably covers a notepad; the client's data lives
   in *your* Turso database.
@@ -36,28 +39,77 @@ turso db shell padify < server/schema.sql
 
 ## 2. Run the API
 
-The API runs anywhere Bun runs (a VPS, Fly.io, Railway, Render, a home
-server — anything that can keep a small process alive):
+The API runs anywhere Bun runs. The recommended home is **AlwaysData** —
+one small always-on process with SSH access; the rest of this section is
+the AlwaysData recipe (any host that keeps a process alive works the same:
+a VPS, Fly.io, Railway, a home server).
 
-```bash
-cd server
-PORT=3041 \
-TURSO_DATABASE_URL='libsql://padify-<you>.turso.io' \
-TURSO_AUTH_TOKEN='<token from step 1>' \
-ALLOWED_ORIGINS='https://your-padify-site.example' \
-bun run start
-```
+### 2a. AlwaysData, step by step
+
+1. **Install Bun over SSH** (AlwaysData gives full SSH; Bun is not
+   preinstalled but lands in your home directory):
+
+   ```bash
+   ssh your-account@ssh-YOUR-ACCOUNT.alwaysdata.net
+   curl -fsSL https://bun.sh/install | bash
+   # → ~/.bun/bin/bun  (log out/in or source ~/.bashrc to get it on PATH)
+   ```
+
+2. **Get the server code onto the box** — clone the repo (or `rsync` just
+   `server/`; the API has zero npm dependencies, so there is nothing to
+   `install`):
+
+   ```bash
+   git clone https://github.com/gvqz/padify.git ~/padify
+   ```
+
+3. **Launch it** with the Turso credentials from step 1. `--smol` makes
+   Bun keep its heap lean; it is the recommended flag on small plans:
+
+   ```bash
+   cd ~/padify/server
+   PORT=3041 \
+   TURSO_DATABASE_URL='libsql://padify-<you>.turso.io' \
+   TURSO_AUTH_TOKEN='<token from step 1>' \
+   ~/.bun/bin/bun --smol index.ts
+   ```
+
+4. **Keep it alive** from the AlwaysData panel: create a site backed by
+   your account whose start command is the launch line above (adapt the
+   site type — a Node/program site with a custom command works; the exact
+   naming depends on your plan). AlwaysData fronts sites with HTTPS on
+   your account domain, which is what Netlify will proxy to (step 3).
+
+### 2b. Memory footprint (measured, Bun 1.3)
+
+| Stage | RSS |
+|---|---|
+| Idle after boot | ~43–46 MB |
+| During a sign-up (scrypt hashing) | ~63–66 MB peak |
+
+The peak is the password hash doing its job (scrypt is *designed* to be
+memory-hard); it is transient and returns to the idle floor afterwards.
+That fits a 128 MB process budget with roughly 2× headroom. The server
+also has explicit guardrails so memory cannot creep:
+
+- request bodies are capped at 2 MB at the runtime level (rejected with
+  413 before any handler runs);
+- the per-IP rate-limit map sweeps expired entries every 5 minutes
+  (IPs that never return cannot accumulate);
+- note sync pushes batch all rows into one request (one round-trip to
+  Turso instead of one per row);
+- there is no caching of query results — rows exist only while a request
+  is being served.
+
+Other environment variables:
 
 - `PORT` — defaults to `3041`.
 - `TURSO_DATABASE_URL` — omit it (or use `file:`) to run with a local SQLite
   file at `server/local.db` instead of Turso (great for local dev).
 - `ALLOWED_ORIGINS` — comma-separated origins allowed to call the API from a
   browser. Not needed when the API is served under the same origin as the
-  app (see below).
-
-Keep it alive with your platform's process manager, or wrap it in a systemd
-unit / Docker container — it is a single `bun index.ts` process with no
-build step.
+  app (see below — the Netlify redirect in step 3 makes everything
+  same-origin).
 
 ## 3. Route the app to the API
 
@@ -65,12 +117,13 @@ The frontend calls the API at `apiBase` (default `''` = same origin, i.e.
 `/api/...` on your site). Easiest production setup: reverse-proxy `/api/*`
 from your static host to the API so everything is same-origin.
 
-**Netlify** — add a redirect to `netlify.toml`:
+**Netlify** — the redirect is already wired in `netlify.toml`; just replace
+the placeholder with your AlwaysData domain:
 
 ```toml
 [[redirects]]
   from = "/api/*"
-  to = "https://your-api-host.example/:splat"
+  to = "https://YOUR-ACCOUNT.alwaysdata.net/:splat"
   status = 200
   force = true
 ```
