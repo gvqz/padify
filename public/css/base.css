@@ -1,0 +1,139 @@
+/*
+ * base.css — Design tokens, document shell and shared primitives
+ *
+ * Split out of the old monolithic style.css. Loaded from index.html as an
+ * ordered <link>; keep the order (base first, vercel design system last).
+ */
+
+:root {
+  /* primary theme colors */
+  --dough-white: #fbfaf5;
+  --obsidian-black: #0b1215;
+
+  /* theme switcher colors */
+  --c-text-primary: #191919;
+  --c-text-secondary: #737374;
+  --c-border-primary: #ccc;
+  --c-bg-body: #ccc;
+  --c-bg-primary: #fff;
+  --c-bg-secondary: #d4d8dd;
+  --c-bg-button: #fff;
+  --slider-shadow: inset 0 1px 1px #ddd, 0 2px 3px #ccc;
+}
+
+body {
+  /* The fixed navbar paints ~101px tall at every viewport: a 50px brand
+     row plus the 50px action row under it (on phones the icon toolbar
+     stays visible and only the collapse menu hides). Padding has to
+     clear the whole bar or the first lines of every note sit behind it.
+     Picture-in-Picture host windows zero this out separately. */
+  padding-top: 101px;
+  background-color: var(--dough-white);
+}
+
+a:focus {
+  outline: revert;
+  outline-offset: revert;
+}
+
+.btn.active.focus,
+.btn.active:focus,
+.btn.focus,
+.btn:active.focus,
+.btn:active:focus,
+.btn:focus {
+  outline: revert;
+  outline-offset: revert;
+}
+
+input[type=file]:focus,
+input[type=checkbox]:focus,
+input[type=radio]:focus {
+  outline: revert;
+  outline-offset: revert;
+}
+
+@media (min-width: 992px) {
+  .col-md-5 {
+    width: 50%;
+  }
+}
+
+#mainContainer {
+  position: relative;
+}
+
+#pipContainer {
+  display: none;
+}
+
+.pip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #7e7d7d;
+  font-weight: bold;
+  pointer-events: none;
+  z-index: 1000;
+  background-color: rgba(0, 0, 0, 0.5);
+
+  &::after {
+    content: "Floating Window is Activated";
+  }
+}
+
+.overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  /* Adjust opacity as needed */
+  pointer-events: none;
+  /* Makes overlay non-interactive by default */
+  z-index: 10;
+  display: none;
+}
+
+.break-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 1040;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(circle at top, rgba(255, 246, 224, 0.18), rgba(255, 246, 224, 0) 35%),
+    rgba(24, 31, 38, 0.14);
+  backdrop-filter: blur(0px);
+  transition: opacity 900ms ease, backdrop-filter 900ms ease;
+}
+
+.break-veil.active {
+  opacity: 1;
+  backdrop-filter: blur(2px);
+}
+
+.dark .break-veil {
+  background:
+    radial-gradient(circle at top, rgba(147, 197, 253, 0.08), rgba(147, 197, 253, 0) 35%),
+    rgba(6, 10, 14, 0.34);
+}
+
+.pip-icon {
+  cursor: pointer;
+}
+
+@media all and (display-mode: picture-in-picture) {
+  body {
+    padding-top: 0px;
+  }
+}
+
+.generic-flex {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+

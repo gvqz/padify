@@ -1,0 +1,863 @@
+/*
+ * modals.css — Statistics modal, print styles, modal design system, help tour
+ *
+ * Split out of the old monolithic style.css. Loaded from index.html as an
+ * ordered <link>; keep the order (base first, vercel design system last).
+ */
+
+/* Statistics Modal Styles */
+.statistics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin: 20px 0;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 12px;
+  border-radius: 10px;
+  background: #e5e6e7;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 1px 1px 4px 0px #0000001f;
+}
+
+body.dark .stat-item {
+  background: rgb(224 242 255);
+}
+
+body.dark .stat-item:hover {
+  box-shadow: 2px 2px 3px 1px #0000001f;
+}
+
+.stat-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #5d5b5b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.stat-label a {
+  vertical-align: 2px;
+}
+
+.stat-label .tooltip {
+  text-transform: none;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--c-text-primary);
+}
+
+body.dark .stat-value {
+  color: #585656;
+}
+
+#keyboardShortcutsModal .modal-dialog {
+  max-width: 800px;
+}
+
+@media (max-width: 720px) {
+  .statistics-grid {
+    gap: 15px;
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .statistics-grid {
+    gap: 15px;
+  }
+
+  .stat-value {
+    font-size: 22px;
+  }
+
+  .stat-label {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .statistics-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+}
+
+@media print {
+
+  .dark .toast-popup,
+  .toast-popup,
+  .word-count-container,
+  .coffee-icon {
+    display: none !important;
+  }
+
+  .dark textarea,
+  .dark #note {
+    border-left: none;
+    border-right: none;
+  }
+
+  textarea,
+  #note {
+    border: none;
+    border-left: none;
+    border-right: none;
+  }
+}
+/* ==========================================================================
+   Dark theme for app dialogs (Bootstrap modals + SweetAlert2 popups).
+   Aligns every modal with the dark palette already used by the snapshots
+   modal and the Unicode picker: slate surfaces, light text, blue accent.
+   ========================================================================== */
+
+.dark {
+  --c-text-primary: #e2e8f0;
+  --c-text-secondary: #a0aec0;
+  --c-border-primary: #4a5568;
+  --c-bg-primary: #2d3748;
+  --c-bg-secondary: #1a2332;
+  --c-bg-button: #2d3748;
+  --slider-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.4), 0 2px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* ---- dialog frame ------------------------------------------------------ */
+
+.dark .modal-content {
+  background-color: #2d3748;
+  border: 1px solid #4a5568;
+  color: #e2e8f0;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+
+.dark .modal-header {
+  border-bottom: 1px solid #4a5568;
+}
+
+.dark .modal-footer {
+  border-top: 1px solid #4a5568;
+}
+
+.dark .modal-title,
+.dark .custom-modal-title {
+  color: #e2e8f0;
+}
+
+.dark .modal-header .close,
+.dark .modal-header .close:hover {
+  color: #e2e8f0;
+  text-shadow: none;
+  opacity: 0.85;
+}
+
+.dark .modal-body {
+  color: #cbd5e0;
+}
+
+.dark .modal-body label,
+.dark .modal-body .checkbox label,
+.dark .modal-body .radio label {
+  color: #e2e8f0;
+}
+
+.dark .modal-body .help-block,
+.dark .modal-body .text-muted {
+  color: #a0aec0;
+}
+
+.dark .modal-body a {
+  color: #63b3ed;
+}
+
+.dark .modal-body a:hover,
+.dark .modal-body a:focus {
+  color: #90cdf4;
+}
+
+/* ---- form controls ------------------------------------------------------ */
+
+.dark .form-control {
+  background-color: #1a2332;
+  border: 1px solid #4a5568;
+  color: #e2e8f0;
+}
+
+.dark .form-control::placeholder {
+  color: #a0aec0;
+}
+
+.dark .form-control:focus {
+  border-color: #63b3ed;
+  box-shadow: 0 0 0 0.2rem rgba(99, 179, 237, 0.25);
+}
+
+/* ---- buttons ------------------------------------------------------------ */
+
+.dark .btn-default,
+.dark .modal-content .btn-default {
+  background-color: #1a2332;
+  border: 1px solid #4a5568;
+  color: #e2e8f0;
+}
+
+.dark .btn-default:hover,
+.dark .btn-default:focus,
+.dark .btn-default:active,
+.dark .btn-default.active,
+.dark .open>.dropdown-toggle.btn-default {
+  background-color: #4a5568;
+  border: 1px solid #4a5568;
+  color: #ffffff;
+}
+
+.dark .btn-link {
+  color: #63b3ed;
+}
+
+.dark .btn-link:hover,
+.dark .btn-link:focus {
+  color: #90cdf4;
+}
+
+/* ---- nav tabs (About) ---------------------------------------------------- */
+
+.dark .nav-tabs {
+  border-bottom: 1px solid #4a5568;
+}
+
+.dark .nav-tabs>li>a {
+  color: #a0aec0;
+}
+
+.dark .nav-tabs>li>a:hover {
+  border-color: transparent;
+  color: #e2e8f0;
+  background-color: transparent;
+}
+
+.dark .nav-tabs>li.active>a,
+.dark .nav-tabs>li.active>a:focus,
+.dark .nav-tabs>li.active>a:hover {
+  background-color: #2d3748;
+  color: #e2e8f0;
+  border: 1px solid #4a5568;
+  border-bottom-color: transparent;
+}
+
+/* ---- keyboard shortcuts keycaps ------------------------------------------ */
+
+.dark kbd {
+  color: #e2e8f0;
+  background: #1a2332;
+  border: 2px solid #4a5568;
+  box-shadow: 0 4px #10161f, inset 0 -2px 4px rgba(0, 0, 0, 0.35);
+  text-shadow: none;
+}
+
+/* ---- statistics modal ----------------------------------------------------- */
+
+body.dark .stat-item {
+  background: #1a2332;
+  box-shadow: none;
+}
+
+body.dark .stat-item:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+body.dark .stat-label {
+  color: #a0aec0;
+}
+
+body.dark .stat-value {
+  color: #e2e8f0;
+}
+
+/* ---- volume slider dark accent (preferences typewriter volume) ------------ */
+.dark .volume-slider {
+  accent-color: #63b3ed;
+}
+
+/* ---- preferences toggles + theme switcher --------------------------------- */
+
+.dark .checkbox.checbox-switch label span,
+.dark .checkbox-inline.checbox-switch span {
+  background-color: #1a2332;
+  border-color: #4a5568;
+  box-shadow: #4a5568 0px 0px 0px 0px inset;
+}
+
+.dark .checkbox.checbox-switch label>input:checked+span,
+.dark .checkbox-inline.checbox-switch>input:checked+span {
+  background-color: #63b3ed;
+  border-color: #63b3ed;
+  box-shadow: rgba(99, 179, 237, 0.45) 0px 0px 0px 8px inset;
+}
+
+.dark .theme-switcher label {
+  color: #a0aec0;
+}
+
+.dark .theme-switcher label:hover {
+  color: #e2e8f0;
+}
+
+/* ---- SweetAlert2 non-toast dialogs ---------------------------------------- */
+
+.dark .swal2-popup:not(.swal-toast-bottom-offset) {
+  background: #2d3748 !important;
+  color: #e2e8f0;
+}
+
+.dark .swal2-title {
+  color: #e2e8f0;
+}
+
+.dark .swal2-html-container {
+  color: #cbd5e0;
+}
+
+.dark .swal2-cancel {
+  background-color: #1a2332;
+  border: 1px solid #4a5568;
+  color: #e2e8f0;
+}
+
+.dark .swal2-cancel:hover {
+  background-color: #4a5568;
+  color: #ffffff;
+}
+
+/* ---- timer modal ----------------------------------------------------------- */
+
+.dark .timer-modal .btn-primary {
+  background-color: #2c5282;
+  border-color: #2c5282;
+}
+
+.dark .timer-modal .btn-primary:hover,
+.dark .timer-modal .btn-primary:focus,
+.dark .timer-modal .btn-primary:active,
+.dark .timer-modal .btn-primary.active {
+  background-color: #31708e;
+  border-color: #31708e;
+}
+
+.dark .theme-switcher label span {
+  color: #a0aec0;
+}
+
+.dark .theme-switcher label:hover span {
+  color: #e2e8f0;
+}
+
+/* ---- keyboard shortcuts table rows ----------------------------------------- */
+
+.dark .modal-body table tr {
+  background-color: #1a2332;
+}
+
+.dark .modal-body table tr:nth-child(n+2) {
+  border-top: 1px solid #4a5568;
+}
+
+.dark .modal-body table tr td,
+.dark .modal-body table td {
+  color: #cbd5e0;
+}
+
+/* ---- brand (wordmark) menu -------------------------------------------------- */
+
+/* The wordmark menu rides on the same popover design system as the other
+   navbar dropdowns (vercel.css `.navbar .dropdown-menu` — background, border,
+   radius, shadow, entrance animation). The #brandMenu-scoped rules below only
+   tweak placement, widen the frame for the shortcut row and add the caret. */
+
+.brand-menu-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+#brandMenu {
+  top: calc(100% + 2px);
+  min-width: 248px;
+}
+
+/* two-layer caret: border-colored diamond underneath, background diamond on
+   top — a seamless tooltip pointer through the popover border */
+#brandMenu::before,
+#brandMenu::after {
+  content: "";
+  position: absolute;
+  transform: rotate(45deg);
+}
+
+#brandMenu::before {
+  top: -6.5px;
+  left: 19px;
+  width: 12px;
+  height: 12px;
+  background: var(--vz-border);
+}
+
+#brandMenu::after {
+  top: -5.5px;
+  left: 20px;
+  width: 10px;
+  height: 10px;
+  background: var(--vz-bg-elevated);
+}
+
+.brand-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+
+.brand-menu-item:hover,
+.brand-menu-item:focus {
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg);
+  text-decoration: none;
+  outline: none;
+}
+
+.brand-menu-item svg {
+  flex: none;
+  color: var(--vz-fg-muted);
+  transition: color 0.1s ease;
+}
+
+.brand-menu-item:hover svg,
+.brand-menu-item:focus svg {
+  color: var(--vz-fg);
+}
+
+.brand-menu-text {
+  flex: 1 1 auto;
+}
+
+.brand-menu-kbd {
+  flex: none;
+  padding: 2px 6px;
+  border: 1px solid var(--vz-border);
+  border-radius: 4px;
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg-muted);
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* ---- help tour modal -------------------------------------------------------- */
+
+.help-dialog {
+  width: 560px;
+  max-width: calc(100vw - 30px);
+}
+
+.help-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.help-close {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  z-index: 2;
+}
+
+.dark .help-close,
+.dark .help-close:hover {
+  color: #e2e8f0;
+}
+
+.help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px 0;
+}
+
+.help-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #98938a;
+}
+
+.help-counter {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: #a9a49a;
+}
+
+.help-body {
+  padding: 10px 24px 0;
+}
+
+.help-stage {
+  min-height: 264px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.help-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 8px 0 2px;
+}
+
+.help-stage[data-direction="forward"] .help-step {
+  animation: help-in-forward 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.help-stage[data-direction="backward"] .help-step {
+  animation: help-in-backward 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+@keyframes help-in-forward {
+  from {
+    opacity: 0;
+    transform: translateX(26px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes help-in-backward {
+  from {
+    opacity: 0;
+    transform: translateX(-26px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.help-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 19px;
+  margin-bottom: 18px;
+}
+
+.help-icon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.help-title {
+  margin: 0 0 9px;
+  font-size: 19px;
+  font-weight: 700;
+  color: #2e2c26;
+}
+
+.help-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.68;
+  color: #6b675e;
+}
+
+.help-hints {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 16px;
+  margin-top: 16px;
+}
+
+.help-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: #8a857b;
+}
+
+.help-hint kbd {
+  padding: 2px 8px;
+  font-size: 10.5px;
+  margin: 0;
+  border-width: 1px;
+  box-shadow: 0 2px #c9c5b9;
+}
+
+.help-more {
+  display: inline-block;
+  margin-top: 16px;
+  font-size: 13px;
+  color: #3574d8;
+}
+
+.help-more:hover,
+.help-more:focus {
+  color: #2a5cb2;
+  text-decoration: none;
+}
+
+.help-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px 22px 6px;
+  border-top: 1px solid #eeebe0;
+}
+
+.help-dots {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.help-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 99px;
+  background: #d8d4c8;
+  transition: width 0.2s ease, background 0.2s ease;
+}
+
+.help-dot:hover {
+  background: #b9b4a6;
+}
+
+.help-dot.active {
+  width: 22px;
+  background: #3b82f6;
+}
+
+.help-nav {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.help-btn {
+  min-width: 92px;
+}
+
+/* step accent tints */
+
+.help-step[data-accent="blue"] .help-icon {
+  background: rgba(59, 130, 246, 0.13);
+  color: #2f6fe4;
+}
+
+.help-step[data-accent="violet"] .help-icon {
+  background: rgba(139, 92, 246, 0.13);
+  color: #7c4df0;
+}
+
+.help-step[data-accent="rose"] .help-icon {
+  background: rgba(244, 63, 94, 0.12);
+  color: #e0446c;
+}
+
+.help-step[data-accent="amber"] .help-icon {
+  background: rgba(245, 158, 11, 0.16);
+  color: #d9820b;
+}
+
+.help-step[data-accent="teal"] .help-icon {
+  background: rgba(20, 184, 166, 0.14);
+  color: #0e9488;
+}
+
+.help-step[data-accent="emerald"] .help-icon {
+  background: rgba(16, 185, 129, 0.14);
+  color: #0d9668;
+}
+
+.help-step[data-accent="sky"] .help-icon {
+  background: rgba(14, 165, 233, 0.14);
+  color: #0b87c8;
+}
+
+.help-step[data-accent="indigo"] .help-icon {
+  background: rgba(99, 102, 241, 0.14);
+  color: #5457d8;
+}
+
+/* dark theme */
+
+.dark .help-eyebrow {
+  color: #8b98ab;
+}
+
+.dark .help-counter {
+  color: #74829a;
+}
+
+.dark .help-title {
+  color: #e2e8f0;
+}
+
+.dark .help-text {
+  color: #a9b4c2;
+}
+
+.dark .help-hint {
+  color: #9fb0c4;
+}
+
+.dark .help-hint kbd {
+  color: #cbd5e0;
+  background: #1a2332;
+  border-color: #4a5568;
+  box-shadow: 0 2px #10161f;
+}
+
+.dark .help-more {
+  color: #7cc5ff;
+}
+
+.dark .help-more:hover,
+.dark .help-more:focus {
+  color: #a8d9ff;
+}
+
+.dark .help-footer {
+  border-top-color: #4a5568;
+}
+
+.dark .help-dot {
+  background: #46566f;
+}
+
+.dark .help-dot:hover {
+  background: #56627a;
+}
+
+.dark .help-dot.active {
+  background: #60a5fa;
+}
+
+.dark .help-step[data-accent="blue"] .help-icon {
+  background: rgba(96, 165, 250, 0.16);
+  color: #93c5fd;
+}
+
+.dark .help-step[data-accent="violet"] .help-icon {
+  background: rgba(167, 139, 250, 0.16);
+  color: #c4b5fd;
+}
+
+.dark .help-step[data-accent="rose"] .help-icon {
+  background: rgba(251, 113, 133, 0.14);
+  color: #fda4af;
+}
+
+.dark .help-step[data-accent="amber"] .help-icon {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fcd34d;
+}
+
+.dark .help-step[data-accent="teal"] .help-icon {
+  background: rgba(45, 212, 191, 0.14);
+  color: #5eead4;
+}
+
+.dark .help-step[data-accent="emerald"] .help-icon {
+  background: rgba(52, 211, 153, 0.14);
+  color: #6ee7b7;
+}
+
+.dark .help-step[data-accent="sky"] .help-icon {
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+}
+
+.dark .help-step[data-accent="indigo"] .help-icon {
+  background: rgba(129, 140, 248, 0.15);
+  color: #a5b4fc;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .help-stage[data-direction="forward"] .help-step,
+  .help-stage[data-direction="backward"] .help-step {
+    animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .help-dialog {
+    width: auto;
+  }
+
+  .help-body {
+    padding: 8px 18px 0;
+  }
+
+  .help-stage {
+    min-height: 252px;
+  }
+
+  .help-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+  }
+
+  .help-icon svg {
+    width: 26px;
+    height: 26px;
+  }
+
+  .help-title {
+    font-size: 17.5px;
+  }
+
+  .help-text {
+    font-size: 13.5px;
+  }
+
+  .help-nav {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
