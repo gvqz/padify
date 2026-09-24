@@ -63,15 +63,14 @@ a VPS, Fly.io, Railway, a home server).
    git clone https://github.com/gvqz/padify.git ~/padify
    ```
 
-3. **Launch it** with the Turso credentials from step 1. `--smol` makes
-   Bun keep its heap lean; it is the recommended flag on small plans:
+3. **Launch it** with the Turso credentials from step 1:
 
    ```bash
    cd ~/padify/server
    PORT=3041 \
    TURSO_DATABASE_URL='libsql://padify-<you>.turso.io' \
    TURSO_AUTH_TOKEN='<token from step 1>' \
-   ~/.bun/bin/bun --smol index.ts
+   ~/.bun/bin/bun index.ts
    ```
 
 4. **Keep it alive** from the AlwaysData panel: create a site backed by
@@ -84,13 +83,15 @@ a VPS, Fly.io, Railway, a home server).
 
 | Stage | RSS |
 |---|---|
-| Idle after boot | ~43–46 MB |
-| During a sign-up (scrypt hashing) | ~63–66 MB peak |
+| Idle after boot | ~46 MB |
+| During a sign-up (scrypt hashing) | ~66 MB peak |
 
 The peak is the password hash doing its job (scrypt is *designed* to be
 memory-hard); it is transient and returns to the idle floor afterwards.
-That fits a 128 MB process budget with roughly 2× headroom. The server
-also has explicit guardrails so memory cannot creep:
+That fits a 128 MB process budget with roughly 2× headroom. (Bun's
+`--smol` flag trims ~3 MB of RSS but runs a more aggressive GC — not
+worth the trade; launch without it.) The server also has explicit
+guardrails so memory cannot creep:
 
 - request bodies are capped at 2 MB at the runtime level (rejected with
   413 before any handler runs);
