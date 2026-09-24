@@ -8,7 +8,7 @@
   publish = "dist"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
 
 # Keep the service worker fresh so PWA updates roll out immediately.
 [[headers]]
