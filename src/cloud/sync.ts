@@ -2,9 +2,10 @@
  * Padify cloud sync — notes (tabs) mirrored to the padify API (Turso).
  *
  * Design rules:
- *  • Local-first. localStorage stays the source of truth for the UI; the
- *    cloud is a durable backup + transport between devices. Every feature
- *    works exactly as before while signed out.
+ *  • Local-first. The on-device storage layer (IndexedDB — see
+ *    src/storage/) stays the source of truth for the UI; the cloud is a
+ *    durable backup + transport between devices. Every feature works
+ *    exactly as before while signed out.
  *  • Last-write-wins per note, compared by the client `updatedAt` clock that
  *    padify already stamps on every edit. Conflicts resolve to the most
  *    recent edit; snapshots (local, unsynced) still hold every prior version.
@@ -14,10 +15,11 @@
  *    state and retries on the next change, `online` event or 30s tick.
  *
  * The API is a tiny bun service (see server/) backed by a Turso database;
- * sessions are bearer tokens stored in localStorage under padifySession.
+ * sessions are bearer tokens stored under the padifySession storage key.
  */
 
 import { api as apiCall, ApiError } from './api';
+import { stateGet, stateSet, stateRemove } from '../storage';
 import type { NoteTab, TabManager, TabTombstone, TabsSyncPayload } from '../tabs';
 
 // ---------------------------------------------------------------------------
@@ -104,7 +106,7 @@ function api<T>(path: string, options: { method?: string; body?: unknown } = {})
 
 function loadStoredSession(): StoredSession | null {
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
+    const raw = stateGet(SESSION_KEY);
     if (!raw) {
       return null;
     }
@@ -129,9 +131,9 @@ function storeSession(next: StoredSession | null): void {
   session = next;
   try {
     if (next) {
-      localStorage.setItem(SESSION_KEY, JSON.stringify(next));
+      stateSet(SESSION_KEY, JSON.stringify(next));
     } else {
-      localStorage.removeItem(SESSION_KEY);
+      stateRemove(SESSION_KEY);
     }
   } catch {
     /* storage unavailable — session lives for this page only */

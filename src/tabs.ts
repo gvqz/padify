@@ -3,11 +3,19 @@
  *
  * Tabs live on the main page alongside the rich text formatting (merged in
  * from the old standalone Tabbypad tool, which no longer ships as a separate
- * page). Every tab is an independent note with its own rich content that is
- * autosaved to localStorage:
+ * page). Every tab is an independent note with its own rich content,
+ * autosaved per-record into the padify IndexedDB store (see src/storage/):
  *
- *   padifyTabs      → JSON array of { id, name, html, createdAt, updatedAt }
- *   padifyActiveTab → id of the tab shown in the editor
+ *   notes store    → one row per note: { id, name, html, createdAt,
+ *                    updatedAt, position } — deletions are rows with
+ *                    deleted=true (tombstones), exactly like the cloud
+ *                    schema; a save writes only the changed rows
+ *   kv store       → padifyActiveTab holds the id of the tab in the editor
+ *
+ * A legacy blob mirror keeps the old `padifyTabs` localStorage key fresh for
+ * service-worker-cached pre-storage app versions (bounded cadence — see
+ * storage/notes.ts), and IndexedDB-unavailable browsers fall back to the
+ * blob format entirely.
  *
  * The legacy single-note `note` key (plain text, optionally with markdown
  * style **bold** / *italic* / __underline__ / ~~strikethrough__ wrappers) is
@@ -23,6 +31,14 @@
 import $ from 'jquery';
 import Swal from 'sweetalert2';
 import { showToast } from './utils';
+import {
+  ACTIVE_TAB_KEY,
+  loadNotes,
+  saveNotes,
+  stateGet,
+  stateRemove,
+  type StoredNoteTab,
+} from './storage';
 
 export interface NoteTab {
   id: string;
@@ -33,8 +49,6 @@ export interface NoteTab {
   updatedAt: number;
 }
 
-const TABS_KEY = 'padifyTabs';
-const ACTIVE_KEY = 'padifyActiveTab';
 const LEGACY_NOTE_KEY = 'note';
 
 /**
@@ -46,8 +60,6 @@ export interface TabTombstone {
   id: string;
   updatedAt: number;
 }
-
-const TOMBSTONES_KEY = 'padifyTabTombstones';
 
 /** Notifies the rail's count badge (and any other listener) about tab count. */
 const RAIL_COUNT_ID = 'tabRailCount';
@@ -97,8 +109,8 @@ export const WELCOME_HTML = [
   '- Download notes as plain text, PDF, HTML, and DOCX file.',
   '- Ability to play generative ambient music and mix 25 ambience sounds to help you focus.',
   '',
-  "CAUTION: Since the app uses the browser's localStorage to store your notes,",
-  "it's recommended that you take a backup of your notes more often using the",
+  "CAUTION: Since the app stores your notes on your own device, it's",
+  'recommended that you take a backup of your notes more often using the',
   '"Download Notes" button or by pressing the "ctrl/command + s" keys.',
   '',
   '<b>Delete this text and start writing your notes</b>',
@@ -280,13 +292,19 @@ export class TabManager {
     this.strip = $('#tabStripTabs');
   }
 
-  /** Loads (or bootstraps) the model and paints the strip + editor. */
-  init(): void {
-    this.tabs = this.load();
-    this.tombstones = this.loadTombstones();
+  /**
+   * Loads (or bootstraps) the model and paints the strip + editor. Awaited
+   * by app.ts after the storage layer hydrated (see storage/index.ts).
+   */
+  async init(): Promise<void> {
+    const snapshot = await loadNotes();
+    this.tabs = this.loadModel(snapshot.tabs);
+    this.tombstones = snapshot.tombstones.filter(
+      (entry) => entry && typeof entry.id === 'string' && typeof entry.updatedAt === 'number',
+    );
     this.migrateLegacyNote();
 
-    const savedActive = localStorage.getItem(ACTIVE_KEY);
+    const savedActive = stateGet(ACTIVE_TAB_KEY);
     this.activeId = this.tabs.some((tab) => tab.id === savedActive)
       ? savedActive
       : (this.tabs[0]?.id ?? null);
@@ -307,44 +325,31 @@ export class TabManager {
 
   // ---- model ---------------------------------------------------------------
 
-  private load(): NoteTab[] {
-    const raw = localStorage.getItem(TABS_KEY);
-    if (!raw) {
-      return [];
-    }
-
-    try {
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) {
-        return [];
-      }
-
-      return parsed
-        .filter((entry) => entry && typeof entry === 'object' && typeof entry.id === 'string')
-        .map((entry) => ({
-          id: entry.id as string,
-          name: typeof entry.name === 'string' ? entry.name : null,
-          html: typeof entry.html === 'string' ? sanitizeNoteHtml(entry.html) : '',
-          createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : Date.now(),
-          updatedAt: typeof entry.updatedAt === 'number' ? entry.updatedAt : Date.now(),
-        }));
-    } catch {
-      return [];
-    }
+  /** Validates + sanitises a stored row into the editor-safe model shape. */
+  private loadModel(entries: StoredNoteTab[]): NoteTab[] {
+    return entries
+      .filter((entry) => entry && typeof entry.id === 'string')
+      .map((entry) => ({
+        id: entry.id,
+        name: typeof entry.name === 'string' ? entry.name : null,
+        html: typeof entry.html === 'string' ? sanitizeNoteHtml(entry.html) : '',
+        createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : Date.now(),
+        updatedAt: typeof entry.updatedAt === 'number' ? entry.updatedAt : Date.now(),
+      }));
   }
 
   /**
    * One-time migration from the legacy single-note `note` key. Runs after
-   * load() so an existing tab list wins over the old note.
+   * the snapshot load so an existing tab list wins over the old note.
    */
   private migrateLegacyNote(): void {
-    const legacy = localStorage.getItem(LEGACY_NOTE_KEY);
+    const legacy = stateGet(LEGACY_NOTE_KEY);
 
     if (legacy === null) {
       return;
     }
 
-    localStorage.removeItem(LEGACY_NOTE_KEY);
+    stateRemove(LEGACY_NOTE_KEY);
 
     if (this.tabs.length > 0 || legacy.trim() === '') {
       return;
@@ -354,11 +359,14 @@ export class TabManager {
     this.persist();
   }
 
-  private persist(): void {
-    localStorage.setItem(TABS_KEY, JSON.stringify(this.tabs));
-    if (this.activeId) {
-      localStorage.setItem(ACTIVE_KEY, this.activeId);
-    }
+  /**
+   * Persists the model (write-behind — see storage/notes.ts) and notifies
+   * the sync layer + persist listeners. `immediate=false` marks the typing
+   * path: the IndexedDB diff still runs, the legacy blob mirror is
+   * throttled.
+   */
+  private persist(immediate = true): void {
+    saveNotes({ tabs: this.tabs, tombstones: this.tombstones }, this.activeId, { immediate });
 
     const payload = this.exportForSync();
     if (this.onPersist) {
@@ -381,23 +389,12 @@ export class TabManager {
 
   // ---- sync support ---------------------------------------------------------
 
-  private loadTombstones(): TabTombstone[] {
-    try {
-      const raw = localStorage.getItem(TOMBSTONES_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(parsed)) {
-        return [];
-      }
-      return parsed.filter(
-        (entry) => entry && typeof entry.id === 'string' && typeof entry.updatedAt === 'number',
-      );
-    } catch {
-      return [];
-    }
-  }
-
+  /**
+   * Persists the tombstone list (they live as deleted rows in the notes
+   * store — see storage/notes.ts).
+   */
   private persistTombstones(): void {
-    localStorage.setItem(TOMBSTONES_KEY, JSON.stringify(this.tombstones));
+    saveNotes({ tabs: this.tabs, tombstones: this.tombstones }, this.activeId, { immediate: true });
   }
 
   /** Records a tab deletion so the cloud can mirror it (tombstone). */
@@ -478,7 +475,7 @@ export class TabManager {
     }
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
-      this.persist();
+      this.persist(false);
     }, 400);
   }
 

@@ -11,8 +11,10 @@
  *                         about to expire.
  *
  * The user's Spotify app Client ID (from developer.spotify.com/dashboard) is
- * stored in localStorage — see the Connect screen in the music player.
+ * stored via the storage layer — see the Connect screen in the music player.
  */
+
+import { stateGet, stateSet, stateRemove } from '../storage';
 
 export interface SpotifyAuthSession {
   accessToken: string;
@@ -91,7 +93,7 @@ export function getRedirectUri(): string {
 
 export function getClientId(): string | null {
   try {
-    const value = localStorage.getItem(CLIENT_ID_STORAGE_KEY);
+    const value = stateGet(CLIENT_ID_STORAGE_KEY);
     return value && value.trim() ? value.trim() : null;
   } catch {
     return null;
@@ -99,7 +101,7 @@ export function getClientId(): string | null {
 }
 
 export function saveClientId(clientId: string): void {
-  localStorage.setItem(CLIENT_ID_STORAGE_KEY, clientId.trim());
+  stateSet(CLIENT_ID_STORAGE_KEY, clientId.trim());
 }
 
 // ---------------------------------------------------------------------------
@@ -108,7 +110,7 @@ export function saveClientId(clientId: string): void {
 
 export function getSession(): SpotifyAuthSession | null {
   try {
-    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    const raw = stateGet(AUTH_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<SpotifyAuthSession>;
     if (
@@ -131,7 +133,7 @@ export function getSession(): SpotifyAuthSession | null {
 
 function saveSession(session: SpotifyAuthSession): void {
   try {
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+    stateSet(AUTH_STORAGE_KEY, JSON.stringify(session));
   } catch {
     /* storage unavailable — session lives for this page only */
   }
@@ -142,8 +144,8 @@ export function isAuthenticated(): boolean {
 }
 
 export function disconnect(): void {
-  localStorage.removeItem(AUTH_STORAGE_KEY);
-  localStorage.removeItem(PKCE_STORAGE_KEY);
+  stateRemove(AUTH_STORAGE_KEY);
+  stateRemove(PKCE_STORAGE_KEY);
 }
 
 // ---------------------------------------------------------------------------
@@ -160,11 +162,8 @@ export async function beginLogin(): Promise<void> {
   const state = randomString(16);
   const codeChallenge = await sha256Base64Url(verifier);
   try {
-    localStorage.setItem(
-      PKCE_STORAGE_KEY,
-      JSON.stringify({ verifier, state, redirect: getRedirectUri() }),
-    );
-    localStorage.setItem(RETURN_FLAG_KEY, '1');
+    stateSet(PKCE_STORAGE_KEY, JSON.stringify({ verifier, state, redirect: getRedirectUri() }));
+    stateSet(RETURN_FLAG_KEY, '1');
   } catch {
     /* proceed without persistence — the exchange will fail gracefully */
   }
@@ -203,7 +202,7 @@ export async function completeLogin(): Promise<LoginResult | null> {
   let expectedState: string | null = null;
   let redirect: string | null = null;
   try {
-    const raw = localStorage.getItem(PKCE_STORAGE_KEY);
+    const raw = stateGet(PKCE_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as {
         verifier?: string;
@@ -217,7 +216,7 @@ export async function completeLogin(): Promise<LoginResult | null> {
   } catch {
     /* corrupted storage — treat as missing */
   }
-  localStorage.removeItem(PKCE_STORAGE_KEY);
+  stateRemove(PKCE_STORAGE_KEY);
 
   // Strip the OAuth params from the address bar.
   window.history.replaceState(
@@ -259,8 +258,8 @@ export async function completeLogin(): Promise<LoginResult | null> {
 
 export function consumedReturnFlag(): boolean {
   try {
-    if (localStorage.getItem(RETURN_FLAG_KEY) !== '1') return false;
-    localStorage.removeItem(RETURN_FLAG_KEY);
+    if (stateGet(RETURN_FLAG_KEY) !== '1') return false;
+    stateRemove(RETURN_FLAG_KEY);
     return true;
   } catch {
     return false;

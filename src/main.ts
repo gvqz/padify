@@ -3,6 +3,14 @@ import 'bootstrap';
 import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
 
+import { storageReady } from './storage';
+
+// Kick the IndexedDB open + hydration at module evaluation — the earliest
+// possible moment — so it overlaps bundle evaluation and DOM parsing. Every
+// consumer (app.ts, white-noise-player.ts) awaits storageReady() before
+// reading any state, and app.ts constructs the music player only after.
+void storageReady();
+
 import './app';
 import './snapshots';
 import './timer';

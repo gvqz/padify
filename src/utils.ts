@@ -3,6 +3,7 @@ import Swal from 'sweetalert2';
 import { get, setState, selector } from './selector';
 import type { NotepadUI } from './selector';
 import { getTabManager } from './tabs';
+import { stateGet, stateSet } from './storage';
 
 // Bootstrap 3's jQuery modal plugin (registered globally by the `bootstrap`
 // import in main.ts) is not covered by @types/jquery.
@@ -115,7 +116,7 @@ export function enableDarkMode(
   $('#mode').attr('title', lightmodeText);
   $('#themeIcon').attr('src', 'img/navbar/light-theme.svg');
   metaThemeColor!.setAttribute('content', darkMetaColor);
-  localStorage.setItem('mode', 'dark');
+  stateSet('mode', 'dark');
 }
 
 export function enableLightMode(
@@ -128,7 +129,7 @@ export function enableLightMode(
   $('#mode').attr('title', darkmodeText);
   $('#themeIcon').attr('src', 'img/navbar/dark-theme.svg');
   metaThemeColor!.setAttribute('content', lightMetaColor);
-  localStorage.setItem('mode', 'light');
+  stateSet('mode', 'light');
 }
 
 export interface ThemeConfig {
@@ -154,7 +155,7 @@ export function enableDeviceTheme(themeConfig: ThemeConfig): void {
     );
   }
 
-  localStorage.setItem('mode', 'device');
+  stateSet('mode', 'device');
 }
 
 export function resetFontSize(defaultFontSize: number): void {
@@ -627,7 +628,7 @@ export function turnOffFocusMode(notepad: NotepadUI): void {
   textArea.style.borderLeft = '';
 
   if (
-    localStorage.getItem('userChosenWordCountPillSelected') === 'Yes' ||
+    stateGet('userChosenWordCountPillSelected') === 'Yes' ||
     selector().defaultConfig.defaultShowWordCountPill === 'Yes'
   ) {
     notepad.bottomLine.show();

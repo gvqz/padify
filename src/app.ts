@@ -35,6 +35,8 @@ import {
 import Swal from 'sweetalert2';
 import { initUnicodePicker } from './unicode/picker';
 import { TabManager, setTabManager, getEditorText, getEditorHtml, sanitizeNoteHtml } from './tabs';
+import { initMusicPlayer } from './music-player';
+import { storageReady, stateGet, stateSet, stateRemove } from './storage';
 import { initCloudSync } from './cloud/sync';
 import { initCloudUI } from './cloud/ui';
 import { initCloudShare } from './cloud/share';
@@ -78,7 +80,11 @@ interface BreakReminderState {
   dismissedUntil: number;
 }
 
-$(document).ready(function () {
+$(document).ready(async function () {
+  // Storage hydrates from IndexedDB before any state is read (boot started
+  // at module evaluation in main.ts — this await is usually instant).
+  await storageReady();
+
   const breakReminderConfig = {
     // Show the reminder after this much active writing time.
     thresholdMs: 30 * 60 * 1000,
@@ -98,7 +104,7 @@ $(document).ready(function () {
     // Keep the reminder suppressed for this long after dismissal.
     dismissCooldownMs: 30 * 60 * 1000,
 
-    // localStorage key used to persist reminder state across reloads.
+    // Storage key (kv store) used to persist reminder state across reloads.
     storageKey: 'breakReminderState',
   };
 
@@ -114,7 +120,7 @@ $(document).ready(function () {
   let breakRemindersEnabled = false;
 
   function loadBreakReminderState(): BreakReminderState {
-    const rawState = localStorage.getItem(breakReminderConfig.storageKey);
+    const rawState = stateGet(breakReminderConfig.storageKey);
 
     if (!rawState) {
       return { ...breakReminderDefaults };
@@ -131,12 +137,12 @@ $(document).ready(function () {
   }
 
   function persistBreakReminderState(): void {
-    localStorage.setItem(breakReminderConfig.storageKey, JSON.stringify(breakReminderState));
+    stateSet(breakReminderConfig.storageKey, JSON.stringify(breakReminderState));
   }
 
   function clearBreakReminderState(): void {
     breakReminderState = { ...breakReminderDefaults };
-    localStorage.removeItem(breakReminderConfig.storageKey);
+    stateRemove(breakReminderConfig.storageKey);
   }
 
   function closeBreakReminderPopup(): void {
@@ -331,7 +337,7 @@ $(document).ready(function () {
     updateWordCountPill(tabManager.getActiveText());
     handleTabSwitchedWhileListening();
   };
-  tabManager.init();
+  await tabManager.init();
 
   // Share links stay fresh through the persist hook (no-op without a
   // configured cloud project).
@@ -339,6 +345,11 @@ $(document).ready(function () {
 
   // Voice typing (Web Speech API) — hides its own UI when unsupported.
   initVoiceTyping();
+
+  // Music player — constructed after storage hydration (its constructor
+  // restores the persisted player state). The modal markup itself is
+  // already in the DOM from the module's import-time injection.
+  initMusicPlayer();
 
   // Cloud sync boots only when a sync project is configured; the UI
   // (navbar icon, modal, settings section) stays hidden otherwise.
@@ -485,7 +496,7 @@ $(document).ready(function () {
 
     // Add random pitch for realism (±5% variation)
     s.playbackRate = 0.95 + Math.random() * 0.1;
-    const currentVolume = localStorage.getItem('userChosenTypewriterVolume');
+    const currentVolume = stateGet('userChosenTypewriterVolume');
     s.volume = currentVolume
       ? Number(currentVolume) / 100
       : editorConfig.defaultTypewriterVolume / 100;
@@ -507,7 +518,7 @@ $(document).ready(function () {
     if (e.key === 'Enter') {
       if (typewriterSoundEnabled) {
         const s = carriageReturnSound.cloneNode() as HTMLAudioElement;
-        const currentVolume = localStorage.getItem('userChosenTypewriterVolume');
+        const currentVolume = stateGet('userChosenTypewriterVolume');
         s.volume = currentVolume
           ? Number(currentVolume) / 100
           : editorConfig.defaultTypewriterVolume / 100;
@@ -518,7 +529,7 @@ $(document).ready(function () {
     } else if (e.key === ' ') {
       if (typewriterSoundEnabled) {
         const s = spacebarSound.cloneNode() as HTMLAudioElement;
-        const currentVolume = localStorage.getItem('userChosenTypewriterVolume');
+        const currentVolume = stateGet('userChosenTypewriterVolume');
         s.volume = currentVolume
           ? Number(currentVolume) / 100
           : editorConfig.defaultTypewriterVolume / 100;
@@ -632,7 +643,7 @@ $(document).ready(function () {
   // Handle typewriter sound toggle
   $('#typewriterSound').on('change', function () {
     const isEnabled = $(this).is(':checked');
-    localStorage.setItem('userChosenTypewriterSound', isEnabled ? 'Yes' : 'No');
+    stateSet('userChosenTypewriterSound', isEnabled ? 'Yes' : 'No');
     typewriterSoundEnabled = isEnabled;
 
     if (isEnabled) {
@@ -653,7 +664,7 @@ $(document).ready(function () {
   let volumePreviewTimer: ReturnType<typeof setTimeout> | null = null;
   $('#typewriterVolume').on('input', function () {
     const volume = $(this).val() as string;
-    localStorage.setItem('userChosenTypewriterVolume', volume);
+    stateSet('userChosenTypewriterVolume', volume);
 
     if (typewriterSoundEnabled) {
       typeSound.volume = Number(volume) / 100;
@@ -1609,24 +1620,24 @@ $(document).ready(function () {
 
   // Check for legacy font preferences and migrate them to the new system
   function migrateLegacyFontPrefs(): void {
-    const dyslexicFont = localStorage.getItem('dyslexicFont') === 'true';
-    const monospacedFont = localStorage.getItem('monospaced') === 'true';
-    const serifFont = localStorage.getItem('serifFont') === 'true';
+    const dyslexicFont = stateGet('dyslexicFont') === 'true';
+    const monospacedFont = stateGet('monospaced') === 'true';
+    const serifFont = stateGet('serifFont') === 'true';
 
     if (dyslexicFont) {
-      localStorage.setItem('selectedFont', 'dyslexic');
+      stateSet('selectedFont', 'dyslexic');
     } else if (monospacedFont) {
-      localStorage.setItem('selectedFont', 'monospaced');
+      stateSet('selectedFont', 'monospaced');
     } else if (serifFont) {
-      localStorage.setItem('selectedFont', 'serif');
+      stateSet('selectedFont', 'serif');
     } else {
-      localStorage.setItem('selectedFont', 'default');
+      stateSet('selectedFont', 'default');
     }
 
     // Clear old preferences
-    localStorage.removeItem('dyslexicFont');
-    localStorage.removeItem('monospaced');
-    localStorage.removeItem('serifFont');
+    stateRemove('dyslexicFont');
+    stateRemove('monospaced');
+    stateRemove('serifFont');
   }
 
   // Apply font based on selection
@@ -1670,15 +1681,15 @@ $(document).ready(function () {
   function initFontSelection(): void {
     // Migrate legacy preferences if needed
     if (
-      localStorage.getItem('dyslexicFont') !== null ||
-      localStorage.getItem('monospaced') !== null ||
-      localStorage.getItem('serifFont') !== null
+      stateGet('dyslexicFont') !== null ||
+      stateGet('monospaced') !== null ||
+      stateGet('serifFont') !== null
     ) {
       migrateLegacyFontPrefs();
     }
 
     // Get the selected font or default to 'default'
-    const selectedFont = localStorage.getItem('selectedFont') || 'default';
+    const selectedFont = stateGet('selectedFont') || 'default';
 
     // Set the dropdown value
     fontSelect.value = selectedFont;
@@ -1690,7 +1701,7 @@ $(document).ready(function () {
   // Handle font selection change
   fontSelect.addEventListener('change', (e) => {
     const selectedFont = (e.target as HTMLSelectElement).value;
-    localStorage.setItem('selectedFont', selectedFont);
+    stateSet('selectedFont', selectedFont);
     applyFont(selectedFont);
   });
 

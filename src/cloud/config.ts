@@ -4,8 +4,8 @@
  * Cloud sync stores notes (tabs) on the padify API (see server/), which
  * keeps everything in a Turso (libSQL) database so long-term users can
  * recover their notes on a new device or browser. The app itself stays
- * local-first: localStorage remains the source of truth and nothing leaves
- * the device until the user signs in.
+ * local-first: the on-device storage layer (see src/storage/) remains the
+ * source of truth and nothing leaves the device until the user signs in.
  *
  * The client talks to the API at CLOUD_BUILD_CONFIG.apiBase:
  *  • '' (default) → same-origin, endpoints under /api/… . This works with
@@ -14,13 +14,16 @@
  *  • Any absolute URL (https://api.example.com) to point at a separately
  *    hosted API. The API answers with permissive CORS for allowed origins.
  *
- * A runtime override (localStorage key `padifyCloudConfig`, set as JSON
+ * A runtime override (storage key `padifyCloudConfig`, set as JSON
  * {apiBase}) wins over the build-time constant. It exists for local
- * development and testing; it is intentionally not exposed in the UI.
+ * development and testing; it is intentionally not exposed in the UI. (Set
+ * it with localStorage.setItem — the storage layer mirrors both ways.)
  *
  * To run the app fully local-only (no cloud icon, no sync), remove the
  * cloud wiring from src/main.ts — the app degrades gracefully.
  */
+
+import { stateGet } from '../storage';
 
 const RUNTIME_CONFIG_KEY = 'padifyCloudConfig';
 
@@ -45,7 +48,7 @@ function normalizeBase(base: string): string {
  */
 export function getCloudConfig(): CloudConfig {
   try {
-    const raw = localStorage.getItem(RUNTIME_CONFIG_KEY);
+    const raw = stateGet(RUNTIME_CONFIG_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<CloudConfig> | null;
       if (parsed && typeof parsed.apiBase === 'string') {

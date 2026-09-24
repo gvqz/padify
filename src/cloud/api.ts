@@ -6,6 +6,7 @@
  */
 
 import { getCloudConfig } from './config';
+import { stateGet } from '../storage';
 
 export class ApiError extends Error {
   constructor(
@@ -54,12 +55,12 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
 }
 
 /**
- * Reads the session token straight from localStorage so that any module can
- * call the API without importing the sync engine (and its side effects).
+ * Reads the session token straight from the storage layer so that any module
+ * can call the API without importing the sync engine (and its side effects).
  */
 function readSessionToken(): string | null {
   try {
-    const raw = localStorage.getItem('padifySession');
+    const raw = stateGet('padifySession');
     if (!raw) {
       return null;
     }

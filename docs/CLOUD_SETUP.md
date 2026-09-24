@@ -1,6 +1,6 @@
 # Cloud sync — setup guide (Turso)
 
-Padify keeps notes in the browser (localStorage) so everything works offline.
+Padify keeps notes in the browser (IndexedDB, with a localStorage fallback) so everything works offline.
 Cloud sync adds a durable backup on top: signed-in users get their notes
 restored on any device, and offline edits upload automatically once the
 device is back online.
@@ -193,8 +193,9 @@ Behaviour reference:
 
 ## How sync works (reference)
 
-- **Local-first.** localStorage stays the source of truth; the app never
-  waits on the network. Signed-out installs behave exactly like before.
+- **Local-first.** The on-device IndexedDB store stays the source of
+  truth; the app never waits on the network. Signed-out installs behave
+  exactly like before.
 - **Last-write-wins** per note using padify's existing `updatedAt` stamp.
   Editing the same note on two devices offline keeps the most recent edit.
   Snapshots (local) preserve every prior version either way.
@@ -215,6 +216,9 @@ localStorage.setItem('padifyCloudConfig', JSON.stringify({
   apiBase: 'http://localhost:3041'
 }));
 ```
+
+(The storage layer reads this key through its mirrors, so the plain
+localStorage call works.)
 
 Remove the key (or rely on the Vite proxy — `vite.config.ts` already proxies
 `/api` to `localhost:3041` in dev) to go back to the default.

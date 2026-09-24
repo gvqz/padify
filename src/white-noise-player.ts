@@ -1,6 +1,7 @@
 import $ from 'jquery';
 import Swal from 'sweetalert2';
 import type { SweetAlertResult } from 'sweetalert2';
+import { stateGet, stateSet, storageReady } from './storage';
 
 interface SoundEntry {
   url: string;
@@ -170,7 +171,7 @@ export class WhiteNoisePlayer {
 
   loadPresets(): Record<string, PresetMix> {
     try {
-      const rawPresets = localStorage.getItem(this.presetsStorageKey);
+      const rawPresets = stateGet(this.presetsStorageKey);
       const parsedPresets = JSON.parse(rawPresets || '{}');
       return parsedPresets && typeof parsedPresets === 'object'
         ? (parsedPresets as Record<string, PresetMix>)
@@ -183,7 +184,7 @@ export class WhiteNoisePlayer {
 
   persistPresets(): void {
     try {
-      localStorage.setItem(this.presetsStorageKey, JSON.stringify(this.presets));
+      stateSet(this.presetsStorageKey, JSON.stringify(this.presets));
     } catch (error) {
       console.error('Error saving ambient noise presets:', error);
     }
@@ -714,8 +715,10 @@ export class WhiteNoisePlayer {
   }
 }
 
-// Initialize the player when the document is ready
-$(document).ready(() => {
+// Initialize the player when the document is ready — after the storage
+// layer hydrated, since the constructor loads the persisted presets.
+$(document).ready(async () => {
+  await storageReady();
   window.whiteNoisePlayer = new WhiteNoisePlayer();
 
   // Global mute state

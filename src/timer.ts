@@ -1,5 +1,6 @@
 import $ from 'jquery';
 import { showToast } from './utils';
+import { stateGet, stateSet } from './storage';
 
 // Timer configuration
 interface TimerPreset {
@@ -159,16 +160,16 @@ const timerModalHtml = `
 $(document.body).append(timerModalHtml);
 
 $(document).ready(function () {
-  if (localStorage.getItem('timerChime') && localStorage.getItem('timerChime') == 'true') {
+  if (stateGet('timerChime') && stateGet('timerChime') == 'true') {
     $('#timerChime').prop('checked', true);
   }
 
   $('#timerChime').change(function (this: HTMLElement) {
     const checkbox = this as HTMLInputElement;
     if (checkbox.checked) {
-      localStorage.setItem('timerChime', 'true');
+      stateSet('timerChime', 'true');
     } else {
-      localStorage.setItem('timerChime', 'false');
+      stateSet('timerChime', 'false');
     }
     refreshChimePicker();
   });
@@ -176,7 +177,7 @@ $(document).ready(function () {
   // Chime sound selection — clicking a chime picks it and plays a preview.
   $(document).on('click', '.chime-option', function (this: HTMLElement) {
     const chimeId = $(this).data('chime') as string;
-    localStorage.setItem(CHIME_STORAGE_KEY, chimeId);
+    stateSet(CHIME_STORAGE_KEY, chimeId);
     refreshChimeSelection();
     playChime(chimeId);
   });
@@ -184,7 +185,7 @@ $(document).ready(function () {
   refreshChimeSelection();
   refreshChimePicker();
 
-  const lastCustom = Number(localStorage.getItem(LAST_CUSTOM_DURATION_KEY));
+  const lastCustom = Number(stateGet(LAST_CUSTOM_DURATION_KEY));
   if (
     Number.isFinite(lastCustom) &&
     lastCustom >= CUSTOM_MIN_MINUTES &&
@@ -204,7 +205,7 @@ $(document).ready(function () {
 // ---------------------------------------------------------------------------
 
 function getSelectedChime(): ChimeDef {
-  const stored = localStorage.getItem(CHIME_STORAGE_KEY);
+  const stored = stateGet(CHIME_STORAGE_KEY);
   return CHIMES.find((chime) => chime.id === stored) || CHIMES[0];
 }
 
@@ -304,7 +305,7 @@ export function updateTimer(): void {
   timerConfig.remainingTime = Math.max(0, Math.ceil((timerConfig.endTime! - Date.now()) / 1000));
 
   if (timerConfig.remainingTime <= 0) {
-    if (localStorage.getItem('timerChime') && localStorage.getItem('timerChime') == 'true') {
+    if (stateGet('timerChime') && stateGet('timerChime') == 'true') {
       playChimeSound();
     }
 
@@ -369,7 +370,7 @@ $(document).on('click', '#timerStartBtn', function () {
   const rawValue = Number(($('#timerCustomMinutes').val() as string | number | undefined) ?? 25);
   const minutes = clampCustomMinutes(rawValue);
   $('#timerCustomMinutes').val(minutes);
-  localStorage.setItem(LAST_CUSTOM_DURATION_KEY, String(minutes));
+  stateSet(LAST_CUSTOM_DURATION_KEY, String(minutes));
   startTimer(minutes);
   $('#timerModal').modal('hide');
   showToast(`Session started — ${minutes} minutes. Keep writing!`);

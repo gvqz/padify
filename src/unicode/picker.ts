@@ -2,6 +2,7 @@ import $ from 'jquery';
 import type { NotepadUI } from '../selector';
 import type { UnicodeSymbol } from './types';
 import { showToast } from '../utils';
+import { stateGet, stateSet } from '../storage';
 
 export interface UnicodePickerHandle {
   /** Opens the character picker modal and focuses the search input. */
@@ -101,7 +102,7 @@ function normalizeQuery(value: string): string {
 
 function loadFavorites(): Set<string> {
   try {
-    const raw = localStorage.getItem(FAVORITES_KEY);
+    const raw = stateGet(FAVORITES_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
     return new Set(Array.isArray(parsed) ? parsed.filter((c) => typeof c === 'string') : []);
   } catch {
@@ -111,7 +112,7 @@ function loadFavorites(): Set<string> {
 
 function loadRecents(): string[] {
   try {
-    const raw = localStorage.getItem(RECENT_KEY);
+    const raw = stateGet(RECENT_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed.filter((c) => typeof c === 'string') : [];
   } catch {
@@ -617,7 +618,7 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
   function pushRecent(char: string): void {
     state.recents = [char, ...state.recents.filter((c) => c !== char)].slice(0, RECENT_LIMIT);
     try {
-      localStorage.setItem(RECENT_KEY, JSON.stringify(state.recents));
+      stateSet(RECENT_KEY, JSON.stringify(state.recents));
     } catch {
       /* storage unavailable — keep in-memory state */
     }
@@ -631,7 +632,7 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
       state.favorites.add(char);
     }
     try {
-      localStorage.setItem(FAVORITES_KEY, JSON.stringify([...state.favorites]));
+      stateSet(FAVORITES_KEY, JSON.stringify([...state.favorites]));
     } catch {
       /* storage unavailable — keep in-memory state */
     }

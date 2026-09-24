@@ -1,4 +1,5 @@
 import $ from 'jquery';
+import { stateGet, stateSet, stateRemove } from './storage';
 
 export type StateKey = string;
 
@@ -95,16 +96,19 @@ export interface AppSelector {
   selectByClassName: (className: string) => JQuery;
 }
 
+// Settings persist through the storage layer (IndexedDB + localStorage
+// compatibility mirror — see src/storage/). Signatures are intentionally
+// identical to the localStorage API.
 export function getState(state: StateKey): string | null {
-  return localStorage.getItem(state);
+  return stateGet(state);
 }
 
 export function setState(state: StateKey, value: string): void {
-  localStorage.setItem(state, value);
+  stateSet(state, value);
 }
 
 export function removeState(state: StateKey): void {
-  localStorage.removeItem(state);
+  stateRemove(state);
 }
 
 export function selectById(id: string): JQuery {

@@ -15,11 +15,15 @@
  * whatever is playing when the modal is closed.
  *
  * Persistence: `padify-music-state` (volume/shuffle/repeat/favorites/…) and
- * `padify-spotify-*` keys (see src/spotify/auth.ts).
+ * `padify-spotify-*` keys (see src/spotify/auth.ts), all through the
+ * storage layer. The player is constructed by initMusicPlayer() AFTER the
+ * storage layer hydrated (app.ts), so the persisted state is visible to the
+ * constructor; only the markup injection happens at module evaluation.
  */
 
 import $ from 'jquery';
 import { showToast } from './utils';
+import { stateGet, stateSet } from './storage';
 import { MusicEngine } from './music/engine';
 import { drawTrackArt } from './music/art';
 import { TRACKS, getTrackById, PLAYLIST_LABELS, formatTime, type Track } from './music/tracks';
@@ -839,7 +843,7 @@ class MusicPlayerApp {
 
   private loadState(): MusicPlayerState {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = stateGet(STORAGE_KEY);
       if (!raw) return { ...DEFAULT_STATE };
       const parsed = JSON.parse(raw) as Partial<MusicPlayerState>;
       const favorites = Array.isArray(parsed.favorites)
@@ -872,7 +876,7 @@ class MusicPlayerApp {
 
   private persist(): void {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
+      stateSet(STORAGE_KEY, JSON.stringify(this.state));
     } catch {
       /* storage unavailable — playback still works, just not restored */
     }
@@ -2619,7 +2623,25 @@ class MusicPlayerApp {
 // Module singletons + public API
 // ---------------------------------------------------------------------------
 
-const player = new MusicPlayerApp();
+let player: MusicPlayerApp | null = null;
+
+/**
+ * Constructs the player once the storage layer has hydrated (its
+ * constructor restores the persisted player state and bootstraps Spotify).
+ * Called from app.ts after `await storageReady()`; the modal markup is
+ * already in the DOM from the module-evaluation injection above.
+ */
+export function initMusicPlayer(): void {
+  if (player) {
+    return;
+  }
+  player = new MusicPlayerApp();
+
+  // Debug/E2E probes (harmless in production, typed via a local interface).
+  const debugWindow = window as unknown as MusicDebugWindow;
+  debugWindow.__musicEngine = (player as unknown as { engine: MusicEngine }).engine;
+  debugWindow.__musicPlayer = musicPlayerAPI;
+}
 
 export const musicPlayerAPI: {
   open(): void;
@@ -2635,19 +2657,16 @@ export const musicPlayerAPI: {
   close: () => {
     $('#musicPlayerModal').modal('hide');
   },
-  togglePlay: () => player.togglePlay(),
-  playTrack: (id: string) => player.playRadioTrack(id),
-  next: () => player.next(),
-  prev: () => player.prev(),
+  togglePlay: () => player?.togglePlay(),
+  playTrack: (id: string) => player?.playRadioTrack(id),
+  next: () => player?.next(),
+  prev: () => player?.prev(),
 };
 
-// Debug/E2E probes (harmless in production, typed via a local interface).
 interface MusicDebugWindow {
   __musicEngine?: MusicEngine;
   __musicPlayer?: typeof musicPlayerAPI;
   __musicProbe?: () => Record<string, unknown>;
 }
-const debugWindow = window as unknown as MusicDebugWindow;
-debugWindow.__musicEngine = (player as unknown as { engine: MusicEngine }).engine;
-debugWindow.__musicPlayer = musicPlayerAPI;
-debugWindow.__musicProbe = () => player.debugSnapshot();
+const probeWindow = window as unknown as MusicDebugWindow;
+probeWindow.__musicProbe = () => player?.debugSnapshot() ?? {};
