@@ -112,6 +112,33 @@ Other environment variables:
   app (see below — the Netlify redirect in step 3 makes everything
   same-origin).
 
+### Free music (no-login search + playback)
+
+The music player's free path runs through two extra public endpoints on this
+API (`GET /api/music/search` and `GET /api/music/resolve` — see
+`server/music.ts`). Both are optional: without them the player simply tells
+users to connect Spotify instead.
+
+- `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` — your Spotify app's
+  credentials (the same app users connect with works). The server exchanges
+  them for a Client-Credentials token to search Spotify's public catalog for
+  anonymous users. Set them and `GET /api/music/capabilities` flips
+  `search` to `true`.
+- `SPOTIFY_MARKET` — optional market code (e.g. `US`) for catalog search.
+- `yt-dlp` — install it on the host (`pip install yt-dlp` or a distro
+  package) and `GET /api/music/capabilities` flips `resolve` to `true`. The
+  server runs it with `--print` + `-f bestaudio` so only the ~10 KB text
+  stream URL crosses the wire — audio flows browser → googlevideo.com
+  directly, never through the API, keeping AlwaysData's 10 GB/month budget
+  essentially untouched.
+- `YTDLP_PATH` — override the yt-dlp binary location.
+- `MUSIC_RESOLVE_CONCURRENCY` — simultaneous yt-dlp processes (default 2,
+  capped at 4) to protect the 128 MB RAM budget.
+
+Resolved stream URLs are cached in the `music_resolutions` table (TTL 3 h,
+swept at boot), so repeat plays are one cheap SELECT and repeat requests for
+the same track dedupe into a single yt-dlp run.
+
 ## 3. Route the app to the API
 
 The frontend calls the API at `apiBase` (default `''` = same origin, i.e.

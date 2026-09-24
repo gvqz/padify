@@ -25,7 +25,7 @@ Built as a Progressive Web App using the [Service Worker API](https://developer.
 - Multiple notes in **tabs** on the main page, with **bold / italic / underline / strikethrough** formatting that renders right in the editor
 - Download notes as **plain text**, **PDF**, **HTML**, and **DOCX**
 - Monospaced, serif and dyslexic fonts
-- Optional typewriter sound, break reminders, and a built-in music player with generative ambient tracks plus a 25-sound ambience mixer
+- Optional typewriter sound, break reminders, and a built-in music player — free song search and playback with no account (local favorites, queue and playlist), or connect Spotify Premium for native streaming with your playlists and Liked Songs — plus a 12-sound ambience mixer
 - Unicode character picker — 5,400+ symbols, math, arrows, currency, box drawing, braille and emoji with search, favorites and recents (`Ctrl/Cmd + Shift + O`)
 - Privacy-focused — nothing you type is ever collected or sent anywhere
 

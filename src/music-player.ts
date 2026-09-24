@@ -1,32 +1,46 @@
 /**
- * Padify music player — v2.
+ * Padify music player — v3.
  *
- * A full player with three sources behind one transport bar:
+ * One player, two ways to listen:
  *
- *   • Radio    — the offline generative engine (src/music/*)
- *   • Ambience — the soundscape mixer (src/white-noise-player.ts)
- *   • Spotify  — OAuth 2.0 login → Web API library + search → Web Playback
- *               SDK streaming (Premium) with 30-second previews for free
- *               accounts.
+ *   • Free search (default, zero login) — search Spotify's catalog through
+ *     the Padify API (metadata only), then play full tracks in a plain
+ *     HTML5 <audio> element using stream URLs the API resolves with
+ *     yt-dlp. Anonymous users get local favorites, a local queue and
+ *     exactly one local playlist, all on-device.
  *
- * The modal is appended at module evaluation (same pattern as timer.ts).
- * The Ambience tab keeps the exact ids/classes/data attributes that
- * WhiteNoisePlayer binds to. A mini-player bar lives on the page and mirrors
- * whatever is playing when the modal is closed.
+ *   • Connect Spotify (Premium) — OAuth login brings your playlists, Liked
+ *     Songs and search with the full Web API, likes/queue/playlist actions
+ *     against your real Spotify library, and native playback through the
+ *     Web Playback SDK (with Spotify device handoff). Connected free
+ *     accounts keep the Web API surface but play through the free engine.
  *
- * Persistence: `padify-music-state` (volume/shuffle/repeat/favorites/…) and
- * `padify-spotify-*` keys (see src/spotify/auth.ts), all through the
- * storage layer. The player is constructed by initMusicPlayer() AFTER the
- * storage layer hydrated (app.ts), so the persisted state is visible to the
- * constructor; only the markup injection happens at module evaluation.
+ *   • Ambience — the soundscape mixer (src/white-noise-player.ts) rides
+ *     along in its own tab, unchanged.
+ *
+ * The radio/generative engine is gone; the modal markup is injected at
+ * module evaluation (same pattern as timer.ts) and the app is constructed
+ * by initMusicPlayer() AFTER storage hydration (app.ts).
+ *
+ * Persistence (storage layer → IndexedDB + localStorage mirror):
+ *   padify-music-state   volume / shuffle / repeat / view / free queue
+ *   padify-music-library local favorites + the single local playlist
+ *   padify-spotify-*     the OAuth session (src/spotify/auth.ts)
  */
 
 import $ from 'jquery';
+import Swal from 'sweetalert2';
+import type { SweetAlertResult } from 'sweetalert2';
 import { showToast } from './utils';
 import { stateGet, stateSet } from './storage';
-import { MusicEngine } from './music/engine';
-import { drawTrackArt } from './music/art';
-import { TRACKS, getTrackById, PLAYLIST_LABELS, formatTime, type Track } from './music/tracks';
+import { LocalMusicLibrary } from './music/library';
+import {
+  fetchMusicCapabilities,
+  freeSearchTracks,
+  resolveTrackStream,
+  FreeMusicError,
+  type MusicCapabilities,
+} from './music/client';
 import {
   beginLogin,
   completeLogin,
@@ -60,18 +74,19 @@ declare global {
 // ---------------------------------------------------------------------------
 
 type RepeatMode = 'off' | 'all' | 'one';
-type TrackFilter = 'all' | 'focus' | 'calm' | 'sleep' | 'uplift' | 'favorites';
-type PlayerSource = 'none' | 'radio' | 'spotify';
-type SpotifyMode = 'sdk' | 'preview';
-type ViewId = 'radio' | 'ambience' | 'spotify';
+type ViewId = 'music' | 'queue' | 'ambience';
+type PlayerSource = 'none' | 'free' | 'spotify';
+/** How the *current* sound is actually being produced. */
+type SpotifyMode = 'sdk' | 'resolve' | 'preview';
 
 interface MusicPlayerState {
   volume: number;
   shuffle: boolean;
   repeat: RepeatMode;
-  lastTrackId: string | null;
-  favorites: string[];
   view: ViewId;
+  /** The anonymous/free queue (track snapshots), restored across reloads. */
+  freeQueue: SpotifyTrack[];
+  freeIndex: number;
 }
 
 const STORAGE_KEY = 'padify-music-state';
@@ -80,24 +95,18 @@ const PROGRESS_INTERVAL_MS = 250;
 const SDK_POLL_INTERVAL_MS = 5000;
 const SEARCH_DEBOUNCE_MS = 350;
 const PREVIEW_LABEL = '30s preview';
+const FREE_LABEL = 'Free';
+const FREE_SEARCH_LIMIT = 24;
+const PLAYLIST_MENU_ITEMS = 8;
 
 const DEFAULT_STATE: MusicPlayerState = {
   volume: 0.7,
   shuffle: false,
   repeat: 'off',
-  lastTrackId: null,
-  favorites: [],
-  view: 'radio',
+  view: 'music',
+  freeQueue: [],
+  freeIndex: -1,
 };
-
-const FILTERS: { id: TrackFilter; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'focus', label: 'Focus' },
-  { id: 'calm', label: 'Calm' },
-  { id: 'sleep', label: 'Sleep' },
-  { id: 'uplift', label: 'Uplift' },
-  { id: 'favorites', label: 'Favorites' },
-];
 
 // ---------------------------------------------------------------------------
 // Icons (inline, currentColor)
@@ -115,9 +124,11 @@ const ICONS = {
     '<path d="M9 18V5l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="15" r="2.5"/>',
     16,
   ),
+  queueTab: icon(
+    '<path d="M4 6h16M4 12h16"/><circle cx="9" cy="18" r="3"/><path d="M13 18h7"/>',
+    16,
+  ),
   ambienceTab: icon('<path d="M4 9.5v5M8 6.5v11M12 3.5v17M16 6.5v11M20 9.5v5"/>', 16),
-  spotifyTab:
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.52 17.28c-.24.36-.66.48-1.02.24-2.82-1.74-6.36-2.1-10.56-1.14-.42.12-.78-.18-.9-.54-.12-.42.18-.78.54-.9 4.56-1.02 8.52-.6 11.64 1.32.42.18.48.66.3 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.24-1.98-8.16-2.58-11.94-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.8 15 10.44 18.72 12.72c.361.181.54.78.24 1.26zm.12-3.36C15.24 8.4 8.82 8.16 5.1 9.34c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381C8.76 5.86 15.9 6.14 20.64 8.82c.54.3.72 1.021.42 1.56-.299.421-1.02.599-1.559.3z"/></svg>',
   shuffle: icon(
     '<path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="m15 15 6 6"/><path d="M4 4l5 5"/>',
   ),
@@ -160,12 +171,18 @@ const ICONS = {
   ),
   heart: icon(
     '<path d="M12 20.5c-5.2-3.4-8.5-6.3-8.5-10A4.6 4.6 0 0 1 8 6c1.6 0 3.1.8 4 2.1A4.9 4.9 0 0 1 16 6a4.6 4.6 0 0 1 4.5 4.5c0 3.7-3.3 6.6-8.5 10z"/>',
-    18,
+    17,
+  ),
+  heartFilled: icon(
+    '<path fill="currentColor" stroke="none" d="M12 20.5c-5.2-3.4-8.5-6.3-8.5-10A4.6 4.6 0 0 1 8 6c1.6 0 3.1.8 4 2.1A4.9 4.9 0 0 1 16 6a4.6 4.6 0 0 1 4.5 4.5c0 3.7-3.3 6.6-8.5 10z"/>',
+    17,
   ),
   spark: icon(
     '<path d="M12 3v3M12 18v3M4.2 7.2l2.1 2.1M17.7 14.7l2.1 2.1M3 12h3M18 12h3M4.2 16.8l2.1-2.1M17.7 9.3l2.1-2.1"/>',
     16,
   ),
+  plus: icon('<path d="M12 5v14M5 12h14"/>', 16),
+  remove: icon('<path d="M18 6 6 18M6 6l12 12"/>', 14),
 };
 
 const playIconSvg = (size: number): string =>
@@ -291,12 +308,6 @@ const AMBIENT_SOUNDS: AmbientSoundDef[] = [
 // Markup builders
 // ---------------------------------------------------------------------------
 
-const buildChips = (): string =>
-  FILTERS.map(
-    (filter) =>
-      `<button type="button" class="mp-chip${filter.id === 'all' ? ' is-active' : ''}" data-filter="${filter.id}" aria-pressed="${filter.id === 'all'}">${filter.label}<span class="mp-chip-count" data-count-for="${filter.id}"></span></button>`,
-  ).join('');
-
 const buildSoundButtons = (): string =>
   AMBIENT_SOUNDS.map(
     (sound) => `
@@ -312,23 +323,6 @@ const buildSoundButtons = (): string =>
         </div>`,
   ).join('\n');
 
-const buildRadioRows = (): string =>
-  TRACKS.map((track) => {
-    const label = PLAYLIST_LABELS[track.playlist];
-    const isFav = ''; // favorites state applied after state loads
-    return `
-        <div class="mp-row" data-track-id="${track.id}" data-playlist="${track.playlist}" role="listitem">
-            <button type="button" class="mp-row-main" aria-label="Play ${track.title} (${label})">
-                <canvas class="mp-row-art" width="512" height="512" aria-hidden="true"></canvas>
-                <span class="mp-row-title">${track.title}</span>
-                <span class="mp-row-tag">${label}</span>
-                ${eqMarkup('mp-row-eq')}
-                <span class="mp-row-dur">${formatTime(track.durationSec)}</span>
-            </button>
-            <button type="button" class="mp-row-star${isFav}" aria-pressed="false" title="Favorite" aria-label="Add ${track.title} to favorites">${ICONS.star}</button>
-        </div>`;
-  }).join('\n');
-
 const musicPlayerModalHtml = `
 <div class="modal fade mp-modal" id="musicPlayerModal" tabindex="-1" role="dialog" aria-labelledby="musicPlayerTitle">
     <div class="modal-dialog modal-lg" role="document">
@@ -338,9 +332,9 @@ const musicPlayerModalHtml = `
                     ${ICONS.note}
                     <span>Music</span>
                 </h4>
-                <button type="button" class="mp-status-chip" id="mpSpotifyChip" title="Spotify" aria-label="Spotify connection status">
+                <button type="button" class="mp-status-chip" id="mpAccountChip" title="Spotify" aria-label="Spotify connection status">
                     ${spotifyLogo(14)}
-                    <span id="mpSpotifyChipText">Connect Spotify</span>
+                    <span id="mpAccountChipText">Connect Spotify</span>
                 </button>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">&times;</button>
             </div>
@@ -350,13 +344,12 @@ const musicPlayerModalHtml = `
                     <div class="mp-pb-main">
                         <div class="mp-pb-art-wrap">
                             <span class="mp-pb-placeholder">${ICONS.note}</span>
-                            <canvas class="mp-pb-art" id="mpPbArt" width="512" height="512" aria-hidden="true" hidden></canvas>
                             <img class="mp-pb-img" id="mpPbImg" alt="" hidden />
                             ${eqMarkup('mp-pb-eq')}
                         </div>
                         <div class="mp-pb-meta">
                             <div class="mp-pb-title" id="mpPbTitle">Nothing playing</div>
-                            <div class="mp-pb-sub" id="mpPbSub">Pick a radio track or connect Spotify</div>
+                            <div class="mp-pb-sub" id="mpPbSub">Search a song or connect Spotify</div>
                         </div>
                         <span class="mp-pb-source" id="mpPbSource" hidden></span>
                     </div>
@@ -394,35 +387,179 @@ const musicPlayerModalHtml = `
                     </div>
                 </div>
 
-                <div class="mp-tabs" role="tablist" aria-label="Music player sources">
-                    <button type="button" class="mp-tab is-active" id="mpTabRadio" role="tab" aria-selected="true" aria-controls="mpRadioView">
-                        ${ICONS.musicTab}<span>Radio</span>
+                <div class="mp-tabs" role="tablist" aria-label="Music player views">
+                    <button type="button" class="mp-tab is-active" id="mpTabMusic" role="tab" aria-selected="true" aria-controls="mpMusicView">
+                        ${ICONS.musicTab}<span>Music</span>
+                    </button>
+                    <button type="button" class="mp-tab" id="mpTabQueue" role="tab" aria-selected="false" aria-controls="mpQueueView" tabindex="-1">
+                        ${ICONS.queueTab}<span>Queue</span><span class="mp-tab-count" id="mpQueueCount" hidden></span>
                     </button>
                     <button type="button" class="mp-tab" id="mpTabAmbience" role="tab" aria-selected="false" aria-controls="mpAmbienceView" tabindex="-1">
                         ${ICONS.ambienceTab}<span>Ambience</span>
                     </button>
-                    <button type="button" class="mp-tab" id="mpTabSpotify" role="tab" aria-selected="false" aria-controls="mpSpotifyView" tabindex="-1">
-                        ${ICONS.spotifyTab}<span>Spotify</span>
-                    </button>
                 </div>
 
-                <div class="mp-view" id="mpRadioView" role="tabpanel" aria-labelledby="mpTabRadio">
-                    <div class="mp-lib-toolbar">
-                        <div class="mp-search">
-                            ${ICONS.search}
-                            <input type="search" id="mpRadioSearchInput" class="mp-search-input" placeholder="Search radio tracks…" autocomplete="off" spellcheck="false" aria-label="Search radio tracks">
-                            <button type="button" class="mp-search-clear" id="mpRadioSearchClear" aria-label="Clear search" hidden>&times;</button>
+                <div class="mp-view" id="mpMusicView" role="tabpanel" aria-labelledby="mpTabMusic">
+                    <div class="mp-search mp-music-search">
+                        ${ICONS.search}
+                        <input type="search" id="mpSearchInput" class="mp-search-input" placeholder="Search songs, artists, albums…" autocomplete="off" spellcheck="false" aria-label="Search music">
+                        <button type="button" class="mp-search-clear" id="mpSearchClear" aria-label="Clear search" hidden>&times;</button>
+                    </div>
+                    <div class="mp-search-notice" id="mpSearchNotice" role="status" hidden></div>
+
+                    <div class="mp-free-home" id="mpFreeHome">
+                        <div class="mp-hero" id="mpHero">
+                            <div class="mp-hero-copy">
+                                <h3>${ICONS.spark} Free music, no account</h3>
+                                <p>Search millions of songs and play them free — no login, no ads. Favorites, your queue and one local playlist live on this device.</p>
+                            </div>
+                            <button type="button" class="mp-btn mp-btn-primary mp-hero-connect" id="mpHeroConnect">
+                                ${spotifyLogo(16)}
+                                <span>Connect Spotify</span>
+                            </button>
                         </div>
-                        <div class="mp-chips" role="group" aria-label="Filter tracks">
-                            ${buildChips()}
+                        <section class="sp-section" id="mpFavoritesSection">
+                            <header class="sp-section-head">
+                                <h4>${ICONS.heart} Favorites</h4>
+                                <span class="mp-section-count" id="mpFavCount"></span>
+                            </header>
+                            <div class="sp-tracks" id="mpFavoritesList" role="list" aria-label="Favorite tracks"></div>
+                            <div class="mp-empty" id="mpFavoritesEmpty">
+                                ${ICONS.heart}
+                                <p>Tap the heart on any song to keep it here — no account needed.</p>
+                            </div>
+                        </section>
+                        <section class="sp-section" id="mpLocalPlaylistSection">
+                            <header class="sp-section-head">
+                                <h4>${ICONS.playlist} <span id="mpPlaylistName">My Playlist</span></h4>
+                                <span class="mp-section-count" id="mpPlaylistCount"></span>
+                                <button type="button" class="sp-more-btn" id="mpPlaylistRename" hidden>Rename</button>
+                                <button type="button" class="sp-more-btn" id="mpPlaylistClear" hidden>Remove all</button>
+                            </header>
+                            <div class="sp-tracks" id="mpLocalPlaylistList" role="list" aria-label="Local playlist tracks"></div>
+                            <div class="mp-empty" id="mpLocalPlaylistEmpty">
+                                ${ICONS.playlist}
+                                <p>Use the + button on any song to start your playlist. You get one — it stays on this device.</p>
+                            </div>
+                        </section>
+                    </div>
+
+                    <div class="sp-connect" id="spConnect" hidden>
+                        <div class="sp-connect-card">
+                            <button type="button" class="sp-connect-back" id="spConnectBack">${ICONS.back}<span>Continue without an account</span></button>
+                            <div class="sp-connect-logo">${spotifyLogo(44)}</div>
+                            <h3 class="sp-connect-title">Connect Spotify</h3>
+                            <p class="sp-connect-copy">Your Liked Songs, playlists and search across 100M+ tracks — plus likes, queues and playlist adds straight to your Spotify account. Premium streams natively in the app.</p>
+                            <button type="button" class="mp-btn mp-btn-primary sp-connect-btn" id="spConnectBtn">
+                                ${spotifyLogo(18)}
+                                <span>Connect Spotify</span>
+                            </button>
+                            <div class="sp-setup">
+                                <p class="sp-setup-title">${ICONS.spark} One-time setup — your own Spotify app</p>
+                                <ol class="sp-setup-steps">
+                                    <li>Open <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">developer.spotify.com/dashboard</a> and choose <strong>Create app</strong>.</li>
+                                    <li>Add <code class="sp-redirect-uri" id="spRedirectUri">https://padify.netlify.app/</code><button type="button" class="sp-copy-btn" id="spCopyRedirect" title="Copy redirect URI">${ICONS.copy}</button> as the app's <strong>Redirect URI</strong>.</li>
+                                    <li>Copy the app's <strong>Client ID</strong> and save it below.</li>
+                                </ol>
+                                <div class="sp-setup-input-row">
+                                    <input type="text" id="spClientIdInput" placeholder="Paste your Spotify Client ID" autocomplete="off" spellcheck="false" aria-label="Spotify Client ID">
+                                    <button type="button" class="mp-btn" id="spClientIdSave">Save</button>
+                                </div>
+                            </div>
+                            <p class="sp-premium-note">${ICONS.info}<span>Spotify <strong>Premium unlocks native streaming</strong>, device handoff and the full player. Free accounts still play everything through Padify's free streams.</span></p>
+                            <p class="sp-error" id="spConnectError" hidden></p>
                         </div>
                     </div>
-                    <div class="mp-tracklist" id="mpTrackList" role="list" aria-label="Tracks">
-                        ${buildRadioRows()}
+
+                    <div class="sp-app" id="spApp" hidden>
+                        <div class="sp-profile">
+                            <img class="sp-avatar" id="spAvatar" alt="" />
+                            <div class="sp-profile-meta">
+                                <span class="sp-name" id="spName"></span>
+                                <span class="sp-product" id="spProduct"></span>
+                            </div>
+                            <div class="sp-profile-actions">
+                                <button type="button" class="sp-icon-btn" id="spRefresh" title="Refresh library" aria-label="Refresh library">${ICONS.refresh}</button>
+                                <button type="button" class="sp-icon-btn" id="spDisconnect" title="Disconnect Spotify" aria-label="Disconnect Spotify">${ICONS.power}</button>
+                            </div>
+                        </div>
+                        <div class="sp-skeleton" id="spSkeleton" hidden>
+                            <div class="sp-skeleton-row"></div><div class="sp-skeleton-row"></div><div class="sp-skeleton-row"></div><div class="sp-skeleton-row"></div>
+                        </div>
+                        <div class="sp-library" id="spLibrary" hidden>
+                            <section class="sp-section" id="spLikedSection">
+                                <header class="sp-section-head">
+                                    <h4>${ICONS.heart} Liked Songs</h4>
+                                    <button type="button" class="sp-more-btn" id="spLikedMore" hidden>Load more</button>
+                                </header>
+                                <div class="sp-tracks" id="spLikedList" role="list" aria-label="Liked songs"></div>
+                                <div class="sp-empty" id="spLikedEmpty" hidden><p>No liked songs yet — heart a track in Spotify and it shows up here.</p></div>
+                            </section>
+                            <section class="sp-section" id="spTopSection">
+                                <header class="sp-section-head"><h4>${ICONS.spark} Top Tracks</h4></header>
+                                <div class="sp-tracks" id="spTopList" role="list" aria-label="Top tracks"></div>
+                            </section>
+                            <section class="sp-section" id="spPlaylistsSection">
+                                <header class="sp-section-head"><h4>${ICONS.playlist} Your Playlists</h4></header>
+                                <div class="sp-card-row" id="spPlaylistsRow"></div>
+                                <div class="sp-empty" id="spPlaylistsEmpty" hidden><p>No playlists yet.</p></div>
+                            </section>
+                            <p class="sp-premium-note sp-free-note" id="spFreeNote" hidden>${ICONS.info}<span>Free account — everything still plays through Padify's ad-free streams. Premium adds native Spotify playback and device handoff.</span></p>
+                        </div>
+                        <div class="sp-results" id="spResults" hidden>
+                            <button type="button" class="sp-back" id="spResultsBack">${ICONS.back}<span>Back to library</span></button>
+                            <section class="sp-section" id="spSearchTracksSection" hidden>
+                                <header class="sp-section-head"><h4>Tracks</h4></header>
+                                <div class="sp-tracks" id="spSearchTracks" role="list" aria-label="Track results"></div>
+                            </section>
+                            <section class="sp-section" id="spSearchPlaylistsSection" hidden>
+                                <header class="sp-section-head"><h4>Playlists</h4></header>
+                                <div class="sp-card-row" id="spSearchPlaylists"></div>
+                            </section>
+                            <section class="sp-section" id="spSearchAlbumsSection" hidden>
+                                <header class="sp-section-head"><h4>Albums</h4></header>
+                                <div class="sp-card-row" id="spSearchAlbums"></div>
+                            </section>
+                            <section class="sp-section" id="spSearchArtistsSection" hidden>
+                                <header class="sp-section-head"><h4>Artists</h4></header>
+                                <div class="sp-card-row sp-card-row-artists" id="spSearchArtists"></div>
+                            </section>
+                            <div class="sp-empty" id="spSearchEmpty" hidden><p>Nothing found — try a different search.</p></div>
+                        </div>
+                        <div class="sp-detail" id="spDetail" hidden>
+                            <button type="button" class="sp-back" id="spDetailBack">${ICONS.back}<span id="spDetailBackLabel">Back</span></button>
+                            <div class="sp-detail-header">
+                                <img class="sp-detail-art" id="spDetailArt" alt="" />
+                                <div class="sp-detail-copy">
+                                    <span class="sp-detail-type" id="spDetailType"></span>
+                                    <h3 class="sp-detail-name" id="spDetailName"></h3>
+                                    <p class="sp-detail-meta" id="spDetailMeta"></p>
+                                    <button type="button" class="mp-btn mp-btn-primary sp-detail-play" id="spDetailPlay">${ICONS.play}<span>Play</span></button>
+                                </div>
+                            </div>
+                            <div class="sp-tracks" id="spDetailTracks" role="list" aria-label="Tracks"></div>
+                        </div>
                     </div>
-                    <div class="mp-empty" id="mpFavoritesEmpty" hidden>
-                        ${ICONS.star}
-                        <p>No favorites yet. Tap the star on any track to keep it close.</p>
+
+                    <div class="mp-results" id="mpResults" hidden>
+                        <button type="button" class="sp-back" id="mpResultsBack">${ICONS.back}<span>Back</span></button>
+                        <section class="sp-section" id="mpResultsSection">
+                            <header class="sp-section-head"><h4>Tracks</h4></header>
+                            <div class="sp-tracks" id="mpResultsList" role="list" aria-label="Search results"></div>
+                            <div class="sp-empty" id="mpResultsEmpty" hidden><p>Nothing found — try a different search.</p></div>
+                        </section>
+                    </div>
+                </div>
+
+                <div class="mp-view" id="mpQueueView" role="tabpanel" aria-labelledby="mpTabQueue" hidden>
+                    <div class="mp-queue-toolbar">
+                        <p class="mp-ambience-hint" id="mpQueueHint">Up next on this device</p>
+                        <button type="button" class="sp-more-btn" id="mpQueueClear" hidden>Clear queue</button>
+                    </div>
+                    <div class="sp-tracks" id="mpQueueList" role="list" aria-label="Play queue"></div>
+                    <div class="mp-empty" id="mpQueueEmpty">
+                        ${ICONS.queueTab}
+                        <p>Nothing queued. Play a song or use the + button to line one up.</p>
                     </div>
                 </div>
 
@@ -462,108 +599,7 @@ const musicPlayerModalHtml = `
                     </div>
                 </div>
 
-                <div class="mp-view" id="mpSpotifyView" role="tabpanel" aria-labelledby="mpTabSpotify" hidden>
-                    <div class="sp-connect" id="spConnect">
-                        <div class="sp-connect-card">
-                            <div class="sp-connect-logo">${spotifyLogo(44)}</div>
-                            <h3 class="sp-connect-title">Connect Spotify</h3>
-                            <p class="sp-connect-copy">Your Liked Songs, playlists and search across 100M+ tracks — playable right here while you write.</p>
-                            <button type="button" class="mp-btn mp-btn-primary sp-connect-btn" id="spConnectBtn">
-                                ${spotifyLogo(18)}
-                                <span>Connect Spotify</span>
-                            </button>
-                            <div class="sp-setup">
-                                <p class="sp-setup-title">${ICONS.spark} One-time setup — your own Spotify app</p>
-                                <ol class="sp-setup-steps">
-                                    <li>Open <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">developer.spotify.com/dashboard</a> and choose <strong>Create app</strong>.</li>
-                                    <li>Add <code class="sp-redirect-uri" id="spRedirectUri">https://padify.netlify.app/</code><button type="button" class="sp-copy-btn" id="spCopyRedirect" title="Copy redirect URI">${ICONS.copy}</button> as the app's <strong>Redirect URI</strong>.</li>
-                                    <li>Copy the app's <strong>Client ID</strong> and save it below.</li>
-                                </ol>
-                                <div class="sp-setup-input-row">
-                                    <input type="text" id="spClientIdInput" placeholder="Paste your Spotify Client ID" autocomplete="off" spellcheck="false" aria-label="Spotify Client ID">
-                                    <button type="button" class="mp-btn" id="spClientIdSave">Save</button>
-                                </div>
-                            </div>
-                            <p class="sp-premium-note">${ICONS.info}<span>Spotify <strong>Premium is required for full playback</strong> — free accounts play 30-second previews.</span></p>
-                            <p class="sp-error" id="spConnectError" hidden></p>
-                        </div>
-                    </div>
-
-                    <div class="sp-app" id="spApp" hidden>
-                        <div class="sp-profile">
-                            <img class="sp-avatar" id="spAvatar" alt="" />
-                            <div class="sp-profile-meta">
-                                <span class="sp-name" id="spName"></span>
-                                <span class="sp-product" id="spProduct"></span>
-                            </div>
-                            <div class="sp-profile-actions">
-                                <button type="button" class="sp-icon-btn" id="spRefresh" title="Refresh library" aria-label="Refresh library">${ICONS.refresh}</button>
-                                <button type="button" class="sp-icon-btn" id="spDisconnect" title="Disconnect Spotify" aria-label="Disconnect Spotify">${ICONS.power}</button>
-                            </div>
-                        </div>
-                        <div class="mp-search sp-search">
-                            ${ICONS.search}
-                            <input type="search" id="spSearchInput" class="mp-search-input" placeholder="Search Spotify — songs, albums, artists, playlists…" autocomplete="off" spellcheck="false" aria-label="Search Spotify">
-                            <button type="button" class="mp-search-clear" id="spSearchClear" aria-label="Clear search" hidden>&times;</button>
-                        </div>
-                        <div class="sp-skeleton" id="spSkeleton" hidden>
-                            <div class="sp-skeleton-row"></div><div class="sp-skeleton-row"></div><div class="sp-skeleton-row"></div><div class="sp-skeleton-row"></div>
-                        </div>
-                        <div class="sp-library" id="spLibrary" hidden>
-                            <section class="sp-section" id="spLikedSection">
-                                <header class="sp-section-head">
-                                    <h4>${ICONS.heart} Liked Songs</h4>
-                                    <button type="button" class="sp-more-btn" id="spLikedMore" hidden>Load more</button>
-                                </header>
-                                <div class="sp-tracks" id="spLikedList" role="list" aria-label="Liked songs"></div>
-                                <div class="sp-empty" id="spLikedEmpty" hidden><p>No liked songs yet — heart a track in Spotify and it shows up here.</p></div>
-                            </section>
-                            <section class="sp-section" id="spTopSection">
-                                <header class="sp-section-head"><h4>${ICONS.spark} Top Tracks</h4></header>
-                                <div class="sp-tracks" id="spTopList" role="list" aria-label="Top tracks"></div>
-                            </section>
-                            <section class="sp-section" id="spPlaylistsSection">
-                                <header class="sp-section-head"><h4>${ICONS.playlist} Your Playlists</h4></header>
-                                <div class="sp-card-row" id="spPlaylistsRow"></div>
-                                <div class="sp-empty" id="spPlaylistsEmpty" hidden><p>No playlists yet.</p></div>
-                            </section>
-                            <p class="sp-premium-note sp-free-note" id="spFreeNote" hidden>${ICONS.info}<span>You're on a free account — tracks play as 30-second previews. <strong>Spotify Premium is required for full playback.</strong></span></p>
-                        </div>
-                        <div class="sp-results" id="spResults" hidden>
-                            <button type="button" class="sp-back" id="spResultsBack">${ICONS.back}<span>Back to library</span></button>
-                            <section class="sp-section" id="spSearchTracksSection" hidden>
-                                <header class="sp-section-head"><h4>Tracks</h4></header>
-                                <div class="sp-tracks" id="spSearchTracks" role="list" aria-label="Track results"></div>
-                            </section>
-                            <section class="sp-section" id="spSearchPlaylistsSection" hidden>
-                                <header class="sp-section-head"><h4>Playlists</h4></header>
-                                <div class="sp-card-row" id="spSearchPlaylists"></div>
-                            </section>
-                            <section class="sp-section" id="spSearchAlbumsSection" hidden>
-                                <header class="sp-section-head"><h4>Albums</h4></header>
-                                <div class="sp-card-row" id="spSearchAlbums"></div>
-                            </section>
-                            <section class="sp-section" id="spSearchArtistsSection" hidden>
-                                <header class="sp-section-head"><h4>Artists</h4></header>
-                                <div class="sp-card-row sp-card-row-artists" id="spSearchArtists"></div>
-                            </section>
-                            <div class="sp-empty" id="spSearchEmpty" hidden><p>Nothing found — try a different search.</p></div>
-                        </div>
-                        <div class="sp-detail" id="spDetail" hidden>
-                            <button type="button" class="sp-back" id="spDetailBack">${ICONS.back}<span id="spDetailBackLabel">Back</span></button>
-                            <div class="sp-detail-header">
-                                <img class="sp-detail-art" id="spDetailArt" alt="" />
-                                <div class="sp-detail-copy">
-                                    <span class="sp-detail-type" id="spDetailType"></span>
-                                    <h3 class="sp-detail-name" id="spDetailName"></h3>
-                                    <p class="sp-detail-meta" id="spDetailMeta"></p>
-                                    <button type="button" class="mp-btn mp-btn-primary sp-detail-play" id="spDetailPlay">${ICONS.play}<span>Play</span></button>
-                                </div>
-                            </div>
-                            <div class="sp-tracks" id="spDetailTracks" role="list" aria-label="Tracks"></div>
-                        </div>
-                    </div>
-                </div>
+                <div class="mp-row-menu" id="mpRowMenu" hidden></div>
             </div>
             <div class="modal-footer mp-footer">
                 <span class="mp-footer-hint">Playback continues after closing</span>
@@ -578,7 +614,6 @@ const miniPlayerHtml = `
     <button type="button" class="mp-mini-open" id="mpMiniOpen" title="Open music player" aria-label="Open music player">
         <span class="mp-mini-art-wrap">
             <span class="mp-mini-placeholder">${ICONS.note}</span>
-            <canvas class="mp-mini-canvas" id="mpMiniCanvas" width="512" height="512" aria-hidden="true" hidden></canvas>
             <img class="mp-mini-img" id="mpMiniImg" alt="" hidden />
         </span>
         <span class="mp-mini-meta">
@@ -602,6 +637,13 @@ function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
   if (!el) throw new Error(`Music player markup missing #${id}`);
   return el as T;
+}
+
+function formatTime(sec: number): string {
+  const clamped = Math.max(0, Math.floor(sec));
+  const minutes = Math.floor(clamped / 60);
+  const seconds = clamped % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
 function formatMs(ms: number): string {
@@ -642,20 +684,24 @@ class MusicPlayerApp {
   private navbarIconObserver: MutationObserver | null = null;
   private navbarIconWatchedEl: Element | null = null;
 
-  // ---- radio ----
-  private engine = new MusicEngine();
-  private currentRadioId: string;
-  private filter: TrackFilter = 'all';
-  private radioSearch = '';
-  private radioRows = new Map<string, HTMLDivElement>();
+  // ---- free engine (no login): <audio> + resolved stream URLs ----
+  private freeAudio: HTMLAudioElement | null = null;
+  private freeMode: 'resolve' | 'preview' = 'resolve';
+  /** Guards against a stale resolve overwriting a newer track. */
+  private freeResolveToken = 0;
+  private retriedCurrentTrack = false;
+
+  // ---- local (on-device) library ----
+  private library = new LocalMusicLibrary();
+
+  // ---- capabilities of this deployment's API ----
+  private caps: MusicCapabilities = { search: false, resolve: false };
+  private capsChecked = false;
 
   // ---- spotify ----
   private sdk = new SpotifySdkController();
   private profile: SpotifyProfile | null = null;
-  private previewAudio: HTMLAudioElement | null = null;
-  private spotifyMode: SpotifyMode = 'preview';
-  private spQueue: SpotifyTrack[] = [];
-  private spIndex = -1;
+  private spotifyMode: SpotifyMode = 'resolve';
   private sdkState: WebPlaybackPlayerState | null = null;
   private sdkStateAt = 0;
   private likedOffset = 0;
@@ -665,11 +711,17 @@ class MusicPlayerApp {
   private detailContextUri: string | null = null;
   private detailQueue: SpotifyTrack[] = [];
   private spotifyBusy = false;
+  private playlistsCache: SpotifyPlaylist[] = [];
+  /** Session cache of "is this track saved in the user's Spotify library". */
+  private savedIds = new Set<string>();
+  private savedIdsPending = new Set<string>();
+
+  // ---- rendered lists (queueId → tracks) ----
+  private queues = new Map<string, SpotifyTrack[]>();
 
   // ---- DOM refs ----
   private readonly root: HTMLElement;
   private readonly playerBar: HTMLElement;
-  private readonly pbArt: HTMLCanvasElement;
   private readonly pbImg: HTMLImageElement;
   private readonly pbPlaceholder: HTMLElement;
   private readonly pbTitle: HTMLElement;
@@ -691,27 +743,49 @@ class MusicPlayerApp {
   private readonly deviceName: HTMLElement;
   private readonly deviceMenu: HTMLElement;
 
-  private readonly tabRadio: HTMLButtonElement;
+  private readonly tabMusic: HTMLButtonElement;
+  private readonly tabQueue: HTMLButtonElement;
   private readonly tabAmbience: HTMLButtonElement;
-  private readonly tabSpotify: HTMLButtonElement;
-  private readonly radioView: HTMLElement;
+  private readonly musicView: HTMLElement;
+  private readonly queueView: HTMLElement;
   private readonly ambienceView: HTMLElement;
-  private readonly spotifyView: HTMLElement;
-  private readonly trackList: HTMLElement;
-  private readonly favoritesEmpty: HTMLElement;
-  private readonly radioSearchInput: HTMLInputElement;
+  private readonly queueCount: HTMLElement;
+  private readonly queueList: HTMLElement;
+  private readonly queueEmpty: HTMLElement;
+  private readonly queueHint: HTMLElement;
+  private readonly queueClear: HTMLButtonElement;
 
-  private readonly spChip: HTMLButtonElement;
-  private readonly spChipText: HTMLElement;
+  private readonly searchInput: HTMLInputElement;
+  private readonly searchNotice: HTMLElement;
+
+  private readonly freeHome: HTMLElement;
+  private readonly hero: HTMLElement;
+  private readonly heroConnect: HTMLButtonElement;
+  private readonly favoritesList: HTMLElement;
+  private readonly favoritesEmpty: HTMLElement;
+  private readonly favCount: HTMLElement;
+  private readonly localPlaylistList: HTMLElement;
+  private readonly localPlaylistEmpty: HTMLElement;
+  private readonly playlistName: HTMLElement;
+  private readonly playlistCount: HTMLElement;
+  private readonly playlistRename: HTMLButtonElement;
+  private readonly playlistClear: HTMLButtonElement;
+
+  private readonly resultsView: HTMLElement;
+  private readonly resultsList: HTMLElement;
+  private readonly resultsEmpty: HTMLElement;
+
+  private readonly accountChip: HTMLButtonElement;
+  private readonly accountChipText: HTMLElement;
   private readonly connectView: HTMLElement;
   private readonly connectBtn: HTMLButtonElement;
+  private readonly connectBack: HTMLButtonElement;
   private readonly connectError: HTMLElement;
   private readonly clientIdInput: HTMLInputElement;
   private readonly appView: HTMLElement;
   private readonly avatar: HTMLImageElement;
   private readonly spNameEl: HTMLElement;
   private readonly spProductEl: HTMLElement;
-  private readonly searchInput: HTMLInputElement;
   private readonly skeleton: HTMLElement;
   private readonly libraryView: HTMLElement;
   private readonly likedList: HTMLElement;
@@ -721,11 +795,12 @@ class MusicPlayerApp {
   private readonly playlistsRow: HTMLElement;
   private readonly playlistsEmpty: HTMLElement;
   private readonly freeNote: HTMLElement;
-  private readonly resultsView: HTMLElement;
-  private readonly detailView: HTMLElement;
+  private readonly spResultsView: HTMLElement;
+  private readonly spDetailView: HTMLElement;
+
+  private readonly rowMenu: HTMLElement;
 
   private readonly mini: HTMLElement;
-  private readonly miniCanvas: HTMLCanvasElement;
   private readonly miniImg: HTMLImageElement;
   private readonly miniTitle: HTMLElement;
   private readonly miniSub: HTMLElement;
@@ -736,7 +811,6 @@ class MusicPlayerApp {
 
     this.root = byId('musicPlayerModal');
     this.playerBar = byId('mpPlayerBar');
-    this.pbArt = byId('mpPbArt');
     this.pbImg = byId('mpPbImg');
     this.pbPlaceholder = this.playerBar.querySelector('.mp-pb-placeholder') as HTMLElement;
     this.pbTitle = byId('mpPbTitle');
@@ -758,27 +832,49 @@ class MusicPlayerApp {
     this.deviceName = byId('mpDeviceName');
     this.deviceMenu = byId('mpDeviceMenu');
 
-    this.tabRadio = byId('mpTabRadio');
+    this.tabMusic = byId('mpTabMusic');
+    this.tabQueue = byId('mpTabQueue');
     this.tabAmbience = byId('mpTabAmbience');
-    this.tabSpotify = byId('mpTabSpotify');
-    this.radioView = byId('mpRadioView');
+    this.musicView = byId('mpMusicView');
+    this.queueView = byId('mpQueueView');
     this.ambienceView = byId('mpAmbienceView');
-    this.spotifyView = byId('mpSpotifyView');
-    this.trackList = byId('mpTrackList');
-    this.favoritesEmpty = byId('mpFavoritesEmpty');
-    this.radioSearchInput = byId('mpRadioSearchInput');
+    this.queueCount = byId('mpQueueCount');
+    this.queueList = byId('mpQueueList');
+    this.queueEmpty = byId('mpQueueEmpty');
+    this.queueHint = byId('mpQueueHint');
+    this.queueClear = byId('mpQueueClear');
 
-    this.spChip = byId('mpSpotifyChip');
-    this.spChipText = byId('mpSpotifyChipText');
+    this.searchInput = byId('mpSearchInput');
+    this.searchNotice = byId('mpSearchNotice');
+
+    this.freeHome = byId('mpFreeHome');
+    this.hero = byId('mpHero');
+    this.heroConnect = byId('mpHeroConnect');
+    this.favoritesList = byId('mpFavoritesList');
+    this.favoritesEmpty = byId('mpFavoritesEmpty');
+    this.favCount = byId('mpFavCount');
+    this.localPlaylistList = byId('mpLocalPlaylistList');
+    this.localPlaylistEmpty = byId('mpLocalPlaylistEmpty');
+    this.playlistName = byId('mpPlaylistName');
+    this.playlistCount = byId('mpPlaylistCount');
+    this.playlistRename = byId('mpPlaylistRename');
+    this.playlistClear = byId('mpPlaylistClear');
+
+    this.resultsView = byId('mpResults');
+    this.resultsList = byId('mpResultsList');
+    this.resultsEmpty = byId('mpResultsEmpty');
+
+    this.accountChip = byId('mpAccountChip');
+    this.accountChipText = byId('mpAccountChipText');
     this.connectView = byId('spConnect');
     this.connectBtn = byId('spConnectBtn');
+    this.connectBack = byId('spConnectBack');
     this.connectError = byId('spConnectError');
     this.clientIdInput = byId('spClientIdInput');
     this.appView = byId('spApp');
     this.avatar = byId('spAvatar');
     this.spNameEl = byId('spName');
     this.spProductEl = byId('spProduct');
-    this.searchInput = byId('spSearchInput');
     this.skeleton = byId('spSkeleton');
     this.libraryView = byId('spLibrary');
     this.likedList = byId('spLikedList');
@@ -788,27 +884,16 @@ class MusicPlayerApp {
     this.playlistsRow = byId('spPlaylistsRow');
     this.playlistsEmpty = byId('spPlaylistsEmpty');
     this.freeNote = byId('spFreeNote');
-    this.resultsView = byId('spResults');
-    this.detailView = byId('spDetail');
+    this.spResultsView = byId('spResults');
+    this.spDetailView = byId('spDetail');
+
+    this.rowMenu = byId('mpRowMenu');
 
     this.mini = byId('mpMiniPlayer');
-    this.miniCanvas = byId('mpMiniCanvas');
     this.miniImg = byId('mpMiniImg');
     this.miniTitle = byId('mpMiniTitle');
     this.miniSub = byId('mpMiniSub');
     this.miniPlay = byId('mpMiniPlay');
-
-    // Radio art for every row.
-    this.trackList.querySelectorAll<HTMLCanvasElement>('.mp-row-art').forEach((canvas) => {
-      const row = canvas.closest('.mp-row') as HTMLDivElement | null;
-      const track = row ? getTrackById(row.dataset.trackId ?? '') : null;
-      if (track) drawTrackArt(canvas, track);
-    });
-
-    // Engine wiring.
-    this.engine.onStateChange = () => this.handleEngineState();
-    this.engine.onEnd = () => this.handleRadioEnd();
-    this.engine.setVolume(this.state.volume);
 
     // Restore persisted UI state.
     this.volumeInput.value = String(Math.round(this.state.volume * 100));
@@ -817,16 +902,10 @@ class MusicPlayerApp {
     this.applyRepeatVisuals();
     this.updateVolumeIcon();
 
-    const restored = (this.state.lastTrackId && getTrackById(this.state.lastTrackId)) || TRACKS[0];
-    this.currentRadioId = restored.id;
-    this.engine.load(restored);
-    this.updateChips();
-    this.updateRadioRows();
-
     this.bindEvents();
     this.setupMediaSession();
     this.watchNavbarIcon();
-    this.switchView(this.state.view || 'radio');
+    this.switchView(this.state.view || 'music');
 
     // Initial slider fills.
     this.setRangeFill(this.seek);
@@ -835,8 +914,9 @@ class MusicPlayerApp {
       this.setRangeFill(slider);
     });
 
-    // Spotify bootstrap.
-    void this.bootstrapSpotify();
+    this.renderFreeHome();
+    this.restoreFreeQueue();
+    this.bootstrap();
   }
 
   // ---- persistence ---------------------------------------------------------
@@ -846,10 +926,13 @@ class MusicPlayerApp {
       const raw = stateGet(STORAGE_KEY);
       if (!raw) return { ...DEFAULT_STATE };
       const parsed = JSON.parse(raw) as Partial<MusicPlayerState>;
-      const favorites = Array.isArray(parsed.favorites)
-        ? parsed.favorites.filter(
-            (id): id is string => typeof id === 'string' && getTrackById(id) !== undefined,
-          )
+      const freeQueue = Array.isArray(parsed.freeQueue)
+        ? parsed.freeQueue
+            .filter(
+              (track): track is SpotifyTrack =>
+                Boolean(track) && typeof track.id === 'string' && typeof track.name === 'string',
+            )
+            .slice(0, 200)
         : [];
       return {
         volume:
@@ -860,14 +943,14 @@ class MusicPlayerApp {
         repeat: REPEAT_MODES.includes(parsed.repeat as RepeatMode)
           ? (parsed.repeat as RepeatMode)
           : DEFAULT_STATE.repeat,
-        lastTrackId:
-          typeof parsed.lastTrackId === 'string' && getTrackById(parsed.lastTrackId) !== undefined
-            ? parsed.lastTrackId
-            : null,
-        favorites,
-        view: ['radio', 'ambience', 'spotify'].includes(parsed.view as ViewId)
+        view: ['music', 'queue', 'ambience'].includes(parsed.view as ViewId)
           ? (parsed.view as ViewId)
           : DEFAULT_STATE.view,
+        freeQueue,
+        freeIndex:
+          typeof parsed.freeIndex === 'number'
+            ? Math.min(Math.max(-1, Math.round(parsed.freeIndex)), freeQueue.length - 1)
+            : -1,
       };
     } catch {
       return { ...DEFAULT_STATE };
@@ -883,193 +966,273 @@ class MusicPlayerApp {
   }
 
   // ========================================================================
-  // Radio source
+  // Free engine — HTML5 <audio> fed by resolved stream URLs (no login)
   // ========================================================================
 
-  private currentRadioTrack(): Track | null {
-    return getTrackById(this.currentRadioId) ?? null;
+  private currentFreeTrack(): SpotifyTrack | null {
+    return this.state.freeQueue[this.state.freeIndex] ?? null;
   }
 
-  private visibleRadioTracks(): Track[] {
-    const query = this.radioSearch.trim().toLowerCase();
-    return TRACKS.filter((track) => {
-      const matchesFilter =
-        this.filter === 'all' ||
-        track.playlist === this.filter ||
-        (this.filter === 'favorites' && this.state.favorites.includes(track.id));
-      const matchesSearch =
-        !query ||
-        track.title.toLowerCase().includes(query) ||
-        PLAYLIST_LABELS[track.playlist].toLowerCase().includes(query);
-      return matchesFilter && matchesSearch;
+  private ensureFreeAudio(): HTMLAudioElement {
+    if (this.freeAudio) return this.freeAudio;
+    const audio = new Audio();
+    audio.preload = 'none';
+    audio.volume = this.state.volume;
+    audio.addEventListener('timeupdate', () => {
+      if (this.source === 'free') this.updateProgress();
     });
+    audio.addEventListener('loadedmetadata', () => {
+      if (this.source === 'free') {
+        const total = this.currentDurationMs();
+        this.timeTotal.textContent = formatMs(total);
+        this.seek.setAttribute('aria-valuetext', formatMs(this.currentPositionMs()));
+      }
+    });
+    audio.addEventListener('play', () => this.handleFreePlaybackState(true));
+    audio.addEventListener('playing', () => this.handleFreePlaybackState(true));
+    audio.addEventListener('pause', () => this.handleFreePlaybackState(false));
+    audio.addEventListener('ended', () => this.handleFreeEnded());
+    audio.addEventListener('error', () => this.handleFreeAudioError());
+    this.freeAudio = audio;
+    return audio;
   }
 
-  playRadioTrack(id: string): void {
-    const track = getTrackById(id);
-    if (!track) return;
-    this.stopSpotifyPlayback();
-    this.miniDismissed = false;
-    this.currentRadioId = id;
-    this.state.lastTrackId = id;
-    this.persist();
-    this.source = 'radio';
-    this.engine.play(track, 0);
-    this.updateRadioRows();
-    this.syncPlayerBarRadio();
+  /** Reflects <audio> play/pause in the bar, rows, mini player and navbar. */
+  private handleFreePlaybackState(playing: boolean): void {
+    const isFreeEngine =
+      this.source === 'free' || (this.source === 'spotify' && this.spotifyMode === 'preview');
+    if (!isFreeEngine) return;
+    if (playing && this.source === 'free') {
+      const track = this.currentFreeTrack();
+      if (track && this.pbSub.textContent === 'Finding a stream…') {
+        this.pbSub.textContent = trackArtistNames(track);
+      }
+    }
+    this.playerBar.classList.toggle('is-playing', playing);
+    this.updatePlayIcon();
     this.updateMini();
+    this.updateRowStates();
+    this.syncNavbarIcon();
+    if (playing) this.startProgressTimer();
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
+      } catch {
+        /* playbackState unsupported — non-fatal */
+      }
+    }
   }
 
-  private radioNext(auto = false): void {
-    const list = this.visibleRadioTracks().length > 0 ? this.visibleRadioTracks() : TRACKS;
-    const idx = list.findIndex((t) => t.id === this.currentRadioId);
-    let nextIdx: number;
+  /** Starts playing the queue at `index` through the free engine. */
+  private async playFreeAt(index: number, auto = false): Promise<void> {
+    const queue = this.state.freeQueue;
+    if (queue.length === 0) return;
+    let idx = index;
+    if (idx >= queue.length) {
+      if (this.state.repeat === 'all') idx = 0;
+      else return;
+    }
+    if (idx < 0) idx = queue.length - 1;
 
-    if (this.state.shuffle) {
-      if (list.length <= 1) return;
-      do {
-        nextIdx = Math.floor(Math.random() * list.length);
-      } while (nextIdx === idx);
-    } else {
-      nextIdx = idx + 1;
+    if (this.state.shuffle && queue.length > 1 && !auto) {
+      let randomIdx = idx;
+      while (randomIdx === idx) randomIdx = Math.floor(Math.random() * queue.length);
+      idx = randomIdx;
     }
 
-    if (nextIdx >= list.length) {
+    const track = queue[idx];
+    if (!track) return;
+    this.state.freeIndex = idx;
+    this.persist();
+
+    this.stopSpotifyPlayback();
+    this.miniDismissed = false;
+    this.source = 'free';
+    this.spotifyMode = 'resolve';
+    this.retriedCurrentTrack = false;
+    this.freeMode = 'resolve';
+    const token = ++this.freeResolveToken;
+
+    this.syncPlayerBarFree(track, false, 'resolve', 'Finding a stream…');
+    this.updateRowStates();
+    this.updateQueueView();
+    this.syncNavbarIcon();
+    this.startProgressTimer();
+
+    if (!this.capsChecked) await this.checkCapabilities();
+
+    if (!this.caps.resolve) {
+      this.tryPreviewFallback(track, token, 'Free playback is not available on this deployment.');
+      return;
+    }
+
+    try {
+      const stream = await resolveTrackStream(this.freeResolveInput(track));
+      if (token !== this.freeResolveToken) return; // a newer track took over
+      const audio = this.ensureFreeAudio();
+      this.pbSub.textContent = trackArtistNames(track);
+      audio.src = stream.url;
+      await audio.play().catch(() => {
+        showToast('Tap play to start the audio.');
+      });
+    } catch (err) {
+      if (token !== this.freeResolveToken) return;
+      this.handleResolveFailure(track, token, err);
+    }
+  }
+
+  private freeResolveInput(track: SpotifyTrack): {
+    trackId: string;
+    title: string;
+    artist: string;
+    durationMs: number | null;
+  } {
+    return {
+      trackId: track.id,
+      title: track.name,
+      artist: trackArtistNames(track),
+      durationMs: track.duration_ms > 0 ? track.duration_ms : null,
+    };
+  }
+
+  private handleResolveFailure(track: SpotifyTrack, token: number, err: unknown): void {
+    if (this.retriedCurrentTrack) {
+      this.tryPreviewFallback(track, token, this.describeFreeError(err));
+      return;
+    }
+    // One retry with a fresh (cache-busting) resolution before giving up.
+    this.retriedCurrentTrack = true;
+    this.pbSub.textContent = 'Retrying…';
+    resolveTrackStream(this.freeResolveInput(track), true)
+      .then((stream) => {
+        if (token !== this.freeResolveToken) return;
+        const audio = this.ensureFreeAudio();
+        audio.src = stream.url;
+        void audio.play().catch(() => undefined);
+      })
+      .catch((retryErr: unknown) => {
+        if (token !== this.freeResolveToken) return;
+        this.tryPreviewFallback(track, token, this.describeFreeError(retryErr));
+      });
+  }
+
+  /** Last resort: the public 30-second preview, when one exists. */
+  private tryPreviewFallback(track: SpotifyTrack, token: number, message: string): void {
+    if (track.preview_url) {
+      showToast(`${message} Playing a 30-second preview instead.`);
+      this.freeMode = 'preview';
+      this.syncPlayerBarFree(track, false, 'preview');
+      const audio = this.ensureFreeAudio();
+      audio.src = track.preview_url;
+      void audio.play().catch(() => undefined);
+      return;
+    }
+    showToast(message);
+    this.updatePlayerBarEmpty();
+    this.updateRowStates();
+    this.updateQueueView();
+  }
+
+  private describeFreeError(err: unknown): string {
+    if (err instanceof FreeMusicError) return err.message;
+    if (err instanceof Error && err.message) return err.message;
+    return 'Could not play this song.';
+  }
+
+  private handleFreeAudioError(): void {
+    if (this.source !== 'free') return;
+    const track = this.currentFreeTrack();
+    if (!track) return;
+    const token = this.freeResolveToken;
+    // The audio element failed on a URL we handed it — re-resolve (fresh)
+    // or fall back to the preview.
+    this.handleResolveFailure(track, token, new Error('That stream expired — refreshing.'));
+  }
+
+  private handleFreeEnded(): void {
+    if (this.source !== 'free') return;
+    if (this.state.repeat === 'one') {
+      void this.playFreeAt(this.state.freeIndex, true);
+      return;
+    }
+    const nextIdx = this.state.freeIndex + 1;
+    if (nextIdx < this.state.freeQueue.length || this.state.repeat === 'all') {
+      void this.playFreeAt(nextIdx, true);
+    } else {
+      this.updatePlayerBarEmpty();
+      this.updateRowStates();
+      this.updateQueueView();
+    }
+  }
+
+  private freeNext(auto = false): void {
+    const queue = this.state.freeQueue;
+    if (queue.length === 0) return;
+    const idx = this.state.freeIndex;
+    if (this.state.shuffle) {
+      if (queue.length <= 1) return;
+      let randomIdx = idx;
+      while (randomIdx === idx) randomIdx = Math.floor(Math.random() * queue.length);
+      void this.playFreeAt(randomIdx);
+      return;
+    }
+    let nextIdx = idx + 1;
+    if (nextIdx >= queue.length) {
       if (auto && this.state.repeat === 'off') {
-        this.engine.stop();
+        this.updatePlayerBarEmpty();
         return;
       }
       nextIdx = 0;
     }
-    this.playRadioTrack(list[nextIdx].id);
+    void this.playFreeAt(nextIdx);
   }
 
-  private radioPrev(): void {
-    const track = this.currentRadioTrack();
-    if (track && this.engine.currentTrack?.id === track.id && this.engine.getPosition() > 3) {
-      this.engine.seek(0);
+  private freePrev(): void {
+    const audio = this.freeAudio;
+    const track = this.currentFreeTrack();
+    if (
+      audio &&
+      track &&
+      audio.src &&
+      !audio.paused &&
+      audio.currentTime > 3 &&
+      this.freeResolveToken > 0
+    ) {
+      audio.currentTime = 0;
       return;
     }
-    const list = this.visibleRadioTracks().length > 0 ? this.visibleRadioTracks() : TRACKS;
-    const idx = list.findIndex((t) => t.id === this.currentRadioId);
-    let prevIdx: number;
-    if (this.state.shuffle) {
-      if (list.length <= 1) return;
-      do {
-        prevIdx = Math.floor(Math.random() * list.length);
-      } while (prevIdx === idx);
-    } else {
-      prevIdx = idx - 1;
-    }
-    if (prevIdx < 0) prevIdx = list.length - 1;
-    this.playRadioTrack(list[prevIdx].id);
+    const queue = this.state.freeQueue;
+    if (queue.length === 0) return;
+    let prevIdx = this.state.freeIndex - 1;
+    if (prevIdx < 0) prevIdx = queue.length - 1;
+    void this.playFreeAt(prevIdx);
   }
 
-  private handleRadioEnd(): void {
-    if (this.state.repeat === 'one') {
-      const track = this.currentRadioTrack();
-      if (track) this.engine.play(track, 0);
+  /** Appends a track to the free queue (the "+ button"). */
+  private enqueueFree(track: SpotifyTrack): void {
+    const queue = this.state.freeQueue;
+    if (this.source === 'free' || queue.length > 0) {
+      queue.push(track);
+      this.state.freeIndex = Math.min(this.state.freeIndex, queue.length - 1);
+      this.persist();
+      this.updateQueueView();
+      showToast('Added to queue.');
       return;
     }
-    this.radioNext(true);
-  }
-
-  private handleEngineState(): void {
-    if (this.source !== 'radio') return;
-    this.syncPlayerBarRadio();
-    this.updateRadioRows();
-    if (this.engine.isPlaying) {
-      this.startProgressTimer();
-    } else {
-      this.stopProgressTimer();
-    }
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = this.engine.isPlaying ? 'playing' : 'paused';
-    }
-    this.updateMini();
-    this.syncNavbarIcon();
-  }
-
-  private updateRadioRows(): void {
-    const playingId =
-      this.source === 'radio' && this.engine.isPlaying ? this.engine.currentTrack?.id : null;
-    const favorites = this.state.favorites;
-    let visibleCount = 0;
-
-    for (const track of TRACKS) {
-      const row = this.trackList.querySelector<HTMLDivElement>(
-        `.mp-row[data-track-id="${track.id}"]`,
-      );
-      if (!row) continue;
-
-      const matches =
-        this.filter === 'all' ||
-        track.playlist === this.filter ||
-        (this.filter === 'favorites' && favorites.includes(track.id));
-      const query = this.radioSearch.trim().toLowerCase();
-      const matchesSearch =
-        !query ||
-        track.title.toLowerCase().includes(query) ||
-        PLAYLIST_LABELS[track.playlist].toLowerCase().includes(query);
-      const visible = matches && matchesSearch;
-      row.hidden = !visible;
-      if (visible) visibleCount++;
-
-      const isCurrent = this.source === 'radio' && track.id === this.currentRadioId;
-      row.classList.toggle('is-current', isCurrent);
-      row.classList.toggle('is-playing', isCurrent && playingId === track.id);
-
-      const star = row.querySelector<HTMLButtonElement>('.mp-row-star');
-      const isFav = favorites.includes(track.id);
-      if (star) {
-        star.classList.toggle('is-fav', isFav);
-        star.setAttribute('aria-pressed', String(isFav));
-      }
-    }
-
-    const showEmpty =
-      visibleCount === 0 && (this.filter === 'favorites' || this.radioSearch.trim() !== '');
-    this.favoritesEmpty.hidden = !showEmpty;
-    if (showEmpty && this.radioSearch.trim() !== '') {
-      const copy = this.favoritesEmpty.querySelector('p');
-      if (copy) copy.textContent = 'No tracks match your search.';
-    } else {
-      const copy = this.favoritesEmpty.querySelector('p');
-      if (copy) copy.textContent = 'No favorites yet. Tap the star on any track to keep it close.';
-    }
-    this.trackList.style.display = showEmpty ? 'none' : '';
-  }
-
-  private updateChips(): void {
-    this.root.querySelectorAll<HTMLButtonElement>('.mp-chip').forEach((chip) => {
-      const chipFilter = chip.dataset.filter as TrackFilter;
-      const active = chipFilter === this.filter;
-      chip.classList.toggle('is-active', active);
-      chip.setAttribute('aria-pressed', String(active));
-    });
-    this.root.querySelectorAll<HTMLElement>('.mp-chip-count').forEach((count) => {
-      const forFilter = count.dataset.countFor as TrackFilter;
-      let n: number;
-      if (forFilter === 'all') n = TRACKS.length;
-      else if (forFilter === 'favorites') n = this.state.favorites.length;
-      else n = TRACKS.filter((t) => t.playlist === forFilter).length;
-      count.textContent = String(n);
-    });
-  }
-
-  private toggleRadioFavorite(id: string): void {
-    const track = getTrackById(id);
-    if (!track) return;
-    const idx = this.state.favorites.indexOf(id);
-    const isFav = idx === -1;
-    if (isFav) {
-      this.state.favorites.push(id);
-    } else {
-      this.state.favorites.splice(idx, 1);
-    }
+    // Nothing playing yet — this becomes the track up next (and now).
+    this.state.freeQueue = [track];
+    this.state.freeIndex = 0;
     this.persist();
-    this.updateChips();
-    this.updateRadioRows();
+    void this.playFreeAt(0);
+  }
+
+  /** Restores the persisted free queue display (paused) after a reload. */
+  private restoreFreeQueue(): void {
+    const track = this.currentFreeTrack();
+    if (!track) return;
+    this.source = 'free';
+    this.freeMode = 'resolve';
+    this.syncPlayerBarFree(track, false, 'resolve');
   }
 
   // ========================================================================
@@ -1077,10 +1240,13 @@ class MusicPlayerApp {
   // ========================================================================
 
   private isPlaying(): boolean {
-    if (this.source === 'radio') return this.engine.isPlaying;
+    if (this.source === 'free') {
+      return this.freeAudio !== null && !this.freeAudio.paused;
+    }
     if (this.source === 'spotify') {
-      if (this.spotifyMode === 'preview')
-        return this.previewAudio !== null && !this.previewAudio.paused;
+      if (this.spotifyMode === 'preview') {
+        return this.freeAudio !== null && !this.freeAudio.paused;
+      }
       if (this.activeDeviceId) return this.sdkRestPlaying;
       return this.sdkState ? !this.sdkState.paused : false;
     }
@@ -1088,29 +1254,31 @@ class MusicPlayerApp {
   }
 
   private currentDurationMs(): number {
-    if (this.source === 'radio') {
-      const track = this.currentRadioTrack();
-      return track ? track.durationSec * 1000 : 0;
+    if (this.source === 'free') {
+      if (this.freeMode === 'preview') return 30_000;
+      const audio = this.freeAudio;
+      if (audio && audio.src && Number.isFinite(audio.duration) && audio.duration > 0) {
+        return audio.duration * 1000;
+      }
+      const track = this.currentFreeTrack();
+      return track ? track.duration_ms : 0;
     }
     if (this.source === 'spotify') {
-      if (this.spotifyMode === 'preview') {
-        return 30_000;
-      }
-      return this.sdkState?.duration ?? 0;
+      return this.sdkState?.duration ?? this.sdkRestTrack?.duration_ms ?? 0;
     }
     return 0;
   }
 
   private currentPositionMs(): number {
-    if (this.source === 'radio') {
-      const track = this.currentRadioTrack();
-      if (!track) return 0;
-      const pos = this.engine.currentTrack?.id === track.id ? this.engine.getPosition() : 0;
-      return pos * 1000;
+    if (this.source === 'free') {
+      const audio = this.freeAudio;
+      if (audio && audio.src) return audio.currentTime * 1000;
+      return 0;
     }
     if (this.source === 'spotify') {
       if (this.spotifyMode === 'preview') {
-        return this.previewAudio ? this.previewAudio.currentTime * 1000 : 0;
+        const audio = this.freeAudio;
+        return audio ? audio.currentTime * 1000 : 0;
       }
       if (this.sdkState) {
         if (this.sdkState.paused) return this.sdkState.position;
@@ -1122,23 +1290,32 @@ class MusicPlayerApp {
     return 0;
   }
 
-  private syncPlayerBarRadio(): void {
-    const track = this.currentRadioTrack();
-    if (!track) return;
-    this.pbImg.hidden = true;
-    this.pbArt.hidden = false;
-    this.pbPlaceholder.hidden = true;
-    drawTrackArt(this.pbArt, track);
-    this.pbTitle.textContent = track.title;
-    this.pbSub.textContent = 'Padify Studio';
+  private syncPlayerBarFree(
+    track: SpotifyTrack,
+    playing: boolean,
+    mode: 'resolve' | 'preview',
+    loadingText?: string,
+  ): void {
+    const art = pickImage(track.album?.images, 1) ?? pickImage(track.album?.images, 0);
+    if (art) {
+      this.pbImg.src = art;
+      this.pbImg.alt = `${track.album?.name ?? 'Album'} art`;
+      this.pbImg.hidden = false;
+    } else {
+      this.pbImg.hidden = true;
+      this.pbPlaceholder.hidden = false;
+    }
+    this.pbTitle.textContent = track.name;
+    this.pbSub.textContent = loadingText ?? trackArtistNames(track);
     this.pbSource.hidden = false;
-    this.pbSource.textContent = 'Radio';
-    this.timeTotal.textContent = formatTime(track.durationSec);
-    this.playerBar.classList.toggle('is-playing', this.engine.isPlaying);
+    this.pbSource.textContent = mode === 'preview' ? PREVIEW_LABEL : FREE_LABEL;
+    this.timeTotal.textContent = formatMs(mode === 'preview' ? 30_000 : track.duration_ms || 0);
+    this.playerBar.classList.toggle('is-playing', playing);
     this.updatePlayIcon();
     this.updateProgress();
-    this.updateMediaSessionRadio(track);
+    this.updateMediaSessionTrack(track);
     this.deviceWrap.hidden = true;
+    this.updateMini();
   }
 
   private syncPlayerBarSpotify(
@@ -1147,7 +1324,6 @@ class MusicPlayerApp {
     playing: boolean,
     mode: SpotifyMode,
   ): void {
-    this.pbArt.hidden = true;
     this.pbPlaceholder.hidden = true;
     const art = pickImage(track.album?.images, 1) ?? pickImage(track.album?.images, 0);
     if (art) {
@@ -1168,7 +1344,7 @@ class MusicPlayerApp {
     this.playerBar.classList.toggle('is-playing', playing);
     this.updatePlayIcon();
     this.updateProgress();
-    this.updateMediaSessionSpotify(track);
+    this.updateMediaSessionTrack(track);
     this.deviceWrap.hidden = !(mode === 'sdk' && this.profile?.product === 'premium');
     this.updateMini();
   }
@@ -1203,9 +1379,8 @@ class MusicPlayerApp {
 
   private updatePlayerBarEmpty(): void {
     this.pbTitle.textContent = 'Nothing playing';
-    this.pbSub.textContent = 'Pick a radio track or connect Spotify';
+    this.pbSub.textContent = 'Search a song or connect Spotify';
     this.pbSource.hidden = true;
-    this.pbArt.hidden = true;
     this.pbImg.hidden = true;
     this.pbPlaceholder.hidden = false;
     this.timeCurrent.textContent = '0:00';
@@ -1215,7 +1390,15 @@ class MusicPlayerApp {
     this.playerBar.classList.remove('is-playing');
     this.updatePlayIcon();
     this.deviceWrap.hidden = true;
+    this.stopProgressTimer();
     this.updateMini();
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.metadata = null;
+      } catch {
+        /* unsupported — non-fatal */
+      }
+    }
   }
 
   private startProgressTimer(): void {
@@ -1233,26 +1416,28 @@ class MusicPlayerApp {
   // ---- transport ---------------------------------------------------------
 
   togglePlay(): void {
-    if (this.source === 'radio') {
-      if (!this.engine.currentTrack) {
-        this.playRadioTrack(this.currentRadioId);
+    if (this.source === 'free') {
+      const audio = this.freeAudio ?? this.ensureFreeAudio();
+      if (!audio.src) {
+        const track = this.currentFreeTrack();
+        if (track) void this.playFreeAt(Math.max(0, this.state.freeIndex));
         return;
       }
-      if (this.engine.isPlaying) this.engine.pause();
-      else this.engine.resume();
+      if (audio.paused) void audio.play().catch(() => undefined);
+      else audio.pause();
       return;
     }
     if (this.source === 'spotify') {
-      if (this.spotifyMode === 'preview' && this.previewAudio) {
-        if (this.previewAudio.paused) void this.previewAudio.play().catch(() => undefined);
-        else this.previewAudio.pause();
+      if (this.spotifyMode === 'preview' && this.freeAudio) {
+        if (this.freeAudio.paused) void this.freeAudio.play().catch(() => undefined);
+        else this.freeAudio.pause();
         return;
       }
       if (this.spotifyMode === 'sdk') {
         if (this.activeDeviceId) {
           // Playback lives on another device — control it via REST.
           if (this.isPlaying()) {
-            void spotify.pausePlayback().catch(() => this.toastSpotifyError());
+            void spotify.pausePlayback(this.activeDeviceId).catch(() => this.toastSpotifyError());
             this.sdkRestPlaying = false;
           } else {
             void spotify
@@ -1269,13 +1454,13 @@ class MusicPlayerApp {
   }
 
   next(): void {
-    if (this.source === 'radio') {
-      this.radioNext();
+    if (this.source === 'free') {
+      this.freeNext();
       return;
     }
     if (this.source === 'spotify') {
       if (this.spotifyMode === 'preview') {
-        this.playSpotifyPreviewAt(this.spIndex + 1);
+        this.freeNext();
         return;
       }
       if (this.spotifyMode === 'sdk') {
@@ -1285,13 +1470,13 @@ class MusicPlayerApp {
   }
 
   prev(): void {
-    if (this.source === 'radio') {
-      this.radioPrev();
+    if (this.source === 'free') {
+      this.freePrev();
       return;
     }
     if (this.source === 'spotify') {
       if (this.spotifyMode === 'preview') {
-        this.playSpotifyPreviewAt(this.spIndex - 1);
+        this.freePrev();
         return;
       }
       if (this.spotifyMode === 'sdk') {
@@ -1304,8 +1489,7 @@ class MusicPlayerApp {
 
   private setVolume(value: number, fromUser: boolean): void {
     const vol = Math.max(0, Math.min(1, value));
-    this.engine.setVolume(vol);
-    if (this.previewAudio) this.previewAudio.volume = vol;
+    if (this.freeAudio) this.freeAudio.volume = vol;
     void this.sdk.setVolume(vol).catch(() => undefined);
     if (fromUser) {
       this.state.volume = vol;
@@ -1412,11 +1596,15 @@ class MusicPlayerApp {
   }
 
   private commitSeekTo(posMs: number): void {
-    if (this.source === 'radio') {
-      this.engine.seek(posMs / 1000);
+    if (this.source === 'free') {
+      const audio = this.freeAudio;
+      if (audio && audio.src) {
+        const max = this.freeMode === 'preview' ? 29.5 : Number.MAX_SAFE_INTEGER;
+        audio.currentTime = Math.min(posMs / 1000, max);
+      }
     } else if (this.source === 'spotify') {
-      if (this.spotifyMode === 'preview' && this.previewAudio) {
-        this.previewAudio.currentTime = Math.min(posMs / 1000, 29.5);
+      if (this.spotifyMode === 'preview' && this.freeAudio) {
+        this.freeAudio.currentTime = Math.min(posMs / 1000, 29.5);
       } else if (this.spotifyMode === 'sdk') {
         if (this.activeDeviceId) {
           void spotify
@@ -1430,97 +1618,11 @@ class MusicPlayerApp {
   }
 
   // ========================================================================
-  // Spotify: preview playback (free accounts)
-  // ========================================================================
-
-  private ensurePreviewAudio(): HTMLAudioElement {
-    if (this.previewAudio) return this.previewAudio;
-    const audio = new Audio();
-    audio.preload = 'none';
-    audio.volume = this.state.volume;
-    audio.addEventListener('timeupdate', () => {
-      if (this.source === 'spotify' && this.spotifyMode === 'preview') {
-        this.updateProgress();
-      }
-    });
-    audio.addEventListener('play', () => this.updatePlayIcon());
-    audio.addEventListener('pause', () => this.updatePlayIcon());
-    audio.addEventListener('ended', () => this.handlePreviewEnded());
-    audio.addEventListener('error', () => {
-      if (this.source === 'spotify' && this.spotifyMode === 'preview') {
-        showToast('Preview unavailable for this track.');
-        this.updatePlayerBarEmpty();
-        this.updateSpotifyRows();
-      }
-    });
-    this.previewAudio = audio;
-    return audio;
-  }
-
-  private handlePreviewEnded(): void {
-    if (this.source !== 'spotify' || this.spotifyMode !== 'preview') return;
-    if (this.state.repeat === 'one') {
-      this.playSpotifyPreviewAt(this.spIndex);
-      return;
-    }
-    const nextIdx = this.spIndex + 1;
-    if (nextIdx < this.spQueue.length || this.state.repeat === 'all') {
-      this.playSpotifyPreviewAt(nextIdx);
-    } else {
-      this.updatePlayerBarEmpty();
-      this.updateSpotifyRows();
-    }
-  }
-
-  playSpotifyPreviewAt(index: number): void {
-    if (this.spQueue.length === 0) return;
-    let idx = index;
-    if (idx >= this.spQueue.length) {
-      if (this.state.repeat === 'all') idx = 0;
-      else return;
-    }
-    if (idx < 0) idx = this.spQueue.length - 1;
-
-    if (this.state.shuffle && this.spQueue.length > 1) {
-      let randomIdx = idx;
-      while (randomIdx === idx) randomIdx = Math.floor(Math.random() * this.spQueue.length);
-      idx = randomIdx;
-    }
-
-    const track = this.spQueue[idx];
-    if (!track) return;
-    this.spIndex = idx;
-
-    if (!track.preview_url) {
-      showToast('No preview available for this track.');
-      return;
-    }
-
-    this.pauseRadioForSpotify();
-    this.miniDismissed = false;
-    const audio = this.ensurePreviewAudio();
-    audio.src = track.preview_url;
-    this.source = 'spotify';
-    this.spotifyMode = 'preview';
-    this.startProgressTimer();
-    this.syncPlayerBarSpotify(track, trackArtistNames(track), true, 'preview');
-    this.updateSpotifyRows();
-    this.syncNavbarIcon();
-    audio.play().catch(() => {
-      showToast('Tap play to start the preview.');
-    });
-  }
-
-  // ========================================================================
   // Spotify: SDK playback (Premium)
   // ========================================================================
 
-  private pauseRadioForSpotify(): void {
-    if (this.engine.isPlaying) this.engine.pause();
-  }
-
   private stopSpotifyPlayback(): void {
-    if (this.previewAudio && !this.previewAudio.paused) this.previewAudio.pause();
+    if (this.freeAudio && !this.freeAudio.paused) this.freeAudio.pause();
     if (this.source === 'spotify' && this.spotifyMode === 'sdk') {
       if (this.activeDeviceId) {
         void spotify.pausePlayback(this.activeDeviceId).catch(() => undefined);
@@ -1544,7 +1646,7 @@ class MusicPlayerApp {
       this.sdk.onState((state) => this.handleSdkState(state));
       this.sdk.onError((message) => {
         if (message.toLowerCase().includes('premium')) {
-          this.handleFreeAccountFallback();
+          this.handleNonPremiumAccount();
         } else {
           showToast(`Spotify player: ${message}`);
         }
@@ -1562,39 +1664,40 @@ class MusicPlayerApp {
     this.spotifyMode = 'sdk';
     const track = state.track_window.current_track;
     this.syncPlayerBarSpotify(track, trackArtistNames(track), !state.paused, 'sdk');
-    this.updateSpotifyRows();
+    this.updateRowStates();
+    this.updateQueueView();
     this.startProgressTimer();
     this.syncNavbarIcon();
   }
 
-  private handleFreeAccountFallback(): void {
-    if (this.profile) this.profile = { ...this.profile, product: 'free' };
+  /** Premium-only SDK hit a wall — stay connected, play via the free engine. */
+  private handleNonPremiumAccount(): void {
+    if (this.profile && this.profile.product !== 'free') {
+      this.profile = { ...this.profile, product: 'free' };
+    }
     this.freeNote.hidden = false;
     this.deviceWrap.hidden = true;
-    showToast('Spotify Premium is required for full playback — playing 30-second previews.');
   }
 
   /**
    * Plays a list of Spotify tracks starting at `index`.
-   * Premium → Web Playback SDK (full songs); Free → 30s previews.
+   * Premium → Web Playback SDK; everyone else → the free engine.
    */
-  async playSpotifyList(
+  private async playTrackList(
     tracks: SpotifyTrack[],
     index: number,
     contextUri?: string | null,
   ): Promise<void> {
     if (tracks.length === 0) return;
     const startIndex = Math.max(0, Math.min(index, tracks.length - 1));
-    this.spQueue = tracks;
-    this.spIndex = startIndex;
-
     const isPremium = this.profile?.product === 'premium';
+
     if (!isPremium) {
-      this.playSpotifyPreviewAt(startIndex);
+      this.state.freeQueue = [...tracks];
+      await this.playFreeAt(startIndex);
       return;
     }
 
-    this.pauseRadioForSpotify();
     this.source = 'spotify';
     this.spotifyMode = 'sdk';
 
@@ -1624,9 +1727,12 @@ class MusicPlayerApp {
         true,
         'sdk',
       );
-      this.updateSpotifyRows();
-    } catch (err) {
-      this.toastSpotifyError(err);
+      this.updateRowStates();
+    } catch {
+      // SDK unavailable (blocked iframe, network…) — fall back to free engine.
+      showToast('Native Spotify playback is unavailable — playing the free stream instead.');
+      this.state.freeQueue = [...tracks];
+      await this.playFreeAt(startIndex);
     }
   }
 
@@ -1744,10 +1850,10 @@ class MusicPlayerApp {
   }
 
   // ========================================================================
-  // Spotify: auth + library
+  // Bootstrap / auth state
   // ========================================================================
 
-  private async bootstrapSpotify(): Promise<void> {
+  private async bootstrap(): Promise<void> {
     const returning = consumedReturnFlag();
     const result = await completeLogin();
     if (result && !result.ok && result.error) {
@@ -1757,13 +1863,36 @@ class MusicPlayerApp {
     if (isAuthenticated()) {
       await this.loadSpotifyProfile();
       if (returning && result?.ok) {
-        this.switchView('spotify');
+        this.switchView('music');
         $('#musicPlayerModal').modal('show');
         showToast('Spotify connected.');
       }
     } else {
-      this.renderConnectScreen();
+      this.renderAnonymousState();
+      void this.checkCapabilities();
     }
+  }
+
+  private async checkCapabilities(): Promise<void> {
+    this.caps = await fetchMusicCapabilities();
+    this.capsChecked = true;
+    if (!isAuthenticated() && !this.caps.search) {
+      this.showSearchNotice(
+        'Free search needs the Padify music API — it looks offline here. Connect Spotify to browse your library instead.',
+      );
+    }
+    if (!this.caps.resolve) {
+      this.hero.classList.add('is-degraded');
+    }
+  }
+
+  private showSearchNotice(message: string): void {
+    this.searchNotice.textContent = message;
+    this.searchNotice.hidden = false;
+  }
+
+  private clearSearchNotice(): void {
+    this.searchNotice.hidden = true;
   }
 
   private async loadSpotifyProfile(): Promise<void> {
@@ -1781,7 +1910,7 @@ class MusicPlayerApp {
             this.updateDevicePill();
           })
           .catch(() => {
-            this.handleFreeAccountFallback();
+            this.handleNonPremiumAccount();
           });
       } else {
         this.freeNote.hidden = false;
@@ -1789,7 +1918,7 @@ class MusicPlayerApp {
     } catch (err) {
       if (err instanceof SpotifyAuthError) {
         this.showConnectError(err.message);
-        this.renderConnectScreen();
+        this.renderAnonymousState();
       } else {
         this.toastSpotifyError(err);
       }
@@ -1798,23 +1927,19 @@ class MusicPlayerApp {
     }
   }
 
-  private renderConnectScreen(): void {
-    this.connectView.hidden = false;
-    this.appView.hidden = true;
-    this.spChipText.textContent = 'Connect Spotify';
-    this.spChip.classList.remove('is-connected');
-    const redirectEl = byId('spRedirectUri');
-    redirectEl.textContent = getRedirectUri();
-    const savedId = getClientId();
-    if (savedId) this.clientIdInput.value = savedId;
+  private renderAnonymousState(): void {
+    this.accountChipText.textContent = 'Connect Spotify';
+    this.accountChip.classList.remove('is-connected');
+    this.showMusicSubView(this.searchInput.value.trim().length >= 2 ? 'results-anon' : 'home');
+    this.renderFreeHome();
   }
 
   private renderConnectedState(): void {
     if (!this.profile) return;
-    this.connectView.hidden = true;
-    this.appView.hidden = false;
-    this.spChipText.textContent = this.profile.display_name ?? 'Spotify';
-    this.spChip.classList.add('is-connected');
+    this.clearSearchNotice();
+    this.showMusicSubView('app');
+    this.accountChipText.textContent = this.profile.display_name ?? 'Spotify';
+    this.accountChip.classList.add('is-connected');
 
     this.spNameEl.textContent = this.profile.display_name ?? 'Spotify user';
     const product = this.profile.product === 'premium' ? 'Premium' : 'Free';
@@ -1835,6 +1960,70 @@ class MusicPlayerApp {
     this.connectError.hidden = false;
   }
 
+  // ========================================================================
+  // Free home (anonymous) — favorites + the one local playlist
+  // ========================================================================
+
+  private renderFreeHome(): void {
+    if (isAuthenticated()) return;
+    const favorites = this.library.favorites;
+    const playlist = this.library.playlist;
+
+    this.queues.set('favorites', favorites);
+    this.favoritesList.innerHTML = favorites
+      .map((track) => this.trackRowMarkup(track, 'favorites'))
+      .join('');
+    this.favoritesEmpty.hidden = favorites.length > 0;
+    this.favCount.textContent = favorites.length > 0 ? `${favorites.length} songs` : '';
+
+    if (playlist) {
+      this.queues.set('local-playlist', playlist.tracks);
+      this.playlistName.textContent = playlist.name;
+      this.localPlaylistList.innerHTML = playlist.tracks
+        .map((track) => this.trackRowMarkup(track, 'local-playlist'))
+        .join('');
+      this.localPlaylistEmpty.hidden = playlist.tracks.length > 0;
+      this.playlistCount.textContent =
+        playlist.tracks.length > 0 ? `${playlist.tracks.length} songs` : '';
+      this.playlistRename.hidden = false;
+      this.playlistClear.hidden = playlist.tracks.length === 0;
+    } else {
+      this.queues.delete('local-playlist');
+      this.playlistName.textContent = 'My Playlist';
+      this.localPlaylistList.innerHTML = '';
+      this.localPlaylistEmpty.hidden = false;
+      this.playlistCount.textContent = '';
+      this.playlistRename.hidden = true;
+      this.playlistClear.hidden = true;
+    }
+    this.refreshRowHearts(this.favoritesList);
+    this.refreshRowHearts(this.localPlaylistList);
+    this.updateRowStates();
+    this.updateQueueCount();
+  }
+
+  private async renameLocalPlaylist(): Promise<void> {
+    const playlist = this.library.playlist;
+    if (!playlist) return;
+    const result = (await Swal.fire({
+      title: 'Rename playlist',
+      input: 'text',
+      inputValue: playlist.name,
+      showCancelButton: true,
+      confirmButtonText: 'Rename',
+      confirmButtonColor: 'var(--vz-primary, #0070f3)',
+      inputValidator: (value: string) => (value.trim() ? null : 'Enter a name.'),
+    })) as SweetAlertResult<string>;
+    if (result.isConfirmed && typeof result.value === 'string') {
+      this.library.renamePlaylist(result.value);
+      this.renderFreeHome();
+    }
+  }
+
+  // ========================================================================
+  // Spotify library (connected)
+  // ========================================================================
+
   private async loadLibrary(): Promise<void> {
     this.skeleton.hidden = false;
     this.libraryView.hidden = true;
@@ -1848,22 +2037,26 @@ class MusicPlayerApp {
       this.likedOffset = liked ? liked.items.length : 0;
       this.likedTotal = liked?.total ?? 0;
 
-      this.renderSpotifyTrackRows(
-        this.likedList,
-        (liked?.items ?? []).map((item) => item.track).filter((t): t is SpotifyTrack => t !== null),
-      );
-      this.likedEmpty.hidden = (liked?.items?.length ?? 0) > 0;
+      const likedTracks = (liked?.items ?? [])
+        .map((item) => item.track)
+        .filter((t): t is SpotifyTrack => t !== null);
+      for (const track of likedTracks) this.savedIds.add(track.id);
+      this.renderTrackRows(this.likedList, likedTracks, 'liked');
+      this.likedEmpty.hidden = likedTracks.length > 0;
       this.likedMore.hidden = liked ? this.likedOffset >= (liked.total ?? 0) : true;
 
-      this.renderSpotifyTrackRows(this.topList, top?.items ?? []);
+      this.renderTrackRows(this.topList, top?.items ?? [], 'top');
 
       const playlistItems = playlists?.items ?? [];
+      this.playlistsCache = playlistItems;
       this.playlistsRow.innerHTML = playlistItems
         .map((playlist) => this.playlistCardMarkup(playlist))
         .join('');
       this.playlistsEmpty.hidden = playlistItems.length > 0;
 
       this.libraryView.hidden = false;
+      this.refreshRowHearts(this.topList);
+      this.updateRowStates();
     } catch (err) {
       this.toastSpotifyError(err);
     } finally {
@@ -1907,26 +2100,52 @@ class MusicPlayerApp {
         </button>`;
   }
 
+  // ========================================================================
+  // Track rows (one component for every list, free or connected)
+  // ========================================================================
+
   private trackRowMarkup(track: SpotifyTrack, queueId: string): string {
-    const isPremium = this.profile?.product === 'premium';
-    const playable = isPremium || track.preview_url !== null;
     const art = pickImage(track.album?.images, 2) ?? pickImage(track.album?.images, 0);
     const artists = escapeHtml(trackArtistNames(track));
+    const name = escapeHtml(track.name);
     return `
-        <div class="sp-row${playable ? '' : ' is-disabled'}" role="listitem" data-queue-id="${queueId}" data-track-uri="${track.uri}">
-            <button type="button" class="sp-row-main" ${playable ? '' : 'disabled'} aria-label="Play ${escapeHtml(track.name)} by ${artists}">
+        <div class="sp-row" role="listitem" data-queue-id="${queueId}" data-track-id="${track.id}" data-track-uri="${track.uri}">
+            <button type="button" class="sp-row-main" aria-label="Play ${name} by ${artists}">
                 <span class="sp-row-art">${art ? `<img src="${art}" alt="" loading="lazy">` : ICONS.note}</span>
                 <span class="sp-row-copy">
-                    <span class="sp-row-name">${escapeHtml(track.name)}</span>
+                    <span class="sp-row-name">${name}</span>
                     <span class="sp-row-sub">${artists}${track.explicit ? ' · E' : ''}</span>
                 </span>
                 ${eqMarkup('sp-row-eq')}
                 <span class="sp-row-dur">${formatMs(track.duration_ms)}</span>
             </button>
+            <button type="button" class="sp-row-like" data-like aria-pressed="false" title="Favorite" aria-label="Save ${name} to favorites">${ICONS.heart}</button>
+            <button type="button" class="sp-row-menu" data-menu aria-haspopup="true" aria-expanded="false" title="More options" aria-label="More options for ${name}">${ICONS.plus}</button>
         </div>`;
   }
 
-  private renderSpotifyTrackRows(
+  /** Queue rows: same shell + a remove button instead of the menu. */
+  private queueRowMarkup(track: SpotifyTrack, index: number): string {
+    const art = pickImage(track.album?.images, 2) ?? pickImage(track.album?.images, 0);
+    const artists = escapeHtml(trackArtistNames(track));
+    const name = escapeHtml(track.name);
+    return `
+        <div class="sp-row" role="listitem" data-queue-index="${index}" data-track-id="${track.id}" data-track-uri="${track.uri}">
+            <button type="button" class="sp-row-main" aria-label="Play ${name} by ${artists}">
+                <span class="sp-row-art">${art ? `<img src="${art}" alt="" loading="lazy">` : ICONS.note}</span>
+                <span class="sp-row-copy">
+                    <span class="sp-row-name">${name}</span>
+                    <span class="sp-row-sub">${artists}${track.explicit ? ' · E' : ''}</span>
+                </span>
+                ${eqMarkup('sp-row-eq')}
+                <span class="sp-row-dur">${formatMs(track.duration_ms)}</span>
+            </button>
+            <button type="button" class="sp-row-like" data-like aria-pressed="false" title="Favorite" aria-label="Save ${name} to favorites">${ICONS.heart}</button>
+            <button type="button" class="sp-row-remove" data-remove title="Remove from queue" aria-label="Remove ${name} from queue">${ICONS.remove}</button>
+        </div>`;
+  }
+
+  private renderTrackRows(
     container: HTMLElement,
     tracks: SpotifyTrack[],
     queueId = `q-${Math.random().toString(36).slice(2, 8)}`,
@@ -1935,18 +2154,12 @@ class MusicPlayerApp {
     this.queues.set(queueId, withArt);
     container.dataset.queueId = queueId;
     container.innerHTML = withArt.map((track) => this.trackRowMarkup(track, queueId)).join('');
-    this.updateSpotifyRows();
+    this.updateRowStates();
+    this.refreshRowHearts(container);
   }
 
-  private queues = new Map<string, SpotifyTrack[]>();
-
-  private updateSpotifyRows(): void {
-    const currentUri =
-      this.source === 'spotify'
-        ? this.spotifyMode === 'preview'
-          ? this.spQueue[this.spIndex]?.uri
-          : (this.sdkState?.track_window.current_track?.uri ?? this.sdkRestTrack?.uri)
-        : null;
+  private updateRowStates(): void {
+    const currentUri = this.currentTrackUri();
     const playing = this.isPlaying();
     this.root.querySelectorAll<HTMLElement>('.sp-row').forEach((row) => {
       const uri = row.dataset.trackUri;
@@ -1956,54 +2169,279 @@ class MusicPlayerApp {
     });
   }
 
-  private async loadMoreLiked(): Promise<void> {
+  private currentTrackUri(): string | null {
+    if (this.source === 'free') return this.currentFreeTrack()?.uri ?? null;
+    if (this.source === 'spotify') {
+      if (this.spotifyMode === 'preview') return this.currentFreeTrack()?.uri ?? null;
+      return this.sdkState?.track_window.current_track?.uri ?? this.sdkRestTrack?.uri ?? null;
+    }
+    return null;
+  }
+
+  // ---- hearts (local favorites vs Spotify likes) ----------------------------
+
+  /**
+   * Fills the heart buttons in a freshly rendered list. Anonymous → local
+   * library; connected → one batched /me/tracks/contains call (session
+   * cached) for ids we don't know yet.
+   */
+  private refreshRowHearts(container: HTMLElement): void {
+    if (!isAuthenticated()) {
+      container.querySelectorAll<HTMLElement>('.sp-row[data-like]').forEach((row) => {
+        this.setRowHeart(row, this.library.isFavorite(row.dataset.trackId ?? ''));
+      });
+      return;
+    }
+    const queueId = container.dataset.queueId;
+    if (queueId === 'liked') {
+      // Liked Songs rows are saved by definition.
+      container.querySelectorAll<HTMLElement>('.sp-row[data-like]').forEach((row) => {
+        this.setRowHeart(row, true);
+      });
+      return;
+    }
+    const unknown: string[] = [];
+    container.querySelectorAll<HTMLElement>('.sp-row[data-like]').forEach((row) => {
+      const id = row.dataset.trackId ?? '';
+      if (this.savedIds.has(id)) {
+        this.setRowHeart(row, true);
+      } else if (!this.savedIdsPending.has(id)) {
+        unknown.push(id);
+      }
+    });
+    if (unknown.length === 0) return;
+    unknown.forEach((id) => this.savedIdsPending.add(id));
+    spotify
+      .checkSavedTracks(unknown.slice(0, 50))
+      .then((states) => {
+        unknown.forEach((id, i) => {
+          if (states[i]) this.savedIds.add(id);
+          this.savedIdsPending.delete(id);
+        });
+        container.querySelectorAll<HTMLElement>('.sp-row[data-like]').forEach((row) => {
+          this.setRowHeart(row, this.savedIds.has(row.dataset.trackId ?? ''));
+        });
+      })
+      .catch(() => {
+        unknown.forEach((id) => this.savedIdsPending.delete(id));
+      });
+  }
+
+  private setRowHeart(row: HTMLElement, filled: boolean): void {
+    const like = row.querySelector<HTMLElement>('[data-like]');
+    if (!like) return;
+    like.classList.toggle('is-fav', filled);
+    like.setAttribute('aria-pressed', String(filled));
+    like.innerHTML = filled ? ICONS.heartFilled : ICONS.heart;
+  }
+
+  private async toggleRowLike(row: HTMLElement): Promise<void> {
+    const trackId = row.dataset.trackId ?? '';
+    const track = this.trackFromRow(row);
+    if (!track) return;
+
+    if (!isAuthenticated()) {
+      const nowFav = this.library.toggleFavorite(track);
+      this.setRowHeart(row, nowFav);
+      this.renderFreeHome();
+      return;
+    }
+
+    const wasSaved = this.savedIds.has(trackId);
     try {
-      this.likedMore.disabled = true;
-      const page = await spotify.getSavedTracks(30, this.likedOffset);
-      const tracks = page.items
-        .map((item) => item.track)
-        .filter((t): t is SpotifyTrack => t !== null);
-      const queueId = this.likedList.dataset.queueId ?? 'liked';
-      const existing = this.queues.get(queueId) ?? [];
-      this.queues.set(queueId, [...existing, ...tracks]);
-      this.likedList.insertAdjacentHTML(
-        'beforeend',
-        tracks.map((track) => this.trackRowMarkup(track, queueId)).join(''),
-      );
-      this.likedOffset += page.items.length;
-      this.likedTotal = page.total;
-      this.likedMore.hidden = this.likedOffset >= page.total;
-      this.updateSpotifyRows();
+      if (wasSaved) {
+        await spotify.removeSavedTracks([trackId]);
+        this.savedIds.delete(trackId);
+      } else {
+        await spotify.saveTracks([trackId]);
+        this.savedIds.add(trackId);
+      }
+      this.setRowHeart(row, !wasSaved);
+      // Liked Songs list keeps only actually-saved tracks.
+      if (wasSaved && row.closest('#spLikedList')) {
+        row.remove();
+        this.likedTotal = Math.max(0, this.likedTotal - 1);
+        if (this.likedList.children.length === 0) this.likedEmpty.hidden = false;
+      }
     } catch (err) {
       this.toastSpotifyError(err);
-    } finally {
-      this.likedMore.disabled = false;
     }
   }
 
-  // ---- search ---------------------------------------------------------------
+  private trackFromRow(row: HTMLElement): SpotifyTrack | null {
+    const trackId = row.dataset.trackId ?? '';
+    const queue = this.queues.get(row.dataset.queueId ?? '');
+    return (
+      queue?.find((track) => track.id === trackId) ??
+      this.state.freeQueue.find((track) => track.id === trackId) ??
+      this.library.favorites.find((track) => track.id === trackId) ??
+      this.library.playlist?.tracks.find((track) => track.id === trackId) ??
+      null
+    );
+  }
 
-  private async runSpotifySearch(query: string): Promise<void> {
-    const trimmed = query.trim();
-    if (trimmed.length < 2) {
-      this.showLibrary();
+  // ---- the row action menu (+ queue, + playlist) -----------------------------
+
+  private openRowMenu(row: HTMLElement, button: HTMLElement): void {
+    const track = this.trackFromRow(row);
+    if (!track) return;
+    this.closeRowMenu();
+
+    const connected = isAuthenticated();
+    const items: string[] = [];
+    items.push(
+      `<button type="button" class="mp-row-menu-item" data-action="queue">${ICONS.queueTab}<span>Add to queue</span></button>`,
+    );
+    if (!connected) {
+      items.push(
+        `<button type="button" class="mp-row-menu-item" data-action="local-playlist">${ICONS.playlist}<span>${
+          this.library.playlist
+            ? `Add to ${escapeHtml(this.library.playlist.name)}`
+            : 'Start your playlist'
+        }</span></button>`,
+      );
+    } else {
+      const playlists = this.playlistsCache.slice(0, PLAYLIST_MENU_ITEMS);
+      if (playlists.length > 0) {
+        items.push('<div class="mp-row-menu-divider"></div>');
+        for (const playlist of playlists) {
+          items.push(
+            `<button type="button" class="mp-row-menu-item" data-action="spotify-playlist" data-playlist-id="${playlist.id}" title="${escapeHtml(playlist.name)}">${ICONS.playlist}<span>${escapeHtml(playlist.name)}</span></button>`,
+          );
+        }
+      }
+    }
+
+    this.rowMenu.innerHTML = items.join('');
+    row.appendChild(this.rowMenu);
+    this.rowMenu.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+    this.rowMenuOpener = button;
+    this.rowMenu.querySelector<HTMLElement>('.mp-row-menu-item')?.focus();
+  }
+
+  private rowMenuOpener: HTMLElement | null = null;
+
+  private closeRowMenu(): void {
+    if (this.rowMenu.hidden) return;
+    this.rowMenu.hidden = true;
+    this.rowMenu.remove();
+    this.rowMenu.innerHTML = '';
+    if (this.rowMenuOpener) {
+      this.rowMenuOpener.setAttribute('aria-expanded', 'false');
+      this.rowMenuOpener = null;
+    }
+  }
+
+  private async handleRowMenuAction(
+    action: string,
+    playlistId: string | null,
+    row: HTMLElement,
+  ): Promise<void> {
+    const track = this.trackFromRow(row);
+    if (!track) return;
+
+    if (action === 'queue') {
+      if (
+        isAuthenticated() &&
+        this.profile?.product === 'premium' &&
+        this.source === 'spotify' &&
+        this.spotifyMode === 'sdk'
+      ) {
+        try {
+          await spotify.addToQueue(track.uri, this.activeDeviceId ?? undefined);
+          showToast('Added to your Spotify queue.');
+        } catch (err) {
+          this.toastSpotifyError(err);
+        }
+      } else {
+        this.enqueueFree(track);
+      }
       return;
     }
+
+    if (action === 'local-playlist') {
+      const result = this.library.addToPlaylist(track);
+      if (result === 'duplicate') showToast('Already in your playlist.');
+      else if (result === 'full') showToast('Your playlist is full (300 songs).');
+      else if (result === 'created') showToast('Playlist started — rename it any time.');
+      else showToast('Added to your playlist.');
+      this.renderFreeHome();
+      return;
+    }
+
+    if (action === 'spotify-playlist' && playlistId) {
+      const playlist = this.playlistsCache.find((p) => p.id === playlistId);
+      try {
+        await spotify.addTracksToPlaylist(playlistId, [track.uri]);
+        showToast(`Added to ${playlist?.name ?? 'playlist'}.`);
+      } catch (err) {
+        this.toastSpotifyError(err);
+      }
+    }
+  }
+
+  // ========================================================================
+  // Search (one box; anonymous free search vs connected Spotify search)
+  // ========================================================================
+
+  private async runSearch(query: string): Promise<void> {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      this.clearResults();
+      this.clearSearchNotice();
+      return;
+    }
+
+    if (isAuthenticated()) {
+      await this.runSpotifySearch(trimmed);
+      return;
+    }
+
+    if (!this.capsChecked) await this.checkCapabilities();
+    if (!this.caps.search) {
+      this.showSearchNotice(
+        'Free search needs the Padify music API — it looks offline here. Connect Spotify to browse your library instead.',
+      );
+      return;
+    }
+    this.clearSearchNotice();
+
+    this.showMusicSubView('results-anon');
+    this.resultsList.innerHTML =
+      '<div class="sp-skeleton-row"></div><div class="sp-skeleton-row"></div><div class="sp-skeleton-row"></div>';
+    this.resultsEmpty.hidden = true;
+
     try {
-      const results = await spotify.search(trimmed, 'track,album,playlist,artist', 10);
+      const tracks = await freeSearchTracks(trimmed, FREE_SEARCH_LIMIT);
+      this.renderTrackRows(this.resultsList, tracks, 'free-search');
+      this.resultsEmpty.hidden = tracks.length > 0;
+    } catch (err) {
+      this.resultsList.innerHTML = '';
+      this.resultsEmpty.hidden = false;
+      this.showSearchNotice(
+        err instanceof FreeMusicError ? err.message : 'Search failed — try again.',
+      );
+    }
+  }
+
+  private async runSpotifySearch(query: string): Promise<void> {
+    try {
+      const results = await spotify.search(query, 'track,album,playlist,artist', 10);
       const hasAnything =
         (results.tracks?.items.length ?? 0) > 0 ||
         (results.playlists?.items.length ?? 0) > 0 ||
         (results.albums?.items.length ?? 0) > 0 ||
         (results.artists?.items.length ?? 0) > 0;
 
+      this.showMusicSubView('app');
       this.libraryView.hidden = true;
-      this.detailView.hidden = true;
-      this.resultsView.hidden = false;
+      this.spDetailView.hidden = true;
+      this.spResultsView.hidden = false;
 
       const tracks = (results.tracks?.items ?? []).filter((t): t is SpotifyTrack => t !== null);
       byId('spSearchTracksSection').hidden = tracks.length === 0;
-      this.renderSpotifyTrackRows(byId('spSearchTracks'), tracks, 'search-tracks');
+      this.renderTrackRows(byId('spSearchTracks'), tracks, 'search-tracks');
 
       const playlists = results.playlists?.items ?? [];
       byId('spSearchPlaylistsSection').hidden = playlists.length === 0;
@@ -2029,13 +2467,21 @@ class MusicPlayerApp {
     }
   }
 
+  private clearResults(): void {
+    if (isAuthenticated()) {
+      this.showLibrary();
+    } else {
+      this.showMusicSubView('home');
+    }
+  }
+
   private showLibrary(): void {
-    this.resultsView.hidden = true;
-    this.detailView.hidden = true;
+    this.spResultsView.hidden = true;
+    this.spDetailView.hidden = true;
     if (this.appView.hidden === false) this.libraryView.hidden = false;
   }
 
-  // ---- detail (playlist / album / artist) ------------------------------------
+  // ---- detail (playlist / album / artist — connected) ------------------------
 
   private async openDetail(
     kind: 'playlist' | 'album' | 'artist',
@@ -2046,9 +2492,10 @@ class MusicPlayerApp {
       image?: string | null;
     },
   ): Promise<void> {
+    this.showMusicSubView('app');
     this.libraryView.hidden = true;
-    this.resultsView.hidden = true;
-    this.detailView.hidden = false;
+    this.spResultsView.hidden = true;
+    this.spDetailView.hidden = false;
     byId('spDetailBackLabel').textContent =
       this.searchInput.value.trim().length >= 2 ? 'Back to results' : 'Back to library';
     byId('spDetailType').textContent =
@@ -2089,11 +2536,95 @@ class MusicPlayerApp {
       byId('spDetailMeta').textContent = meta;
       this.detailContextUri = contextUri;
       this.detailQueue = tracks;
-      this.renderSpotifyTrackRows(tracksEl, tracks, 'detail');
+      this.renderTrackRows(tracksEl, tracks, 'detail');
     } catch (err) {
       byId('spDetailMeta').textContent = 'Could not load tracks.';
       this.toastSpotifyError(err);
     }
+  }
+
+  // ========================================================================
+  // Queue view
+  // ========================================================================
+
+  private updateQueueCount(): void {
+    const remaining =
+      this.source === 'free' || this.state.freeQueue.length > 0
+        ? Math.max(0, this.state.freeQueue.length - Math.max(0, this.state.freeIndex) - 1)
+        : (this.sdkState?.track_window.next_tracks.length ?? 0);
+    this.queueCount.textContent = remaining > 0 ? String(remaining) : '';
+    this.queueCount.hidden = remaining === 0;
+  }
+
+  private updateQueueView(): void {
+    this.updateQueueCount();
+    if (this.queueView.hidden) return;
+
+    // Premium SDK playback: Spotify owns the queue — show what's up next.
+    if (this.source === 'spotify' && this.spotifyMode === 'sdk') {
+      const current = this.sdkState?.track_window.current_track;
+      const next = this.sdkState?.track_window.next_tracks ?? [];
+      this.queueHint.textContent = 'Spotify is managing this queue';
+      this.queueClear.hidden = true;
+      const rows = [...(current ? [current] : []), ...next.slice(0, 20)].map((track) =>
+        // Read-only: the remove buttons carry data-readonly so the click
+        // handler ignores them (Spotify's queue can't be edited here).
+        this.queueRowMarkup(track, 0).replace(
+          'class="sp-row-remove" data-remove',
+          'class="sp-row-remove" data-remove data-readonly',
+        ),
+      );
+      this.queueList.innerHTML = rows.join('');
+      this.queueEmpty.hidden = rows.length > 0;
+      this.updateRowStates();
+      return;
+    }
+
+    const queue = this.state.freeQueue;
+    this.queueHint.textContent = queue.length > 0 ? 'Up next on this device' : 'Nothing queued';
+    this.queueClear.hidden = queue.length === 0;
+    this.queueList.innerHTML = queue
+      .map((track, index) => this.queueRowMarkup(track, index))
+      .join('');
+    this.queueEmpty.hidden = queue.length > 0;
+    this.refreshRowHearts(this.queueList);
+    this.updateRowStates();
+  }
+
+  private removeFromQueue(index: number): void {
+    const queue = this.state.freeQueue;
+    if (index < 0 || index >= queue.length) return;
+    const wasCurrent = index === this.state.freeIndex;
+    queue.splice(index, 1);
+    if (index < this.state.freeIndex) this.state.freeIndex -= 1;
+    if (wasCurrent) {
+      this.state.freeIndex = Math.min(this.state.freeIndex, queue.length - 1);
+      if (queue.length === 0) {
+        this.source = 'none';
+        this.freeResolveToken++;
+        if (this.freeAudio) this.freeAudio.removeAttribute('src');
+        this.updatePlayerBarEmpty();
+      } else {
+        void this.playFreeAt(Math.max(0, this.state.freeIndex));
+      }
+    }
+    this.persist();
+    this.updateQueueView();
+    this.updateRowStates();
+  }
+
+  private clearQueue(): void {
+    this.state.freeQueue = [];
+    this.state.freeIndex = -1;
+    this.persist();
+    if (this.source === 'free') {
+      this.source = 'none';
+      this.freeResolveToken++;
+      if (this.freeAudio) this.freeAudio.removeAttribute('src');
+      this.updatePlayerBarEmpty();
+    }
+    this.updateQueueView();
+    this.updateRowStates();
   }
 
   // ========================================================================
@@ -2103,20 +2634,35 @@ class MusicPlayerApp {
   private switchView(view: ViewId): void {
     this.state.view = view;
     this.persist();
-    this.radioView.hidden = view !== 'radio';
+    this.musicView.hidden = view !== 'music';
+    this.queueView.hidden = view !== 'queue';
     this.ambienceView.hidden = view !== 'ambience';
-    this.spotifyView.hidden = view !== 'spotify';
-    this.tabRadio.classList.toggle('is-active', view === 'radio');
+    this.tabMusic.classList.toggle('is-active', view === 'music');
+    this.tabQueue.classList.toggle('is-active', view === 'queue');
     this.tabAmbience.classList.toggle('is-active', view === 'ambience');
-    this.tabSpotify.classList.toggle('is-active', view === 'spotify');
-    this.tabRadio.setAttribute('aria-selected', String(view === 'radio'));
+    this.tabMusic.setAttribute('aria-selected', String(view === 'music'));
+    this.tabQueue.setAttribute('aria-selected', String(view === 'queue'));
     this.tabAmbience.setAttribute('aria-selected', String(view === 'ambience'));
-    this.tabSpotify.setAttribute('aria-selected', String(view === 'spotify'));
-    this.tabRadio.tabIndex = view === 'radio' ? 0 : -1;
+    this.tabMusic.tabIndex = view === 'music' ? 0 : -1;
+    this.tabQueue.tabIndex = view === 'queue' ? 0 : -1;
     this.tabAmbience.tabIndex = view === 'ambience' ? 0 : -1;
-    this.tabSpotify.tabIndex = view === 'spotify' ? 0 : -1;
-    if (view === 'spotify' && isAuthenticated() && !this.profile && !this.spotifyBusy) {
+    if (view === 'queue') this.updateQueueView();
+    if (view === 'music' && isAuthenticated() && !this.profile && !this.spotifyBusy) {
       void this.loadSpotifyProfile();
+    }
+  }
+
+  /** Sub-navigation inside the Music tab (anonymous ↔ connected). */
+  private showMusicSubView(sub: 'home' | 'connect' | 'app' | 'results-anon'): void {
+    this.freeHome.hidden = sub !== 'home';
+    this.connectView.hidden = sub !== 'connect';
+    this.appView.hidden = sub !== 'app';
+    this.resultsView.hidden = sub !== 'results-anon';
+    if (sub === 'connect') {
+      const redirectEl = byId('spRedirectUri');
+      redirectEl.textContent = getRedirectUri();
+      const savedId = getClientId();
+      if (savedId) this.clientIdInput.value = savedId;
     }
   }
 
@@ -2144,11 +2690,11 @@ class MusicPlayerApp {
 
   private updateMini(): void {
     const hasContent =
-      (this.source === 'radio' && this.currentRadioTrack() !== null) ||
+      (this.source === 'free' && this.currentFreeTrack() !== null) ||
       (this.source === 'spotify' &&
         (this.spotifyMode === 'preview'
-          ? this.spQueue[this.spIndex] !== undefined
-          : this.sdkState?.track_window.current_track !== null));
+          ? this.currentFreeTrack() !== null
+          : this.sdkState?.track_window.current_track != null));
     const modalOpen = this.root.classList.contains('in');
     this.mini.hidden = !hasContent || modalOpen || this.miniDismissed;
     if (!hasContent) return;
@@ -2156,15 +2702,17 @@ class MusicPlayerApp {
     let title = '';
     let sub = '';
     let artUrl: string | null = null;
-    let radioTrack: Track | null = null;
 
-    if (this.source === 'radio') {
-      radioTrack = this.currentRadioTrack();
-      title = radioTrack?.title ?? '';
-      sub = 'Padify Studio';
+    if (this.source === 'free') {
+      const track = this.currentFreeTrack();
+      if (track) {
+        title = track.name;
+        sub = trackArtistNames(track);
+        artUrl = pickImage(track.album?.images, 1);
+      }
     } else if (this.source === 'spotify') {
       if (this.spotifyMode === 'preview') {
-        const track = this.spQueue[this.spIndex];
+        const track = this.currentFreeTrack();
         if (track) {
           title = track.name;
           sub = trackArtistNames(track);
@@ -2185,15 +2733,8 @@ class MusicPlayerApp {
     if (artUrl) {
       this.miniImg.src = artUrl;
       this.miniImg.hidden = false;
-      this.miniCanvas.hidden = true;
-      (this.mini.querySelector('.mp-mini-placeholder') as HTMLElement).hidden = true;
-    } else if (radioTrack) {
-      drawTrackArt(this.miniCanvas, radioTrack);
-      this.miniCanvas.hidden = false;
-      this.miniImg.hidden = true;
       (this.mini.querySelector('.mp-mini-placeholder') as HTMLElement).hidden = true;
     } else {
-      this.miniCanvas.hidden = true;
       this.miniImg.hidden = true;
       (this.mini.querySelector('.mp-mini-placeholder') as HTMLElement).hidden = false;
     }
@@ -2202,15 +2743,25 @@ class MusicPlayerApp {
   }
 
   private stopAndHideMini(): void {
-    if (this.source === 'radio') this.engine.stop();
+    if (this.source === 'free') {
+      this.freeResolveToken++;
+      if (this.freeAudio) {
+        this.freeAudio.removeAttribute('src');
+        this.freeAudio.load();
+      }
+    }
     if (this.source === 'spotify') {
       this.stopSpotifyPlayback();
-      if (this.previewAudio) this.previewAudio.pause();
+      if (this.freeAudio) this.freeAudio.pause();
     }
+    this.state.freeQueue = [];
+    this.state.freeIndex = -1;
+    this.persist();
+    this.source = 'none';
     this.miniDismissed = true;
     this.updatePlayerBarEmpty();
-    this.updateRadioRows();
-    this.updateSpotifyRows();
+    this.updateRowStates();
+    this.updateQueueView();
     this.syncNavbarIcon();
   }
 
@@ -2233,28 +2784,14 @@ class MusicPlayerApp {
     }
   }
 
-  private updateMediaSessionRadio(track: Track): void {
-    if (!('mediaSession' in navigator)) return;
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: track.title,
-        artist: 'Padify Studio',
-        album: PLAYLIST_LABELS[track.playlist],
-        artwork: [{ src: this.pbArt.toDataURL('image/png'), sizes: '512x512', type: 'image/png' }],
-      });
-    } catch {
-      /* metadata/artwork unsupported — non-fatal */
-    }
-  }
-
-  private updateMediaSessionSpotify(track: SpotifyTrack): void {
+  private updateMediaSessionTrack(track: SpotifyTrack): void {
     if (!('mediaSession' in navigator)) return;
     try {
       const art = pickImage(track.album?.images, 0);
       navigator.mediaSession.metadata = new MediaMetadata({
         title: track.name,
         artist: trackArtistNames(track),
-        album: track.album?.name ?? 'Spotify',
+        album: track.album?.name ?? 'Padify',
         artwork: art ? [{ src: art, sizes: '640x640', type: 'image/jpeg' }] : [],
       });
     } catch {
@@ -2269,7 +2806,7 @@ class MusicPlayerApp {
     if (!iconEl) return;
     this.ensureNavbarIconObserver(iconEl);
     const ambientOn = window.whiteNoisePlayer ? window.whiteNoisePlayer.isAnySoundPlaying() : false;
-    const playerOn = this.isPlaying() || (this.source === 'radio' && this.engine.isPlaying);
+    const playerOn = this.isPlaying();
     const should = playerOn || ambientOn;
     const has = iconEl.classList.contains('is-playing');
     if (has !== should) {
@@ -2312,10 +2849,14 @@ class MusicPlayerApp {
 
   private bindEvents(): void {
     // Tabs.
-    this.tabRadio.addEventListener('click', () => this.switchView('radio'));
+    this.tabMusic.addEventListener('click', () => this.switchView('music'));
+    this.tabQueue.addEventListener('click', () => this.switchView('queue'));
     this.tabAmbience.addEventListener('click', () => this.switchView('ambience'));
-    this.tabSpotify.addEventListener('click', () => this.switchView('spotify'));
-    this.spChip.addEventListener('click', () => this.switchView('spotify'));
+    this.accountChip.addEventListener('click', () => {
+      this.switchView('music');
+      if (isAuthenticated()) this.showMusicSubView('app');
+      else if (this.appView.hidden && this.resultsView.hidden) this.showMusicSubView('connect');
+    });
 
     // Transport.
     this.playBtn.addEventListener('click', () => this.togglePlay());
@@ -2336,44 +2877,6 @@ class MusicPlayerApp {
     });
     this.seek.addEventListener('input', () => this.previewSeek());
     this.seek.addEventListener('change', () => this.commitSeek());
-
-    // Radio library interactions (delegated — rows are static markup).
-    this.trackList.addEventListener('click', (event) => {
-      const target = event.target as HTMLElement;
-      const row = target.closest('.mp-row') as HTMLDivElement | null;
-      if (!row) return;
-      const id = row.dataset.trackId;
-      if (!id) return;
-      if (target.closest('.mp-row-star')) {
-        this.toggleRadioFavorite(id);
-        return;
-      }
-      this.playRadioTrack(id);
-    });
-
-    // Radio search + filter chips.
-    this.radioSearchInput.addEventListener('input', () => {
-      this.radioSearch = this.radioSearchInput.value;
-      byId('mpRadioSearchClear').hidden = this.radioSearch === '';
-      this.updateRadioRows();
-    });
-    byId('mpRadioSearchClear').addEventListener('click', () => {
-      this.radioSearchInput.value = '';
-      this.radioSearch = '';
-      byId('mpRadioSearchClear').hidden = true;
-      this.updateRadioRows();
-      this.radioSearchInput.focus();
-    });
-    this.root.querySelectorAll<HTMLButtonElement>('.mp-chip').forEach((chip) => {
-      chip.addEventListener('click', () => {
-        const filter = chip.dataset.filter as TrackFilter;
-        if (filter) {
-          this.filter = filter;
-          this.updateChips();
-          this.updateRadioRows();
-        }
-      });
-    });
 
     // Ambient volume sliders: keep the gradient fill in sync (cosmetic).
     this.root.addEventListener('input', (event) => {
@@ -2405,7 +2908,52 @@ class MusicPlayerApp {
       }
     });
 
-    // ---- Spotify events ----
+    // ---- anonymous home ----
+    this.heroConnect.addEventListener('click', () => {
+      this.showMusicSubView('connect');
+    });
+    this.connectBack.addEventListener('click', () => {
+      this.connectError.hidden = true;
+      this.showMusicSubView('home');
+    });
+    this.playlistRename.addEventListener('click', () => {
+      void this.renameLocalPlaylist();
+    });
+    this.playlistClear.addEventListener('click', () => {
+      if (!this.library.playlist) return;
+      this.library.playlist.tracks = [];
+      this.library.persist();
+      this.renderFreeHome();
+      showToast('Playlist emptied.');
+    });
+
+    // ---- queue view ----
+    this.queueClear.addEventListener('click', () => this.clearQueue());
+
+    // ---- search ----
+    this.searchInput.addEventListener('input', () => {
+      byId('mpSearchClear').hidden = this.searchInput.value === '';
+      if (this.searchTimer !== null) clearTimeout(this.searchTimer);
+      this.searchTimer = setTimeout(() => {
+        this.searchTimer = null;
+        void this.runSearch(this.searchInput.value);
+      }, SEARCH_DEBOUNCE_MS);
+    });
+    byId('mpSearchClear').addEventListener('click', () => {
+      this.searchInput.value = '';
+      byId('mpSearchClear').hidden = true;
+      this.clearSearchNotice();
+      this.clearResults();
+      this.searchInput.focus();
+    });
+    byId('mpResultsBack').addEventListener('click', () => {
+      this.searchInput.value = '';
+      byId('mpSearchClear').hidden = true;
+      this.clearSearchNotice();
+      this.showMusicSubView('home');
+    });
+
+    // ---- Spotify connect screen ----
     this.connectBtn.addEventListener('click', async () => {
       const clientId = getClientId();
       if (!clientId) {
@@ -2460,6 +3008,9 @@ class MusicPlayerApp {
       this.sdk.disconnect();
       spotifyDisconnect();
       this.profile = null;
+      this.playlistsCache = [];
+      this.savedIds.clear();
+      this.savedIdsPending.clear();
       this.stopSdkPolling();
       this.freeNote.hidden = true;
       if (this.source === 'spotify') {
@@ -2467,37 +3018,22 @@ class MusicPlayerApp {
         this.updatePlayerBarEmpty();
       }
       this.searchInput.value = '';
-      this.showLibrary();
-      this.renderConnectScreen();
-      this.updateSpotifyRows();
+      byId('mpSearchClear').hidden = true;
+      this.renderAnonymousState();
+      this.updateRowStates();
       this.syncNavbarIcon();
-      showToast('Spotify disconnected.');
+      showToast('Spotify disconnected — your local music stays on this device.');
     });
 
-    // Spotify search.
-    this.searchInput.addEventListener('input', () => {
-      byId('spSearchClear').hidden = this.searchInput.value === '';
-      if (this.searchTimer !== null) clearTimeout(this.searchTimer);
-      this.searchTimer = setTimeout(() => {
-        this.searchTimer = null;
-        void this.runSpotifySearch(this.searchInput.value);
-      }, SEARCH_DEBOUNCE_MS);
-    });
-    byId('spSearchClear').addEventListener('click', () => {
-      this.searchInput.value = '';
-      byId('spSearchClear').hidden = true;
-      this.showLibrary();
-      this.searchInput.focus();
-    });
     byId('spResultsBack').addEventListener('click', () => {
       this.searchInput.value = '';
-      byId('spSearchClear').hidden = true;
+      byId('mpSearchClear').hidden = true;
       this.showLibrary();
     });
     byId('spDetailBack').addEventListener('click', () => {
-      this.detailView.hidden = true;
+      this.spDetailView.hidden = true;
       if (this.searchInput.value.trim().length >= 2) {
-        this.resultsView.hidden = false;
+        this.spResultsView.hidden = false;
       } else {
         this.showLibrary();
       }
@@ -2507,19 +3043,60 @@ class MusicPlayerApp {
       void this.loadMoreLiked();
     });
 
-    // Spotify rows (delegated across all track lists).
+    // ---- track rows + cards (delegated across every list) ----
     this.root.addEventListener('click', (event) => {
       const target = event.target as HTMLElement;
+
+      // Row action menu items.
+      if (this.rowMenu.hidden === false && this.rowMenu.contains(target)) {
+        const item = target.closest('.mp-row-menu-item') as HTMLElement | null;
+        if (item) {
+          const row = this.rowMenu.closest('.sp-row') as HTMLElement | null;
+          const action = item.dataset.action ?? '';
+          const playlistId = item.dataset.playlistId ?? null;
+          this.closeRowMenu();
+          if (row) void this.handleRowMenuAction(action, playlistId, row);
+        }
+        return;
+      }
+
+      const row = target.closest('.sp-row') as HTMLElement | null;
+
+      if (row) {
+        if (target.closest('[data-remove]') && !target.closest('[data-readonly]')) {
+          this.removeFromQueue(Number(row.dataset.queueIndex));
+          return;
+        }
+        if (target.closest('[data-menu]')) {
+          const button = target.closest('[data-menu]') as HTMLElement;
+          this.openRowMenu(row, button);
+          return;
+        }
+        if (target.closest('[data-like]')) {
+          void this.toggleRowLike(row);
+          return;
+        }
+      }
+
       const rowMain = target.closest('.sp-row-main') as HTMLButtonElement | null;
       if (rowMain) {
-        const row = rowMain.closest('.sp-row') as HTMLElement | null;
+        const trackId = row?.dataset.trackId ?? '';
         const queueId = row?.dataset.queueId;
-        const trackUri = row?.dataset.trackUri;
+        const queueIndex = Number(row?.dataset.queueIndex);
+        if (row && !Number.isNaN(queueIndex) && row.dataset.queueIndex !== undefined) {
+          // Queue view rows jump to that queue position.
+          if (this.source !== 'spotify' || this.spotifyMode !== 'sdk') {
+            void this.playFreeAt(queueIndex);
+          }
+          return;
+        }
         const queue = queueId ? this.queues.get(queueId) : undefined;
-        if (queue && trackUri) {
-          const index = queue.findIndex((track) => track.uri === trackUri);
+        if (queue && trackId) {
+          const index = queue.findIndex((track) => track.id === trackId);
           const contextUri = queueId === 'detail' ? this.detailContextUri : null;
-          void this.playSpotifyList(queue, Math.max(0, index), contextUri);
+          void this.playTrackList(queue, Math.max(0, index), contextUri);
+        } else if (row && this.source === 'free' && row.dataset.trackUri) {
+          // Row from a list we no longer track (stale) — ignore.
         }
         return;
       }
@@ -2550,10 +3127,27 @@ class MusicPlayerApp {
       }
     });
 
+    // Close the row menu on outside clicks / Escape.
+    document.addEventListener('click', (event) => {
+      if (this.rowMenu.hidden) return;
+      if (!this.rowMenu.contains(event.target as Node) && !targetInMenuOpener(event.target)) {
+        this.closeRowMenu();
+      }
+    });
+    const targetInMenuOpener = (target: EventTarget | null): boolean => {
+      // SVG icons inside the button are SVGElements, not HTMLElements —
+      // match on Element so icon clicks count as "inside the opener".
+      if (!(target instanceof Element)) return false;
+      return target.closest('[data-menu]') !== null;
+    };
+    this.root.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') this.closeRowMenu();
+    });
+
     // Detail "Play" button — plays the loaded detail list.
     byId('spDetailPlay').addEventListener('click', () => {
       if (this.detailQueue.length === 0) return;
-      void this.playSpotifyList(this.detailQueue, 0, this.detailContextUri);
+      void this.playTrackList(this.detailQueue, 0, this.detailContextUri);
     });
 
     // ---- Mini player ----
@@ -2571,6 +3165,7 @@ class MusicPlayerApp {
         this.updateMini();
         this.startSdkPolling();
         this.syncNavbarIcon();
+        this.updateQueueView();
       })
       .on('hidden.bs.modal', () => {
         this.updateMini();
@@ -2589,13 +3184,38 @@ class MusicPlayerApp {
       ) {
         return;
       }
-      if (this.source !== 'radio') return;
-      const track = this.engine.currentTrack;
-      if (!track) return;
+      if (this.source !== 'free' || !this.freeAudio?.src) return;
       event.preventDefault();
-      const pos = this.engine.getPosition();
-      this.engine.seek(key === 'ArrowLeft' ? pos - 5 : pos + 5);
+      const delta = key === 'ArrowLeft' ? -5 : 5;
+      this.freeAudio.currentTime = Math.max(0, this.freeAudio.currentTime + delta);
     });
+  }
+
+  private async loadMoreLiked(): Promise<void> {
+    try {
+      this.likedMore.disabled = true;
+      const page = await spotify.getSavedTracks(30, this.likedOffset);
+      const tracks = page.items
+        .map((item) => item.track)
+        .filter((t): t is SpotifyTrack => t !== null);
+      for (const track of tracks) this.savedIds.add(track.id);
+      const queueId = this.likedList.dataset.queueId ?? 'liked';
+      const existing = this.queues.get(queueId) ?? [];
+      this.queues.set(queueId, [...existing, ...tracks]);
+      this.likedList.insertAdjacentHTML(
+        'beforeend',
+        tracks.map((track) => this.trackRowMarkup(track, queueId)).join(''),
+      );
+      this.likedOffset += page.items.length;
+      this.likedTotal = page.total;
+      this.likedMore.hidden = this.likedOffset >= page.total;
+      this.updateRowStates();
+      this.refreshRowHearts(this.likedList);
+    } catch (err) {
+      this.toastSpotifyError(err);
+    } finally {
+      this.likedMore.disabled = false;
+    }
   }
 
   // ---- Debug / E2E hooks ------------------------------------------------------
@@ -2603,12 +3223,11 @@ class MusicPlayerApp {
   debugSnapshot(): Record<string, unknown> {
     return {
       source: this.source,
-      engine: this.engine.debugSnapshot(),
-      currentRadioId: this.currentRadioId,
-      filter: this.filter,
-      favorites: this.state.favorites,
+      freeIndex: this.state.freeIndex,
+      freeQueueLength: this.state.freeQueue.length,
       shuffle: this.state.shuffle,
       repeat: this.state.repeat,
+      caps: this.caps,
       spotify: {
         connected: isAuthenticated(),
         product: this.profile?.product ?? null,
@@ -2627,9 +3246,10 @@ let player: MusicPlayerApp | null = null;
 
 /**
  * Constructs the player once the storage layer has hydrated (its
- * constructor restores the persisted player state and bootstraps Spotify).
- * Called from app.ts after `await storageReady()`; the modal markup is
- * already in the DOM from the module-evaluation injection above.
+ * constructor restores the persisted player state and bootstraps the
+ * account state). Called from app.ts after `await storageReady()`; the
+ * modal markup is already in the DOM from the module-evaluation injection
+ * above.
  */
 export function initMusicPlayer(): void {
   if (player) {
@@ -2639,7 +3259,6 @@ export function initMusicPlayer(): void {
 
   // Debug/E2E probes (harmless in production, typed via a local interface).
   const debugWindow = window as unknown as MusicDebugWindow;
-  debugWindow.__musicEngine = (player as unknown as { engine: MusicEngine }).engine;
   debugWindow.__musicPlayer = musicPlayerAPI;
 }
 
@@ -2647,7 +3266,6 @@ export const musicPlayerAPI: {
   open(): void;
   close(): void;
   togglePlay(): void;
-  playTrack(id: string): void;
   next(): void;
   prev(): void;
 } = {
@@ -2658,13 +3276,11 @@ export const musicPlayerAPI: {
     $('#musicPlayerModal').modal('hide');
   },
   togglePlay: () => player?.togglePlay(),
-  playTrack: (id: string) => player?.playRadioTrack(id),
   next: () => player?.next(),
   prev: () => player?.prev(),
 };
 
 interface MusicDebugWindow {
-  __musicEngine?: MusicEngine;
   __musicPlayer?: typeof musicPlayerAPI;
   __musicProbe?: () => Record<string, unknown>;
 }

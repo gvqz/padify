@@ -320,4 +320,47 @@ export async function getPlaybackState(): Promise<SpotifyPlaybackState | null> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Library interactions (likes, queues, playlists) — the "do everything the
+// Spotify app can" surface for connected users.
+// ---------------------------------------------------------------------------
+
+/** GET /me/tracks/contains — true per id (batch, max 50 per call). */
+export async function checkSavedTracks(ids: string[]): Promise<boolean[]> {
+  const chunk = ids.slice(0, 50);
+  if (chunk.length === 0) return [];
+  return request<boolean[]>(`/me/tracks/contains?${query({ ids: chunk.join(',') })}`);
+}
+
+/** PUT /me/tracks — save (like) tracks. */
+export function saveTracks(ids: string[]): Promise<void> {
+  return request<void>('/me/tracks', {
+    method: 'PUT',
+    body: JSON.stringify({ ids: ids.slice(0, 50) }),
+  });
+}
+
+/** DELETE /me/tracks — remove (unlike) tracks. */
+export function removeSavedTracks(ids: string[]): Promise<void> {
+  return request<void>('/me/tracks', {
+    method: 'DELETE',
+    body: JSON.stringify({ ids: ids.slice(0, 50) }),
+  });
+}
+
+/** POST /me/player/queue — queue a track on the active device (Premium). */
+export function addToQueue(uri: string, deviceId?: string): Promise<void> {
+  return request<void>(`/me/player/queue?${query({ uri, device_id: deviceId })}`, {
+    method: 'POST',
+  });
+}
+
+/** POST /playlists/{id}/tracks — append tracks to one of the user's playlists. */
+export function addTracksToPlaylist(playlistId: string, uris: string[]): Promise<void> {
+  return request<void>(`/playlists/${playlistId}/tracks`, {
+    method: 'POST',
+    body: JSON.stringify({ uris: uris.slice(0, 100) }),
+  });
+}
+
 export { SpotifyAuthError };

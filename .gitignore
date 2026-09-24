@@ -11,3 +11,6 @@ server/local.db
 .env
 dev.log
 worklog.md
+
+# music smoke-test databases
+server/local-*.db*

@@ -28,6 +28,11 @@
  *  • Share tokens are generated server-side; the public viewer endpoint only
  *    returns rows that are neither revoked nor expired.
  *  • Small per-IP rate limits protect the auth endpoints.
+ *
+ * Free music surface (public, no session — see music.ts):
+ *   GET /api/music/capabilities                       → {search, resolve}
+ *   GET /api/music/search?q=&limit=                   → {tracks}
+ *   GET /api/music/resolve?trackId=&title=&artist=…   → {url, videoId, …}
  */
 
 import { randomBytes } from 'node:crypto';
@@ -40,6 +45,13 @@ import {
   verifyPassword,
   type SessionUser
 } from './auth';
+import {
+  musicSearch,
+  resolveTrackStream,
+  resolveConfigured,
+  searchConfigured,
+  sweepMusicCache
+} from './music';
 
 const PORT = Number(process.env.PORT ?? 3041);
 const MAX_BODY_BYTES = 2_000_000;
@@ -128,8 +140,9 @@ const rateSweep = setInterval(() => {
 }, 5 * 60_000);
 rateSweep.unref?.();
 
-function rateLimited(request: Request, bucket: 'auth' | 'api'): boolean {
-  const limit = bucket === 'auth' ? 30 : 300;
+function rateLimited(request: Request, bucket: 'auth' | 'api' | 'music-search' | 'music-resolve'): boolean {
+  const limits: Record<string, number> = { auth: 30, api: 300, 'music-search': 60, 'music-resolve': 30 };
+  const limit = limits[bucket] ?? 300;
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
     || request.headers.get('x-real-ip')
     || 'local';
@@ -423,6 +436,77 @@ async function route(db: Db, request: Request, pathname: string): Promise<Respon
     return handlePublicShareGet(db, request, publicShare[1]);
   }
 
+  // ---- free music (public — this is the no-login path of the music player) --
+
+  if (pathname === '/api/music/capabilities' && method === 'GET') {
+    return json(request, { search: searchConfigured(), resolve: resolveConfigured() });
+  }
+
+  if (pathname === '/api/music/search' && method === 'GET') {
+    if (rateLimited(request, 'music-search')) {
+      return json(request, { error: 'Too many searches — wait a moment and try again.' }, 429);
+    }
+    const url = new URL(request.url);
+    const q = (url.searchParams.get('q') ?? '').trim().slice(0, 200);
+    const limit = Math.min(30, Math.max(1, asInt(url.searchParams.get('limit'), 20)));
+    if (q.length < 1) {
+      return json(request, { error: 'Missing search query.' }, 400);
+    }
+    if (!searchConfigured()) {
+      return json(request, {
+        error: 'Free search is not configured on this server (SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET missing).'
+      }, 503);
+    }
+    try {
+      const tracks = await musicSearch(q, limit);
+      return json(request, { tracks });
+    } catch {
+      return json(request, { error: 'Search is temporarily unavailable — try again.' }, 502);
+    }
+  }
+
+  if (pathname === '/api/music/resolve' && method === 'GET') {
+    if (rateLimited(request, 'music-resolve')) {
+      return json(request, { error: 'Too many requests — wait a moment and try again.' }, 429);
+    }
+    const url = new URL(request.url);
+    const trackId = (url.searchParams.get('trackId') ?? '').trim();
+    const title = (url.searchParams.get('title') ?? '').trim().slice(0, 200);
+    const artist = (url.searchParams.get('artist') ?? '').trim().slice(0, 300);
+    const durationMs = asInt(url.searchParams.get('durationMs'), 0);
+    const fresh = url.searchParams.get('fresh') === '1';
+    if (!/^[A-Za-z0-9_-]{6,64}$/.test(trackId)) {
+      return json(request, { error: 'Missing or invalid track id.' }, 400);
+    }
+    if (!title) {
+      return json(request, { error: 'Missing track title.' }, 400);
+    }
+    if (!resolveConfigured()) {
+      return json(request, {
+        error: 'Free playback is not configured on this server (yt-dlp missing).'
+      }, 503);
+    }
+    try {
+      const stream = await resolveTrackStream(db, {
+        key: trackId,
+        title,
+        artist,
+        durationMs: durationMs > 0 ? durationMs : null,
+        fresh
+      });
+      return json(request, stream);
+    } catch (error) {
+      const message = error instanceof Error && /timed out/.test(error.message)
+        ? 'Resolving this song took too long — try again.'
+        : 'Could not find a stream for this song.';
+      return json(request, { error: message }, 404);
+    }
+  }
+
+  if (pathname.startsWith('/api/music/') && method === 'GET') {
+    return json(request, { error: 'Not found.' }, 404);
+  }
+
   if (!pathname.startsWith('/api/')) {
     return json(request, { error: 'Not found.' }, 404);
   }
@@ -496,6 +580,7 @@ async function route(db: Db, request: Request, pathname: string): Promise<Respon
 const db = await createDb();
 await applySchema(db);
 await db.run('delete from sessions where expires_at <= ?', [Date.now()]);
+await sweepMusicCache(db);
 
 Bun.serve({
   port: PORT,
