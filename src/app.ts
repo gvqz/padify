@@ -996,13 +996,6 @@ $(document).ready(function () {
   notepad.downloadNotes.click(function (e) {
     e.stopPropagation(); // Stop click event from bubbling
     $('#iconDropdown').toggleClass('show');
-    $('#moreToolsDropdown').removeClass('show');
-  });
-
-  notepad.moreTools.click(function (e) {
-    e.stopPropagation(); // Stop click event from bubbling
-    $('#moreToolsDropdown').toggleClass('show');
-    $('#iconDropdown').removeClass('show');
   });
 
   notepad.downloadNotesPlain.click(function () {
@@ -1028,7 +1021,6 @@ $(document).ready(function () {
   // Close dropdown if clicked outside
   $(document).on('click', function () {
     $('#iconDropdown').removeClass('show');
-    $('#moreToolsDropdown').removeClass('show');
   });
 
   notepad.fullScreenButton.click(function () {
@@ -1535,7 +1527,6 @@ $(document).ready(function () {
     if (event.key === 'Escape') {
       $('.modal').modal('hide');
       $('#iconDropdown').removeClass('show');
-      $('#moreToolsDropdown').removeClass('show');
       // Only exit focus mode when it is actually on — otherwise
       // every Escape keypress (context menu, dialogs, etc.)
       // yanked focus back to the note textarea.

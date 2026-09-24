@@ -29,23 +29,13 @@ Built as a Progressive Web App using the [Service Worker API](https://developer.
 - Unicode character picker — 5,400+ symbols, math, arrows, currency, box drawing, braille and emoji with search, favorites and recents (`Ctrl/Cmd + Shift + O`)
 - Privacy-focused — nothing you type is ever collected or sent anywhere
 
-## Mini tools
+## Retired mini tools
 
-The app ships with a small suite of companion tools:
-
-- [Rich Text Notes](/rich-text-notes/) — write with formatting, export as PDF
-- [Markdown Editor](/markdown-editor/) — two-pane markdown editor with live preview
-- [Voice Notes](/voice-notes/) — record and manage voice notes in the browser
-- [Simple Kanban](/kanban/) — lightweight task board with CSV export
-- [Text Tools](/text-tools/) — line operations, cleanup, find & replace, data extraction
-- [Text Diff](/text-diff/) — compare two blocks of text
-- [Teleprompter](/teleprompter/) — scrolling text with adjustable speed and styling
-- [Drawingpad](/drawingpad/) — drawing canvas (currently being rebuilt; the pad shell stays behind its PIN gate in the meantime)
-- [Tasks](/tasks/) — a dead simple todo manager
+The standalone companion-tool pages (Rich Text Notes, Markdown Editor, Voice Notes, Simple Kanban, Text Tools, Text Diff, Teleprompter, Drawingpad, Tasks) have been removed from the app. Their full feature sets were captured before deletion in [markdownreports/](markdownreports/) — one report per page — to serve as the reference for rebuilding those features as note types inside the main editor's new-note flow.
 
 ## Privacy
 
-Everything stays on your device by default: notes, snapshots, settings. Nothing is collected and no analytics exist. Cloud sync is strictly opt-in — when a user signs in, only their note tabs and drawing scene are stored in the app owner's sync project, locked to that account with row level security. Sign out and new edits never leave the device again.
+Everything stays on your device by default: notes, snapshots, settings. Nothing is collected and no analytics exist. Cloud sync is strictly opt-in — when a user signs in, only their note tabs are stored in the app owner's sync project, locked to that account. Sign out and new edits never leave the device again.
 
 ## Running locally
 

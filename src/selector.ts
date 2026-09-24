@@ -7,7 +7,6 @@ export interface NotepadUI {
   clearNotes: JQuery;
   copyToClipboard: JQuery;
   downloadNotes: JQuery;
-  moreTools: JQuery;
   downloadNotesPlain: JQuery;
   downloadNotesPdf: JQuery;
   downloadNotesDocx: JQuery;
@@ -127,7 +126,6 @@ export function selector(): AppSelector {
       clearNotes: selectById('clearNotes'),
       copyToClipboard: selectById('copyToClipboard'),
       downloadNotes: selectById('downloadNotes'),
-      moreTools: selectById('moreTools'),
       downloadNotesPlain: selectById('downloadNotesPlain'),
       downloadNotesPdf: selectById('downloadNotesPdf'),
       downloadNotesDocx: selectById('downloadNotesDocx'),
