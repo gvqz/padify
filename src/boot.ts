@@ -32,6 +32,7 @@ import { initTimer } from './timer';
 import { initWhiteNoisePlayer } from './white-noise-player';
 import { mountMusicPlayer } from './music-player';
 import { initContextMenu } from './context-menu';
+import { mountModals } from './ui/modals';
 
 /** Resolves once the DOM is parsed (module scripts run before that). */
 function domReady(): Promise<void> {
@@ -45,6 +46,10 @@ function domReady(): Promise<void> {
 
 export async function bootPadify(): Promise<void> {
   await domReady();
+
+  // 0. Modal markup — verbatim partials under src/ui/modals/, mounted before
+  //    anything queries a modal by id (selector(), help, snapshots, app…).
+  mountModals();
 
   // 1. Markup + DOM-only feature wiring.
   initHelp();
