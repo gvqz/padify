@@ -39,6 +39,7 @@ import {
   stateRemove,
   type StoredNoteTab,
 } from './storage';
+import { getEditorPort } from './editor/port';
 
 export interface NoteTab {
   id: string;
@@ -886,14 +887,28 @@ export function getEditorText(): string {
   return tabManagerInstance?.getActiveText() ?? '';
 }
 
-/** HTML of the note currently shown in the editor. */
+/**
+ * HTML of the note currently shown in the editor. Routed through the
+ * EditorPort (see editor/port.ts) with a bare-DOM fallback for the rare
+ * paths that run before the composition root installed the port.
+ */
 export function getEditorHtml(): string {
+  const port = getEditorPort();
+  if (port) {
+    return port.getHtml();
+  }
   const element = document.getElementById('note') as HTMLElement | null;
   return element ? element.innerHTML : '';
 }
 
-/** Replaces the editor content (already-sanitised on entry) and persists. */
+/** Replaces the editor content (sanitized in the port) and persists. */
 export function setEditorHtml(html: string): void {
+  const port = getEditorPort();
+  if (port) {
+    port.setHtml(html);
+    return;
+  }
+
   const element = document.getElementById('note') as HTMLElement | null;
   if (!element) {
     return;

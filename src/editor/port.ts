@@ -1,0 +1,80 @@
+/**
+ * EditorPort — the seam between the Padify app and the note editor.
+ *
+ * Every part of the app that reads or writes the note (snapshots, share
+ * links, voice typing, the unicode picker, the context menu, statistics,
+ * exports) goes through this interface instead of reaching into the editor
+ * DOM or calling document.execCommand directly.
+ *
+ * Why: the editor is being revamped (markdown / rich text on a real
+ * document model). The revamp ships as a second EditorPort implementation
+ * over that model — the app around it does not change. The current
+ * implementation (`contenteditable-port.ts`) keeps the existing
+ * contenteditable + execCommand editor alive behind the same contract.
+ *
+ * Contract notes:
+ *  - `setHtml` accepts arbitrary markup and sanitizes it down to the
+ *    stored formatting subset before it touches the surface (the storage
+ *    sanitizer in tabs.ts is the boundary — same as load).
+ *  - `getText` returns `\n`-separated plain text with `&nbsp;` normalized.
+ *  - Formatting/insert/undo methods return whether the engine accepted
+ *    them, mirroring document.execCommand's boolean result.
+ */
+
+export type FormatCommand = 'bold' | 'italic' | 'underline' | 'strikeThrough';
+
+/** Every mutation-style command the app performs on the editor surface. */
+export type EditorCommand = FormatCommand | 'removeFormat';
+
+export interface EditorPort {
+  /** The note's HTML in the stored formatting subset. */
+  getHtml(): string;
+
+  /** Replaces the whole note (sanitized on entry) and persists it. */
+  setHtml(html: string): void;
+
+  /** Plain text of the note, `\n`-separated, nbsp normalized to spaces. */
+  getText(): string;
+
+  /** True when the note carries no meaningful content. */
+  isEmpty(): boolean;
+
+  /** Moves keyboard focus into the editor. */
+  focus(): void;
+
+  /**
+   * Inserts plain text at the caret, replacing the selection (the voice,
+   * unicode and tab-indentation path). Returns false if unsupported.
+   */
+  insertText(text: string): boolean;
+
+  /**
+   * Applies/toggles a formatting command over the current selection.
+   * Returns false if the engine rejected it.
+   */
+  applyFormat(command: EditorCommand): boolean;
+
+  /** True when the selection carries the given format. */
+  queryFormat(command: FormatCommand): boolean;
+
+  undo(): boolean;
+  redo(): boolean;
+
+  /** Fires on user edits (typing, formatting). Returns an unsubscriber. */
+  onInput(listener: () => void): () => void;
+}
+
+// ---------------------------------------------------------------------------
+// Singleton holder — the composition root installs the port once at boot;
+// features resolve it through here.
+// ---------------------------------------------------------------------------
+
+let editorPortInstance: EditorPort | null = null;
+
+export function setEditorPort(port: EditorPort): void {
+  editorPortInstance = port;
+}
+
+export function getEditorPort(): EditorPort | null {
+  return editorPortInstance;
+}

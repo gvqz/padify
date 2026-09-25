@@ -20,6 +20,8 @@ import {
 } from './utils';
 import { initUnicodePicker } from './unicode/picker';
 import { TabManager, setTabManager, getEditorText, getEditorHtml, sanitizeNoteHtml } from './tabs';
+import { setEditorPort } from './editor/port';
+import { ContentEditablePort } from './editor/contenteditable-port';
 import { initMusicPlayer } from './music-player';
 import { storageReady } from './storage';
 import { initCloudSync } from './cloud/sync';
@@ -84,6 +86,20 @@ $(document).ready(async function () {
   // on the left of the page (see tabs.ts).
   const tabManager = new TabManager(notepad.note);
   setTabManager(tabManager);
+
+  // The editor seam — every reader/writer of the note surface goes through
+  // this port (see editor/port.ts). The legacy contenteditable adapter is
+  // installed here; the document-model editor will install its own.
+  const noteElement = document.getElementById('note');
+  if (noteElement) {
+    setEditorPort(
+      new ContentEditablePort(noteElement, {
+        sanitize: sanitizeNoteHtml,
+        onDocumentReplaced: () => tabManager.syncAfterExternalEdit(),
+      }),
+    );
+  }
+
   tabManager.onActiveChanged = () => {
     updateWordCountPill(tabManager.getActiveText());
     handleTabSwitchedWhileListening();
@@ -152,13 +168,8 @@ $(document).ready(async function () {
 
   notepad.wordCount.text(characterAndWordCountText);
 
-  // Keep execCommand producing plain tags (b/i/u/strike) rather than
-  // inline CSS spans, so stored notes stay small and portable.
-  try {
-    document.execCommand('styleWithCSS', false, 'false');
-  } catch {
-    /* unsupported — tags are still the usual outcome */
-  }
+  // Plain tags over inline CSS come with the editor port (see
+  // ContentEditablePort — styleWithCSS lives with the editor now).
 
   // Paste always lands as plain text — the editor keeps its own
   // formatting (bold/italic/underline/strike) and nothing else.
