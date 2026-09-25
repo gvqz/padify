@@ -1,4 +1,4 @@
-import $ from 'jquery';
+import { $ } from './lib/q';
 import { showToast } from './utils';
 import { stateGet, stateSet, stateRemove } from './storage';
 

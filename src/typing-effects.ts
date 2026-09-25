@@ -1,4 +1,4 @@
-import $ from 'jquery';
+import { $ } from './lib/q';
 import type { NotepadUI, EditorConfig } from './selector';
 import { stateGet, stateSet, stateRemove } from './storage';
 
@@ -84,7 +84,10 @@ export function initTypingEffects(
 
     const baseX = caret.left;
     const baseY = caret.top + caret.height * 0.6;
-    const layer = keyburstLayer[0];
+    const layer = keyburstLayer.get(0);
+    if (!layer) {
+      return;
+    }
 
     for (let i = 0; i < keyburstParticleCount; i++) {
       const particle = document.createElement('span');

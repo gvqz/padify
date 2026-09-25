@@ -30,7 +30,7 @@ type NodeArray = ElementOrDocument[];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type QEvent = Event & { originalEvent?: Event } & Record<string, any>;
 
-export type QEventHandler = (this: ElementOrDocument, event: QEvent) => void;
+export type QEventHandler = (this: HTMLElement, event: QEvent) => void;
 
 interface WrapperRecord {
   direct?: EventListener;
@@ -68,7 +68,7 @@ function stampOriginalEvent(event: Event): void {
 
 function bindHandler(handler: QEventHandler, event: Event, element: EventTarget): void {
   stampOriginalEvent(event);
-  handler.call(element as ElementOrDocument, event);
+  handler.call(element as HTMLElement, event);
 }
 
 function delegatedWrapper(selector: string, handler: QEventHandler): EventListener {

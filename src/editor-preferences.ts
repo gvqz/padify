@@ -1,4 +1,4 @@
-import $ from 'jquery';
+import { $ } from './lib/q';
 import Swal from 'sweetalert2';
 import type { AppState, EditorConfig, NotepadUI, StateKey } from './selector';
 import { resetFontSize, resetLineHeight, resetFontWeight, resetShowWordCountPill, resetWriteDirection, resetTexture, resetOptimalLineLength, resetFont, showToast, updateWordCountPill } from './utils';

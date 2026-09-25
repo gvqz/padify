@@ -128,7 +128,7 @@ describe('q — the DOM facade that replaced jQuery', () => {
 
   it('binds direct handlers with this = element and fires on native events', () => {
     const seen: { thisValue: unknown; originalIsSelf: boolean }[] = [];
-    $('#check').on('change', function (this: ElementOrDocument, event) {
+    $('#check').on('change', function (this: HTMLElement, event) {
       seen.push({ thisValue: this, originalIsSelf: event.originalEvent === event });
     });
     document.getElementById('check')?.dispatchEvent(new Event('change', { bubbles: true }));
@@ -139,7 +139,7 @@ describe('q — the DOM facade that replaced jQuery', () => {
 
   it('delegates events and binds this to the matched element', () => {
     const seen: Element[] = [];
-    $(document).on('click', '.child', function (this: ElementOrDocument) {
+    $(document).on('click', '.child', function (this: HTMLElement) {
       seen.push(this as Element);
     });
     document.querySelector('#box .child')?.dispatchEvent(
