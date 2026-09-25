@@ -23,6 +23,8 @@ import keyboardShortcutsModalHtml from './keyboard-shortcuts-modal.html?raw';
 import unicodePickerModalHtml from './unicode-picker-modal.html?raw';
 import cloudModalHtml from './cloud-modal.html?raw';
 import shareModalHtml from './share-modal.html?raw';
+import preferencesModalHtml from './preferences-modal.html?raw';
+import statisticsModalHtml from './statistics-modal.html?raw';
 
 /** Modal markup in the original document order (relative to each other). */
 const MODAL_PARTIALS: string[] = [
@@ -32,6 +34,8 @@ const MODAL_PARTIALS: string[] = [
   unicodePickerModalHtml,
   cloudModalHtml,
   shareModalHtml,
+  preferencesModalHtml,
+  statisticsModalHtml,
 ];
 
 let mounted = false;
