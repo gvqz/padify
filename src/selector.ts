@@ -29,15 +29,12 @@ export interface NotepadUI {
   keyboardShortcutsModal: JQuery;
   fullScreenButton: JQuery;
   optimalLineLength: JQuery;
-  monospaced: JQuery;
   shareNotes: JQuery;
-  dyslexic: JQuery;
   spellCheck: JQuery;
   breakReminders: JQuery;
   explodingEffect: JQuery;
   bottomLine: JQuery;
   statisticsModal: JQuery;
-  serif: JQuery;
 }
 
 export interface AppState {
@@ -165,15 +162,12 @@ export function selector(): AppSelector {
       keyboardShortcutsModal: selectById('keyboardShortcutsModal'),
       fullScreenButton: selectById('fullScreenButton'),
       optimalLineLength: selectById('optimalLineLength'),
-      monospaced: selectById('monospaced'),
       shareNotes: selectById('shareNotes'),
-      dyslexic: selectById('dyslexic'),
       spellCheck: selectById('spellCheck'),
       breakReminders: selectById('breakReminders'),
       explodingEffect: selectById('explodingEffect'),
       bottomLine: selectByClassName('bottom-line'),
       statisticsModal: selectById('statisticsModal'),
-      serif: selectById('serif'),
     },
     state: {
       note: getState('note'),

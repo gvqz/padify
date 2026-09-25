@@ -112,8 +112,6 @@ export function enableDarkMode(
 ): void {
   $(document.body).addClass('dark');
   $('.navbar').removeClass('navbar-default');
-  $('#mode').attr('title', lightmodeText);
-  $('#themeIcon').attr('src', 'img/navbar/light-theme.svg');
   metaThemeColor!.setAttribute('content', darkMetaColor);
   stateSet('mode', 'dark');
 }
@@ -125,8 +123,6 @@ export function enableLightMode(
 ): void {
   $(document.body).removeClass('dark');
   $('.navbar').addClass('navbar-default');
-  $('#mode').attr('title', darkmodeText);
-  $('#themeIcon').attr('src', 'img/navbar/dark-theme.svg');
   metaThemeColor!.setAttribute('content', lightMetaColor);
   stateSet('mode', 'light');
 }

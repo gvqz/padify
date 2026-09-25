@@ -388,7 +388,6 @@ export class WhiteNoisePlayer {
 
     const result = await Swal.fire({
       title,
-      target: document.getElementById('whiteNoiseModal'),
       input: 'text',
       inputValue: value,
       inputPlaceholder: 'Preset name',
@@ -429,7 +428,6 @@ export class WhiteNoisePlayer {
 
     const result = await Swal.fire({
       title: 'Overwrite preset?',
-      target: document.getElementById('whiteNoiseModal'),
       text: `"${presetName}" already exists.`,
       icon: 'warning',
       showCancelButton: true,
@@ -450,7 +448,6 @@ export class WhiteNoisePlayer {
 
     const result = await Swal.fire({
       title: 'Delete preset?',
-      target: document.getElementById('whiteNoiseModal'),
       text: `"${presetName}" will be removed from your saved mixes.`,
       icon: 'warning',
       showCancelButton: true,

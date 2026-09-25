@@ -33,6 +33,7 @@ import { initWhiteNoisePlayer } from './white-noise-player';
 import { mountMusicPlayer } from './music-player';
 import { initContextMenu } from './context-menu';
 import { mountModals } from './ui/modals';
+import { assertMarkupContract } from './ui/contract';
 
 /** Resolves once the DOM is parsed (module scripts run before that). */
 function domReady(): Promise<void> {
@@ -50,6 +51,10 @@ export async function bootPadify(): Promise<void> {
   // 0. Modal markup — verbatim partials under src/ui/modals/, mounted before
   //    anything queries a modal by id (selector(), help, snapshots, app…).
   mountModals();
+
+  // Fail here — loudly, naming the missing elements — if the markup the
+  // features are about to dereference is not in the document.
+  assertMarkupContract();
 
   // 1. Markup + DOM-only feature wiring.
   initHelp();
