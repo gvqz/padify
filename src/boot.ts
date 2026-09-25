@@ -30,7 +30,7 @@ import { initHelp } from './help';
 import { initSnapshots } from './snapshots';
 import { initTimer } from './timer';
 import { initWhiteNoisePlayer } from './white-noise-player';
-import { mountMusicPlayer } from './music-player';
+import { mountMusicPlayer } from './features/music-player';
 import { initContextMenu } from './context-menu';
 import { mountModals } from './ui/modals';
 import { assertMarkupContract } from './ui/contract';

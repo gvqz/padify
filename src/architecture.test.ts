@@ -112,3 +112,75 @@ describe('markup ↔ JS contract', () => {
     expect(missing).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Layering
+// ---------------------------------------------------------------------------
+
+function importTargets(file: string): string[] {
+  return [...read(file).matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
+}
+
+describe('layering rules', () => {
+  const srcFiles = walk(resolve(process.cwd(), 'src')).filter(
+    (f) => f.endsWith('.ts') && !f.endsWith('.test.ts'),
+  );
+  const rel = (f: string) => f.slice(process.cwd().length + 1);
+
+  it('features/music-player is imported only by the composition roots', () => {
+    // The music feature (music-player + music/ + spotify/) is the biggest
+    // module in the app; its public surface is initMusicPlayer/mountMusic-
+    // Player and its only legitimate consumers are the shell (app.ts) and
+    // the boot sequence (boot.ts). Everything else must go through seams.
+    const allowed = new Set(['src/app.ts', 'src/boot.ts']);
+    const violators: string[] = [];
+    for (const file of srcFiles) {
+      if (file.includes('/features/music-player/')) continue;
+      const outside = importTargets(file).some((t) => t.includes('features/music-player'));
+      if (outside && !allowed.has(rel(file))) violators.push(rel(file));
+    }
+    expect(violators).toEqual([]);
+  });
+
+  it('features never import other features', () => {
+    // Rule lands with the first feature so the second cannot wire itself
+    // into the first; features talk through core seams (settings, ports).
+    const featureFiles = srcFiles.filter((f) => f.includes('/features/'));
+    const violators: string[] = [];
+    for (const file of featureFiles) {
+      const featureRoot = file.split('/features/')[1]!.split('/')[0]!;
+      for (const target of importTargets(file)) {
+        const m = target.match(/(?:\.\.\/)+features\/([\w-]+)\//) ?? target.match(/^features\/([\w-]+)\//);
+        if (m && m[1] !== featureRoot) violators.push(`${rel(file)} -> ${target}`);
+      }
+    }
+    expect(violators).toEqual([]);
+  });
+
+  it('src/ui is passive markup mounting — it never imports features or the app', () => {
+    const violators: string[] = [];
+    for (const file of srcFiles.filter((f) => f.includes('/ui/'))) {
+      for (const target of importTargets(file)) {
+        if (/features\//.test(target) || /(^|\.)\.(\/app)?$|\.\/app['"]/.test(target)) {
+          violators.push(`${rel(file)} -> ${target}`);
+        }
+      }
+    }
+    expect(violators).toEqual([]);
+  });
+
+  it('the legacy editor adapter is wired only by the shell', () => {
+    // editor/port.ts is the public contract (any module may resolve the
+    // port through it); editor/contenteditable-port.ts is the legacy
+    // IMPLEMENTATION — only app.ts (which installs the port) may touch it,
+    // so the future document-model editor swaps in one place.
+    const violators: string[] = [];
+    for (const file of srcFiles) {
+      if (rel(file) === 'src/app.ts' || file.includes('/editor/')) continue;
+      if (importTargets(file).some((t) => t.includes('editor/contenteditable-port'))) {
+        violators.push(rel(file));
+      }
+    }
+    expect(violators).toEqual([]);
+  });
+});

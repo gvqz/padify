@@ -11,7 +11,7 @@
  * a good citizen: no server calls, bounded storage, zero rate limits.
  */
 
-import { stateGet, stateSet } from '../storage';
+import { stateGet, stateSet } from '../../../storage';
 import type { SpotifyTrack } from '../spotify/api';
 
 const LIBRARY_KEY = 'padify-music-library';

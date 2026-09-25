@@ -31,8 +31,8 @@
 import $ from 'jquery';
 import Swal from 'sweetalert2';
 import type { SweetAlertResult } from 'sweetalert2';
-import { showToast } from './utils';
-import { stateGet, stateSet } from './storage';
+import { showToast } from '../../utils';
+import { stateGet, stateSet } from '../../storage';
 import { LocalMusicLibrary } from './music/library';
 import {
   fetchMusicCapabilities,

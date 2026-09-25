@@ -22,7 +22,7 @@ import { initUnicodePicker } from './unicode/picker';
 import { TabManager, setTabManager, getEditorText, getEditorHtml, sanitizeNoteHtml } from './tabs';
 import { setEditorPort, getEditorPort } from './editor/port';
 import { ContentEditablePort } from './editor/contenteditable-port';
-import { initMusicPlayer } from './music-player';
+import { initMusicPlayer } from './features/music-player';
 import { storageReady } from './storage';
 import { initCloudSync } from './cloud/sync';
 import { initCloudUI } from './cloud/ui';

@@ -12,7 +12,7 @@
  * both the free and the connected path.
  */
 
-import { getCloudConfig } from '../cloud/config';
+import { getCloudConfig } from '../../../cloud/config';
 import type { SpotifyTrack } from '../spotify/api';
 
 export interface MusicCapabilities {

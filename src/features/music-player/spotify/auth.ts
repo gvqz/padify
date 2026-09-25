@@ -14,7 +14,7 @@
  * stored via the storage layer — see the Connect screen in the music player.
  */
 
-import { stateGet, stateSet, stateRemove } from '../storage';
+import { stateGet, stateSet, stateRemove } from '../../../storage';
 
 export interface SpotifyAuthSession {
   accessToken: string;
