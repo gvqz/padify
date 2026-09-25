@@ -26,14 +26,19 @@
 
 import { showToast } from './utils';
 import { CASES } from './case-conversions';
+import {
+  getEditorPort,
+  type EditorCommand,
+  type FormatCommand,
+} from './editor/port';
 
 interface FormatDef {
   id: 'bold' | 'italic' | 'underline' | 'strike';
   label: string;
-  /** The document.execCommand name that toggles this format. */
-  command: string;
+  /** The editor command that toggles this format. */
+  command: FormatCommand;
   /** The document.queryCommandState name that reports it. */
-  stateCommand: string;
+  stateCommand: FormatCommand;
   glyph: string;
 }
 
@@ -332,6 +337,10 @@ class ContextMenu {
     if (!editor.contains(selection.getRangeAt(0).commonAncestorContainer)) return false;
 
     try {
+      const port = getEditorPort();
+      if (port) {
+        return port.queryFormat(def.command);
+      }
       return document.queryCommandState(def.stateCommand);
     } catch {
       return false;
@@ -531,12 +540,12 @@ class ContextMenu {
   private runAction(action: string, caseId?: string, formatId?: FormatDef['id']): void {
     switch (action) {
       case 'undo':
-        this.execCommand('undo');
+        this.editorUndo();
         this.close();
         this.restoreFocus();
         break;
       case 'redo':
-        this.execCommand('redo');
+        this.editorRedo();
         this.close();
         this.restoreFocus();
         break;
@@ -633,9 +642,10 @@ class ContextMenu {
     this.close();
     this.editor.focus({ preventScroll: true });
 
-    // execCommand keeps the native undo stack intact and fires an input
-    // event, which the app uses to autosave the note.
-    const ok = this.execCommand(def.command);
+    // The command runs through the EditorPort (or execCommand until the
+    // port is installed) — it keeps the native undo stack intact and fires
+    // an input event, which the app uses to autosave the note.
+    const ok = this.applyEditorCommand(def.command);
     showToast(
       ok
         ? this.isFormatActive(def)
@@ -657,7 +667,7 @@ class ContextMenu {
     this.close();
     this.editor.focus({ preventScroll: true });
 
-    const ok = this.execCommand('removeFormat');
+    const ok = this.applyEditorCommand('removeFormat');
     showToast(ok ? 'Formatting removed.' : 'Could not remove formatting in this browser.');
   }
 
@@ -669,6 +679,30 @@ class ContextMenu {
     }
   }
 
+  /**
+   * Format + undo/redo mutations go through the EditorPort so the same
+   * actions keep working when the document-model editor replaces the
+   * contenteditable. Clipboard commands (copy/cut/paste) are browser-level
+   * and stay on execCommand/the async API.
+   */
+  private applyEditorCommand(command: EditorCommand): boolean {
+    const port = getEditorPort();
+    if (port) {
+      return port.applyFormat(command);
+    }
+    return this.execCommand(command);
+  }
+
+  private editorUndo(): boolean {
+    const port = getEditorPort();
+    return port ? port.undo() : this.execCommand('undo');
+  }
+
+  private editorRedo(): boolean {
+    const port = getEditorPort();
+    return port ? port.redo() : this.execCommand('redo');
+  }
+
   /** Replaces the current selection, keeping the native undo stack intact. */
   private replaceSelection(replacement: string): void {
     const editor = this.editor;
@@ -676,7 +710,8 @@ class ContextMenu {
     this.close();
     editor.focus({ preventScroll: true });
 
-    const ok = this.execCommand('insertText', replacement);
+    const port = getEditorPort();
+    const ok = port ? port.insertText(replacement) : this.execCommand('insertText', replacement);
     if (!ok) {
       const selection = window.getSelection();
       if (selection && selection.rangeCount > 0) {
