@@ -1,4 +1,4 @@
-import $ from 'jquery';
+import { $ } from './lib/q';
 import Swal from 'sweetalert2';
 import { selector } from './selector';
 import {
@@ -37,16 +37,6 @@ import { initThemeController } from './theme-controller';
 import { initEditorPreferences, clearTabIndentation } from './editor-preferences';
 import { setBreakRemindersEnabled, trackWritingActivity } from './break-reminder';
 import { registerServiceWorker, initInstallPrompt } from './install-pwa';
-
-// Bootstrap 3's jQuery plugins (registered globally by the `bootstrap` import
-// in main.ts) are not covered by @types/jquery. The `modal` member is also
-// declared in utils.ts; identical declarations merge.
-declare global {
-  interface JQuery {
-    modal(action: string | { [key: string]: unknown }): JQuery;
-    tooltip(options?: Record<string, unknown>): JQuery;
-  }
-}
 
 // The editor is a contenteditable <div id="note"> — see tabs.ts for the tab
 // model and the storage format. Text readers go through getEditorText().
@@ -206,7 +196,14 @@ export async function initApp(): Promise<void> {
     }
   });
 
-  $('[data-toggle="tooltip"]').tooltip({
+  // Bootstrap's tooltip plugin still owns the toolbar tooltips; it is
+  // replaced by the owned tooltip controller when the bundle is dropped.
+  const legacyJQuery = (
+    window as unknown as {
+      jQuery?: (input: Element[]) => { tooltip: (options: Record<string, unknown>) => void };
+    }
+  ).jQuery;
+  legacyJQuery?.(Array.from(document.querySelectorAll('[data-toggle="tooltip"]'))).tooltip({
     container: 'body',
   });
 

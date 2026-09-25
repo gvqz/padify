@@ -121,10 +121,10 @@ function parseHtml(html: string): Element[] {
   return Array.from(template.content.children) as Element[];
 }
 
-function normalizeAppendSource(source: Q | ElementOrDocument | string): Element[] {
+function normalizeAppendSource(source: Q | Node | string): Node[] {
   if (typeof source === 'string') return parseHtml(source);
   if (source instanceof Q) return source.els.filter(isElement);
-  if (isElement(source)) return [source];
+  if (source instanceof Node) return [source];
   return [];
 }
 
@@ -337,14 +337,17 @@ export class Q {
   }
 
   attr(name: string): string | null;
-  attr(name: string, value: string | number | boolean): this;
-  attr(name: string, value?: string | number | boolean): string | null | this {
+  attr(name: string, value: string | number | boolean | null): this;
+  attr(name: string, value?: string | number | boolean | null): string | null | this {
     if (value === undefined) {
       const first = this.els[0];
       return first && isElement(first) ? first.getAttribute(name) : null;
     }
     this.els.forEach((el) => {
-      if (isElement(el)) el.setAttribute(name, String(value));
+      if (!isElement(el)) return;
+      // jQuery semantics: setting an attribute to null removes it.
+      if (value === null) el.removeAttribute(name);
+      else el.setAttribute(name, String(value));
     });
     return this;
   }
@@ -466,7 +469,7 @@ export class Q {
     return this;
   }
 
-  append(source: Q | ElementOrDocument | string): this {
+  append(source: Q | Node | string): this {
     const sources = normalizeAppendSource(source);
     this.els.forEach((el, containerIndex) => {
       if (!isElement(el)) return;
@@ -492,7 +495,7 @@ export class Q {
     return this;
   }
 
-  replaceWith(source: Q | ElementOrDocument | string): this {
+  replaceWith(source: Q | Node | string): this {
     const sources = normalizeAppendSource(source);
     this.els.forEach((el, index) => {
       if (!isElement(el)) return;

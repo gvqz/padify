@@ -7,7 +7,7 @@
  *  • a "Cloud sync" section inside Settings pointing at the modal.
  */
 
-import $ from 'jquery';
+import { $ } from '../lib/q';
 import { showToast } from '../utils';
 import { getCloudConfig } from './config';
 import { getCloudSync, type CloudStatus } from './sync';

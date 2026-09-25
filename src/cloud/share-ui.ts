@@ -7,7 +7,7 @@
  * get a sign-in prompt — sharing is a cloud-account feature.
  */
 
-import $ from 'jquery';
+import { $ } from '../lib/q';
 import Swal from 'sweetalert2';
 import { showToast } from '../utils';
 import { deriveTabTitle, getEditorHtml, getTabManager } from '../tabs';
