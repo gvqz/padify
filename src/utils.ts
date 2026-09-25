@@ -1,16 +1,8 @@
-import $ from 'jquery';
+import { $ } from './lib/q';
 import Swal from 'sweetalert2';
 import { get, setState, selector } from './selector';
 import { getTabManager } from './tabs';
 import { stateSet } from './storage';
-
-// Bootstrap 3's jQuery modal plugin (registered globally by the `bootstrap`
-// import in main.ts) is not covered by @types/jquery.
-declare global {
-  interface JQuery {
-    modal(action: string | { [key: string]: unknown }): JQuery;
-  }
-}
 
 export function getFileName(): string {
   return 'Notes-' + getCurrentDate() + '.txt';

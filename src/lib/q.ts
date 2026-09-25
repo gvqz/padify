@@ -497,7 +497,8 @@ export class Q {
     return this;
   }
 
-  focus(): this {
+  focus(handler?: QEventHandler): this {
+    if (handler) return this.on('focus', handler);
     const first = this.els[0];
     if (isElement(first) && typeof (first as HTMLElement).focus === 'function') {
       (first as HTMLElement).focus();
@@ -505,12 +506,42 @@ export class Q {
     return this;
   }
 
-  select(): this {
+  select(handler?: QEventHandler): this {
+    if (handler) return this.on('select', handler);
     const first = this.els[0];
     if (isElement(first) && typeof (first as HTMLInputElement).select === 'function') {
       (first as HTMLInputElement).select();
     }
     return this;
+  }
+
+  /** Event-binding shorthands (jQuery's direct event helpers). */
+  keydown(handler: QEventHandler): this {
+    return this.on('keydown', handler);
+  }
+
+  keyup(handler: QEventHandler): this {
+    return this.on('keyup', handler);
+  }
+
+  input(handler: QEventHandler): this {
+    return this.on('input', handler);
+  }
+
+  change(handler: QEventHandler): this {
+    return this.on('change', handler);
+  }
+
+  scroll(handler: QEventHandler): this {
+    return this.on('scroll', handler);
+  }
+
+  click(handler?: QEventHandler): this {
+    return handler ? this.on('click', handler) : this.trigger('click');
+  }
+
+  blur(handler?: QEventHandler): this {
+    return handler ? this.on('blur', handler) : this.trigger('blur');
   }
 
   scrollTop(value?: number): number | this {

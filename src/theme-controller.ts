@@ -1,4 +1,4 @@
-import $ from 'jquery';
+import { $ } from './lib/q';
 import {
   enableDarkMode,
   enableLightMode,

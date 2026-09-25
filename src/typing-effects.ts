@@ -55,7 +55,7 @@ export function initTypingEffects(
       if (rects.length > 0) {
         rect = rects[rects.length - 1];
       } else {
-        const editorRect = notepad.note.get(0)?.getBoundingClientRect();
+        const editorRect = (notepad.note.get(0) as HTMLElement | undefined)?.getBoundingClientRect();
         if (!editorRect) return null;
         rect = editorRect;
       }

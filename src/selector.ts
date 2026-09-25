@@ -1,40 +1,40 @@
-import $ from 'jquery';
+import { $, type Q } from './lib/q';
 import { stateGet, stateSet, stateRemove } from './storage';
 import { DEFAULT_EDITOR_CONFIG, getSetting, isSettingKey, removeSetting, setSetting } from './state/settings';
 
 export type StateKey = string;
 
 export interface NotepadUI {
-  aboutModal: JQuery;
-  copyToClipboard: JQuery;
-  downloadNotes: JQuery;
-  downloadNotesPlain: JQuery;
-  downloadNotesPdf: JQuery;
-  downloadNotesDocx: JQuery;
-  downloadNotesHtml: JQuery;
-  fontSize: JQuery;
-  fontWeight: JQuery;
-  installApp: JQuery;
-  lineHeight: JQuery;
-  writeDirection: JQuery;
-  texture: JQuery;
-  note: JQuery;
-  preferencesModal: JQuery;
-  resetPreferences: JQuery;
-  showWordCountPill: JQuery;
-  clearTabIndentation: JQuery;
-  wordCount: JQuery;
-  installAppButtonContainer: JQuery;
-  wordCountContainer: JQuery;
-  keyboardShortcutsModal: JQuery;
-  fullScreenButton: JQuery;
-  optimalLineLength: JQuery;
-  shareNotes: JQuery;
-  spellCheck: JQuery;
-  breakReminders: JQuery;
-  explodingEffect: JQuery;
-  bottomLine: JQuery;
-  statisticsModal: JQuery;
+  aboutModal: Q;
+  copyToClipboard: Q;
+  downloadNotes: Q;
+  downloadNotesPlain: Q;
+  downloadNotesPdf: Q;
+  downloadNotesDocx: Q;
+  downloadNotesHtml: Q;
+  fontSize: Q;
+  fontWeight: Q;
+  installApp: Q;
+  lineHeight: Q;
+  writeDirection: Q;
+  texture: Q;
+  note: Q;
+  preferencesModal: Q;
+  resetPreferences: Q;
+  showWordCountPill: Q;
+  clearTabIndentation: Q;
+  wordCount: Q;
+  installAppButtonContainer: Q;
+  wordCountContainer: Q;
+  keyboardShortcutsModal: Q;
+  fullScreenButton: Q;
+  optimalLineLength: Q;
+  shareNotes: Q;
+  spellCheck: Q;
+  breakReminders: Q;
+  explodingEffect: Q;
+  bottomLine: Q;
+  statisticsModal: Q;
 }
 
 export interface AppState {
@@ -88,12 +88,12 @@ export interface AppSelector {
   notepad: NotepadUI;
   state: AppState;
   defaultConfig: EditorConfig;
-  get: (context: string | HTMLElement | JQuery) => JQuery;
+  get: (context: string | HTMLElement | Q) => Q;
   getState: (state: StateKey) => string | null;
   setState: (state: StateKey, value: string) => void;
   removeState: (state: StateKey) => void;
-  selectById: (id: string) => JQuery;
-  selectByClassName: (className: string) => JQuery;
+  selectById: (id: string) => Q;
+  selectByClassName: (className: string) => Q;
 }
 
 // Settings persist through the storage layer (IndexedDB + localStorage
@@ -123,16 +123,16 @@ export function removeState(state: StateKey): void {
   stateRemove(state);
 }
 
-export function selectById(id: string): JQuery {
+export function selectById(id: string): Q {
   return $(`#${id}`);
 }
 
-export function selectByClassName(className: string): JQuery {
+export function selectByClassName(className: string): Q {
   return $(`.${className}`);
 }
 
-export function get(context: string | HTMLElement | JQuery): JQuery {
-  return $(context as unknown as HTMLElement);
+export function get(context: string | HTMLElement | Q): Q {
+  return $(context);
 }
 
 export function selector(): AppSelector {

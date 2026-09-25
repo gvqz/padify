@@ -1,5 +1,5 @@
 // Snapshots Manager
-import $ from 'jquery';
+import { $ } from './lib/q';
 import Swal from 'sweetalert2';
 import { getEditorHtml, getEditorText, htmlToText, setEditorHtml } from './tabs';
 import { showToast, updateWordCountPill } from './utils';
