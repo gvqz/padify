@@ -20,12 +20,18 @@
 import aboutModalHtml from './about-modal.html?raw';
 import snapshotsModalHtml from './snapshots-modal.html?raw';
 import keyboardShortcutsModalHtml from './keyboard-shortcuts-modal.html?raw';
+import unicodePickerModalHtml from './unicode-picker-modal.html?raw';
+import cloudModalHtml from './cloud-modal.html?raw';
+import shareModalHtml from './share-modal.html?raw';
 
 /** Modal markup in the original document order (relative to each other). */
 const MODAL_PARTIALS: string[] = [
   aboutModalHtml,
   snapshotsModalHtml,
   keyboardShortcutsModalHtml,
+  unicodePickerModalHtml,
+  cloudModalHtml,
+  shareModalHtml,
 ];
 
 let mounted = false;
