@@ -15,7 +15,7 @@
  *    an honest toast and leaves the editor untouched.
  */
 
-import $ from 'jquery';
+import { $, type Q } from './lib/q';
 import { showToast } from './utils';
 import { getEditorPort } from './editor/port';
 
@@ -136,7 +136,7 @@ function insertDictation(text: string): void {
 // UI helpers
 // ---------------------------------------------------------------------------
 
-function voiceBar(): JQuery {
+function voiceBar(): Q {
   return $('#voiceBar');
 }
 
@@ -151,7 +151,12 @@ function setBarInterim(interim: string | null): void {
 
 function renderListeningUI(active: boolean): void {
   $('#voiceTypeButton').toggleClass('listening', active).attr('aria-pressed', String(active));
-  voiceBar().attr('hidden', active ? null : 'hidden');
+  const bar = voiceBar();
+  if (active) {
+    bar.removeAttr('hidden');
+  } else {
+    bar.attr('hidden', 'hidden');
+  }
   if (active) {
     setBarInterim(null);
   }

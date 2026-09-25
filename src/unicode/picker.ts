@@ -1,4 +1,4 @@
-import $ from 'jquery';
+import { $, type Q } from '../lib/q';
 import type { NotepadUI } from '../selector';
 import type { UnicodeSymbol } from './types';
 import { showToast } from '../utils';

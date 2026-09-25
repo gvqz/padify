@@ -1,4 +1,4 @@
-import $ from 'jquery';
+import { $ } from './lib/q';
 
 /**
  * Brand menu + Help tour.
@@ -218,7 +218,7 @@ export function initHelp(): void {
   });
 
   dots.on('click', '.help-dot', (event) => {
-    const index = Number($(event.currentTarget).data('i'));
+    const index = Number($(event.currentTarget as HTMLElement).data('i'));
     if (Number.isNaN(index)) return;
     render(index, index > current ? 1 : -1);
   });

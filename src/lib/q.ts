@@ -297,6 +297,8 @@ export class Q {
     return this;
   }
 
+  text(): string;
+  text(value: string | number): this;
   text(value?: string | number): string | this {
     if (value === undefined) {
       return this.els.length ? (this.els[0].textContent ?? '') : '';
@@ -307,6 +309,8 @@ export class Q {
     return this;
   }
 
+  html(): string;
+  html(value: string): this;
   html(value?: string): string | this {
     if (value === undefined) {
       return this.els.length && 'innerHTML' in this.els[0]
@@ -319,6 +323,8 @@ export class Q {
     return this;
   }
 
+  val(): string | number | null;
+  val(value: string | number): this;
   val(value?: string | number): string | number | null | this {
     if (value === undefined) {
       const first = this.els[0] as HTMLInputElement | undefined;
@@ -544,6 +550,8 @@ export class Q {
     return handler ? this.on('blur', handler) : this.trigger('blur');
   }
 
+  scrollTop(): number;
+  scrollTop(value: number): this;
   scrollTop(value?: number): number | this {
     if (value === undefined) {
       const first = this.els[0] as { scrollTop?: number } | undefined;

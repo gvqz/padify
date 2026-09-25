@@ -1,4 +1,4 @@
-import $ from 'jquery';
+import { $ } from './lib/q';
 import Swal from 'sweetalert2';
 import type { SweetAlertResult } from 'sweetalert2';
 import { stateGet, stateSet, storageReady } from './storage';
