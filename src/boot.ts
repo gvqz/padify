@@ -34,6 +34,9 @@ import { mountMusicPlayer } from './features/music-player';
 import { initContextMenu } from './context-menu';
 import { mountModals } from './ui/modals';
 import { assertMarkupContract } from './ui/contract';
+import { initModalBehavior } from './ui/behavior/modal';
+import { initCollapseBehavior } from './ui/behavior/collapse';
+import { initTooltips } from './ui/behavior/tooltip';
 
 /** Resolves once the DOM is parsed (module scripts run before that). */
 function domReady(): Promise<void> {
@@ -52,6 +55,12 @@ export async function bootPadify(): Promise<void> {
   //    anything queries a modal by id (selector(), help, snapshots, app…).
   mountModals();
 
+  // 0.5 The owned UI behaviors (bootstrap-JS replacements): modals, the
+  //     navbar hamburger collapse and tooltips. Document-level delegated
+  //     listeners — installed once, before any feature can open a dialog.
+  initModalBehavior();
+  initCollapseBehavior();
+
   // Fail here — loudly, naming the missing elements — if the markup the
   // features are about to dereference is not in the document.
   assertMarkupContract();
@@ -59,6 +68,7 @@ export async function bootPadify(): Promise<void> {
   // 1. Markup + DOM-only feature wiring.
   initHelp();
   initTimer();
+  initTooltips(); // after initTimer so the timer modal's tooltip is covered
   mountMusicPlayer();
   initSnapshots();
   initContextMenu();

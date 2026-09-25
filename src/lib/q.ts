@@ -565,25 +565,6 @@ export class Q {
     });
     return this;
   }
-
-  /**
-   * TEMPORARY compat shim: while Bootstrap 3's JS bundle still drives
-   * modals, programmatic `.modal('show'/'hide')` calls delegate to it via
-   * the window.jQuery global it requires. This method is deleted together
-   * with the bundle when src/ui/behavior/ owns modals.
-   */
-  modal(action: string): this {
-    const legacy = (window as unknown as {
-      jQuery?: (input: unknown) => { modal: (a: string) => void };
-    }).jQuery;
-    if (!legacy) {
-      throw new Error('.modal() compat shim needs the legacy bootstrap bundle');
-    }
-    this.els.forEach((el) => {
-      if (isElement(el)) legacy(el).modal(action);
-    });
-    return this;
-  }
 }
 
 export function $(input: string | ElementOrDocument | Q | ArrayLike<ElementOrDocument>): Q {

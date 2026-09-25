@@ -1,4 +1,5 @@
 import { $, type Q } from '../lib/q';
+import { openModal, closeModal } from '../ui/behavior/modal';
 import type { NotepadUI } from '../selector';
 import type { UnicodeSymbol } from './types';
 import { showToast } from '../utils';
@@ -616,7 +617,7 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
   }
 
   function close(): void {
-    $modal.modal('hide');
+    closeModal($modal.get(0));
   }
 
   function pushRecent(char: string): void {
@@ -967,7 +968,7 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
   let hasOpenedOnce = false;
 
   function open(): void {
-    $modal.modal('show');
+    openModal($modal.get(0));
     void ensureReady().then(() => {
       // On the first open of a session, land the user on their recently
       // used characters (their most likely intent) when any exist.

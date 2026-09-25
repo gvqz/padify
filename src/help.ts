@@ -1,4 +1,5 @@
 import { $ } from './lib/q';
+import { closeModal, closeAllModals, openModal } from './ui/behavior/modal';
 
 /**
  * Brand menu + Help tour.
@@ -211,7 +212,7 @@ export function initHelp(): void {
 
   nextButton.on('click', () => {
     if (current === steps.length - 1) {
-      helpModal.modal('hide');
+      closeModal(helpModal.get(0));
       return;
     }
     go(1);
@@ -246,15 +247,15 @@ export function initHelp(): void {
   // The About modal links into the tour.
   $('#aboutTourLink').on('click', (event) => {
     event.preventDefault();
-    $('.modal').modal('hide');
-    helpModal.modal('show');
+    closeAllModals();
+    openModal(helpModal.get(0));
   });
 
   // The last tour step links out to the shortcuts list.
   stage.on('click', '#helpShortcutsLink', (event) => {
     event.preventDefault();
-    helpModal.modal('hide');
-    $('#keyboardShortcutsModal').modal('show');
+    closeModal(helpModal.get(0));
+    openModal($('#keyboardShortcutsModal').get(0));
   });
 
   // ---- brand menu -------------------------------------------------------------

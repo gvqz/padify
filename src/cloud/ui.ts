@@ -8,6 +8,7 @@
  */
 
 import { $ } from '../lib/q';
+import { openModal, closeModal } from '../ui/behavior/modal';
 import { showToast } from '../utils';
 import { getCloudConfig } from './config';
 import { getCloudSync, type CloudStatus } from './sync';
@@ -176,9 +177,9 @@ export function initCloudUI(): void {
 
   // Settings → Cloud sync → Manage: leave Settings, open the Cloud modal.
   $('#cloudSettingsManage').on('click', () => {
-    $('#preferencesModal').modal('hide');
+    closeModal($('#preferencesModal').get(0));
     setTimeout(() => {
-      $('#cloudModal').modal('show');
+      openModal($('#cloudModal').get(0));
     }, 200);
   });
 
@@ -258,7 +259,7 @@ export function initCloudUI(): void {
 }
 
 function openCloudModal(): void {
-  $('#cloudModal').modal('show');
+  openModal($('#cloudModal').get(0));
 }
 
 function formatTime(timestamp: number): string {

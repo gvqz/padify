@@ -1,9 +1,5 @@
 /// <reference types="vite/client" />
 
-// Bootstrap 3 ships no TypeScript declarations; it is imported purely for
-// its jQuery plugin side effects (modals, dropdowns, transitions).
-declare module 'bootstrap';
-
 // Document Picture-in-Picture API (behind a feature check at runtime).
 interface DocumentPictureInPictureOptions {
   width?: number;

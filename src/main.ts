@@ -1,10 +1,13 @@
-import './jquery-global';
-import 'bootstrap';
 import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
 
 // All app stylesheets load as ordered <link> tags from index.html (see the
 // note there) — the app's styles stay fully static, no bundler involved.
+//
+// Bootstrap's JS bundle is GONE: its three used behaviors (modal, collapse,
+// tooltip) live in src/ui/behavior/ as owned native-DOM controllers, wired
+// by boot.ts. Only the vendored bootstrap stylesheet remains (a <link> in
+// index.html), pinned by src/architecture.test.ts.
 
 import { storageReady } from './storage';
 import { bootPadify } from './boot';

@@ -1,5 +1,6 @@
 // Snapshots Manager
 import { $ } from './lib/q';
+import { openModal, closeModal } from './ui/behavior/modal';
 import Swal from 'sweetalert2';
 import { getEditorHtml, getEditorText, htmlToText, setEditorHtml } from './tabs';
 import { showToast, updateWordCountPill } from './utils';
@@ -59,7 +60,7 @@ export class SnapshotsManager {
   setupEventListeners(): void {
     // Open snapshots modal
     document.getElementById('snapshotsButton')?.addEventListener('click', () => {
-      $('#snapshotsModal').modal('show');
+      openModal($('#snapshotsModal').get(0));
       this.loadSnapshots();
     });
 
@@ -305,7 +306,7 @@ export class SnapshotsManager {
 
         // Close the modal after a short delay
         setTimeout(() => {
-          $('#snapshotsModal').modal('hide');
+          closeModal($('#snapshotsModal').get(0));
         }, 150);
       }
     };

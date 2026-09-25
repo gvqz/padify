@@ -1,4 +1,5 @@
 import { $ } from './lib/q';
+import { closeModal } from './ui/behavior/modal';
 import Swal from 'sweetalert2';
 import type { AppState, EditorConfig, NotepadUI, StateKey } from './selector';
 import { resetFontSize, resetLineHeight, resetFontWeight, resetShowWordCountPill, resetWriteDirection, resetTexture, resetOptimalLineLength, resetFont, showToast, updateWordCountPill } from './utils';
@@ -428,7 +429,7 @@ export function clearTabIndentation(notepad: NotepadUI): void {
     // for the dialog to be gone before touching the DOM.
     if ($('#preferencesModal').hasClass('in')) {
       $('#preferencesModal').one('hidden.bs.modal', applyEdit);
-      $('#preferencesModal').modal('hide');
+      closeModal($('#preferencesModal').get(0));
     } else {
       applyEdit();
     }

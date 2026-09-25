@@ -8,6 +8,7 @@
  */
 
 import { $ } from '../lib/q';
+import { openModal, closeModal } from '../ui/behavior/modal';
 import Swal from 'sweetalert2';
 import { showToast } from '../utils';
 import { deriveTabTitle, getEditorHtml, getTabManager } from '../tabs';
@@ -38,9 +39,9 @@ export function initShareUI(): void {
   });
 
   $('#shareSignInCta').on('click', () => {
-    $('#shareModal').modal('hide');
+    closeModal($('#shareModal').get(0));
     setTimeout(() => {
-      $('#cloudModal').modal('show');
+      openModal($('#cloudModal').get(0));
     }, 200);
   });
 
@@ -63,7 +64,7 @@ export function initShareUI(): void {
 }
 
 function openShareModal(): void {
-  $('#shareModal').modal('show');
+  openModal($('#shareModal').get(0));
 }
 
 // ---- panes -----------------------------------------------------------------

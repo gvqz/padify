@@ -31,6 +31,7 @@ import { initShareUI } from './cloud/share-ui';
 import { initVoiceTyping, toggleVoiceTyping, handleTabSwitchedWhileListening } from './voice';
 import { initTypingEffects } from './typing-effects';
 import { initPipWindow } from './pip-window';
+import { openModal, closeAllModals } from './ui/behavior/modal';
 import { initSaveIndicator } from './save-indicator';
 import { initTabRailDrawer } from './tab-rail-drawer';
 import { initThemeController } from './theme-controller';
@@ -194,17 +195,6 @@ export async function initApp(): Promise<void> {
         notepad.note.trigger('input');
       }
     }
-  });
-
-  // Bootstrap's tooltip plugin still owns the toolbar tooltips; it is
-  // replaced by the owned tooltip controller when the bundle is dropped.
-  const legacyJQuery = (
-    window as unknown as {
-      jQuery?: (input: Element[]) => { tooltip: (options: Record<string, unknown>) => void };
-    }
-  ).jQuery;
-  legacyJQuery?.(Array.from(document.querySelectorAll('[data-toggle="tooltip"]'))).tooltip({
-    container: 'body',
   });
 
   // Theme (light / dark / follow device) — see theme-controller.ts.
@@ -379,7 +369,7 @@ export async function initApp(): Promise<void> {
     event = event || (window.event as KeyboardEvent);
 
     if (event.key === 'Escape') {
-      $('.modal').modal('hide');
+      closeAllModals();
       $('#iconDropdown').removeClass('show');
       $('#brandMenu').removeClass('show');
     }
@@ -399,8 +389,8 @@ export async function initApp(): Promise<void> {
 
       if (notepad.preferencesModal.hasClass('in')) return;
 
-      $('.modal').modal('hide');
-      notepad.preferencesModal.modal('show');
+      closeAllModals();
+      openModal(notepad.preferencesModal.get(0));
     }
 
     if ((event.ctrlKey || event.metaKey) && event.code === 'KeyK') {
@@ -408,8 +398,8 @@ export async function initApp(): Promise<void> {
 
       if (notepad.keyboardShortcutsModal.hasClass('in')) return;
 
-      $('.modal').modal('hide');
-      notepad.keyboardShortcutsModal.modal('show');
+      closeAllModals();
+      openModal(notepad.keyboardShortcutsModal.get(0));
     }
 
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyO') {

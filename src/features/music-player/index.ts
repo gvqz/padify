@@ -29,6 +29,7 @@
  */
 
 import { $ } from '../../lib/q';
+import { openModal, closeModal } from '../../ui/behavior/modal';
 import Swal from 'sweetalert2';
 import type { SweetAlertResult } from 'sweetalert2';
 import { showToast } from '../../utils';
@@ -1864,7 +1865,7 @@ class MusicPlayerApp {
       await this.loadSpotifyProfile();
       if (returning && result?.ok) {
         this.switchView('music');
-        $('#musicPlayerModal').modal('show');
+        openModal($('#musicPlayerModal').get(0));
         showToast('Spotify connected.');
       }
     } else {
@@ -3152,7 +3153,7 @@ class MusicPlayerApp {
 
     // ---- Mini player ----
     byId('mpMiniOpen').addEventListener('click', () => {
-      $('#musicPlayerModal').modal('show');
+      openModal($('#musicPlayerModal').get(0));
     });
     this.miniPlay.addEventListener('click', () => this.togglePlay());
     byId('mpMiniNext').addEventListener('click', () => this.next());
@@ -3270,10 +3271,10 @@ export const musicPlayerAPI: {
   prev(): void;
 } = {
   open: () => {
-    $('#musicPlayerModal').modal('show');
+    openModal($('#musicPlayerModal').get(0));
   },
   close: () => {
-    $('#musicPlayerModal').modal('hide');
+    closeModal($('#musicPlayerModal').get(0));
   },
   togglePlay: () => player?.togglePlay(),
   next: () => player?.next(),

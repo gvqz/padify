@@ -1,4 +1,5 @@
 import { $ } from './lib/q';
+import { closeModal } from './ui/behavior/modal';
 import { showToast } from './utils';
 import { stateGet, stateSet } from './storage';
 
@@ -206,7 +207,7 @@ export function initTimer(): void {
   $(document).on('click', '.timer-preset', function (this: HTMLElement) {
     const minutes = $(this).data('minutes') as number;
     startTimer(minutes);
-    $('#timerModal').modal('hide');
+    closeModal($('#timerModal').get(0));
     showToast(`Session started — ${minutes} minutes. Keep writing!`);
   });
 
@@ -216,7 +217,7 @@ export function initTimer(): void {
     $('#timerCustomMinutes').val(minutes);
     stateSet(LAST_CUSTOM_DURATION_KEY, String(minutes));
     startTimer(minutes);
-    $('#timerModal').modal('hide');
+    closeModal($('#timerModal').get(0));
     showToast(`Session started — ${minutes} minutes. Keep writing!`);
   });
 

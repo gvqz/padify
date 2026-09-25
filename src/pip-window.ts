@@ -1,3 +1,4 @@
+import { $ } from './lib/q';
 import { showToast, saveTextAsFile, getFileName } from './utils';
 import { getEditorText } from './tabs';
 import { isListening, stopVoiceTyping } from './voice';
