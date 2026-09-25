@@ -28,7 +28,7 @@
  *   padify-spotify-*     the OAuth session (src/spotify/auth.ts)
  */
 
-import $ from 'jquery';
+import { $ } from '../../lib/q';
 import Swal from 'sweetalert2';
 import type { SweetAlertResult } from 'sweetalert2';
 import { showToast } from '../../utils';
@@ -62,12 +62,6 @@ import type {
 } from './spotify/api';
 import { SpotifySdkController } from './spotify/sdk';
 import type { WebPlaybackPlayerState } from './spotify/sdk';
-
-declare global {
-  interface JQuery {
-    modal(action: string | { [key: string]: unknown }): JQuery;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Types & constants
@@ -3179,7 +3173,7 @@ class MusicPlayerApp {
       });
 
     // Arrow-key seeking inside the modal (not on form controls).
-    $(this.root).on('keydown', (event: JQuery.KeyDownEvent<HTMLElement>) => {
+    $(this.root).on('keydown', (event) => {
       const key = event.key;
       if (key !== 'ArrowLeft' && key !== 'ArrowRight') return;
       const target = event.target as HTMLElement;
