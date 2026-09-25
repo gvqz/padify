@@ -384,7 +384,13 @@ body.dark .stat-value {
 
 .brand-menu-wrap {
   position: relative;
-  display: inline-block;
+  /* The wrapper must be a float, not an inline-block. The header row's
+     geometry relies on the Bootstrap mechanism: the wordmark floats left
+     and the flex `.icon-container` box sits beside it on the same 50px
+     line. An inline-block wrapper would contain the floated brand and
+     become an in-flow 50px block, pushing the icon row (and the whole
+     navbar) onto a second line. */
+  float: left;
 }
 
 #brandMenu {

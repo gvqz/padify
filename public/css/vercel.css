@@ -3031,11 +3031,11 @@ body.marble-paper {
 #editorShell {
   display: flex;
   align-items: stretch;
-  /* 101px = the fixed navbar's painted height (body padding-top — see
+  /* 50px = the fixed navbar's painted height (body padding-top — see
      base.css). Filling exactly the remaining viewport keeps the page
      unscrollable, so focus-scrolling can never slide the note under
      the navbar. */
-  height: calc(100vh - 101px);
+  height: calc(100vh - 50px);
   min-height: 320px;
 }
 

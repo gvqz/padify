@@ -22,12 +22,12 @@
 }
 
 body {
-  /* The fixed navbar paints ~101px tall at every viewport: a 50px brand
-     row plus the 50px action row under it (on phones the icon toolbar
-     stays visible and only the collapse menu hides). Padding has to
-     clear the whole bar or the first lines of every note sit behind it.
+  /* The fixed navbar is a single 50px row (plus 1px border) at every
+     viewport: the wordmark and the icon toolbar share the header line and
+     only the collapse menu hides on phones. Padding has to clear the whole
+     bar or the first lines of every note sit behind it.
      Picture-in-Picture host windows zero this out separately. */
-  padding-top: 101px;
+  padding-top: 50px;
   background-color: var(--dough-white);
 }
 
