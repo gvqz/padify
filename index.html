@@ -12,12 +12,15 @@
     <meta name="keywords" content="padify,note,offline,mobile,web,notepad,android,ios,desktop" />
     <meta name="application-name" content="Padify" />
     <!--
-      Stylesheets, in strict cascade order: the vendored Bootstrap fork,
-      then the app areas split out of the old monolithic style.css
-      (base -> editor -> navbar -> components -> timer -> effects ->
-      switches -> animations -> fonts), then the feature stylesheets and
-      the vercel design system last — mirroring the pre-split order.
+      Stylesheets, in strict cascade order: tokens.css (design tokens,
+      loaded first so every later file can consume them), the vendored
+      Bootstrap fork, then the app areas split out of the old monolithic
+      style.css (base -> editor -> navbar -> components -> timer ->
+      effects -> switches -> animations -> fonts), then the feature
+      stylesheets and the vercel design system last — mirroring the
+      pre-split order.
     -->
+    <link href="/css/tokens.css" rel="stylesheet" />
     <link href="/css/bootstrap.min.css" rel="stylesheet" />
     <link href="/css/base.css" rel="stylesheet" />
     <link href="/css/editor.css" rel="stylesheet" />

@@ -27,7 +27,7 @@ body {
      only the collapse menu hides on phones. Padding has to clear the whole
      bar or the first lines of every note sit behind it.
      Picture-in-Picture host windows zero this out separately. */
-  padding-top: 50px;
+  padding-top: var(--navbar-h);
   background-color: var(--dough-white);
 }
 
