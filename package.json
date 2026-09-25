@@ -15,7 +15,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "gen:unicode": "node scripts/gen-unicode-data.mjs"
+    "gen:unicode": "node scripts/gen-unicode-data.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "bootstrap": "3.4.1",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "@types/jquery": "^3.5.32",
     "eslint": "^10.11.0",
     "eslint-config-prettier": "^10.1.8",

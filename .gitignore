@@ -14,3 +14,8 @@ worklog.md
 
 # music smoke-test databases
 server/local-*.db*
+
+# playwright artifacts
+test-results/
+playwright-report/
+vite.log
