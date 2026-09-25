@@ -28,7 +28,7 @@
  * editor surface only ever contains the formatting the app itself produces.
  */
 
-import $ from 'jquery';
+import { $, type Q } from './lib/q';
 import Swal from 'sweetalert2';
 import { showToast } from './utils';
 import {
@@ -280,14 +280,14 @@ function createTab(html: string = '', name: string | null = null): NoteTab {
 export class TabManager {
   private tabs: NoteTab[] = [];
   private activeId: string | null = null;
-  private readonly editor: JQuery;
-  private readonly strip: JQuery;
+  private readonly editor: Q;
+  private readonly strip: Q;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private tombstones: TabTombstone[] = [];
   private dirtyIds: Set<string> = new Set();
   private persistListeners: Set<(payload: TabsSyncPayload) => void> = new Set();
 
-  constructor(editor: JQuery) {
+  constructor(editor: Q) {
     this.editor = editor;
     this.strip = $('#tabStripTabs');
   }
@@ -490,7 +490,7 @@ export class TabManager {
       return;
     }
 
-    const html = this.editor.html() ?? '';
+    const html = this.editor.html();
     if (html === active.html) {
       return;
     }
@@ -509,7 +509,7 @@ export class TabManager {
       return;
     }
 
-    active.html = this.editor.html() ?? '';
+    active.html = this.editor.html();
     active.updatedAt = Date.now();
     this.dirtyIds.add(active.id);
     this.persist();
@@ -550,12 +550,13 @@ export class TabManager {
   // ---- strip rendering --------------------------------------------------------
 
   private renderStrip(): void {
-    const stripElement = this.strip.get(0);
+    const stripElement = this.strip.get(0) as HTMLElement | undefined;
     if (!stripElement) {
       return;
     }
 
-    // Rebuild without jQuery empty() so event handlers die with the nodes.
+    // Rebuild by clearing the node directly so event handlers die with the
+    // children (no retained listeners on surviving parents).
     stripElement.textContent = '';
 
     this.tabs.forEach((tab) => {
@@ -836,10 +837,9 @@ export class TabManager {
   }
 
   private scrollTabIntoView(tabId: string): void {
-    this.strip
-      .find(`.tab-strip-tab[data-tab-id="${tabId}"]`)
-      .get(0)
-      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    (
+      this.strip.find(`.tab-strip-tab[data-tab-id="${tabId}"]`).get(0) as HTMLElement | undefined
+    )?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
   private setActiveClass(): void {

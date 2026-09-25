@@ -89,9 +89,7 @@ export async function initApp(): Promise<void> {
 
   // Note tabs — multiple notes inside the one editor, shown as a rail
   // on the left of the page (see tabs.ts).
-  // (cast interim: tabs.ts migrates off jQuery in its own batch — the cast
-  // is removed the moment TabManager takes a Q editor)
-  const tabManager = new TabManager(notepad.note as unknown as JQuery<HTMLElement>);
+  const tabManager = new TabManager(notepad.note);
   setTabManager(tabManager);
 
   // The editor seam — every reader/writer of the note surface goes through

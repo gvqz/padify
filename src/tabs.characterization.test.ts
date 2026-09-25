@@ -13,7 +13,7 @@
  */
 import 'fake-indexeddb/auto';
 import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import $ from 'jquery';
+import { $ } from './lib/q';
 
 import {
   deriveTabTitle,
@@ -459,8 +459,7 @@ describe('TabManager (characterization)', () => {
     const tabId = manager.getActive()!.id;
 
     manager.switchTo(tabId, false); // ensure active strip element exists
-    // The strip binds NATIVE listeners, so dispatch a real bubbling event
-    // (jQuery .trigger only runs jQuery-bound handlers).
+    // The strip binds NATIVE listeners, so dispatch a real bubbling event.
     $(`#tabStripTabs .tab-strip-tab[data-tab-id="${tabId}"]`)
       .get(0)!
       .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
@@ -469,7 +468,7 @@ describe('TabManager (characterization)', () => {
     expect(input).toHaveLength(1);
 
     input.val('My recipe');
-    input.trigger($.Event('keydown', { key: 'Enter' }));
+    input.get(0)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
     expect(manager.getActive()!.name).toBe('My recipe');
     expect($(`#tabStripTabs .tab-strip-tab[data-tab-id="${tabId}"] .tab-strip-title`).text()).toBe(
