@@ -1,5 +1,6 @@
 import $ from 'jquery';
 import { stateGet, stateSet, stateRemove } from './storage';
+import { DEFAULT_EDITOR_CONFIG, getSetting, isSettingKey, removeSetting, setSetting } from './state/settings';
 
 export type StateKey = string;
 
@@ -40,6 +41,11 @@ export interface NotepadUI {
 }
 
 export interface AppState {
+  /**
+   * A SNAPSHOT taken when selector() runs — values go stale as settings
+   * change. New code should read through src/state/settings.ts instead;
+   * this shape stays for the legacy consumers that destructure it once.
+   */
   note: string | null;
   mode: string | null;
   isUserPreferredTheme: string | null;
@@ -95,16 +101,28 @@ export interface AppSelector {
 
 // Settings persist through the storage layer (IndexedDB + localStorage
 // compatibility mirror — see src/storage/). Signatures are intentionally
-// identical to the localStorage API.
+// identical to the localStorage API. Writes and clears route through
+// src/state/settings.ts — the typed choke point that also owns the key
+// list, the editor defaults and change notifications — so every legacy
+// setState caller gains change notifications for free. Reads stay direct
+// (they have no side effects to unify).
 export function getState(state: StateKey): string | null {
-  return stateGet(state);
+  return isSettingKey(state) ? getSetting(state) : stateGet(state);
 }
 
 export function setState(state: StateKey, value: string): void {
+  if (isSettingKey(state)) {
+    setSetting(state, value);
+    return;
+  }
   stateSet(state, value);
 }
 
 export function removeState(state: StateKey): void {
+  if (isSettingKey(state)) {
+    removeSetting(state);
+    return;
+  }
   stateRemove(state);
 }
 
@@ -183,22 +201,7 @@ export function selector(): AppSelector {
       userChosenExplodingEffect: getState('userChosenExplodingEffect'),
       selectedFont: getState('selectedFont'),
     },
-    defaultConfig: {
-      defaultFontSize: 18,
-      defaultLineHeight: 26,
-      defaultFont: 'default',
-      defaultFontWeight: 'normal',
-      defaultShowWordCountPill: 'Yes',
-      defaultWriteDirection: 'ltr',
-      defaultTexture: 'normal',
-      defaultOptimalLineLength: false,
-      defaultOptimalLineLengthPadding: '15px 24px 80px',
-      defaultSpellCheck: true,
-      defaultTypewriterSound: false,
-      defaultTypewriterVolume: 25,
-      defaultBreakReminders: false,
-      defaultExplodingEffect: false,
-    },
+    defaultConfig: DEFAULT_EDITOR_CONFIG,
     get,
     getState,
     setState,
