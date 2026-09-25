@@ -17,6 +17,7 @@
 
 import $ from 'jquery';
 import { showToast } from './utils';
+import { getEditorPort } from './editor/port';
 
 // ---------------------------------------------------------------------------
 // Minimal typings for the Web Speech API (not in the default DOM lib)
@@ -155,7 +156,12 @@ function insertDictation(text: string): void {
 
   // Trailing space keeps consecutive dictation bursts (and hand typing after
   // a burst) from gluing words together.
-  document.execCommand('insertText', false, `${insertText} `);
+  const port = getEditorPort();
+  if (port) {
+    port.insertText(`${insertText} `);
+  } else {
+    document.execCommand('insertText', false, `${insertText} `);
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@ import $ from 'jquery';
 import type { NotepadUI } from '../selector';
 import type { UnicodeSymbol } from './types';
 import { showToast } from '../utils';
+import { getEditorPort } from '../editor/port';
 import { stateGet, stateSet } from '../storage';
 
 export interface UnicodePickerHandle {
@@ -586,7 +587,10 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
     }
 
     let inserted = false;
-    if (typeof document.execCommand === 'function') {
+    const port = getEditorPort();
+    if (port) {
+      inserted = port.insertText(symbol.char);
+    } else if (typeof document.execCommand === 'function') {
       inserted = document.execCommand('insertText', false, symbol.char);
     }
     if (!inserted && selection && selection.rangeCount > 0) {

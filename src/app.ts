@@ -20,7 +20,10 @@ import {
 } from './utils';
 import { initUnicodePicker } from './unicode/picker';
 import { TabManager, setTabManager, getEditorText, getEditorHtml, sanitizeNoteHtml } from './tabs';
-import { setEditorPort } from './editor/port';
+import {
+  setEditorPort,
+  getEditorPort,
+} from './editor/port';
 import { ContentEditablePort } from './editor/contenteditable-port';
 import { initMusicPlayer } from './music-player';
 import { storageReady } from './storage';
@@ -185,7 +188,8 @@ $(document).ready(async function () {
       return;
     }
 
-    if (!document.execCommand('insertText', false, text)) {
+    const port = getEditorPort();
+    if (!(port ? port.insertText(text) : document.execCommand('insertText', false, text))) {
       // Fallback: splice a text node into the current range.
       const selection = window.getSelection();
       if (selection && selection.rangeCount > 0) {
@@ -251,7 +255,12 @@ $(document).ready(async function () {
 
       if (!selection || selection.rangeCount === 0 || selectedText.indexOf('\n') === -1) {
         // Single caret/selection (no line spans): insert a tab.
-        document.execCommand('insertText', false, tabCharacter);
+        const port = getEditorPort();
+        if (port) {
+          port.insertText(tabCharacter);
+        } else {
+          document.execCommand('insertText', false, tabCharacter);
+        }
         return;
       }
 
