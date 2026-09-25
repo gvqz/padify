@@ -26,11 +26,7 @@
 
 import { showToast } from './utils';
 import { CASES } from './case-conversions';
-import {
-  getEditorPort,
-  type EditorCommand,
-  type FormatCommand,
-} from './editor/port';
+import { getEditorPort, type EditorCommand, type FormatCommand } from './editor/port';
 
 interface FormatDef {
   id: 'bold' | 'italic' | 'underline' | 'strike';
@@ -170,8 +166,6 @@ const menuMarkup = `
         </button>
     </div>
 </div>`;
-
-document.body.insertAdjacentHTML('beforeend', menuMarkup);
 
 // ---------------------------------------------------------------------------
 // Controller
@@ -1011,8 +1005,6 @@ class ContextMenu {
   }
 }
 
-new ContextMenu();
-
 // E2E probe.
 interface CtxDebugWindow {
   __padifyContextMenu?: { cases: string[]; formats: string[] };
@@ -1021,3 +1013,12 @@ interface CtxDebugWindow {
   cases: CASES.map((entry) => entry.id),
   formats: FORMATS.map((entry) => entry.id),
 };
+
+/**
+ * Mounts the context menu markup and constructs it. Called by boot.ts; the
+ * two statements used to run at module evaluation.
+ */
+export function initContextMenu(): void {
+  document.body.insertAdjacentHTML('beforeend', menuMarkup);
+  new ContextMenu();
+}

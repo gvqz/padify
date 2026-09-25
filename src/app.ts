@@ -20,10 +20,7 @@ import {
 } from './utils';
 import { initUnicodePicker } from './unicode/picker';
 import { TabManager, setTabManager, getEditorText, getEditorHtml, sanitizeNoteHtml } from './tabs';
-import {
-  setEditorPort,
-  getEditorPort,
-} from './editor/port';
+import { setEditorPort, getEditorPort } from './editor/port';
 import { ContentEditablePort } from './editor/contenteditable-port';
 import { initMusicPlayer } from './music-player';
 import { storageReady } from './storage';
@@ -60,9 +57,14 @@ declare global {
 // save-indicator, tab-rail-drawer, theme-controller, editor-preferences
 // and install-pwa.
 
-$(document).ready(async function () {
-  // Storage hydrates from IndexedDB before any state is read (boot started
-  // at module evaluation in main.ts — this await is usually instant).
+/**
+ * Boots the app shell. Called by boot.ts (the composition root) once the
+ * DOM is ready — this used to be a $(document).ready callback before the
+ * boot sequence became explicit.
+ */
+export async function initApp(): Promise<void> {
+  // Storage hydrates from IndexedDB before any state is read (hydration is
+  // kicked at module evaluation in main.ts — this await is usually instant).
   await storageReady();
 
   const darkmodeText = 'Enable dark mode [Ctrl/Cmd + M]';
@@ -457,4 +459,4 @@ $(document).ready(async function () {
 
   registerServiceWorker();
   initInstallPrompt();
-});
+}

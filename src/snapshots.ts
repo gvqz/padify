@@ -504,13 +504,17 @@ export class SnapshotsManager {
   }
 }
 
-// Initialize the snapshots manager when the DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
+/**
+ * Wires the snapshots feature: constructs the manager when the snapshots
+ * button exists and exposes the window.createSnapshot hook. Called by
+ * boot.ts; used to register itself on DOMContentLoaded.
+ */
+export function initSnapshots(): void {
   // Only initialize if the snapshots button exists
   if (document.getElementById('snapshotsButton')) {
     window.snapshotsManager = new SnapshotsManager();
   }
-});
+}
 
 // Add a global function to create a snapshot (can be called from other parts of the app)
 window.createSnapshot = function (title?: string): void {

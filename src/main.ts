@@ -7,6 +7,7 @@ import 'sweetalert2/dist/sweetalert2.min.css';
 // note there) — the app's styles stay fully static, no bundler involved.
 
 import { storageReady } from './storage';
+import { bootPadify } from './boot';
 
 // Kick the IndexedDB open + hydration at module evaluation — the earliest
 // possible moment — so it overlaps bundle evaluation and DOM parsing. Every
@@ -14,13 +15,9 @@ import { storageReady } from './storage';
 // reading any state, and app.ts constructs the music player only after.
 void storageReady();
 
-import './app';
-import './help';
-import './snapshots';
-import './timer';
-import './white-noise-player';
-import './music-player';
-import './context-menu';
+// Everything else starts through the composition root — boot.ts owns the
+// startup sequence. No feature module may self-initialize on import.
+void bootPadify();
 
 // Expose Swal for any legacy code paths that still reference the global.
 (window as unknown as { Swal: typeof Swal }).Swal = Swal;

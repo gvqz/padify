@@ -156,10 +156,14 @@ const timerModalHtml = `
     </div>
 `;
 
-// Add timer HTML to the DOM
-$(document.body).append(timerModalHtml);
-
-$(document).ready(function () {
+/**
+ * Mounts the writing-session modal and wires the timer UI. Called by
+ * boot.ts; these statements used to run at module evaluation / inside a
+ * $(document).ready callback.
+ */
+export function initTimer(): void {
+  // Add timer HTML to the DOM
+  $(document.body).append(timerModalHtml);
   if (stateGet('timerChime') && stateGet('timerChime') == 'true') {
     $('#timerChime').prop('checked', true);
   }
@@ -198,7 +202,55 @@ $(document).ready(function () {
   $('#timerModal').on('show.bs.modal', function () {
     refreshTimerViews();
   });
-});
+
+  $(document).on('click', '.timer-preset', function (this: HTMLElement) {
+    const minutes = $(this).data('minutes') as number;
+    startTimer(minutes);
+    $('#timerModal').modal('hide');
+    showToast(`Session started — ${minutes} minutes. Keep writing!`);
+  });
+
+  $(document).on('click', '#timerStartBtn', function () {
+    const rawValue = Number(($('#timerCustomMinutes').val() as string | number | undefined) ?? 25);
+    const minutes = clampCustomMinutes(rawValue);
+    $('#timerCustomMinutes').val(minutes);
+    stateSet(LAST_CUSTOM_DURATION_KEY, String(minutes));
+    startTimer(minutes);
+    $('#timerModal').modal('hide');
+    showToast(`Session started — ${minutes} minutes. Keep writing!`);
+  });
+
+  $(document).on('click', '#timerMinusBtn', function () {
+    const next = clampCustomMinutes(Number($('#timerCustomMinutes').val()) - 5);
+    $('#timerCustomMinutes').val(next);
+  });
+
+  $(document).on('click', '#timerPlusBtn', function () {
+    const next = clampCustomMinutes(Number($('#timerCustomMinutes').val()) + 5);
+    $('#timerCustomMinutes').val(next);
+  });
+
+  $(document).on('click', '#timerAddFiveBtn', function () {
+    addFiveMinutes();
+  });
+
+  $(document).on('click', '#timerStopBtn', function () {
+    stopTimer();
+    showToast('Session stopped.');
+  });
+
+  $(document).on('click', '#stopTimer', function () {
+    stopTimer();
+  });
+
+  // Refresh immediately when returning to the tab. Browsers may pause or
+  // heavily throttle interval callbacks while a page is hidden.
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && timerConfig.isRunning) {
+      updateTimer();
+    }
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Chime helpers
@@ -357,52 +409,3 @@ function clampCustomMinutes(value: number): number {
   }
   return Math.min(CUSTOM_MAX_MINUTES, Math.max(CUSTOM_MIN_MINUTES, Math.round(value)));
 }
-
-// Event listeners
-$(document).on('click', '.timer-preset', function (this: HTMLElement) {
-  const minutes = $(this).data('minutes') as number;
-  startTimer(minutes);
-  $('#timerModal').modal('hide');
-  showToast(`Session started — ${minutes} minutes. Keep writing!`);
-});
-
-$(document).on('click', '#timerStartBtn', function () {
-  const rawValue = Number(($('#timerCustomMinutes').val() as string | number | undefined) ?? 25);
-  const minutes = clampCustomMinutes(rawValue);
-  $('#timerCustomMinutes').val(minutes);
-  stateSet(LAST_CUSTOM_DURATION_KEY, String(minutes));
-  startTimer(minutes);
-  $('#timerModal').modal('hide');
-  showToast(`Session started — ${minutes} minutes. Keep writing!`);
-});
-
-$(document).on('click', '#timerMinusBtn', function () {
-  const next = clampCustomMinutes(Number($('#timerCustomMinutes').val()) - 5);
-  $('#timerCustomMinutes').val(next);
-});
-
-$(document).on('click', '#timerPlusBtn', function () {
-  const next = clampCustomMinutes(Number($('#timerCustomMinutes').val()) + 5);
-  $('#timerCustomMinutes').val(next);
-});
-
-$(document).on('click', '#timerAddFiveBtn', function () {
-  addFiveMinutes();
-});
-
-$(document).on('click', '#timerStopBtn', function () {
-  stopTimer();
-  showToast('Session stopped.');
-});
-
-$(document).on('click', '#stopTimer', function () {
-  stopTimer();
-});
-
-// Refresh immediately when returning to the tab. Browsers may pause or
-// heavily throttle interval callbacks while a page is hidden.
-document.addEventListener('visibilitychange', function () {
-  if (!document.hidden && timerConfig.isRunning) {
-    updateTimer();
-  }
-});

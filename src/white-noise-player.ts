@@ -715,9 +715,12 @@ export class WhiteNoisePlayer {
   }
 }
 
-// Initialize the player when the document is ready — after the storage
-// layer hydrated, since the constructor loads the persisted presets.
-$(document).ready(async () => {
+/**
+ * Constructs the ambience player after storage hydration (its constructor
+ * loads persisted presets). Called by boot.ts; used to be a
+ * $(document).ready callback.
+ */
+export async function initWhiteNoisePlayer(): Promise<void> {
   await storageReady();
   window.whiteNoisePlayer = new WhiteNoisePlayer();
 
@@ -764,4 +767,4 @@ $(document).ready(async () => {
     });
     stopButton.style.display = 'none';
   }
-});
+}

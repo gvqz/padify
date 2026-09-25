@@ -137,144 +137,152 @@ const MODAL_MARKUP = `
   </div>
 </div>`;
 
-$('body').append(MODAL_MARKUP);
+/**
+ * Mounts the Help/About modal markup and wires the tour, the shortcuts
+ * entry points and the brand (wordmark) menu. Called by boot.ts; these
+ * statements used to run at module evaluation.
+ */
+export function initHelp(): void {
+  $('body').append(MODAL_MARKUP);
 
-const helpModal = $('#helpModal');
-const stage = $('#helpStage');
-const dots = $('#helpDots');
-const counter = $('#helpStepCounter');
-const prevButton = $('#helpPrev');
-const nextButton = $('#helpNext');
-let current = 0;
+  const helpModal = $('#helpModal');
+  const stage = $('#helpStage');
+  const dots = $('#helpDots');
+  const counter = $('#helpStepCounter');
+  const prevButton = $('#helpPrev');
+  const nextButton = $('#helpNext');
+  let current = 0;
 
-dots.html(
-  steps
-    .map(
-      (step, index) =>
-        `<button type="button" class="help-dot" data-i="${index}" aria-label="Step ${index + 1}: ${step.title}"></button>`,
-    )
-    .join(''),
-);
+  dots.html(
+    steps
+      .map(
+        (step, index) =>
+          `<button type="button" class="help-dot" data-i="${index}" aria-label="Step ${index + 1}: ${step.title}"></button>`,
+      )
+      .join(''),
+  );
 
-function hintsMarkup(hints: HelpHint[]): string {
-  if (hints.length === 0) return '';
-  const chips = hints
-    .map(
-      (hint) => `<span class="help-hint"><kbd>${hint.keys}</kbd><span>${hint.label}</span></span>`,
-    )
-    .join('');
-  return `<div class="help-hints">${chips}</div>`;
-}
+  function hintsMarkup(hints: HelpHint[]): string {
+    if (hints.length === 0) return '';
+    const chips = hints
+      .map(
+        (hint) =>
+          `<span class="help-hint"><kbd>${hint.keys}</kbd><span>${hint.label}</span></span>`,
+      )
+      .join('');
+    return `<div class="help-hints">${chips}</div>`;
+  }
 
-function stepMarkup(step: HelpStep, isLast: boolean): string {
-  const more = isLast
-    ? '<a href="#keyboard-shortcuts" class="help-more" id="helpShortcutsLink">Browse all keyboard shortcuts</a>'
-    : '';
-  return `<div class="help-step" data-accent="${step.accent}">
+  function stepMarkup(step: HelpStep, isLast: boolean): string {
+    const more = isLast
+      ? '<a href="#keyboard-shortcuts" class="help-more" id="helpShortcutsLink">Browse all keyboard shortcuts</a>'
+      : '';
+    return `<div class="help-step" data-accent="${step.accent}">
   <span class="help-icon">${step.icon}</span>
   <h3 class="help-title">${step.title}</h3>
   <p class="help-text">${step.text}</p>
   ${hintsMarkup(step.hints)}
   ${more}
 </div>`;
-}
-
-function render(index: number, direction: 1 | -1): void {
-  current = index;
-  const isLast = index === steps.length - 1;
-  stage.attr('data-direction', direction > 0 ? 'forward' : 'backward');
-  stage.html(stepMarkup(steps[index], isLast));
-  dots.children().removeClass('active');
-  dots.children().eq(index).addClass('active');
-  counter.text(`${index + 1} / ${steps.length}`);
-  prevButton.prop('disabled', index === 0);
-  nextButton.text(isLast ? 'Get started' : 'Next');
-}
-
-function go(direction: 1 | -1): void {
-  const target = current + direction;
-  if (target < 0 || target >= steps.length) return;
-  render(target, direction);
-}
-
-// Every open starts the tour from the beginning.
-helpModal.on('show.bs.modal', () => render(0, 1));
-
-prevButton.on('click', () => go(-1));
-
-nextButton.on('click', () => {
-  if (current === steps.length - 1) {
-    helpModal.modal('hide');
-    return;
   }
-  go(1);
-});
 
-dots.on('click', '.help-dot', (event) => {
-  const index = Number($(event.currentTarget).data('i'));
-  if (Number.isNaN(index)) return;
-  render(index, index > current ? 1 : -1);
-});
-
-// Arrow keys navigate the tour while the modal is open. Guard against
-// keypresses landing in editable surfaces (should not happen behind the
-// backdrop, but it is cheap to be safe).
-$(document).on('keydown', (event) => {
-  if (!helpModal.hasClass('in')) return;
-  const target = event.target as unknown as HTMLElement | null;
-  const tag = target?.tagName ?? '';
-  if (target?.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
-    return;
+  function render(index: number, direction: 1 | -1): void {
+    current = index;
+    const isLast = index === steps.length - 1;
+    stage.attr('data-direction', direction > 0 ? 'forward' : 'backward');
+    stage.html(stepMarkup(steps[index], isLast));
+    dots.children().removeClass('active');
+    dots.children().eq(index).addClass('active');
+    counter.text(`${index + 1} / ${steps.length}`);
+    prevButton.prop('disabled', index === 0);
+    nextButton.text(isLast ? 'Get started' : 'Next');
   }
-  if (event.key === 'ArrowRight') {
+
+  function go(direction: 1 | -1): void {
+    const target = current + direction;
+    if (target < 0 || target >= steps.length) return;
+    render(target, direction);
+  }
+
+  // Every open starts the tour from the beginning.
+  helpModal.on('show.bs.modal', () => render(0, 1));
+
+  prevButton.on('click', () => go(-1));
+
+  nextButton.on('click', () => {
+    if (current === steps.length - 1) {
+      helpModal.modal('hide');
+      return;
+    }
     go(1);
-  } else if (event.key === 'ArrowLeft') {
-    go(-1);
-  } else {
-    return;
+  });
+
+  dots.on('click', '.help-dot', (event) => {
+    const index = Number($(event.currentTarget).data('i'));
+    if (Number.isNaN(index)) return;
+    render(index, index > current ? 1 : -1);
+  });
+
+  // Arrow keys navigate the tour while the modal is open. Guard against
+  // keypresses landing in editable surfaces (should not happen behind the
+  // backdrop, but it is cheap to be safe).
+  $(document).on('keydown', (event) => {
+    if (!helpModal.hasClass('in')) return;
+    const target = event.target as unknown as HTMLElement | null;
+    const tag = target?.tagName ?? '';
+    if (target?.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+      return;
+    }
+    if (event.key === 'ArrowRight') {
+      go(1);
+    } else if (event.key === 'ArrowLeft') {
+      go(-1);
+    } else {
+      return;
+    }
+    event.preventDefault();
+  });
+
+  // The About modal links into the tour.
+  $('#aboutTourLink').on('click', (event) => {
+    event.preventDefault();
+    $('.modal').modal('hide');
+    helpModal.modal('show');
+  });
+
+  // The last tour step links out to the shortcuts list.
+  stage.on('click', '#helpShortcutsLink', (event) => {
+    event.preventDefault();
+    helpModal.modal('hide');
+    $('#keyboardShortcutsModal').modal('show');
+  });
+
+  // ---- brand menu -------------------------------------------------------------
+
+  const menu = $('#brandMenu');
+  const brandButton = $('#brandMenuButton');
+
+  function closeBrandMenu(): void {
+    menu.removeClass('show');
+    brandButton.attr('aria-expanded', 'false');
   }
-  event.preventDefault();
-});
 
-// The About modal links into the tour.
-$('#aboutTourLink').on('click', (event) => {
-  event.preventDefault();
-  $('.modal').modal('hide');
-  helpModal.modal('show');
-});
+  brandButton.on('click', (event) => {
+    event.stopPropagation();
+    const open = menu.toggleClass('show').hasClass('show');
+    brandButton.attr('aria-expanded', open ? 'true' : 'false');
+  });
 
-// The last tour step links out to the shortcuts list.
-stage.on('click', '#helpShortcutsLink', (event) => {
-  event.preventDefault();
-  helpModal.modal('hide');
-  $('#keyboardShortcutsModal').modal('show');
-});
+  // The three entries open their modals through Bootstrap's delegated
+  // click.bs.modal.data-api handler on the document, so the click must keep
+  // bubbling — only close the menu (the document-level close handler re-runs
+  // this, which is harmless).
+  menu.on('click', 'a.brand-menu-item', () => {
+    closeBrandMenu();
+  });
 
-// ---- brand menu -------------------------------------------------------------
-
-const menu = $('#brandMenu');
-const brandButton = $('#brandMenuButton');
-
-function closeBrandMenu(): void {
-  menu.removeClass('show');
-  brandButton.attr('aria-expanded', 'false');
+  $(document).on('click', closeBrandMenu);
+  $(document).on('keydown', (event) => {
+    if (event.key === 'Escape') closeBrandMenu();
+  });
 }
-
-brandButton.on('click', (event) => {
-  event.stopPropagation();
-  const open = menu.toggleClass('show').hasClass('show');
-  brandButton.attr('aria-expanded', open ? 'true' : 'false');
-});
-
-// The three entries open their modals through Bootstrap's delegated
-// click.bs.modal.data-api handler on the document, so the click must keep
-// bubbling — only close the menu (the document-level close handler re-runs
-// this, which is harmless).
-menu.on('click', 'a.brand-menu-item', () => {
-  closeBrandMenu();
-});
-
-$(document).on('click', closeBrandMenu);
-$(document).on('keydown', (event) => {
-  if (event.key === 'Escape') closeBrandMenu();
-});

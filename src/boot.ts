@@ -1,0 +1,61 @@
+/**
+ * Padify boot — the composition root.
+ *
+ * This file is the ONE place that knows which features exist and in what
+ * order they start. main.ts kicks storage hydration at module evaluation
+ * (so IndexedDB opens while the bundle evaluates and the DOM parses), then
+ * calls bootPadify(); everything else hangs off the explicit sequence
+ * below.
+ *
+ * History: boot used to happen as import-order side effects — every module
+ * appended its own markup, bound its own handlers and sometimes registered
+ * $(document).ready callbacks, so the real startup order was an accident
+ * of the import list in main.ts. The explicit sequence replaces that while
+ * preserving the original ordering guarantees:
+ *
+ *   1. feature markup + DOM-only wiring (help, timer, music, snapshots,
+ *      context menu) — everything that needs the DOM but no hydrated state
+ *   2. initApp() — the shell: awaits storageReady(), builds the tab
+ *      manager + editor port, wires cloud/voice/music/tabs/shortcuts
+ *   3. initWhiteNoisePlayer() — the last ready-callback of the old order,
+ *      awaiting storage hydration itself
+ *
+ * The music player's construction stays inside initApp (via
+ * initMusicPlayer) because its constructor reads persisted state and must
+ * run after hydration; mountMusicPlayer only puts its markup in the DOM.
+ */
+
+import { initApp } from './app';
+import { initHelp } from './help';
+import { initSnapshots } from './snapshots';
+import { initTimer } from './timer';
+import { initWhiteNoisePlayer } from './white-noise-player';
+import { mountMusicPlayer } from './music-player';
+import { initContextMenu } from './context-menu';
+
+/** Resolves once the DOM is parsed (module scripts run before that). */
+function domReady(): Promise<void> {
+  if (document.readyState !== 'loading') {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    document.addEventListener('DOMContentLoaded', () => resolve(), { once: true });
+  });
+}
+
+export async function bootPadify(): Promise<void> {
+  await domReady();
+
+  // 1. Markup + DOM-only feature wiring.
+  initHelp();
+  initTimer();
+  mountMusicPlayer();
+  initSnapshots();
+  initContextMenu();
+
+  // 2. The app shell (tabs, editor port, cloud, voice, music, shortcuts).
+  await initApp();
+
+  // 3. Late features that hydrate their own state.
+  await initWhiteNoisePlayer();
+}

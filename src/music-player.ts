@@ -627,7 +627,13 @@ const miniPlayerHtml = `
     <button type="button" class="mp-mini-close" id="mpMiniClose" title="Stop and hide player" aria-label="Stop and hide player">${ICONS.close}</button>
 </div>`;
 
-$(document.body).append(musicPlayerModalHtml + miniPlayerHtml);
+/**
+ * Mounts the music player + mini player modal markup. Called by boot.ts
+ * before initMusicPlayer(); used to run at module evaluation.
+ */
+export function mountMusicPlayer(): void {
+  $(document.body).append(musicPlayerModalHtml + miniPlayerHtml);
+}
 
 // ---------------------------------------------------------------------------
 // Small helpers
