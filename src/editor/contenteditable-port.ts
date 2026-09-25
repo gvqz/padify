@@ -69,6 +69,47 @@ export class ContentEditablePort implements EditorPort {
     this.element.focus();
   }
 
+  isCaretInside(): boolean {
+    const selection = window.getSelection();
+    return (
+      !!selection &&
+      selection.rangeCount > 0 &&
+      this.element.contains(selection.getRangeAt(0).startContainer)
+    );
+  }
+
+  ensureCaretInside(): boolean {
+    if (this.isCaretInside()) {
+      return true;
+    }
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(this.element);
+    range.collapse(false); // end of the note
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    return this.isCaretInside();
+  }
+
+  charBeforeCaret(): string {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return '';
+    }
+
+    const anchor = selection.getRangeAt(0).startContainer;
+    const offset = selection.getRangeAt(0).startOffset;
+
+    if (anchor.nodeType === Node.TEXT_NODE) {
+      return (anchor.nodeValue ?? '').slice(0, offset).slice(-1);
+    }
+
+    // Element anchor: the text right before it, if any.
+    const element = anchor as Element;
+    const before = element.textContent ?? '';
+    return offset > 0 ? before.slice(-1) : before;
+  }
+
   insertText(text: string): boolean {
     if (typeof document.execCommand !== 'function') {
       return false;

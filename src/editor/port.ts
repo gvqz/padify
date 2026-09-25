@@ -42,6 +42,22 @@ export interface EditorPort {
   /** Moves keyboard focus into the editor. */
   focus(): void;
 
+  /** True when the editing caret/selection currently sits inside the note. */
+  isCaretInside(): boolean;
+
+  /**
+   * Parks the caret at the end of the note when it drifted outside (voice
+   * dictation must never land in the void). Returns true when the caret is
+   * inside afterwards.
+   */
+  ensureCaretInside(): boolean;
+
+  /**
+   * The single character immediately before the caret ('' at the very
+   * start of the note). Powers dictation's smart spacing/capitalisation.
+   */
+  charBeforeCaret(): string;
+
   /**
    * Inserts plain text at the caret, replacing the selection (the voice,
    * unicode and tab-indentation path). Returns false if unsupported.

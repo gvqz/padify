@@ -88,59 +88,32 @@ let supported = false;
 const RESTART_DELAY_MS = 250;
 
 // ---------------------------------------------------------------------------
-// Insertion helpers
+// Insertion helpers — all of them through the EditorPort, never the DOM
 // ---------------------------------------------------------------------------
 
 /**
- * Character just before the caret (empty string at the very start of the
- * note). Used to decide whether dictated text needs a separating space.
+ * Inserts dictated text at the caret with tidy spacing/capitalisation.
+ * All caret positioning and insertion go through the EditorPort — this
+ * module never touches the editor DOM directly (it must survive the
+ * contenteditable → document-model swap untouched).
  */
-function charBeforeCaret(): string {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) {
-    return '';
-  }
-
-  const anchor = selection.getRangeAt(0).startContainer;
-  const offset = selection.getRangeAt(0).startOffset;
-
-  if (anchor.nodeType === Node.TEXT_NODE) {
-    return (anchor.nodeValue ?? '').slice(0, offset).slice(-1);
-  }
-
-  // Element anchor: the text right before it, if any.
-  const element = anchor as Element;
-  const before = element.textContent ?? '';
-  return offset > 0 ? before.slice(-1) : before;
-}
-
-/** Inserts dictated text at the caret with tidy spacing/capitalisation. */
 function insertDictation(text: string): void {
-  const editor = document.getElementById('note');
-  if (!editor || !text.trim()) {
+  if (!text.trim()) {
+    return;
+  }
+  const port = getEditorPort();
+  if (!port) {
     return;
   }
 
-  editor.focus();
-
+  port.focus();
   // If the caret drifted outside the editor (click on the bar, …), park it at
   // the end of the note so dictation never lands in the void.
-  const selection = window.getSelection();
-  const caretInside =
-    !!selection &&
-    selection.rangeCount > 0 &&
-    editor.contains(selection.getRangeAt(0).startContainer);
-  if (!caretInside) {
-    const range = document.createRange();
-    range.selectNodeContents(editor);
-    range.collapse(false);
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-  }
+  port.ensureCaretInside();
 
   let insertText = text.trim().replace(/\s+/g, ' ');
 
-  const previous = charBeforeCaret();
+  const previous = port.charBeforeCaret();
   if (previous) {
     // New sentence → capitalise; mid-sentence → separate with a space
     // unless the dictation itself opens with punctuation.
@@ -156,12 +129,7 @@ function insertDictation(text: string): void {
 
   // Trailing space keeps consecutive dictation bursts (and hand typing after
   // a burst) from gluing words together.
-  const port = getEditorPort();
-  if (port) {
-    port.insertText(`${insertText} `);
-  } else {
-    document.execCommand('insertText', false, `${insertText} `);
-  }
+  port.insertText(`${insertText} `);
 }
 
 // ---------------------------------------------------------------------------
@@ -295,22 +263,8 @@ export function startVoiceTyping(): void {
   }
 
   // Park the caret in the note first so the very first words land in it.
-  const editor = document.getElementById('note');
-  if (editor && document.activeElement !== editor) {
-    const selection = window.getSelection();
-    const caretInside =
-      !!selection &&
-      selection.rangeCount > 0 &&
-      editor.contains(selection.getRangeAt(0).startContainer);
-    if (!caretInside) {
-      editor.focus();
-      const range = document.createRange();
-      range.selectNodeContents(editor);
-      range.collapse(false);
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-    }
-  }
+  getEditorPort()?.focus();
+  getEditorPort()?.ensureCaretInside();
 
   startRecognition();
 }
