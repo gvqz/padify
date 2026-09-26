@@ -19,16 +19,13 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "bootstrap": "3.4.1",
     "docx": "^8.5.0",
-    "jquery": "^3.7.1",
     "jspdf": "^2.5.2",
     "sweetalert2": "^11.14.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
-    "@types/jquery": "^3.5.32",
     "eslint": "^10.11.0",
     "eslint-config-prettier": "^10.1.8",
     "fake-indexeddb": "^6.2.5",

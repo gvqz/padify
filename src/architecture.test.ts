@@ -5,6 +5,7 @@
  * silently rot. When one fails, the fix is to honor the rule — not to
  * delete the test.
  */
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -64,23 +65,39 @@ function referencedElementIds(): Map<string, string[]> {
 }
 
 describe('bootstrap single source of truth', () => {
-  it('the vendored stylesheet is a byte copy of the installed package', () => {
-    // The <link>ed public/css/bootstrap.min.css and the JS from
-    // `import 'bootstrap'` (package.json) MUST be the same version — the
-    // 3.3.4/3.4.1 split was a latent bug source (CSS tuned against one,
-    // behavior fixes shipped only in the other). If this fails, copy
-    // node_modules/bootstrap/dist/css/bootstrap.min.css over
-    // public/css/bootstrap.min.css — or bump both together.
+  // Bootstrap survives ONLY as the vendored stylesheet public/css/
+  // bootstrap.min.css (the first cascade layer). The npm package and the
+  // JS bundle are gone — modal/collapse/tooltip live in src/ui/behavior/.
+  // The file is pinned by content hash: if this test fails, someone edited
+  // a minified vendored file by hand. To bump the bootstrap version,
+  // replace the file with the new dist CSS and update BOTH the hash and
+  // the banner version below — deliberately, in a commit that says so.
+  const VENDORED_BOOTSTRAP_SHA256 =
+    '6d92dfc1700fd38cd130ad818e23bc8aef697f815b2ea5face2b5dfad22f2e11';
+  const VENDORED_BOOTSTRAP_VERSION = '3.4.1';
+
+  it('the vendored stylesheet is untouched (content-hash pin)', () => {
     const vendored = read('public/css/bootstrap.min.css');
-    const installed = read('node_modules/bootstrap/dist/css/bootstrap.min.css');
-    expect(vendored).toBe(installed);
+    const digest = createHash('sha256').update(vendored).digest('hex');
+    expect(digest).toBe(VENDORED_BOOTSTRAP_SHA256);
   });
 
-  it('the vendored stylesheet banner matches the installed package version', () => {
-    const pkg = JSON.parse(read('package.json')) as { dependencies: { bootstrap: string } };
+  it('the vendored stylesheet banner matches the pinned version', () => {
     const banner = read('public/css/bootstrap.min.css').slice(0, 200);
-    const version = pkg.dependencies.bootstrap.replace(/^[\^~>=<\s]+/, '');
-    expect(banner).toContain(`Bootstrap v${version}`);
+    expect(banner).toContain(`Bootstrap v${VENDORED_BOOTSTRAP_VERSION}`);
+  });
+
+  it('jquery and the bootstrap JS bundle stay out of the dependency tree', () => {
+    const pkg = JSON.parse(read('package.json')) as {
+      dependencies: Record<string, string>;
+      devDependencies: Record<string, string>;
+    };
+    const banned = ['jquery', 'bootstrap', '@types/jquery'];
+    const present = [
+      ...Object.keys(pkg.dependencies),
+      ...Object.keys(pkg.devDependencies),
+    ].filter((name) => banned.includes(name));
+    expect(present).toEqual([]);
   });
 });
 
