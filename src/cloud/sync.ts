@@ -20,6 +20,7 @@
 
 import { api as apiCall, ApiError } from './api';
 import { stateGet, stateSet, stateRemove } from '../storage';
+import { normalizeNoteType } from '../editor/note-types';
 import type { NoteTab, TabManager, TabTombstone, TabsSyncPayload } from '../tabs';
 
 // ---------------------------------------------------------------------------
@@ -62,6 +63,8 @@ interface NoteRow {
   created_at: number;
   updated_at: number;
   deleted: boolean;
+  /** The note kind; null = the default (standard). Absent on old servers. */
+  note_type: string | null;
 }
 
 interface StoredSession {
@@ -501,6 +504,7 @@ function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): MergeResu
         html: row.html ?? '',
         createdAt: typeof row.created_at === 'number' ? row.created_at : Date.now(),
         updatedAt: typeof row.updated_at === 'number' ? row.updated_at : Date.now(),
+        noteType: normalizeNoteType(row.note_type),
       });
       touched = true;
       return;
@@ -511,6 +515,9 @@ function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): MergeResu
       local.html = row.html ?? '';
       local.createdAt = typeof row.created_at === 'number' ? row.created_at : local.createdAt;
       local.updatedAt = row.updated_at;
+      // Type only ever rides along; an old server row (undefined) keeps the
+      // local value instead of resetting the note to the default.
+      local.noteType = normalizeNoteType(row.note_type) ?? local.noteType;
       touched = true;
     }
   });
@@ -533,6 +540,7 @@ function tabToRow(tab: NoteTab, userId: string, position: number): NoteRow {
     created_at: tab.createdAt,
     updated_at: tab.updatedAt,
     deleted: false,
+    note_type: tab.noteType ?? null,
   };
 }
 
@@ -546,6 +554,7 @@ function tombstoneToRow(tombstone: TabTombstone, userId: string): NoteRow {
     created_at: tombstone.updatedAt,
     updated_at: tombstone.updatedAt,
     deleted: true,
+    note_type: null,
   };
 }
 

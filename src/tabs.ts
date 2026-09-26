@@ -40,6 +40,13 @@ import {
   type StoredNoteTab,
 } from './storage';
 import { getEditorPort } from './editor/port';
+import {
+  DEFAULT_NOTE_TYPE,
+  normalizeNoteType,
+  type NoteType,
+} from './editor/note-types';
+
+export type { NoteType } from './editor/note-types';
 
 export interface NoteTab {
   id: string;
@@ -48,6 +55,11 @@ export interface NoteTab {
   html: string;
   createdAt: number;
   updatedAt: number;
+  /**
+   * The note kind — absent means the default (standard). See
+   * editor/note-types.ts; kept optional so existing rows need no migration.
+   */
+  noteType?: NoteType;
 }
 
 const LEGACY_NOTE_KEY = 'note';
@@ -76,6 +88,10 @@ export interface TabsSyncPayload {
 }
 
 const MAX_TITLE_LENGTH = 42;
+
+/** Tiny pen-nib badge marking rich text notes in the rail. */
+const RICH_TYPE_BADGE_SVG =
+  '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>';
 
 /** Welcome note shown for brand-new installs (rich HTML). */
 export const WELCOME_HTML = [
@@ -268,9 +284,17 @@ function createTabId(): string {
   return `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function createTab(html: string = '', name: string | null = null): NoteTab {
+function createTab(
+  html: string = '',
+  name: string | null = null,
+  noteType: NoteType = DEFAULT_NOTE_TYPE,
+): NoteTab {
   const now = Date.now();
-  return { id: createTabId(), name, html, createdAt: now, updatedAt: now };
+  const tab: NoteTab = { id: createTabId(), name, html, createdAt: now, updatedAt: now };
+  if (noteType !== DEFAULT_NOTE_TYPE) {
+    tab.noteType = noteType;
+  }
+  return tab;
 }
 
 // ---------------------------------------------------------------------------
@@ -286,6 +310,7 @@ export class TabManager {
   private tombstones: TabTombstone[] = [];
   private dirtyIds: Set<string> = new Set();
   private persistListeners: Set<(payload: TabsSyncPayload) => void> = new Set();
+  private activeListeners: Set<(tab: NoteTab) => void> = new Set();
 
   constructor(editor: Q) {
     this.editor = editor;
@@ -335,6 +360,7 @@ export class TabManager {
         html: typeof entry.html === 'string' ? sanitizeNoteHtml(entry.html) : '',
         createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : Date.now(),
         updatedAt: typeof entry.updatedAt === 'number' ? entry.updatedAt : Date.now(),
+        noteType: normalizeNoteType(entry.noteType),
       }));
   }
 
@@ -384,6 +410,19 @@ export class TabManager {
     this.persistListeners.add(listener);
     return () => {
       this.persistListeners.delete(listener);
+    };
+  }
+
+  /**
+   * Fires whenever the active note changed (switch, create, external merge).
+   * Used by type-aware editor chrome (e.g. the rich text toolbar) that must
+   * follow the note without each feature grabbing the single onActiveChanged
+   * slot.
+   */
+  addActiveListener(listener: (tab: NoteTab) => void): () => void {
+    this.activeListeners.add(listener);
+    return () => {
+      this.activeListeners.delete(listener);
     };
   }
 
@@ -581,6 +620,15 @@ export class TabManager {
     button.dataset.tabId = tab.id;
     button.title = tab.name ? tab.name : 'Double-click to rename';
 
+    if (tab.noteType && tab.noteType !== DEFAULT_NOTE_TYPE) {
+      const typeBadge = document.createElement('span');
+      typeBadge.className = 'tab-strip-type';
+      typeBadge.title = 'Rich text note';
+      typeBadge.setAttribute('aria-hidden', 'true');
+      typeBadge.innerHTML = RICH_TYPE_BADGE_SVG;
+      button.appendChild(typeBadge);
+    }
+
     const title = document.createElement('span');
     title.className = 'tab-strip-title';
     title.textContent = deriveTabTitle(tab);
@@ -683,10 +731,10 @@ export class TabManager {
     this.notifyActiveChanged();
   }
 
-  addTab(focusEditor = true): void {
+  addTab(focusEditor = true, noteType: NoteType = DEFAULT_NOTE_TYPE): void {
     this.saveActiveFromEditor();
 
-    const tab = createTab('');
+    const tab = createTab('', null, noteType);
     this.tabs.push(tab);
     this.activeId = tab.id;
     this.dirtyIds.add(tab.id);
@@ -703,7 +751,7 @@ export class TabManager {
     }
 
     this.notifyActiveChanged();
-    showToast('New tab created.');
+    showToast(noteType === DEFAULT_NOTE_TYPE ? 'New note created.' : 'New rich text note created.');
   }
 
   private requestCloseTab(tabId: string): void {
@@ -858,12 +906,14 @@ export class TabManager {
   onPersist: ((payload: TabsSyncPayload) => void) | null = null;
 
   private notifyActiveChanged(): void {
-    if (this.onActiveChanged) {
-      const active = this.getActive();
-      if (active) {
-        this.onActiveChanged(active);
-      }
+    const active = this.getActive();
+    if (!active) {
+      return;
     }
+    if (this.onActiveChanged) {
+      this.onActiveChanged(active);
+    }
+    this.activeListeners.forEach((listener) => listener(active));
   }
 }
 

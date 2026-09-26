@@ -230,4 +230,28 @@ export async function applySchema(db: Db): Promise<void> {
   for (const statement of statements) {
     await db.run(statement);
   }
+
+  await migrateColumns(db);
+}
+
+/**
+ * Column migrations for databases created before a column existed —
+ * `create table if not exists` cannot add columns to an existing table.
+ * Each entry runs an ALTER TABLE only when PRAGMA reports the column
+ * missing, so startup stays idempotent on every database state.
+ */
+const REQUIRED_COLUMNS: Array<{ table: string; column: string; definition: string }> = [
+  // note_type carries the note kind (rich text etc.); null = standard.
+  { table: 'notes', column: 'note_type', definition: 'text' },
+];
+
+async function migrateColumns(db: Db): Promise<void> {
+  for (const { table, column, definition } of REQUIRED_COLUMNS) {
+    const rows = await db.all(`pragma table_info(${table})`);
+    const exists = rows.some(row => String(row.name) === column);
+    if (!exists) {
+      await db.run(`alter table ${table} add column ${column} ${definition}`);
+      console.log(`[padify-api] schema migration: added ${table}.${column}`);
+    }
+  }
 }

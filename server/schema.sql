@@ -44,7 +44,8 @@ create table if not exists notes (
   position   integer not null default 0,
   created_at integer not null default 0,
   updated_at integer not null default 0,
-  deleted    integer not null default 0
+  deleted    integer not null default 0,
+  note_type  text
 );
 
 create index if not exists notes_user_id_idx on notes(user_id);

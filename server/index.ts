@@ -224,7 +224,7 @@ async function handleSignin(db: Db, request: Request): Promise<Response> {
 
 async function handleNotesGet(db: Db, request: Request, user: SessionUser): Promise<Response> {
   const rows = await db.all(
-    `select id, user_id, name, html, position, created_at, updated_at, deleted
+    `select id, user_id, name, html, position, created_at, updated_at, deleted, note_type
      from notes where user_id = ? order by position asc`,
     [user.id]
   );
@@ -241,6 +241,7 @@ interface IncomingNoteRow {
   created_at: number;
   updated_at: number;
   deleted: boolean;
+  note_type: string | null;
 }
 
 function parseNoteRows(value: unknown): IncomingNoteRow[] | null {
@@ -264,7 +265,9 @@ function parseNoteRows(value: unknown): IncomingNoteRow[] | null {
       position: asInt(row.position, 0),
       created_at: asInt(row.created_at, 0),
       updated_at: asInt(row.updated_at, 0),
-      deleted: asBool(row.deleted)
+      deleted: asBool(row.deleted),
+      // Only known note kinds are stored; anything else = the default.
+      note_type: row.note_type === 'rich' ? 'rich' : null
     });
   }
   return rows;
@@ -287,17 +290,18 @@ async function handleNotesPut(db: Db, request: Request, user: SessionUser): Prom
   // single local transaction) instead of one round-trip per row.
   await db.runMany(
     rows.map(row => ({
-      sql: `insert into notes (id, user_id, name, html, position, created_at, updated_at, deleted)
-       values (?, ?, ?, ?, ?, ?, ?, ?)
+      sql: `insert into notes (id, user_id, name, html, position, created_at, updated_at, deleted, note_type)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?)
        on conflict(id) do update set
          name = excluded.name,
          html = excluded.html,
          position = excluded.position,
          created_at = excluded.created_at,
          updated_at = excluded.updated_at,
-         deleted = excluded.deleted
+         deleted = excluded.deleted,
+         note_type = excluded.note_type
        where notes.user_id = excluded.user_id`,
-      args: [row.id, user.id, row.name, row.html, row.position, row.created_at, row.updated_at, row.deleted ? 1 : 0]
+      args: [row.id, user.id, row.name, row.html, row.position, row.created_at, row.updated_at, row.deleted ? 1 : 0, row.note_type]
     }))
   );
 

@@ -595,3 +595,99 @@ describe('TabManager (characterization)', () => {
     expect(tabs[0].html).toBe(WELCOME_HTML);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Note types — the noteType field (absent = standard, no migration)
+// ---------------------------------------------------------------------------
+
+describe('note types (characterization)', () => {
+  const stored = (id: string, html: string, overrides: Partial<StoredNoteTab> = {}): StoredNoteTab => ({
+    id,
+    name: null,
+    html,
+    createdAt: 0,
+    updatedAt: 0,
+    ...overrides,
+  });
+
+  async function bootedManager(): Promise<TabManager> {
+    const manager = new TabManager($('#note'));
+    await manager.init();
+    return manager;
+  }
+
+  it('addTab defaults to a standard note — noteType stays absent', async () => {
+    const manager = await bootedManager();
+
+    manager.addTab(false);
+
+    const active = manager.getActive()!;
+    expect(active.noteType).toBeUndefined();
+    // absent stays absent on the wire: standard notes keep the old row shape
+    expect('noteType' in active).toBe(false);
+  });
+
+  it('addTab creates a rich note and the rail badge marks it', async () => {
+    const manager = await bootedManager();
+
+    manager.addTab(false, 'rich');
+
+    expect(manager.getActive()!.noteType).toBe('rich');
+    const badge = document.querySelector('#tabStripTabs .tab-strip-tab.active .tab-strip-type');
+    expect(badge).not.toBeNull();
+    // the earlier standard tab carries no badge
+    const firstTab = document.querySelector('#tabStripTabs .tab-strip-tab:not(.active)');
+    expect(firstTab?.querySelector('.tab-strip-type')).toBeNull();
+  });
+
+  it('noteType persists through the storage round trip', async () => {
+    const manager = await bootedManager();
+    manager.addTab(false, 'rich');
+    const richId = manager.getActive()!.id;
+
+    await flushAndReboot();
+    const persisted = await loadNotes();
+    expect(persisted.tabs.find((t) => t.id === richId)!.noteType).toBe('rich');
+
+    const rebooted = await bootedManager();
+    expect(rebooted.getActive()!.noteType).toBe('rich');
+  });
+
+  it('rehydrates a stored rich note and normalizes unknown type values to standard', async () => {
+    saveNotes(
+      {
+        tabs: [
+          stored('t1', '<b>rich</b>', { noteType: 'rich' }),
+          stored('t2', '<b>plain</b>', { noteType: 'standard' as StoredNoteTab['noteType'] }),
+          stored('t3', '<b>alien</b>', { noteType: 'markdown' as StoredNoteTab['noteType'] }),
+        ],
+        tombstones: [],
+      },
+      't1',
+      { immediate: true },
+    );
+    await flushAndReboot();
+
+    const manager = await bootedManager();
+    const tabs = manager.exportForSync().tabs;
+    expect(tabs.find((t) => t.id === 't1')!.noteType).toBe('rich');
+    expect(tabs.find((t) => t.id === 't2')!.noteType).toBeUndefined();
+    expect(tabs.find((t) => t.id === 't3')!.noteType).toBeUndefined();
+  });
+
+  it('applyExternalMerge rides noteType along with the merged rows', async () => {
+    const manager = await bootedManager();
+    const localRichId = manager.getActive()!.id;
+
+    // (the sync layer's mergeRemote is what keeps a local type through a
+    // remote update — at this seam the rows arrive already merged)
+    manager.applyExternalMerge([
+      stored(localRichId, 'updated', { updatedAt: 999, noteType: 'rich' }),
+      stored('remote-1', '<b>from afar</b>', { noteType: 'rich' }),
+    ]);
+
+    const tabs = manager.exportForSync().tabs;
+    expect(tabs.find((t) => t.id === localRichId)!.noteType).toBe('rich');
+    expect(tabs.find((t) => t.id === 'remote-1')!.noteType).toBe('rich');
+  });
+});

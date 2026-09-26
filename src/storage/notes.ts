@@ -27,6 +27,7 @@
 
 import { NOTES_STORE, storageBackend, writeAll } from './idb';
 import { stateSet } from './kv';
+import { normalizeNoteType, type NoteType } from '../editor/note-types';
 
 /** A live note, structurally identical to NoteTab in tabs.ts. */
 export interface StoredNoteTab {
@@ -36,6 +37,8 @@ export interface StoredNoteTab {
   html: string;
   createdAt: number;
   updatedAt: number;
+  /** The note kind — absent means the default (standard). */
+  noteType?: NoteType;
 }
 
 /** A deletion not yet confirmed by the cloud. */
@@ -85,7 +88,7 @@ let currentSnapshotForMirror: NotesSnapshot | null = null;
  */
 const lastWritten = new Map<
   string,
-  { name: string | null; position: number; updatedAt: number; deleted: boolean }
+  { name: string | null; position: number; updatedAt: number; deleted: boolean; noteType: NoteType | undefined }
 >();
 
 // ---- compatibility mirror state ---------------------------------------------
@@ -117,6 +120,7 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
       html: typeof record.html === 'string' ? record.html : '',
       createdAt: typeof record.createdAt === 'number' ? record.createdAt : Date.now(),
       updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now(),
+      noteType: normalizeNoteType((record as { noteType?: unknown }).noteType),
     }));
 
   const tombstones = valid
@@ -135,6 +139,7 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
       position: index,
       updatedAt: tab.updatedAt,
       deleted: false,
+      noteType: tab.noteType,
     });
   });
   tombstones.forEach((tombstone) => {
@@ -143,6 +148,7 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
       position: -1,
       updatedAt: tombstone.updatedAt,
       deleted: true,
+      noteType: undefined,
     });
   });
 
@@ -181,6 +187,7 @@ function loadLegacySnapshot(): NotesSnapshot {
             html: typeof entry.html === 'string' ? entry.html : '',
             createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : Date.now(),
             updatedAt: typeof entry.updatedAt === 'number' ? entry.updatedAt : Date.now(),
+            noteType: normalizeNoteType(entry.noteType),
           });
         }
       });
@@ -293,12 +300,19 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
   snapshot.tabs.forEach((tab, index) => {
     seen.add(tab.id);
     const previous = lastWritten.get(tab.id);
-    const signature = { name: tab.name, position: index, updatedAt: tab.updatedAt, deleted: false };
+    const signature = {
+      name: tab.name,
+      position: index,
+      updatedAt: tab.updatedAt,
+      deleted: false,
+      noteType: tab.noteType,
+    };
     if (
       !previous ||
       previous.name !== signature.name ||
       previous.position !== index ||
       previous.updatedAt !== tab.updatedAt ||
+      previous.noteType !== signature.noteType ||
       previous.deleted
     ) {
       upserts.push({ ...tab, position: index, deleted: false });
@@ -324,6 +338,7 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
         position: -1,
         updatedAt: tombstone.updatedAt,
         deleted: true,
+        noteType: undefined,
       });
     }
   });
