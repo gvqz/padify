@@ -9,27 +9,54 @@
             <div id="tabStripTabs" class="tab-strip-tabs"></div>
           </div>
           <div class="tab-rail-foot">
-            <button
-              type="button"
-              id="addTab"
-              class="tab-rail-add"
-              title="New tab"
-              aria-label="Add a new tab"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                aria-hidden="true"
+            <div class="tab-rail-add-group">
+              <button
+                type="button"
+                id="addTab"
+                class="tab-rail-add"
+                title="New note"
+                aria-label="Add a new note"
               >
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              <span>New note</span>
-            </button>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                <span>New note</span>
+              </button>
+              <button
+                type="button"
+                id="addTabTypeMenu"
+                class="tab-rail-add-type"
+                title="Choose a note type"
+                aria-label="Choose a note type"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                aria-controls="addTabTypeMenuPopover"
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+            </div>
+            <div id="addTabTypeMenuPopover" class="tab-type-menu" role="menu" aria-label="Note type" hidden></div>
           </div>
         </aside>
         <div id="tabRailBackdrop" class="tab-rail-backdrop" aria-hidden="true"></div>

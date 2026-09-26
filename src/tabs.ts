@@ -43,6 +43,7 @@ import { getEditorPort } from './editor/port';
 import {
   DEFAULT_NOTE_TYPE,
   normalizeNoteType,
+  NOTE_TYPES,
   type NoteType,
 } from './editor/note-types';
 
@@ -708,6 +709,106 @@ export class TabManager {
 
     $('#addTab').on('click', () => {
       this.addTab();
+    });
+
+    this.bindTypeMenu();
+  }
+
+  // ---- note type menu ----------------------------------------------------------
+  //
+  // The chevron beside "New note" opens the type menu; the main button keeps
+  // creating the default (standard) note in one click. Menu items are built
+  // from the NOTE_TYPES registry so a future type needs no markup change.
+
+  /** Icons for the creation menu, keyed by type id (see editor/note-types.ts). */
+  private static readonly TYPE_ICONS: Record<NoteType, string> = {
+    standard:
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
+    rich: RICH_TYPE_BADGE_SVG.replace('width="10" height="10"', 'width="15" height="15"'),
+  };
+
+  private bindTypeMenu(): void {
+    const trigger = document.getElementById('addTabTypeMenu');
+    const popover = document.getElementById('addTabTypeMenuPopover');
+    if (!trigger || !popover) {
+      return;
+    }
+
+    const isOpen = (): boolean => !popover.hidden;
+    const setOpen = (open: boolean): void => {
+      popover.hidden = !open;
+      trigger.setAttribute('aria-expanded', String(open));
+    };
+
+    trigger.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setOpen(!isOpen());
+      if (isOpen()) {
+        this.renderTypeMenuItems(popover);
+      }
+    });
+
+    // Outside click closes (the trigger's own click already stopped here).
+    document.addEventListener('click', (event) => {
+      if (!isOpen()) {
+        return;
+      }
+      const target = event.target as Node;
+      if (!popover.contains(target) && !trigger.contains(target)) {
+        setOpen(false);
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && isOpen()) {
+        setOpen(false);
+        trigger.focus();
+      }
+    });
+
+    popover.addEventListener('click', (event) => {
+      const item = (event.target as HTMLElement).closest<HTMLElement>('[data-note-type]');
+      if (!item) {
+        return;
+      }
+      event.stopPropagation();
+      setOpen(false);
+      this.addTab(true, normalizeNoteType(item.dataset.noteType) ?? DEFAULT_NOTE_TYPE);
+      (this.editor.get(0) as HTMLElement).focus();
+    });
+  }
+
+  private renderTypeMenuItems(popover: HTMLElement): void {
+    if (popover.childElementCount > 0) {
+      return; // built once from the registry; the page is single-session
+    }
+
+    NOTE_TYPES.forEach((def) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'tab-type-menu-item';
+      item.setAttribute('role', 'menuitem');
+      item.dataset.noteType = def.id;
+
+      const icon = document.createElement('span');
+      icon.className = 'tab-type-menu-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.innerHTML = TabManager.TYPE_ICONS[def.id];
+      item.appendChild(icon);
+
+      const text = document.createElement('span');
+      text.className = 'tab-type-menu-text';
+      const label = document.createElement('span');
+      label.className = 'tab-type-menu-label';
+      label.textContent = def.label;
+      const description = document.createElement('span');
+      description.className = 'tab-type-menu-desc';
+      description.textContent = def.description;
+      text.appendChild(label);
+      text.appendChild(description);
+      item.appendChild(text);
+
+      popover.appendChild(item);
     });
   }
 

@@ -52,6 +52,8 @@ export const MARKUP_CONTRACT: MarkupContractGroup[] = [
       'tabStrip',
       'tabStripTabs',
       'addTab',
+      'addTabTypeMenu',
+      'addTabTypeMenuPopover',
       'textareaContainer',
       'note',
       'saveState',
