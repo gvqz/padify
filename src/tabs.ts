@@ -166,6 +166,11 @@ export function legacyTextToHtml(text: string): string {
     .replace(/\*([^*\n]+?)\*/g, '<i>$1</i>');
 }
 
+/**
+ * The tags a note may contain. Inline tags are the classic formatting
+ * subset; the block + link tags are the rich text note vocabulary (see the
+ * rich toolbar). Everything else is unwrapped to its text on load.
+ */
 const ALLOWED_TAGS = new Set([
   'B',
   'STRONG',
@@ -179,12 +184,42 @@ const ALLOWED_TAGS = new Set([
   'DIV',
   'SPAN',
   'P',
+  'H1',
+  'H2',
+  'H3',
+  'UL',
+  'OL',
+  'LI',
+  'BLOCKQUOTE',
+  'PRE',
+  'A',
 ]);
 
 /**
+ * Attributes a surviving tag may keep. Everything else is stripped — the
+ * editor only ever produces these itself. `a[href]` is the one deliberate
+ * exception (the rich text link button), gated to safe schemes below.
+ */
+const ALLOWED_ATTRS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ['A', new Set(['href'])],
+]);
+
+/**
+ * Link schemes a stored href may use. javascript:/data:/vbscript: and
+ * friends are dropped (the anchor keeps its text, just without a target).
+ */
+const SAFE_HREF_PATTERN = /^(https?:|mailto:|#|\/)/i;
+
+function sanitizeHref(raw: string): string | null {
+  const href = raw.trim();
+  return href.length > 0 && SAFE_HREF_PATTERN.test(href) ? href : null;
+}
+
+/**
  * Strips the stored HTML down to the formatting subset the editor produces:
- * known inline tags survive without attributes, everything else is unwrapped
- * to its text. Guards the innerHTML round-trip against stray markup.
+ * known inline/block tags survive (with their one allowed attribute where
+ * declared), everything else is unwrapped to its text. Guards the innerHTML
+ * round-trip against stray markup.
  */
 export function sanitizeNoteHtml(html: string): string {
   const parsed = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
@@ -208,6 +243,25 @@ export function sanitizeNoteHtml(html: string): string {
     }
 
     const clone = document.createElement(element.tagName);
+
+    const allowedAttrs = ALLOWED_ATTRS.get(element.tagName);
+    if (allowedAttrs) {
+      allowedAttrs.forEach((attr) => {
+        const value = element.getAttribute(attr);
+        if (value === null) {
+          return;
+        }
+        if (attr === 'href') {
+          const safe = sanitizeHref(value);
+          if (safe !== null) {
+            clone.setAttribute(attr, safe);
+          }
+          return;
+        }
+        clone.setAttribute(attr, value);
+      });
+    }
+
     children.forEach((child) => clone.appendChild(child));
     return [clone];
   };
@@ -228,6 +282,9 @@ export function htmlToText(html: string): string {
 
   const parts: string[] = [];
 
+  /** Block tags read as line boundaries, like innerText would report them. */
+  const BLOCK_TAGS = new Set(['DIV', 'P', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'PRE', 'LI']);
+
   const walk = (node: Node): void => {
     if (node.nodeType === Node.TEXT_NODE) {
       parts.push(node.nodeValue ?? '');
@@ -242,7 +299,7 @@ export function htmlToText(html: string): string {
       parts.push('\n');
       return;
     }
-    if (element.tagName === 'DIV' || element.tagName === 'P') {
+    if (BLOCK_TAGS.has(element.tagName)) {
       // Block boundaries read as newlines, like innerText would report them.
       if ((element.textContent ?? '') === '') {
         parts.push('\n');

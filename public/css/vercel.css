@@ -3069,6 +3069,86 @@ body.dark #note:has(> br:only-child)::before {
   text-underline-offset: 2px;
 }
 
+/* ---- Rich text note vocabulary ----
+   Headings, lists, quotes, code blocks and links inside the note surface.
+   Sized to sit calmly inside the note's 15px line rhythm; tokens keep dark
+   mode in step automatically. */
+
+#note h1,
+#note h2,
+#note h3 {
+  margin: 0.6em 0 0.25em;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--vz-fg);
+}
+
+#note h1 {
+  font-size: 1.55em;
+  letter-spacing: -0.01em;
+}
+
+#note h2 {
+  font-size: 1.3em;
+}
+
+#note h3 {
+  font-size: 1.13em;
+}
+
+#note h1:first-child,
+#note h2:first-child,
+#note h3:first-child,
+#note > ul:first-child,
+#note > ol:first-child,
+#note > blockquote:first-child,
+#note > pre:first-child {
+  margin-top: 0;
+}
+
+#note ul,
+#note ol {
+  margin: 0.35em 0;
+  padding-left: 1.5em;
+}
+
+#note li {
+  margin: 0.15em 0;
+}
+
+#note blockquote {
+  margin: 0.5em 0;
+  padding: 0.15em 0 0.15em 0.9em;
+  border-left: 3px solid var(--vz-border-strong);
+  color: var(--vz-fg-muted);
+}
+
+#note pre {
+  margin: 0.5em 0;
+  padding: 0.6em 0.8em;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg-subtle);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+#note a {
+  /* The design system is monochrome — links read through the underline,
+     like the topbar/footer links, not through a new hue. */
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--vz-fg-subtle);
+}
+
+#note a:hover {
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--vz-fg);
+}
+
 /* ---- Note rail (left sidebar) ---- */
 #tabRail {
   display: flex;

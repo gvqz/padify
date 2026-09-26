@@ -64,12 +64,16 @@
 
   /**
    * Strips the stored note HTML down to the same formatting subset the
-   * editor produces (b/strong/i/em/u/s/strike/del/br/div/span/p, no
-   * attributes) so a crafted share payload cannot inject markup.
+   * editor produces (b/strong/i/em/u/s/strike/del/br/div/span/p + the rich
+   * text vocabulary h1/h2/h3/ul/ol/li/blockquote/pre) so a crafted share
+   * payload cannot inject markup. `a[href]` is the one attribute kept, and
+   * only for safe schemes — identical policy to the app's sanitizer
+   * (sanitizeNoteHtml in src/tabs.ts). Keep the two in sync.
    */
   function sanitizeShareHtml(html) {
     var parsed = new DOMParser().parseFromString('<body>' + String(html == null ? '' : html) + '</body>', 'text/html');
-    var allowed = { B: 1, STRONG: 1, I: 1, EM: 1, U: 1, S: 1, STRIKE: 1, DEL: 1, BR: 1, DIV: 1, SPAN: 1, P: 1 };
+    var allowed = { B: 1, STRONG: 1, I: 1, EM: 1, U: 1, S: 1, STRIKE: 1, DEL: 1, BR: 1, DIV: 1, SPAN: 1, P: 1, H1: 1, H2: 1, H3: 1, UL: 1, OL: 1, LI: 1, BLOCKQUOTE: 1, PRE: 1, A: 1 };
+    var safeHref = /^(https?:|mailto:|#|\/)/i;
 
     function walk(node) {
       if (node.nodeType === Node.TEXT_NODE) {
@@ -87,6 +91,14 @@
         return children;
       }
       var clone = document.createElement(element.tagName);
+      if (element.tagName === 'A') {
+        var href = (element.getAttribute('href') || '').trim();
+        if (href && safeHref.test(href)) {
+          clone.setAttribute('href', href);
+          clone.setAttribute('rel', 'noopener noreferrer nofollow');
+          clone.setAttribute('target', '_blank');
+        }
+      }
       children.forEach(function (child) {
         clone.appendChild(child);
       });

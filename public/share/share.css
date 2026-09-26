@@ -160,6 +160,59 @@ body {
   color: var(--s-fg-muted);
 }
 
+/* Rich text note vocabulary — mirrors the editor's #note styles
+   (vercel.css) with the share page's own --s-* tokens. */
+.share-content h1,
+.share-content h2,
+.share-content h3 {
+  margin: 0.6em 0 0.25em;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.share-content h1 {
+  font-size: 1.55em;
+}
+
+.share-content h2 {
+  font-size: 1.3em;
+}
+
+.share-content h3 {
+  font-size: 1.13em;
+}
+
+.share-content ul,
+.share-content ol {
+  margin: 0.35em 0;
+  padding-left: 1.5em;
+}
+
+.share-content blockquote {
+  margin: 0.5em 0;
+  padding: 0.15em 0 0.15em 0.9em;
+  border-left: 3px solid var(--s-border);
+  color: var(--s-fg-muted);
+}
+
+.share-content pre {
+  margin: 0.5em 0;
+  padding: 0.6em 0.8em;
+  border: 1px solid var(--s-border);
+  border-radius: 8px;
+  background: var(--s-bg-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.share-content a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* ---- state (loading / unavailable / error) ---- */
 
 .share-state {

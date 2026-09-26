@@ -146,13 +146,34 @@ describe('sanitizeNoteHtml (characterization)', () => {
     expect(sanitizeNoteHtml('<div data-note="7">v</div>')).toBe('<div>v</div>');
   });
 
-  it('a javascript: href cannot survive — the anchor itself is unwrapped', () => {
-    expect(sanitizeNoteHtml('<a href="javascript:alert(1)">click</a>')).toBe('click');
+  it('a javascript: href cannot survive — the link is kept, the target is not', () => {
+    // Policy change (rich text notes): the anchor is now part of the allowed
+    // subset (the link button creates it), but its href is gated to safe
+    // schemes. A hostile scheme loses the attribute, not the text.
+    expect(sanitizeNoteHtml('<a href="javascript:alert(1)">click</a>')).toBe('<a>click</a>');
   });
 
   it('unwraps unknown tags to their text content', () => {
-    expect(sanitizeNoteHtml('<h1>title</h1>')).toBe('title');
     expect(sanitizeNoteHtml('<custom-el>hey</custom-el>')).toBe('hey');
+    expect(sanitizeNoteHtml('<h4>too deep</h4>')).toBe('too deep');
+  });
+
+  it('passes the rich text block subset through (h1-h3, lists, quote, pre)', () => {
+    const rich = '<h1>Title</h1><h2>Sub</h2><h3>Subsub</h3>' +
+      '<ul><li>one</li><li>two</li></ul><ol><li>first</li></ol>' +
+      '<blockquote>quoted</blockquote><pre>code()</pre>';
+    expect(sanitizeNoteHtml(rich)).toBe(rich);
+  });
+
+  it('keeps a[href] only for safe schemes and no other attributes', () => {
+    expect(sanitizeNoteHtml('<a href="https://padify.app">ok</a>')).toBe('<a href="https://padify.app">ok</a>');
+    expect(sanitizeNoteHtml('<a href="mailto:x@y.z">mail</a>')).toBe('<a href="mailto:x@y.z">mail</a>');
+    expect(sanitizeNoteHtml('<a href="#anchor">local</a>')).toBe('<a href="#anchor">local</a>');
+    expect(sanitizeNoteHtml('<a href="/relative">rel</a>')).toBe('<a href="/relative">rel</a>');
+    expect(sanitizeNoteHtml('<a href="data:text/html,evil">data</a>')).toBe('<a>data</a>');
+    expect(sanitizeNoteHtml('<a href="https://x" target="_blank" class="c" onclick="evil()">t</a>')).toBe(
+      '<a href="https://x">t</a>',
+    );
   });
 
   it('unwraps <script> to inert text, not executable markup', () => {
@@ -236,6 +257,13 @@ describe('htmlToText (characterization)', () => {
     // Quirk pinned on purpose: htmlToText has no notion of "non-visible"
     // elements. sanitizeNoteHtml is what defuses markup upstream.
     expect(htmlToText('<script>hidden()</script>visible')).toBe('hidden()visible');
+  });
+
+  it('treats rich block tags as line boundaries (h1-h3, li, blockquote, pre)', () => {
+    expect(htmlToText('<h1>Title</h1><p>body</p>')).toBe('Title\nbody');
+    expect(htmlToText('<ul><li>one</li><li>two</li></ul>')).toBe('one\ntwo');
+    expect(htmlToText('<blockquote>quote</blockquote><p>end</p>')).toBe('quote\nend');
+    expect(htmlToText('<pre>a()</pre><pre>b()</pre>')).toBe('a()\nb()');
   });
 });
 

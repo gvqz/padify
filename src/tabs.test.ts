@@ -67,8 +67,15 @@ describe('sanitizeNoteHtml', () => {
     expect(sanitizeNoteHtml('<img src=x onerror=y>hi')).toBe('hi');
   });
 
-  it('flattens list markup to text', () => {
-    expect(sanitizeNoteHtml('<ul><li>a</li><li>b</li></ul>')).toBe('ab');
+  it('keeps the rich text block subset (lists, headings, quote, pre, links)', () => {
+    // Policy change (rich text notes, 2026-09): the allowlist grew from the
+    // inline subset to the rich toolbar's vocabulary. List markup survives
+    // instead of flattening; a[href] is the single allowed attribute.
+    expect(sanitizeNoteHtml('<ul><li>a</li><li>b</li></ul>')).toBe('<ul><li>a</li><li>b</li></ul>');
+    expect(sanitizeNoteHtml('<h1>t</h1><blockquote>q</blockquote><pre>c</pre>')).toBe(
+      '<h1>t</h1><blockquote>q</blockquote><pre>c</pre>',
+    );
+    expect(sanitizeNoteHtml('<a href="https://x.y">l</a>')).toBe('<a href="https://x.y">l</a>');
   });
 
   it('keeps empty allowed blocks', () => {
