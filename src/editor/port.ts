@@ -23,6 +23,11 @@
 
 export type FormatCommand = 'bold' | 'italic' | 'underline' | 'strikeThrough';
 
+/** Block formats the rich text toolbar applies to the selection's blocks. */
+export type BlockFormat = 'p' | 'h1' | 'h2' | 'h3' | 'blockquote' | 'pre';
+
+export type ListKind = 'ul' | 'ol';
+
 /** Every mutation-style command the app performs on the editor surface. */
 export type EditorCommand = FormatCommand | 'removeFormat';
 
@@ -72,6 +77,33 @@ export interface EditorPort {
 
   /** True when the selection carries the given format. */
   queryFormat(command: FormatCommand): boolean;
+
+  /**
+   * Sets the block type (paragraph, heading, quote, code block) of the
+   * selection's block. Returns false if the engine rejected it.
+   */
+  applyBlockFormat(format: BlockFormat): boolean;
+
+  /**
+   * The block type at the caret/selection ('p' covers plain divs), or null
+   * when it cannot be determined. Powers the toolbar's pressed states.
+   */
+  queryBlockFormat(): BlockFormat | null;
+
+  /** Turns an ordered/unordered list on or off at the selection. */
+  toggleList(kind: ListKind): boolean;
+
+  /** The list kind active at the selection, or null when not in a list. */
+  queryListKind(): ListKind | null;
+
+  /**
+   * Links the current selection with the given href. Returns false when
+   * there is nothing to link (collapsed selection) or the engine refused.
+   */
+  insertLink(href: string): boolean;
+
+  /** Removes the link under the caret/selection, keeping its text. */
+  removeLink(): boolean;
 
   undo(): boolean;
   redo(): boolean;

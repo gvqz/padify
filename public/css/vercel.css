@@ -3149,6 +3149,158 @@ body.dark #note:has(> br:only-child)::before {
   text-decoration-color: var(--vz-fg);
 }
 
+/* ---- Rich text toolbar ----
+   Lives above the note; only mounted-visible for rich notes. Same chip
+   language as the rest of the chrome; pressed = the subtle chip wash. */
+
+.rich-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  background: var(--vz-bg-elevated);
+  position: relative;
+}
+
+.rich-toolbar[hidden] {
+  display: none;
+}
+
+.rich-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rich-toolbar-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--vz-border);
+}
+
+.rich-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+.rich-btn:hover {
+  background: var(--vz-bg-hover);
+  color: var(--vz-fg);
+}
+
+.rich-btn:focus-visible {
+  outline: 2px solid var(--vz-fg-subtle);
+  outline-offset: -2px;
+}
+
+.rich-btn[aria-pressed='true'] {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg);
+}
+
+.rich-btn svg {
+  flex: 0 0 auto;
+}
+
+.rich-btn-glyph {
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.rich-glyph-italic {
+  font-style: italic;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+.rich-glyph-underline {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.rich-glyph-strike {
+  text-decoration: line-through;
+}
+
+.rich-glyph-p {
+  font-weight: 500;
+}
+
+/* The link popover: a small input row anchored to the toolbar. */
+.rich-link-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 4px;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  background: var(--vz-bg-elevated);
+  box-shadow: var(--vz-shadow-menu);
+  animation: vz-menu-in 130ms var(--vz-ease);
+}
+
+.rich-link-popover[hidden] {
+  display: none;
+}
+
+.rich-link-input {
+  width: 240px;
+  max-width: 56vw;
+  padding: 5px 8px;
+  border: 1px solid var(--vz-border-strong);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg);
+  color: var(--vz-fg);
+  font-size: 12.5px;
+}
+
+.rich-link-input:focus {
+  outline: none;
+  border-color: var(--vz-fg-subtle);
+}
+
+.rich-link-apply,
+.rich-link-remove {
+  padding: 5px 9px;
+  border: 1px solid var(--vz-border-strong);
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 100ms ease;
+}
+
+.rich-link-apply:hover {
+  background: var(--vz-bg-hover);
+}
+
+.rich-link-remove:hover {
+  background: var(--vz-danger-soft);
+  border-color: var(--vz-danger);
+  color: var(--vz-danger);
+}
+
 /* ---- Note rail (left sidebar) ---- */
 #tabRail {
   display: flex;

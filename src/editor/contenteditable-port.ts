@@ -8,7 +8,7 @@
  * surface directly. When the document-model editor lands, it ships as a
  * sibling implementation of EditorPort and this adapter retires.
  */
-import type { EditorCommand, EditorPort, FormatCommand } from './port';
+import type { BlockFormat, EditorCommand, EditorPort, FormatCommand, ListKind } from './port';
 
 const FORMAT_COMMANDS: readonly FormatCommand[] = [
   'bold',
@@ -16,6 +16,8 @@ const FORMAT_COMMANDS: readonly FormatCommand[] = [
   'underline',
   'strikeThrough',
 ];
+
+const BLOCK_TAGS: readonly BlockFormat[] = ['p', 'h1', 'h2', 'h3', 'blockquote', 'pre'];
 
 function isFormatCommand(command: EditorCommand): command is FormatCommand {
   return (FORMAT_COMMANDS as readonly string[]).includes(command);
@@ -129,6 +131,63 @@ export class ContentEditablePort implements EditorPort {
 
   queryFormat(command: FormatCommand): boolean {
     return document.queryCommandState(command);
+  }
+
+  applyBlockFormat(format: BlockFormat): boolean {
+    if (typeof document.execCommand !== 'function') {
+      return false;
+    }
+    // The bracketed tag form is the long-standing cross-browser spelling of
+    // formatBlock's value.
+    return document.execCommand('formatBlock', false, `<${format}>`);
+  }
+
+  queryBlockFormat(): BlockFormat | null {
+    if (typeof document.queryCommandValue !== 'function') {
+      return null;
+    }
+    const value = (document.queryCommandValue('formatBlock') || '').toLowerCase();
+    // Plain paragraphs live as divs in the contenteditable surface.
+    if (value === 'div' || value === '') {
+      return 'p';
+    }
+    return BLOCK_TAGS.includes(value as BlockFormat) ? (value as BlockFormat) : null;
+  }
+
+  toggleList(kind: ListKind): boolean {
+    if (typeof document.execCommand !== 'function') {
+      return false;
+    }
+    return document.execCommand(kind === 'ul' ? 'insertUnorderedList' : 'insertOrderedList', false);
+  }
+
+  queryListKind(): ListKind | null {
+    if (typeof document.queryCommandState !== 'function') {
+      return null;
+    }
+    if (document.queryCommandState('insertUnorderedList')) {
+      return 'ul';
+    }
+    if (document.queryCommandState('insertOrderedList')) {
+      return 'ol';
+    }
+    return null;
+  }
+
+  insertLink(href: string): boolean {
+    if (typeof document.execCommand !== 'function') {
+      return false;
+    }
+    // createLink over a collapsed caret is a no-op in every engine — the
+    // caller (toolbar) turns the false into user guidance instead.
+    return document.execCommand('createLink', false, href);
+  }
+
+  removeLink(): boolean {
+    if (typeof document.execCommand !== 'function') {
+      return false;
+    }
+    return document.execCommand('unlink', false);
   }
 
   undo(): boolean {

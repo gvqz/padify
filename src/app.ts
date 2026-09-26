@@ -34,6 +34,7 @@ import { initPipWindow } from './pip-window';
 import { openModal, closeAllModals } from './ui/behavior/modal';
 import { initSaveIndicator } from './save-indicator';
 import { initTabRailDrawer } from './tab-rail-drawer';
+import { initRichToolbar } from './editor/rich-toolbar';
 import { initThemeController } from './theme-controller';
 import { initEditorPreferences, clearTabIndentation } from './editor-preferences';
 import { setBreakRemindersEnabled, trackWritingActivity } from './break-reminder';
@@ -232,6 +233,10 @@ export async function initApp(): Promise<void> {
 
   // ---- left note rail (mobile drawer) — see tab-rail-drawer.ts ------
   initTabRailDrawer(tabManager);
+
+  // ---- rich text toolbar — visible only for rich notes, see
+  // editor/rich-toolbar.ts ----
+  initRichToolbar(tabManager);
 
   notepad.note.keydown(function (e) {
     if (e.key === 'Tab') {
