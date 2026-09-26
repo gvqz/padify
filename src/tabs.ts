@@ -104,6 +104,8 @@ export const WELCOME_HTML = [
   '- Multiple notes live in the sidebar on the left — plus bold, italic,',
   '  underline and strikethrough formatting that renders right inside the',
   '  editor (right-click to try it).',
+  '- Note types: use the arrow beside "New note" to create rich text',
+  '  notes with headings, lists, quotes, code blocks and links.',
   '- Voice typing: click the mic in the top bar (or press alt/option + v)',
   '  and just talk.',
   '- Optional cloud sync: click the cloud icon in the top bar to back up',
