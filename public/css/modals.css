@@ -440,7 +440,7 @@ body.dark .stat-value {
 
 .brand-menu-item:hover,
 .brand-menu-item:focus {
-  background: var(--vz-bg-subtle);
+  background: var(--vz-bg-hover);
   color: var(--vz-fg);
   text-decoration: none;
   outline: none;

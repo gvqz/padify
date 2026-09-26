@@ -53,6 +53,7 @@
   --surface-raised: #ffffff;  /* dialogs, menus, cards */
   --surface-subtle: #fafafa;  /* hover rows, wells, secondary */
   --surface-chip: #f1f1f1;    /* chips, badges, switch track */
+  --surface-hover: #ececec;   /* interactive hover chips (icons, menu rows, close buttons) */
 
   /* ---------------------------------------------------------------------
      Ink
@@ -109,6 +110,7 @@ body.dark {
   --surface-raised: #111111;
   --surface-subtle: #1a1a1a;
   --surface-chip: #1a1a1a;
+  --surface-hover: #232323;
 
   --fg: #ededed;
   --fg-muted: #a1a1a1;
