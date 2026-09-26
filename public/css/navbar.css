@@ -5,21 +5,6 @@
  * ordered <link>; keep the order (base first, vercel design system last).
  */
 
-.about-icon-container {
-  display: inline-flex;
-  gap: 10px;
-  float: left;
-  align-items: center;
-}
-
-.about-icon-container>a {
-  transition: transform 200ms ease-out;
-}
-
-.about-icon-container>a:hover {
-  transform: translateY(-5px) rotate(-15deg);
-}
-
 .dark .icon-container span>a {
   transition: all 0.3s ease-in-out;
 }
@@ -176,29 +161,6 @@
   align-items: center;
   justify-content: center;
   text-decoration: none;
-}
-
-.unicode-icon-badge {
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.unicode-icon a:hover .unicode-icon-badge,
-.unicode-icon a:focus .unicode-icon-badge {
-  transform: translateY(-1px);
-  background: rgba(255, 255, 255, 0.24);
-  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .dropdown-item {

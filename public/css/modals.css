@@ -228,31 +228,6 @@ body.dark .stat-value {
   color: #90cdf4;
 }
 
-/* ---- nav tabs (About) ---------------------------------------------------- */
-
-.dark .nav-tabs {
-  border-bottom: 1px solid #4a5568;
-}
-
-.dark .nav-tabs>li>a {
-  color: #a0aec0;
-}
-
-.dark .nav-tabs>li>a:hover {
-  border-color: transparent;
-  color: #e2e8f0;
-  background-color: transparent;
-}
-
-.dark .nav-tabs>li.active>a,
-.dark .nav-tabs>li.active>a:focus,
-.dark .nav-tabs>li.active>a:hover {
-  background-color: #2d3748;
-  color: #e2e8f0;
-  border: 1px solid #4a5568;
-  border-bottom-color: transparent;
-}
-
 /* ---- keyboard shortcuts keycaps ------------------------------------------ */
 
 .dark kbd {
@@ -303,14 +278,6 @@ body.dark .stat-value {
   box-shadow: rgba(99, 179, 237, 0.45) 0px 0px 0px 8px inset;
 }
 
-.dark .theme-switcher label {
-  color: #a0aec0;
-}
-
-.dark .theme-switcher label:hover {
-  color: #e2e8f0;
-}
-
 /* ---- SweetAlert2 non-toast dialogs ---------------------------------------- */
 
 .dark .swal2-popup:not(.swal-toast-bottom-offset) {
@@ -352,13 +319,6 @@ body.dark .stat-value {
   border-color: #31708e;
 }
 
-.dark .theme-switcher label span {
-  color: #a0aec0;
-}
-
-.dark .theme-switcher label:hover span {
-  color: #e2e8f0;
-}
 
 /* ---- keyboard shortcuts table rows ----------------------------------------- */
 

@@ -396,50 +396,10 @@ body.dark .navbar.navbar-fixed-top .navbar-nav svg {
   color: inherit;
 }
 
-.navbar.navbar-fixed-top .navbar-nav .about-link {
-  color: var(--vz-fg-muted);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.navbar.navbar-fixed-top .navbar-nav .about-link:hover,
-.navbar.navbar-fixed-top .navbar-nav .about-link:focus {
-  color: var(--vz-fg);
-}
-
 /* Music playing indicator — a small green status dot */
 .ambient-noise-icon .ambient-noise-status-dot {
   background: var(--vz-success);
   box-shadow: 0 0 0 2px var(--vz-bg-navbar);
-}
-
-/* Unicode favorites badge — mono chip */
-.unicode-icon-badge {
-  background: var(--vz-bg-subtle);
-  color: var(--vz-fg-muted);
-  border: 1px solid var(--vz-border);
-  transition: background-color var(--vz-dur) ease, color var(--vz-dur) ease,
-    border-color var(--vz-dur) ease;
-}
-
-.unicode-icon a:hover .unicode-icon-badge,
-.unicode-icon a:focus .unicode-icon-badge {
-  background: var(--vz-bg-elevated);
-  color: var(--vz-fg);
-  border-color: var(--vz-border-strong);
-}
-
-body.dark .unicode-icon-badge {
-  background: var(--vz-bg-chip);
-  color: var(--vz-fg-muted);
-  border-color: var(--vz-border);
-}
-
-body.dark .unicode-icon a:hover .unicode-icon-badge,
-body.dark .unicode-icon a:focus .unicode-icon-badge {
-  background: var(--vz-bg-subtle);
-  color: var(--vz-fg);
-  border-color: var(--vz-border-strong);
 }
 
 /* --------------------------------------------------------------------------
@@ -697,41 +657,6 @@ body.dark .modal-body table td {
 body .modal-body table tr td:first-child,
 body.dark .modal-body table tr td:first-child {
   color: var(--vz-fg);
-}
-
-/* About modal details */
-body .about-tabs,
-body.dark .about-tabs,
-body.dark .nav-tabs {
-  border-bottom: 1px solid var(--vz-border);
-}
-
-body .about-tabs .nav-link,
-body.dark .about-tabs .nav-link,
-body.dark .about-tabs > li > a {
-  color: var(--vz-fg-muted);
-  font-size: 13px;
-  font-weight: 500;
-  border: none;
-  transition: color var(--vz-dur) ease;
-  padding: 8px 14px;
-  margin-bottom: -1px;
-}
-
-body .about-tabs .nav-link:hover,
-body.dark .about-tabs .nav-link:hover {
-  color: var(--vz-fg);
-}
-
-body .about-tabs .nav-link.active,
-body.dark .about-tabs .nav-link.active,
-body.dark .about-tabs > li.active > a,
-body.dark .about-tabs > li.active > a:focus,
-body.dark .about-tabs > li.active > a:hover {
-  color: var(--vz-fg);
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid var(--vz-fg);
 }
 
 body .about-notice {

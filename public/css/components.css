@@ -172,73 +172,6 @@ a {
   border-top: 1px solid #f0f0f0;
 }
 
-.theme-switcher {
-  background-color: var(--c-bg-secondary);
-  border-radius: 8px;
-  display: flex;
-  padding: 0 3px;
-  align-items: center;
-  position: relative;
-  overflow: hidden;
-  font-size: 12px;
-  width: 100%;
-}
-
-.theme-switcher .slider {
-  display: block;
-  position: absolute;
-  z-index: 1;
-  width: calc((100% - 6px) / 3);
-  top: 3px;
-  transform: translatex(-110%);
-  bottom: 3px;
-  border-radius: 6px;
-  transition: 0.15s ease, transform 0.25s ease-out;
-  background-color: var(--c-bg-button);
-  box-shadow: var(--slider-shadow);
-}
-
-.theme-switcher input {
-  display: none;
-}
-
-.theme-switcher input:nth-of-type(1):checked~.slider {
-  transform: translateX(0);
-}
-
-.theme-switcher input:nth-of-type(2):checked~.slider {
-  transform: translateX(100%);
-}
-
-.theme-switcher input:nth-of-type(3):checked~.slider {
-  transform: translateX(200%);
-}
-
-.theme-switcher label {
-  margin-bottom: 0;
-  position: relative;
-  z-index: 2;
-  width: calc(100% / 3);
-  color: var(--c-text-secondary);
-}
-
-.theme-switcher label span {
-  padding: 8px 0;
-  border-radius: 6px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-weight: 500;
-  color: #727272;
-  cursor: pointer;
-}
-
-.theme-switcher label svg {
-  display: inline-block;
-  margin-right: 0.5rem;
-  width: 20px;
-}
-
 #mode {
   cursor: pointer;
   display: flex;
@@ -349,18 +282,6 @@ a {
 .dark #toast {
   background-color: #202630;
   color: #fff;
-}
-
-.dark .unicode-icon-badge {
-  background: rgba(148, 163, 184, 0.14);
-  border-color: rgba(148, 163, 184, 0.25);
-  color: #e2e8f0;
-}
-
-.dark .unicode-icon a:hover .unicode-icon-badge,
-.dark .unicode-icon a:focus .unicode-icon-badge {
-  background: rgba(148, 163, 184, 0.24);
-  border-color: rgba(148, 163, 184, 0.35);
 }
 
 
