@@ -126,13 +126,6 @@ export function initRichToolbar(tabManager: TabManager): void {
     }
   };
 
-  const currentAnchor = (): HTMLAnchorElement | null => {
-    const selection = window.getSelection();
-    const node = selection && selection.rangeCount > 0 ? selection.anchorNode : null;
-    const base = node instanceof Element ? node : (node?.parentElement ?? null);
-    return base?.closest('a') ?? null;
-  };
-
   const selectionIsInNote = (): boolean => {
     const note = document.getElementById('note');
     const selection = window.getSelection();
@@ -163,8 +156,7 @@ export function initRichToolbar(tabManager: TabManager): void {
     parkedRange =
       selectionIsInNote() ? window.getSelection()!.getRangeAt(0).cloneRange() : null;
     // Prefill with the link under the caret, if any.
-    const anchor = currentAnchor();
-    elements.input.value = anchor?.getAttribute('href') ?? '';
+    elements.input.value = safeQuery(() => getEditorPort()?.queryLinkHref()) ?? '';
     elements.popover.hidden = false;
     elements.linkButton?.setAttribute('aria-expanded', 'true');
     elements.input.focus();
@@ -193,9 +185,7 @@ export function initRichToolbar(tabManager: TabManager): void {
 
     // Editing an existing link: retarget the anchor under the caret instead
     // of requiring a fresh selection.
-    const anchor = currentAnchor();
-    if (anchor) {
-      anchor.setAttribute('href', href);
+    if (port.retargetLink(href)) {
       tabManager.saveActiveFromEditor();
       closeLinkPopover(true);
       return;
@@ -204,8 +194,11 @@ export function initRichToolbar(tabManager: TabManager): void {
     if (port.insertLink(href)) {
       closeLinkPopover(true);
     } else {
-      // createLink over a collapsed caret is a no-op in every engine.
+      // createLink over a collapsed caret is refused by the port — guide
+      // instead of dumping the href, and get out of the note's way so the
+      // user can actually select text.
       showToast('Select the text to link first.');
+      closeLinkPopover(true);
     }
   };
 

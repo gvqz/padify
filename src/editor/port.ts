@@ -105,6 +105,18 @@ export interface EditorPort {
   /** Removes the link under the caret/selection, keeping its text. */
   removeLink(): boolean;
 
+  /**
+   * The href of the link at/around the selection, or null when the caret is
+   * not on a link. Powers the toolbar's link popover prefill.
+   */
+  queryLinkHref(): string | null;
+
+  /**
+   * Repoints the link at/around the selection to href. Returns false when
+   * there is no link under the caret/selection.
+   */
+  retargetLink(href: string): boolean;
+
   undo(): boolean;
   redo(): boolean;
 

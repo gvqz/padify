@@ -194,13 +194,38 @@ test.describe('note types', () => {
     const editor = page.locator('#note');
     await editor.click();
     await page.keyboard.type('read the docs');
-    // Select "docs" and link it.
-    await editor.getByText('docs').dblclick();
+    // Select the last word ("docs") — keyboard only, a dblclick on text=
+    // resolves to the editor element instead of the word.
+    await page.keyboard.press('Control+Shift+ArrowLeft');
     await page.locator('#richLinkButton').click();
     await page.locator('#richLinkInput').fill('https://example.com/docs');
     await page.locator('#richLinkApply').click();
 
+    // The word is wrapped — not replaced with the href.
     await expect(editor.locator('a[href="https://example.com/docs"]')).toHaveCount(1);
+    await expect(editor.locator('a')).toHaveText('docs');
     await expect(page.locator('#richLinkPopover')).toBeHidden();
+
+    // A collapsed caret is "nothing to link" — guidance, no href dumped.
+    // Home parks the caret at the note start, outside any anchor (the anchor
+    // is the note's last block, so End would clamp back INSIDE it).
+    await page.keyboard.press('Home');
+    await page.locator('#richLinkButton').click();
+    await page.locator('#richLinkInput').fill('https://example.com/stray');
+    await page.locator('#richLinkApply').click();
+    await expect(page.locator('#toast')).toContainText('Select the text to link first');
+    await expect(editor.locator('a')).toHaveText('docs');
+    await expect(editor.locator('a')).toHaveAttribute('href', 'https://example.com/docs');
+
+    // Putting the caret on the link and reopening the popover prefills the
+    // current href; applying retargets the existing anchor in place.
+    await editor.locator('a').click();
+    await page.locator('#richLinkButton').click();
+    await expect(page.locator('#richLinkInput')).toHaveValue('https://example.com/docs');
+    await page.locator('#richLinkInput').fill('https://example.com/docs/v2');
+    await page.locator('#richLinkApply').click();
+
+    await expect(editor.locator('a[href="https://example.com/docs/v2"]')).toHaveCount(1);
+    await expect(editor.locator('a')).toHaveText('docs');
   });
 });

@@ -178,8 +178,13 @@ export class ContentEditablePort implements EditorPort {
     if (typeof document.execCommand !== 'function') {
       return false;
     }
-    // createLink over a collapsed caret is a no-op in every engine — the
-    // caller (toolbar) turns the false into user guidance instead.
+    // The contract promises false over a collapsed caret ("nothing to
+    // link") — but Chrome happily accepts it and dumps the href into the
+    // note as anchor text. Guard so the caller's guidance toast fires.
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      return false;
+    }
     return document.execCommand('createLink', false, href);
   }
 
@@ -188,6 +193,31 @@ export class ContentEditablePort implements EditorPort {
       return false;
     }
     return document.execCommand('unlink', false);
+  }
+
+  /** The anchor at/around the selection, or null — always inside the note. */
+  private anchorAtSelection(): HTMLAnchorElement | null {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return null;
+    }
+    const node = selection.anchorNode;
+    const base = node instanceof Element ? node : (node?.parentElement ?? null);
+    const anchor = base?.closest('a');
+    return anchor && this.element.contains(anchor) ? (anchor as HTMLAnchorElement) : null;
+  }
+
+  queryLinkHref(): string | null {
+    return this.anchorAtSelection()?.getAttribute('href') ?? null;
+  }
+
+  retargetLink(href: string): boolean {
+    const anchor = this.anchorAtSelection();
+    if (!anchor) {
+      return false;
+    }
+    anchor.setAttribute('href', href);
+    return true;
   }
 
   undo(): boolean {
