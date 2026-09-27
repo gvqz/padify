@@ -47,14 +47,17 @@ kbd>span {
   font-size: 11px;
 }
 
-table {
+/* Scoped to the modal chrome (the keyboard-shortcuts table). Note tables
+   must not match these — the rich text editor paints its own table subset
+   with vercel.css's #note rules. */
+.modal-content table {
   padding: 0;
   margin-left: auto;
   margin-right: auto;
   width: 100%;
 }
 
-table tr {
+.modal-content table tr {
   display: flex;
   background-color: var(--dough-white);
   margin: 0;
@@ -62,11 +65,11 @@ table tr {
   align-items: center;
 }
 
-table tr:nth-child(n+2) {
+.modal-content table tr:nth-child(n+2) {
   border-top: 1px solid #e0e0e0;
 }
 
-table tr td {
+.modal-content table tr td {
   text-align: left;
   margin: 0;
   padding: 6px 13px;

@@ -34,6 +34,14 @@ export type ScriptType = 'super' | 'sub';
 /** Horizontal text alignment of the selection's blocks. */
 export type Alignment = 'left' | 'center' | 'right' | 'justify';
 
+/** The caret's position inside a table, as queryTableContext reports it. */
+export interface TableCellContext {
+  rows: number;
+  cols: number;
+  rowIndex: number;
+  colIndex: number;
+}
+
 /** Every mutation-style command the app performs on the editor surface. */
 export type EditorCommand = FormatCommand | 'removeFormat';
 
@@ -170,6 +178,32 @@ export interface EditorPort {
 
   /** Inserts a horizontal rule at the caret, splitting the block. */
   insertHorizontalRule(): boolean;
+
+  /**
+   * Inserts a rows×cols table at the caret (Docs-style grid pick). The
+   * produced markup is the stored table subset: table > tbody > tr > td.
+   */
+  insertTable(rows: number, cols: number): boolean;
+
+  /**
+   * The table the caret sits in, with its shape and the caret's cell
+   * coordinates — null when the caret is not inside a table. Powers the
+   * table menu's visibility and its row/column operations.
+   */
+  queryTableContext(): TableCellContext | null;
+
+  /**
+   * Moves the caret between table cells (Tab / Shift+Tab, Docs-style).
+   * Returns false when the caret is not in a table or there is no neighbor.
+   */
+  moveTableCellFocus(step: 1 | -1): boolean;
+
+  /**
+   * Runs a table structure operation at the caret's cell: row-above,
+   * row-below, col-left, col-right, row-delete, col-delete, table-delete.
+   * Returns false when the caret is not in a table.
+   */
+  runTableAction(action: string): boolean;
 
   /** Fires on user edits (typing, formatting). Returns an unsubscriber. */
   onInput(listener: () => void): () => void;

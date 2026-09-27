@@ -73,7 +73,7 @@
    */
   function sanitizeShareHtml(html) {
     var parsed = new DOMParser().parseFromString('<body>' + String(html == null ? '' : html) + '</body>', 'text/html');
-    var allowed = { B: 1, STRONG: 1, I: 1, EM: 1, U: 1, S: 1, STRIKE: 1, DEL: 1, BR: 1, DIV: 1, SPAN: 1, P: 1, H1: 1, H2: 1, H3: 1, UL: 1, OL: 1, LI: 1, BLOCKQUOTE: 1, PRE: 1, SUP: 1, SUB: 1, HR: 1, A: 1 };
+    var allowed = { B: 1, STRONG: 1, I: 1, EM: 1, U: 1, S: 1, STRIKE: 1, DEL: 1, BR: 1, DIV: 1, SPAN: 1, P: 1, H1: 1, H2: 1, H3: 1, UL: 1, OL: 1, LI: 1, BLOCKQUOTE: 1, PRE: 1, SUP: 1, SUB: 1, HR: 1, A: 1, TABLE: 1, THEAD: 1, TBODY: 1, TR: 1, TD: 1, TH: 1 };
     var safeHref = /^(https?:|mailto:|#|\/)/i;
     var colorValue = /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(,\s*(0?\.\d+|1)\s*)?\)|[a-z]+)$/i;
     var fontFamilyValue = /^[-a-z0-9\s,'’]{1,120}$/i;
@@ -117,7 +117,7 @@
           clone.setAttribute('rel', 'noopener noreferrer nofollow');
           clone.setAttribute('target', '_blank');
         }
-      } else if (element.tagName === 'SPAN' || element.tagName === 'DIV' || element.tagName === 'P' || element.tagName === 'H1' || element.tagName === 'H2' || element.tagName === 'H3' || element.tagName === 'LI' || element.tagName === 'BLOCKQUOTE' || element.tagName === 'PRE') {
+      } else if (element.tagName === 'SPAN' || element.tagName === 'DIV' || element.tagName === 'P' || element.tagName === 'H1' || element.tagName === 'H2' || element.tagName === 'H3' || element.tagName === 'LI' || element.tagName === 'BLOCKQUOTE' || element.tagName === 'PRE' || element.tagName === 'TD' || element.tagName === 'TH') {
         var rawStyle = element.getAttribute('style');
         if (rawStyle) {
           var safeStyle = sanitizeStyle(rawStyle, element.tagName === 'SPAN');

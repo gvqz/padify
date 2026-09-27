@@ -181,7 +181,13 @@ describe('sanitizeNoteHtml (characterization)', () => {
   });
 
   it('drills into unknown wrappers and rescues allowed children', () => {
-    expect(sanitizeNoteHtml('<table><tr><td><b>kept</b></td></tr></table>')).toBe('<b>kept</b>');
+    // Policy update (tables, 2026-09): table markup is now part of the
+    // stored subset, so the drill-down behavior moves to a genuinely
+    // unknown wrapper — <section> is unwrapped, the <b> inside is kept.
+    expect(sanitizeNoteHtml('<section><b>kept</b></section>')).toBe('<b>kept</b>');
+    expect(sanitizeNoteHtml('<table><tr><td><b>kept</b></td></tr></table>')).toBe(
+      '<table><tbody><tr><td><b>kept</b></td></tr></tbody></table>',
+    );
   });
 
   it('iframe content is raw text per the HTML spec — it comes back escaped, inert', () => {

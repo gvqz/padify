@@ -16,6 +16,7 @@ import type {
   FormatCommand,
   ListKind,
   ScriptType,
+  TableCellContext,
 } from './port';
 
 const FORMAT_COMMANDS: readonly FormatCommand[] = [
@@ -470,6 +471,197 @@ export class ContentEditablePort implements EditorPort {
       return false;
     }
     return document.execCommand('insertHorizontalRule', false);
+  }
+
+  // -------------------------------------------------------------------------
+  // Tables — the table > tbody > tr > td subset. Insertion rides
+  // execCommand('insertHTML') so the native undo stack keeps one step; the
+  // row/column operations rewrite the DOM by hand and announce themselves.
+  // -------------------------------------------------------------------------
+
+  insertTable(rows: number, cols: number): boolean {
+    if (!this.canExec()) {
+      return false;
+    }
+    const safeRows = Math.min(Math.max(Math.floor(rows), 1), 20);
+    const safeCols = Math.min(Math.max(Math.floor(cols), 1), 10);
+    const rowHtml = `<tr>${'<td></td>'.repeat(safeCols)}</tr>`;
+    const html = `<table><tbody>${rowHtml.repeat(safeRows)}</tbody></table><div><br></div>`;
+    if (!document.execCommand('insertHTML', false, html)) {
+      return false;
+    }
+    // Put the caret into the first cell — Chrome leaves it after the table.
+    const firstCell = this.element.querySelectorAll('td')[0];
+    if (firstCell) {
+      const range = document.createRange();
+      range.selectNodeContents(firstCell);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+    this.announceEdit();
+    return true;
+  }
+
+  /** The table/cell the selection's anchor sits in, or null. */
+  private tableAtSelection(): { table: HTMLTableElement; cell: HTMLTableCellElement } | null {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return null;
+    }
+    const node = selection.getRangeAt(0).startContainer;
+    const base = node instanceof Element ? node : (node?.parentElement ?? null);
+    const cell = base?.closest('td, th');
+    const table = cell?.closest('table');
+    if (!(cell instanceof HTMLElement) || !(table instanceof HTMLTableElement)) {
+      return null;
+    }
+    if (!this.element.contains(table)) {
+      return null;
+    }
+    return { table, cell: cell as HTMLTableCellElement };
+  }
+
+  queryTableContext(): TableCellContext | null {
+    const at = this.tableAtSelection();
+    if (!at) {
+      return null;
+    }
+    const rows = Array.from(at.table.querySelectorAll('tr'));
+    const rowIndex = rows.findIndex((row) => row.contains(at.cell));
+    if (rowIndex === -1) {
+      return null;
+    }
+    const cols = rows[rowIndex]!.children.length;
+    const colIndex = Array.from(rows[rowIndex]!.children).indexOf(at.cell);
+    return { rows: rows.length, cols, rowIndex, colIndex: colIndex === -1 ? 0 : colIndex };
+  }
+
+  moveTableCellFocus(step: 1 | -1): boolean {
+    const context = this.queryTableContext();
+    if (!context) {
+      return false;
+    }
+    const table = this.tableAtSelection()!.table;
+    const rows = Array.from(table.querySelectorAll('tr'));
+    const targetRow = context.rowIndex;
+    const targetCol = context.colIndex + step;
+    // Row wrap: past the last/first cell of a row, move to the next/prev row.
+    const clampedRow = Math.min(Math.max(targetRow + Math.floor(targetCol / context.cols), 0), rows.length - 1);
+    const clampedCol = ((targetCol % context.cols) + context.cols) % context.cols;
+    if (clampedRow === context.rowIndex && clampedCol === context.colIndex) {
+      return false;
+    }
+    const cell = rows[clampedRow]?.children[clampedCol];
+    if (!(cell instanceof HTMLElement)) {
+      return false;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    return true;
+  }
+
+  /**
+   * The table menu's operations. Every one keeps the caret logically near
+   * where it was (the touched cell, its replacement, or the block after the
+   * removed table) and announces the rewrite so autosave/toolbar stay live.
+   */
+  runTableAction(action: string): boolean {
+    const context = this.queryTableContext();
+    if (!context) {
+      return false;
+    }
+    const { table, cell } = this.tableAtSelection()!;
+    const rows = Array.from(table.querySelectorAll('tr'));
+    const row = rows[context.rowIndex]!;
+    const placeCaret = (target: Element | null): void => {
+      if (!target) {
+        return;
+      }
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    };
+
+    switch (action) {
+      case 'row-above':
+      case 'row-below': {
+        const newRow = row.cloneNode(true) as HTMLTableRowElement;
+        Array.from(newRow.children).forEach((td) => {
+          td.innerHTML = '';
+        });
+        row.insertAdjacentElement(action === 'row-above' ? 'beforebegin' : 'afterend', newRow);
+        const cellIndex = Array.from(row.children).indexOf(cell);
+        placeCaret(newRow.children[cellIndex]);
+        break;
+      }
+      case 'col-left':
+      case 'col-right': {
+        const cellIndex = Array.from(row.children).indexOf(cell);
+        const offset = action === 'col-left' ? 0 : 1;
+        rows.forEach((r) => {
+          const fresh = document.createElement('td');
+          r.children[cellIndex]?.insertAdjacentElement(
+            offset === 0 ? 'beforebegin' : 'afterend',
+            fresh,
+          );
+        });
+        placeCaret(row.children[cellIndex + offset]);
+        break;
+      }
+      case 'row-delete': {
+        if (rows.length === 1) {
+          table.remove();
+          this.caretAfterTable(table);
+          break;
+        }
+        const next = row.nextElementSibling ?? row.previousElementSibling;
+        row.remove();
+        placeCaret(next?.children[context.colIndex] ?? null);
+        break;
+      }
+      case 'col-delete': {
+        const cellIndex = Array.from(row.children).indexOf(cell);
+        if (row.children.length === 1) {
+          table.remove();
+          this.caretAfterTable(table);
+          break;
+        }
+        rows.forEach((r) => r.children[cellIndex]?.remove());
+        placeCaret(row.children[Math.min(cellIndex, row.children.length - 1)]);
+        break;
+      }
+      case 'table-delete': {
+        table.remove();
+        this.caretAfterTable(table);
+        break;
+      }
+      default:
+        return false;
+    }
+    this.announceEdit();
+    return true;
+  }
+
+  /** After a table disappears, park the caret in the block that follows it. */
+  private caretAfterTable(table: HTMLTableElement): void {
+    const next = table.nextElementSibling;
+    if (next) {
+      const range = document.createRange();
+      range.selectNodeContents(next);
+      range.collapse(false);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
   }
 
   private canExec(): boolean {

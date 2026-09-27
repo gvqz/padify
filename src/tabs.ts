@@ -167,9 +167,10 @@ export function legacyTextToHtml(text: string): string {
 
 /**
  * The tags a note may contain. Inline tags are the classic formatting
- * subset; the block + link tags are the rich text note vocabulary, and
- * sup/sub/hr join for the Docs-style controls (scripts, rules). Everything
- * else is unwrapped to its text on load.
+ * subset; the block + link tags are the rich text note vocabulary; sup/sub/
+ * hr serve the scripts and rules; the checklist data attributes and the
+ * table subset (table/thead/tbody/tr/td/th) complete the Docs-style
+ * controls. Everything else is unwrapped to its text on load.
  */
 const ALLOWED_TAGS = new Set([
   'B',
@@ -196,6 +197,12 @@ const ALLOWED_TAGS = new Set([
   'SUB',
   'HR',
   'A',
+  'TABLE',
+  'THEAD',
+  'TBODY',
+  'TR',
+  'TD',
+  'TH',
 ]);
 
 /**
@@ -216,6 +223,8 @@ const ALLOWED_ATTRS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['LI', new Set(['style', 'data-checked'])],
   ['BLOCKQUOTE', new Set(['style'])],
   ['PRE', new Set(['style'])],
+  ['TD', new Set(['style'])],
+  ['TH', new Set(['style'])],
 ]);
 
 /**
@@ -390,6 +399,26 @@ export function htmlToText(html: string): string {
         element.childNodes.forEach(walk);
         return;
       }
+    }
+    // Table rows read as lines, cells tab-separated (Docs' export shape).
+    if (element.tagName === 'TR') {
+      if (parts.length > 0) {
+        parts.push('\n');
+      }
+      let cells = 0;
+      element.childNodes.forEach((child) => {
+        if (child.nodeType === Node.ELEMENT_NODE) {
+          const tag = (child as HTMLElement).tagName;
+          if (tag === 'TD' || tag === 'TH') {
+            if (cells > 0) {
+              parts.push('\t');
+            }
+            cells += 1;
+            child.childNodes.forEach(walk);
+          }
+        }
+      });
+      return;
     }
     if (BLOCK_TAGS.has(element.tagName)) {
       // Block boundaries read as newlines, like innerText would report them.

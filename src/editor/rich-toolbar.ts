@@ -117,7 +117,19 @@ export function initRichToolbar(tabManager: TabManager): void {
       toolbar
         .querySelectorAll<HTMLButtonElement>('[aria-pressed]')
         .forEach((button) => button.setAttribute('aria-pressed', 'false'));
+      const tableHost = document.getElementById('richTableMenuHost');
+      if (tableHost) {
+        tableHost.hidden = true;
+      }
       return;
+    }
+
+    // The table-ops menu only means something while the caret sits in a
+    // table — it appears and disappears with the context, like Docs' hover
+    // toolbar, just docked so it cannot cover the cells.
+    const tableHost = document.getElementById('richTableMenuHost');
+    if (tableHost) {
+      tableHost.hidden = !safeQuery(() => port.queryTableContext());
     }
 
     toolbar.querySelectorAll<HTMLButtonElement>('[data-rich-cmd]').forEach((button) => {
@@ -275,6 +287,22 @@ export function initRichToolbar(tabManager: TabManager): void {
       refreshStates();
     });
   };
+
+  // The grid picker previews the rectangle the pointer covers, the way
+  // Docs' insert grid does: every cell up to the hovered row/column lights.
+  const gridPanel = toolbar.querySelector<HTMLElement>('.rich-menu-panel-grid');
+  const paintGrid = (hovered: HTMLElement | null): void => {
+    const cells = Array.from(gridPanel?.querySelectorAll<HTMLElement>('[data-rich-grid]') ?? []);
+    const [row = -1, col = -1] = (hovered?.dataset.richGrid ?? '-1,-1').split(',').map(Number);
+    cells.forEach((cell) => {
+      const [r = -1, c = -1] = (cell.dataset.richGrid ?? '-1,-1').split(',').map(Number);
+      cell.classList.toggle('rich-grid-on', r <= row && c <= col);
+    });
+  };
+  gridPanel?.addEventListener('mouseover', (event) => {
+    paintGrid((event.target as HTMLElement).closest<HTMLElement>('[data-rich-grid]'));
+  });
+  gridPanel?.addEventListener('mouseleave', () => paintGrid(null));
 
   const closeLinkPopover = (refocusEditor = false): void => {
     elements.popover.hidden = true;
@@ -451,6 +479,24 @@ export function initRichToolbar(tabManager: TabManager): void {
           hiliteGlyph.style.setProperty('--rich-hilite', color);
         }
       }
+      closeMenus(true);
+      scheduleStateRefresh();
+      return;
+    }
+
+    // The table grid picker: cell (r,c) inserts an (r+1)x(c+1) table.
+    const gridCell = target.closest<HTMLButtonElement>('[data-rich-grid]');
+    if (gridCell) {
+      const [row = 0, col = 0] = (gridCell.dataset.richGrid ?? '0,0').split(',').map(Number);
+      port.insertTable(row + 1, col + 1);
+      closeMenus(true);
+      scheduleStateRefresh();
+      return;
+    }
+
+    const tableItem = target.closest<HTMLButtonElement>('[data-rich-table]');
+    if (tableItem) {
+      port.runTableAction(tableItem.dataset.richTable!);
       closeMenus(true);
       scheduleStateRefresh();
       return;

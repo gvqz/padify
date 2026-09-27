@@ -225,6 +225,66 @@
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 12h16"/><path d="M8 6h8" opacity=".5"/><path d="M8 18h8" opacity=".5"/></svg>
                 <span class="sr-only">Insert divider</span>
               </button>
+              <div class="rich-menu-host">
+                <button type="button" class="rich-btn rich-menu-btn" data-rich-menu="table" aria-haspopup="menu" aria-expanded="false" title="Insert table">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M3 9.5h18M9.75 9.5v10M15.75 9.5v10"/></svg>
+                  <span class="sr-only">Insert table</span>
+                </button>
+                <div class="rich-menu-panel rich-menu-panel-grid" role="menu" aria-label="Insert table" hidden>
+                  <!-- 6x6 grid; cells carry 0-based row/col, click inserts (r+1)x(c+1) -->
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="0,0" aria-label="1 by 1 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="0,1" aria-label="1 by 2 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="0,2" aria-label="1 by 3 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="0,3" aria-label="1 by 4 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="0,4" aria-label="1 by 5 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="0,5" aria-label="1 by 6 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="1,0" aria-label="2 by 1 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="1,1" aria-label="2 by 2 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="1,2" aria-label="2 by 3 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="1,3" aria-label="2 by 4 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="1,4" aria-label="2 by 5 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="1,5" aria-label="2 by 6 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="2,0" aria-label="3 by 1 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="2,1" aria-label="3 by 2 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="2,2" aria-label="3 by 3 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="2,3" aria-label="3 by 4 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="2,4" aria-label="3 by 5 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="2,5" aria-label="3 by 6 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="3,0" aria-label="4 by 1 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="3,1" aria-label="4 by 2 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="3,2" aria-label="4 by 3 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="3,3" aria-label="4 by 4 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="3,4" aria-label="4 by 5 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="3,5" aria-label="4 by 6 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="4,0" aria-label="5 by 1 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="4,1" aria-label="5 by 2 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="4,2" aria-label="5 by 3 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="4,3" aria-label="5 by 4 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="4,4" aria-label="5 by 5 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="4,5" aria-label="5 by 6 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="5,0" aria-label="6 by 1 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="5,1" aria-label="6 by 2 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="5,2" aria-label="6 by 3 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="5,3" aria-label="6 by 4 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="5,4" aria-label="6 by 5 table"></button>
+                  <button type="button" role="menuitem" class="rich-grid-cell" data-rich-grid="5,5" aria-label="6 by 6 table"></button>
+                </div>
+              </div>
+              <div class="rich-menu-host" id="richTableMenuHost" hidden>
+                <button type="button" class="rich-btn rich-menu-btn" data-rich-menu="table-ops" aria-haspopup="menu" aria-expanded="false" title="Table options">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M3 9.5h18M9.75 9.5v10M15.75 9.5v10"/><path d="m11 14.5 1.5 1.5 2.5-3" stroke-width="1.8"/></svg>
+                  <span class="sr-only">Table options</span>
+                </button>
+                <div class="rich-menu-panel" role="menu" aria-label="Table options" hidden>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-table="row-above">Insert row above</button>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-table="row-below">Insert row below</button>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-table="col-left">Insert column left</button>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-table="col-right">Insert column right</button>
+                  <button type="button" role="menuitem" class="rich-menu-item rich-menu-danger" data-rich-table="row-delete">Delete row</button>
+                  <button type="button" role="menuitem" class="rich-menu-item rich-menu-danger" data-rich-table="col-delete">Delete column</button>
+                  <button type="button" role="menuitem" class="rich-menu-item rich-menu-danger" data-rich-table="table-delete">Delete table</button>
+                </div>
+              </div>
             </div>
             <div class="rich-toolbar-sep" aria-hidden="true"></div>
             <div class="rich-toolbar-group">

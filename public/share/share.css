@@ -245,6 +245,32 @@ body {
   color: var(--s-fg-muted);
 }
 
+/* Tables — the same chrome-painted borders as the editor (vercel.css);
+   the share view is read-only. */
+.share-content table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+}
+
+.share-content td,
+.share-content th {
+  border: 1px solid var(--s-border);
+  padding: 3px 10px;
+  min-width: 36px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.share-content th {
+  background: var(--s-bg-soft);
+  font-weight: 650;
+}
+
+.share-content td:empty::after,
+.share-content th:empty::after {
+  content: '\00a0';
+}
+
 .share-content pre {
   margin: 0.5em 0;
   padding: 0.6em 0.8em;

@@ -3215,6 +3215,34 @@ body.dark #note:has(> br:only-child)::before {
   text-decoration-color: var(--vz-fg-subtle);
 }
 
+/* ---- Tables ----
+   The stored subset is table > tbody > tr > td/th — borders live here in
+   the chrome, not in the note markup. Empty cells keep their height with
+   an nbsp ghost so the caret can reach them. */
+#note table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+}
+
+#note td,
+#note th {
+  border: 1px solid var(--vz-border-strong);
+  padding: 3px 10px;
+  min-width: 36px;
+  text-align: left;
+  vertical-align: top;
+}
+
+#note th {
+  background: var(--vz-bg-subtle);
+  font-weight: 650;
+}
+
+#note td:empty::after,
+#note th:empty::after {
+  content: '\00a0';
+}
+
 /* ---- Rich text toolbar ----
    Lives above the note; only mounted-visible for rich notes. Same chip
    language as the rest of the chrome; pressed = the subtle chip wash. */
@@ -3440,6 +3468,7 @@ body.dark #note:has(> br:only-child)::before {
   color: var(--vz-fg-muted);
   font-size: 12.5px;
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
   transition: background-color 100ms ease, color 100ms ease;
 }
@@ -3492,6 +3521,53 @@ body.dark #note:has(> br:only-child)::before {
   background: var(--vz-bg-hover);
   transform: none;
   color: var(--vz-fg);
+}
+
+/* The table menu host appears only while the caret is inside a table. */
+.rich-menu-host[hidden] {
+  display: none;
+}
+
+/* The insert-table grid: Docs' hover rectangle, cell (r,c) lights up to
+   the hovered row/column and picks the size on click. */
+.rich-menu-panel-grid {
+  grid-template-columns: repeat(6, 15px);
+  gap: 3px;
+  padding: 8px;
+}
+
+.rich-grid-cell {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 1px solid var(--vz-border-strong);
+  border-radius: 2px;
+  background: var(--vz-bg-elevated);
+  cursor: pointer;
+}
+
+.rich-grid-cell:hover,
+.rich-grid-cell.rich-grid-on {
+  border-color: var(--vz-fg-muted);
+  background: var(--vz-fg-subtle);
+}
+
+/* Destructive table operations read through the shared danger ink and a
+   hairline that separates them from the structural ones. */
+.rich-menu-item.rich-menu-danger {
+  margin-top: 4px;
+  color: var(--vz-danger);
+}
+
+.rich-menu-item.rich-menu-danger:first-of-type {
+  border-top: 1px solid var(--vz-border);
+  padding-top: 9px;
+}
+
+.rich-menu-item.rich-menu-danger:hover,
+.rich-menu-item.rich-menu-danger:focus-visible {
+  background: var(--vz-bg-hover);
+  color: var(--vz-danger);
 }
 
 /* ---- Note rail (left sidebar) ---- */

@@ -42,7 +42,8 @@ export function initRichShortcuts(tabManager: TabManager): void {
     const mod = event.ctrlKey || event.metaKey;
 
     // Inside a list, Tab/Shift+Tab structure the list (the port nests
-    // natively); stop the legacy literal-tab handler from also firing.
+    // natively); inside a table they walk the cells (Docs parity). Both
+    // stop the legacy literal-tab handler from also firing.
     if (event.key === 'Tab' && getEditorPort()?.queryListKind() !== null) {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -51,6 +52,13 @@ export function initRichShortcuts(tabManager: TabManager): void {
       } else {
         getEditorPort()?.indent();
       }
+      return;
+    }
+
+    if (event.key === 'Tab' && getEditorPort()?.queryTableContext()) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      getEditorPort()?.moveTableCellFocus(event.shiftKey ? -1 : 1);
       return;
     }
 

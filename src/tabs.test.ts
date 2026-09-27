@@ -143,6 +143,23 @@ describe('sanitizeNoteHtml', () => {
     // The mark never travels to a tag that does not declare it.
     expect(sanitizeNoteHtml('<div data-checked="true">x</div>')).toBe('<div>x</div>');
   });
+
+  it('keeps the table subset with alignment styles on cells (policy: tables, 2026-09)', () => {
+    expect(sanitizeNoteHtml('<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>')).toBe(
+      '<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>',
+    );
+    expect(sanitizeNoteHtml('<table><tr><th>h</th></tr></table>')).toBe(
+      '<table><tbody><tr><th>h</th></tr></tbody></table>',
+    );
+    // Cell alignment is the one style a cell may carry (the align buttons).
+    expect(
+      sanitizeNoteHtml('<table><tbody><tr><td style="text-align: center">c</td></tr></tbody></table>'),
+    ).toBe('<table><tbody><tr><td style="text-align: center">c</td></tr></tbody></table>');
+    // A hostile attribute rides the same wall as everywhere else.
+    expect(sanitizeNoteHtml('<table><tbody><tr><td bgcolor="red">c</td></tr></tbody></table>')).toBe(
+      '<table><tbody><tr><td>c</td></tr></tbody></table>',
+    );
+  });
 });
 
 describe('htmlToText', () => {
@@ -165,6 +182,14 @@ describe('htmlToText', () => {
         '<ul data-rich-checklist="true"><li data-checked="false">milk</li><li data-checked="true">eggs</li></ul>',
       ),
     ).toBe('[ ] milk\n[x] eggs');
+  });
+
+  it('reads table rows as lines with tab-separated cells', () => {
+    expect(
+      htmlToText(
+        '<table><tbody><tr><td>a1</td><td>b1</td></tr><tr><td>a2</td><td>b2</td></tr></tbody></table>',
+      ),
+    ).toBe('a1\tb1\na2\tb2');
   });
 
   it('strips inline formatting', () => {
