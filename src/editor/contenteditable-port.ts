@@ -31,6 +31,18 @@ const BLOCK_TAGS: readonly BlockFormat[] = ['p', 'h1', 'h2', 'h3', 'blockquote',
 /** Blocks that carry the margin-left indent step (lists nest natively). */
 const INDENTABLE_TAGS = new Set(['DIV', 'P', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'PRE']);
 
+/**
+ * Block siblings a caret can safely move to when an insertion must escape a
+ * list (tables/dividers nest inside <li> otherwise) — the note's block set
+ * plus the lists and tables themselves.
+ */
+const BLOCK_SIBLING_TAGS = new Set([
+  ...INDENTABLE_TAGS,
+  'UL',
+  'OL',
+  'TABLE',
+]);
+
 /** px added per indent step — the classic contenteditable indent depth. */
 const INDENT_STEP_PX = 40;
 const MAX_INDENT_PX = 240;
@@ -57,6 +69,13 @@ const LEGACY_FONT_SIZE_PX: ReadonlyMap<string, number> = new Map([
 
 /** The execCommand marker size: setFontSize rewrites every size="7" to px. */
 const FONT_MARKER_SIZE = '7';
+
+/**
+ * The styled-caret marker: a zero-width space inside the span the caret
+ * lands in, so typed text joins a run that already carries the picked
+ * style. Invisible to the reader, stripped from titles/previews/counts.
+ */
+const ZERO_WIDTH_SPACE = '\u200B';
 
 function isFormatCommand(command: EditorCommand): command is FormatCommand {
   return (FORMAT_COMMANDS as readonly string[]).includes(command);
@@ -113,7 +132,9 @@ export class ContentEditablePort implements EditorPort {
   }
 
   getText(): string {
-    return this.element.innerText.replace(/\u00a0/g, ' ');
+    // The styled-caret marker is plumbing, not text — keep it out of the
+    // counts, previews and stats the same way innerText skips hidden runs.
+    return this.element.innerText.replace(/\u00a0/g, ' ').replace(/\u200B/g, '');
   }
 
   isEmpty(): boolean {
@@ -179,11 +200,264 @@ export class ContentEditablePort implements EditorPort {
     if (!isFormatCommand(command) && command !== 'removeFormat') {
       return false;
     }
+    // Strike inside a CHECKED checklist item is a Chrome trap: the item's
+    // CSS-painted line-through makes the engine believe the text is already
+    // struck, so the toggle silently no-ops (command answers true, DOM never
+    // changes, unchecking later reveals no strike). The checked-item toggle
+    // is handled by hand instead — wrap/unwrap the selection's runs in
+    // <strike>, which the sanitizer already stores.
+    if (command === 'strikeThrough' && this.insideCheckedItem()) {
+      return this.toggleManualStrike();
+    }
     return document.execCommand(command, false);
   }
 
+  /** True when the selection starts inside a checked checklist item. */
+  private insideCheckedItem(): boolean {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return false;
+    }
+    const node = selection.getRangeAt(0).startContainer;
+    const base = node instanceof Element ? node : (node?.parentElement ?? null);
+    const item = base?.closest<HTMLLIElement>('li[data-checked="true"]');
+    return !!item && this.element.contains(item);
+  }
+
+  /**
+   * Strike toggle for checked checklist items: wraps the selection's runs in
+   * <strike> (or unwraps them when every covered run is already struck),
+   * then announces the edit. extractContents splits partial text nodes and
+   * partial strike elements natively, so partial toggles behave too.
+   */
+  private toggleManualStrike(): boolean {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return false;
+    }
+    const range = selection.getRangeAt(0);
+    if (range.collapsed) {
+      return false;
+    }
+    // Within one list item the range is purely inline — extract/insert can
+    // rework it safely. Across blocks only the per-run wrap is safe.
+    const sameBlock = this.blockOf(range.startContainer) === this.blockOf(range.endContainer);
+    const texts = this.textNodesInRange(range);
+    if (texts.length === 0) {
+      return false;
+    }
+    if (sameBlock) {
+      // Toggle off only when every covered run is already struck; otherwise
+      // the press means "strike it all". Unwrapping targets the LIVE strike
+      // wrappers: extract/insert would only drop the wrapper from a fragment
+      // and re-insert the text right back inside the live <strike>.
+      const allStruck = texts.every((t) => t.parentElement?.closest('strike, s, del'));
+      if (allStruck) {
+        const wrappers = new Set<Element>();
+        for (const text of texts) {
+          const wrapper = text.parentElement?.closest('strike, s, del');
+          if (wrapper && this.element.contains(wrapper)) {
+            wrappers.add(wrapper);
+          }
+        }
+        wrappers.forEach((el) => this.unwrapElement(el));
+      } else {
+        const fragment = range.extractContents();
+        const strike = document.createElement('strike');
+        strike.append(fragment);
+        range.insertNode(strike);
+        // Native parity: the engine keeps the struck text selected, so the
+        // toolbar answers pressed for the run the caret sits in.
+        const struck = document.createRange();
+        struck.selectNodeContents(strike);
+        selection.removeAllRanges();
+        selection.addRange(struck);
+      }
+    } else {
+      // Cross-block: wrap the unstruck runs in place, leave the rest alone.
+      const wrapTargets = texts.filter((t) => !t.parentElement?.closest('strike, s, del'));
+      if (wrapTargets.length === 0) {
+        return false;
+      }
+      for (const text of wrapTargets) {
+        this.wrapTextRange(text, range);
+      }
+    }
+    this.announceEdit();
+    return true;
+  }
+
+  /** The block-level ancestor of a node inside the editor, or null. */
+  private blockOf(node: Node): Element | null {
+    let el = node instanceof Element ? node : (node.parentElement ?? null);
+    while (el && el !== this.element && !BLOCK_SIBLING_TAGS.has(el.tagName)) {
+      el = el.parentElement;
+    }
+    return el && el !== this.element ? el : null;
+  }
+
+  /** Non-empty text nodes the range touches, document order. */
+  private textNodesInRange(range: Range): Text[] {
+    const texts: Text[] = [];
+    const walker = document.createTreeWalker(this.element, NodeFilter.SHOW_TEXT);
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      if ((node.nodeValue ?? '').length > 0 && range.intersectsNode(node)) {
+        texts.push(node as Text);
+      }
+    }
+    return texts;
+  }
+
+  /** Wraps the part of `text` the range covers into a fresh <strike>. */
+  private wrapTextRange(text: Text, range: Range): void {
+    const value = text.nodeValue ?? '';
+    const start = text === range.startContainer ? range.startOffset : 0;
+    const end = text === range.endContainer ? range.endOffset : value.length;
+    if (end <= start) {
+      return;
+    }
+    let mid: Text = text;
+    if (end < value.length) {
+      text.splitText(end); // tail stays in the DOM as the next sibling
+    }
+    if (start > 0) {
+      mid = text.splitText(start);
+    }
+    const strike = document.createElement('strike');
+    mid.replaceWith(strike);
+    strike.append(mid);
+  }
+
+  /** Replaces an element with its children (keeps the selection's host). */
+  private unwrapElement(el: Element): void {
+    const parent = el.parentNode;
+    if (!parent) {
+      return;
+    }
+    while (el.firstChild) {
+      parent.insertBefore(el.firstChild, el);
+    }
+    el.remove();
+    parent.normalize();
+  }
+
   queryFormat(command: FormatCommand): boolean {
+    // Chrome's queryCommandState('strikeThrough') also answers true when the
+    // selection merely sits in a checked checklist item — the checklist
+    // paints its strike with CSS text-decoration. Compute the state from the
+    // stored subset (s/strike/del) so the toolbar only lights up for real
+    // user-applied strike.
+    if (command === 'strikeThrough') {
+      const struck = this.strikeAtCaret();
+      return struck !== null;
+    }
     return document.queryCommandState(command);
+  }
+
+  /** The strike element the caret's anchor sits in, or null. */
+  private strikeAtCaret(): Element | null {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return null;
+    }
+    const node = selection.getRangeAt(0).startContainer;
+    const base = node instanceof Element ? node : (node?.parentElement ?? null);
+    const struck = base?.closest('s, strike, del');
+    return struck && this.element.contains(struck) ? struck : null;
+  }
+
+  /** True when the selection is a single point inside the note. */
+  private selectionIsCollapsed(): boolean {
+    const selection = window.getSelection();
+    return (
+      !!selection &&
+      selection.rangeCount === 1 &&
+      selection.getRangeAt(0).collapsed &&
+      this.element.contains(selection.anchorNode)
+    );
+  }
+
+  /**
+   * Docs behavior for styling at a collapsed caret: what the user types
+   * next carries the picked style. execCommand cannot express that for
+   * size/color/font/highlight (fontSize is a plain no-op; the others keep
+   * the style in Chrome's typing layer and emit <font> tags the sanitizer
+   * strips at save). Insert a zero-width-space run styled with the target
+   * properties instead — the caret lands inside it, so the following
+   * keystrokes join the run, the markup is already the storage subset, and
+   * undo removes the run in one step (verified against Chrome's stack).
+   */
+  private applyCollapsedStyle(styles: Record<string, string>): boolean {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return false;
+    }
+    const styleAttr = Object.entries(styles)
+      .filter(([, value]) => value !== '')
+      .map(([prop, value]) => `${prop}: ${value}`)
+      .join('; ');
+    if (styleAttr === '') {
+      return false;
+    }
+    // insertHTML (not a manual range.insertNode) so the run stays on
+    // Chrome's native undo stack — one Ctrl+Z removes it, style included.
+    if (!document.execCommand('insertHTML', false, `<span style="${styleAttr}">${ZERO_WIDTH_SPACE}</span>`)) {
+      return false;
+    }
+    // Chrome leaves the caret right after the inserted run; move it inside,
+    // past the marker, so the next keystrokes join the styled run.
+    const run = this.zeroWidthRunAtCaret();
+    if (run) {
+      const caret = document.createRange();
+      caret.setStart(run.firstChild!, 1);
+      caret.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(caret);
+    }
+    this.announceEdit();
+    return true;
+  }
+
+  /** The styled-caret run the selection just landed beside, or null. */
+  private zeroWidthRunAtCaret(): HTMLElement | null {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return null;
+    }
+    const anchor = selection.anchorNode;
+    const candidates: (Node | null)[] = [
+      anchor,
+      anchor ? anchor.childNodes[selection.anchorOffset - 1] ?? null : null,
+    ];
+    for (const candidate of candidates) {
+      if (
+        candidate instanceof HTMLElement &&
+        candidate.tagName === 'SPAN' &&
+        candidate.textContent === ZERO_WIDTH_SPACE &&
+        this.element.contains(candidate)
+      ) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * "None" highlight at a collapsed caret: if the caret sits in a styled
+   * caret run, drop that run's background; otherwise plain ink is already
+   * the state, so the request is a no-op success.
+   */
+  private clearCollapsedHighlight(): boolean {
+    const selection = window.getSelection();
+    const node = selection?.anchorNode;
+    const base = node instanceof Element ? node : (node?.parentElement ?? null);
+    const run = base?.closest<HTMLElement>('span');
+    if (run && this.element.contains(run) && run.textContent === ZERO_WIDTH_SPACE) {
+      run.style.removeProperty('background-color');
+      this.announceEdit();
+    }
+    return true;
   }
 
   applyBlockFormat(format: BlockFormat): boolean {
@@ -340,6 +614,12 @@ export class ContentEditablePort implements EditorPort {
     if (!Number.isFinite(px) || px < 8 || px > 96) {
       return false;
     }
+    // Chrome ignores fontSize at a collapsed caret entirely (no typing
+    // style either) — the Docs behavior "pick a size, then type" needs the
+    // styled-caret run below.
+    if (this.selectionIsCollapsed()) {
+      return this.applyCollapsedStyle({ 'font-size': `${px}px` });
+    }
     if (!document.execCommand('fontSize', false, FONT_MARKER_SIZE)) {
       return false;
     }
@@ -358,6 +638,13 @@ export class ContentEditablePort implements EditorPort {
     if (name === '' || !this.canExec()) {
       return false;
     }
+    // At a collapsed caret Chrome answers fontName with a typing style that
+    // later wraps typed text in <font face> tags — markup the sanitizer
+    // strips at save time. The styled caret run below keeps the output in
+    // the span subset.
+    if (this.selectionIsCollapsed()) {
+      return this.applyCollapsedStyle({ 'font-family': name });
+    }
     if (!document.execCommand('fontName', false, name)) {
       return false;
     }
@@ -371,6 +658,12 @@ export class ContentEditablePort implements EditorPort {
     if (value === '' || !this.canExec()) {
       return false;
     }
+    // Same collapsed-caret story as setFontFamily: Chrome's typing style
+    // would produce <font color> tags that silently lose their ink at the
+    // sanitizer. The styled caret run keeps everything in the subset.
+    if (this.selectionIsCollapsed()) {
+      return this.applyCollapsedStyle({ color: value });
+    }
     if (!document.execCommand('foreColor', false, value)) {
       return false;
     }
@@ -383,6 +676,14 @@ export class ContentEditablePort implements EditorPort {
     const value = color.trim();
     if (value === '' || !this.canExec()) {
       return false;
+    }
+    // "None" at a collapsed caret: plain ink is the absence of a highlight,
+    // but if the caret sits in a styled caret run, that run loses its ink.
+    if (this.selectionIsCollapsed() && value === 'transparent') {
+      return this.clearCollapsedHighlight();
+    }
+    if (this.selectionIsCollapsed()) {
+      return this.applyCollapsedStyle({ 'background-color': value });
     }
     // hiliteColor already answers with a span style in Chrome; no <font>
     // normalization needed, but run it anyway in case older paths leak.
@@ -470,7 +771,47 @@ export class ContentEditablePort implements EditorPort {
     if (!this.canExec()) {
       return false;
     }
+    this.escapeListAtCaret();
     return document.execCommand('insertHorizontalRule', false);
+  }
+
+  /**
+   * A table or divider dropped while the caret sits in a list item would be
+   * nested inside that <li> (checkbox gutter, strike-through, list indents
+   * all leak onto it). Move the caret out of the list first: to the start of
+   * the block after the list, or to a fresh paragraph appended after it.
+   */
+  private escapeListAtCaret(): void {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return;
+    }
+    const node = selection.getRangeAt(0).startContainer;
+    const base = node instanceof Element ? node : (node?.parentElement ?? null);
+    const item = base?.closest('li');
+    const list = item?.closest('ul, ol');
+    if (!(list instanceof HTMLElement) || !this.element.contains(list)) {
+      return;
+    }
+    const next = list.nextElementSibling;
+    if (next && BLOCK_SIBLING_TAGS.has(next.tagName)) {
+      // A block follows the list — aim for its very start.
+      const range = document.createRange();
+      range.setStart(next, 0);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return;
+    }
+    // Nothing usable after the list — give the insert a paragraph to land in.
+    const paragraph = document.createElement('div');
+    paragraph.append(document.createElement('br'));
+    list.after(paragraph);
+    const range = document.createRange();
+    range.setStart(paragraph, 0);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
   }
 
   // -------------------------------------------------------------------------
@@ -487,6 +828,7 @@ export class ContentEditablePort implements EditorPort {
     const safeCols = Math.min(Math.max(Math.floor(cols), 1), 10);
     const rowHtml = `<tr>${'<td></td>'.repeat(safeCols)}</tr>`;
     const html = `<table><tbody>${rowHtml.repeat(safeRows)}</tbody></table><div><br></div>`;
+    this.escapeListAtCaret();
     if (!document.execCommand('insertHTML', false, html)) {
       return false;
     }

@@ -436,7 +436,8 @@ export function htmlToText(html: string): string {
   };
 
   probe.childNodes.forEach(walk);
-  return parts.join('');
+  // The styled-caret marker (U+200B) is editor plumbing, not content.
+  return parts.join('').replace(/\u200B/g, '');
 }
 
 /** Derives the tab label: user name, else the first non-empty line. */
