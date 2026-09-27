@@ -16,7 +16,14 @@
  */
 import type { TabManager } from '../tabs';
 import { showToast } from '../utils';
-import { getEditorPort, type BlockFormat, type EditorCommand, type ListKind } from './port';
+import {
+  getEditorPort,
+  type EditorPort,
+  type BlockFormat,
+  type EditorCommand,
+  type ListKind,
+  type ScriptType,
+} from './port';
 import { isRichNote } from './note-types';
 
 /** href schemes the toolbar offers inline (mirrors the storage sanitizer). */
@@ -29,6 +36,30 @@ const STATE_COMMANDS: ReadonlySet<string> = new Set([
   'underline',
   'strikeThrough',
 ]);
+
+/** data-rich-action values and the port call each one means. */
+const ACTIONS: Readonly<Record<string, (port: EditorPort) => void>> = {
+  undo: (port) => port.undo(),
+  redo: (port) => port.redo(),
+  sup: (port) => port.applyScript('super'),
+  sub: (port) => port.applyScript('sub'),
+  indent: (port) => port.indent(),
+  outdent: (port) => port.outdent(),
+  hr: (port) => port.insertHorizontalRule(),
+  'align-left': (port) => port.applyAlignment('left'),
+  'align-center': (port) => port.applyAlignment('center'),
+  'align-right': (port) => port.applyAlignment('right'),
+  'align-justify': (port) => port.applyAlignment('justify'),
+};
+
+/** Fonts the menu offers — the caret label matches against these. */
+const KNOWN_FONTS: readonly string[] = [
+  'arial',
+  'verdana',
+  'times new roman',
+  'georgia',
+  'courier new',
+];
 
 interface RichToolbarElements {
   toolbar: HTMLElement;
@@ -106,6 +137,133 @@ export function initRichToolbar(tabManager: TabManager): void {
     toolbar.querySelectorAll<HTMLButtonElement>('[data-rich-list]').forEach((button) => {
       button.setAttribute('aria-pressed', String(button.dataset.richList === listKind));
     });
+
+    // Superscript/subscript and the alignments answer through queryCommand*
+    // too — 'left' reports true on default-aligned blocks, so the resting
+    // state shows pressed like Docs does.
+    toolbar.querySelectorAll<HTMLButtonElement>('[data-rich-query]').forEach((button) => {
+      const query = button.dataset.richQuery!;
+      let active: boolean | null = false;
+      if (query === 'super' || query === 'sub') {
+        active = safeQuery(() => port.queryScript(query));
+      } else if (query.startsWith('align-')) {
+        active = safeQuery(() => port.queryAlignment()) === query.slice('align-'.length);
+      }
+      button.setAttribute('aria-pressed', String(!!active));
+    });
+
+    refreshCaretLabels();
+  };
+
+  /**
+   * The size/font buttons echo what the caret sits in, the way Docs' menus
+   * do — read from the computed style of the selection's element rather
+   * than the legacy queryCommandValue scale.
+   */
+  const refreshCaretLabels = (): void => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return;
+    }
+    const anchor = selection.getRangeAt(0).startContainer;
+    const element = anchor instanceof Element ? anchor : anchor.parentElement;
+    if (!element) {
+      return;
+    }
+    const style = window.getComputedStyle(element);
+
+    const sizeLabel = toolbar.querySelector<HTMLElement>('[data-rich-label="size"]');
+    if (sizeLabel) {
+      const px = parseFloat(style.fontSize);
+      sizeLabel.textContent = Number.isFinite(px) ? String(Math.round(px)) : '16';
+    }
+
+    const fontLabel = toolbar.querySelector<HTMLElement>('[data-rich-label="font"]');
+    if (fontLabel) {
+      const family = (style.fontFamily.split(',')[0] ?? '')
+        .replace(/["']/g, '')
+        .trim()
+        .toLowerCase();
+      const known = KNOWN_FONTS.find((font) => font === family);
+      if (known) {
+        fontLabel.textContent = known
+          .split(' ')
+          .map((word) => word[0]!.toUpperCase() + word.slice(1))
+          .join(' ');
+      } else {
+        fontLabel.textContent = 'Font';
+      }
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // The Docs-style dropdown menus (size, font, colors). One open at a time;
+  // the editor keeps its selection while choosing (pointerdown is prevented)
+  // and focus lands on the first item so keyboard users are first-class.
+  // ---------------------------------------------------------------------------
+
+  const closeMenus = (refocusEditor = false): void => {
+    toolbar.querySelectorAll<HTMLButtonElement>('[data-rich-menu]').forEach((button) => {
+      button.setAttribute('aria-expanded', 'false');
+    });
+    toolbar.querySelectorAll<HTMLElement>('.rich-menu-panel').forEach((panel) => {
+      panel.hidden = true;
+    });
+    if (refocusEditor) {
+      getEditorPort()?.focus();
+    }
+  };
+
+  const openMenu = (button: HTMLButtonElement): void => {
+    const panel = button.parentElement?.querySelector<HTMLElement>('.rich-menu-panel');
+    if (!panel) {
+      return;
+    }
+    closeMenus();
+    panel.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+    panel.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+  };
+
+  const toggleMenu = (button: HTMLButtonElement): void => {
+    const panel = button.parentElement?.querySelector<HTMLElement>('.rich-menu-panel');
+    if (panel?.hidden) {
+      openMenu(button);
+    } else {
+      closeMenus(true);
+    }
+  };
+
+  const anyMenuOpen = (): boolean =>
+    Array.from(toolbar.querySelectorAll<HTMLElement>('.rich-menu-panel')).some(
+      (panel) => !panel.hidden,
+    );
+
+  /**
+   * Arrow-key roving over a menu's items — list menus move by one, swatch
+   * grids follow their column count (read from the computed grid), Home/End
+   * jump to the edges, everything wraps.
+   */
+  const roveMenu = (panel: HTMLElement, key: string): void => {
+    const items = Array.from(panel.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+    if (items.length === 0) {
+      return;
+    }
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    if (current === -1) {
+      items[key === 'ArrowUp' ? items.length - 1 : 0]?.focus();
+      return;
+    }
+    const columns =
+      window.getComputedStyle(panel).gridTemplateColumns.split(' ').filter(Boolean).length || 1;
+    const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: columns, ArrowUp: -columns }[key] ?? 0;
+    if (step === 0 && key !== 'Home' && key !== 'End') {
+      return;
+    }
+    const target =
+      key === 'Home' ? 0 : key === 'End' ? items.length - 1 : current + step;
+    const next = ((target % items.length) + items.length) % items.length;
+    items[next]?.focus();
   };
 
   const scheduleStateRefresh = (): void => {
@@ -226,16 +384,69 @@ export function initRichToolbar(tabManager: TabManager): void {
     }
   };
 
-  // Buttons must not steal the selection: prevent default on pointerdown so
-  // the editor keeps its caret/selection while the command runs.
+  // Buttons and menu items must not steal the selection: prevent default on
+  // pointerdown so the editor keeps its caret/selection while the command
+  // runs — the menus behave like Docs' (choose a color mid-selection).
   toolbar.addEventListener('pointerdown', (event) => {
-    if ((event.target as HTMLElement).closest('.rich-btn')) {
+    const target = event.target as HTMLElement;
+    if (target.closest('.rich-btn') || target.closest('.rich-menu-item') || target.closest('.rich-swatch')) {
       event.preventDefault();
     }
   });
 
   toolbar.addEventListener('click', (event) => {
-    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('.rich-btn');
+    const target = event.target as HTMLElement;
+
+    // --- dropdown menus -------------------------------------------------
+    const menuButton = target.closest<HTMLButtonElement>('[data-rich-menu]');
+    if (menuButton) {
+      toggleMenu(menuButton);
+      return;
+    }
+
+    const port = getEditorPort();
+    if (!port) {
+      return;
+    }
+
+    const sizeItem = target.closest<HTMLButtonElement>('[data-rich-size]');
+    if (sizeItem) {
+      port.setFontSize(Number(sizeItem.dataset.richSize));
+      closeMenus(true);
+      scheduleStateRefresh();
+      return;
+    }
+
+    const fontItem = target.closest<HTMLButtonElement>('[data-rich-font]');
+    if (fontItem) {
+      port.setFontFamily(fontItem.dataset.richFont!);
+      closeMenus(true);
+      scheduleStateRefresh();
+      return;
+    }
+
+    const colorItem = target.closest<HTMLButtonElement>('[data-rich-color]');
+    if (colorItem) {
+      port.setTextColor(colorItem.dataset.richColor!);
+      // The glyph bar previews the ink the picker last applied (session only).
+      toolbar
+        .querySelector<HTMLElement>('[data-rich-ink="color"]')
+        ?.style.setProperty('--rich-ink', colorItem.dataset.richColor!);
+      closeMenus(true);
+      scheduleStateRefresh();
+      return;
+    }
+
+    const highlightItem = target.closest<HTMLButtonElement>('[data-rich-highlight]');
+    if (highlightItem) {
+      port.setHighlight(highlightItem.dataset.richHighlight!);
+      closeMenus(true);
+      scheduleStateRefresh();
+      return;
+    }
+
+    // --- plain buttons ---------------------------------------------------
+    const button = target.closest<HTMLButtonElement>('.rich-btn');
     if (!button) {
       return;
     }
@@ -250,14 +461,38 @@ export function initRichToolbar(tabManager: TabManager): void {
     }
 
     if (button.dataset.richCmd) {
-      getEditorPort()?.applyFormat(button.dataset.richCmd as EditorCommand);
+      port.applyFormat(button.dataset.richCmd as EditorCommand);
+    } else if (button.dataset.richAction) {
+      ACTIONS[button.dataset.richAction]?.(port);
     } else if (button.dataset.richBlock) {
       runBlockCommand(button.dataset.richBlock as BlockFormat);
     } else if (button.dataset.richList) {
-      getEditorPort()?.toggleList(button.dataset.richList as ListKind);
+      port.toggleList(button.dataset.richList as ListKind);
     }
 
     scheduleStateRefresh();
+  });
+
+  // Menu keyboard: arrows rove, Escape/Tab leave the menu back into the note.
+  toolbar.addEventListener('keydown', (event) => {
+    const active = document.activeElement as HTMLElement | null;
+    const panel = active?.closest<HTMLElement>('.rich-menu-panel');
+    if (!panel) {
+      return;
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      roveMenu(panel, event.key);
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      roveMenu(panel, event.key);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeMenus(true);
+    } else if (event.key === 'Tab') {
+      closeMenus();
+    }
   });
 
   elements.apply?.addEventListener('click', applyLink);
@@ -273,22 +508,28 @@ export function initRichToolbar(tabManager: TabManager): void {
     }
   });
 
-  // Outside click + Escape close the link popover.
+  // Outside click closes the link popover AND the menus; Escape likewise.
   document.addEventListener('click', (event) => {
-    if (elements.popover.hidden) {
-      return;
-    }
     const target = event.target as Node;
     if (
+      !elements.popover.hidden &&
       !elements.popover.contains(target) &&
       !(elements.linkButton && elements.linkButton.contains(target))
     ) {
       closeLinkPopover();
     }
+    if (anyMenuOpen() && !toolbar.contains(target)) {
+      closeMenus();
+    }
   });
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !elements.popover.hidden) {
-      closeLinkPopover(true);
+    if (event.key === 'Escape') {
+      if (!elements.popover.hidden) {
+        closeLinkPopover(true);
+      }
+      if (anyMenuOpen()) {
+        closeMenus(true);
+      }
     }
   });
 
@@ -302,6 +543,9 @@ export function initRichToolbar(tabManager: TabManager): void {
     toolbar.hidden = !show;
     if (!show && !elements.popover.hidden) {
       closeLinkPopover();
+    }
+    if (!show && anyMenuOpen()) {
+      closeMenus();
     }
     if (show) {
       scheduleStateRefresh();

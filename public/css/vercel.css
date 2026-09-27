@@ -3310,6 +3310,133 @@ body.dark #note:has(> br:only-child)::before {
   color: var(--vz-danger);
 }
 
+/* The Docs-style dropdowns: size, font, colors. A host is one button plus
+   its floating panel; panels open under the toolbar like the link popover. */
+.rich-menu-host {
+  position: relative;
+  display: inline-flex;
+}
+
+.rich-menu-btn {
+  gap: 2px;
+}
+
+.rich-menu-label {
+  max-width: 76px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* The 'A' glyph carries a bar that previews the picker's last ink. */
+.rich-color-glyph {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.rich-color-bar {
+  width: 13px;
+  height: 3px;
+  margin-top: 1.5px;
+  border-radius: 1px;
+  background: var(--rich-ink, var(--vz-fg));
+}
+
+.rich-menu-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 70;
+  display: grid;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  background: var(--vz-bg-elevated);
+  box-shadow: var(--vz-shadow-menu);
+  animation: vz-menu-in 130ms var(--vz-ease);
+}
+
+.rich-menu-panel[hidden] {
+  display: none;
+}
+
+.rich-menu-panel-sizes {
+  grid-template-columns: repeat(2, minmax(52px, 1fr));
+  min-width: 112px;
+}
+
+.rich-menu-panel-fonts {
+  min-width: 176px;
+}
+
+.rich-menu-item {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg-muted);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+.rich-menu-item:hover,
+.rich-menu-item:focus-visible {
+  background: var(--vz-bg-hover);
+  color: var(--vz-fg);
+  outline: none;
+}
+
+.rich-menu-panel-swatches {
+  grid-template-columns: repeat(6, 22px);
+  gap: 5px;
+  padding: 8px;
+}
+
+.rich-swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 5px;
+  background: var(--swatch);
+  cursor: pointer;
+  transition: transform 80ms ease, box-shadow 80ms ease;
+}
+
+.rich-swatch:hover,
+.rich-swatch:focus-visible {
+  transform: scale(1.12);
+  box-shadow: 0 0 0 1px var(--vz-border-strong);
+  outline: none;
+}
+
+/* The 'None' chip spans the swatch row and reads as a ghost button. */
+.rich-swatch-none {
+  grid-column: 1 / -1;
+  width: auto;
+  height: 20px;
+  border-style: dashed;
+  background: transparent;
+  color: var(--vz-fg-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.rich-swatch-none:hover {
+  background: var(--vz-bg-hover);
+  transform: none;
+  color: var(--vz-fg);
+}
+
 /* ---- Note rail (left sidebar) ---- */
 #tabRail {
   display: flex;

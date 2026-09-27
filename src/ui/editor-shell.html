@@ -70,10 +70,97 @@
             hidden
           >
             <div class="rich-toolbar-group">
+              <button type="button" class="rich-btn" data-rich-action="undo" title="Undo">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h11a5 5 0 0 1 0 10h-4"/><path d="m8 6-4 4 4 4"/></svg>
+                <span class="sr-only">Undo</span>
+              </button>
+              <button type="button" class="rich-btn" data-rich-action="redo" title="Redo">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10H9a5 5 0 0 0 0 10h4"/><path d="m16 6 4 4-4 4"/></svg>
+                <span class="sr-only">Redo</span>
+              </button>
+            </div>
+            <div class="rich-toolbar-sep" aria-hidden="true"></div>
+            <div class="rich-toolbar-group">
               <button type="button" class="rich-btn" data-rich-cmd="bold" aria-pressed="false" title="Bold"><span class="rich-btn-glyph" aria-hidden="true">B</span><span class="sr-only">Bold</span></button>
               <button type="button" class="rich-btn" data-rich-cmd="italic" aria-pressed="false" title="Italic"><span class="rich-btn-glyph rich-glyph-italic" aria-hidden="true">I</span><span class="sr-only">Italic</span></button>
               <button type="button" class="rich-btn" data-rich-cmd="underline" aria-pressed="false" title="Underline"><span class="rich-btn-glyph rich-glyph-underline" aria-hidden="true">U</span><span class="sr-only">Underline</span></button>
               <button type="button" class="rich-btn" data-rich-cmd="strikeThrough" aria-pressed="false" title="Strikethrough"><span class="rich-btn-glyph rich-glyph-strike" aria-hidden="true">S</span><span class="sr-only">Strikethrough</span></button>
+              <button type="button" class="rich-btn" data-rich-action="sup" data-rich-query="super" aria-pressed="false" title="Superscript"><span class="rich-btn-glyph" aria-hidden="true">x&#178;</span><span class="sr-only">Superscript</span></button>
+              <button type="button" class="rich-btn" data-rich-action="sub" data-rich-query="sub" aria-pressed="false" title="Subscript"><span class="rich-btn-glyph" aria-hidden="true">x&#8322;</span><span class="sr-only">Subscript</span></button>
+            </div>
+            <div class="rich-toolbar-sep" aria-hidden="true"></div>
+            <div class="rich-toolbar-group">
+              <div class="rich-menu-host">
+                <button type="button" class="rich-btn rich-menu-btn" data-rich-menu="size" aria-haspopup="menu" aria-expanded="false" title="Font size">
+                  <span class="rich-menu-label" data-rich-label="size">16</span>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                  <span class="sr-only">Font size</span>
+                </button>
+                <div class="rich-menu-panel rich-menu-panel-sizes" role="menu" aria-label="Font size" hidden>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-size="12">12</button>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-size="14">14</button>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-size="16">16</button>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-size="18">18</button>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-size="24">24</button>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-size="32">32</button>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-size="40">40</button>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-size="48">48</button>
+                </div>
+              </div>
+              <div class="rich-menu-host">
+                <button type="button" class="rich-btn rich-menu-btn" data-rich-menu="font" aria-haspopup="menu" aria-expanded="false" title="Font">
+                  <span class="rich-menu-label" data-rich-label="font">Font</span>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                  <span class="sr-only">Font</span>
+                </button>
+                <div class="rich-menu-panel rich-menu-panel-fonts" role="menu" aria-label="Font" hidden>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-font="Arial" style="font-family: Arial, sans-serif">Arial</button>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-font="Verdana" style="font-family: Verdana, sans-serif">Verdana</button>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-font="Times New Roman" style="font-family: 'Times New Roman', serif">Times New Roman</button>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-font="Georgia" style="font-family: Georgia, serif">Georgia</button>
+                  <button type="button" role="menuitem" class="rich-menu-item" data-rich-font="Courier New" style="font-family: 'Courier New', monospace">Courier New</button>
+                </div>
+              </div>
+            </div>
+            <div class="rich-toolbar-sep" aria-hidden="true"></div>
+            <div class="rich-toolbar-group">
+              <div class="rich-menu-host">
+                <button type="button" class="rich-btn rich-menu-btn" data-rich-menu="color" aria-haspopup="menu" aria-expanded="false" title="Text color">
+                  <span class="rich-color-glyph" aria-hidden="true">A<span class="rich-color-bar" data-rich-ink="color"></span></span>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                  <span class="sr-only">Text color</span>
+                </button>
+                <div class="rich-menu-panel rich-menu-panel-swatches" role="menu" aria-label="Text color" hidden>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-color="#1a1a1a" style="--swatch: #1a1a1a" aria-label="Text color black"></button>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-color="#666666" style="--swatch: #666666" aria-label="Text color gray"></button>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-color="#b3b3b3" style="--swatch: #b3b3b3" aria-label="Text color light gray"></button>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-color="#ffffff" style="--swatch: #ffffff" aria-label="Text color white"></button>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-color="#ea4335" style="--swatch: #ea4335" aria-label="Text color red"></button>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-color="#e64980" style="--swatch: #e64980" aria-label="Text color pink"></button>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-color="#fbbc04" style="--swatch: #fbbc04" aria-label="Text color yellow"></button>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-color="#b45309" style="--swatch: #b45309" aria-label="Text color brown"></button>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-color="#34a853" style="--swatch: #34a853" aria-label="Text color green"></button>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-color="#0d9488" style="--swatch: #0d9488" aria-label="Text color teal"></button>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-color="#4285f4" style="--swatch: #4285f4" aria-label="Text color blue"></button>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-color="#9333ea" style="--swatch: #9333ea" aria-label="Text color purple"></button>
+                </div>
+              </div>
+              <div class="rich-menu-host">
+                <button type="button" class="rich-btn rich-menu-btn" data-rich-menu="highlight" aria-haspopup="menu" aria-expanded="false" title="Highlight color">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 4 5 5-8.5 8.5a2 2 0 0 1-1 .54L5 19l.96-5.5a2 2 0 0 1 .54-1z"/></svg>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                  <span class="sr-only">Highlight color</span>
+                </button>
+                <div class="rich-menu-panel rich-menu-panel-swatches" role="menu" aria-label="Highlight color" hidden>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-highlight="#fff3bf" style="--swatch: #fff3bf" aria-label="Highlight yellow"></button>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-highlight="#ffe3e3" style="--swatch: #ffe3e3" aria-label="Highlight pink"></button>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-highlight="#d3f9d8" style="--swatch: #d3f9d8" aria-label="Highlight green"></button>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-highlight="#d0ebff" style="--swatch: #d0ebff" aria-label="Highlight blue"></button>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-highlight="#e5dbff" style="--swatch: #e5dbff" aria-label="Highlight purple"></button>
+                  <button type="button" role="menuitem" class="rich-swatch" data-rich-highlight="#ffe8cc" style="--swatch: #ffe8cc" aria-label="Highlight orange"></button>
+                  <button type="button" role="menuitem" class="rich-swatch rich-swatch-none" data-rich-highlight="transparent" aria-label="No highlight">None</button>
+                </div>
+              </div>
             </div>
             <div class="rich-toolbar-sep" aria-hidden="true"></div>
             <div class="rich-toolbar-group">
@@ -92,6 +179,36 @@
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 6h11M10 12h11M10 18h11"/><path d="M4 6h1v4M4 10h2" stroke-width="1.6"/><path d="M4 14h2l-2 3h2" stroke-width="1.6"/></svg>
                 <span class="sr-only">Numbered list</span>
               </button>
+              <button type="button" class="rich-btn" data-rich-action="outdent" title="Decrease indent">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 6h10M11 12h10M11 18h10"/><path d="m7 9-3 3 3 3"/></svg>
+                <span class="sr-only">Decrease indent</span>
+              </button>
+              <button type="button" class="rich-btn" data-rich-action="indent" title="Increase indent">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 6h10M11 12h10M11 18h10"/><path d="m4 9 3 3-3 3"/></svg>
+                <span class="sr-only">Increase indent</span>
+              </button>
+            </div>
+            <div class="rich-toolbar-sep" aria-hidden="true"></div>
+            <div class="rich-toolbar-group">
+              <button type="button" class="rich-btn" data-rich-action="align-left" data-rich-query="align-left" aria-pressed="false" title="Align left">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h14"/></svg>
+                <span class="sr-only">Align left</span>
+              </button>
+              <button type="button" class="rich-btn" data-rich-action="align-center" data-rich-query="align-center" aria-pressed="false" title="Align center">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M4 18h16"/></svg>
+                <span class="sr-only">Align center</span>
+              </button>
+              <button type="button" class="rich-btn" data-rich-action="align-right" data-rich-query="align-right" aria-pressed="false" title="Align right">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M10 12h10M6 18h14"/></svg>
+                <span class="sr-only">Align right</span>
+              </button>
+              <button type="button" class="rich-btn" data-rich-action="align-justify" data-rich-query="align-justify" aria-pressed="false" title="Justify">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                <span class="sr-only">Justify</span>
+              </button>
+            </div>
+            <div class="rich-toolbar-sep" aria-hidden="true"></div>
+            <div class="rich-toolbar-group">
               <button type="button" class="rich-btn" data-rich-block="blockquote" aria-pressed="false" title="Quote">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 11H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v8a4 4 0 0 1-4 4"/><path d="M20 11h-4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v8a4 4 0 0 1-4 4"/></svg>
                 <span class="sr-only">Quote</span>
@@ -99,6 +216,10 @@
               <button type="button" class="rich-btn" data-rich-block="pre" aria-pressed="false" title="Code block">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg>
                 <span class="sr-only">Code block</span>
+              </button>
+              <button type="button" class="rich-btn" data-rich-action="hr" title="Insert divider">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 12h16"/><path d="M8 6h8" opacity=".4"/><path d="M8 18h8" opacity=".4"/></svg>
+                <span class="sr-only">Insert divider</span>
               </button>
             </div>
             <div class="rich-toolbar-sep" aria-hidden="true"></div>

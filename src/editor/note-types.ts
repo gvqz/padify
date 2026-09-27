@@ -31,7 +31,7 @@ export const NOTE_TYPES: readonly NoteTypeDef[] = [
   {
     id: 'rich',
     label: 'Rich text note',
-    description: 'Headings, lists, quotes, code & links',
+    description: 'Docs-style formatting — fonts, colors, lists & links',
   },
 ] as const;
 
