@@ -39,6 +39,23 @@ export function isNoteType(value: unknown): value is NoteType {
   return NOTE_TYPES.some((def) => def.id === value);
 }
 
+/** The registry label ('Rich text note'), or the id when unknown. */
+export function noteTypeLabel(type: NoteType): string {
+  return NOTE_TYPES.find((def) => def.id === type)?.label ?? type;
+}
+
+/**
+ * Presentation: the icon a type shows in the creation menu (15px) and, for
+ * non-default notes, as the rail badge (10px). Kept beside the registry so
+ * a type's menu entry stays one self-contained thing.
+ */
+export const NOTE_TYPE_ICONS: Record<NoteType, (size: number) => string> = {
+  standard: (size) =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>`,
+  rich: (size) =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>`,
+};
+
 /**
  * Reads a stored/unknown value into the note's type. The default type is
  * represented as `undefined` on the note (kept out of storage), so both

@@ -35,6 +35,7 @@ import { openModal, closeAllModals } from './ui/behavior/modal';
 import { initSaveIndicator } from './save-indicator';
 import { initTabRailDrawer } from './tab-rail-drawer';
 import { initRichToolbar } from './editor/rich-toolbar';
+import { initNoteTypeMenu } from './ui/note-type-menu';
 import { initThemeController } from './theme-controller';
 import { initEditorPreferences, clearTabIndentation } from './editor-preferences';
 import { setBreakRemindersEnabled, trackWritingActivity } from './break-reminder';
@@ -237,6 +238,10 @@ export async function initApp(): Promise<void> {
   // ---- rich text toolbar — visible only for rich notes, see
   // editor/rich-toolbar.ts ----
   initRichToolbar(tabManager);
+
+  // ---- note-type menu — the chevron beside "New note", see
+  // ui/note-type-menu.ts ----
+  initNoteTypeMenu((type) => tabManager.addTab(true, type));
 
   notepad.note.keydown(function (e) {
     if (e.key === 'Tab') {
