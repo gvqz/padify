@@ -209,6 +209,62 @@ test.describe('docs toolbar', () => {
     await page.reload();
     await expect(page.locator('#note div').first()).toHaveCSS('margin-left', '40px');
   });
+
+  test('a size picked at a collapsed caret styles what is typed next', async ({ page }) => {
+    await page.goto('/');
+    await createRichNote(page);
+
+    const editor = page.locator('#note');
+    const toolbar = page.locator('#richToolbar');
+    await editor.click();
+    await page.keyboard.type('before');
+
+    // Chrome ignores fontSize at a collapsed caret outright; the port plants
+    // a styled caret run so the Docs behavior holds: pick a size, then type.
+    await toolbar.locator('[data-rich-menu="size"]').click();
+    await toolbar.locator('[data-rich-size="24"]').click();
+    await page.keyboard.type('AFTER24');
+    await expect(editor.locator('span')).toHaveText('\u200BAFTER24');
+    await expect(editor.locator('span')).toHaveCSS('font-size', '24px');
+
+    // The styled run survives the storage round trip (span subset).
+    await page.waitForTimeout(900);
+    await page.reload();
+    const runStyle = (prop: string): Promise<string> =>
+      page.evaluate((p) => {
+        const span = Array.from(document.querySelectorAll('#note span')).find((s) =>
+          s.textContent?.includes('AFTER24'),
+        );
+        return span ? getComputedStyle(span).getPropertyValue(p) : '';
+      }, prop);
+    expect(await runStyle('font-size')).toBe('24px');
+  });
+
+  test('the size menu marks the value the caret sits in', async ({ page }) => {
+    await page.goto('/');
+    await createRichNote(page);
+
+    const editor = page.locator('#note');
+    const toolbar = page.locator('#richToolbar');
+    await editor.click();
+    await page.keyboard.type('plain text');
+
+    // The bare caret answers the note's default size — read the live label
+    // and assert its menu item is the one marked, Docs-style.
+    await toolbar.locator('[data-rich-menu="size"]').click();
+    const label = (await toolbar.locator('[data-rich-label="size"]').textContent())!.trim();
+    await expect(toolbar.locator(`[data-rich-size="${label}"]`)).toHaveClass(/rich-menu-current/);
+    await page.keyboard.press('Escape');
+
+    // Style the line 32, reopen: the menu now ticks 32.
+    await editor.press('Control+End');
+    await editor.press('Shift+Home');
+    await toolbar.locator('[data-rich-menu="size"]').click();
+    await toolbar.locator('[data-rich-size="32"]').click();
+    await toolbar.locator('[data-rich-menu="size"]').click();
+    await expect(toolbar.locator('[data-rich-size="32"]')).toHaveClass(/rich-menu-current/);
+    await expect(toolbar.locator('[data-rich-size="16"]')).not.toHaveClass(/rich-menu-current/);
+  });
 });
 
 test.describe('floating window gating', () => {

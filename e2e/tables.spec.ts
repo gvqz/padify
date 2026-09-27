@@ -87,4 +87,26 @@ test.describe('tables', () => {
     await expect(table).toHaveCount(0);
     await expect(opsButton).toBeHidden();
   });
+
+  test('a table inserted from inside a checklist item escapes the list', async ({ page }) => {
+    await page.goto('/');
+    await createRichNote(page);
+
+    const editor = page.locator('#note');
+    await editor.click();
+    await page.keyboard.type('groceries');
+    await page.locator('[data-rich-list="checklist"]').click();
+    await expect(editor.locator('ul[data-rich-checklist] > li')).toHaveText('groceries');
+
+    // The caret sits at the item's end — a naive insert would nest the table
+    // in the <li> (checkbox gutter, strike-through and list indents leak in).
+    await page.locator('[data-rich-menu="table"]').click();
+    await page.locator('[data-rich-grid="1,0"]').click(); // 2x1
+    await expect(editor.locator('table td')).toHaveCount(2);
+    await expect(editor.locator('li table')).toHaveCount(0);
+    const listAfter = await page.evaluate(
+      () => document.querySelector('#note ul')!.nextElementSibling?.tagName,
+    );
+    expect(listAfter).toBe('DIV'); // the table's trailing paragraph follows
+  });
 });

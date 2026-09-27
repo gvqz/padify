@@ -95,6 +95,49 @@ test.describe('checklists', () => {
     await expect(editor.locator('ol > li')).toHaveCount(1);
   });
 
+  test('strike inside a checked item toggles the real strike (no CSS ghost)', async ({ page }) => {
+    await page.goto('/');
+    await createRichNote(page);
+
+    const editor = page.locator('#note');
+    const toolbar = page.locator('#richToolbar');
+    const strikeButton = toolbar.locator('[data-rich-cmd="strikeThrough"]');
+
+    await editor.click();
+    await page.keyboard.type('sounded great');
+    await toolbar.locator('[data-rich-list="checklist"]').click();
+    await clickCheckbox(page, 0); // checked: the item paints its own line-through
+
+    // The gutter click parks the caret at the item start; go to the end so
+    // Shift+Home covers the whole line.
+    await editor.press('End');
+
+    // The painted strike must NOT light the toolbar button.
+    await expect(strikeButton).toHaveAttribute('aria-pressed', 'false');
+
+    // Striking the checked item's text: the engine would read the CSS and
+    // toggle to a silent no-op — the toolbar wraps the runs by hand.
+    await editor.press('Shift+Home');
+    await strikeButton.click();
+    await expect(editor.locator('li strike')).toHaveText('sounded great');
+    await expect(strikeButton).toHaveAttribute('aria-pressed', 'true');
+
+    // Second press unwraps (toggle semantics hold inside checked items).
+    // A fresh click first — the retained range from the strike would make
+    // Shift+Home collapse instead of reselecting.
+    await editor.click();
+    await editor.press('End');
+    await editor.press('Shift+Home');
+    await strikeButton.click();
+    await expect(editor.locator('li strike')).toHaveCount(0);
+    await expect(editor.locator('li')).toHaveText('sounded great');
+
+    // Unchecking reveals no leftover strike either way.
+    await clickCheckbox(page, 0);
+    await expect(editor.locator('li')).toHaveText('sounded great');
+    await expect(editor.locator('strike')).toHaveCount(0);
+  });
+
   test('a standard note never shows the checklist button (the gate holds)', async ({ page }) => {
     await page.goto('/');
     await page.locator('#addTab').click();
