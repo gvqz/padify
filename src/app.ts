@@ -376,8 +376,8 @@ export async function initApp(): Promise<void> {
     themeController.resetToDevice();
   });
 
-  // Floating window — see pip-window.ts.
-  initPipWindow();
+  // Floating window — see pip-window.ts. Standard notes only.
+  initPipWindow(tabManager);
 
   // This listens for keyboard shortcuts
   document.onkeydown = function (event: KeyboardEvent) {

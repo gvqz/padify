@@ -1,15 +1,21 @@
 import { $ } from './lib/q';
 import { showToast, saveTextAsFile, getFileName } from './utils';
 import { getEditorText } from './tabs';
+import type { TabManager } from './tabs';
 import { isListening, stopVoiceTyping } from './voice';
+import { normalizeNoteType } from './editor/note-types';
 
 /**
  * Picture-in-Picture floating window — moves the editor into a small
  * always-on-top window (Document Picture-in-Picture API), keeps its
  * theme in sync with the main window and supports the formatting
- * shortcuts while floating. The button only shows when supported.
+ * shortcuts while floating. The button only shows when supported AND
+ * only for standard notes: the floating window hosts the bare editor
+ * surface (no rich toolbar, no type-specific chrome), so it is a
+ * plain-typing feature — a rich note active means the button hides and
+ * an open floating window closes itself.
  */
-export function initPipWindow(): void {
+export function initPipWindow(tabManager: TabManager): void {
   const pipButton = document.getElementById('pip')!;
 
   // Only show the Picture-in-Picture
@@ -18,11 +24,27 @@ export function initPipWindow(): void {
     return;
   }
 
-  $('#pipContainer').show();
-
   let pipWindow: Window | null = null;
   let pipThemeObserver: MutationObserver | null = null;
   let pipSwitching = false;
+
+  /** The floating window is a plain-typing surface — standard notes only. */
+  const syncAvailability = (): void => {
+    const standard = normalizeNoteType(tabManager.getActive()?.noteType) === undefined;
+    if (standard) {
+      $('#pipContainer').show();
+    } else {
+      // Closing returns the editor to the main window (pagehide below).
+      if (pipWindow) {
+        pipWindow.close();
+      }
+      $('#pipContainer').hide();
+    }
+  };
+
+  // Visibility follows the active note — boot, switch, create, cloud merge.
+  tabManager.addActiveListener(syncAvailability);
+  syncAvailability();
 
   /** Mirrors the app's dark mode onto the floating editor. */
   const applyPipTheme = () => {
