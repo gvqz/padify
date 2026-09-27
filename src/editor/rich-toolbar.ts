@@ -77,6 +77,18 @@ export function initRichToolbar(tabManager: TabManager): void {
       return;
     }
 
+    // A selection that no longer lives in the note (document replaced by a
+    // switch/cloud merge, or the user clicked elsewhere) leaves queryCommand*
+    // answering from a detached selection — the pressed states would go
+    // stale garbage. Nothing selected in the note, nothing shown pressed;
+    // the next selectionchange inside the note re-syncs.
+    if (!port.isCaretInside()) {
+      toolbar
+        .querySelectorAll<HTMLButtonElement>('[aria-pressed]')
+        .forEach((button) => button.setAttribute('aria-pressed', 'false'));
+      return;
+    }
+
     toolbar.querySelectorAll<HTMLButtonElement>('[data-rich-cmd]').forEach((button) => {
       const command = button.dataset.richCmd!;
       // removeFormat is an action, not a state — it never shows pressed.

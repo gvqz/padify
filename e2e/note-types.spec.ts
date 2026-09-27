@@ -117,6 +117,46 @@ test.describe('note types', () => {
     await expect(editor).toBeVisible();
   });
 
+  test('pressed states clear while the selection is outside the note', async ({ page }) => {
+    await page.goto('/');
+    await openTypeMenu(page);
+    await page
+      .locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Rich text note' })
+      .click();
+
+    const editor = page.locator('#note');
+    const toolbar = page.locator('#richToolbar');
+    await editor.click();
+    await page.keyboard.type('code line');
+    await editor.press('Control+End');
+    await editor.press('Shift+Home');
+    await toolbar.locator('[data-rich-block="pre"]').click();
+    await expect(editor.locator('pre')).toHaveCount(1);
+    await expect(toolbar.locator('[data-rich-block="pre"]')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    // A selection that no longer lives in the note (document replaced, user
+    // clicked elsewhere) must not keep the caret's pressed states lit.
+    await page.evaluate(() => {
+      const range = document.createRange();
+      range.selectNodeContents(document.querySelector('.word-count-container p')!);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    });
+    await expect(toolbar.locator('[aria-pressed="true"]')).toHaveCount(0);
+
+    // Caret back inside the note (a real click — Chrome clamps below-content
+    // clicks into the last block, the code block) — the states re-sync.
+    await editor.click();
+    await expect(toolbar.locator('[data-rich-block="pre"]')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
   test('the link toolbar flow wraps the selected text', async ({ page }) => {
     await page.goto('/');
     await openTypeMenu(page);
