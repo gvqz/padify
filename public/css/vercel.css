@@ -3479,10 +3479,20 @@ body.dark #note:has(> br:only-child)::before {
   border-top: 1px solid var(--vz-border);
 }
 
-/* "New note" + its type-menu chevron form one split control. */
+/* "New note" + its type-menu chevron form one split control: a single
+   dashed capsule, the chevron cell divided by a hairline. */
 .tab-rail-add-group {
   display: flex;
-  gap: 6px;
+  overflow: hidden;
+  border: 1px dashed var(--vz-border-strong);
+  border-radius: var(--vz-radius-md);
+  transition: border-color var(--vz-dur) var(--vz-ease), background var(--vz-dur) var(--vz-ease);
+}
+
+.tab-rail-add-group:hover,
+.tab-rail-add-group:focus-within {
+  border-color: var(--vz-fg-subtle);
+  background: var(--vz-bg-subtle);
 }
 
 .tab-rail-add {
@@ -3493,22 +3503,27 @@ body.dark #note:has(> br:only-child)::before {
   flex: 1 1 auto;
   min-width: 0;
   padding: 8px 10px;
-  border: 1px dashed var(--vz-border-strong);
-  border-radius: var(--vz-radius-md);
+  border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--vz-fg-muted);
   font-size: 13px;
   line-height: 1.4;
   cursor: pointer;
-  transition: color var(--vz-dur) var(--vz-ease), border-color var(--vz-dur) var(--vz-ease), background var(--vz-dur) var(--vz-ease);
+  transition: color var(--vz-dur) var(--vz-ease);
 }
 
 .tab-rail-add:hover,
 .tab-rail-add:focus-visible {
   color: var(--vz-fg);
-  border-color: var(--vz-fg-subtle);
-  background: var(--vz-bg-subtle);
   outline: none;
+}
+
+.tab-rail-add:focus-visible,
+.tab-rail-add-type:focus-visible {
+  outline: 2px solid var(--vz-fg-subtle);
+  outline-offset: -3px;
+  border-radius: var(--vz-radius);
 }
 
 .tab-rail-add svg {
@@ -3521,22 +3536,27 @@ body.dark #note:has(> br:only-child)::before {
   align-items: center;
   justify-content: center;
   align-self: stretch;
-  width: 30px;
-  border: 1px dashed var(--vz-border-strong);
-  border-radius: var(--vz-radius-md);
+  width: 29px;
+  border: 0;
+  border-left: 1px dashed var(--vz-border-strong);
+  border-radius: 0;
   background: transparent;
   color: var(--vz-fg-muted);
   cursor: pointer;
-  transition: color var(--vz-dur) var(--vz-ease), border-color var(--vz-dur) var(--vz-ease), background var(--vz-dur) var(--vz-ease);
+  transition: color var(--vz-dur) var(--vz-ease), background var(--vz-dur) var(--vz-ease);
 }
 
-.tab-rail-add-type:hover,
-.tab-rail-add-type:focus-visible,
+.tab-rail-add-type:hover {
+  color: var(--vz-fg);
+}
+
+.tab-rail-add-type:focus-visible {
+  color: var(--vz-fg);
+}
+
 .tab-rail-add-type[aria-expanded='true'] {
   color: var(--vz-fg);
-  border-color: var(--vz-fg-subtle);
-  background: var(--vz-bg-subtle);
-  outline: none;
+  background: var(--vz-bg-hover);
 }
 
 /* The note-type menu opens upward from the rail foot (the foot sits at the
