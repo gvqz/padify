@@ -27,6 +27,13 @@ export function initRichShortcuts(tabManager: TabManager): void {
     KeyJ: 'justify',
   };
 
+  /** Docs' list cluster: bullets, numbers, checklist. */
+  const LIST_KEYS: Readonly<Record<string, 'ul' | 'ol' | 'checklist'>> = {
+    Digit7: 'ul',
+    Digit8: 'ol',
+    Digit9: 'checklist',
+  };
+
   note.addEventListener('keydown', (event: KeyboardEvent) => {
     if (!isRichNote(tabManager.getActive())) {
       return;
@@ -63,6 +70,9 @@ export function initRichShortcuts(tabManager: TabManager): void {
     } else if (event.shiftKey && ALIGN_KEYS[event.code]) {
       event.preventDefault();
       getEditorPort()?.applyAlignment(ALIGN_KEYS[event.code]);
+    } else if (event.shiftKey && LIST_KEYS[event.code]) {
+      event.preventDefault();
+      getEditorPort()?.toggleList(LIST_KEYS[event.code]);
     }
   });
 }

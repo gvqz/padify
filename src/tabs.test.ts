@@ -127,6 +127,22 @@ describe('sanitizeNoteHtml', () => {
     // the editor normalizes its own font tags before storage ever sees one.
     expect(sanitizeNoteHtml('<font size="5">x</font>')).toBe('x');
   });
+
+  it('keeps the checklist attributes with their fixed values (policy: checklists, 2026-09)', () => {
+    expect(
+      sanitizeNoteHtml(
+        '<ul data-rich-checklist="true"><li data-checked="false">a</li><li data-checked="true">b</li></ul>',
+      ),
+    ).toBe(
+      '<ul data-rich-checklist="true"><li data-checked="false">a</li><li data-checked="true">b</li></ul>',
+    );
+    // Anything but the boolean vocabulary is a crafted payload, not
+    // editor output: the attribute is dropped, the markup survives.
+    expect(sanitizeNoteHtml('<ul data-rich-checklist="inject">x</ul>')).toBe('<ul>x</ul>');
+    expect(sanitizeNoteHtml('<li data-checked="on">x</li>')).toBe('<li>x</li>');
+    // The mark never travels to a tag that does not declare it.
+    expect(sanitizeNoteHtml('<div data-checked="true">x</div>')).toBe('<div>x</div>');
+  });
 });
 
 describe('htmlToText', () => {
@@ -141,6 +157,14 @@ describe('htmlToText', () => {
 
   it('reads horizontal rules as line boundaries', () => {
     expect(htmlToText('a<hr>b')).toBe('a\nb');
+  });
+
+  it('reads checklist items with their box state', () => {
+    expect(
+      htmlToText(
+        '<ul data-rich-checklist="true"><li data-checked="false">milk</li><li data-checked="true">eggs</li></ul>',
+      ),
+    ).toBe('[ ] milk\n[x] eggs');
   });
 
   it('strips inline formatting', () => {

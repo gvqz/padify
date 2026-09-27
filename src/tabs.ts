@@ -201,7 +201,8 @@ const ALLOWED_TAGS = new Set([
 /**
  * Attributes a surviving tag may keep. Everything else is stripped — the
  * editor only ever produces these itself. `a[href]` is gated to safe
- * schemes below; `style` is gated to the property allowlist beneath it.
+ * schemes below; `style` is gated to the property allowlist beneath it;
+ * the checklist data attributes are gated to their fixed vocabularies.
  */
 const ALLOWED_ATTRS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['A', new Set(['href'])],
@@ -211,9 +212,20 @@ const ALLOWED_ATTRS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['H1', new Set(['style'])],
   ['H2', new Set(['style'])],
   ['H3', new Set(['style'])],
-  ['LI', new Set(['style'])],
+  ['UL', new Set(['data-rich-checklist'])],
+  ['LI', new Set(['style', 'data-checked'])],
   ['BLOCKQUOTE', new Set(['style'])],
   ['PRE', new Set(['style'])],
+]);
+
+/**
+ * Data-attribute values that may survive, by attribute. The checklist mark
+ * is a boolean flag and the item state a boolean pair — anything else is a
+ * crafted payload, not editor output.
+ */
+const ALLOWED_DATA_ATTR_VALUES: ReadonlyMap<string, RegExp> = new Map([
+  ['data-rich-checklist', /^true$/],
+  ['data-checked', /^(true|false)$/],
 ]);
 
 /**
@@ -318,6 +330,13 @@ export function sanitizeNoteHtml(html: string): string {
           }
           return;
         }
+        const dataPattern = ALLOWED_DATA_ATTR_VALUES.get(attr);
+        if (dataPattern) {
+          if (dataPattern.test(value)) {
+            clone.setAttribute(attr, value);
+          }
+          return;
+        }
         clone.setAttribute(attr, value);
       });
     }
@@ -358,6 +377,19 @@ export function htmlToText(html: string): string {
     if (element.tagName === 'BR') {
       parts.push('\n');
       return;
+    }
+    // Checklist items read with their box state — the plain-text twin of
+    // the rendered checkbox.
+    if (element.tagName === 'LI') {
+      const list = element.parentElement;
+      if (list instanceof HTMLElement && list.hasAttribute('data-rich-checklist')) {
+        if (parts.length > 0) {
+          parts.push('\n');
+        }
+        parts.push(element.getAttribute('data-checked') === 'true' ? '[x] ' : '[ ] ');
+        element.childNodes.forEach(walk);
+        return;
+      }
     }
     if (BLOCK_TAGS.has(element.tagName)) {
       // Block boundaries read as newlines, like innerText would report them.

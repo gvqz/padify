@@ -3158,6 +3158,63 @@ body.dark #note:has(> br:only-child)::before {
   margin: 1em 0;
 }
 
+/* ---- Checklists ----
+   A checklist is an unordered list carrying data-rich-checklist; every
+   item states its box in data-checked. The boxes are painted here, in the
+   item's left gutter — no foreign element enters the note, and clicks in
+   the gutter (handled by the port) toggle the state. Direct children only:
+   a plain list nested inside an item keeps its own markers. */
+#note ul[data-rich-checklist] {
+  list-style: none;
+  padding-left: 4px;
+}
+
+#note ul[data-rich-checklist] > li {
+  position: relative;
+  margin: 0.3em 0;
+  padding-left: 30px;
+  min-height: 22px;
+}
+
+#note ul[data-rich-checklist] > li::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 0.28em;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--vz-fg-muted);
+  border-radius: 4px;
+  background: transparent;
+  transition:
+    background-color var(--vz-dur) ease,
+    border-color var(--vz-dur) ease;
+}
+
+#note ul[data-rich-checklist] > li[data-checked='true']::before {
+  border-color: var(--vz-fg);
+  background: var(--vz-fg);
+}
+
+#note ul[data-rich-checklist] > li[data-checked='true']::after {
+  content: '';
+  position: absolute;
+  left: 8.2px;
+  top: calc(0.28em + 3.2px);
+  width: 4px;
+  height: 8px;
+  border-right: 1.8px solid var(--vz-bg);
+  border-bottom: 1.8px solid var(--vz-bg);
+  transform: rotate(42deg);
+}
+
+#note ul[data-rich-checklist] > li[data-checked='true'] {
+  color: var(--vz-fg-muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--vz-fg-subtle);
+}
+
 /* ---- Rich text toolbar ----
    Lives above the note; only mounted-visible for rich notes. Same chip
    language as the rest of the chrome; pressed = the subtle chip wash. */

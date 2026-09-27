@@ -188,6 +188,56 @@ body {
   padding-left: 1.5em;
 }
 
+/* Checklists — same painted boxes as the editor (see vercel.css); the
+   share view is read-only, so there is no gutter interaction. */
+.share-content ul[data-rich-checklist] {
+  list-style: none;
+  padding-left: 4px;
+}
+
+.share-content ul[data-rich-checklist] > li {
+  position: relative;
+  margin: 0.3em 0;
+  padding-left: 30px;
+  min-height: 22px;
+}
+
+.share-content ul[data-rich-checklist] > li::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 0.28em;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--s-fg-muted);
+  border-radius: 4px;
+  background: transparent;
+}
+
+.share-content ul[data-rich-checklist] > li[data-checked='true']::before {
+  border-color: var(--s-fg);
+  background: var(--s-fg);
+}
+
+.share-content ul[data-rich-checklist] > li[data-checked='true']::after {
+  content: '';
+  position: absolute;
+  left: 8.2px;
+  top: calc(0.28em + 3.2px);
+  width: 4px;
+  height: 8px;
+  border-right: 1.8px solid var(--s-bg);
+  border-bottom: 1.8px solid var(--s-bg);
+  transform: rotate(42deg);
+}
+
+.share-content ul[data-rich-checklist] > li[data-checked='true'] {
+  color: var(--s-fg-muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--s-fg-subtle);
+}
+
 .share-content blockquote {
   margin: 0.5em 0;
   padding: 0.15em 0 0.15em 0.9em;

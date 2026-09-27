@@ -34,6 +34,15 @@ const INDENTABLE_TAGS = new Set(['DIV', 'P', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'PR
 const INDENT_STEP_PX = 40;
 const MAX_INDENT_PX = 240;
 
+/**
+ * The checklist vocabulary on the stored subset: an unordered list carries
+ * data-rich-checklist, every item states its box state. Clicks in the
+ * item's left gutter (the checkbox column the CSS paints) toggle it.
+ */
+const CHECKLIST_ATTR = 'data-rich-checklist';
+const CHECKED_ATTR = 'data-checked';
+const CHECKLIST_GUTTER_PX = 30;
+
 /** The legacy execCommand font-size scale, in px (what 1..7 rendered as). */
 const LEGACY_FONT_SIZE_PX: ReadonlyMap<string, number> = new Map([
   ['1', 10],
@@ -77,6 +86,20 @@ export class ContentEditablePort implements EditorPort {
     // Keep execCommand producing plain tags (b/i/u/s) rather than inline
     // styles — the storage subset has no place for `<span style>`.
     document.execCommand('styleWithCSS', false, 'false');
+
+    // Checklist interactions live on the surface itself: clicking an item's
+    // checkbox gutter flips its state, and Enter on a checked item starts
+    // the next one unchecked (the engine clones the item's attributes).
+    element.addEventListener('click', (event) => {
+      this.toggleChecklistItem(event as MouseEvent);
+    });
+    element.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' || event.shiftKey) {
+        return;
+      }
+      // After the engine splits the item, an empty checked clone unchecks.
+      requestAnimationFrame(() => this.uncheckEmptyItemUnderCaret());
+    });
   }
 
   getHtml(): string {
@@ -184,10 +207,46 @@ export class ContentEditablePort implements EditorPort {
   }
 
   toggleList(kind: ListKind): boolean {
-    if (typeof document.execCommand !== 'function') {
+    if (!this.canExec()) {
       return false;
     }
-    return document.execCommand(kind === 'ul' ? 'insertUnorderedList' : 'insertOrderedList', false);
+    // The bullet button over a checklist converts it to a plain bulleted
+    // list (Docs semantics) — the engine's toggle would erase the list.
+    if (kind === 'ul' && this.queryListKind() === 'checklist') {
+      const lists = this.checklistsAtSelection();
+      if (lists.length === 0) {
+        return false;
+      }
+      lists.forEach((list) => list.removeAttribute(CHECKLIST_ATTR));
+      this.announceEdit();
+      return true;
+    }
+    if (kind === 'checklist') {
+      // Toggling a checklist off hands the blocks back to the engine.
+      if (this.queryListKind() === 'checklist') {
+        const savedOff = this.captureCaretTextOffset();
+        const done = document.execCommand('insertUnorderedList', false);
+        this.restoreCaretTextOffset(savedOff);
+        return done;
+      }
+      const savedOn = this.captureCaretTextOffset();
+      if (!document.execCommand('insertUnorderedList', false)) {
+        return false;
+      }
+      // Mark the lists the command just produced/touched, then announce:
+      // the attribute rewrite below is invisible to execCommand's events.
+      this.markSelectionListsAsChecklist();
+      this.restoreCaretTextOffset(savedOn);
+      this.announceEdit();
+      return true;
+    }
+    const saved = this.captureCaretTextOffset();
+    const done = document.execCommand(
+      kind === 'ul' ? 'insertUnorderedList' : 'insertOrderedList',
+      false,
+    );
+    this.restoreCaretTextOffset(saved);
+    return done;
   }
 
   queryListKind(): ListKind | null {
@@ -195,7 +254,7 @@ export class ContentEditablePort implements EditorPort {
       return null;
     }
     if (document.queryCommandState('insertUnorderedList')) {
-      return 'ul';
+      return this.listAtSelection()?.hasAttribute(CHECKLIST_ATTR) ? 'checklist' : 'ul';
     }
     if (document.queryCommandState('insertOrderedList')) {
       return 'ol';
@@ -415,6 +474,178 @@ export class ContentEditablePort implements EditorPort {
 
   private canExec(): boolean {
     return typeof document.execCommand === 'function';
+  }
+
+  // -------------------------------------------------------------------------
+  // Checklists — the data-rich-checklist subset. Storage sees only the two
+  // attributes (see the sanitizer allowlist); the boxes themselves are
+  // painted by CSS, so no foreign element ever enters the note.
+  // -------------------------------------------------------------------------
+
+  /** The UL at/around the selection, or null. */
+  private listAtSelection(): HTMLUListElement | null {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return null;
+    }
+    const node = selection.getRangeAt(0).startContainer;
+    const base = node instanceof Element ? node : (node?.parentElement ?? null);
+    const list = base?.closest('ul');
+    return list && this.element.contains(list) ? (list as HTMLUListElement) : null;
+  }
+
+  /**
+   * Chrome's list commands reset a collapsed caret to the start of the item
+   * they produce. Remember the caret as a character offset inside its
+   * block's text so toggleList can re-anchor it after the rewrite. Only the
+   * collapsed case needs this: ranged toggles leave the selection to the
+   * engine, which keeps it across the produced items.
+   */
+  private captureCaretTextOffset(): { text: string; offset: number } | null {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) {
+      return null;
+    }
+    const range = selection.getRangeAt(0);
+    const node = range.startContainer;
+    if (node.nodeType !== Node.TEXT_NODE) {
+      return null;
+    }
+    const block = node.parentElement?.closest('div, p, h1, h2, h3, li, blockquote, pre');
+    if (!block || !this.element.contains(block)) {
+      return null;
+    }
+    const leading = document.createRange();
+    leading.selectNodeContents(block);
+    leading.setEnd(range.startContainer, range.startOffset);
+    return { text: block.textContent ?? '', offset: leading.toString().length };
+  }
+
+  /**
+   * Puts the caret back where captureCaretTextOffset found it: the item
+   * carrying the same text, walked to the same character offset. Offset 0
+   * needs no work — Chrome already left the caret there.
+   */
+  private restoreCaretTextOffset(saved: { text: string; offset: number } | null): void {
+    if (!saved || saved.offset === 0) {
+      return;
+    }
+    for (const li of this.element.querySelectorAll('li')) {
+      if ((li.textContent ?? '') !== saved.text) {
+        continue;
+      }
+      const walker = document.createTreeWalker(li, NodeFilter.SHOW_TEXT);
+      let remaining = saved.offset;
+      while (walker.nextNode()) {
+        const text = walker.currentNode as Text;
+        const length = text.nodeValue?.length ?? 0;
+        if (remaining <= length) {
+          const range = document.createRange();
+          range.setStart(text, remaining);
+          range.collapse(true);
+          const selection = window.getSelection();
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+          return;
+        }
+        remaining -= length;
+      }
+      return;
+    }
+  }
+
+  /** The checklists holding the selection's start and end blocks. */
+  private checklistsAtSelection(): HTMLUListElement[] {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return [];
+    }
+    const range = selection.getRangeAt(0);
+    const found = new Set<HTMLUListElement>();
+    for (const node of [range.startContainer, range.endContainer]) {
+      const base = node instanceof Element ? node : (node?.parentElement ?? null);
+      const list = base?.closest('ul');
+      if (list instanceof HTMLUListElement && list.hasAttribute(CHECKLIST_ATTR)) {
+        found.add(list);
+      }
+    }
+    return Array.from(found);
+  }
+
+  /**
+   * After insertUnorderedList, every UL holding the selection's edges is a
+   * list the command just produced or merged — mark those as checklists and
+   * give any item without a stated state the unchecked default.
+   */
+  private markSelectionListsAsChecklist(): void {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    const marked = new Set<HTMLUListElement>();
+    for (const node of [range.startContainer, range.endContainer]) {
+      const base = node instanceof Element ? node : (node?.parentElement ?? null);
+      const list = base?.closest('ul');
+      if (list instanceof HTMLUListElement && this.element.contains(list)) {
+        marked.add(list);
+      }
+    }
+    marked.forEach((list) => {
+      list.setAttribute(CHECKLIST_ATTR, 'true');
+      list.querySelectorAll('li').forEach((li) => {
+        if (!li.hasAttribute(CHECKED_ATTR)) {
+          li.setAttribute(CHECKED_ATTR, 'false');
+        }
+      });
+    });
+  }
+
+  /**
+   * The boxes are painted by CSS in the item's left gutter — a click there
+   * toggles the state instead of moving the caret.
+   */
+  private toggleChecklistItem(event: MouseEvent): void {
+    const target = event.target instanceof Element ? event.target : null;
+    const item = target?.closest('li');
+    if (!item || !this.element.contains(item)) {
+      return;
+    }
+    const list = item.closest('ul');
+    if (!(list instanceof HTMLUListElement) || !list.hasAttribute(CHECKLIST_ATTR)) {
+      return;
+    }
+    const rect = item.getBoundingClientRect();
+    if (event.clientX - rect.left > CHECKLIST_GUTTER_PX) {
+      return;
+    }
+    const next = item.getAttribute(CHECKED_ATTR) === 'true' ? 'false' : 'true';
+    item.setAttribute(CHECKED_ATTR, next);
+    this.announceEdit();
+  }
+
+  /**
+   * Enter clones the item's attributes into its continuation — an empty
+   * checked clone reads as a done item with no text. Docs starts the next
+   * item unchecked, so strip the state when the split left one empty.
+   */
+  private uncheckEmptyItemUnderCaret(): void {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return;
+    }
+    const node = selection.getRangeAt(0).startContainer;
+    const base = node instanceof Element ? node : (node?.parentElement ?? null);
+    const item = base?.closest('li');
+    if (
+      item &&
+      this.element.contains(item) &&
+      (item.textContent ?? '').trim() === '' &&
+      item.getAttribute(CHECKED_ATTR) === 'true'
+    ) {
+      item.setAttribute(CHECKED_ATTR, 'false');
+      this.announceEdit();
+    }
   }
 
   /**

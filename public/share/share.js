@@ -124,6 +124,13 @@
           if (safeStyle) clone.setAttribute('style', safeStyle);
         }
       }
+      // Checklists ride the same fixed vocabularies as the app sanitizer:
+      // the list keeps its boolean mark, items their boolean box state.
+      if (element.tagName === 'UL' && element.getAttribute('data-rich-checklist') === 'true') {
+        clone.setAttribute('data-rich-checklist', 'true');
+      } else if (element.tagName === 'LI' && /^(true|false)$/.test(element.getAttribute('data-checked') || '')) {
+        clone.setAttribute('data-checked', element.getAttribute('data-checked'));
+      }
       children.forEach(function (child) {
         clone.appendChild(child);
       });

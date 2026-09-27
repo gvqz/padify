@@ -26,7 +26,7 @@ export type FormatCommand = 'bold' | 'italic' | 'underline' | 'strikeThrough';
 /** Block formats the rich text toolbar applies to the selection's blocks. */
 export type BlockFormat = 'p' | 'h1' | 'h2' | 'h3' | 'blockquote' | 'pre';
 
-export type ListKind = 'ul' | 'ol';
+export type ListKind = 'ul' | 'ol' | 'checklist';
 
 /** Vertical script offsets (Docs-style superscript / subscript). */
 export type ScriptType = 'super' | 'sub';
@@ -96,7 +96,12 @@ export interface EditorPort {
    */
   queryBlockFormat(): BlockFormat | null;
 
-  /** Turns an ordered/unordered list on or off at the selection. */
+  /**
+   * Turns a list on or off at the selection. 'checklist' marks the produced
+   * unordered list with data-rich-checklist; toggling it off returns plain
+   * paragraphs, and the bullet/numbered kinds convert a checklist into the
+   * equivalent plain list (Docs behavior) instead of erasing it.
+   */
   toggleList(kind: ListKind): boolean;
 
   /** The list kind active at the selection, or null when not in a list. */
