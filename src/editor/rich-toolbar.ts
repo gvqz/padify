@@ -234,7 +234,47 @@ export function initRichToolbar(tabManager: TabManager): void {
     closeMenus();
     panel.hidden = false;
     button.setAttribute('aria-expanded', 'true');
+    clampPanelToViewport(panel);
+    markCurrentValue(button, panel);
     panel.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+  };
+
+  /**
+   * Panels anchor to their (absolutely positioned) host with plain CSS, so a
+   * wide panel beside a toolbar button near the window's right edge — the
+   * table grid, the table options — paints off-screen. Shift it back inside
+   * once it has its real size.
+   */
+  const clampPanelToViewport = (panel: HTMLElement): void => {
+    panel.style.removeProperty('margin-left');
+    const rect = panel.getBoundingClientRect();
+    const overflow = rect.right - window.innerWidth + 4; // 4px breathing room
+    if (overflow > 0) {
+      panel.style.marginLeft = `${-overflow}px`;
+    }
+  };
+
+  /**
+   * Docs marks the size/font the caret currently sits in. The caret labels
+   * already track the live values — echo the one the menu is about to offer.
+   */
+  const markCurrentValue = (button: HTMLButtonElement, panel: HTMLElement): void => {
+    const kind = button.dataset.richMenu;
+    if (kind !== 'size' && kind !== 'font') {
+      return;
+    }
+    const current = toolbar
+      .querySelector<HTMLElement>(`[data-rich-label="${kind}"]`)
+      ?.textContent?.trim()
+      .toLowerCase();
+    panel.querySelectorAll<HTMLButtonElement>('[role="menuitem"]').forEach((item) => {
+      const matches =
+        current !== undefined &&
+        current !== '' &&
+        item.textContent!.trim().toLowerCase() === current;
+      item.setAttribute('aria-checked', String(matches));
+      item.classList.toggle('rich-menu-current', matches);
+    });
   };
 
   const toggleMenu = (button: HTMLButtonElement): void => {

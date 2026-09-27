@@ -3251,7 +3251,7 @@ body.dark #note:has(> br:only-child)::before {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 2px;
+  gap: 1px;
   padding: 4px;
   border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius-md);
@@ -3272,7 +3272,7 @@ body.dark #note:has(> br:only-child)::before {
 .rich-toolbar-sep {
   width: 1px;
   height: 18px;
-  margin: 0 4px;
+  margin: 0 3px;
   background: var(--vz-border);
 }
 
@@ -3478,6 +3478,13 @@ body.dark #note:has(> br:only-child)::before {
   background: var(--vz-bg-hover);
   color: var(--vz-fg);
   outline: none;
+}
+
+/* The value the caret currently sits in, the way Docs ticks it. */
+.rich-menu-item.rich-menu-current {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg);
+  font-weight: 600;
 }
 
 .rich-menu-panel-swatches {
