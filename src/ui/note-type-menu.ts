@@ -44,10 +44,58 @@ export function initNoteTypeMenu(onCreate: (type: NoteType) => void): void {
     }
   });
 
+  // Menu keys, per the menu role this markup declares: arrows rove focus
+  // (wrapping), Home/End jump, Tab closes while letting focus move on, and
+  // Escape closes with focus back on the trigger. Enter/Space activate —
+  // native button behavior.
+  const menuItems = (): HTMLElement[] =>
+    Array.from(popover.querySelectorAll<HTMLElement>('[data-note-type]'));
+  const focusItemAt = (items: HTMLElement[], index: number): void => {
+    if (items.length > 0) {
+      items[(index + items.length) % items.length].focus();
+    }
+  };
+
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && isOpen()) {
+    if (!isOpen()) {
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
       setOpen(false);
       trigger.focus();
+      return;
+    }
+
+    if (event.key === 'Tab') {
+      setOpen(false); // focus keeps moving on; the menu just follows suit
+      return;
+    }
+
+    const items = menuItems();
+    if (items.length === 0) {
+      return;
+    }
+    const current = items.findIndex((item) => item === document.activeElement);
+
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        focusItemAt(items, current < 0 ? 0 : current + 1);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        focusItemAt(items, current < 0 ? items.length - 1 : current - 1);
+        break;
+      case 'Home':
+        event.preventDefault();
+        focusItemAt(items, 0);
+        break;
+      case 'End':
+        event.preventDefault();
+        focusItemAt(items, items.length - 1);
+        break;
     }
   });
 

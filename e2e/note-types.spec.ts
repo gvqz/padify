@@ -52,6 +52,32 @@ test.describe('note types', () => {
     await expect(page.locator('#addTabTypeMenu')).toBeFocused();
   });
 
+  test('the type menu navigates with menu keys and activates with Enter', async ({ page }) => {
+    await page.goto('/');
+    const popover = page.locator('#addTabTypeMenuPopover');
+
+    await page.locator('#addTabTypeMenu').click();
+    await expect(popover).toBeVisible();
+
+    // Arrows rove focus (from the trigger into the list, wrapping), Home/End jump.
+    await page.keyboard.press('ArrowDown');
+    await expect(popover.locator('.tab-type-menu-item').first()).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(popover.locator('.tab-type-menu-item').last()).toBeFocused();
+    await page.keyboard.press('ArrowDown'); // wraps to the first item
+    await expect(popover.locator('.tab-type-menu-item').first()).toBeFocused();
+    await page.keyboard.press('End');
+    await expect(popover.locator('.tab-type-menu-item').last()).toBeFocused();
+
+    // Enter activates the focused item — the rich note is created.
+    await page.keyboard.press('ArrowDown'); // last wraps forward to the first
+    await expect(popover.locator('.tab-type-menu-item').first()).toBeFocused();
+    await page.keyboard.press('ArrowDown'); // onto "Rich text note"
+    await page.keyboard.press('Enter');
+    await expect(popover).toBeHidden();
+    await expect(page.locator('#richToolbar')).toBeVisible();
+  });
+
   test('a rich note gets the toolbar, formats through it, and survives a reload', async ({
     page,
   }) => {

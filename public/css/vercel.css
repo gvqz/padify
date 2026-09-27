@@ -3579,6 +3579,7 @@ body.dark #note:has(> br:only-child)::before {
 }
 
 .tab-type-menu-item:hover,
+.tab-type-menu-item:focus,
 .tab-type-menu-item:focus-visible {
   background: var(--vz-bg-hover);
   outline: none;
