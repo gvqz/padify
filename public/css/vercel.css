@@ -3128,6 +3128,9 @@ body.dark #note:has(> br:only-child)::before {
   padding: 0.6em 0.8em;
   border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius);
+  /* bootstrap ships pre { color: #333 } — on the dark surface that is
+     near-invisible, so the code block always states its ink explicitly. */
+  color: var(--vz-fg);
   background: var(--vz-bg-subtle);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.9em;

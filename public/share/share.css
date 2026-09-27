@@ -200,6 +200,9 @@ body {
   padding: 0.6em 0.8em;
   border: 1px solid var(--s-border);
   border-radius: 8px;
+  /* Same reason as the editor: bootstrap's pre { color: #333 } must not
+     decide the ink inside the code block. */
+  color: var(--s-fg);
   background: var(--s-bg-soft);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.9em;
