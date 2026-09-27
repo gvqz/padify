@@ -65,15 +65,34 @@
   /**
    * Strips the stored note HTML down to the same formatting subset the
    * editor produces (b/strong/i/em/u/s/strike/del/br/div/span/p + the rich
-   * text vocabulary h1/h2/h3/ul/ol/li/blockquote/pre) so a crafted share
-   * payload cannot inject markup. `a[href]` is the one attribute kept, and
-   * only for safe schemes — identical policy to the app's sanitizer
-   * (sanitizeNoteHtml in src/tabs.ts). Keep the two in sync.
+   * text vocabulary h1/h2/h3/ul/ol/li/blockquote/pre + sup/sub/hr) so a
+   * crafted share payload cannot inject markup. `a[href]` is kept only for
+   * safe schemes, `style` only for the app sanitizer's property allowlist —
+   * identical policy to sanitizeNoteHtml in src/tabs.ts. Keep the two in
+   * sync.
    */
   function sanitizeShareHtml(html) {
     var parsed = new DOMParser().parseFromString('<body>' + String(html == null ? '' : html) + '</body>', 'text/html');
-    var allowed = { B: 1, STRONG: 1, I: 1, EM: 1, U: 1, S: 1, STRIKE: 1, DEL: 1, BR: 1, DIV: 1, SPAN: 1, P: 1, H1: 1, H2: 1, H3: 1, UL: 1, OL: 1, LI: 1, BLOCKQUOTE: 1, PRE: 1, A: 1 };
+    var allowed = { B: 1, STRONG: 1, I: 1, EM: 1, U: 1, S: 1, STRIKE: 1, DEL: 1, BR: 1, DIV: 1, SPAN: 1, P: 1, H1: 1, H2: 1, H3: 1, UL: 1, OL: 1, LI: 1, BLOCKQUOTE: 1, PRE: 1, SUP: 1, SUB: 1, HR: 1, A: 1 };
     var safeHref = /^(https?:|mailto:|#|\/)/i;
+    var colorValue = /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(,\s*(0?\.\d+|1)\s*)?\)|[a-z]+)$/i;
+    var fontFamilyValue = /^[-a-z0-9\s,'’]{1,120}$/i;
+    var inlineStyles = { 'color': colorValue, 'background-color': colorValue, 'font-size': /^\d+(\.\d+)?(px|pt)$/, 'font-family': fontFamilyValue };
+    var blockStyles = { 'text-align': /^(left|center|right|justify)$/i, 'margin-left': /^\d+(\.\d+)?px$/ };
+
+    function sanitizeStyle(raw, inline) {
+      var allowedProps = inline ? inlineStyles : blockStyles;
+      var kept = [];
+      raw.split(';').forEach(function (declaration) {
+        var colon = declaration.indexOf(':');
+        if (colon <= 0) return;
+        var prop = declaration.slice(0, colon).trim().toLowerCase();
+        var value = declaration.slice(colon + 1).trim();
+        var pattern = allowedProps[prop];
+        if (pattern && pattern.test(value)) kept.push(prop + ': ' + value);
+      });
+      return kept.length ? kept.join('; ') : null;
+    }
 
     function walk(node) {
       if (node.nodeType === Node.TEXT_NODE) {
@@ -97,6 +116,12 @@
           clone.setAttribute('href', href);
           clone.setAttribute('rel', 'noopener noreferrer nofollow');
           clone.setAttribute('target', '_blank');
+        }
+      } else if (element.tagName === 'SPAN' || element.tagName === 'DIV' || element.tagName === 'P' || element.tagName === 'H1' || element.tagName === 'H2' || element.tagName === 'H3' || element.tagName === 'LI' || element.tagName === 'BLOCKQUOTE' || element.tagName === 'PRE') {
+        var rawStyle = element.getAttribute('style');
+        if (rawStyle) {
+          var safeStyle = sanitizeStyle(rawStyle, element.tagName === 'SPAN');
+          if (safeStyle) clone.setAttribute('style', safeStyle);
         }
       }
       children.forEach(function (child) {

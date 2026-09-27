@@ -167,8 +167,9 @@ export function legacyTextToHtml(text: string): string {
 
 /**
  * The tags a note may contain. Inline tags are the classic formatting
- * subset; the block + link tags are the rich text note vocabulary (see the
- * rich toolbar). Everything else is unwrapped to its text on load.
+ * subset; the block + link tags are the rich text note vocabulary, and
+ * sup/sub/hr join for the Docs-style controls (scripts, rules). Everything
+ * else is unwrapped to its text on load.
  */
 const ALLOWED_TAGS = new Set([
   'B',
@@ -191,17 +192,70 @@ const ALLOWED_TAGS = new Set([
   'LI',
   'BLOCKQUOTE',
   'PRE',
+  'SUP',
+  'SUB',
+  'HR',
   'A',
 ]);
 
 /**
  * Attributes a surviving tag may keep. Everything else is stripped — the
- * editor only ever produces these itself. `a[href]` is the one deliberate
- * exception (the rich text link button), gated to safe schemes below.
+ * editor only ever produces these itself. `a[href]` is gated to safe
+ * schemes below; `style` is gated to the property allowlist beneath it.
  */
 const ALLOWED_ATTRS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['A', new Set(['href'])],
+  ['SPAN', new Set(['style'])],
+  ['DIV', new Set(['style'])],
+  ['P', new Set(['style'])],
+  ['H1', new Set(['style'])],
+  ['H2', new Set(['style'])],
+  ['H3', new Set(['style'])],
+  ['LI', new Set(['style'])],
+  ['BLOCKQUOTE', new Set(['style'])],
+  ['PRE', new Set(['style'])],
 ]);
+
+/**
+ * CSS a stored note may keep, split by tag class. The editor only ever
+ * produces these declarations itself (the Docs-style controls), but notes
+ * also come back from storage and cloud sync — the allowlist is the wall
+ * that keeps a crafted payload from carrying url()/expression() or layout
+ * hijacks into the surface.
+ */
+const COLOR_VALUE_PATTERN =
+  /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(,\s*(0?\.\d+|1)\s*)?\)|[a-z]+)$/i;
+const FONT_FAMILY_VALUE_PATTERN = /^[-a-z0-9\s,'’]{1,120}$/i;
+
+const INLINE_STYLE_PROPS: ReadonlyMap<string, RegExp> = new Map([
+  ['color', COLOR_VALUE_PATTERN],
+  ['background-color', COLOR_VALUE_PATTERN],
+  ['font-size', /^\d+(\.\d+)?(px|pt)$/],
+  ['font-family', FONT_FAMILY_VALUE_PATTERN],
+]);
+
+const BLOCK_STYLE_PROPS: ReadonlyMap<string, RegExp> = new Map([
+  ['text-align', /^(left|center|right|justify)$/i],
+  ['margin-left', /^\d+(\.\d+)?px$/],
+]);
+
+function sanitizeStyle(raw: string, inline: boolean): string | null {
+  const allowed = inline ? INLINE_STYLE_PROPS : BLOCK_STYLE_PROPS;
+  const kept: string[] = [];
+  for (const declaration of raw.split(';')) {
+    const colon = declaration.indexOf(':');
+    if (colon <= 0) {
+      continue;
+    }
+    const prop = declaration.slice(0, colon).trim().toLowerCase();
+    const value = declaration.slice(colon + 1).trim();
+    const pattern = allowed.get(prop);
+    if (pattern && pattern.test(value)) {
+      kept.push(`${prop}: ${value}`);
+    }
+  }
+  return kept.length > 0 ? kept.join('; ') : null;
+}
 
 /**
  * Link schemes a stored href may use. javascript:/data:/vbscript: and
@@ -257,6 +311,13 @@ export function sanitizeNoteHtml(html: string): string {
           }
           return;
         }
+        if (attr === 'style') {
+          const safe = sanitizeStyle(value, element.tagName === 'SPAN');
+          if (safe !== null) {
+            clone.setAttribute(attr, safe);
+          }
+          return;
+        }
         clone.setAttribute(attr, value);
       });
     }
@@ -282,7 +343,7 @@ export function htmlToText(html: string): string {
   const parts: string[] = [];
 
   /** Block tags read as line boundaries, like innerText would report them. */
-  const BLOCK_TAGS = new Set(['DIV', 'P', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'PRE', 'LI']);
+  const BLOCK_TAGS = new Set(['DIV', 'P', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'PRE', 'LI', 'HR']);
 
   const walk = (node: Node): void => {
     if (node.nodeType === Node.TEXT_NODE) {

@@ -210,6 +210,12 @@ body {
   overflow-wrap: break-word;
 }
 
+.share-content hr {
+  border: 0;
+  border-top: 1px solid var(--s-border);
+  margin: 1em 0;
+}
+
 .share-content a {
   color: inherit;
   text-decoration: underline;

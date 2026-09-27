@@ -3152,6 +3152,12 @@ body.dark #note:has(> br:only-child)::before {
   text-decoration-color: var(--vz-fg);
 }
 
+#note hr {
+  border: 0;
+  border-top: 1px solid var(--vz-border-strong);
+  margin: 1em 0;
+}
+
 /* ---- Rich text toolbar ----
    Lives above the note; only mounted-visible for rich notes. Same chip
    language as the rest of the chrome; pressed = the subtle chip wash. */

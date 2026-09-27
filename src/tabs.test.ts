@@ -55,8 +55,45 @@ describe('sanitizeNoteHtml', () => {
     );
   });
 
-  it('strips every attribute from surviving tags', () => {
-    expect(sanitizeNoteHtml('<span style="color:red">s</span>')).toBe('<span>s</span>');
+  it('keeps only the allowlisted style declarations (policy: Docs-style controls, 2026-09)', () => {
+    // The style attribute used to be stripped wholesale; it now survives
+    // per-property for exactly the declarations the Docs-style controls
+    // produce — colors and typography on spans, alignment and indent on
+    // blocks. Everything else (position, url(), unknown props) is dropped.
+    expect(sanitizeNoteHtml('<span style="color:#e64980">s</span>')).toBe(
+      '<span style="color: #e64980">s</span>',
+    );
+    expect(
+      sanitizeNoteHtml('<span style="background-color: rgb(255, 243, 191)">s</span>'),
+    ).toBe('<span style="background-color: rgb(255, 243, 191)">s</span>');
+    expect(sanitizeNoteHtml('<span style="font-size: 24px">s</span>')).toBe(
+      '<span style="font-size: 24px">s</span>',
+    );
+    expect(sanitizeNoteHtml('<span style="font-family: Georgia">s</span>')).toBe(
+      '<span style="font-family: Georgia">s</span>',
+    );
+    expect(sanitizeNoteHtml('<p style="text-align: center">s</p>')).toBe(
+      '<p style="text-align: center">s</p>',
+    );
+    expect(sanitizeNoteHtml('<div style="margin-left: 40px">s</div>')).toBe(
+      '<div style="margin-left: 40px">s</div>',
+    );
+  });
+
+  it('drops hostile or out-of-policy style declarations', () => {
+    // url() and friends cannot survive the value shapes; a block must not
+    // carry inline typography and a span must not carry layout.
+    expect(sanitizeNoteHtml('<span style="color: url(evil)">s</span>')).toBe('<span>s</span>');
+    expect(sanitizeNoteHtml('<span style="position: fixed">s</span>')).toBe('<span>s</span>');
+    expect(sanitizeNoteHtml('<span style="color: expression(alert(1))">s</span>')).toBe(
+      '<span>s</span>',
+    );
+    expect(sanitizeNoteHtml('<p style="color: red">s</p>')).toBe('<p>s</p>');
+    expect(sanitizeNoteHtml('<span style="text-align: center">s</span>')).toBe('<span>s</span>');
+    expect(sanitizeNoteHtml('<p style="margin-left: -40px">s</p>')).toBe('<p>s</p>');
+  });
+
+  it('strips attributes from surviving tags it has no style for', () => {
     expect(sanitizeNoteHtml('<b onclick="evil()">bold</b>')).toBe('<b>bold</b>');
   });
 
@@ -81,6 +118,15 @@ describe('sanitizeNoteHtml', () => {
   it('keeps empty allowed blocks', () => {
     expect(sanitizeNoteHtml('<div></div>')).toBe('<div></div>');
   });
+
+  it('keeps the Docs-style vocabulary (scripts, rules)', () => {
+    expect(sanitizeNoteHtml('a<sup>2</sup> + b<sub>n</sub><hr>')).toBe(
+      'a<sup>2</sup> + b<sub>n</sub><hr>',
+    );
+    // A stray legacy <font> (an old synced note) still degrades to text —
+    // the editor normalizes its own font tags before storage ever sees one.
+    expect(sanitizeNoteHtml('<font size="5">x</font>')).toBe('x');
+  });
 });
 
 describe('htmlToText', () => {
@@ -91,6 +137,10 @@ describe('htmlToText', () => {
 
   it('renders empty paragraphs as blank lines', () => {
     expect(htmlToText('<p></p>')).toBe('\n');
+  });
+
+  it('reads horizontal rules as line boundaries', () => {
+    expect(htmlToText('a<hr>b')).toBe('a\nb');
   });
 
   it('strips inline formatting', () => {
