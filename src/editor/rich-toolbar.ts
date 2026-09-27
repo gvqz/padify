@@ -121,6 +121,7 @@ export function initRichToolbar(tabManager: TabManager): void {
       if (tableHost) {
         tableHost.hidden = true;
       }
+      refreshHistoryButtons();
       return;
     }
 
@@ -165,6 +166,22 @@ export function initRichToolbar(tabManager: TabManager): void {
     });
 
     refreshCaretLabels();
+    refreshHistoryButtons();
+  };
+
+  /**
+   * Docs dims undo/redo at the ends of the history. Chrome answers
+   * queryCommandEnabled for both reliably on the editor surface — the
+   * buttons stay focusable and clickable (a dead undo click is a harmless
+   * no-op), only the ink changes.
+   */
+  const refreshHistoryButtons = (): void => {
+    const canUndo = safeQuery(() => document.queryCommandEnabled('undo')) ?? false;
+    const canRedo = safeQuery(() => document.queryCommandEnabled('redo')) ?? false;
+    const undoButton = toolbar.querySelector<HTMLElement>('[data-rich-action="undo"]');
+    const redoButton = toolbar.querySelector<HTMLElement>('[data-rich-action="redo"]');
+    undoButton?.setAttribute('aria-disabled', String(!canUndo));
+    redoButton?.setAttribute('aria-disabled', String(!canRedo));
   };
 
   /**

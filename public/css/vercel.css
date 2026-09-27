@@ -3308,6 +3308,11 @@ body.dark #note:has(> br:only-child)::before {
   color: var(--vz-fg);
 }
 
+/* Dead history ends read dimmed but stay clickable (no-op) — Docs parity. */
+.rich-btn[aria-disabled='true'] {
+  opacity: 0.35;
+}
+
 .rich-btn svg {
   flex: 0 0 auto;
 }
