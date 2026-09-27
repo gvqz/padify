@@ -528,6 +528,14 @@ export class ContentEditablePort implements EditorPort {
 
   /** Applies the indent step to the selection's blocks, clamped to [0, max]. */
   private shiftSelectionBlocks(delta: number): boolean {
+    // A fresh note's first line is bare text directly in #note — no block
+    // element exists to carry the margin. Give the run a real block first,
+    // the same wrap formatBlock performs.
+    if (this.selectionBlocks().length === 0) {
+      if (!this.canExec() || !document.execCommand('formatBlock', false, '<div>')) {
+        return false;
+      }
+    }
     const blocks = this.selectionBlocks();
     if (blocks.length === 0) {
       return false;
