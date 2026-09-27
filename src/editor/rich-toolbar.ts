@@ -439,7 +439,18 @@ export function initRichToolbar(tabManager: TabManager): void {
 
     const highlightItem = target.closest<HTMLButtonElement>('[data-rich-highlight]');
     if (highlightItem) {
-      port.setHighlight(highlightItem.dataset.richHighlight!);
+      const color = highlightItem.dataset.richHighlight!;
+      port.setHighlight(color);
+      // The marker's swipe line previews the last ink (session only, the
+      // same deal as the text-color bar); "None" returns it to plain ink.
+      const hiliteGlyph = toolbar.querySelector<SVGElement>('[data-rich-hilite]');
+      if (hiliteGlyph) {
+        if (color === 'transparent') {
+          hiliteGlyph.style.removeProperty('--rich-hilite');
+        } else {
+          hiliteGlyph.style.setProperty('--rich-hilite', color);
+        }
+      }
       closeMenus(true);
       scheduleStateRefresh();
       return;
