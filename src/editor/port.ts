@@ -28,6 +28,12 @@ export type BlockFormat = 'p' | 'h1' | 'h2' | 'h3' | 'blockquote' | 'pre';
 
 export type ListKind = 'ul' | 'ol';
 
+/** Vertical script offsets (Docs-style superscript / subscript). */
+export type ScriptType = 'super' | 'sub';
+
+/** Horizontal text alignment of the selection's blocks. */
+export type Alignment = 'left' | 'center' | 'right' | 'justify';
+
 /** Every mutation-style command the app performs on the editor surface. */
 export type EditorCommand = FormatCommand | 'removeFormat';
 
@@ -119,6 +125,46 @@ export interface EditorPort {
 
   undo(): boolean;
   redo(): boolean;
+
+  // -------------------------------------------------------------------------
+  // The Docs-style vocabulary — fonts, sizes, colors, alignment, indentation
+  // and rules. Inline styles are stored as sanitized span/block styles (see
+  // the style allowlist in tabs.ts); the port normalizes whatever legacy
+  // markup the engine produced (e.g. <font>) into that subset.
+  // -------------------------------------------------------------------------
+
+  /** Sets the font size (px) of the selection. */
+  setFontSize(px: number): boolean;
+
+  /** Sets the font family of the selection. */
+  setFontFamily(family: string): boolean;
+
+  /** Sets the text color of the selection (any sanitized color value). */
+  setTextColor(color: string): boolean;
+
+  /** Sets the highlight behind the selection ('transparent' clears it). */
+  setHighlight(color: string): boolean;
+
+  /** Toggles superscript/subscript at the selection (re-apply to clear). */
+  applyScript(type: ScriptType): boolean;
+
+  /** True when the selection carries the given script offset. */
+  queryScript(type: ScriptType): boolean;
+
+  /** Aligns the selection's blocks. */
+  applyAlignment(align: Alignment): boolean;
+
+  /** The alignment active at the selection, or null when indeterminate. */
+  queryAlignment(): Alignment | null;
+
+  /** Indents the selection: nests inside lists, margin-steps plain blocks. */
+  indent(): boolean;
+
+  /** Reverses indent() — unnests list items, un-steps block margins. */
+  outdent(): boolean;
+
+  /** Inserts a horizontal rule at the caret, splitting the block. */
+  insertHorizontalRule(): boolean;
 
   /** Fires on user edits (typing, formatting). Returns an unsubscriber. */
   onInput(listener: () => void): () => void;
