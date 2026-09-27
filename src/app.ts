@@ -35,6 +35,7 @@ import { openModal, closeAllModals } from './ui/behavior/modal';
 import { initSaveIndicator } from './save-indicator';
 import { initTabRailDrawer } from './tab-rail-drawer';
 import { initRichToolbar } from './editor/rich-toolbar';
+import { initRichShortcuts } from './editor/rich-shortcuts';
 import { initNoteTypeMenu } from './ui/note-type-menu';
 import { initThemeController } from './theme-controller';
 import { initEditorPreferences, clearTabIndentation } from './editor-preferences';
@@ -238,6 +239,10 @@ export async function initApp(): Promise<void> {
   // ---- rich text toolbar — visible only for rich notes, see
   // editor/rich-toolbar.ts ----
   initRichToolbar(tabManager);
+
+  // Docs-style shortcuts for rich notes — registered BEFORE the legacy Tab
+  // handler below so lists can claim Tab/Shift+Tab first.
+  initRichShortcuts(tabManager);
 
   // ---- note-type menu — the chevron beside "New note", see
   // ui/note-type-menu.ts ----
