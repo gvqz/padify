@@ -2683,27 +2683,6 @@ body.dark.graph-paper {
     linear-gradient(90deg, #26262680 1px, transparent 1px);
 }
 
-body.chessboard-paper {
-  background-image: conic-gradient(#f1f1f1 25%, #ffffff 0 50%, #f1f1f1 0 75%, #ffffff 0);
-  background-size: 42px 42px;
-}
-
-body.dark.chessboard-paper {
-  background-image: conic-gradient(#141414 25%, #000000 0 50%, #141414 0 75%, #000000 0);
-}
-
-body.starfield-paper {
-  background-image: radial-gradient(#d4d4d4 1px, transparent 1.4px),
-    radial-gradient(#b8b8b8 1px, transparent 1.4px);
-  background-position: 0 0, 14px 18px;
-  background-size: 52px 52px;
-}
-
-body.dark.starfield-paper {
-  background-image: radial-gradient(#3a3a3a 1px, transparent 1.4px),
-    radial-gradient(#555555 1px, transparent 1.4px);
-}
-
 body.grain-paper {
   background-color: var(--vz-bg);
 }
@@ -2716,10 +2695,8 @@ body.dark.newspaper-paper {
   background-color: #0a0a0a;
 }
 
-/* linen / recycled / marble keep their imagery but sit on neutral paper */
-body.linen-paper,
-body.recycled-paper,
-body.marble-paper {
+/* Recycled keeps its imagery but sits on neutral paper */
+body.recycled-paper {
   background-color: var(--vz-bg);
 }
 

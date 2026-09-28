@@ -27,42 +27,35 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
   const { notepad, state, setState, editorConfig, optimalLineLengthPadding } = ctx;
   const removeState = stateRemove;
 
+  // Retired textures (chessboard, linen, marble) are deliberately absent:
+  // a stored choice of one of them fails this check and migrates to normal.
   const allowedTextures = [
     'normal',
     'dotted',
     'graph',
-    'chessboard',
     'starfield',
     'grain',
-    'linen',
     'recycled',
     'newspaper',
-    'marble',
   ];
 
   function applyTexture(textureSelected: string): void {
     $(document.body).removeClass(
-      'dotted-paper graph-paper chessboard-paper starfield-paper grain-paper linen-paper recycled-paper newspaper-paper marble-paper',
+      'dotted-paper graph-paper starfield-paper grain-paper recycled-paper newspaper-paper',
     );
 
     if (textureSelected == 'dotted') {
       $(document.body).addClass('dotted-paper');
     } else if (textureSelected == 'graph') {
       $(document.body).addClass('graph-paper');
-    } else if (textureSelected == 'chessboard') {
-      $(document.body).addClass('chessboard-paper');
     } else if (textureSelected == 'starfield') {
       $(document.body).addClass('starfield-paper');
     } else if (textureSelected == 'grain') {
       $(document.body).addClass('grain-paper');
-    } else if (textureSelected == 'linen') {
-      $(document.body).addClass('linen-paper');
     } else if (textureSelected == 'recycled') {
       $(document.body).addClass('recycled-paper');
     } else if (textureSelected == 'newspaper') {
       $(document.body).addClass('newspaper-paper');
-    } else if (textureSelected == 'marble') {
-      $(document.body).addClass('marble-paper');
     }
   }
 

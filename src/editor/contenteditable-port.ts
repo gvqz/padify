@@ -99,6 +99,9 @@ export class ContentEditablePort implements EditorPort {
   private readonly element: HTMLElement;
   private readonly deps: ContentEditablePortDeps;
 
+  /** Re-entrancy guard for the empty-after-delete normalization pass. */
+  private normalizingEmpty = false;
+
   constructor(element: HTMLElement, deps: ContentEditablePortDeps) {
     this.element = element;
     this.deps = deps;
@@ -119,6 +122,11 @@ export class ContentEditablePort implements EditorPort {
       }
       // After the engine splits the item, an empty checked clone unchecks.
       requestAnimationFrame(() => this.uncheckEmptyItemUnderCaret());
+    });
+    // Deleting everything in one stroke leaves Chrome's skeleton behind —
+    // catch it on the way out so the note reads empty again.
+    element.addEventListener('input', (event) => {
+      this.maybeNormalizeAfterDelete(event);
     });
   }
 
@@ -1188,6 +1196,90 @@ export class ContentEditablePort implements EditorPort {
    */
   private announceEdit(): void {
     this.element.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  /**
+   * Deleting everything in one stroke (Ctrl+A then Backspace/Delete) leaves
+   * Chrome's skeleton behind: the last block survives as an empty
+   * `<h1><br></h1>` or `<ul><li><br></li></ul>`. The placeholder then never
+   * comes back (`:empty` / `> br:only-child` don't match), the next
+   * keystrokes silently continue as the heading/list, and Chrome keeps the
+   * deleted run's character style as its typing style — new text comes out
+   * bold/colored with the toolbar showing none of it. Docs resets to a plain
+   * surface when the note empties; mirror that.
+   *
+   * Only delete-type inputs qualify: an empty list or heading the user just
+   * switched to on purpose (inputType insertUnorderedList / format…) is a
+   * deliberate empty block and must survive. The styled-caret run from a
+   * collapsed formatting choice is likewise a deliberate empty state.
+   */
+  private maybeNormalizeAfterDelete(event: Event): void {
+    const inputType = (event as InputEvent).inputType ?? '';
+    if (this.normalizingEmpty || !inputType.startsWith('delete')) {
+      return;
+    }
+    if (!this.isVisuallyEmpty() || this.hasStyledCaretRun() || !this.isCaretInside()) {
+      return;
+    }
+
+    this.normalizingEmpty = true;
+    try {
+      const restructured = this.hasEmptySkeleton();
+      if (restructured) {
+        this.element.innerHTML = '<br>';
+      }
+
+      // The deleted run's style survives as Chrome's typing style. A
+      // collapsed removeFormat alone does not clear it — select-all +
+      // removeFormat does (verified), then collapse back to the line start.
+      this.element.focus();
+      document.execCommand('selectAll');
+      document.execCommand('removeFormat');
+      const selection = window.getSelection();
+      const caret = document.createRange();
+      caret.setStart(this.element, 0);
+      caret.collapse(true);
+      selection?.removeAllRanges();
+      selection?.addRange(caret);
+
+      if (restructured) {
+        // The rewrite bypassed execCommand — announce the new state so
+        // autosave, the title and the toolbar all follow.
+        this.announceEdit();
+      }
+    } finally {
+      this.normalizingEmpty = false;
+    }
+  }
+
+  /** No text and nothing block-like or embedded that could carry content. */
+  private isVisuallyEmpty(): boolean {
+    if (this.element.querySelector('img, hr, table, iframe, video, audio')) {
+      return false;
+    }
+    return (this.element.textContent ?? '').replace(/\u200B/g, '').trim() === '';
+  }
+
+  /** The collapsed-caret styling run (a zero-width span) is deliberate. */
+  private hasStyledCaretRun(): boolean {
+    return Array.from(this.element.querySelectorAll('span')).some(
+      (span) => span.textContent === ZERO_WIDTH_SPACE,
+    );
+  }
+
+  /**
+   * Element structure beyond a single bare `<br>` — the skeleton a
+   * select-all delete leaves (heading/list/quote/code/paragraph wrappers,
+   * or a run of stray `<br>`s).
+   */
+  private hasEmptySkeleton(): boolean {
+    const elements = Array.from(this.element.childNodes).filter(
+      (node): node is Element => node.nodeType === Node.ELEMENT_NODE,
+    );
+    if (elements.length === 0) {
+      return false;
+    }
+    return elements.length > 1 || !(elements[0] instanceof HTMLBRElement);
   }
 
   /**

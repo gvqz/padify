@@ -175,15 +175,12 @@ export function resetWriteDirection(defaultWriteDirection: string): void {
 }
 
 export function resetTexture(defaultTexture: string): void {
-  $(document.body).removeClass('dotted-paper');
-  $(document.body).removeClass('graph-paper');
-  $(document.body).removeClass('chessboard-paper');
-  $(document.body).removeClass('starfield-paper');
-  $(document.body).removeClass('grain-paper');
-  $(document.body).removeClass('linen-paper');
-  $(document.body).removeClass('recycled-paper');
-  $(document.body).removeClass('newspaper-paper');
-  $(document.body).removeClass('marble-paper');
+  // The retired textures (chessboard/linen/marble) stay in this cleanup so
+  // a body still carrying one of their classes from an old session lands
+  // back on a paper that exists.
+  $(document.body).removeClass(
+    'dotted-paper graph-paper chessboard-paper starfield-paper grain-paper linen-paper recycled-paper newspaper-paper marble-paper',
+  );
   $('#texture').val(defaultTexture);
 }
 
