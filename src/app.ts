@@ -381,10 +381,12 @@ export async function initApp(): Promise<void> {
   // Floating window — see pip-window.ts. Standard notes only.
   initPipWindow(tabManager);
 
-  // This listens for keyboard shortcuts
-  document.onkeydown = function (event: KeyboardEvent) {
-    event = event || (window.event as KeyboardEvent);
-
+  // This listens for keyboard shortcuts.
+  // Use addEventListener (not document.onkeydown = ...) so the handler composes
+  // with the capture-phase listeners registered elsewhere in the codebase
+  // (context-menu.ts, voice.ts, note-type-menu.ts, help.ts) instead of clobbering
+  // the only `onkeydown` slot on the document.
+  document.addEventListener('keydown', (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
       closeAllModals();
       $('#iconDropdown').removeClass('show');
@@ -452,7 +454,7 @@ export async function initApp(): Promise<void> {
       event.preventDefault();
       tabManager.cycle(event.key === 'ArrowRight' ? 1 : -1);
     }
-  };
+  });
 
   document.addEventListener('fullscreenchange', function () {
     if (!document.fullscreenElement) {

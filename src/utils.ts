@@ -31,7 +31,9 @@ export function getCurrentDate(): string {
 export function showToast(message: string): void {
   const toast = document.getElementById('toast')!;
   toast.className = 'show';
-  toast.innerHTML = message;
+  // Use textContent — never innerHTML — to avoid XSS from externally-sourced
+  // error strings (Spotify API responses, server error bodies, etc.).
+  toast.textContent = message;
 
   setTimeout(function () {
     toast.className = toast.className.replace('show', '');

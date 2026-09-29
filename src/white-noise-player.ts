@@ -2,6 +2,7 @@ import { $ } from './lib/q';
 import Swal from 'sweetalert2';
 import type { SweetAlertResult } from 'sweetalert2';
 import { stateGet, stateSet, storageReady } from './storage';
+import { escapeHtml } from './tabs';
 
 interface SoundEntry {
   url: string;
@@ -340,20 +341,22 @@ export class WhiteNoisePlayer {
       const isActivePreset = presetName === this.activePresetName;
       row.classList.toggle('active', isActivePreset);
 
+      const safeName = escapeHtml(presetName);
+      const safeNameAttr = escapeHtml(presetName);
       row.innerHTML = `
-                <span class="ambient-noise-preset-row-name">${presetName}</span>
+                <span class="ambient-noise-preset-row-name">${safeName}</span>
                 <span class="ambient-noise-preset-row-actions">
                     <span class="ambient-noise-preset-check ${isActivePreset ? 'visible' : ''}" aria-hidden="true">
                         <svg width="18" height="18" viewBox="0 0 18 18">
                             <path d="m4 9 3 3 7-8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
                         </svg>
                     </span>
-                    <button type="button" class="ambient-noise-preset-icon-button" data-preset-rename="${presetName}" title="Rename preset" aria-label="Rename ${presetName}">
+                    <button type="button" class="ambient-noise-preset-icon-button" data-preset-rename="${safeNameAttr}" title="Rename preset" aria-label="Rename ${safeNameAttr}">
                         <svg width="18" height="18" viewBox="0 0 18 18">
                             <path d="M12.95 2.95a1.5 1.5 0 1 1 2.12 2.12L6 14.14 2.5 15.5 3.86 12z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
                         </svg>
                     </button>
-                    <button type="button" class="ambient-noise-preset-icon-button delete" data-preset-delete="${presetName}" title="Delete preset" aria-label="Delete ${presetName}">
+                    <button type="button" class="ambient-noise-preset-icon-button delete" data-preset-delete="${safeNameAttr}" title="Delete preset" aria-label="Delete ${safeNameAttr}">
                         <svg width="18" height="18" viewBox="0 0 18 18">
                             <path d="M3.5 5.5h11M7 2.75h4M6 5.5v8.25M9 5.5v8.25M12 5.5v8.25M4.75 5.5l.5 9.25a1 1 0 0 0 1 .95h5.5a1 1 0 0 0 1-.95l.5-9.25" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
                         </svg>
