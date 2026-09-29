@@ -288,7 +288,7 @@ export class ContentEditablePort implements EditorPort {
         return false;
       }
       for (const text of wrapTargets) {
-        this.wrapTextRange(text, range);
+        this.wrapTextRange(text, range, 'strike');
       }
     }
     this.announceEdit();
@@ -317,8 +317,8 @@ export class ContentEditablePort implements EditorPort {
     return texts;
   }
 
-  /** Wraps the part of `text` the range covers into a fresh <strike>. */
-  private wrapTextRange(text: Text, range: Range): void {
+  /** Wraps the part of `text` the range covers into a fresh element. */
+  private wrapTextRange(text: Text, range: Range, tagName: string): void {
     const value = text.nodeValue ?? '';
     const start = text === range.startContainer ? range.startOffset : 0;
     const end = text === range.endContainer ? range.endOffset : value.length;
@@ -332,9 +332,9 @@ export class ContentEditablePort implements EditorPort {
     if (start > 0) {
       mid = text.splitText(start);
     }
-    const strike = document.createElement('strike');
-    mid.replaceWith(strike);
-    strike.append(mid);
+    const wrapper = document.createElement(tagName);
+    mid.replaceWith(wrapper);
+    wrapper.append(mid);
   }
 
   /** Replaces an element with its children (keeps the selection's host). */
@@ -702,22 +702,223 @@ export class ContentEditablePort implements EditorPort {
     return true;
   }
 
+  /**
+   * Superscript/subscript toggle. Chrome's own execCommand path is broken
+   * in both directions: queryCommandState answers false inside a live
+   * <sup>/<sub>, and re-running the command over scripted text does NOT
+   * unwrap it — the next keystroke instead lands in a NEW nested element
+   * (text keeps shrinking; the user can never turn it off). So the state
+   * reads from the DOM and the range toggle is performed by hand, the same
+   * way the checked-item strike toggle works.
+   */
   applyScript(type: ScriptType): boolean {
     if (!this.canExec()) {
       return false;
     }
-    return document.execCommand(type === 'super' ? 'superscript' : 'subscript', false);
+    const tag = type === 'super' ? 'sup' : 'sub';
+    const oppositeTag = type === 'super' ? 'sub' : 'sup';
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return false;
+    }
+    const range = selection.getRangeAt(0);
+
+    if (range.collapsed) {
+      // Toggle OFF: split every same-script wrapper at the caret so the
+      // following keystrokes continue plain. Nested chains (the engine's
+      // compounding damage) are split one level per pass.
+      let splitAny = false;
+      for (let pass = 0; pass < 8; pass += 1) {
+        const wrapper = this.scriptWrapperAtSelectionStart(tag);
+        if (!wrapper) {
+          break;
+        }
+        this.splitInlineAtCaret(wrapper, selection);
+        splitAny = true;
+      }
+      // Switching scripts at the caret (sup → sub or back): leave the
+      // opposite script too so the engine's typing style starts fresh.
+      const opposite = this.scriptWrapperAtSelectionStart(oppositeTag);
+      if (opposite) {
+        this.splitInlineAtCaret(opposite, selection);
+      }
+      if (splitAny) {
+        this.announceEdit();
+        return true;
+      }
+      // Turn ON at a bare caret: the engine's typing style is correct in
+      // this direction (verified — typed text joins a fresh <sup>/<sub>).
+      return document.execCommand(type === 'super' ? 'superscript' : 'subscript', false);
+    }
+    return this.toggleScriptRange(tag, oppositeTag, range, selection);
+  }
+
+  /**
+   * Range script toggle. Every covered run already in the target script →
+   * unwrap (the OFF direction Chrome refuses to do). Otherwise wrap the
+   * uncovered runs, stripping BOTH script tags from the extracted fragment:
+   * the opposite tag switches per Docs semantics, and stripping the target
+   * tag can never nest — which also repairs the engine's compounded chains.
+   */
+  private toggleScriptRange(
+    tag: 'sup' | 'sub',
+    oppositeTag: 'sup' | 'sub',
+    range: Range,
+    selection: Selection,
+  ): boolean {
+    const texts = this.textNodesInRange(range);
+    if (texts.length === 0) {
+      return false;
+    }
+    const sameBlock = this.blockOf(range.startContainer) === this.blockOf(range.endContainer);
+    if (sameBlock) {
+      const allInside = texts.every((text) => this.scriptWrapperOf(text, tag) !== null);
+      if (allInside) {
+        const wrappers = new Set<HTMLElement>();
+        for (const text of texts) {
+          this.collectScriptAncestors(text, tag, wrappers);
+        }
+        this.unwrapOutermostFirst(wrappers);
+        this.announceEdit();
+        return true;
+      }
+      const fragment = range.extractContents();
+      this.stripScriptTags(fragment, tag);
+      this.stripScriptTags(fragment, oppositeTag);
+      const script = document.createElement(tag);
+      script.append(fragment);
+      range.insertNode(script);
+      // Native parity: the scripted run stays selected, so a second press
+      // toggles off and the toolbar answers pressed for the run.
+      const scripted = document.createRange();
+      scripted.selectNodeContents(script);
+      selection.removeAllRanges();
+      selection.addRange(scripted);
+      this.announceEdit();
+      return true;
+    }
+    // Cross-block: sup/sub are inline and never span blocks, so per-run
+    // surgery is safe. Some runs covered, some not → the press means
+    // "script it all" (Docs semantics); all covered → toggle off.
+    const wrapTargets = texts.filter((text) => this.scriptWrapperOf(text, tag) === null);
+    if (wrapTargets.length === 0) {
+      const wrappers = new Set<HTMLElement>();
+      for (const text of texts) {
+        this.collectScriptAncestors(text, tag, wrappers);
+      }
+      this.unwrapOutermostFirst(wrappers);
+      this.announceEdit();
+      return true;
+    }
+    for (const text of wrapTargets) {
+      const opposite = this.scriptWrapperOf(text, oppositeTag);
+      if (opposite) {
+        this.unwrapElement(opposite);
+      }
+      this.wrapTextRange(text, range, tag);
+    }
+    this.announceEdit();
+    return true;
+  }
+
+  /** The nearest sup/sub ancestor of the selection's start, or null. */
+  private scriptWrapperAtSelectionStart(tagName: 'sup' | 'sub'): HTMLElement | null {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return null;
+    }
+    return this.scriptWrapperOf(selection.getRangeAt(0).startContainer, tagName);
+  }
+
+  /** The nearest script ancestor of a node inside the editor, or null. */
+  private scriptWrapperOf(node: Node, tagName: 'sup' | 'sub'): HTMLElement | null {
+    const base = node instanceof Element ? node : (node.parentElement ?? null);
+    const wrapper = base?.closest<HTMLElement>(tagName);
+    return wrapper && this.element.contains(wrapper) ? wrapper : null;
+  }
+
+  /** Every same-script ancestor of a text node, nearest last. */
+  private collectScriptAncestors(
+    text: Text,
+    tagName: 'sup' | 'sub',
+    into: Set<HTMLElement>,
+  ): void {
+    let el = text.parentElement;
+    while (el && el !== this.element) {
+      if (el.tagName.toLowerCase() === tagName) {
+        into.add(el as HTMLElement);
+      }
+      el = el.parentElement;
+    }
+  }
+
+  /** Unwraps a set of nested wrappers without detaching the inner ones. */
+  private unwrapOutermostFirst(wrappers: Set<HTMLElement>): void {
+    const ordered = [...wrappers].sort((a, b) =>
+      a.contains(b) ? -1 : b.contains(a) ? 1 : 0,
+    );
+    ordered.forEach((el) => this.unwrapElement(el));
+  }
+
+  /** Drops every `tagName` element inside a fragment, keeping children. */
+  private stripScriptTags(fragment: DocumentFragment, tagName: 'sup' | 'sub'): void {
+    fragment.querySelectorAll(tagName).forEach((el) => {
+      const parent = el.parentNode;
+      if (!parent) {
+        return;
+      }
+      while (el.firstChild) {
+        parent.insertBefore(el.firstChild, el);
+      }
+      el.remove();
+    });
+  }
+
+  /**
+   * Splits an inline script element at the collapsed caret: the content
+   * after the caret moves out of the element, and the caret lands between
+   * the two halves — outside the script, so typing continues plain.
+   *
+   * The caret must not rest DIRECTLY against the run: a position right
+   * after a <sup>/<sub> is visually equivalent to the position inside the
+   * run's end, and Chrome's caret correction snaps it back in — the next
+   * keystroke joins the script again (the compounding bug, round two). A
+   * zero-width space between the run and the caret breaks the equivalence;
+   * the port's text pipeline already strips U+200B everywhere it matters.
+   */
+  private splitInlineAtCaret(el: HTMLElement, selection: Selection): void {
+    const range = selection.getRangeAt(0);
+    if (!el.contains(range.startContainer)) {
+      return;
+    }
+    const tail = document.createRange();
+    tail.setStart(range.startContainer, range.startOffset);
+    tail.setEnd(el, el.childNodes.length);
+    const parent = el.parentNode;
+    if (!parent) {
+      return;
+    }
+    const fragment = tail.extractContents();
+    // insertBefore splices a fragment's children in but RETURNS the (now
+    // empty, parentless) fragment itself — track the first inserted child
+    // for the caret instead of trusting the return value.
+    if (fragment.firstChild) {
+      parent.insertBefore(fragment, el.nextSibling);
+    }
+    const guard = document.createTextNode(ZERO_WIDTH_SPACE);
+    parent.insertBefore(guard, el.nextSibling);
+    const caret = document.createRange();
+    caret.setStart(guard, 1);
+    caret.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(caret);
   }
 
   queryScript(type: ScriptType): boolean {
-    if (typeof document.queryCommandState !== 'function') {
-      return false;
-    }
-    try {
-      return document.queryCommandState(type === 'super' ? 'superscript' : 'subscript');
-    } catch {
-      return false;
-    }
+    // DOM-based on purpose: queryCommandState('superscript') answers false
+    // inside a live <sup> in Chrome, which left the toolbar blind to the
+    // state the caret was actually in.
+    return this.scriptWrapperAtSelectionStart(type === 'super' ? 'sup' : 'sub') !== null;
   }
 
   applyAlignment(align: Alignment): boolean {
