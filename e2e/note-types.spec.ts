@@ -99,6 +99,7 @@ test.describe('note types', () => {
     await page.keyboard.type('Quarterly roadmap');
     await editor.press('Control+End');
     await editor.press('Shift+Home');
+    await toolbar.locator('[data-rich-menu="block"]').click();
     await toolbar.locator('[data-rich-block="h1"]').click();
     await expect(editor.locator('h1')).toHaveCount(1);
 
@@ -156,12 +157,11 @@ test.describe('note types', () => {
     await page.keyboard.type('code line');
     await editor.press('Control+End');
     await editor.press('Shift+Home');
+    await toolbar.locator('[data-rich-menu="block"]').click();
     await toolbar.locator('[data-rich-block="pre"]').click();
     await expect(editor.locator('pre')).toHaveCount(1);
-    await expect(toolbar.locator('[data-rich-block="pre"]')).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    // The styles button echoes the caret's block format, Docs-style.
+    await expect(toolbar.locator('[data-rich-label="block"]')).toHaveText('Code block');
 
     // A selection that no longer lives in the note (document replaced, user
     // clicked elsewhere) must not keep the caret's pressed states lit.
@@ -177,10 +177,7 @@ test.describe('note types', () => {
     // Caret back inside the note (a real click — Chrome clamps below-content
     // clicks into the last block, the code block) — the states re-sync.
     await editor.click();
-    await expect(toolbar.locator('[data-rich-block="pre"]')).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await expect(toolbar.locator('[data-rich-label="block"]')).toHaveText('Code block');
   });
 
   test('the link toolbar flow wraps the selected text', async ({ page }) => {

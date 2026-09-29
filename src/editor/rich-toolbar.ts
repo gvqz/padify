@@ -61,6 +61,16 @@ const KNOWN_FONTS: readonly string[] = [
   'courier new',
 ];
 
+/** The styles-menu button echoes the caret's block format, Docs-style. */
+const BLOCK_LABELS: Readonly<Record<BlockFormat, string>> = {
+  p: 'Normal text',
+  h1: 'Heading 1',
+  h2: 'Heading 2',
+  h3: 'Heading 3',
+  blockquote: 'Quote',
+  pre: 'Code block',
+};
+
 interface RichToolbarElements {
   toolbar: HTMLElement;
   linkButton: HTMLButtonElement | null;
@@ -142,11 +152,13 @@ export function initRichToolbar(tabManager: TabManager): void {
     });
 
     const blockFormat = safeQuery(() => port.queryBlockFormat());
+    const blockLabel = toolbar.querySelector<HTMLElement>('[data-rich-label="block"]');
+    if (blockLabel) {
+      blockLabel.textContent = BLOCK_LABELS[blockFormat ?? 'p'] ?? BLOCK_LABELS.p;
+    }
+
     const listKind = safeQuery(() => port.queryListKind());
 
-    toolbar.querySelectorAll<HTMLButtonElement>('[data-rich-block]').forEach((button) => {
-      button.setAttribute('aria-pressed', String(button.dataset.richBlock === blockFormat));
-    });
     toolbar.querySelectorAll<HTMLButtonElement>('[data-rich-list]').forEach((button) => {
       button.setAttribute('aria-pressed', String(button.dataset.richList === listKind));
     });
@@ -271,11 +283,11 @@ export function initRichToolbar(tabManager: TabManager): void {
     }
   };
 
-  /** Docs marks the size/font the caret sits in; custom sizes echo into
-   * the input row so a second visit shows what the caret is in. */
+  /** Docs marks the size/font/styles the caret sits in; custom sizes echo
+   * into the input row so a second visit shows what the caret is in. */
   const markCurrentValue = (button: HTMLButtonElement, panel: HTMLElement): void => {
     const kind = button.dataset.richMenu;
-    if (kind !== 'size' && kind !== 'font') {
+    if (kind !== 'size' && kind !== 'font' && kind !== 'block') {
       return;
     }
     const current = toolbar
@@ -511,6 +523,15 @@ export function initRichToolbar(tabManager: TabManager): void {
       return;
     }
 
+    // The styles menu: choosing the active style returns the block to plain.
+    const blockItem = target.closest<HTMLButtonElement>('[data-rich-block]');
+    if (blockItem) {
+      runBlockCommand(blockItem.dataset.richBlock as BlockFormat);
+      closeMenus(true);
+      scheduleStateRefresh();
+      return;
+    }
+
     // The custom size row: 1–400, per the Docs-style menu contract.
     const applyCustomSize = (): void => {
       const input = document.getElementById('richSizeInput') as HTMLInputElement | null;
@@ -627,8 +648,6 @@ export function initRichToolbar(tabManager: TabManager): void {
       port.applyFormat(button.dataset.richCmd as EditorCommand);
     } else if (button.dataset.richAction) {
       ACTIONS[button.dataset.richAction]?.(port);
-    } else if (button.dataset.richBlock) {
-      runBlockCommand(button.dataset.richBlock as BlockFormat);
     } else if (button.dataset.richList) {
       port.toggleList(button.dataset.richList as ListKind);
     }

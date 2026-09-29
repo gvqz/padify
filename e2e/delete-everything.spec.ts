@@ -42,7 +42,8 @@ test.describe('delete everything after typing', () => {
     const editor = page.locator('#note');
     await editor.click();
     await page.keyboard.type('big title');
-    await page.locator('#richToolbar [data-rich-block="h1"]').click();
+    await page.locator('#richToolbar [data-rich-menu="block"]').click();
+    await page.locator('[data-rich-block="h1"]').click();
     await expect(editor.locator('h1')).toHaveText('big title');
 
     await page.keyboard.press('ControlOrMeta+a');

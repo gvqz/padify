@@ -3317,10 +3317,6 @@ body.dark #note:has(> br:only-child)::before {
   text-decoration: line-through;
 }
 
-.rich-glyph-p {
-  font-weight: 500;
-}
-
 /* The link popover: a small input row anchored to the toolbar. */
 .rich-link-popover {
   position: absolute;
@@ -3501,6 +3497,35 @@ body.dark #note:has(> br:only-child)::before {
 
 .rich-menu-panel-fonts {
   min-width: 176px;
+}
+
+/* The styles menu: items preview their own format, Docs-style. */
+.rich-menu-panel-block {
+  min-width: 172px;
+}
+
+.rich-menu-panel-block [data-rich-block='h1'] {
+  font-size: 15.5px;
+  font-weight: 650;
+}
+
+.rich-menu-panel-block [data-rich-block='h2'] {
+  font-size: 14.5px;
+  font-weight: 650;
+}
+
+.rich-menu-panel-block [data-rich-block='h3'] {
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.rich-menu-panel-block [data-rich-block='blockquote'] {
+  font-style: italic;
+}
+
+.rich-menu-panel-block [data-rich-block='pre'] {
+  font-family: ui-monospace, 'Cascadia Mono', 'Courier New', monospace;
+  font-size: 12px;
 }
 
 .rich-menu-item {
