@@ -106,6 +106,7 @@ export function enableDarkMode(
   $('.navbar').removeClass('navbar-default');
   metaThemeColor!.setAttribute('content', darkMetaColor);
   stateSet('mode', 'dark');
+  announceTheme('dark');
 }
 
 export function enableLightMode(
@@ -117,6 +118,12 @@ export function enableLightMode(
   $('.navbar').addClass('navbar-default');
   metaThemeColor!.setAttribute('content', lightMetaColor);
   stateSet('mode', 'light');
+  announceTheme('light');
+}
+
+/** Rich notes re-map their ink when this fires (editor/theme-colors.ts). */
+function announceTheme(mode: 'light' | 'dark'): void {
+  document.dispatchEvent(new CustomEvent('padify:theme', { detail: { mode } }));
 }
 
 export interface ThemeConfig {

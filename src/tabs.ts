@@ -41,6 +41,10 @@ import {
 } from './storage';
 import { getEditorPort } from './editor/port';
 import {
+  currentThemeMode,
+  noteRenderedForTheme,
+} from './editor/theme-colors';
+import {
   DEFAULT_NOTE_TYPE,
   normalizeNoteType,
   NOTE_TYPE_ICONS,
@@ -62,6 +66,12 @@ export interface NoteTab {
    * editor/note-types.ts; kept optional so existing rows need no migration.
    */
   noteType?: NoteType;
+  /**
+   * The theme the note's inline colors were last written under — rich text
+   * notes only (editor/theme-colors.ts). Absent on legacy notes, which are
+   * left exactly as stored until their next edit.
+   */
+  colorTheme?: 'light' | 'dark';
 }
 
 const LEGACY_NOTE_KEY = 'note';
@@ -541,6 +551,10 @@ export class TabManager {
         createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : Date.now(),
         updatedAt: typeof entry.updatedAt === 'number' ? entry.updatedAt : Date.now(),
         noteType: normalizeNoteType(entry.noteType),
+        colorTheme:
+          entry.colorTheme === 'light' || entry.colorTheme === 'dark'
+            ? entry.colorTheme
+            : undefined,
       }));
   }
 
@@ -716,6 +730,7 @@ export class TabManager {
 
     active.html = html;
     active.updatedAt = Date.now();
+    active.colorTheme = currentThemeMode();
     this.dirtyIds.add(active.id);
     this.schedulePersist();
     this.refreshTabLabel(active.id);
@@ -730,6 +745,7 @@ export class TabManager {
 
     active.html = this.editor.html();
     active.updatedAt = Date.now();
+    active.colorTheme = currentThemeMode();
     this.dirtyIds.add(active.id);
     this.persist();
     this.refreshTabLabel(active.id);
@@ -741,6 +757,13 @@ export class TabManager {
     const active = this.getActive();
     this.editor.html(active ? active.html : '');
     this.editor.scrollTop(0);
+    // A note whose stored colors were written under the other theme is
+    // re-inked for display right away (visual only — storage catches up on
+    // the next edit, so opening a note never writes on its own).
+    noteRenderedForTheme(
+      this.editor.get(0) as HTMLElement | undefined,
+      active?.colorTheme,
+    );
   }
 
   getActiveText(): string {

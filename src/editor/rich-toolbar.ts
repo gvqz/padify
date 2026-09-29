@@ -25,6 +25,10 @@ import {
   type ScriptType,
 } from './port';
 import { isRichNote } from './note-types';
+import {
+  currentThemeMode,
+  resolvePaletteColor,
+} from './theme-colors';
 
 /** href schemes the toolbar offers inline (mirrors the storage sanitizer). */
 const SAFE_HREF_PATTERN = /^(https?:\/\/|mailto:|#|\/)/i;
@@ -643,11 +647,17 @@ export function initRichToolbar(tabManager: TabManager): void {
 
     const colorItem = target.closest<HTMLButtonElement>('[data-rich-color]');
     if (colorItem) {
-      port.setTextColor(colorItem.dataset.richColor!);
-      // The glyph bar previews the ink the picker last applied (session only).
-      toolbar
-        .querySelector<HTMLElement>('[data-rich-ink="color"]')
-        ?.style.setProperty('--rich-ink', colorItem.dataset.richColor!);
+      // Swatches carry palette KEYS — resolved through the current theme so
+      // "ink" is near-black on paper and near-white on the dark surface.
+      const key = colorItem.dataset.richColor!;
+      const hex = resolvePaletteColor(key, currentThemeMode());
+      if (hex) {
+        port.setTextColor(hex);
+        // The glyph bar previews the ink the picker last applied (session only).
+        toolbar
+          .querySelector<HTMLElement>('[data-rich-ink="color"]')
+          ?.style.setProperty('--rich-ink', hex);
+      }
       closeMenus(true);
       scheduleStateRefresh();
       return;
@@ -830,6 +840,14 @@ export function initRichToolbar(tabManager: TabManager): void {
 
   // Pressed states follow the caret and the edits.
   document.addEventListener('selectionchange', scheduleStateRefresh);
+
+  // A theme flip re-inks the note (theme-colors) — the session ink preview
+  // would then advertise a color that no longer matches the surface.
+  document.addEventListener('padify:theme', () => {
+    toolbar
+      .querySelector<HTMLElement>('[data-rich-ink="color"]')
+      ?.style.removeProperty('--rich-ink');
+  });
   getEditorPort()?.onInput(scheduleStateRefresh);
 
   // Visibility follows the active note — boot, switch, create, cloud merge.

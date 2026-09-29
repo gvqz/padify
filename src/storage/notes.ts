@@ -39,6 +39,8 @@ export interface StoredNoteTab {
   updatedAt: number;
   /** The note kind — absent means the default (standard). */
   noteType?: NoteType;
+  /** The theme the note's inline colors were last written under. */
+  colorTheme?: 'light' | 'dark';
 }
 
 /** A deletion not yet confirmed by the cloud. */
@@ -121,6 +123,11 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
       createdAt: typeof record.createdAt === 'number' ? record.createdAt : Date.now(),
       updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now(),
       noteType: normalizeNoteType((record as { noteType?: unknown }).noteType),
+      colorTheme:
+        (record as { colorTheme?: unknown }).colorTheme === 'light' ||
+        (record as { colorTheme?: unknown }).colorTheme === 'dark'
+          ? ((record as { colorTheme: 'light' | 'dark' }).colorTheme)
+          : undefined,
     }));
 
   const tombstones = valid
@@ -188,6 +195,10 @@ function loadLegacySnapshot(): NotesSnapshot {
             createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : Date.now(),
             updatedAt: typeof entry.updatedAt === 'number' ? entry.updatedAt : Date.now(),
             noteType: normalizeNoteType(entry.noteType),
+            colorTheme:
+              entry.colorTheme === 'light' || entry.colorTheme === 'dark'
+                ? entry.colorTheme
+                : undefined,
           });
         }
       });

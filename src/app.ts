@@ -35,6 +35,7 @@ import { openModal, closeAllModals } from './ui/behavior/modal';
 import { initSaveIndicator } from './save-indicator';
 import { initTabRailDrawer } from './tab-rail-drawer';
 import { initRichToolbar } from './editor/rich-toolbar';
+import { initThemeColors } from './editor/theme-colors';
 import { initRichShortcuts } from './editor/rich-shortcuts';
 import { initNoteTypeMenu } from './ui/note-type-menu';
 import { initThemeController } from './theme-controller';
@@ -238,6 +239,7 @@ export async function initApp(): Promise<void> {
 
   // ---- rich text toolbar — visible only for rich notes, see
   // editor/rich-toolbar.ts ----
+  initThemeColors(tabManager);
   initRichToolbar(tabManager);
 
   // Docs-style shortcuts for rich notes — registered BEFORE the legacy Tab
