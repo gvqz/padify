@@ -138,12 +138,15 @@ body.dark {
   background-color: var(--vz-bg);
 }
 
+/* The selection wash must be unmistakable — the neutral 14% wash read as
+   "nothing is selected" (user-reported). An accent blue is the universal
+   selection affordance and survives both themes; text keeps its own ink. */
 ::selection {
-  background: rgba(0, 0, 0, 0.14);
+  background: rgba(59, 130, 246, 0.3);
 }
 
 body.dark ::selection {
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(96, 165, 250, 0.45);
 }
 
 /* Slim, quiet scrollbars everywhere */
@@ -3301,7 +3304,8 @@ body.dark #note:has(> br:only-child)::before {
 
 .rich-glyph-italic {
   font-style: italic;
-  font-family: Georgia, 'Times New Roman', serif;
+  /* The Georgia serif "I" sat visibly off-grid next to the sans B/U/S
+     (user-reported misalignment) — the shared sans keeps the row even. */
 }
 
 .rich-glyph-underline {
