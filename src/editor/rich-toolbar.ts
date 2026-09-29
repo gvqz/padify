@@ -1061,6 +1061,10 @@ export function initRichToolbar(tabManager: TabManager): void {
     mathShellHost = existing?.element ?? null;
     elements.mathInput.value = existing?.latex ?? '';
     renderMathPreview(elements.mathPreview, elements.mathInput.value);
+    // The button labels the gesture: inserting is new, applying retargets.
+    if (elements.mathInsert) {
+      elements.mathInsert.textContent = existing ? 'Apply' : 'Insert';
+    }
     elements.mathPopover.hidden = false;
     elements.mathInput.focus();
     elements.mathInput.select();
