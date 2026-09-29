@@ -3223,6 +3223,12 @@ body.dark #note:has(> br:only-child)::before {
   vertical-align: top;
 }
 
+/* Hovered cells answer the pointer, Docs-style — subtle, never sticky. */
+#note td:hover,
+#note th:hover {
+  background: var(--vz-bg-hover);
+}
+
 #note th {
   background: var(--vz-bg-subtle);
   font-weight: 650;
