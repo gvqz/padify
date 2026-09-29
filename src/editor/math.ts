@@ -24,6 +24,20 @@ export const MATH_CLASS = 'padify-math';
 /** Stored LaTeX is capped — an editor needs ~10, a crafted payload less. */
 export const MATH_LATEX_PATTERN = /^[\s\S]{1,2000}$/;
 
+/**
+ * KaTeX macros that can produce clickable links, embed external resources, or
+ * smuggle HTML. `\href{url}{text}` renders as `<a href="url">text</a>` — a
+ * `javascript:` URL there is a self-XSS in the math preview element (which
+ * lives outside the editor's link-click interceptor in contenteditable-port.ts).
+ * `\url{}` is the same surface. `\includegraphics`, `\htmlData`, `\htmlClass`,
+ * `\htmlStyle`, and `\mathchoice` round out the dangerous set. We refuse to
+ * render LaTeX containing these macros and fall back to showing the source —
+ * the math popover is a learning tool where users experiment with \href
+ * legitimately, but the editor surface itself is the only place those should
+ * ever execute.
+ */
+const MATH_FORBIDDEN_MACROS = /\\(href|url|htmlData|htmlStyle|htmlClass|includegraphics|mathchoice)\b/;
+
 /** Escapes a string for safe use inside an HTML attribute (insertHTML). */
 export function escapeHtmlAttr(value: string): string {
   return value
@@ -57,6 +71,14 @@ export function renderMathIn(root: HTMLElement): void {
       span.setAttribute('contenteditable', 'false');
       span.innerHTML = '';
       const latex = span.getAttribute('data-latex') ?? '';
+      if (MATH_FORBIDDEN_MACROS.test(latex)) {
+        // Refuse to render LaTeX containing dangerous macros. Falls back to
+        // the source text so the user still sees what they typed — and so a
+        // malicious note can't smuggle a `javascript:` link through \href.
+        span.textContent = latex;
+        span.setAttribute('data-rendered', '1');
+        return;
+      }
       try {
         span.innerHTML = katex.renderToString(latex, { throwOnError: false });
       } catch {
@@ -71,6 +93,10 @@ export function renderMathIn(root: HTMLElement): void {
 /** Live-renders LaTeX into a preview element (throws never). */
 export function renderMathPreview(target: HTMLElement, latex: string): void {
   target.innerHTML = '';
+  if (MATH_FORBIDDEN_MACROS.test(latex)) {
+    target.textContent = latex;
+    return;
+  }
   try {
     target.innerHTML = katex.renderToString(latex, { throwOnError: false });
   } catch {
