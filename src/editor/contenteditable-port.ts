@@ -84,6 +84,48 @@ const FONT_MARKER_SIZE = '7';
  */
 const ZERO_WIDTH_SPACE = '\u200B';
 
+/** Elements that make a surface non-empty even with no text inside. */
+const EMPTY_SURFACE_MEDIA = 'img, hr, table, iframe, video, audio';
+
+/**
+ * Rewrites "empty but not really" surfaces to a truly empty one (''), and
+ * reports whether a rewrite happened.
+ *
+ * Why: Chrome never leaves a contenteditable truly empty. Deleting
+ * everything (select-all + delete, backspacing the last character) leaves a
+ * bare `<br>`, and if the last block carried a format, the whole skeleton
+ * (`<h1><br></h1>`, `<ul><li><br></li></ul>`) survives instead. The bare br
+ * has a visible cost: the placeholder paints on the first line while the
+ * caret — snapped past the br — blinks one line DOWN, and the first typed
+ * character then jumps back UP to replace the br. A truly empty surface
+ * keeps placeholder, caret and first typed character on the same line
+ * (fresh notes are born with innerHTML '' — that state is proven).
+ *
+ * Guards: media/embeds make the surface meaningful, and a zero-width styled
+ * caret run is a deliberate empty state (the collapsed-formatting feature —
+ * see the styled-caret run) and must survive.
+ */
+export function normalizeEmptyEditorSurface(element: HTMLElement): boolean {
+  if (element.innerHTML === '') {
+    return false;
+  }
+  if (element.querySelector(EMPTY_SURFACE_MEDIA)) {
+    return false;
+  }
+  const styledCaretRun = Array.from(element.querySelectorAll('span')).some(
+    (span) => span.textContent === ZERO_WIDTH_SPACE,
+  );
+  if (styledCaretRun) {
+    return false;
+  }
+  const text = (element.textContent ?? '').replace(/\u200B/g, '').trim();
+  if (text !== '') {
+    return false;
+  }
+  element.innerHTML = '';
+  return true;
+}
+
 function isFormatCommand(command: EditorCommand): command is FormatCommand {
   return (FORMAT_COMMANDS as readonly string[]).includes(command);
 }
@@ -207,6 +249,10 @@ export class ContentEditablePort implements EditorPort {
 
   setHtml(html: string): void {
     this.element.innerHTML = this.deps.sanitize(html);
+    // Stored pre-fix notes can carry Chrome's bare `<br>` as their "empty"
+    // state — collapse it on the way in so the caret never sits one line
+    // below the placeholder (see normalizeEmptyEditorSurface).
+    normalizeEmptyEditorSurface(this.element);
     // Math shells arrive empty from storage — render them into view.
     renderMathIn(this.element);
     this.deps.onDocumentReplaced?.();
@@ -220,6 +266,10 @@ export class ContentEditablePort implements EditorPort {
 
   isEmpty(): boolean {
     return this.getText().trim() === '';
+  }
+
+  normalizeEmptySurface(): boolean {
+    return normalizeEmptyEditorSurface(this.element);
   }
 
   focus(): void {
@@ -1561,12 +1611,13 @@ export class ContentEditablePort implements EditorPort {
   /**
    * Deleting everything in one stroke (Ctrl+A then Backspace/Delete) leaves
    * Chrome's skeleton behind: the last block survives as an empty
-   * `<h1><br></h1>` or `<ul><li><br></li></ul>`. The placeholder then never
-   * comes back (`:empty` / `> br:only-child` don't match), the next
-   * keystrokes silently continue as the heading/list, and Chrome keeps the
-   * deleted run's character style as its typing style — new text comes out
-   * bold/colored with the toolbar showing none of it. Docs resets to a plain
-   * surface when the note empties; mirror that.
+   * `<h1><br></h1>` or `<ul><li><br></li></ul>`, or — the plain case — a
+   * bare `<br>`. Either way the note must READ empty again: the placeholder
+   * returns, the next keystrokes don't inherit the old block/character
+   * format, and the caret sits on the same line the first typed character
+   * will land on (see normalizeEmptyEditorSurface — the bare-br caret sits
+   * one line off). Docs resets to a plain surface when the note empties;
+   * mirror that.
    *
    * Only delete-type inputs qualify: an empty list or heading the user just
    * switched to on purpose (inputType insertUnorderedList / format…) is a
@@ -1584,17 +1635,20 @@ export class ContentEditablePort implements EditorPort {
 
     this.normalizingEmpty = true;
     try {
-      const restructured = this.hasEmptySkeleton();
-      if (restructured) {
-        this.element.innerHTML = '<br>';
-      }
-
       // The deleted run's style survives as Chrome's typing style. A
       // collapsed removeFormat alone does not clear it — select-all +
-      // removeFormat does (verified), then collapse back to the line start.
+      // removeFormat does (verified). Runs while the old skeleton is still
+      // in place, so the selection has something to cover.
       this.element.focus();
       document.execCommand('selectAll');
       document.execCommand('removeFormat');
+
+      // Then the whole empty state — skeleton, bare br, stray whitespace —
+      // collapses to truly empty. (Previously only the skeleton was
+      // rewritten, and to '<br>', which kept the caret one line below the
+      // placeholder; see normalizeEmptyEditorSurface.)
+      const rewritten = normalizeEmptyEditorSurface(this.element);
+
       const selection = window.getSelection();
       const caret = document.createRange();
       caret.setStart(this.element, 0);
@@ -1602,7 +1656,7 @@ export class ContentEditablePort implements EditorPort {
       selection?.removeAllRanges();
       selection?.addRange(caret);
 
-      if (restructured) {
+      if (rewritten) {
         // The rewrite bypassed execCommand — announce the new state so
         // autosave, the title and the toolbar all follow.
         this.announceEdit();
@@ -1614,7 +1668,7 @@ export class ContentEditablePort implements EditorPort {
 
   /** No text and nothing block-like or embedded that could carry content. */
   private isVisuallyEmpty(): boolean {
-    if (this.element.querySelector('img, hr, table, iframe, video, audio')) {
+    if (this.element.querySelector(EMPTY_SURFACE_MEDIA)) {
       return false;
     }
     return (this.element.textContent ?? '').replace(/\u200B/g, '').trim() === '';
@@ -1625,21 +1679,6 @@ export class ContentEditablePort implements EditorPort {
     return Array.from(this.element.querySelectorAll('span')).some(
       (span) => span.textContent === ZERO_WIDTH_SPACE,
     );
-  }
-
-  /**
-   * Element structure beyond a single bare `<br>` — the skeleton a
-   * select-all delete leaves (heading/list/quote/code/paragraph wrappers,
-   * or a run of stray `<br>`s).
-   */
-  private hasEmptySkeleton(): boolean {
-    const elements = Array.from(this.element.childNodes).filter(
-      (node): node is Element => node.nodeType === Node.ELEMENT_NODE,
-    );
-    if (elements.length === 0) {
-      return false;
-    }
-    return elements.length > 1 || !(elements[0] instanceof HTMLBRElement);
   }
 
   /**

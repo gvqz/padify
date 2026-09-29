@@ -58,6 +58,15 @@ export interface EditorPort {
   /** True when the note carries no meaningful content. */
   isEmpty(): boolean;
 
+  /**
+   * Collapses the editor's "empty but not really" states (Chrome's bare
+   * `<br>` after a delete-all, empty skeletons) to a truly empty surface,
+   * so placeholder, caret and the first typed character share one line.
+   * Returns true when a rewrite happened. Side-effect free otherwise —
+   * opening a note may call it without persisting anything.
+   */
+  normalizeEmptySurface(): boolean;
+
   /** Moves keyboard focus into the editor. */
   focus(): void;
 

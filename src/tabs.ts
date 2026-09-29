@@ -786,6 +786,11 @@ export class TabManager {
   private loadActiveIntoEditor(): void {
     const active = this.getActive();
     this.editor.html(active ? active.html : '');
+    // Stored pre-fix notes can carry a bare `<br>` as their "empty" state —
+    // collapse it for display (visual only, opening never writes; without
+    // this the caret blinks one line below the placeholder until the first
+    // edit). The port method has no persistence side effects.
+    getEditorPort()?.normalizeEmptySurface();
     // Stored math shells arrive empty — render them into view (the port's
     // setHtml would also work, but its document-replaced hook persists,
     // and opening a note must not write on its own).
