@@ -75,7 +75,25 @@ export function stateGet(key: string): string | null {
   return mirror.get(key) ?? null;
 }
 
-export function stateSet(key: string, value: string): void {
+/**
+ * Optional write-through behaviour. By default every set/remove mirrors to
+ * localStorage synchronously so pre-IndexedDB SW versions keep reading
+ * fresh settings and the inline pre-paint theme script keeps working.
+ *
+ * Pass `{ localStorage: false }` for sensitive values (e.g. OAuth tokens)
+ * that should live in IndexedDB only — XSS can still reach IndexedDB in
+ * theory, but the synchronous, world-readable `localStorage` API is a
+ * much wider attack surface. The pre-IndexedDB fallback path is
+ * unaffected: when IndexedDB is unavailable, the value lands in
+ * `localStorage` regardless, because that's the only backend.
+ */
+export interface StateSetOptions {
+  localStorage?: boolean;
+}
+
+export function stateSet(key: string, value: string, options: StateSetOptions = {}): void {
+  const mirrorToLocal = options.localStorage !== false;
+
   if (storageBackend() === 'local-storage') {
     try {
       localStorage.setItem(key, value);
@@ -87,10 +105,12 @@ export function stateSet(key: string, value: string): void {
 
   // Write-through: the localStorage copy feeds old app versions and the
   // pre-paint theme script; the IndexedDB copy is the durable one.
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    /* quota exceeded — the mirror is best-effort */
+  if (mirrorToLocal) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      /* quota exceeded — the mirror is best-effort */
+    }
   }
 
   mirror.set(key, value);

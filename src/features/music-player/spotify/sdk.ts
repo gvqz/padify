@@ -79,6 +79,7 @@ declare global {
 // ---------------------------------------------------------------------------
 
 let sdkLoading: Promise<void> | null = null;
+let sdkScript: HTMLScriptElement | null = null;
 
 function loadSdkScript(): Promise<void> {
   if (window.Spotify?.Player) return Promise.resolve();
@@ -90,13 +91,30 @@ function loadSdkScript(): Promise<void> {
     const script = document.createElement('script');
     script.src = SDK_SCRIPT_URL;
     script.async = true;
-    script.onerror = () => reject(new Error('Could not load the Spotify SDK.'));
+    script.onerror = () => {
+      // Reset the cached promise and remove the script so a retry actually
+      // re-fetches instead of returning the permanently-rejected promise.
+      sdkLoading = null;
+      if (sdkScript && sdkScript.parentNode) {
+        sdkScript.parentNode.removeChild(sdkScript);
+      }
+      sdkScript = null;
+      reject(new Error('Could not load the Spotify SDK.'));
+    };
     document.head.appendChild(script);
+    sdkScript = script;
 
     // Safety net: some blockers swallow onSpotifyWebPlaybackSDKReady.
     setTimeout(() => {
       if (window.Spotify?.Player) resolve();
     }, 10_000);
+  });
+  // If the promise ever rejects, drop the cached reference so a later
+  // `loadSdkScript()` call re-attempts the fetch instead of returning a
+  // permanently-rejected promise. (The onerror handler already does this
+  // synchronously, but this covers any other rejection path.)
+  sdkLoading.catch(() => {
+    sdkLoading = null;
   });
   return sdkLoading;
 }
@@ -238,5 +256,13 @@ export class SpotifySdkController {
     this.player = null;
     this.deviceId = null;
     this.isReady = false;
+    // Clear listener Sets so a subsequent init() doesn't accumulate duplicates.
+    // Without this, every disconnect → ensureSdkReady() cycle adds a fresh
+    // onState/onError listener to the same Sets; after N reconnects every
+    // playback-state change re-renders the player bar N times and every
+    // error shows N toasts.
+    this.readyListeners.clear();
+    this.stateListeners.clear();
+    this.errorListeners.clear();
   }
 }

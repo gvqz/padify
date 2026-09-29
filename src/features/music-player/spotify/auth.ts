@@ -133,7 +133,11 @@ export function getSession(): SpotifyAuthSession | null {
 
 function saveSession(session: SpotifyAuthSession): void {
   try {
-    stateSet(AUTH_STORAGE_KEY, JSON.stringify(session));
+    // IndexedDB only — do NOT mirror OAuth tokens to localStorage. The
+    // synchronous, world-readable localStorage API is a much wider XSS
+    // surface than IndexedDB; combined with the long-lived refresh_token
+    // this is the difference between a stolen session and a contained one.
+    stateSet(AUTH_STORAGE_KEY, JSON.stringify(session), { localStorage: false });
   } catch {
     /* storage unavailable — session lives for this page only */
   }
@@ -232,7 +236,14 @@ export async function completeLogin(): Promise<LoginResult | null> {
   if (!verifier) {
     return { ok: false, error: 'Login session expired — try connecting again.' };
   }
-  if (expectedState && returnedState && expectedState !== returnedState) {
+  // CSRF defence: state must be present on both sides AND match. The previous
+  // `if (expectedState && returnedState && expectedState !== returnedState)`
+  // check skipped when either side was missing — an attacker stripping
+  // `state` from the redirect URL, or the user's PKCE storage being wiped
+  // between beginLogin and the callback, would silently bypass the check.
+  // PKCE verifier rotation currently saves us, but the state check is the
+  // standard CSRF defence and must be enforced whenever a session is claimed.
+  if (!expectedState || !returnedState || expectedState !== returnedState) {
     return { ok: false, error: 'Login verification failed (state mismatch). Try again.' };
   }
 
