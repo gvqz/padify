@@ -137,3 +137,36 @@ input[type=radio]:focus {
   gap: 5px;
 }
 
+
+/* --------------------------------------------------------------------------
+   Standards-mode parity (the doctype round)
+   -------------------------------------------------------------------------- */
+
+/* The app spent its life in quirks mode (no doctype); these rules pin the
+   quirks-era rendering that changed when standards mode arrived, so the
+   switch is pixel-neutral.
+
+   1. Chrome's quirks UA stylesheet gives `form` a 1em bottom margin (14px
+      at the cloud modal's font size); standards mode does not. The cloud
+      auth form's gap below is part of the established look. */
+form {
+  margin-bottom: 1em;
+}
+
+/* 2. In quirks mode table cells do not inherit the body's line-height —
+      they use the font's normal metrics. Standards mode inherits
+      (1.4286 × 13px here), which stretched shortcut rows and would
+      stretch note tables too. `normal` is deterministic for the bundled
+      font stack, so this restores the pre-doctype cell layout exactly. */
+td,
+th {
+  line-height: normal;
+}
+
+/* 3. The statistics labels carry an inline tooltip icon; in quirks the
+      baseline sat at the icon's bottom edge, in standards the strut lifts
+      the line 0.59px. Nudge the icon back onto the quirks position. */
+.stat-label img {
+  position: relative;
+  top: -0.59px;
+}

@@ -43,9 +43,12 @@ export function buildMathShell(latex: string): string {
  * notes without math (one querySelectorAll) and idempotent everywhere else
  * — already-rendered spans carry data-rendered and are skipped.
  *
- * Renders through renderToString + innerHTML, NOT katex.render: the app's
- * index.html predates a doctype (quirks mode) and katex.render refuses to
- * run in quirks mode, while renderToString never touches the document.
+ * Renders through renderToString + innerHTML, NOT katex.render:
+ * renderToString never touches the document, so it works in any rendering
+ * mode (the app's index.html lived without a doctype for years, where
+ * katex.render's quirks-mode check refused to run) and in every context
+ * the shell could land in. The doctype has since been added, but
+ * renderToString stays — same output, fewer moving parts.
  */
 export function renderMathIn(root: HTMLElement): void {
   root
