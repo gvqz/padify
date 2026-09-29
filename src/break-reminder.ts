@@ -1,5 +1,5 @@
 import { $ } from './lib/q';
-import { showToast } from './utils';
+import { showToast, debounce } from './utils';
 import { stateGet, stateSet, stateRemove } from './storage';
 
 /**
@@ -69,6 +69,11 @@ function loadBreakReminderState(): BreakReminderState {
 function persistBreakReminderState(): void {
   stateSet(breakReminderConfig.storageKey, JSON.stringify(breakReminderState));
 }
+
+// Debounced variant for the per-keystroke path. JSON.stringify + localStorage
+// write on every input event is unnecessary work; the editor itself uses 400 ms
+// for saveActiveFromEditor. The threshold check stays synchronous.
+const persistBreakReminderStateDebounced = debounce(persistBreakReminderState, 1000);
 
 function clearBreakReminderState(): void {
   breakReminderState = { ...breakReminderDefaults };
@@ -149,7 +154,10 @@ function trackWritingActivity(): void {
   }
 
   breakReminderState.lastActivityAt = now;
-  persistBreakReminderState();
+  // Use the debounced variant — trackWritingActivity fires on every keystroke
+  // (registered from app.ts on the editor's 'input' event). The threshold
+  // check below stays synchronous; only the persistence is throttled.
+  persistBreakReminderStateDebounced();
   maybeShowBreakReminder(now);
 }
 

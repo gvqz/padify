@@ -729,7 +729,6 @@ export async function initWhiteNoisePlayer(): Promise<void> {
 
   // Function to toggle global mute
   function toggleGlobalMute(): void {
-    console.log('Toggling global mute');
     isGlobalMuted = !isGlobalMuted;
     const playingIcon = document.getElementById('globalPlayingIcon') as HTMLElement;
     const globalMuteIcon = document.getElementById('globalMuteIcon') as HTMLElement;

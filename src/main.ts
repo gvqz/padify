@@ -1,4 +1,3 @@
-import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
 
 // All app stylesheets load as ordered <link> tags from index.html (see the
@@ -21,6 +20,3 @@ void storageReady();
 // Everything else starts through the composition root — boot.ts owns the
 // startup sequence. No feature module may self-initialize on import.
 void bootPadify();
-
-// Expose Swal for any legacy code paths that still reference the global.
-(window as unknown as { Swal: typeof Swal }).Swal = Swal;

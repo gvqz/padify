@@ -73,23 +73,24 @@
     <!--#include src/ui/editor-shell.html -->
 
     <script>
-      if (localStorage.getItem('mode')) {
-        if (localStorage.getItem('mode') == 'dark') {
+      // Pre-paint theme: avoids the dark→light flash before app.ts boots.
+      // Null-guard every .navbar reference — a malformed SSI include could
+      // leave the navbar absent at this point, and the inline script throwing
+      // would leave dark mode half-applied (no recovery until app.ts runs).
+      (function () {
+        var stored = localStorage.getItem('mode');
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var dark = stored ? stored === 'dark' : prefersDark;
+        if (dark) {
           document.body.classList.add('dark');
-          document.querySelector('.navbar').classList.remove('navbar-default');
+          var n = document.querySelector('.navbar');
+          if (n) n.classList.remove('navbar-default');
         } else {
           document.body.classList.remove('dark');
-          document.querySelector('.navbar').classList.add('navbar-default');
+          var n2 = document.querySelector('.navbar');
+          if (n2) n2.classList.add('navbar-default');
         }
-      } else {
-        if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-          document.body.classList.add('dark');
-          document.querySelector('.navbar').classList.remove('navbar-default');
-        } else {
-          document.body.classList.remove('dark');
-          document.querySelector('.navbar').classList.add('navbar-default');
-        }
-      }
+      })();
     </script>
 
     <script type="module" src="/src/main.ts"></script>

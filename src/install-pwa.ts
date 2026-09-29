@@ -16,13 +16,13 @@ declare global {
 export function registerServiceWorker(): void {
   if ('serviceWorker' in navigator && import.meta.env.PROD) {
     navigator.serviceWorker.register('sw.js').then(
-      function (registration) {
-        // Registration was successful
-        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+      () => {
+        // Registration successful — no need to log in production.
       },
-      function (err) {
-        // registration failed :(
-        console.log('ServiceWorker registration failed: ', err);
+      (err: unknown) => {
+        // Registration failed — warn (not log) so it shows in the console
+        // without being filtered by default log-level filters.
+        console.warn('ServiceWorker registration failed: ', err);
       },
     );
   }
