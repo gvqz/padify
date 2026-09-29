@@ -78,6 +78,12 @@ interface RichToolbarElements {
   input: HTMLInputElement;
   apply: HTMLButtonElement | null;
   remove: HTMLButtonElement | null;
+  chipRow: HTMLElement | null;
+  editRow: HTMLElement | null;
+  view: HTMLAnchorElement | null;
+  edit: HTMLButtonElement | null;
+  copy: HTMLButtonElement | null;
+  chipRemove: HTMLButtonElement | null;
 }
 
 /**
@@ -104,6 +110,12 @@ export function initRichToolbar(tabManager: TabManager): void {
     input: document.getElementById('richLinkInput') as HTMLInputElement,
     apply: document.getElementById('richLinkApply') as HTMLButtonElement | null,
     remove: document.getElementById('richLinkRemove') as HTMLButtonElement | null,
+    editRow: document.querySelector('#richLinkPopover [data-link-mode="edit"]'),
+    chipRow: document.querySelector('#richLinkPopover [data-link-mode="view"]'),
+    view: document.getElementById('richLinkView') as HTMLAnchorElement | null,
+    edit: document.getElementById('richLinkEdit') as HTMLButtonElement | null,
+    copy: document.getElementById('richLinkCopy') as HTMLButtonElement | null,
+    chipRemove: document.getElementById('richLinkChipRemove') as HTMLButtonElement | null,
   };
 
   if (!elements.popover || !elements.input) {
@@ -176,6 +188,13 @@ export function initRichToolbar(tabManager: TabManager): void {
       }
       button.setAttribute('aria-pressed', String(!!active));
     });
+
+    // The link button reads pressed while the caret sits in a link — the
+    // same "state at the caret" contract as the other buttons.
+    if (elements.linkButton) {
+      const inLink = safeQuery(() => port.queryLinkHref());
+      elements.linkButton.setAttribute('aria-pressed', String(!!inLink));
+    }
 
     refreshCaretLabels();
     refreshHistoryButtons();
@@ -382,14 +401,6 @@ export function initRichToolbar(tabManager: TabManager): void {
   });
   gridPanel?.addEventListener('mouseleave', () => paintGrid(null));
 
-  const closeLinkPopover = (refocusEditor = false): void => {
-    elements.popover.hidden = true;
-    elements.linkButton?.setAttribute('aria-expanded', 'false');
-    if (refocusEditor) {
-      getEditorPort()?.focus();
-    }
-  };
-
   const selectionIsInNote = (): boolean => {
     const note = document.getElementById('note');
     const selection = window.getSelection();
@@ -416,15 +427,63 @@ export function initRichToolbar(tabManager: TabManager): void {
     selection?.addRange(parkedRange);
   };
 
+  /** The link the popover is currently looking at (chip display + copy). */
+  let chipHref = '';
+
+  const showEditMode = (): void => {
+    elements.chipRow!.hidden = true;
+    elements.editRow!.hidden = false;
+  };
+
+  const showChipMode = (href: string): void => {
+    chipHref = href;
+    if (elements.view) {
+      elements.view.textContent = href;
+      elements.view.setAttribute('href', href);
+    }
+    elements.editRow!.hidden = true;
+    elements.chipRow!.hidden = false;
+  };
+
   const openLinkPopover = (): void => {
     parkedRange =
       selectionIsInNote() ? window.getSelection()!.getRangeAt(0).cloneRange() : null;
-    // Prefill with the link under the caret, if any.
-    elements.input.value = safeQuery(() => getEditorPort()?.queryLinkHref()) ?? '';
+    const existing = safeQuery(() => getEditorPort()?.queryLinkHref()) ?? '';
+    if (existing) {
+      // Docs-style chip: the link under the caret with its actions.
+      showChipMode(existing);
+    } else {
+      elements.input.value = '';
+      showEditMode();
+    }
     elements.popover.hidden = false;
     elements.linkButton?.setAttribute('aria-expanded', 'true');
-    elements.input.focus();
-    elements.input.select();
+    if (existing) {
+      elements.edit?.focus();
+    } else {
+      elements.input.focus();
+      elements.input.select();
+    }
+  };
+
+  const closeLinkPopover = (refocusEditor = false): void => {
+    elements.popover.hidden = true;
+    elements.linkButton?.setAttribute('aria-expanded', 'false');
+    if (refocusEditor) {
+      getEditorPort()?.focus();
+    }
+  };
+
+  /**
+   * Docs completes bare domains into https:// links ("example.com" →
+   * "https://example.com"); scheme-relative paths and anchors pass through.
+   */
+  const completeHref = (raw: string): string => {
+    const value = raw.trim();
+    if (SAFE_HREF_PATTERN.test(value) || /^[a-z][a-z0-9+.-]*:/i.test(value)) {
+      return value;
+    }
+    return `https://${value}`;
   };
 
   const applyLink = (): void => {
@@ -433,8 +492,8 @@ export function initRichToolbar(tabManager: TabManager): void {
       return;
     }
 
-    const href = elements.input.value.trim();
-    if (href === '') {
+    const href = completeHref(elements.input.value);
+    if (elements.input.value.trim() === '') {
       closeLinkPopover(true);
       return;
     }
@@ -457,13 +516,15 @@ export function initRichToolbar(tabManager: TabManager): void {
 
     if (port.insertLink(href)) {
       closeLinkPopover(true);
-    } else {
-      // createLink over a collapsed caret is refused by the port — guide
-      // instead of dumping the href, and get out of the note's way so the
-      // user can actually select text.
-      showToast('Select the text to link first.');
-      closeLinkPopover(true);
+      return;
     }
+
+    // Nothing selected: Docs pastes the URL itself as the linked text.
+    if (port.insertLinkAsText(href)) {
+      closeLinkPopover(true);
+      return;
+    }
+    closeLinkPopover(true);
   };
 
   const removeLink = (): void => {
@@ -683,8 +744,46 @@ export function initRichToolbar(tabManager: TabManager): void {
     }
   });
 
+  /**
+   * Legacy clipboard write: a transient textarea carrying the text, a
+   * select-all, and the engine's copy command. Synchronous, no permissions
+   * needed — good enough for a one-shot copy.
+   */
+  const copyViaExecCommand = (text: string): void => {
+    const scratch = document.createElement('textarea');
+    scratch.value = text;
+    scratch.setAttribute('readonly', '');
+    scratch.style.position = 'fixed';
+    scratch.style.opacity = '0';
+    document.body.appendChild(scratch);
+    scratch.select();
+    let copied = false;
+    try {
+      copied = document.execCommand('copy');
+    } catch {
+      copied = false;
+    }
+    scratch.remove();
+    showToast(copied ? 'Link copied.' : 'Could not copy the link.');
+  };
+
   elements.apply?.addEventListener('click', applyLink);
   elements.remove?.addEventListener('click', removeLink);
+  elements.chipRemove?.addEventListener('click', removeLink);
+  elements.edit?.addEventListener('click', () => {
+    elements.input.value = chipHref;
+    showEditMode();
+    elements.input.focus();
+    elements.input.select();
+  });
+  elements.copy?.addEventListener('click', () => {
+    // Clipboard API first; a textarea fallback covers contexts where the
+    // async clipboard refuses (permissions, older webviews).
+    navigator.clipboard
+      ?.writeText(chipHref)
+      .then(() => showToast('Link copied.'))
+      .catch(() => copyViaExecCommand(chipHref));
+  });
   elements.input.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -718,6 +817,14 @@ export function initRichToolbar(tabManager: TabManager): void {
       if (anyMenuOpen()) {
         closeMenus(true);
       }
+    }
+  });
+
+  // Ctrl/Cmd+K (rich-shortcuts) asks for the link bubble — the request
+  // arrives as an event so the shortcut module stays decoupled from this UI.
+  document.addEventListener('padify:open-link', () => {
+    if (!toolbar.hidden) {
+      openLinkPopover();
     }
   });
 

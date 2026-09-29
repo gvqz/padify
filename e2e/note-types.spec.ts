@@ -203,26 +203,34 @@ test.describe('note types', () => {
     await expect(editor.locator('a')).toHaveText('docs');
     await expect(page.locator('#richLinkPopover')).toBeHidden();
 
-    // A collapsed caret is "nothing to link" — guidance, no href dumped.
+        // A collapsed caret now pastes the URL itself as linked text (Docs'
+    // paste-a-link gesture) instead of the old dead-end guidance.
     // Home parks the caret at the note start, outside any anchor (the anchor
     // is the note's last block, so End would clamp back INSIDE it).
     await page.keyboard.press('Home');
     await page.locator('#richLinkButton').click();
     await page.locator('#richLinkInput').fill('https://example.com/stray');
     await page.locator('#richLinkApply').click();
-    await expect(page.locator('#toast')).toContainText('Select the text to link first');
-    await expect(editor.locator('a')).toHaveText('docs');
-    await expect(editor.locator('a')).toHaveAttribute('href', 'https://example.com/docs');
+    await expect(editor.locator('a[href="https://example.com/stray"]')).toHaveText(
+      'https://example.com/stray',
+    );
 
-    // Putting the caret on the link and reopening the popover prefills the
-    // current href; applying retargets the existing anchor in place.
-    await editor.locator('a').click();
+    // Putting the caret on the link and reopening the popover shows the
+    // chip view; Edit reveals the prefilled input and applying retargets
+    // the existing anchor in place.
+    await editor.locator('a').first().click();
     await page.locator('#richLinkButton').click();
-    await expect(page.locator('#richLinkInput')).toHaveValue('https://example.com/docs');
+    await expect(page.locator('#richLinkView')).toHaveText('https://example.com/stray');
+    await page.locator('#richLinkEdit').click();
+    await expect(page.locator('#richLinkInput')).toHaveValue('https://example.com/stray');
     await page.locator('#richLinkInput').fill('https://example.com/docs/v2');
     await page.locator('#richLinkApply').click();
 
-    await expect(editor.locator('a[href="https://example.com/docs/v2"]')).toHaveCount(1);
-    await expect(editor.locator('a')).toHaveText('docs');
+    await expect(
+      editor.locator('a[href="https://example.com/docs/v2"]'),
+    ).toHaveCount(1);
+    await expect(editor.locator('a[href="https://example.com/docs/v2"]')).toHaveText(
+      'https://example.com/stray',
+    );
   });
 });

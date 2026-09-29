@@ -66,6 +66,17 @@ export function initRichShortcuts(tabManager: TabManager): void {
       return;
     }
 
+    // Docs' link shortcut: Ctrl/Cmd+K opens the link bubble (insert, or the
+    // chip with Edit/Remove/Copy when the caret is already on a link).
+    // Stops here — app.ts's document-level handler would otherwise also open
+    // the shortcuts modal on top of the bubble.
+    if (!event.shiftKey && event.code === 'KeyK') {
+      event.preventDefault();
+      event.stopPropagation();
+      document.dispatchEvent(new CustomEvent('padify:open-link'));
+      return;
+    }
+
     if (event.shiftKey && event.code === 'KeyX') {
       event.preventDefault();
       getEditorPort()?.applyFormat('strikeThrough');

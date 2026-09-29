@@ -310,10 +310,20 @@
                 <span class="sr-only">Clear formatting</span>
               </button>
             </div>
-            <div id="richLinkPopover" class="rich-link-popover" role="dialog" aria-label="Edit link" hidden>
-              <input type="text" id="richLinkInput" class="rich-link-input" placeholder="https://…" aria-label="Link address" />
-              <button type="button" id="richLinkApply" class="rich-link-apply">Apply</button>
-              <button type="button" id="richLinkRemove" class="rich-link-remove" title="Remove link">Remove</button>
+            <div id="richLinkPopover" class="rich-link-popover" role="dialog" aria-label="Link" hidden>
+              <div class="rich-link-row" data-link-mode="edit">
+                <input type="text" id="richLinkInput" class="rich-link-input" placeholder="Paste or type a link" aria-label="Link address" />
+                <button type="button" id="richLinkApply" class="rich-link-apply">Apply</button>
+                <button type="button" id="richLinkRemove" class="rich-link-remove" title="Remove link">Remove</button>
+              </div>
+              <div class="rich-link-chip" data-link-mode="view" hidden>
+                <a id="richLinkView" class="rich-link-view" target="_blank" rel="noopener noreferrer" title="Open link in a new tab"></a>
+                <span class="rich-link-chip-actions">
+                  <button type="button" id="richLinkEdit" class="rich-link-chip-btn">Edit</button>
+                  <button type="button" id="richLinkCopy" class="rich-link-chip-btn">Copy</button>
+                  <button type="button" id="richLinkChipRemove" class="rich-link-chip-btn rich-link-chip-danger">Remove</button>
+                </span>
+              </div>
             </div>
           </div>
           <div class="starter-template">

@@ -121,6 +121,12 @@ export interface EditorPort {
    */
   insertLink(href: string): boolean;
 
+  /**
+   * Docs' paste-a-link gesture at a bare caret: the href itself becomes the
+   * linked text. Returns false when the engine refused.
+   */
+  insertLinkAsText(href: string): boolean;
+
   /** Removes the link under the caret/selection, keeping its text. */
   removeLink(): boolean;
 

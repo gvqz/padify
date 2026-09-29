@@ -559,6 +559,26 @@ export class ContentEditablePort implements EditorPort {
     return document.execCommand('createLink', false, href);
   }
 
+  /**
+   * Docs' paste-a-link gesture: with nothing selected, the URL itself
+   * becomes the linked text instead of the old dead-end toast. insertHTML
+   * keeps the native undo stack (one Ctrl+Z removes the whole link).
+   */
+  insertLinkAsText(href: string): boolean {
+    if (!this.canExec()) {
+      return false;
+    }
+    // The href is scheme-checked by the toolbar; still escape the two
+    // markup-dangerous characters so the attribute can never break out.
+    const safeHref = href.replace(/"/g, '%22').replace(/</g, '%3C').replace(/>/g, '%3E');
+    const label = href.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    if (!document.execCommand('insertHTML', false, `<a href="${safeHref}">${label}</a>`)) {
+      return false;
+    }
+    this.announceEdit();
+    return true;
+  }
+
   removeLink(): boolean {
     if (typeof document.execCommand !== 'function') {
       return false;

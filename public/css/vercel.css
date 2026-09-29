@@ -3377,6 +3377,56 @@ body.dark #note:has(> br:only-child)::before {
   color: var(--vz-danger);
 }
 
+/* The chip view: an existing link shows as URL + actions, Docs-style. */
+.rich-link-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(440px, 72vw);
+}
+
+.rich-link-view {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vz-link, #2563eb);
+  font-size: 12.5px;
+  text-decoration: none;
+}
+
+.rich-link-view:hover {
+  text-decoration: underline;
+}
+
+.rich-link-chip-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.rich-link-chip-btn {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+.rich-link-chip-btn:hover {
+  background: var(--vz-bg-hover);
+  color: var(--vz-fg);
+}
+
+.rich-link-chip-danger:hover {
+  background: var(--vz-danger-soft);
+  color: var(--vz-danger);
+}
+
 /* The Docs-style dropdowns: size, font, colors. A host is one button plus
    its floating panel; panels open under the toolbar like the link popover. */
 .rich-menu-host {
