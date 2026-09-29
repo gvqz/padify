@@ -3638,10 +3638,39 @@ body.dark #note:has(> br:only-child)::before {
   font-weight: 600;
 }
 
-.rich-menu-panel-swatches {
+/* --- The color picker (one component, text + highlight) ------------------ */
+
+/* The panel is the picker host; it lays itself out (the base .rich-menu-panel
+   grid doesn't apply). */
+.rich-menu-panel-color {
+  display: block;
+  width: 236px;
+  padding: 10px;
+}
+
+.rich-cp {
+  display: grid;
+  gap: 10px;
+}
+
+.rich-cp-title {
+  margin-bottom: 6px;
+  color: var(--vz-fg-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rich-cp-grid {
+  display: grid;
   grid-template-columns: repeat(6, 22px);
-  gap: 5px;
-  padding: 8px;
+  gap: 6px;
+  justify-content: start;
+}
+
+.rich-cp-grid-recent {
+  grid-template-columns: repeat(7, 22px);
 }
 
 .rich-swatch {
@@ -3662,23 +3691,174 @@ body.dark #note:has(> br:only-child)::before {
   outline: none;
 }
 
-/* The 'None' chip spans the swatch row and reads as a ghost button. */
+/* The 'None' swatch: dashed ghost with a diagonal strike. */
 .rich-swatch-none {
-  grid-column: 1 / -1;
-  width: auto;
-  height: 20px;
   border-style: dashed;
-  background: transparent;
-  color: var(--vz-fg-muted);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  background:
+    linear-gradient(
+      45deg,
+      transparent 44%,
+      var(--vz-danger) 44% 56%,
+      transparent 56%
+    ),
+    transparent;
 }
 
 .rich-swatch-none:hover {
-  background: var(--vz-bg-hover);
-  transform: none;
+  transform: scale(1.12);
+  background:
+    linear-gradient(
+      45deg,
+      transparent 44%,
+      var(--vz-danger) 44% 56%,
+      transparent 56%
+    ),
+    var(--vz-bg-hover);
+}
+
+/* The custom section: SV pad + preview/hex/apply column, hue slider below. */
+.rich-cp-custom {
+  padding-top: 10px;
+  border-top: 1px solid var(--vz-border);
+}
+
+.rich-cp-row {
+  display: flex;
+  gap: 8px;
+}
+
+.rich-cp-pad {
+  position: relative;
+  overflow: hidden;
+  width: 132px;
+  height: 96px;
+  border: 1px solid var(--vz-border);
+  border-radius: 6px;
+  cursor: crosshair;
+  flex: 0 0 auto;
+}
+
+.rich-cp-pad::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to right, #fff, rgba(255, 255, 255, 0));
+}
+
+.rich-cp-pad::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, #000, rgba(0, 0, 0, 0));
+}
+
+.rich-cp-cursor {
+  position: absolute;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.rich-cp-side {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rich-cp-preview {
+  flex: 0 0 auto;
+  height: 22px;
+  border: 1px solid var(--vz-border);
+  border-radius: 5px;
+  background: var(--vz-bg);
+}
+
+.rich-cp-hex {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 7px;
+  border: 1px solid var(--vz-border-strong);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg);
   color: var(--vz-fg);
+  font-family: ui-monospace, 'Cascadia Mono', 'Courier New', monospace;
+  font-size: 12px;
+}
+
+.rich-cp-hex:focus {
+  outline: none;
+  border-color: var(--vz-fg-subtle);
+}
+
+.rich-cp-hex-bad {
+  border-color: var(--vz-danger);
+}
+
+.rich-cp-apply {
+  padding: 4px 0;
+  border: 1px solid var(--vz-border-strong);
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 100ms ease;
+}
+
+.rich-cp-apply:hover {
+  background: var(--vz-bg-hover);
+}
+
+/* The hue strip: a native range with the spectrum painted on its track. */
+.rich-cp-hue {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 10px;
+  margin-top: 10px;
+  border: 1px solid var(--vz-border);
+  border-radius: 5px;
+  background: linear-gradient(
+    to right,
+    #ff0000,
+    #ffff00,
+    #00ff00,
+    #00ffff,
+    #0000ff,
+    #ff00ff,
+    #ff0000
+  );
+  cursor: pointer;
+}
+
+.rich-cp-hue::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+.rich-cp-hue::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
 }
 
 /* The table menu host appears only while the caret is inside a table. */

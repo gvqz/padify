@@ -301,6 +301,91 @@ test.describe('docs toolbar', () => {
     await expect(page.locator('#toast')).toContainText('1 and 400');
     await expect(input).toBeFocused();
   });
+
+  test('the color picker applies a custom hex to the selection', async ({ page }) => {
+    await page.goto('/');
+    await createRichNote(page);
+
+    const editor = page.locator('#note');
+    const toolbar = page.locator('#richToolbar');
+    await editor.click();
+    await page.keyboard.type('custom ink here');
+
+    // Select "custom ink" via the DOM (keyboard-only word selection is slow).
+    await editor.evaluate(() => {
+      const note = document.querySelector('#note')!;
+      const range = document.createRange();
+      range.setStart(note.firstChild!, 0);
+      range.setEnd(note.firstChild!, 'custom ink'.length);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+
+    await toolbar.locator('[data-rich-menu="color"]').click();
+    const panel = toolbar.locator('[data-rich-panel-color]');
+    await expect(panel).toBeVisible();
+
+    // Palette keys render (theme-aware) and the custom picker is present.
+    await expect(panel.locator('.rich-swatch')).toHaveCount(12);
+    await expect(panel.locator('.rich-cp-hue')).toBeVisible();
+
+    // Type a custom hex; Enter applies it to the parked selection.
+    const hex = panel.locator('.rich-cp-hex');
+    await hex.fill('#7c3aed');
+    await hex.press('Enter');
+
+    const styled = page.evaluate(() => {
+      const span = Array.from(document.querySelectorAll('#note span')).find((s) =>
+        s.textContent?.includes('custom ink'),
+      );
+      return span ? getComputedStyle(span).color : '';
+    });
+    await expect(styled).resolves.toBe('rgb(124, 58, 237)');
+
+    // The panel closed and the note kept focus.
+    await expect(panel).toBeHidden();
+    await expect(editor).toBeFocused();
+
+    // The pick is remembered under Recents for the session.
+    await toolbar.locator('[data-rich-menu="color"]').click();
+    await expect(panel.locator('.rich-cp-grid-recent .rich-swatch')).toHaveCount(1);
+  });
+
+  test('the highlight picker offers pastels plus None and applies both ways', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await createRichNote(page);
+
+    const editor = page.locator('#note');
+    const toolbar = page.locator('#richToolbar');
+    await editor.click();
+    await page.keyboard.type('glow zone');
+
+    await editor.press('Control+A');
+    await toolbar.locator('[data-rich-menu="highlight"]').click();
+    const panel = toolbar.locator('[data-rich-panel-hilite]');
+    await expect(panel.locator('.rich-swatch')).toHaveCount(7); // 6 pastels + None
+
+    await panel.locator('[data-rich-highlight="#d0ebff"]').click();
+    await expect(editor.locator('span')).toHaveCSS(
+      'background-color',
+      'rgb(208, 235, 255)',
+    );
+
+    // None clears the highlight entirely.
+    await editor.press('Control+A');
+    await toolbar.locator('[data-rich-menu="highlight"]').click();
+    await panel.locator('[data-rich-highlight="transparent"]').click();
+    await expect(
+      editor.evaluate(() =>
+        Array.from(document.querySelectorAll('#note span')).some(
+          (s) => (s as HTMLElement).style.backgroundColor !== '',
+        ),
+      ),
+    ).resolves.toBe(false);
+  });
 });
 
 test.describe('floating window gating', () => {

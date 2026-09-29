@@ -29,6 +29,11 @@ import {
   currentThemeMode,
   resolvePaletteColor,
 } from './theme-colors';
+import {
+  mountColorPicker,
+  type ColorPickerEntry,
+  type ColorPickerHandle,
+} from './color-picker';
 
 /** href schemes the toolbar offers inline (mirrors the storage sanitizer). */
 const SAFE_HREF_PATTERN = /^(https?:\/\/|mailto:|#|\/)/i;
@@ -284,6 +289,15 @@ export function initRichToolbar(tabManager: TabManager): void {
       return;
     }
     closeMenus();
+    // The color pickers' custom section takes keyboard focus (that is how
+    // text gets typed into it), which collapses the editor selection. Park
+    // the range at open — the same deal as the link popover — so "select
+    // text, then drag a custom color" applies to what was selected.
+    if (button.dataset.richMenu === 'color' || button.dataset.richMenu === 'highlight') {
+      parkedRange = selectionIsInNote()
+        ? window.getSelection()!.getRangeAt(0).cloneRange()
+        : null;
+    }
     panel.hidden = false;
     button.setAttribute('aria-expanded', 'true');
     clampPanelToViewport(panel);
@@ -310,6 +324,16 @@ export function initRichToolbar(tabManager: TabManager): void {
    * into the input row so a second visit shows what the caret is in. */
   const markCurrentValue = (button: HTMLButtonElement, panel: HTMLElement): void => {
     const kind = button.dataset.richMenu;
+    if (kind === 'color' || kind === 'highlight') {
+      // The picker marks the swatch matching the caret's ink; highlight has
+      // no reliable queryCommandValue dialect, so nothing is marked there.
+      const current =
+        kind === 'color'
+          ? safeQuery(() => getEditorPort()?.queryTextColor()) ?? null
+          : null;
+      (kind === 'color' ? textColorPicker : highlightPicker)?.refresh(current);
+      return;
+    }
     if (kind !== 'size' && kind !== 'font' && kind !== 'block') {
       return;
     }
@@ -683,42 +707,8 @@ export function initRichToolbar(tabManager: TabManager): void {
       return;
     }
 
-    const colorItem = target.closest<HTMLButtonElement>('[data-rich-color]');
-    if (colorItem) {
-      // Swatches carry palette KEYS — resolved through the current theme so
-      // "ink" is near-black on paper and near-white on the dark surface.
-      const key = colorItem.dataset.richColor!;
-      const hex = resolvePaletteColor(key, currentThemeMode());
-      if (hex) {
-        port.setTextColor(hex);
-        // The glyph bar previews the ink the picker last applied (session only).
-        toolbar
-          .querySelector<HTMLElement>('[data-rich-ink="color"]')
-          ?.style.setProperty('--rich-ink', hex);
-      }
-      closeMenus(true);
-      scheduleStateRefresh();
-      return;
-    }
-
-    const highlightItem = target.closest<HTMLButtonElement>('[data-rich-highlight]');
-    if (highlightItem) {
-      const color = highlightItem.dataset.richHighlight!;
-      port.setHighlight(color);
-      // The marker's swipe line previews the last ink (session only, the
-      // same deal as the text-color bar); "None" returns it to plain ink.
-      const hiliteGlyph = toolbar.querySelector<SVGElement>('[data-rich-hilite]');
-      if (hiliteGlyph) {
-        if (color === 'transparent') {
-          hiliteGlyph.style.removeProperty('--rich-hilite');
-        } else {
-          hiliteGlyph.style.setProperty('--rich-hilite', color);
-        }
-      }
-      closeMenus(true);
-      scheduleStateRefresh();
-      return;
-    }
+    // Palette/recents/None swatches are answered inside the color picker
+    // component (see the mounts below) — nothing to do here.
 
     // The table grid picker: cell (r,c) inserts an (r+1)x(c+1) table.
     const gridCell = target.closest<HTMLButtonElement>('[data-rich-grid]');
@@ -814,6 +804,116 @@ export function initRichToolbar(tabManager: TabManager): void {
     scratch.remove();
     showToast(copied ? 'Link copied.' : 'Could not copy the link.');
   };
+
+  // ---------------------------------------------------------------------------
+  // The color pickers (text + highlight): one component, two mounts.
+  //
+  // Palette swatches carry theme KEYS for text (auto dark/light re-inking)
+  // and literal pastels for highlight; recents and the custom picker store
+  // literal hex (same as Docs' custom colors — they don't re-theme).
+  // ---------------------------------------------------------------------------
+  const TEXT_PALETTE_KEYS: ReadonlyArray<readonly [string, string]> = [
+    ['ink', 'black'],
+    ['gray', 'gray'],
+    ['steel', 'light gray'],
+    ['paper', 'white'],
+    ['red', 'red'],
+    ['pink', 'pink'],
+    ['yellow', 'yellow'],
+    ['brown', 'brown'],
+    ['green', 'green'],
+    ['teal', 'teal'],
+    ['blue', 'blue'],
+    ['purple', 'purple'],
+  ];
+
+  const textColorEntry = (key: string, label: string): ColorPickerEntry => ({
+    value: key,
+    label,
+    swatch: `var(--rich-palette-${key})`,
+    resolve: () => resolvePaletteColor(key, currentThemeMode()) ?? '#1a1a1a',
+  });
+
+  const HIGHLIGHT_PALETTE: ReadonlyArray<ColorPickerEntry> = [
+    ...([
+      ['#fff3bf', 'yellow'],
+      ['#ffe3e3', 'pink'],
+      ['#d3f9d8', 'green'],
+      ['#d0ebff', 'blue'],
+      ['#e5dbff', 'purple'],
+      ['#ffe8cc', 'orange'],
+    ] as ReadonlyArray<readonly [string, string]>).map(([value, label]) => ({
+      value,
+      label,
+      swatch: value,
+      resolve: () => value,
+    })),
+    {
+      value: 'transparent',
+      label: 'None',
+      swatch: 'transparent',
+      resolve: () => 'transparent',
+    },
+  ];
+
+  const inkPreview = toolbar.querySelector<HTMLElement>('[data-rich-ink="color"]');
+  const hilitePreview = toolbar.querySelector<HTMLElement>('[data-rich-hilite]');
+
+  const colorPanel = toolbar.querySelector<HTMLElement>('[data-rich-panel-color]');
+  const textColorPicker: ColorPickerHandle | null = colorPanel
+    ? mountColorPicker(colorPanel, {
+        ariaLabel: 'Text color',
+        modeAttr: 'data-rich-color',
+        palette: TEXT_PALETTE_KEYS.map(([key, label]) => textColorEntry(key, label)),
+        onPick: (value) => {
+          const port = getEditorPort();
+          if (!port) {
+            return;
+          }
+          // The picker's inputs moved the caret out of the note — put the
+          // parked selection (or at least the caret) back before applying.
+          if (parkedRange) {
+            restoreParkedRange();
+          } else {
+            port.focus();
+          }
+          port.setTextColor(value);
+          // The glyph bar previews the last ink (session only).
+          inkPreview?.style.setProperty('--rich-ink', value);
+          closeMenus(true);
+          scheduleStateRefresh();
+        },
+      })
+    : null;
+
+  const hilitePanel = toolbar.querySelector<HTMLElement>('[data-rich-panel-hilite]');
+  const highlightPicker: ColorPickerHandle | null = hilitePanel
+    ? mountColorPicker(hilitePanel, {
+        ariaLabel: 'Highlight color',
+        modeAttr: 'data-rich-highlight',
+        palette: HIGHLIGHT_PALETTE,
+        onPick: (value) => {
+          const port = getEditorPort();
+          if (!port) {
+            return;
+          }
+          if (parkedRange) {
+            restoreParkedRange();
+          } else {
+            port.focus();
+          }
+          port.setHighlight(value);
+          // The swash previews the last highlight; "None" returns plain ink.
+          if (value === 'transparent') {
+            hilitePreview?.style.removeProperty('--rich-hilite');
+          } else {
+            hilitePreview?.style.setProperty('--rich-hilite', value);
+          }
+          closeMenus(true);
+          scheduleStateRefresh();
+        },
+      })
+    : null;
 
   elements.apply?.addEventListener('click', applyLink);
   elements.remove?.addEventListener('click', removeLink);

@@ -18,6 +18,7 @@ import type {
   ScriptType,
   TableCellContext,
 } from './port';
+import { rgbStringToHex } from './color-picker';
 
 const FORMAT_COMMANDS: readonly FormatCommand[] = [
   'bold',
@@ -724,6 +725,17 @@ export class ContentEditablePort implements EditorPort {
     this.normalizeFontTags();
     this.announceEdit();
     return true;
+  }
+
+  queryTextColor(): string | null {
+    if (typeof document.queryCommandValue !== 'function') {
+      return null;
+    }
+    try {
+      return rgbStringToHex(document.queryCommandValue('foreColor'));
+    } catch {
+      return null;
+    }
   }
 
   setHighlight(color: string): boolean {

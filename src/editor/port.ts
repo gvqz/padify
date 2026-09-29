@@ -161,6 +161,13 @@ export interface EditorPort {
   /** Sets the text color of the selection (any sanitized color value). */
   setTextColor(color: string): boolean;
 
+  /**
+   * The text color at the caret as '#rrggbb', or null when it cannot be
+   * answered (Chrome answers queryCommandValue('foreColor') reliably; the
+   * equivalent highlight query does not, so there is no pair for it).
+   */
+  queryTextColor(): string | null;
+
   /** Sets the highlight behind the selection ('transparent' clears it). */
   setHighlight(color: string): boolean;
 
