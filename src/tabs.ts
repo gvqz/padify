@@ -40,6 +40,7 @@ import {
   type StoredNoteTab,
 } from './storage';
 import { getEditorPort } from './editor/port';
+import { renderMathIn } from './editor/math';
 import {
   currentThemeMode,
   noteRenderedForTheme,
@@ -238,6 +239,14 @@ const ALLOWED_ATTRS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 ]);
 
 /**
+ * The math-shell class and the shape of its stored LaTeX source. A shell
+ * survives as exactly `<span class="padify-math" data-latex="…"></span>`
+ * — no style, no rendered children, nothing else (see editor/math.ts).
+ */
+const MATH_CLASS = 'padify-math';
+const MATH_LATEX_PATTERN = /^[\s\S]{1,2000}$/;
+
+/**
  * Data-attribute values that may survive, by attribute. The checklist mark
  * is a boolean flag and the item state a boolean pair — anything else is a
  * crafted payload, not editor output.
@@ -328,6 +337,18 @@ export function sanitizeNoteHtml(html: string): string {
 
     const clone = document.createElement(element.tagName);
 
+    // Math shells are their own vocabulary: fixed class + capped LaTeX
+    // source, rendered children never store (the shell is the truth).
+    if (element.tagName === 'SPAN' && element.classList.contains(MATH_CLASS)) {
+      const latex = element.getAttribute('data-latex') ?? '';
+      if (!MATH_LATEX_PATTERN.test(latex)) {
+        return children;
+      }
+      clone.setAttribute('class', MATH_CLASS);
+      clone.setAttribute('data-latex', latex);
+      return [clone];
+    }
+
     const allowedAttrs = ALLOWED_ATTRS.get(element.tagName);
     if (allowedAttrs) {
       allowedAttrs.forEach((attr) => {
@@ -395,6 +416,12 @@ export function htmlToText(html: string): string {
     const element = node as HTMLElement;
     if (element.tagName === 'BR') {
       parts.push('\n');
+      return;
+    }
+    // A math shell reads as its LaTeX source (titles/previews/exports get
+    // the equation, not KaTeX's markup or nothing).
+    if (element.classList && element.classList.contains('padify-math')) {
+      parts.push(element.getAttribute('data-latex') ?? '');
       return;
     }
     // Checklist items read with their box state — the plain-text twin of
@@ -723,7 +750,9 @@ export class TabManager {
       return;
     }
 
-    const html = this.editor.html();
+    // Through the port: sanitized, and math shells stored as their LaTeX
+    // source (the rendered KaTeX markup lives only in the editing DOM).
+    const html = getEditorPort()?.getHtml() ?? this.editor.html();
     if (html === active.html) {
       return;
     }
@@ -743,7 +772,8 @@ export class TabManager {
       return;
     }
 
-    active.html = this.editor.html();
+    // Same port routing as saveActiveFromEditor — sanitized on store.
+    active.html = getEditorPort()?.getHtml() ?? this.editor.html();
     active.updatedAt = Date.now();
     active.colorTheme = currentThemeMode();
     this.dirtyIds.add(active.id);
@@ -756,6 +786,10 @@ export class TabManager {
   private loadActiveIntoEditor(): void {
     const active = this.getActive();
     this.editor.html(active ? active.html : '');
+    // Stored math shells arrive empty — render them into view (the port's
+    // setHtml would also work, but its document-replaced hook persists,
+    // and opening a note must not write on its own).
+    renderMathIn(this.editor.get(0) as HTMLElement);
     this.editor.scrollTop(0);
     // A note whose stored colors were written under the other theme is
     // re-inked for display right away (visual only — storage catches up on

@@ -142,6 +142,25 @@ export interface EditorPort {
    */
   retargetLink(href: string): boolean;
 
+  /**
+   * Inserts a KaTeX equation shell at the caret (rendered in place right
+   * after; one native undo step removes the whole thing). Returns false
+   * when the engine refused.
+   */
+  insertMath(latex: string): boolean;
+
+  /**
+   * The equation the caret sits in (nearest padify-math shell), or null.
+   * Powers the equation bubble's edit mode and the toolbar's state.
+   */
+  queryMathAtCaret(): { latex: string; element: HTMLElement } | null;
+
+  /**
+   * Re-points an existing equation to new LaTeX and re-renders it.
+   * Returns false when the element is not a math shell in this note.
+   */
+  updateMath(element: HTMLElement, latex: string): boolean;
+
   undo(): boolean;
   redo(): boolean;
 

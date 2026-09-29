@@ -3360,6 +3360,65 @@ body.dark #note:has(> br:only-child)::before {
   position: fixed;
 }
 
+/* --- The equation bubble -------------------------------------------------- */
+
+.rich-math-popover {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 300px;
+  max-width: 80vw;
+}
+
+.rich-math-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rich-math-row .rich-link-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rich-math-preview {
+  min-height: 30px;
+  padding: 6px 8px;
+  border: 1px dashed var(--vz-border-strong);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg);
+  color: var(--vz-fg);
+  overflow-x: auto;
+}
+
+.rich-math-preview:empty::before {
+  content: 'LaTeX preview';
+  color: var(--vz-fg-muted);
+  font-size: 11px;
+}
+
+.rich-math-preview .katex {
+  font-size: 1.05em;
+}
+
+/* A rendered equation inside the note: a non-editable chip that answers a
+   click with its editor bubble. */
+.padify-math {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 100ms ease;
+}
+
+.padify-math:hover {
+  background: var(--vz-bg-hover);
+}
+
+.padify-math .katex {
+  font-size: 1.05em;
+}
+
 .rich-link-input {
   width: 240px;
   max-width: 56vw;

@@ -18,6 +18,33 @@ const tab = (overrides: Partial<NoteTab> = {}): NoteTab => ({
   ...overrides,
 });
 
+describe('math shell storage', () => {
+  it('keeps a padify-math shell with its latex, dropping rendered children', () => {
+    const stored = sanitizeNoteHtml(
+      '<p>see <span class="padify-math" data-latex="E=mc^2" contenteditable="false" data-rendered="1"><span class="katex">junk</span></span></p>',
+    );
+    expect(stored).toBe('<p>see <span class="padify-math" data-latex="E=mc^2"></span></p>');
+  });
+
+  it('unwraps a math span with missing or oversized latex', () => {
+    expect(sanitizeNoteHtml('<span class="padify-math">x</span>')).toBe('x');
+    expect(
+      sanitizeNoteHtml(`<span class="padify-math" data-latex="${'x'.repeat(2001)}">y</span>`),
+    ).toBe('y');
+  });
+
+  it('strips a plain span carrying a forged padify-math plus junk class', () => {
+    const stored = sanitizeNoteHtml(
+      '<span class="padify-math other" data-latex="x" style="position:fixed">q</span>',
+    );
+    expect(stored).toBe('<span class="padify-math" data-latex="x"></span>');
+  });
+
+  it('htmlToText reads the latex source, not the markup', () => {
+    expect(htmlToText('a<span class="padify-math" data-latex="x^2"></span>b')).toBe('ax^2b');
+  });
+});
+
 describe('escapeHtml', () => {
   it('escapes the five dangerous characters', () => {
     expect(escapeHtml('<b>&"\'')).toBe('&lt;b&gt;&amp;&quot;&#39;');

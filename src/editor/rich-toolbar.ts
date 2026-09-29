@@ -34,6 +34,7 @@ import {
   type ColorPickerEntry,
   type ColorPickerHandle,
 } from './color-picker';
+import { renderMathPreview } from './math';
 
 /** href schemes the toolbar offers inline (mirrors the storage sanitizer). */
 const SAFE_HREF_PATTERN = /^(https?:\/\/|mailto:|#|\/)/i;
@@ -93,6 +94,10 @@ interface RichToolbarElements {
   edit: HTMLButtonElement | null;
   copy: HTMLButtonElement | null;
   chipRemove: HTMLButtonElement | null;
+  mathPopover: HTMLElement | null;
+  mathInput: HTMLInputElement | null;
+  mathInsert: HTMLButtonElement | null;
+  mathPreview: HTMLElement | null;
 }
 
 /**
@@ -125,6 +130,10 @@ export function initRichToolbar(tabManager: TabManager): void {
     edit: document.getElementById('richLinkEdit') as HTMLButtonElement | null,
     copy: document.getElementById('richLinkCopy') as HTMLButtonElement | null,
     chipRemove: document.getElementById('richLinkChipRemove') as HTMLButtonElement | null,
+    mathPopover: document.getElementById('richMathPopover'),
+    mathInput: document.getElementById('richMathInput') as HTMLInputElement | null,
+    mathInsert: document.getElementById('richMathInsert') as HTMLButtonElement | null,
+    mathPreview: document.getElementById('richMathPreview'),
   };
 
   if (!elements.popover || !elements.input) {
@@ -743,6 +752,15 @@ export function initRichToolbar(tabManager: TabManager): void {
       return;
     }
 
+    if (button.dataset.richAction === 'math') {
+      if (elements.mathPopover?.hidden) {
+        openMathPopover();
+      } else {
+        closeMathPopover(true);
+      }
+      return;
+    }
+
     if (button.dataset.richCmd) {
       port.applyFormat(button.dataset.richCmd as EditorCommand);
     } else if (button.dataset.richAction) {
@@ -943,9 +961,10 @@ export function initRichToolbar(tabManager: TabManager): void {
     }
   });
 
-  // Outside click closes the link popover AND the menus; Escape likewise.
-  // A click on the very link that floated the chip keeps it open — the
-  // toggle runs before this listener (element bubbles before document).
+  // Outside click closes the link popover, the equation bubble AND the
+  // menus; Escape likewise. A click on the very link that floated the chip
+  // keeps it open — the toggle runs before this listener (element bubbles
+  // before document).
   document.addEventListener('click', (event) => {
     const target = event.target as Node;
     if (
@@ -956,6 +975,15 @@ export function initRichToolbar(tabManager: TabManager): void {
     ) {
       closeLinkPopover();
     }
+    if (
+      elements.mathPopover &&
+      !elements.mathPopover.hidden &&
+      !elements.mathPopover.contains(target) &&
+      !(mathShellHost && mathShellHost.contains(target)) &&
+      !(event.target as HTMLElement).closest?.('[data-rich-action="math"]')
+    ) {
+      closeMathPopover();
+    }
     if (anyMenuOpen() && !toolbar.contains(target)) {
       closeMenus();
     }
@@ -964,6 +992,9 @@ export function initRichToolbar(tabManager: TabManager): void {
     if (event.key === 'Escape') {
       if (!elements.popover.hidden) {
         closeLinkPopover(true);
+      }
+      if (elements.mathPopover && !elements.mathPopover.hidden) {
+        closeMathPopover(true);
       }
       if (anyMenuOpen()) {
         closeMenus(true);
@@ -998,6 +1029,97 @@ export function initRichToolbar(tabManager: TabManager): void {
     openLinkChipAtAnchor(detail.anchor, detail.href);
   });
 
+  // ---------------------------------------------------------------------------
+  // The equation bubble: LaTeX in, live KaTeX preview out, Insert commits.
+  // Opens from the toolbar button, the context menu (padify:open-equation)
+  // or a click on an existing equation (padify:math-click, edit mode).
+  // ---------------------------------------------------------------------------
+  let editingMath: HTMLElement | null = null;
+  /** The equation shell whose click opened the bubble (click must not close). */
+  let mathShellHost: HTMLElement | null = null;
+
+  const closeMathPopover = (refocusEditor = false): void => {
+    if (!elements.mathPopover) {
+      return;
+    }
+    elements.mathPopover.hidden = true;
+    editingMath = null;
+    mathShellHost = null;
+    if (refocusEditor) {
+      getEditorPort()?.focus();
+    }
+  };
+
+  const openMathPopover = (existing?: { latex: string; element: HTMLElement }): void => {
+    if (!elements.mathPopover || !elements.mathInput || !elements.mathPreview) {
+      return;
+    }
+    closeMenus();
+    closeMathPopover();
+    closeLinkPopover();
+    editingMath = existing?.element ?? null;
+    mathShellHost = existing?.element ?? null;
+    elements.mathInput.value = existing?.latex ?? '';
+    renderMathPreview(elements.mathPreview, elements.mathInput.value);
+    elements.mathPopover.hidden = false;
+    elements.mathInput.focus();
+    elements.mathInput.select();
+  };
+
+  const applyMath = (): void => {
+    const port = getEditorPort();
+    if (!port || !elements.mathInput) {
+      return;
+    }
+    const latex = elements.mathInput.value.trim();
+    const target = editingMath;
+    // Closing refocuses the editor — Chrome restores the note's caret, so
+    // a fresh insert lands where it was parked (must run BEFORE we clear
+    // the edit target).
+    closeMathPopover(true);
+    if (latex === '') {
+      return;
+    }
+    if (target) {
+      port.updateMath(target, latex);
+      return;
+    }
+    port.insertMath(latex);
+  };
+
+  if (elements.mathInput && elements.mathPreview) {
+    elements.mathInput.addEventListener('input', () => {
+      renderMathPreview(elements.mathPreview!, elements.mathInput!.value);
+    });
+    elements.mathInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        applyMath();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        closeMathPopover(true);
+      }
+    });
+  }
+  elements.mathInsert?.addEventListener('click', applyMath);
+
+  document.addEventListener('padify:math-click', (event) => {
+    if (toolbar.hidden) {
+      return;
+    }
+    const detail = (event as CustomEvent).detail as {
+      element: HTMLElement;
+      latex: string;
+    };
+    openMathPopover(detail);
+  });
+  document.addEventListener('padify:open-equation', () => {
+    if (!toolbar.hidden) {
+      openMathPopover();
+    }
+  });
+
   // Pressed states follow the caret and the edits.
   document.addEventListener('selectionchange', scheduleStateRefresh);
 
@@ -1016,6 +1138,9 @@ export function initRichToolbar(tabManager: TabManager): void {
     toolbar.hidden = !show;
     if (!show && !elements.popover.hidden) {
       closeLinkPopover();
+    }
+    if (!show && elements.mathPopover && !elements.mathPopover.hidden) {
+      closeMathPopover();
     }
     if (!show && anyMenuOpen()) {
       closeMenus();

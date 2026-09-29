@@ -109,6 +109,7 @@ const ICONS = {
   table: icon(
     '<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M3 9.5h18M9.75 9.5v10M15.75 9.5v10"/>',
   ),
+  math: icon('<path d="m3 12 3.5 5L11 4h10"/>'),
 };
 
 // ---------------------------------------------------------------------------
@@ -168,6 +169,9 @@ const menuMarkup = `
         </button>
         <button type="button" class="padify-ctx-item" role="menuitem" data-action="insert-link">
             ${ICONS.link}<span>Insert link</span>
+        </button>
+        <button type="button" class="padify-ctx-item" role="menuitem" data-action="insert-equation">
+            ${ICONS.math}<span>Insert equation</span>
         </button>
         <button type="button" class="padify-ctx-item" role="menuitem" data-action="remove-link" hidden>
             ${ICONS.unlink}<span>Remove link</span>
@@ -639,6 +643,9 @@ class ContextMenu {
       case 'insert-link':
         this.openLinkBubble();
         break;
+      case 'insert-equation':
+        this.openEquationBubble();
+        break;
       case 'remove-link':
         this.removeLinkAtCaret();
         break;
@@ -750,6 +757,13 @@ class ContextMenu {
     this.close();
     this.restoreFocus();
     document.dispatchEvent(new CustomEvent('padify:open-link'));
+  }
+
+  /** The equation bubble (toolbar) owns LaTeX editing; hands over the same way. */
+  private openEquationBubble(): void {
+    this.close();
+    this.restoreFocus();
+    document.dispatchEvent(new CustomEvent('padify:open-equation'));
   }
 
   private removeLinkAtCaret(): void {

@@ -19,6 +19,12 @@ import type {
   TableCellContext,
 } from './port';
 import { rgbStringToHex } from './color-picker';
+import {
+  MATH_CLASS,
+  MATH_LATEX_PATTERN,
+  buildMathShell,
+  renderMathIn,
+} from './math';
 
 const FORMAT_COMMANDS: readonly FormatCommand[] = [
   'bold',
@@ -140,6 +146,24 @@ export class ContentEditablePort implements EditorPort {
           detail: { href, anchor, openInNewTab: mouse.ctrlKey || mouse.metaKey },
         }),
       );
+      return;
+    });
+    // Equations answer a click with their editor bubble, prefilled — the
+    // same gesture the link chip answers with.
+    element.addEventListener('click', (event) => {
+      const mouse = event as MouseEvent;
+      if (mouse.button !== 0) {
+        return;
+      }
+      const target = mouse.target as Element | null;
+      const shell = target?.closest?.(`.${MATH_CLASS}`);
+      if (shell instanceof HTMLElement && element.contains(shell)) {
+        document.dispatchEvent(
+          new CustomEvent('padify:math-click', {
+            detail: { element: shell, latex: shell.getAttribute('data-latex') ?? '' },
+          }),
+        );
+      }
     });
     element.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter' || event.shiftKey) {
@@ -149,18 +173,42 @@ export class ContentEditablePort implements EditorPort {
       requestAnimationFrame(() => this.uncheckEmptyItemUnderCaret());
     });
     // Deleting everything in one stroke leaves Chrome's skeleton behind —
-    // catch it on the way out so the note reads empty again.
+    // catch it on the way out so the note reads empty again. The same pass
+    // renders any math shells that undo/redo just restored un-rendered.
     element.addEventListener('input', (event) => {
       this.maybeNormalizeAfterDelete(event);
+      const inputType = (event as InputEvent).inputType ?? '';
+      if (inputType === '' || inputType.startsWith('history')) {
+        renderMathIn(this.element);
+      }
     });
   }
 
   getHtml(): string {
-    return this.element.innerHTML;
+    return this.deps.sanitize(this.storageHtml());
+  }
+
+  /**
+   * The DOM HTML with math shells emptied again — the rendered KaTeX
+   * markup lives only in the editing surface, the stored note carries the
+   * LaTeX source alone (see math.ts for the storage model).
+   */
+  private storageHtml(): string {
+    if (!this.element.querySelector(`.${MATH_CLASS}`)) {
+      return this.element.innerHTML;
+    }
+    const clone = this.element.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll(`.${MATH_CLASS}`).forEach((span) => {
+      span.removeAttribute('data-rendered');
+      span.innerHTML = '';
+    });
+    return clone.innerHTML;
   }
 
   setHtml(html: string): void {
     this.element.innerHTML = this.deps.sanitize(html);
+    // Math shells arrive empty from storage — render them into view.
+    renderMathIn(this.element);
     this.deps.onDocumentReplaced?.();
   }
 
@@ -633,6 +681,59 @@ export class ContentEditablePort implements EditorPort {
       return false;
     }
     anchor.setAttribute('href', href);
+    return true;
+  }
+
+  // -----------------------------------------------------------------------
+  // Math equations (see math.ts for the shell storage model).
+  // -----------------------------------------------------------------------
+
+  insertMath(latex: string): boolean {
+    const value = latex.trim();
+    if (value === '' || !this.canExec()) {
+      return false;
+    }
+    // One insertHTML step on the native undo stack; the in-place render
+    // that follows is inside a non-editable child, which Chrome's undo
+    // ignores — one Ctrl+Z removes the whole equation.
+    if (!document.execCommand('insertHTML', false, buildMathShell(value))) {
+      return false;
+    }
+    renderMathIn(this.element);
+    this.announceEdit();
+    return true;
+  }
+
+  queryMathAtCaret(): { latex: string; element: HTMLElement } | null {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return null;
+    }
+    const node = selection.anchorNode;
+    const base = node instanceof Element ? node : (node?.parentElement ?? null);
+    const shell = base?.closest(`.${MATH_CLASS}`);
+    if (!(shell instanceof HTMLElement) || !this.element.contains(shell)) {
+      return null;
+    }
+    return { latex: shell.getAttribute('data-latex') ?? '', element: shell };
+  }
+
+  updateMath(element: HTMLElement, latex: string): boolean {
+    const value = latex.trim();
+    if (
+      value === '' ||
+      !MATH_LATEX_PATTERN.test(value) ||
+      !element.classList.contains(MATH_CLASS) ||
+      !this.element.contains(element)
+    ) {
+      return false;
+    }
+    element.setAttribute('data-latex', value);
+    element.removeAttribute('data-rendered');
+    renderMathIn(element);
+    // Attribute mutations don't fire input events — announce manually so
+    // autosave and the save indicator follow.
+    this.announceEdit();
     return true;
   }
 

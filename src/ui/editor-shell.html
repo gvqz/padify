@@ -280,6 +280,10 @@
             </div>
             <div class="rich-toolbar-sep" aria-hidden="true"></div>
             <div class="rich-toolbar-group">
+              <button type="button" class="rich-btn" data-rich-action="math" title="Insert equation">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 12 3.5 5L11 4h10"/></svg>
+                <span class="sr-only">Insert equation</span>
+              </button>
               <button type="button" class="rich-btn" id="richLinkButton" aria-haspopup="dialog" aria-expanded="false" title="Link">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                 <span class="sr-only">Link</span>
@@ -303,6 +307,13 @@
                   <button type="button" id="richLinkChipRemove" class="rich-link-chip-btn rich-link-chip-danger">Remove</button>
                 </span>
               </div>
+            </div>
+            <div id="richMathPopover" class="rich-link-popover rich-math-popover" role="dialog" aria-label="Equation" hidden>
+              <div class="rich-math-row">
+                <input type="text" id="richMathInput" class="rich-link-input" placeholder="e^{i\pi} + 1 = 0" aria-label="LaTeX equation" />
+                <button type="button" id="richMathInsert" class="rich-link-apply">Insert</button>
+              </div>
+              <div id="richMathPreview" class="rich-math-preview" aria-hidden="true"></div>
             </div>
           </div>
           <div class="starter-template">
