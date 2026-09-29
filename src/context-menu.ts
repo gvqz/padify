@@ -7,9 +7,10 @@
  *
  *   Undo · Redo · Cut · Copy · Paste · Delete · Select All
  *   Bold · Italic · Underline · Strikethrough (one-row format group)
- *   Remove Formatting (clears formatting inside the selection)
+ *   Clear Formatting (clears formatting inside the selection, Ctrl+\\)
+ *   Insert Link (hands over to the link bubble; Remove link when on one)
  *   Case Converter (12 transformations, in a submenu — no more separate tab)
- *   Remove Tabs
+ *   Table operations (only while the caret sits inside a table)
  *
  * The editor renders rich text, so formatting runs through the classic
  * editing commands (document.execCommand bold/italic/underline/strikeThrough)
@@ -64,6 +65,15 @@ const FORMATS: FormatDef[] = [
 const icon = (paths: string, size = 15): string =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths}</svg>`;
 
+/** queryCommand-style probes can throw in odd selection states — never crash. */
+function safeQueryPort<T>(fn: () => T): T | null {
+  try {
+    return fn();
+  } catch {
+    return null;
+  }
+}
+
 const ICONS = {
   undo: icon('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
   redo: icon('<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>'),
@@ -87,9 +97,17 @@ const ICONS = {
   ),
   chevron:
     '<svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><path d="M5.25 3 9 6.75 5.25 10.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  tabs: icon('<path d="M3 7h5v5"/><path d="M3 12h5v5"/>'), // custom simple
   erase: icon(
     '<path d="m7 21-4.3-4.3a2.4 2.4 0 0 1 0-3.4l9.6-9.6a2.4 2.4 0 0 1 3.4 0l5.6 5.6a2.4 2.4 0 0 1 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/>',
+  ),
+  link: icon(
+    '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  ),
+  unlink: icon(
+    '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/><path d="M3 3l18 18" opacity="0"/><path d="m4 4 3.5 3.5"/><path d="m16.5 16.5 3.5 3.5"/><path d="M4.6 9.5 2.5 10.2"/><path d="M21.5 13.8l-2.1.7"/><path d="M9.5 4.6 10.2 2.5"/><path d="M13.8 21.5l.7-2.1"/>',
+  ),
+  table: icon(
+    '<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M3 9.5h18M9.75 9.5v10M15.75 9.5v10"/>',
   ),
 };
 
@@ -104,6 +122,7 @@ const IS_APPLE = /Mac|iPhone|iPad|iPod/.test(
 const MOD = IS_APPLE ? '⌘' : 'Ctrl+';
 const REDO_HINT = IS_APPLE ? '⇧⌘Z' : 'Ctrl+Y';
 const STRIKE_HINT = IS_APPLE ? '⌘⇧X' : 'Ctrl+⇧X';
+const CLEAR_HINT = IS_APPLE ? '⌘\\' : 'Ctrl+\\';
 
 const FORMAT_META: Record<FormatDef['id'], { hint: string }> = {
   bold: { hint: `${MOD}B` },
@@ -144,8 +163,14 @@ const menuMarkup = `
             <button type="button" class="padify-ctx-item padify-ctx-fmt padify-fmt-${def.id}" role="menuitemcheckbox" aria-checked="false" data-action="format" data-format="${def.id}" aria-label="${def.label}" title="${def.label} (${FORMAT_META[def.id].hint})"><span aria-hidden="true">${def.glyph}</span></button>`,
             ).join('')}
         </div>
-        <button type="button" class="padify-ctx-item" role="menuitem" data-action="remove-formatting">
-            ${ICONS.erase}<span>Remove formatting</span>
+        <button type="button" class="padify-ctx-item" role="menuitem" data-action="clear-formatting">
+            ${ICONS.erase}<span>Clear formatting</span><kbd>${CLEAR_HINT}</kbd>
+        </button>
+        <button type="button" class="padify-ctx-item" role="menuitem" data-action="insert-link">
+            ${ICONS.link}<span>Insert link</span>
+        </button>
+        <button type="button" class="padify-ctx-item" role="menuitem" data-action="remove-link" hidden>
+            ${ICONS.unlink}<span>Remove link</span>
         </button>
         <div class="padify-ctx-sep" role="separator"></div>
         <div class="padify-ctx-item padify-ctx-parent" data-action="case-menu">
@@ -161,8 +186,26 @@ const menuMarkup = `
                 ).join('')}
             </div>
         </div>
-        <button type="button" class="padify-ctx-item" role="menuitem" data-action="remove-tabs">
-            ${ICONS.tabs}<span>Remove tabs</span>
+        <button type="button" class="padify-ctx-item padify-ctx-table" role="menuitem" data-action="table-op" data-op="row-above" hidden>
+            ${ICONS.table}<span>Insert row above</span>
+        </button>
+        <button type="button" class="padify-ctx-item padify-ctx-table" role="menuitem" data-action="table-op" data-op="row-below" hidden>
+            ${ICONS.table}<span>Insert row below</span>
+        </button>
+        <button type="button" class="padify-ctx-item padify-ctx-table" role="menuitem" data-action="table-op" data-op="col-left" hidden>
+            ${ICONS.table}<span>Insert column left</span>
+        </button>
+        <button type="button" class="padify-ctx-item padify-ctx-table" role="menuitem" data-action="table-op" data-op="col-right" hidden>
+            ${ICONS.table}<span>Insert column right</span>
+        </button>
+        <button type="button" class="padify-ctx-item padify-ctx-table padify-ctx-danger" role="menuitem" data-action="table-op" data-op="row-delete" hidden>
+            ${ICONS.table}<span>Delete row</span>
+        </button>
+        <button type="button" class="padify-ctx-item padify-ctx-table padify-ctx-danger" role="menuitem" data-action="table-op" data-op="col-delete" hidden>
+            ${ICONS.table}<span>Delete column</span>
+        </button>
+        <button type="button" class="padify-ctx-item padify-ctx-table padify-ctx-danger" role="menuitem" data-action="table-op" data-op="table-delete" hidden>
+            ${ICONS.table}<span>Delete table</span>
         </button>
     </div>
 </div>`;
@@ -343,7 +386,7 @@ class ContextMenu {
 
   private refreshEnabledState(): void {
     const hasSelection = this.selection.length > 0;
-    const actions = ['cut', 'copy', 'delete', 'remove-formatting'];
+    const actions = ['cut', 'copy', 'delete', 'clear-formatting'];
     for (const action of actions) {
       const item = this.menu.querySelector<HTMLButtonElement>(
         `.padify-ctx-item[data-action="${action}"]`,
@@ -352,6 +395,28 @@ class ContextMenu {
         item.disabled = !hasSelection;
         item.setAttribute('aria-disabled', String(!hasSelection));
       }
+    }
+
+    // The link and table entries follow the caret's context, the way the
+    // toolbar's table menu does — no link under the caret, no Remove link;
+    // not in a table, no table operations.
+    const port = getEditorPort();
+    const inLink = !!safeQueryPort(() => port?.queryLinkHref());
+    const removeLinkItem = this.menu.querySelector<HTMLButtonElement>(
+      '.padify-ctx-item[data-action="remove-link"]',
+    );
+    if (removeLinkItem) {
+      removeLinkItem.hidden = !inLink;
+    }
+    const inTable = !!safeQueryPort(() => port?.queryTableContext());
+    this.menu.querySelectorAll<HTMLElement>('.padify-ctx-table').forEach((item) => {
+      item.hidden = !inTable;
+    });
+    const insertLinkItem = this.menu.querySelector<HTMLButtonElement>(
+      '.padify-ctx-item[data-action="insert-link"]',
+    );
+    if (insertLinkItem) {
+      insertLinkItem.hidden = inLink;
     }
 
     // Reflect which formats are active at the caret, so screen readers and
@@ -404,7 +469,7 @@ class ContextMenu {
 
     // Prevent the global click handler from closing before the action runs.
     event.stopPropagation();
-    this.runAction(action, caseId, formatId);
+    this.runAction(action, caseId, formatId, item.dataset.op);
   }
 
   private handleMenuKeydown(event: KeyboardEvent): void {
@@ -531,7 +596,12 @@ class ContextMenu {
 
   // ---- actions ------------------------------------------------------------------
 
-  private runAction(action: string, caseId?: string, formatId?: FormatDef['id']): void {
+  private runAction(
+    action: string,
+    caseId?: string,
+    formatId?: FormatDef['id'],
+    tableOp?: string,
+  ): void {
     switch (action) {
       case 'undo':
         this.editorUndo();
@@ -563,14 +633,21 @@ class ContextMenu {
         if (def) this.applyFormat(def);
         break;
       }
-      case 'remove-formatting':
+      case 'clear-formatting':
         this.removeFormatting();
         break;
+      case 'insert-link':
+        this.openLinkBubble();
+        break;
+      case 'remove-link':
+        this.removeLinkAtCaret();
+        break;
+      case 'table-op': {
+        if (tableOp) this.runTableOp(tableOp);
+        break;
+      }
       case 'case':
         if (caseId) this.convertCase(caseId);
-        break;
-      case 'remove-tabs':
-        this.removeTabs();
         break;
       default:
         this.close();
@@ -663,6 +740,40 @@ class ContextMenu {
 
     const ok = this.applyEditorCommand('removeFormat');
     showToast(ok ? 'Formatting removed.' : 'Could not remove formatting in this browser.');
+  }
+
+  /**
+   * The link bubble (toolbar) handles insert/edit/copy; the menu item just
+   * hands over after restoring the caret so the bubble parks the selection.
+   */
+  private openLinkBubble(): void {
+    this.close();
+    this.restoreFocus();
+    document.dispatchEvent(new CustomEvent('padify:open-link'));
+  }
+
+  private removeLinkAtCaret(): void {
+    this.close();
+    const port = getEditorPort();
+    if (!port || !safeQueryPort(() => port.queryLinkHref())) {
+      this.restoreFocus();
+      return;
+    }
+    this.editor?.focus({ preventScroll: true });
+    port.removeLink();
+    showToast('Link removed.');
+  }
+
+  /** Table operations reuse the toolbar's vocabulary (port.runTableAction). */
+  private runTableOp(op: string): void {
+    this.close();
+    const port = getEditorPort();
+    if (!port || !safeQueryPort(() => port.queryTableContext())) {
+      this.restoreFocus();
+      return;
+    }
+    this.editor?.focus({ preventScroll: true });
+    port.runTableAction(op);
   }
 
   private execCommand(command: string, value?: string): boolean {
@@ -948,61 +1059,6 @@ class ContextMenu {
     }
   }
 
-  private removeTabs(): void {
-    const editor = this.editor;
-    if (!editor) {
-      this.close();
-      return;
-    }
-
-    const selection = window.getSelection();
-    const hasSelection =
-      !!selection &&
-      selection.rangeCount > 0 &&
-      !selection.isCollapsed &&
-      editor.contains(selection.getRangeAt(0).commonAncestorContainer);
-
-    // Collect the text nodes inside the selection, or the whole note.
-    const scope = document.createRange();
-    if (hasSelection) {
-      const liveRange = selection!.getRangeAt(0);
-      scope.setStart(liveRange.startContainer, liveRange.startOffset);
-      scope.setEnd(liveRange.endContainer, liveRange.endOffset);
-    } else {
-      scope.selectNodeContents(editor);
-    }
-
-    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, {
-      acceptNode: (node) =>
-        scope.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
-    });
-
-    const textNodes: Text[] = [];
-    while (walker.nextNode()) {
-      textNodes.push(walker.currentNode as Text);
-    }
-
-    const tabCount = textNodes.reduce(
-      (sum, node) => sum + (node.nodeValue?.match(/\t/g) || []).length,
-      0,
-    );
-
-    if (tabCount === 0) {
-      this.close();
-      showToast('No tab indentation to remove.');
-      this.restoreFocus();
-      return;
-    }
-
-    textNodes.forEach((node) => {
-      if (node.nodeValue && node.nodeValue.indexOf('\t') !== -1) {
-        node.nodeValue = node.nodeValue.replace(/\t/g, '');
-      }
-    });
-
-    editor.dispatchEvent(new Event('input', { bubbles: true }));
-    showToast(`Removed ${tabCount} tab${tabCount === 1 ? '' : 's'}.`);
-  }
 }
 
 // E2E probe.

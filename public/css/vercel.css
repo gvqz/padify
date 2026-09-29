@@ -2724,6 +2724,16 @@ body.recycled-paper {
   display: none;
 }
 
+/* Context-menu items toggle visibility by context (Remove link, the table
+   operations) — the class's display:flex would defeat the UA rule. */
+.padify-ctx-item[hidden] {
+  display: none;
+}
+
+.padify-ctx-item.padify-ctx-danger {
+  color: var(--vz-danger);
+}
+
 .padify-ctx-scroll {
   display: flex;
   flex-direction: column;
