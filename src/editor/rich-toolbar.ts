@@ -35,6 +35,7 @@ import {
   type ColorPickerHandle,
 } from './color-picker';
 import { renderMathPreview } from './math';
+import { mountMathPalette } from './math-palette';
 
 /** href schemes the toolbar offers inline (mirrors the storage sanitizer). */
 const SAFE_HREF_PATTERN = /^(https?:\/\/|mailto:|#|\/)/i;
@@ -95,6 +96,7 @@ interface RichToolbarElements {
   copy: HTMLButtonElement | null;
   chipRemove: HTMLButtonElement | null;
   mathPopover: HTMLElement | null;
+  mathPalette: HTMLElement | null;
   mathInput: HTMLInputElement | null;
   mathInsert: HTMLButtonElement | null;
   mathPreview: HTMLElement | null;
@@ -131,6 +133,7 @@ export function initRichToolbar(tabManager: TabManager): void {
     copy: document.getElementById('richLinkCopy') as HTMLButtonElement | null,
     chipRemove: document.getElementById('richLinkChipRemove') as HTMLButtonElement | null,
     mathPopover: document.getElementById('richMathPopover'),
+    mathPalette: document.getElementById('richMathPalette'),
     mathInput: document.getElementById('richMathInput') as HTMLInputElement | null,
     mathInsert: document.getElementById('richMathInsert') as HTMLButtonElement | null,
     mathPreview: document.getElementById('richMathPreview'),
@@ -1030,13 +1033,32 @@ export function initRichToolbar(tabManager: TabManager): void {
   });
 
   // ---------------------------------------------------------------------------
-  // The equation bubble: LaTeX in, live KaTeX preview out, Insert commits.
+  // The equation bubble: Docs-style symbol palettes (pick instead of typing),
+  // LaTeX in, live KaTeX preview out, Insert commits.
   // Opens from the toolbar button, the context menu (padify:open-equation)
   // or a click on an existing equation (padify:math-click, edit mode).
   // ---------------------------------------------------------------------------
   let editingMath: HTMLElement | null = null;
   /** The equation shell whose click opened the bubble (click must not close). */
   let mathShellHost: HTMLElement | null = null;
+  /** The palette builds once, on the first open (KaTeX glyphs take a beat). */
+  let paletteMounted = false;
+
+  const mountPalette = (): void => {
+    if (paletteMounted || !elements.mathPalette || !elements.mathInput) {
+      return;
+    }
+    paletteMounted = true;
+    mountMathPalette(elements.mathPalette, {
+      input: elements.mathInput,
+      onChange: () => {
+        if (elements.mathInput && elements.mathPreview) {
+          renderMathPreview(elements.mathPreview, elements.mathInput.value);
+        }
+      },
+      onEscape: () => closeMathPopover(true),
+    });
+  };
 
   const closeMathPopover = (refocusEditor = false): void => {
     if (!elements.mathPopover) {
@@ -1057,6 +1079,7 @@ export function initRichToolbar(tabManager: TabManager): void {
     closeMenus();
     closeMathPopover();
     closeLinkPopover();
+    mountPalette();
     editingMath = existing?.element ?? null;
     mathShellHost = existing?.element ?? null;
     elements.mathInput.value = existing?.latex ?? '';
