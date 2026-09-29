@@ -3486,6 +3486,17 @@ body.dark #note:has(> br:only-child)::before {
   background: var(--rich-ink, var(--vz-fg));
 }
 
+/* The highlight button shares the letterform+bar language of the text
+   color icon, but its bar reads as a marker swash: thicker, wider and
+   fully rounded. */
+.rich-color-bar-hilite {
+  width: 15px;
+  height: 4.5px;
+  margin-top: 1px;
+  border-radius: 3px;
+  background: var(--rich-hilite, var(--vz-fg));
+}
+
 .rich-menu-panel {
   position: absolute;
   top: calc(100% + 6px);

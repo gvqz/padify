@@ -215,11 +215,11 @@ test.describe('note types', () => {
       'https://example.com/stray',
     );
 
-    // Putting the caret on the link and reopening the popover shows the
-    // chip view; Edit reveals the prefilled input and applying retargets
-    // the existing anchor in place.
+    // Clicking the link floats its chip right under it (links.spec pins the
+    // full gesture); Edit reveals the prefilled input and applying
+    // retargets the existing anchor in place.
     await editor.locator('a').first().click();
-    await page.locator('#richLinkButton').click();
+    await expect(page.locator('#richLinkPopover')).toBeVisible();
     await expect(page.locator('#richLinkView')).toHaveText('https://example.com/stray');
     await page.locator('#richLinkEdit').click();
     await expect(page.locator('#richLinkInput')).toHaveValue('https://example.com/stray');
