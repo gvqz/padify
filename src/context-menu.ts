@@ -28,6 +28,8 @@
 import { showToast } from './utils';
 import { CASES } from './case-conversions';
 import { getEditorPort, type EditorCommand, type FormatCommand } from './editor/port';
+import { getTabManager } from './tabs';
+import { isRichNote } from './editor/note-types';
 
 interface FormatDef {
   id: 'bold' | 'italic' | 'underline' | 'strike';
@@ -157,20 +159,20 @@ const menuMarkup = `
         <button type="button" class="padify-ctx-item" role="menuitem" data-action="select-all">
             ${ICONS.selectAll}<span>Select all</span><kbd>${MOD}A</kbd>
         </button>
-        <div class="padify-ctx-sep" role="separator"></div>
-        <div class="padify-ctx-formats" role="group" aria-label="Text formatting">
+        <div class="padify-ctx-sep padify-ctx-rich" role="separator"></div>
+        <div class="padify-ctx-formats padify-ctx-rich" role="group" aria-label="Text formatting">
             ${FORMATS.map(
               (def) => `
             <button type="button" class="padify-ctx-item padify-ctx-fmt padify-fmt-${def.id}" role="menuitemcheckbox" aria-checked="false" data-action="format" data-format="${def.id}" aria-label="${def.label}" title="${def.label} (${FORMAT_META[def.id].hint})"><span aria-hidden="true">${def.glyph}</span></button>`,
             ).join('')}
         </div>
-        <button type="button" class="padify-ctx-item" role="menuitem" data-action="clear-formatting">
+        <button type="button" class="padify-ctx-item padify-ctx-rich" role="menuitem" data-action="clear-formatting">
             ${ICONS.erase}<span>Clear formatting</span><kbd>${CLEAR_HINT}</kbd>
         </button>
         <button type="button" class="padify-ctx-item" role="menuitem" data-action="insert-link">
             ${ICONS.link}<span>Insert link</span>
         </button>
-        <button type="button" class="padify-ctx-item" role="menuitem" data-action="insert-equation">
+        <button type="button" class="padify-ctx-item padify-ctx-rich" role="menuitem" data-action="insert-equation">
             ${ICONS.math}<span>Insert equation</span>
         </button>
         <button type="button" class="padify-ctx-item" role="menuitem" data-action="remove-link" hidden>
@@ -342,7 +344,11 @@ class ContextMenu {
     this.menu.style.left = `${Math.round(left)}px`;
     this.menu.style.top = `${Math.round(top)}px`;
 
-    const firstItem = this.menu.querySelector<HTMLElement>('.padify-ctx-item:not([disabled])');
+    // Focus lands on the first VISIBLE row — hidden groups (rich-only rows
+    // on a plain note) are skipped, their children can't take focus.
+    const firstItem = Array.from(
+      this.menu.querySelectorAll<HTMLElement>('.padify-ctx-item:not([disabled])'),
+    ).find((item) => item.closest('[hidden]') === null);
     firstItem?.focus();
   }
 
@@ -401,27 +407,39 @@ class ContextMenu {
       }
     }
 
+    // Formatting belongs to rich text notes: the format row, clear
+    // formatting and equations only exist there. On a plain note these
+    // would either be stripped at save (formats) or produce content the
+    // note cannot hold (links, equations) — the menu shrinks to what a
+    // plain note can honestly do: select-all · case converter and friends.
+    // The separator leading the group hides with it, so no doubled rule.
+    const isRich = isRichNote(getTabManager()?.getActive());
+    this.menu.querySelectorAll<HTMLElement>('.padify-ctx-rich').forEach((item) => {
+      item.hidden = !isRich;
+    });
+
     // The link and table entries follow the caret's context, the way the
     // toolbar's table menu does — no link under the caret, no Remove link;
-    // not in a table, no table operations.
+    // not in a table, no table operations. Both are rich-only as well, so
+    // a plain note never shows them no matter what the caret reports.
     const port = getEditorPort();
     const inLink = !!safeQueryPort(() => port?.queryLinkHref());
     const removeLinkItem = this.menu.querySelector<HTMLButtonElement>(
       '.padify-ctx-item[data-action="remove-link"]',
     );
     if (removeLinkItem) {
-      removeLinkItem.hidden = !inLink;
+      removeLinkItem.hidden = !isRich || !inLink;
+    }
+    const insertLinkItem = this.menu.querySelector<HTMLButtonElement>(
+      '.padify-ctx-item[data-action="insert-link"]',
+    );
+    if (insertLinkItem) {
+      insertLinkItem.hidden = !isRich || inLink;
     }
     const inTable = !!safeQueryPort(() => port?.queryTableContext());
     this.menu.querySelectorAll<HTMLElement>('.padify-ctx-table').forEach((item) => {
       item.hidden = !inTable;
     });
-    const insertLinkItem = this.menu.querySelector<HTMLButtonElement>(
-      '.padify-ctx-item[data-action="insert-link"]',
-    );
-    if (insertLinkItem) {
-      insertLinkItem.hidden = inLink;
-    }
 
     // Reflect which formats are active at the caret, so screen readers and
     // the title tooltips tell the truth when the menu opens.
@@ -521,7 +539,11 @@ class ContextMenu {
       this.menu.querySelectorAll<HTMLElement>(
         '.padify-ctx-scroll > .padify-ctx-item:not(.padify-ctx-parent), .padify-ctx-scroll > .padify-ctx-formats .padify-ctx-item, .padify-ctx-scroll > .padify-ctx-parent > .padify-ctx-trigger, .padify-ctx-submenu:not([hidden]) .padify-ctx-item',
       ),
-    ).filter((el) => !(el as HTMLButtonElement).disabled);
+    ).filter(
+      // Skip disabled rows and anything hidden with its group (the
+      // rich-only rows on a plain note render none of their children).
+      (el) => !(el as HTMLButtonElement).disabled && el.closest('[hidden]') === null,
+    );
     const index = items.indexOf(active);
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();

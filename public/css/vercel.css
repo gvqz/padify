@@ -2819,6 +2819,12 @@ body.recycled-paper {
   padding: 1px 0;
 }
 
+/* Hidden with the rest of the rich-only group on plain notes — the
+   display:flex above defeats the UA [hidden] rule without this. */
+.padify-ctx-formats[hidden] {
+  display: none;
+}
+
 .padify-ctx-fmt {
   flex: 1 1 0;
   width: auto;
