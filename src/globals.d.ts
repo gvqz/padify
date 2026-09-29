@@ -30,5 +30,5 @@ declare const documentPictureInPicture: DocumentPictureInPicture | undefined;
 interface Window {
   whiteNoisePlayer?: import('./white-noise-player').WhiteNoisePlayer;
   snapshotsManager?: import('./snapshots').SnapshotsManager;
-  createSnapshot?: (title?: string) => void;
+  createSnapshot?: (title?: string) => Promise<void> | void;
 }

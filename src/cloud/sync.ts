@@ -410,21 +410,31 @@ async function runSyncOnce(): Promise<void> {
     const payload = manager.exportForSync();
     const rows: NoteRow[] = [];
     const byId = new Map(payload.tabs.map((tab) => [tab.id, tab]));
+    const pushedIds: string[] = [];
 
     pendingPush.forEach((id) => {
       const tab = byId.get(id);
       if (tab) {
         rows.push(tabToRow(tab, userId, payload.tabs.indexOf(tab)));
+        pushedIds.push(id);
         return;
       }
       const tombstone = payload.tombstones.find((entry) => entry.id === id);
       if (tombstone) {
         rows.push(tombstoneToRow(tombstone, userId));
+        pushedIds.push(id);
       }
     });
 
     if (rows.length > 0) {
       await api('/api/notes', { method: 'PUT', body: { rows } });
+      // Confirm the push to the TabManager so its dirtyIds set stops growing
+      // forever. Without this, every persist notification re-added every
+      // historical dirty id to pendingPush, so the same rows were pushed on
+      // every 30 s sync cycle forever, byte-for-byte identical. Only entries
+      // that were actually sent are confirmed — anything marked dirty after
+      // the snapshot was taken stays dirty for the next cycle.
+      manager.confirmPushed(pushedIds);
     }
     pendingPush.clear();
   }

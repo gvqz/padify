@@ -689,6 +689,26 @@ export class TabManager {
   }
 
   /**
+   * Called by the cloud sync layer after a push confirmed that the given
+   * note ids are now stored on the server. Without this, the local dirtyIds
+   * set grew monotonically — every persist notification re-added every
+   * historical dirty id to the pendingPush set, so the same rows were
+   * pushed on every 30 s sync cycle forever, byte-for-byte identical.
+   *
+   * Only entries that the server actually acknowledged are dropped. Any id
+   * marked dirty after the push snapshot was taken stays dirty for the
+   * next cycle — see exportForSync() for the snapshot semantics.
+   */
+  confirmPushed(ids: string[]): void {
+    if (ids.length === 0) {
+      return;
+    }
+    for (const id of ids) {
+      this.dirtyIds.delete(id);
+    }
+  }
+
+  /**
    * Replaces the model with a merged tab list coming from the sync layer.
    * The editor only reloads when the user is not actively typing in it, so a
    * background pull can never swallow keystrokes.
@@ -1017,11 +1037,12 @@ export class TabManager {
     const isActive = tabId === this.activeId;
     const text = isActive ? this.getActiveText() : htmlToText(tab.html);
 
-    const closeNow = (): void => {
+    const closeNow = async (): Promise<void> => {
       // Keep a safety snapshot behind the user's back, like delete-notes does.
+      // Await so the snapshot actually lands before the tab is removed.
       if (text.trim() && window.snapshotsManager) {
         try {
-          window.snapshotsManager.createSnapshot(`Before closing "${deriveTabTitle(tab)}"`);
+          await window.snapshotsManager.createSnapshot(`Before closing "${deriveTabTitle(tab)}"`);
         } catch {
           /* snapshots unavailable — the close still proceeds */
         }
@@ -1062,7 +1083,7 @@ export class TabManager {
     };
 
     if (!text.trim()) {
-      closeNow();
+      void closeNow();
       return;
     }
 
@@ -1075,7 +1096,7 @@ export class TabManager {
       cancelButtonText: 'Keep it',
     }).then((result) => {
       if (result.isConfirmed) {
-        closeNow();
+        void closeNow();
       }
     });
   }

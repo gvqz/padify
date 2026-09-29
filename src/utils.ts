@@ -76,15 +76,23 @@ export function saveTextAsFile(textToWrite: string, fileNameToSaveAs: string): v
   downloadLink.innerHTML = 'Download File';
 
   const webkitURL = (window as Window & { webkitURL?: typeof URL }).webkitURL;
-  if (webkitURL != null) {
-    downloadLink.href = webkitURL.createObjectURL(textFileAsBlob);
-  } else {
-    downloadLink.href = window.URL.createObjectURL(textFileAsBlob);
+  const url = webkitURL != null
+    ? webkitURL.createObjectURL(textFileAsBlob)
+    : window.URL.createObjectURL(textFileAsBlob);
+  downloadLink.href = url;
+  if (webkitURL == null) {
     downloadLink.style.display = 'none';
     document.body.appendChild(downloadLink);
   }
 
   downloadLink.click();
+
+  // Revoke the Blob URL after the click is dispatched. Without this every
+  // export leaks a Blob reference (and its URL mapping) until the document
+  // is unloaded — repeated exports bloat memory and the browser's URL table.
+  // The 0 ms timeout lets Safari flush the navigation before the URL is
+  // taken back; modern browsers honour the click synchronously.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export function getPWADisplayMode(): 'twa' | 'standalone' | 'browser' {
@@ -549,10 +557,17 @@ export function deleteNotes(): void {
     },
     confirmButtonText: 'Yes, Delete!',
     cancelButtonText: 'No, keep it.',
-  }).then((result) => {
+  }).then(async (result) => {
     if (result.value) {
-      // save a snapshot before deleting it
-      window.snapshotsManager!.createSnapshot();
+      // Save a safety snapshot before deleting — await so the snapshot
+      // actually lands before the note is wiped. Previously the call was
+      // fire-and-forget and could lose the snapshot if the IDB open hadn't
+      // completed yet, or if the page navigated away mid-write.
+      try {
+        await window.snapshotsManager!.createSnapshot();
+      } catch {
+        /* snapshots unavailable — the delete still proceeds */
+      }
 
       // Clear the active tab (delete-notes only ever deleted the note
       // that was on screen, so it stays per-tab now that tabs exist).
@@ -633,11 +648,14 @@ export function exportNotesAsDocx(textToWrite: string, fileNameToSaveAs: string)
 
     Packer.toBlob(doc).then((blob) => {
       const downloadLink = document.createElement('a');
-      downloadLink.href = window.URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(blob);
+      downloadLink.href = url;
       downloadLink.download = fileNameToSaveAs;
       document.body.appendChild(downloadLink);
       downloadLink.click();
       document.body.removeChild(downloadLink);
+      // Release the Blob reference so repeated exports don't leak.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
     });
   });
 }
@@ -653,11 +671,14 @@ export function downloadHTML(htmlContent: string, fileNameToSaveAs: string): voi
 
   const blob = new Blob([html], { type: 'text/html' });
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blob);
+  a.href = url;
   a.download = fileNameToSaveAs;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+  // Release the Blob reference so repeated exports don't leak.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export function updateWordCountPill(note: string = ''): void {

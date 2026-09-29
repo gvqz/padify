@@ -19,12 +19,31 @@ export class SnapshotsManager {
   storeName: string;
   db: IDBDatabase | null;
 
+  /**
+   * Resolves once the IndexedDB open completes (or rejects if it errors).
+   * Callers that need a snapshot before boot finishes — like the Ctrl+Shift+
+   * Delete safety snapshot in utils.deleteNotes — can `await` this so the
+   * snapshot isn't silently dropped when the IDB open hasn't completed yet.
+   */
+  private readyPromise: Promise<void>;
+  private resolveReady!: () => void;
+  private rejectReady!: (err: unknown) => void;
+
   constructor() {
     this.dbName = 'NotepadSnapshotsDB';
     this.storeName = 'snapshots';
     this.db = null;
+    this.readyPromise = new Promise<void>((resolve, reject) => {
+      this.resolveReady = resolve;
+      this.rejectReady = reject;
+    });
     this.initializeDB();
     this.setupEventListeners();
+  }
+
+  /** Resolves once the IndexedDB connection is open. */
+  ready(): Promise<void> {
+    return this.readyPromise;
   }
 
   // Initialize IndexedDB
@@ -33,12 +52,14 @@ export class SnapshotsManager {
 
     request.onerror = (event) => {
       console.error('Error opening database', event);
+      this.rejectReady(event);
     };
 
     request.onsuccess = (event) => {
       this.db = (event.target as IDBRequest).result;
       this.updateSnapshotsCount();
       this.loadSnapshots();
+      this.resolveReady();
     };
 
     request.onupgradeneeded = (event) => {
@@ -102,10 +123,27 @@ export class SnapshotsManager {
     });
   }
 
-  // Create a new snapshot
-  createSnapshot(title?: string): void {
+  // Create a new snapshot.
+  // Async because the IDB connection may not be open yet — callers that
+  // invoke this from a user action (Ctrl+Shift+Delete safety snapshot, the
+  // Create Snapshot button) get a Promise they can await; the wait is
+  // typically 0 ms after the first paint.
+  async createSnapshot(title?: string): Promise<void> {
     if (!this.db) {
-      console.error('Database not initialized');
+      // Wait for the IDB open to finish instead of silently dropping the
+      // snapshot. Previously the safety snapshot in utils.deleteNotes was
+      // lost if the user hit Ctrl+Shift+Delete within the first ~50 ms of
+      // boot — the note was deleted without a backup.
+      try {
+        await this.ready();
+      } catch {
+        console.error('Snapshots database unavailable — cannot create snapshot.');
+        return;
+      }
+    }
+    if (!this.db) {
+      // ready() resolved but the DB is still null (defensive — should not happen).
+      console.error('Snapshots database not initialized after ready().');
       return;
     }
 
@@ -518,10 +556,10 @@ export function initSnapshots(): void {
 }
 
 // Add a global function to create a snapshot (can be called from other parts of the app)
-window.createSnapshot = function (title?: string): void {
+window.createSnapshot = function (title?: string): Promise<void> {
   if (window.snapshotsManager) {
-    window.snapshotsManager.createSnapshot(title);
-  } else {
-    console.warn('Snapshots manager not initialized');
+    return window.snapshotsManager.createSnapshot(title);
   }
+  console.warn('Snapshots manager not initialized');
+  return Promise.resolve();
 };
