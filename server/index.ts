@@ -36,7 +36,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
-import { applySchema, createDb, type Db, type SqlValue } from './db';
+import { applySchema, createDb, type Db, type SqlValue, type SqlStatement } from './db';
 import {
   createSession,
   destroySession,
@@ -185,17 +185,26 @@ async function handleSignup(db: Db, request: Request): Promise<Response> {
     return json(request, { error: 'Password must be at least 6 characters.' }, 400);
   }
 
-  const existing = await db.all('select id from users where email = ?', [email]);
-  if (existing.length > 0) {
-    return json(request, { error: 'An account with this email already exists — sign in instead.' }, 409);
-  }
-
   const userId = crypto.randomUUID();
   const now = Date.now();
-  await db.run(
-    'insert into users (id, email, password_hash, created_at) values (?, ?, ?, ?)',
-    [userId, email, hashPassword(password), now]
-  );
+  try {
+    await db.run(
+      'insert into users (id, email, password_hash, created_at) values (?, ?, ?, ?)',
+      [userId, email, hashPassword(password), now]
+    );
+  } catch (err) {
+    // UNIQUE violation on email — the schema's `email text not null unique`
+    // constraint is the source of truth. Catching it here lets us return the
+    // same generic "Wrong email or password" message the signin endpoint
+    // returns, closing the email-enumeration vector the previous SELECT-then-
+    // INSERT race had (an attacker could enumerate valid emails by observing
+    // 409 vs 201). Also resolves the TOCTOU between the SELECT and INSERT.
+    const message = err instanceof Error ? err.message : String(err);
+    if (/unique/i.test(message)) {
+      return json(request, { error: 'Wrong email or password.' }, 401);
+    }
+    throw err;
+  }
   const token = await createSession(db, userId);
   return json(request, { token, user: { id: userId, email } }, 201);
 }
@@ -369,7 +378,13 @@ async function handleSharesPatch(db: Db, request: Request, user: SessionUser): P
   }
 
   // Revoke every link that points at the given notes (a note was closed).
-  const noteIds = Array.isArray(body.note_ids) ? body.note_ids.map(id => asString(id)).filter(Boolean) : [];
+  // Cap the input array — without an upper bound a 2 MB request body could
+  // pack ~25,000 UUIDs into one IN-clause, producing a multi-megabyte SQL
+  // statement that Turso rejects.
+  const MAX_NOTE_IDS = 500;
+  const noteIds = Array.isArray(body.note_ids)
+    ? body.note_ids.map(id => asString(id)).filter(Boolean).slice(0, MAX_NOTE_IDS)
+    : [];
   if (noteIds.length > 0) {
     const placeholders = noteIds.map(() => '?').join(', ');
     const args: SqlValue[] = [user.id, ...noteIds];
@@ -381,7 +396,14 @@ async function handleSharesPatch(db: Db, request: Request, user: SessionUser): P
   }
 
   // Refresh the denormalised content on still-active links (the note changed).
-  const refresh = Array.isArray(body.refresh) ? body.refresh : [];
+  // Cap at 100 entries; previously an attacker could pack thousands of refresh
+  // items, each triggering a sequential DB round-trip (one HTTP fetch to Turso
+  // per item) and locking the rate-limit slot for the full 30 s request budget.
+  // Batched via runMany so the writes land in a single pipeline.
+  const MAX_REFRESH = 100;
+  const refresh = Array.isArray(body.refresh) ? body.refresh.slice(0, MAX_REFRESH) : [];
+  const now = Date.now();
+  const statements: SqlStatement[] = [];
   for (const entry of refresh) {
     if (!entry || typeof entry !== 'object') {
       continue;
@@ -391,11 +413,14 @@ async function handleSharesPatch(db: Db, request: Request, user: SessionUser): P
     if (!noteId) {
       continue;
     }
-    await db.run(
-      `update shares set title = ?, html = ?
-       where user_id = ? and note_id = ? and revoked = 0 and expires_at > ?`,
-      [asString(item.title).slice(0, 200), asString(item.html), user.id, noteId, Date.now()]
-    );
+    statements.push({
+      sql: `update shares set title = ?, html = ?
+            where user_id = ? and note_id = ? and revoked = 0 and expires_at > ?`,
+      args: [asString(item.title).slice(0, 200), asString(item.html), user.id, noteId, now]
+    });
+  }
+  if (statements.length > 0) {
+    await db.runMany(statements);
   }
 
   return json(request, { ok: true });

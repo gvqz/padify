@@ -30,6 +30,9 @@ create table if not exists sessions (
 );
 
 create index if not exists sessions_user_id_idx on sessions(user_id);
+-- Boot-time sweep (delete from sessions where expires_at <= ?) is a full table
+-- scan without this index; sessions grow by one row per login.
+create index if not exists sessions_expires_at_idx on sessions(expires_at);
 
 -- ---------------------------------------------------------------------------
 -- Notes (the tabs on the main page) — created_at/updated_at are client epoch
@@ -38,7 +41,7 @@ create index if not exists sessions_user_id_idx on sessions(user_id);
 
 create table if not exists notes (
   id         text primary key,
-  user_id    text not null,
+  user_id    text not null references users(id) on delete cascade,
   name       text,
   html       text not null default '',
   position   integer not null default 0,
@@ -60,7 +63,7 @@ create index if not exists notes_user_id_idx on notes(user_id);
 
 create table if not exists shares (
   token      text primary key,
-  user_id    text not null,
+  user_id    text not null references users(id) on delete cascade,
   note_id    text,
   title      text not null default '',
   html       text not null default '',

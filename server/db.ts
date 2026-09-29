@@ -211,6 +211,11 @@ export async function createDb(): Promise<Db> {
   const file = url ? url.replace(/^file:/i, '') : new URL('./local.db', import.meta.url).pathname;
   const db = new Database(file, { create: true });
   db.exec('pragma journal_mode = wal;');
+  // SQLite needs PRAGMA foreign_keys = ON per-connection to enforce the
+  // `references users(id) on delete cascade` clauses on sessions/notes/shares
+  // — without this, deleting a user row orphans every dependent row. Turso
+  // (libSQL) enforces FKs by default; this matches the local backend to that.
+  db.exec('pragma foreign_keys = on;');
   console.log(`[padify-api] database: local SQLite file (${file})`);
   return new LocalSqliteDb(db);
 }
