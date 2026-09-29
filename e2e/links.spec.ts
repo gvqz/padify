@@ -71,4 +71,69 @@ test.describe('links', () => {
     await expect(editor.locator('a')).toHaveCount(0);
     await expect(editor).toHaveText('docs or it did not happen');
   });
+
+  test('clicking a link floats its chip under the link and keeps typing', async ({
+    page,
+  }) => {
+    await newRichNote(page);
+    const editor = page.locator('#note');
+    await editor.pressSequentially('see the manual here plus padding');
+    // Select exactly "the manual here".
+    await editor.evaluate(() => {
+      const note = document.querySelector('#note')!;
+      const text = note.textContent ?? '';
+      const start = text.indexOf('the manual here');
+      const range = document.createRange();
+      range.setStart(note.firstChild!, start);
+      range.setEnd(note.firstChild!, start + 'the manual here'.length);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+
+    await editor.press('Control+K');
+    await page.locator('#richLinkInput').fill('https://example.com/manual');
+    await page.locator('#richLinkApply').click();
+    await expect(editor.locator('a')).toHaveText('the manual here');
+    await expect(page.locator('#richLinkPopover')).toBeHidden();
+
+    // Click the link itself: the chip floats under it, the editor keeps
+    // focus (typing flows on), and the link text stays put.
+    await editor.locator('a').click();
+    const chip = page.locator('#richLinkPopover');
+    await expect(chip).toBeVisible();
+    await expect(chip.locator('#richLinkView')).toHaveText('https://example.com/manual');
+    await expect(chip).toHaveCSS('position', 'fixed');
+    await expect(page.locator('#note')).toBeFocused();
+
+    const linkBox = await editor.locator('a').boundingBox();
+    const chipBox = await chip.boundingBox();
+    expect(linkBox).not.toBeNull();
+    expect(chipBox).not.toBeNull();
+    // Under the link, horizontally near it, inside the viewport.
+    expect(chipBox!.y).toBeGreaterThanOrEqual(linkBox!.y + linkBox!.height - 2);
+    expect(chipBox!.x).toBeGreaterThanOrEqual(linkBox!.x - 80);
+    expect(chipBox!.x + chipBox!.width).toBeLessThanOrEqual(1280);
+
+    // Clicking elsewhere closes it.
+    await editor.click({ position: { x: 300, y: 10 } });
+    await expect(chip).toBeHidden();
+  });
+
+  test('Ctrl+click on a link opens the URL in a new tab', async ({ page }) => {
+    await newRichNote(page);
+    const editor = page.locator('#note');
+    await editor.pressSequentially('opened elsewhere');
+    await editor.press('Shift+Home');
+    await editor.press('Control+K');
+    await page.locator('#richLinkInput').fill('https://example.com/target');
+    await page.locator('#richLinkApply').click();
+    await expect(editor.locator('a')).toHaveCount(1);
+
+    const popupPromise = page.waitForEvent('popup');
+    await editor.locator('a').click({ modifiers: ['Control'] });
+    const popup = await popupPromise;
+    expect(popup.url()).toContain('https://example.com/target');
+    await popup.close();
+  });
 });

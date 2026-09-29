@@ -116,6 +116,30 @@ export class ContentEditablePort implements EditorPort {
     element.addEventListener('click', (event) => {
       this.toggleChecklistItem(event as MouseEvent);
     });
+    // Links announce themselves instead of swallowing the click: clicking a
+    // link opens the link chip right under it, Ctrl/Cmd+click opens the URL
+    // (the contenteditable default is to do nothing at all). The port only
+    // reports the gesture — the toolbar owns the popover policy.
+    element.addEventListener('click', (event) => {
+      const mouse = event as MouseEvent;
+      if (mouse.button !== 0) {
+        return;
+      }
+      const target = mouse.target as Element | null;
+      const anchor = target?.closest?.('a');
+      if (!anchor || !element.contains(anchor)) {
+        return;
+      }
+      const href = anchor.getAttribute('href');
+      if (!href) {
+        return;
+      }
+      document.dispatchEvent(
+        new CustomEvent('padify:link-click', {
+          detail: { href, anchor, openInNewTab: mouse.ctrlKey || mouse.metaKey },
+        }),
+      );
+    });
     element.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter' || event.shiftKey) {
         return;

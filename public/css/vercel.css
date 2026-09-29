@@ -3354,6 +3354,12 @@ body.dark #note:has(> br:only-child)::before {
   display: none;
 }
 
+/* Clicked-link mode: the chip floats under the very link it describes
+   (fixed viewport coordinates set in JS from the anchor's rect). */
+.rich-link-popover-floating {
+  position: fixed;
+}
+
 .rich-link-input {
   width: 240px;
   max-width: 56vw;

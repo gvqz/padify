@@ -460,6 +460,9 @@ export function initRichToolbar(tabManager: TabManager): void {
       elements.input.value = '';
       showEditMode();
     }
+    // Anchored to the toolbar button (the default) — the link-click path
+    // floats the same popover under the clicked link instead.
+    resetPopoverFloat();
     elements.popover.hidden = false;
     elements.linkButton?.setAttribute('aria-expanded', 'true');
     if (existing) {
@@ -470,9 +473,44 @@ export function initRichToolbar(tabManager: TabManager): void {
     }
   };
 
+  /** The link whose click floated the popover (clicking it must not close). */
+  let floatingAnchor: HTMLAnchorElement | null = null;
+
+  /** Back to the toolbar-anchored position — clears the float coordinates. */
+  const resetPopoverFloat = (): void => {
+    floatingAnchor = null;
+    elements.popover.classList.remove('rich-link-popover-floating');
+    elements.popover.style.removeProperty('left');
+    elements.popover.style.removeProperty('top');
+  };
+
+  /**
+   * Clicking a link in the note shows its chip right under the link, the
+   * way Docs answers a click on a link. Deliberately steals no focus: the
+   * editor keeps it and typing flows on.
+   */
+  const openLinkChipAtAnchor = (anchor: HTMLAnchorElement, href: string): void => {
+    parkedRange =
+      selectionIsInNote() ? window.getSelection()!.getRangeAt(0).cloneRange() : null;
+    floatingAnchor = anchor;
+    showChipMode(href);
+    elements.popover.hidden = false;
+    elements.popover.classList.add('rich-link-popover-floating');
+    elements.linkButton?.setAttribute('aria-expanded', 'true');
+
+    // Under the link, clamped to the viewport (the menu-opening lesson).
+    const rect = anchor.getBoundingClientRect();
+    const width = elements.popover.offsetWidth;
+    const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
+    const top = Math.min(rect.bottom + 6, window.innerHeight - 48);
+    elements.popover.style.left = `${Math.max(8, left)}px`;
+    elements.popover.style.top = `${Math.max(8, top)}px`;
+  };
+
   const closeLinkPopover = (refocusEditor = false): void => {
     elements.popover.hidden = true;
     elements.linkButton?.setAttribute('aria-expanded', 'false');
+    resetPopoverFloat();
     if (refocusEditor) {
       getEditorPort()?.focus();
     }
@@ -806,12 +844,15 @@ export function initRichToolbar(tabManager: TabManager): void {
   });
 
   // Outside click closes the link popover AND the menus; Escape likewise.
+  // A click on the very link that floated the chip keeps it open — the
+  // toggle runs before this listener (element bubbles before document).
   document.addEventListener('click', (event) => {
     const target = event.target as Node;
     if (
       !elements.popover.hidden &&
       !elements.popover.contains(target) &&
-      !(elements.linkButton && elements.linkButton.contains(target))
+      !(elements.linkButton && elements.linkButton.contains(target)) &&
+      !(floatingAnchor && floatingAnchor.contains(target))
     ) {
       closeLinkPopover();
     }
@@ -836,6 +877,25 @@ export function initRichToolbar(tabManager: TabManager): void {
     if (!toolbar.hidden) {
       openLinkPopover();
     }
+  });
+
+  // A click on a link in the note floats the chip under that link; with
+  // Ctrl/Cmd held it opens the URL instead. Reported by the port (see its
+  // click wiring) — this side decides the policy.
+  document.addEventListener('padify:link-click', (event) => {
+    if (toolbar.hidden) {
+      return;
+    }
+    const detail = (event as CustomEvent).detail as {
+      href: string;
+      anchor: HTMLAnchorElement;
+      openInNewTab: boolean;
+    };
+    if (detail.openInNewTab) {
+      window.open(detail.href, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    openLinkChipAtAnchor(detail.anchor, detail.href);
   });
 
   // Pressed states follow the caret and the edits.
