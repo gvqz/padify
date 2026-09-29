@@ -771,7 +771,15 @@ export class TabManager {
     if (!element) {
       return '';
     }
-    return element.innerText.replace(/\u00a0/g, ' ');
+    const text = element.innerText
+      .replace(/\u00a0/g, ' ')
+      // The styled-caret run (U+200B) is formatting, not content.
+      .replace(/\u200B/g, '');
+    // A bare <br> — the empty state a delete-all leaves — reports "\n"
+    // through innerText, which read as a phantom character on an empty
+    // note ("1 character • 0 words"). Whitespace-only means empty for
+    // every consumer of this text (count pill, statistics, share cards).
+    return text.trim() === '' ? '' : text;
   }
 
   clearActiveTab(): void {

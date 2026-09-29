@@ -602,6 +602,25 @@ describe('TabManager (characterization)', () => {
     expect(text).not.toContain('\u00a0');
   });
 
+  it('getActiveText treats a whitespace-only surface as empty (no phantom character)', async () => {
+    const manager = await bootedManager();
+
+    // The empty states a delete-all leaves behind: a bare <br>, a block
+    // skeleton, whitespace-only text and the styled-caret zero-width run.
+    $('#note').html('<br>');
+    expect(manager.getActiveText()).toBe('');
+    $('#note').html('<div><br></div>');
+    expect(manager.getActiveText()).toBe('');
+    $('#note').html('<div>   </div>');
+    expect(manager.getActiveText()).toBe('');
+    $('#note').html('<span>\u200B</span>');
+    expect(manager.getActiveText()).toBe('');
+
+    // Real content keeps its newlines.
+    $('#note').html('line one\nline two');
+    expect(manager.getActiveText()).toBe('line one\nline two');
+  });
+
   it('applyExternalMerge replaces the model, re-sanitizes, and keeps the editor untouched while focused', async () => {
     const manager = await bootedManager();
     const activeId = manager.getActive()!.id;

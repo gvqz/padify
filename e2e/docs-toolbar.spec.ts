@@ -61,7 +61,9 @@ test.describe('docs toolbar', () => {
     await editor.press('Control+End');
     await editor.press('Shift+Home');
     await toolbar.locator('[data-rich-menu="color"]').click();
-    await toolbar.locator('[data-rich-color="#4285f4"]').click();
+    // The palette carries theme KEYS (auto dark/light re-inking); blue
+    // resolves to #4285f4 in light mode.
+    await toolbar.locator('[data-rich-color="blue"]').click();
     expect(await runStyle('color')).toBe('rgb(66, 133, 244)');
 
     // Alignment through the alignment group.
