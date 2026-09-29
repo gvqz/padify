@@ -271,10 +271,8 @@ export function initRichToolbar(tabManager: TabManager): void {
     }
   };
 
-  /**
-   * Docs marks the size/font the caret currently sits in. The caret labels
-   * already track the live values — echo the one the menu is about to offer.
-   */
+  /** Docs marks the size/font the caret sits in; custom sizes echo into
+   * the input row so a second visit shows what the caret is in. */
   const markCurrentValue = (button: HTMLButtonElement, panel: HTMLElement): void => {
     const kind = button.dataset.richMenu;
     if (kind !== 'size' && kind !== 'font') {
@@ -284,14 +282,25 @@ export function initRichToolbar(tabManager: TabManager): void {
       .querySelector<HTMLElement>(`[data-rich-label="${kind}"]`)
       ?.textContent?.trim()
       .toLowerCase();
+    let presetMatched = false;
     panel.querySelectorAll<HTMLButtonElement>('[role="menuitem"]').forEach((item) => {
       const matches =
         current !== undefined &&
         current !== '' &&
         item.textContent!.trim().toLowerCase() === current;
+      if (matches) {
+        presetMatched = true;
+      }
       item.setAttribute('aria-checked', String(matches));
       item.classList.toggle('rich-menu-current', matches);
     });
+    // A non-preset caret size (custom 1–400) — echo it into the input row.
+    if (kind === 'size') {
+      const input = panel.querySelector<HTMLInputElement>('[data-rich-size-custom] input');
+      if (input && !presetMatched && current !== undefined && /^\d+$/.test(current)) {
+        input.value = current;
+      }
+    }
   };
 
   const toggleMenu = (button: HTMLButtonElement): void => {
@@ -502,6 +511,46 @@ export function initRichToolbar(tabManager: TabManager): void {
       return;
     }
 
+    // The custom size row: 1–400, per the Docs-style menu contract.
+    const applyCustomSize = (): void => {
+      const input = document.getElementById('richSizeInput') as HTMLInputElement | null;
+      if (!input) {
+        return;
+      }
+      const parsed = Number(input.value);
+      if (input.value.trim() === '' || !Number.isFinite(parsed)) {
+        input.focus();
+        return;
+      }
+      const px = Math.round(parsed);
+      if (px < 1 || px > 400) {
+        showToast('Font size must be between 1 and 400.');
+        input.focus();
+        return;
+      }
+      // Typing into the input moved focus off the note — the port plants
+      // the styled caret run through the editor surface, so hand focus
+      // (and the parked caret) back before applying.
+      getEditorPort()?.focus();
+      port.setFontSize(px);
+      closeMenus(true);
+      scheduleStateRefresh();
+    };
+    if (target.closest('[data-rich-size-apply]')) {
+      applyCustomSize();
+      return;
+    }
+    const customHost = target.closest('[data-rich-size-custom]');
+    if (customHost && event.type === 'click') {
+      const input = customHost.querySelector<HTMLInputElement>('input');
+      // Clicks inside the custom row mean editing, not applying — the input
+      // keeps focus (it was never preventDefaulted away) and Enter applies.
+      if (input && document.activeElement !== input) {
+        input.focus();
+      }
+      return;
+    }
+
     const fontItem = target.closest<HTMLButtonElement>('[data-rich-font]');
     if (fontItem) {
       port.setFontFamily(fontItem.dataset.richFont!);
@@ -590,6 +639,12 @@ export function initRichToolbar(tabManager: TabManager): void {
   // Menu keyboard: arrows rove, Escape/Tab leave the menu back into the note.
   toolbar.addEventListener('keydown', (event) => {
     const active = document.activeElement as HTMLElement | null;
+    // Enter in the custom size input applies it — the natural typing gesture.
+    if (event.key === 'Enter' && active?.matches?.('[data-rich-size-custom] input')) {
+      event.preventDefault();
+      toolbar.querySelector<HTMLButtonElement>('[data-rich-size-apply]')?.click();
+      return;
+    }
     const panel = active?.closest<HTMLElement>('.rich-menu-panel');
     if (!panel) {
       return;

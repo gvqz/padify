@@ -3440,6 +3440,63 @@ body.dark #note:has(> br:only-child)::before {
 .rich-menu-panel-sizes {
   grid-template-columns: repeat(2, minmax(52px, 1fr));
   min-width: 112px;
+  max-height: min(320px, 40vh);
+  overflow-y: auto;
+}
+
+/* The custom size row spans both preset columns; the input drives, the
+   Apply button commits (Enter in the input applies too). */
+.rich-menu-custom {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+  padding-top: 5px;
+  border-top: 1px solid var(--vz-border);
+}
+
+.rich-size-input {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 7px;
+  border: 1px solid var(--vz-border-strong);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg);
+  color: var(--vz-fg);
+  font-size: 12px;
+}
+
+.rich-size-input:focus {
+  outline: none;
+  border-color: var(--vz-fg-subtle);
+}
+
+/* Hide the number-input spinners — the field is typed, not spun. */
+.rich-size-input::-webkit-outer-spin-button,
+.rich-size-input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.rich-size-input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.rich-size-apply {
+  padding: 4px 9px;
+  border: 1px solid var(--vz-border-strong);
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 100ms ease;
+}
+
+.rich-size-apply:hover {
+  background: var(--vz-bg-hover);
 }
 
 .rich-menu-panel-fonts {

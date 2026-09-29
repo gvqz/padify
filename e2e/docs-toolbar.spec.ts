@@ -154,13 +154,13 @@ test.describe('docs toolbar', () => {
     await expect(panel).toBeVisible();
     // Opening focuses the first item; the sizes grid is 2 columns —
     // Right/Left step one cell, Down/Up jump a row, Home/End the edges.
-    await expect(panel.locator('[data-rich-size="12"]')).toBeFocused();
+    await expect(panel.locator('[data-rich-size="8"]')).toBeFocused();
     await page.keyboard.press('ArrowRight');
-    await expect(panel.locator('[data-rich-size="14"]')).toBeFocused();
+    await expect(panel.locator('[data-rich-size="9"]')).toBeFocused();
     await page.keyboard.press('ArrowDown');
-    await expect(panel.locator('[data-rich-size="18"]')).toBeFocused();
+    await expect(panel.locator('[data-rich-size="11"]')).toBeFocused();
     await page.keyboard.press('End');
-    await expect(panel.locator('[data-rich-size="48"]')).toBeFocused();
+    await expect(panel.locator('[data-rich-size="96"]')).toBeFocused();
 
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
@@ -256,14 +256,48 @@ test.describe('docs toolbar', () => {
     await expect(toolbar.locator(`[data-rich-size="${label}"]`)).toHaveClass(/rich-menu-current/);
     await page.keyboard.press('Escape');
 
-    // Style the line 32, reopen: the menu now ticks 32.
+    // Style the line 36, reopen: the menu now ticks 36.
     await editor.press('Control+End');
     await editor.press('Shift+Home');
     await toolbar.locator('[data-rich-menu="size"]').click();
-    await toolbar.locator('[data-rich-size="32"]').click();
+    await toolbar.locator('[data-rich-size="36"]').click();
     await toolbar.locator('[data-rich-menu="size"]').click();
-    await expect(toolbar.locator('[data-rich-size="32"]')).toHaveClass(/rich-menu-current/);
-    await expect(toolbar.locator('[data-rich-size="16"]')).not.toHaveClass(/rich-menu-current/);
+    await expect(toolbar.locator('[data-rich-size="36"]')).toHaveClass(/rich-menu-current/);
+    await expect(toolbar.locator('[data-rich-size="12"]')).not.toHaveClass(/rich-menu-current/);
+  });
+
+  test('a custom size between 1 and 400 applies and echoes back', async ({ page }) => {
+    await page.goto('/');
+    await createRichNote(page);
+
+    const editor = page.locator('#note');
+    const toolbar = page.locator('#richToolbar');
+    await editor.click();
+    await page.keyboard.type('custom size');
+
+    // Type a non-preset size and apply it.
+    await toolbar.locator('[data-rich-menu="size"]').click();
+    const input = toolbar.locator('#richSizeInput');
+    await input.fill('137');
+    await input.press('Enter');
+
+    // The caret label answers 137 and the typed text joins a 137px run.
+    await expect(toolbar.locator('[data-rich-label="size"]')).toHaveText('137');
+    await page.keyboard.type('BIG');
+    const runSize = page.evaluate(() => {
+      const span = Array.from(document.querySelectorAll('#note span')).find((s) =>
+        s.textContent?.includes('BIG'),
+      );
+      return span ? getComputedStyle(span).fontSize : '';
+    });
+    await expect(runSize).resolves.toBe('137px');
+
+    // Out-of-range values are refused with guidance, not applied.
+    await toolbar.locator('[data-rich-menu="size"]').click();
+    await input.fill('500');
+    await toolbar.locator('[data-rich-size-apply]').click();
+    await expect(page.locator('#toast')).toContainText('1 and 400');
+    await expect(input).toBeFocused();
   });
 });
 

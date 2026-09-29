@@ -619,7 +619,9 @@ export class ContentEditablePort implements EditorPort {
     if (!this.canExec()) {
       return false;
     }
-    if (!Number.isFinite(px) || px < 8 || px > 96) {
+    // Docs-like contract: the menu offers presets, the custom row accepts
+    // anything from 1 to 400.
+    if (!Number.isFinite(px) || px < 1 || px > 400) {
       return false;
     }
     // Chrome ignores fontSize at a collapsed caret entirely (no typing
