@@ -476,6 +476,13 @@ export async function route(db: Db, request: Request, pathname: string): Promise
     return json(request, { error: 'Not found.' }, 404);
   }
 
+  // Liveness probe: 200 with no body worth reading. For the e2e config
+  // (which waits on it before running a spec) and for any uptime monitor —
+  // a 404-for-unknown-paths router cannot serve as its own probe.
+  if (pathname === '/api/health' && method === 'GET') {
+    return json(request, { ok: true });
+  }
+
   // ---- auth (rate limited, no session needed) --------------------------------
 
   if (pathname === '/api/auth/signup' && method === 'POST') {

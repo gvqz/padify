@@ -176,6 +176,14 @@ describe('route — dispatch edges', () => {
     expect(response.headers.get('access-control-allow-origin')).toBe('https://app.test');
   });
 
+  it('answers the health probe with 200 and ok', async () => {
+    const db = new ScriptedDb();
+    const response = await route(db, jsonRequest('GET', undefined), '/api/health');
+
+    expect(response.status).toBe(200);
+    expect(await bodyOf(response)).toEqual({ ok: true });
+  });
+
   it('answers unknown paths with a JSON 404 (signed in)', async () => {
     // Route guards authenticated areas before the fallback, so the 404
     // only speaks for a caller with a live session — script one.
