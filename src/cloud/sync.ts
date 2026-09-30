@@ -54,7 +54,7 @@ export interface CloudSync {
 // Cloud row shape (server/notes — see server/schema.sql)
 // ---------------------------------------------------------------------------
 
-interface NoteRow {
+export interface NoteRow {
   id: string;
   user_id: string;
   name: string | null;
@@ -405,38 +405,41 @@ async function runSyncOnce(): Promise<void> {
 
   const userId = currentUserId;
 
-  // 1. Push whatever is pending (a no-op with an empty queue).
+  // 1. Push whatever is pending (a no-op with an empty queue). Rows go out
+  //    in body-capped batches (see batchRowsForPush) so one oversized note
+  //    can never hold the rest of the queue hostage — it fails alone.
   if (pendingPush.size > 0) {
     const payload = manager.exportForSync();
     const rows: NoteRow[] = [];
     const byId = new Map(payload.tabs.map((tab) => [tab.id, tab]));
-    const pushedIds: string[] = [];
 
     pendingPush.forEach((id) => {
       const tab = byId.get(id);
       if (tab) {
         rows.push(tabToRow(tab, userId, payload.tabs.indexOf(tab)));
-        pushedIds.push(id);
         return;
       }
       const tombstone = payload.tombstones.find((entry) => entry.id === id);
       if (tombstone) {
         rows.push(tombstoneToRow(tombstone, userId));
-        pushedIds.push(id);
       }
     });
 
-    if (rows.length > 0) {
-      await api('/api/notes', { method: 'PUT', body: { rows } });
-      // Confirm the push to the TabManager so its dirtyIds set stops growing
-      // forever. Without this, every persist notification re-added every
-      // historical dirty id to pendingPush, so the same rows were pushed on
-      // every 30 s sync cycle forever, byte-for-byte identical. Only entries
-      // that were actually sent are confirmed — anything marked dirty after
-      // the snapshot was taken stays dirty for the next cycle.
-      manager.confirmPushed(pushedIds);
+    const pushed: string[] = [];
+    try {
+      for (const batch of batchRowsForPush(rows)) {
+        await api('/api/notes', { method: 'PUT', body: { rows: batch } });
+        batch.forEach((row) => pushed.push(row.id));
+      }
+    } finally {
+      // Whatever reached the server is no longer pending: on the happy
+      // path the whole queue drains; when one batch fails, the notes that
+      // made it out still count as pushed and stop re-announcing on every
+      // future persist. The ids the server never saw stay queued for the
+      // next cycle — nothing is dropped.
+      pushed.forEach((id) => pendingPush.delete(id));
+      manager.confirmPushed(pushed);
     }
-    pendingPush.clear();
   }
 
   // 2. Pull the full remote list and merge.
@@ -538,6 +541,37 @@ function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): MergeResu
   tabs.push(...freshRemote);
 
   return { tabs, changed: touched };
+}
+
+/** The server rejects request bodies over 2 MB (its MAX_BODY_BYTES). */
+const PUSH_BATCH_BYTES = 1_500_000;
+
+/**
+ * Packs rows into request bodies the server will accept. Rows join the
+ * current batch while it stays under PUSH_BATCH_BYTES; a row too large to
+ * share a body becomes a batch of one. Such a row can never sync — the
+ * server caps bodies at 2 MB — but by failing alone it stops being able to
+ * block every other note in the queue, which is the property that matters.
+ */
+export function batchRowsForPush(rows: NoteRow[]): NoteRow[][] {
+  const batches: NoteRow[][] = [];
+  let current: NoteRow[] = [];
+  let currentBytes = 0;
+
+  for (const row of rows) {
+    const size = JSON.stringify(row).length;
+    if (current.length > 0 && currentBytes + size > PUSH_BATCH_BYTES) {
+      batches.push(current);
+      current = [];
+      currentBytes = 0;
+    }
+    current.push(row);
+    currentBytes += size;
+  }
+  if (current.length > 0) {
+    batches.push(current);
+  }
+  return batches;
 }
 
 function tabToRow(tab: NoteTab, userId: string, position: number): NoteRow {

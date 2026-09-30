@@ -41,10 +41,7 @@ import {
 } from './storage';
 import { getEditorPort } from './editor/port';
 import { renderMathIn } from './editor/math';
-import {
-  currentThemeMode,
-  noteRenderedForTheme,
-} from './editor/theme-colors';
+import { currentThemeMode, noteRenderedForTheme } from './editor/theme-colors';
 import {
   DEFAULT_NOTE_TYPE,
   normalizeNoteType,
@@ -819,10 +816,7 @@ export class TabManager {
     // A note whose stored colors were written under the other theme is
     // re-inked for display right away (visual only — storage catches up on
     // the next edit, so opening a note never writes on its own).
-    noteRenderedForTheme(
-      this.editor.get(0) as HTMLElement | undefined,
-      active?.colorTheme,
-    );
+    noteRenderedForTheme(this.editor.get(0) as HTMLElement | undefined, active?.colorTheme);
   }
 
   getActiveText(): string {

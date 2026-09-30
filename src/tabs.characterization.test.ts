@@ -140,9 +140,9 @@ describe('sanitizeNoteHtml (characterization)', () => {
   });
 
   it('strips every attribute from surviving tags — classes, styles, handlers', () => {
-    expect(
-      sanitizeNoteHtml('<b class="x" id="y" style="color:red" onclick="evil()">hi</b>'),
-    ).toBe('<b>hi</b>');
+    expect(sanitizeNoteHtml('<b class="x" id="y" style="color:red" onclick="evil()">hi</b>')).toBe(
+      '<b>hi</b>',
+    );
     expect(sanitizeNoteHtml('<div data-note="7">v</div>')).toBe('<div>v</div>');
   });
 
@@ -159,21 +159,26 @@ describe('sanitizeNoteHtml (characterization)', () => {
   });
 
   it('passes the rich text block subset through (h1-h3, lists, quote, pre)', () => {
-    const rich = '<h1>Title</h1><h2>Sub</h2><h3>Subsub</h3>' +
+    const rich =
+      '<h1>Title</h1><h2>Sub</h2><h3>Subsub</h3>' +
       '<ul><li>one</li><li>two</li></ul><ol><li>first</li></ol>' +
       '<blockquote>quoted</blockquote><pre>code()</pre>';
     expect(sanitizeNoteHtml(rich)).toBe(rich);
   });
 
   it('keeps a[href] only for safe schemes and no other attributes', () => {
-    expect(sanitizeNoteHtml('<a href="https://padify.app">ok</a>')).toBe('<a href="https://padify.app">ok</a>');
-    expect(sanitizeNoteHtml('<a href="mailto:x@y.z">mail</a>')).toBe('<a href="mailto:x@y.z">mail</a>');
+    expect(sanitizeNoteHtml('<a href="https://padify.app">ok</a>')).toBe(
+      '<a href="https://padify.app">ok</a>',
+    );
+    expect(sanitizeNoteHtml('<a href="mailto:x@y.z">mail</a>')).toBe(
+      '<a href="mailto:x@y.z">mail</a>',
+    );
     expect(sanitizeNoteHtml('<a href="#anchor">local</a>')).toBe('<a href="#anchor">local</a>');
     expect(sanitizeNoteHtml('<a href="/relative">rel</a>')).toBe('<a href="/relative">rel</a>');
     expect(sanitizeNoteHtml('<a href="data:text/html,evil">data</a>')).toBe('<a>data</a>');
-    expect(sanitizeNoteHtml('<a href="https://x" target="_blank" class="c" onclick="evil()">t</a>')).toBe(
-      '<a href="https://x">t</a>',
-    );
+    expect(
+      sanitizeNoteHtml('<a href="https://x" target="_blank" class="c" onclick="evil()">t</a>'),
+    ).toBe('<a href="https://x">t</a>');
   });
 
   it('unwraps <script> to inert text, not executable markup', () => {
@@ -346,7 +351,11 @@ describe('legacyTextToHtml (characterization)', () => {
 // ---------------------------------------------------------------------------
 
 describe('TabManager (characterization)', () => {
-  const stored = (id: string, html: string, overrides: Partial<StoredNoteTab> = {}): StoredNoteTab => ({
+  const stored = (
+    id: string,
+    html: string,
+    overrides: Partial<StoredNoteTab> = {},
+  ): StoredNoteTab => ({
     id,
     name: null,
     html,
@@ -534,11 +543,9 @@ describe('TabManager (characterization)', () => {
   });
 
   it('marks changed tabs dirty for the sync payload and unmarks nothing silently', async () => {
-    saveNotes(
-      { tabs: [stored('t1', 'one'), stored('t2', 'two')], tombstones: [] },
-      't1',
-      { immediate: true },
-    );
+    saveNotes({ tabs: [stored('t1', 'one'), stored('t2', 'two')], tombstones: [] }, 't1', {
+      immediate: true,
+    });
     await flushAndReboot();
     const manager = await bootedManager();
 
@@ -654,7 +661,11 @@ describe('TabManager (characterization)', () => {
 // ---------------------------------------------------------------------------
 
 describe('note types (characterization)', () => {
-  const stored = (id: string, html: string, overrides: Partial<StoredNoteTab> = {}): StoredNoteTab => ({
+  const stored = (
+    id: string,
+    html: string,
+    overrides: Partial<StoredNoteTab> = {},
+  ): StoredNoteTab => ({
     id,
     name: null,
     html,
@@ -742,5 +753,49 @@ describe('note types (characterization)', () => {
     const tabs = manager.exportForSync().tabs;
     expect(tabs.find((t) => t.id === localRichId)!.noteType).toBe('rich');
     expect(tabs.find((t) => t.id === 'remote-1')!.noteType).toBe('rich');
+  });
+});
+
+describe('dirty lifecycle (the sync handshake)', () => {
+  async function bootedManager(): Promise<TabManager> {
+    const manager = new TabManager($('#note'));
+    await manager.init();
+    return manager;
+  }
+
+  it('a note stops announcing as dirty once the cloud stored it', async () => {
+    const manager = await bootedManager();
+    manager.addTab(false);
+    const id = manager.getActive()!.id;
+
+    // Creating a note marks it dirty — the sync layer learns about it.
+    expect(manager.exportForSync().dirty).toContain(id);
+
+    // The push succeeded; the manager is told the note is clean now.
+    manager.confirmPushed([id]);
+    expect(manager.exportForSync().dirty).not.toContain(id);
+  });
+
+  it('confirmPushed ignores unknown ids and empty lists', async () => {
+    const manager = await bootedManager();
+
+    manager.confirmPushed([]);
+    manager.confirmPushed(['never-existed']);
+    // No throw, no state change worth asserting beyond survival.
+    expect(manager.exportForSync().tabs.length).toBeGreaterThan(0);
+  });
+
+  it('a fresh edit re-dirties a note that was already synced', async () => {
+    const manager = await bootedManager();
+    manager.addTab(false);
+    const id = manager.getActive()!.id;
+    manager.confirmPushed([id]);
+    expect(manager.exportForSync().dirty).not.toContain(id);
+
+    // A real edit — content written into the editor and saved — must
+    // announce the note again.
+    $('#note').html('<p>edited after sync</p>');
+    manager.saveActiveFromEditor();
+    expect(manager.exportForSync().dirty).toContain(id);
   });
 });
