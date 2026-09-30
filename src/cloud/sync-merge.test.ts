@@ -151,3 +151,113 @@ describe('mergeRemote — ordering convergence', () => {
     expect(merge.tabs.map((entry) => entry.id)).toEqual(['b', 'a', 'local-2', 'local-1']);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Sync v2 — the seq ordering. The server's sequence decides; client clocks
+// only arbitrate rows that never carried one.
+// ---------------------------------------------------------------------------
+
+describe('mergeRemote — v2 seq ordering', () => {
+  it('a higher seq beats a lying local clock (the skew fix)', () => {
+    // The local clock is 40 minutes fast; the local row still carries the
+    // seq of the version it edited FROM. The remote edit is later in
+    // server order — it wins. Under the clock rule the fast device would
+    // win every time, which is the bug v2 exists to fix.
+    const local = tab('a', {
+      updatedAt: 9_000_000,
+      syncSeq: 7,
+      content: '<p>stale local</p>',
+    });
+    const remote = row('a', {
+      updated_at: 5_000,
+      seq: 9,
+      content: '<p>the real newer edit</p>',
+    });
+
+    const merge = mergeRemote([remote], payloadOf([local]));
+
+    expect(merge.tabs[0].content).toBe('<p>the real newer edit</p>');
+    expect(merge.tabs[0].syncSeq).toBe(9);
+  });
+
+  it('an equal seq with differing content keeps the local row (no churn)', () => {
+    const local = tab('a', { syncSeq: 4, content: '<p>mine</p>' });
+    const remote = row('a', { seq: 4, content: '<p>theirs</p>' });
+
+    const merge = mergeRemote([remote], payloadOf([local]));
+
+    expect(merge.tabs[0].content).toBe('<p>mine</p>');
+    expect(merge.changed).toBe(false);
+  });
+
+  it('a local row without a seq adopts an identical remote row wholesale', () => {
+    // The rollout path: a pre-upgrade install's rows have no seq. An
+    // identical remote row is adopted — the seq gained, no visible change.
+    const local = tab('a', { content: '<p>same words</p>' });
+    const remote = row('a', { seq: 12, content: '<p>same words</p>' });
+
+    const merge = mergeRemote([remote], payloadOf([local]));
+
+    expect(merge.tabs[0].content).toBe('<p>same words</p>');
+    expect(merge.tabs[0].syncSeq).toBe(12);
+  });
+
+  it('a delete loses to a newer local edit by seq, not by clock', () => {
+    // Closed on the other device — its clock stamps the tombstone HUGE
+    // (skewed); the local edit is older by clock but later in server
+    // order (the row it edited from was already seq 7 when the delete was
+    // only seq 3). The edit survives and step 3 resurrects the note.
+    const local = tab('a', {
+      updatedAt: 100,
+      syncSeq: 7,
+      content: '<p>the newer edit</p>',
+    });
+    const remote = row('a', { deleted: true, updated_at: 9_000_000, seq: 3 });
+
+    const merge = mergeRemote([remote], payloadOf([local]));
+
+    expect(merge.tabs).toHaveLength(1);
+    expect(merge.tabs[0].content).toBe('<p>the newer edit</p>');
+    expect(merge.changed).toBe(false);
+  });
+
+  it('an equal-seq delete still loses to a later local edit (the v1 guard)', () => {
+    // The delete replaced the very version this row edited from (equal
+    // seq) — an unpushed edit that never saw the delete. The clock
+    // arbitrates as in v1: the later edit survives.
+    const local = tab('a', {
+      updatedAt: 12_000,
+      syncSeq: 3,
+      content: '<p>edited after</p>',
+    });
+    const remote = row('a', { deleted: true, updated_at: 9_000, seq: 3 });
+
+    const merge = mergeRemote([remote], payloadOf([local]));
+
+    expect(merge.tabs).toHaveLength(1);
+    expect(merge.tabs[0].content).toBe('<p>edited after</p>');
+  });
+
+  it('the order array drives convergence with unchanged rows included', () => {
+    const local = [tab('a', { syncSeq: 1 }), tab('b', { syncSeq: 2 })];
+    // A clean device (nothing dirty): the order array alone reorders —
+    // unchanged rows are not in the changed set, their place still rules.
+    const merge = mergeRemote(
+      [],
+      { tabs: local, dirty: [], tombstones: [] },
+      { order: ['b', 'a'] },
+    );
+
+    expect(merge.tabs.map((entry) => entry.id)).toEqual(['b', 'a']);
+    expect(merge.changed).toBe(true);
+  });
+
+  it('v1 rows without a seq keep the clock rules exactly', () => {
+    const local = tab('a', { updatedAt: 2_000, content: '<p>old local</p>' });
+    const remote = row('a', { updated_at: 3_000, content: '<p>newer remote</p>' });
+
+    const merge = mergeRemote([remote], payloadOf([local]));
+
+    expect(merge.tabs[0].content).toBe('<p>newer remote</p>');
+  });
+});

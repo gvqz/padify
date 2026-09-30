@@ -48,6 +48,9 @@ export interface StoredNoteTab {
   noteType?: NoteType;
   /** The theme the note's inline colors were last written under. */
   colorTheme?: 'light' | 'dark';
+  /** Sync v2: the server sequence of the last synced version (sync
+   *  metadata; see tabs.ts NoteTab.syncSeq). */
+  syncSeq?: number;
 }
 
 /** A deletion not yet confirmed by the cloud. */

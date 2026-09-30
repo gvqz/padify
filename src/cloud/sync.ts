@@ -59,12 +59,12 @@ export interface NoteRow {
   user_id: string;
   name: string | null;
   /**
-   * The note's content, in the key the rename transition settled on.
-   * Every participant emits BOTH keys carrying the same value for now:
-   * rows built before the rename speak `html`, rows after it speak
-   * `content`, and a deploy gap between the site and the API (either
-   * direction) must never cost a note its body. Readers take either,
-   * prefer `content`; the legacy twin dies with sync v2.
+   * The note's content. The rename transition's legacy twin is dead on
+   * this wire: v2 clients emit `content` only, v2 servers answer with
+   * `content` only. V1 participants (either side of a deploy gap) keep
+   * speaking both keys with the same value — readers take either and
+   * prefer `content`, so a gap never blanks a note's body in either
+   * direction, and the twin rides v1 until every install crossed over.
    */
   content?: string;
   html?: string;
@@ -74,6 +74,22 @@ export interface NoteRow {
   deleted: boolean;
   /** The note kind; null = the default (standard). Absent on old servers. */
   note_type: string | null;
+  /**
+   * Sync v2: the server's sequence for this version of the row. Ordering
+   * across devices keys off it. Absent on v1 servers (and on rows a
+   * stamping build never wrote) — those fall back to the client clock.
+   */
+  seq?: number;
+}
+
+/** A v2 pull's answer: the changed rows, the full order, the next cursor. */
+export interface PullResult {
+  v2: boolean;
+  rows: NoteRow[];
+  /** The full remote position order by id (v2 only; v1 sorts by row.position). */
+  order?: string[];
+  /** The client's next cursor (v2 only; never advanced on v1 answers). */
+  cursor?: number;
 }
 
 /**
@@ -445,7 +461,7 @@ async function runSyncOnce(): Promise<void> {
     const pushed: string[] = [];
     try {
       for (const batch of batchRowsForPush(rows)) {
-        await api('/api/notes', { method: 'PUT', body: { rows: batch } });
+        await api('/api/notes', { method: 'PUT', body: { v: 2, rows: batch } });
         batch.forEach((row) => pushed.push(row.id));
       }
     } finally {
@@ -459,28 +475,50 @@ async function runSyncOnce(): Promise<void> {
     }
   }
 
-  // 2. Pull the full remote list and merge.
-  const data = await api<{ rows: NoteRow[] }>('/api/notes');
-  const remoteRows = (data.rows ?? []).map((row) => ({ ...row, deleted: !!row.deleted }));
+  // 2. Pull (v2: only what changed past the stored cursor; v1 servers
+  //    answer the full list and no cursor — the merge falls back to the
+  //    client clock and the cursor never advances).
+  const pull = await pullNotes(userId);
+  const remoteRows = pull.rows.map((row) => ({ ...row, deleted: !!row.deleted }));
 
   const payload = manager.exportForSync();
-  const merge = mergeRemote(remoteRows, payload);
+  const merge = mergeRemote(remoteRows, payload, { order: pull.order });
 
   if (merge.changed) {
     manager.applyExternalMerge(merge.tabs);
   }
 
-  // 3. Push anything the merge revealed as missing or newer locally
-  //    (first sign-in upload, edits made while the pull was in flight,
-  //    position drift), and confirm tombstones the cloud already has.
+  // 3. Push anything the pull revealed as missing or newer locally, and
+  //    confirm tombstones the cloud already has. Under v2, rows outside
+  //    the changed set are known-unchanged (their seq sits at or below the
+  //    cursor): they are only pushed for position drift, so an untouched
+  //    account stops re-publishing its whole list every cycle.
   const confirmIds: string[] = [];
   const diffRows: NoteRow[] = [];
   const remoteById = new Map(remoteRows.map((row) => [row.id, row]));
+  const positionOf = pull.order
+    ? new Map(pull.order.map((id, index) => [id, index] as const))
+    : null;
   const mergedTabs = manager.exportForSync().tabs;
 
   mergedTabs.forEach((tab, index) => {
     const remote = remoteById.get(tab.id);
-    if (!remote || remote.updated_at < tab.updatedAt || remote.position !== index) {
+    // The remote place of an unchanged row: the pulled row's position
+    // (v1) or the order array's index (v2 — unchanged rows are not in the
+    // changed set but their place still matters).
+    const remotePosition = remote ? remote.position : (positionOf?.get(tab.id) ?? null);
+    if (!remote) {
+      // A row the pull did not deliver: under v2 that means unchanged
+      // since the cursor (its place alone decides), or brand-new to the
+      // server — the first upload of a local-only note.
+      if (remotePosition === null || remotePosition !== index) {
+        diffRows.push(tabToRow(tab, userId, index));
+      }
+      return;
+    }
+    // After the merge kept the local version, its updatedAt is the newer
+    // one; equal clocks mean nothing changed — no churn.
+    if (remote.updated_at < tab.updatedAt || remotePosition !== index) {
       diffRows.push(tabToRow(tab, userId, index));
     }
   });
@@ -497,8 +535,60 @@ async function runSyncOnce(): Promise<void> {
   manager.confirmTombstones(confirmIds);
 
   if (diffRows.length > 0) {
-    await api('/api/notes', { method: 'PUT', body: { rows: diffRows } });
+    await api('/api/notes', { method: 'PUT', body: { v: 2, rows: diffRows } });
   }
+}
+
+// ---------------------------------------------------------------------------
+// The v2 pull
+// ---------------------------------------------------------------------------
+
+/** The stored pull cursor for a user — 0 means “deliver everything”. */
+function loadCursor(userId: string): number {
+  const raw = stateGet(`padifySyncCursor:${userId}`);
+  const parsed = typeof raw === 'string' ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
+}
+
+function storeCursor(userId: string, cursor: number): void {
+  if (cursor > 0) {
+    stateSet(`padifySyncCursor:${userId}`, String(cursor));
+  } else {
+    stateRemove(`padifySyncCursor:${userId}`);
+  }
+}
+
+/**
+ * Pulls the remote rows. A v2 server answers with only what changed past
+ * the stored cursor (plus the full order and the next cursor); a v1
+ * server ignores the version marker and answers the full list — the
+ * result is marked v2: false, the merge falls back to client clocks, and
+ * the stored cursor never advances past data a v1 server cannot key.
+ */
+async function pullNotes(userId: string): Promise<PullResult> {
+  const cursor = loadCursor(userId);
+  const data = await api<{
+    v?: number;
+    rows?: NoteRow[];
+    order?: string[];
+    cursor?: number;
+  }>(`/api/notes?v=2&cursor=${cursor}`);
+
+  if (data.v === 2) {
+    const nextCursor = typeof data.cursor === 'number' && data.cursor > 0 ? data.cursor : cursor;
+    storeCursor(userId, nextCursor);
+    return {
+      v2: true,
+      rows: (data.rows ?? []).map((row) => ({ ...row, deleted: !!row.deleted })),
+      order: data.order,
+      cursor: nextCursor,
+    };
+  }
+
+  return {
+    v2: false,
+    rows: (data.rows ?? []).map((row) => ({ ...row, deleted: !!row.deleted })),
+  };
 }
 
 interface MergeResult {
@@ -507,21 +597,64 @@ interface MergeResult {
 }
 
 /**
- * Last-write-wins merge of remote rows into the local tab list. Tombstones
- * lose to newer local edits: a note edited here AFTER it was closed
- * elsewhere stays, and the cycle's step 3 re-pushes it — the edit
- * resurrects the note instead of the delete burying the edit.
+ * Last-write-wins merge of remote rows into the local tab list.
+ *
+ * Sync v2 orders by the server's sequence: a row that carries one wins
+ * against a local row that carries one by seq alone (client clocks only
+ * ever arbitrate rows that never did — v1 servers, rows a stamping build
+ * never wrote). A local row without a seq adopts a matching remote row
+ * wholesale (identical content, the seq gained — the rollout path for
+ * pre-upgrade installs); differing content without a local seq still
+ * falls to the clock. Tombstones lose to newer local edits: a note edited
+ * here AFTER it was closed elsewhere stays, and the cycle's step 3
+ * re-pushes it — the edit resurrects the note instead of the delete
+ * burying the edit.
  */
-export function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): MergeResult {
+export function mergeRemote(
+  remoteRows: NoteRow[],
+  payload: TabsSyncPayload,
+  options: { order?: string[] } = {},
+): MergeResult {
   const tabs: NoteTab[] = payload.tabs.map((tab) => ({ ...tab }));
   const byId = new Map(tabs.map((tab) => [tab.id, tab]));
   const freshRemote: NoteTab[] = [];
   let touched = false;
 
+  /** The local row wins the delete: newer by seq when both carry one,
+   *  by clock otherwise. Equal seqs mean the delete replaced the very
+   *  version this row edited from — an unpushed edit never saw it, so the
+   *  clock arbitrates exactly as in v1 (later local edit survives, an
+   *  identical copy goes with the delete). */
+  const localSurvivesDelete = (local: NoteTab, row: NoteRow): boolean => {
+    if (row.seq && local.syncSeq) {
+      if (local.syncSeq !== row.seq) {
+        return local.syncSeq > row.seq;
+      }
+    }
+    return local.updatedAt > row.updated_at;
+  };
+
+  /** The remote row wins the edit: by seq when both carry one, by clock
+   *  otherwise. A local row without a seq takes an identical remote row
+   *  wholesale (adoption) and a differing one only on the clock. */
+  const remoteWinsEdit = (local: NoteTab, row: NoteRow): boolean => {
+    const differs = wireRowContent(row) !== local.content || row.name !== local.name;
+    if (row.seq && local.syncSeq) {
+      return row.seq > local.syncSeq && differs;
+    }
+    if (row.seq && !local.syncSeq) {
+      if (!differs) {
+        return true; // adoption: identical content, the seq gained
+      }
+      return row.updated_at > local.updatedAt;
+    }
+    return row.updated_at > local.updatedAt && differs;
+  };
+
   remoteRows.forEach((row) => {
     if (row.deleted) {
       const local = byId.get(row.id);
-      if (local && local.updatedAt > row.updated_at) {
+      if (local && localSurvivesDelete(local, row)) {
         // The local edit is newer than the remote delete. The note stays
         // exactly as it is (changed: false), and step 3 of the cycle sees
         // remote.updated_at < tab.updatedAt and re-pushes it — deleted=false
@@ -549,15 +682,13 @@ export function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): Me
         createdAt: typeof row.created_at === 'number' ? row.created_at : Date.now(),
         updatedAt: typeof row.updated_at === 'number' ? row.updated_at : Date.now(),
         noteType: normalizeNoteType(row.note_type),
+        syncSeq: row.seq && row.seq > 0 ? row.seq : undefined,
       });
       touched = true;
       return;
     }
 
-    if (
-      row.updated_at > local.updatedAt &&
-      (wireRowContent(row) !== local.content || row.name !== local.name)
-    ) {
+    if (remoteWinsEdit(local, row)) {
       local.name = row.name;
       local.content = wireRowContent(row);
       local.createdAt = typeof row.created_at === 'number' ? row.created_at : local.createdAt;
@@ -565,6 +696,7 @@ export function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): Me
       // Type only ever rides along; an old server row (undefined) keeps the
       // local value instead of resetting the note to the default.
       local.noteType = normalizeNoteType(row.note_type) ?? local.noteType;
+      local.syncSeq = row.seq && row.seq > 0 ? row.seq : local.syncSeq;
       touched = true;
     }
   });
@@ -580,12 +712,16 @@ export function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): Me
   // When this device has nothing pending, the remote ordering wins (the
   // strip never reorders underneath an in-flight edit); a device with
   // dirty notes keeps its own order, and its step-3 push re-publishes it
-  // for the other side to adopt.
+  // for the other side to adopt. Under v2 the remote ordering is the
+  // order array (unchanged rows included); under v1 it is the rows'
+  // positions.
   const dirty = new Set(payload.dirty);
   if (!tabs.some((tab) => dirty.has(tab.id))) {
-    const remotePosition = new Map(
-      remoteRows.filter((row) => !row.deleted).map((row) => [row.id, row.position] as const),
-    );
+    const remotePosition = options.order
+      ? new Map(options.order.map((id, index) => [id, index] as const))
+      : new Map(
+          remoteRows.filter((row) => !row.deleted).map((row) => [row.id, row.position] as const),
+        );
     const before = tabs.map((entry) => entry.id).join('|');
     // Stable sort: notes the cloud has never seen (signed-out creations,
     // still clean because they were pushed in an earlier session) keep
@@ -652,9 +788,9 @@ function tabToRow(tab: NoteTab, userId: string, position: number): NoteRow {
     id: tab.id,
     user_id: userId,
     name: tab.name,
-    // Both keys, same value — the transition contract (see NoteRow).
+    // One key: v2 clients stopped emitting the rename's legacy twin (see
+    // NoteRow). V1 servers read either and prefer `content`.
     content: tab.content,
-    html: tab.content,
     position,
     created_at: tab.createdAt,
     updated_at: tab.updatedAt,
@@ -668,9 +804,7 @@ function tombstoneToRow(tombstone: TabTombstone, userId: string): NoteRow {
     id: tombstone.id,
     user_id: userId,
     name: null,
-    // Both keys, same value — the transition contract (see NoteRow).
     content: '',
-    html: '',
     position: 0,
     created_at: tombstone.updatedAt,
     updated_at: tombstone.updatedAt,

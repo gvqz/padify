@@ -87,6 +87,15 @@ export interface NoteTab {
    * left exactly as stored until their next edit.
    */
   colorTheme?: 'light' | 'dark';
+  /**
+   * Sync v2: the server sequence stamped on the version this row last
+   * synced as (see cloud/sync.ts). Ordering across devices keys off it —
+   * client clocks only arbitrate rows that never carried one. Sync
+   * metadata, never user content: it rides storage and the merge, and
+   * edits clear nothing (an edit keeps the seq of the version it edits
+   * FROM, until its own push lands a new one).
+   */
+  syncSeq?: number;
 }
 
 const LEGACY_NOTE_KEY = 'note';
@@ -406,6 +415,8 @@ export class TabManager {
             entry.colorTheme === 'light' || entry.colorTheme === 'dark'
               ? entry.colorTheme
               : undefined,
+          syncSeq:
+            typeof entry.syncSeq === 'number' && entry.syncSeq > 0 ? entry.syncSeq : undefined,
         };
       });
   }
