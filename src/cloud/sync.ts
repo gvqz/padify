@@ -549,10 +549,36 @@ export function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): Me
     }
   });
 
-  // Remote-only tabs join the end of the strip, in their stored order.
-  const positionById = new Map(remoteRows.map((row) => [row.id, row.position]));
-  freshRemote.sort((a, b) => (positionById.get(a.id) ?? 0) - (positionById.get(b.id) ?? 0));
+  // Remote-only tabs join the strip; their final place is decided by the
+  // ordering pass below.
   tabs.push(...freshRemote);
+
+  // Positions converge instead of ping-ponging. Without this, two devices
+  // that merged the same notes in different orders each see
+  // remote.position !== localIndex on every cycle and each re-push their
+  // own ordering forever — the full list, every 30 seconds, both ways.
+  // When this device has nothing pending, the remote ordering wins (the
+  // strip never reorders underneath an in-flight edit); a device with
+  // dirty notes keeps its own order, and its step-3 push re-publishes it
+  // for the other side to adopt.
+  const dirty = new Set(payload.dirty);
+  if (!tabs.some((tab) => dirty.has(tab.id))) {
+    const remotePosition = new Map(
+      remoteRows.filter((row) => !row.deleted).map((row) => [row.id, row.position] as const),
+    );
+    const before = tabs.map((entry) => entry.id).join('|');
+    // Stable sort: notes the cloud has never seen (signed-out creations,
+    // still clean because they were pushed in an earlier session) keep
+    // their relative order at the end.
+    tabs.sort((a, b) => {
+      const pa = remotePosition.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+      const pb = remotePosition.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+      return pa - pb;
+    });
+    if (tabs.map((entry) => entry.id).join('|') !== before) {
+      touched = true;
+    }
+  }
 
   return { tabs, changed: touched };
 }

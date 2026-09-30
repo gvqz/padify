@@ -99,3 +99,41 @@ describe('mergeRemote — edits and arrivals', () => {
     expect(merge.tabs).toHaveLength(1);
   });
 });
+
+describe('mergeRemote — ordering convergence', () => {
+  const payloadOf = (tabs: NoteTab[], dirty: string[] = []): TabsSyncPayload => ({
+    tabs,
+    dirty,
+    tombstones: [],
+  });
+
+  it('a clean device adopts the remote ordering', () => {
+    // The cloud says [b, a]; this device holds [a, b] with nothing pending.
+    const merge = mergeRemote(
+      [row('b', { position: 0 }), row('a', { position: 1 })],
+      payloadOf([tab('a'), tab('b')]),
+    );
+
+    expect(merge.tabs.map((entry) => entry.id)).toEqual(['b', 'a']);
+    expect(merge.changed).toBe(true);
+  });
+
+  it('a device with pending notes keeps its own order', () => {
+    const merge = mergeRemote(
+      [row('b', { position: 0 }), row('a', { position: 1 })],
+      payloadOf([tab('a'), tab('b')], ['a']), // a is dirty — an edit is in flight
+    );
+
+    expect(merge.tabs.map((entry) => entry.id)).toEqual(['a', 'b']);
+    expect(merge.changed).toBe(false);
+  });
+
+  it('notes the cloud never saw sort to the end, keeping their relative order', () => {
+    const merge = mergeRemote(
+      [row('b', { position: 0 }), row('a', { position: 1 })],
+      payloadOf([tab('local-2'), tab('a'), tab('local-1'), tab('b')]),
+    );
+
+    expect(merge.tabs.map((entry) => entry.id)).toEqual(['b', 'a', 'local-2', 'local-1']);
+  });
+});
