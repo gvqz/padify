@@ -3,10 +3,15 @@
  *
  * The app owns a small database:
  *
- *   padify v1
+ *   padify v2
  *     notes → { id, name, html, createdAt, updatedAt, position, deleted }
  *             keyPath 'id', index 'position'
  *     kv    → { key, value }   (localStorage-shaped string values)
+ *     attachments → { id, name, mime, size, createdAt, uploaded, blob }
+ *             keyPath 'id' — the blob store (voice notes and future
+ *             media); deliberately NOT mirrored to localStorage, which
+ *             cannot hold blobs. See storage/attachments.ts for the
+ *             high-level API and its degradation rules.
  *
  * The notes record shape intentionally mirrors the cloud rows in
  * server/schema.sql (camelCase here, snake_case there) so the sync layer can
@@ -16,13 +21,15 @@
  * Everything here is deliberately low-level: open, upgrade, and
  * promise-wrapped transactions. The higher-level semantics — the in-memory
  * mirror, the localStorage fallback, the legacy migration, the compatibility
- * write-through — live in the sibling modules (kv.ts, notes.ts, index.ts).
+ * write-through — live in the sibling modules (kv.ts, notes.ts, attachments.ts,
+ * index.ts).
  */
 
 export const DB_NAME = 'padify';
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 export const NOTES_STORE = 'notes';
 export const KV_STORE = 'kv';
+export const ATTACHMENTS_STORE = 'attachments';
 
 /**
  * Which backend is actually serving reads/writes.
@@ -71,6 +78,10 @@ export function openDatabase(): Promise<StorageBackend> {
       }
       if (!database.objectStoreNames.contains(KV_STORE)) {
         database.createObjectStore(KV_STORE, { keyPath: 'key' });
+      }
+      // v2 — the blob store. Fresh installs and upgrades share this path.
+      if (!database.objectStoreNames.contains(ATTACHMENTS_STORE)) {
+        database.createObjectStore(ATTACHMENTS_STORE, { keyPath: 'id' });
       }
     };
 
