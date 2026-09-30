@@ -53,18 +53,13 @@ import {
   SpotifyAuthError,
 } from './spotify/auth';
 import * as spotify from './spotify/api';
-import type {
-  SpotifyAlbum,
-  SpotifyPlaylist,
-  SpotifyProfile,
-  SpotifySimpleArtist,
-  SpotifyTrack,
-} from './spotify/api';
+import type { SpotifyPlaylist, SpotifyProfile, SpotifyTrack } from './spotify/api';
 import { SpotifySdkController } from './spotify/sdk';
 import type { WebPlaybackPlayerState } from './spotify/sdk';
 
-import { eqMarkup, ICONS } from './markup';
+import { ICONS } from './markup';
 import { byId, formatMs, trackArtistNames, pickImage, escapeHtml } from './helpers';
+import { albumCard, artistCard, playlistCard, queueRow, trackRow } from './rows';
 import {
   REPEAT_MODES,
   loadPlayerState,
@@ -1359,9 +1354,7 @@ class MusicPlayerApp {
     const playlist = this.library.playlist;
 
     this.queues.set('favorites', favorites);
-    this.favoritesList.innerHTML = favorites
-      .map((track) => this.trackRowMarkup(track, 'favorites'))
-      .join('');
+    this.favoritesList.innerHTML = favorites.map((track) => trackRow(track, 'favorites')).join('');
     this.favoritesEmpty.hidden = favorites.length > 0;
     this.favCount.textContent = favorites.length > 0 ? `${favorites.length} songs` : '';
 
@@ -1369,7 +1362,7 @@ class MusicPlayerApp {
       this.queues.set('local-playlist', playlist.tracks);
       this.playlistName.textContent = playlist.name;
       this.localPlaylistList.innerHTML = playlist.tracks
-        .map((track) => this.trackRowMarkup(track, 'local-playlist'))
+        .map((track) => trackRow(track, 'local-playlist'))
         .join('');
       this.localPlaylistEmpty.hidden = playlist.tracks.length > 0;
       this.playlistCount.textContent =
@@ -1439,7 +1432,7 @@ class MusicPlayerApp {
       const playlistItems = playlists?.items ?? [];
       this.playlistsCache = playlistItems;
       this.playlistsRow.innerHTML = playlistItems
-        .map((playlist) => this.playlistCardMarkup(playlist))
+        .map((playlist) => playlistCard(playlist))
         .join('');
       this.playlistsEmpty.hidden = playlistItems.length > 0;
 
@@ -1453,87 +1446,6 @@ class MusicPlayerApp {
     }
   }
 
-  private playlistCardMarkup(playlist: SpotifyPlaylist): string {
-    const art = pickImage(playlist.images, 0);
-    return `
-        <button type="button" class="sp-card" data-playlist-id="${playlist.id}" data-playlist-uri="${playlist.uri}" title="${escapeHtml(playlist.name)}">
-            <span class="sp-card-art">
-                ${art ? `<img src="${art}" alt="" loading="lazy">` : ICONS.playlist}
-            </span>
-            <span class="sp-card-name">${escapeHtml(playlist.name)}</span>
-            <span class="sp-card-meta">${playlist.tracks.total} songs</span>
-        </button>`;
-  }
-
-  private albumCardMarkup(album: SpotifyAlbum): string {
-    const art = pickImage(album.images, 0);
-    return `
-        <button type="button" class="sp-card" data-album-id="${album.id}" data-album-uri="${album.uri}" title="${escapeHtml(album.name)}">
-            <span class="sp-card-art">
-                ${art ? `<img src="${art}" alt="" loading="lazy">` : ICONS.playlist}
-            </span>
-            <span class="sp-card-name">${escapeHtml(album.name)}</span>
-            <span class="sp-card-meta">${escapeHtml(album.artists.map((a) => a.name).join(', '))}</span>
-        </button>`;
-  }
-
-  private artistCardMarkup(artist: SpotifySimpleArtist): string {
-    const art = pickImage(artist.images, 0);
-    return `
-        <button type="button" class="sp-card sp-card-artist" data-artist-id="${artist.id}" data-artist-name="${escapeHtml(artist.name)}" title="${escapeHtml(artist.name)}">
-            <span class="sp-card-art sp-card-art-round">
-                ${art ? `<img src="${art}" alt="" loading="lazy">` : ICONS.playlist}
-            </span>
-            <span class="sp-card-name">${escapeHtml(artist.name)}</span>
-            <span class="sp-card-meta">Artist</span>
-        </button>`;
-  }
-
-  // ========================================================================
-  // Track rows (one component for every list, free or connected)
-  // ========================================================================
-
-  private trackRowMarkup(track: SpotifyTrack, queueId: string): string {
-    const art = pickImage(track.album?.images, 2) ?? pickImage(track.album?.images, 0);
-    const artists = escapeHtml(trackArtistNames(track));
-    const name = escapeHtml(track.name);
-    return `
-        <div class="sp-row" role="listitem" data-queue-id="${queueId}" data-track-id="${track.id}" data-track-uri="${track.uri}">
-            <button type="button" class="sp-row-main" aria-label="Play ${name} by ${artists}">
-                <span class="sp-row-art">${art ? `<img src="${art}" alt="" loading="lazy">` : ICONS.note}</span>
-                <span class="sp-row-copy">
-                    <span class="sp-row-name">${name}</span>
-                    <span class="sp-row-sub">${artists}${track.explicit ? ' · E' : ''}</span>
-                </span>
-                ${eqMarkup('sp-row-eq')}
-                <span class="sp-row-dur">${formatMs(track.duration_ms)}</span>
-            </button>
-            <button type="button" class="sp-row-like" data-like aria-pressed="false" title="Favorite" aria-label="Save ${name} to favorites">${ICONS.heart}</button>
-            <button type="button" class="sp-row-menu" data-menu aria-haspopup="true" aria-expanded="false" title="More options" aria-label="More options for ${name}">${ICONS.plus}</button>
-        </div>`;
-  }
-
-  /** Queue rows: same shell + a remove button instead of the menu. */
-  private queueRowMarkup(track: SpotifyTrack, index: number): string {
-    const art = pickImage(track.album?.images, 2) ?? pickImage(track.album?.images, 0);
-    const artists = escapeHtml(trackArtistNames(track));
-    const name = escapeHtml(track.name);
-    return `
-        <div class="sp-row" role="listitem" data-queue-index="${index}" data-track-id="${track.id}" data-track-uri="${track.uri}">
-            <button type="button" class="sp-row-main" aria-label="Play ${name} by ${artists}">
-                <span class="sp-row-art">${art ? `<img src="${art}" alt="" loading="lazy">` : ICONS.note}</span>
-                <span class="sp-row-copy">
-                    <span class="sp-row-name">${name}</span>
-                    <span class="sp-row-sub">${artists}${track.explicit ? ' · E' : ''}</span>
-                </span>
-                ${eqMarkup('sp-row-eq')}
-                <span class="sp-row-dur">${formatMs(track.duration_ms)}</span>
-            </button>
-            <button type="button" class="sp-row-like" data-like aria-pressed="false" title="Favorite" aria-label="Save ${name} to favorites">${ICONS.heart}</button>
-            <button type="button" class="sp-row-remove" data-remove title="Remove from queue" aria-label="Remove ${name} from queue">${ICONS.remove}</button>
-        </div>`;
-  }
-
   private renderTrackRows(
     container: HTMLElement,
     tracks: SpotifyTrack[],
@@ -1542,7 +1454,7 @@ class MusicPlayerApp {
     const withArt: SpotifyTrack[] = tracks.filter((t) => t && t.uri);
     this.queues.set(queueId, withArt);
     container.dataset.queueId = queueId;
-    container.innerHTML = withArt.map((track) => this.trackRowMarkup(track, queueId)).join('');
+    container.innerHTML = withArt.map((track) => trackRow(track, queueId)).join('');
     this.updateRowStates();
     this.refreshRowHearts(container);
   }
@@ -1835,20 +1747,16 @@ class MusicPlayerApp {
       const playlists = results.playlists?.items ?? [];
       byId('spSearchPlaylistsSection').hidden = playlists.length === 0;
       byId('spSearchPlaylists').innerHTML = playlists
-        .map((playlist) => this.playlistCardMarkup(playlist))
+        .map((playlist) => playlistCard(playlist))
         .join('');
 
       const albums = results.albums?.items ?? [];
       byId('spSearchAlbumsSection').hidden = albums.length === 0;
-      byId('spSearchAlbums').innerHTML = albums
-        .map((album) => this.albumCardMarkup(album))
-        .join('');
+      byId('spSearchAlbums').innerHTML = albums.map((album) => albumCard(album)).join('');
 
       const artists = results.artists?.items ?? [];
       byId('spSearchArtistsSection').hidden = artists.length === 0;
-      byId('spSearchArtists').innerHTML = artists
-        .map((artist) => this.artistCardMarkup(artist))
-        .join('');
+      byId('spSearchArtists').innerHTML = artists.map((artist) => artistCard(artist)).join('');
 
       byId('spSearchEmpty').hidden = hasAnything;
     } catch (err) {
@@ -1958,7 +1866,7 @@ class MusicPlayerApp {
       const rows = [...(current ? [current] : []), ...next.slice(0, 20)].map((track) =>
         // Read-only: the remove buttons carry data-readonly so the click
         // handler ignores them (Spotify's queue can't be edited here).
-        this.queueRowMarkup(track, 0).replace(
+        queueRow(track, 0).replace(
           'class="sp-row-remove" data-remove',
           'class="sp-row-remove" data-remove data-readonly',
         ),
@@ -1972,9 +1880,7 @@ class MusicPlayerApp {
     const queue = this.state.freeQueue;
     this.queueHint.textContent = queue.length > 0 ? 'Up next on this device' : 'Nothing queued';
     this.queueClear.hidden = queue.length === 0;
-    this.queueList.innerHTML = queue
-      .map((track, index) => this.queueRowMarkup(track, index))
-      .join('');
+    this.queueList.innerHTML = queue.map((track, index) => queueRow(track, index)).join('');
     this.queueEmpty.hidden = queue.length > 0;
     this.refreshRowHearts(this.queueList);
     this.updateRowStates();
@@ -2591,7 +2497,7 @@ class MusicPlayerApp {
       this.queues.set(queueId, [...existing, ...tracks]);
       this.likedList.insertAdjacentHTML(
         'beforeend',
-        tracks.map((track) => this.trackRowMarkup(track, queueId)).join(''),
+        tracks.map((track) => trackRow(track, queueId)).join(''),
       );
       this.likedOffset += page.items.length;
       this.likedTotal = page.total;
