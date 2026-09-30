@@ -37,7 +37,6 @@ import { LocalMusicLibrary } from './music/library';
 import {
   fetchMusicCapabilities,
   freeSearchTracks,
-  resolveTrackStream,
   FreeMusicError,
   type MusicCapabilities,
 } from './music/client';
@@ -76,6 +75,7 @@ import {
   prevPlayIndex,
   removeQueueAt,
 } from './queue';
+import { FreeEngine, type FreeEngineEvent, type FreeEngineHost } from './free-engine';
 
 export { mountMusicPlayer } from './markup';
 
@@ -112,11 +112,14 @@ class MusicPlayerApp {
   private navbarIconWatchedEl: Element | null = null;
 
   // ---- free engine (no login): <audio> + resolved stream URLs ----
-  private freeAudio: HTMLAudioElement | null = null;
-  private freeMode: 'resolve' | 'preview' = 'resolve';
-  /** Guards against a stale resolve overwriting a newer track. */
-  private freeResolveToken = 0;
-  private retriedCurrentTrack = false;
+  /** Lazy closures over the app — nothing runs before the first play. */
+  private readonly engineHost: FreeEngineHost = {
+    volume: () => this.state.volume,
+    canResolve: () => this.canResolveNow(),
+    activeFreeTrack: () => (this.source === 'free' ? this.currentFreeTrack() : null),
+    notify: (event) => this.handleEngineEvent(event),
+  };
+  private readonly engine = new FreeEngine(this.engineHost);
 
   // ---- local (on-device) library ----
   private library = new LocalMusicLibrary();
@@ -357,35 +360,43 @@ class MusicPlayerApp {
   }
 
   // ========================================================================
-  // Free engine — HTML5 <audio> fed by resolved stream URLs (no login)
+  // Free engine — HTML5 <audio> fed by resolved stream URLs (no login).
+  // The engine (free-engine.ts) owns the element and the resolve/retry/
+  // fallback machine; the controller keeps the queue math and reacts to
+  // engine events.
   // ========================================================================
 
   private currentFreeTrack(): SpotifyTrack | null {
     return this.state.freeQueue[this.state.freeIndex] ?? null;
   }
 
-  private ensureFreeAudio(): HTMLAudioElement {
-    if (this.freeAudio) return this.freeAudio;
-    const audio = new Audio();
-    audio.preload = 'none';
-    audio.volume = this.state.volume;
-    audio.addEventListener('timeupdate', () => {
-      if (this.source === 'free') this.updateProgress();
-    });
-    audio.addEventListener('loadedmetadata', () => {
-      if (this.source === 'free') {
-        const total = this.currentDurationMs();
-        this.timeTotal.textContent = formatMs(total);
-        this.seek.setAttribute('aria-valuetext', formatMs(this.currentPositionMs()));
-      }
-    });
-    audio.addEventListener('play', () => this.handleFreePlaybackState(true));
-    audio.addEventListener('playing', () => this.handleFreePlaybackState(true));
-    audio.addEventListener('pause', () => this.handleFreePlaybackState(false));
-    audio.addEventListener('ended', () => this.handleFreeEnded());
-    audio.addEventListener('error', () => this.handleFreeAudioError());
-    this.freeAudio = audio;
-    return audio;
+  /** The engine's lazy capabilities check (once per session). */
+  private async canResolveNow(): Promise<boolean> {
+    if (!this.capsChecked) await this.checkCapabilities();
+    return this.caps.resolve;
+  }
+
+  /** Starts playing the queue at `index` through the free engine. */
+  private async playFreeAt(index: number, auto = false): Promise<void> {
+    const queue = this.state.freeQueue;
+    const idx = normalizePlayIndex(
+      queue.length,
+      index,
+      { shuffle: this.state.shuffle, repeat: this.state.repeat },
+      auto,
+    );
+    if (idx === null) return;
+
+    const track = queue[idx];
+    if (!track) return;
+    this.state.freeIndex = idx;
+    this.persist();
+
+    this.stopSpotifyPlayback();
+    this.miniDismissed = false;
+    this.source = 'free';
+    this.spotifyMode = 'resolve';
+    await this.engine.playTrack(track);
   }
 
   /** Reflects <audio> play/pause in the bar, rows, mini player and navbar. */
@@ -412,124 +423,52 @@ class MusicPlayerApp {
     }
   }
 
-  /** Starts playing the queue at `index` through the free engine. */
-  private async playFreeAt(index: number, auto = false): Promise<void> {
-    const queue = this.state.freeQueue;
-    const idx = normalizePlayIndex(
-      queue.length,
-      index,
-      { shuffle: this.state.shuffle, repeat: this.state.repeat },
-      auto,
-    );
-    if (idx === null) return;
-
-    const track = queue[idx];
-    if (!track) return;
-    this.state.freeIndex = idx;
-    this.persist();
-
-    this.stopSpotifyPlayback();
-    this.miniDismissed = false;
-    this.source = 'free';
-    this.spotifyMode = 'resolve';
-    this.retriedCurrentTrack = false;
-    this.freeMode = 'resolve';
-    const token = ++this.freeResolveToken;
-
-    this.syncPlayerBarFree(track, false, 'resolve', 'Finding a stream…');
-    this.updateRowStates();
-    this.updateQueueView();
-    this.syncNavbarIcon();
-    this.startProgressTimer();
-
-    if (!this.capsChecked) await this.checkCapabilities();
-
-    if (!this.caps.resolve) {
-      this.tryPreviewFallback(track, token, 'Free playback is not available on this deployment.');
-      return;
-    }
-
-    try {
-      const stream = await resolveTrackStream(this.freeResolveInput(track));
-      if (token !== this.freeResolveToken) return; // a newer track took over
-      const audio = this.ensureFreeAudio();
-      this.pbSub.textContent = trackArtistNames(track);
-      audio.src = stream.url;
-      await audio.play().catch(() => {
+  /** Everything the engine tells the UI, in one dispatcher. */
+  private handleEngineEvent(event: FreeEngineEvent): void {
+    switch (event.kind) {
+      case 'resolving':
+        this.syncPlayerBarFree(event.track, false, 'resolve', 'Finding a stream…');
+        this.updateRowStates();
+        this.updateQueueView();
+        this.syncNavbarIcon();
+        this.startProgressTimer();
+        return;
+      case 'retrying':
+        this.pbSub.textContent = 'Retrying…';
+        return;
+      case 'stream':
+        this.pbSub.textContent = trackArtistNames(event.track);
+        return;
+      case 'preview':
+        showToast(`${event.message} Playing a 30-second preview instead.`);
+        this.syncPlayerBarFree(event.track, false, 'preview');
+        return;
+      case 'unavailable':
+        showToast(event.message);
+        this.updatePlayerBarEmpty();
+        this.updateRowStates();
+        this.updateQueueView();
+        return;
+      case 'playback':
+        this.handleFreePlaybackState(event.playing);
+        return;
+      case 'time':
+        if (this.source === 'free') this.updateProgress();
+        return;
+      case 'metadata':
+        if (this.source === 'free') {
+          const total = this.currentDurationMs();
+          this.timeTotal.textContent = formatMs(total);
+          this.seek.setAttribute('aria-valuetext', formatMs(this.currentPositionMs()));
+        }
+        return;
+      case 'ended':
+        this.handleFreeEnded();
+        return;
+      case 'autoplay-blocked':
         showToast('Tap play to start the audio.');
-      });
-    } catch (err) {
-      if (token !== this.freeResolveToken) return;
-      this.handleResolveFailure(track, token, err);
+        return;
     }
-  }
-
-  private freeResolveInput(track: SpotifyTrack): {
-    trackId: string;
-    title: string;
-    artist: string;
-    durationMs: number | null;
-  } {
-    return {
-      trackId: track.id,
-      title: track.name,
-      artist: trackArtistNames(track),
-      durationMs: track.duration_ms > 0 ? track.duration_ms : null,
-    };
-  }
-
-  private handleResolveFailure(track: SpotifyTrack, token: number, err: unknown): void {
-    if (this.retriedCurrentTrack) {
-      this.tryPreviewFallback(track, token, this.describeFreeError(err));
-      return;
-    }
-    // One retry with a fresh (cache-busting) resolution before giving up.
-    this.retriedCurrentTrack = true;
-    this.pbSub.textContent = 'Retrying…';
-    resolveTrackStream(this.freeResolveInput(track), true)
-      .then((stream) => {
-        if (token !== this.freeResolveToken) return;
-        const audio = this.ensureFreeAudio();
-        audio.src = stream.url;
-        void audio.play().catch(() => undefined);
-      })
-      .catch((retryErr: unknown) => {
-        if (token !== this.freeResolveToken) return;
-        this.tryPreviewFallback(track, token, this.describeFreeError(retryErr));
-      });
-  }
-
-  /** Last resort: the public 30-second preview, when one exists. */
-  private tryPreviewFallback(track: SpotifyTrack, token: number, message: string): void {
-    if (track.preview_url) {
-      showToast(`${message} Playing a 30-second preview instead.`);
-      this.freeMode = 'preview';
-      this.syncPlayerBarFree(track, false, 'preview');
-      const audio = this.ensureFreeAudio();
-      audio.src = track.preview_url;
-      void audio.play().catch(() => undefined);
-      return;
-    }
-    showToast(message);
-    this.updatePlayerBarEmpty();
-    this.updateRowStates();
-    this.updateQueueView();
-  }
-
-  private describeFreeError(err: unknown): string {
-    if (err instanceof FreeMusicError) return err.message;
-    if (err instanceof Error && err.message) return err.message;
-    return 'Could not play this song.';
-  }
-
-  private handleFreeAudioError(): void {
-    if (this.source !== 'free') return;
-    const track = this.currentFreeTrack();
-    if (!track) return;
-    const token = this.freeResolveToken;
-    // The audio element failed on a URL we handed it — re-resolve (fresh)
-    // or fall back to the preview.
-    this.handleResolveFailure(track, token, new Error('That stream expired — refreshing.'));
   }
 
   private handleFreeEnded(): void {
@@ -569,19 +508,8 @@ class MusicPlayerApp {
   }
 
   private freePrev(): void {
-    const audio = this.freeAudio;
     const track = this.currentFreeTrack();
-    if (
-      audio &&
-      track &&
-      audio.src &&
-      !audio.paused &&
-      audio.currentTime > 3 &&
-      this.freeResolveToken > 0
-    ) {
-      audio.currentTime = 0;
-      return;
-    }
+    if (track && this.engine.restartIfActive()) return;
     const queue = this.state.freeQueue;
     const prevIdx = prevPlayIndex(queue.length, this.state.freeIndex);
     if (prevIdx === null) return;
@@ -613,7 +541,7 @@ class MusicPlayerApp {
     const track = this.currentFreeTrack();
     if (!track) return;
     this.source = 'free';
-    this.freeMode = 'resolve';
+    this.engine.resetMode();
     this.syncPlayerBarFree(track, false, 'resolve');
   }
 
@@ -623,7 +551,7 @@ class MusicPlayerApp {
 
   private isPlaying(): boolean {
     if (this.source === 'free') {
-      return this.freeAudio !== null && !this.freeAudio.paused;
+      return this.engine.isPlaying;
     }
     if (this.source === 'spotify') {
       if (this.activeDeviceId) return this.sdkRestPlaying;
@@ -634,11 +562,9 @@ class MusicPlayerApp {
 
   private currentDurationMs(): number {
     if (this.source === 'free') {
-      if (this.freeMode === 'preview') return 30_000;
-      const audio = this.freeAudio;
-      if (audio && audio.src && Number.isFinite(audio.duration) && audio.duration > 0) {
-        return audio.duration * 1000;
-      }
+      if (this.engine.mode === 'preview') return 30_000;
+      const audioMs = this.engine.audioDurationMs;
+      if (audioMs !== null) return audioMs;
       const track = this.currentFreeTrack();
       return track ? track.duration_ms : 0;
     }
@@ -650,9 +576,7 @@ class MusicPlayerApp {
 
   private currentPositionMs(): number {
     if (this.source === 'free') {
-      const audio = this.freeAudio;
-      if (audio && audio.src) return audio.currentTime * 1000;
-      return 0;
+      return this.engine.positionMs;
     }
     if (this.source === 'spotify') {
       if (this.sdkState) {
@@ -785,14 +709,12 @@ class MusicPlayerApp {
 
   togglePlay(): void {
     if (this.source === 'free') {
-      const audio = this.freeAudio ?? this.ensureFreeAudio();
-      if (!audio.src) {
+      if (!this.engine.hasSource) {
         const track = this.currentFreeTrack();
         if (track) void this.playFreeAt(Math.max(0, this.state.freeIndex));
         return;
       }
-      if (audio.paused) void audio.play().catch(() => undefined);
-      else audio.pause();
+      this.engine.toggle();
       return;
     }
     if (this.source === 'spotify') {
@@ -840,7 +762,7 @@ class MusicPlayerApp {
 
   private setVolume(value: number, fromUser: boolean): void {
     const vol = Math.max(0, Math.min(1, value));
-    if (this.freeAudio) this.freeAudio.volume = vol;
+    this.engine.setVolume(vol);
     void this.sdk.setVolume(vol).catch(() => undefined);
     if (fromUser) {
       this.state.volume = vol;
@@ -948,11 +870,7 @@ class MusicPlayerApp {
 
   private commitSeekTo(posMs: number): void {
     if (this.source === 'free') {
-      const audio = this.freeAudio;
-      if (audio && audio.src) {
-        const max = this.freeMode === 'preview' ? 29.5 : Number.MAX_SAFE_INTEGER;
-        audio.currentTime = Math.min(posMs / 1000, max);
-      }
+      this.engine.seekToMs(posMs);
     } else if (this.source === 'spotify') {
       if (this.spotifyMode === 'sdk') {
         if (this.activeDeviceId) {
@@ -971,7 +889,7 @@ class MusicPlayerApp {
   // ========================================================================
 
   private stopSpotifyPlayback(): void {
-    if (this.freeAudio && !this.freeAudio.paused) this.freeAudio.pause();
+    this.engine.pauseIfPlaying();
     if (this.source === 'spotify' && this.spotifyMode === 'sdk') {
       if (this.activeDeviceId) {
         void spotify.pausePlayback(this.activeDeviceId).catch(() => undefined);
@@ -1848,8 +1766,7 @@ class MusicPlayerApp {
     if (result.wasCurrent) {
       if (result.emptied) {
         this.source = 'none';
-        this.freeResolveToken++;
-        if (this.freeAudio) this.freeAudio.removeAttribute('src');
+        this.engine.dropSource();
         this.updatePlayerBarEmpty();
       } else {
         void this.playFreeAt(Math.max(0, this.state.freeIndex));
@@ -1866,8 +1783,7 @@ class MusicPlayerApp {
     this.persist();
     if (this.source === 'free') {
       this.source = 'none';
-      this.freeResolveToken++;
-      if (this.freeAudio) this.freeAudio.removeAttribute('src');
+      this.engine.dropSource();
       this.updatePlayerBarEmpty();
     }
     this.updateQueueView();
@@ -1979,15 +1895,11 @@ class MusicPlayerApp {
 
   private stopAndHideMini(): void {
     if (this.source === 'free') {
-      this.freeResolveToken++;
-      if (this.freeAudio) {
-        this.freeAudio.removeAttribute('src');
-        this.freeAudio.load();
-      }
+      this.engine.stop();
     }
     if (this.source === 'spotify') {
       this.stopSpotifyPlayback();
-      if (this.freeAudio) this.freeAudio.pause();
+      this.engine.pauseIfPlaying();
     }
     this.state.freeQueue = [];
     this.state.freeIndex = -1;
@@ -2419,10 +2331,10 @@ class MusicPlayerApp {
       ) {
         return;
       }
-      if (this.source !== 'free' || !this.freeAudio?.src) return;
+      if (this.source !== 'free' || !this.engine.hasSource) return;
       event.preventDefault();
       const delta = key === 'ArrowLeft' ? -5 : 5;
-      this.freeAudio.currentTime = Math.max(0, this.freeAudio.currentTime + delta);
+      this.engine.nudgeSeconds(delta);
     });
   }
 
