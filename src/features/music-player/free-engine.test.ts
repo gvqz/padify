@@ -8,12 +8,6 @@ import type { SpotifyTrack } from './spotify/api';
  * faked (jsdom cannot play), the resolve API is mocked, and the host is
  * a spy; what these tests pin is the decision sequence: which events
  * fire, in what order, and what ends up on the element.
- *
- * Quirks pinned on purpose (they were the controller's behavior):
- * - the retry-success path does NOT emit 'stream' — the bar keeps
- *   "Retrying…" until the next track (fixed separately in the app);
- * - the retry re-resolve and the preview fallback are fire-and-forget
- *   (void promises) with the same token guard as the main path.
  */
 
 vi.mock('./music/client', () => ({
@@ -235,8 +229,7 @@ describe('FreeEngine', () => {
       expect(resolveMock).toHaveBeenCalledTimes(2);
       const second = resolveMock.mock.calls[1]!;
       expect(second[1]).toBe(true); // cache-busted
-      expect(kinds(host)).toEqual(['resolving', 'retrying']);
-      // Pinned quirk: no 'stream' event on the retry path.
+      expect(kinds(host)).toEqual(['resolving', 'retrying', 'stream']);
       expect(element().playCalls).toBe(1);
     });
 

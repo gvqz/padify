@@ -17,8 +17,6 @@ import { trackArtistNames } from './helpers';
  * - A stale resolve never overwrites a newer track (the token guard).
  * - A failed resolve is retried exactly once, cache-busted.
  * - The preview is the last resort, and only when one exists.
- * - The subtitle keeps whatever the controller set during loading
- *   ("Retrying…" included) until the controller changes it.
  */
 
 export type FreeEngineMode = 'resolve' | 'preview';
@@ -146,7 +144,7 @@ export class FreeEngine {
     if (this.audio && !this.audio.paused) this.audio.pause();
   }
 
-  /** Full stop: invalidate in-flight resolves and drop the source. */
+  /** Full stop: invalidate in-flight resolves, drop the source, reset. */
   stop(): void {
     this.resolveToken++;
     const audio = this.audio;
@@ -154,16 +152,6 @@ export class FreeEngine {
       audio.removeAttribute('src');
       audio.load();
     }
-  }
-
-  /**
-   * Drops the source without resetting the element — the queue-emptied
-   * paths' historical behavior (kept verbatim; the element is not asked
-   * to load()).
-   */
-  dropSource(): void {
-    this.resolveToken++;
-    if (this.audio) this.audio.removeAttribute('src');
   }
 
   /** Arrow-key seeking: a relative nudge in seconds, uncapped. */
@@ -247,6 +235,7 @@ export class FreeEngine {
       .then((stream) => {
         if (token !== this.resolveToken) return;
         const audio = this.ensureAudio();
+        this.host.notify({ kind: 'stream', track });
         audio.src = stream.url;
         void audio.play().catch(() => undefined);
       })

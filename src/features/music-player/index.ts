@@ -929,6 +929,7 @@ class MusicPlayerApp {
     this.activeDeviceId = null; // our device is active
     this.source = 'spotify';
     this.spotifyMode = 'sdk';
+    if (!state.paused) this.engine.pauseIfPlaying(); // one voice at a time
     const track = state.track_window.current_track;
     this.syncPlayerBarSpotify(track, trackArtistNames(track), !state.paused);
     this.updateRowStates();
@@ -967,6 +968,8 @@ class MusicPlayerApp {
 
     this.source = 'spotify';
     this.spotifyMode = 'sdk';
+    // Only one engine may sing: hand the output to the SDK.
+    this.engine.pauseIfPlaying();
 
     try {
       const deviceId = await this.ensureSdkReady();
@@ -1766,7 +1769,7 @@ class MusicPlayerApp {
     if (result.wasCurrent) {
       if (result.emptied) {
         this.source = 'none';
-        this.engine.dropSource();
+        this.engine.stop();
         this.updatePlayerBarEmpty();
       } else {
         void this.playFreeAt(Math.max(0, this.state.freeIndex));
@@ -1783,7 +1786,7 @@ class MusicPlayerApp {
     this.persist();
     if (this.source === 'free') {
       this.source = 'none';
-      this.engine.dropSource();
+      this.engine.stop();
       this.updatePlayerBarEmpty();
     }
     this.updateQueueView();
