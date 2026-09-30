@@ -194,6 +194,52 @@ export async function handleSignin(db: Db, request: Request): Promise<Response> 
 }
 
 export async function handleNotesGet(db: Db, request: Request, user: SessionUser): Promise<Response> {
+  const query = new URL(request.url).searchParams;
+
+  // Sync v2: incremental pull. The client sends its last-seen sequence and
+  // receives only what changed past it, plus the full position order (the
+  // strip's convergence sort needs every note's place, not just the
+  // changed ones'). Rows the seq-stamping builds have never written
+  // (seq = 0 — the migration's default, or a v1-only server's history)
+  // are delivered unconditionally, so a fresh v2 server never hides an
+  // untouched row behind an old cursor.
+  if (query.get('v') === '2') {
+    const cursorParam = Number(query.get('cursor'));
+    const cursor = Number.isFinite(cursorParam) && cursorParam > 0 ? Math.floor(cursorParam) : 0;
+
+    const rows = await db.all(
+      `select id, name, content, position, created_at, updated_at, deleted, note_type, seq
+       from notes where user_id = ? and (seq > ? or seq = 0) order by seq asc`,
+      [user.id, cursor]
+    );
+    const order = await db.all(
+      `select id from notes where user_id = ? and deleted = 0 order by position asc`,
+      [user.id]
+    );
+    const nextCursor = rows.reduce(
+      (max, row) => Math.max(max, Number(row.seq) || 0),
+      cursor
+    );
+    return json(request, {
+      v: 2,
+      rows: rows.map(row => ({
+        id: String(row.id),
+        name: row.name ?? null,
+        content: row.content ?? '',
+        position: Number(row.position) || 0,
+        created_at: Number(row.created_at) || 0,
+        updated_at: Number(row.updated_at) || 0,
+        deleted: Number(row.deleted) === 1,
+        note_type: row.note_type ?? null,
+        seq: Number(row.seq) || 0
+      })),
+      // The full remote position order, by id — unchanged rows included.
+      order: order.map(row => String(row.id)),
+      // The client's next cursor: everything at or below this has been seen.
+      cursor: nextCursor
+    });
+  }
+
   const rows = await db.all(
     `select id, user_id, name, content, position, created_at, updated_at, deleted, note_type
      from notes where user_id = ? order by position asc`,
@@ -202,7 +248,10 @@ export async function handleNotesGet(db: Db, request: Request, user: SessionUser
   return json(request, {
     // Dual-key during the rename transition (see handleSharesGet): rows
     // built before the rename read `html`, everything after it reads
-    // `content`, and a deploy gap must never blank a note on pull.
+    // `content`, and a deploy gap must never blank a note on pull. V2
+    // clients stop emitting the twin (their pulls answer through the v2
+    // path above); v1 clients keep receiving it until every install has
+    // crossed over.
     rows: rows.map(row => ({ ...row, html: row.content, deleted: Number(row.deleted) === 1 }))
   });
 }
@@ -218,14 +267,27 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
     return json(request, { error: 'Invalid notes payload.' }, 400);
   }
 
+  // Sync v2 stamping: every write assigns the row the next number in the
+  // user's monotonic sequence — fresh inserts and conflict updates alike,
+  // so a re-push, a position drift and a delete all surface to cursored
+  // pulls. The base is read once per batch and handed out in row order;
+  // two racing batches can hand out the same numbers (the sequence stays
+  // monotonic, deliveries never drop — only their order ties), which is
+  // the documented cost of doing this without a CAS counter table.
+  const seqRows = await db.all(
+    'select coalesce(max(seq), 0) as base from notes where user_id = ?',
+    [user.id]
+  );
+  const base = Number(seqRows[0]?.base ?? 0) || 0;
+
   // The owner comes from the session, never from the payload; the conflict
   // clause pins updates to rows the user already owns (no cross-user writes).
   // All rows go out as one batched write (single Turso pipeline request,
   // single local transaction) instead of one round-trip per row.
   await db.runMany(
-    rows.map(row => ({
-      sql: `insert into notes (id, user_id, name, content, position, created_at, updated_at, deleted, note_type)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    rows.map((row, index) => ({
+      sql: `insert into notes (id, user_id, name, content, position, created_at, updated_at, deleted, note_type, seq)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        on conflict(id) do update set
          name = excluded.name,
          content = excluded.content,
@@ -233,9 +295,21 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
          created_at = excluded.created_at,
          updated_at = excluded.updated_at,
          deleted = excluded.deleted,
-         note_type = excluded.note_type
+         note_type = excluded.note_type,
+         seq = excluded.seq
        where notes.user_id = excluded.user_id`,
-      args: [row.id, user.id, row.name, row.content, row.position, row.created_at, row.updated_at, row.deleted ? 1 : 0, row.note_type]
+      args: [
+        row.id,
+        user.id,
+        row.name,
+        row.content,
+        row.position,
+        row.created_at,
+        row.updated_at,
+        row.deleted ? 1 : 0,
+        row.note_type,
+        base + index + 1
+      ]
     }))
   );
 

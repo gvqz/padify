@@ -257,7 +257,10 @@ const REQUIRED_COLUMNS: Array<{ table: string; column: string; definition: strin
   { table: 'notes', column: 'note_type', definition: 'text' },
   // Shares carry the note's type alongside the denormalised content so the
   // public viewer can render by kind (see public/share/share.js).
-  { table: 'shares', column: 'note_type', definition: 'text' }
+  { table: 'shares', column: 'note_type', definition: 'text' },
+  // Sync v2's per-user change sequence, stamped on every notes write; the
+  // default 0 marks rows a seq-stamping build has never written.
+  { table: 'notes', column: 'seq', definition: 'integer not null default 0' }
 ];
 
 async function migrateColumns(db: Db): Promise<void> {

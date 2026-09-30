@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Db, Row, SqlStatement, SqlValue } from '../server/db';
 import {
+  handleNotesGet,
+  handleNotesPut,
   handlePublicShareGet,
   handleSharesPatch,
   handleSignup,
@@ -211,5 +213,141 @@ describe('MAX_BODY_BYTES', () => {
     // The client's PUSH_BATCH_BYTES (1.5 MB) must stay below this; the
     // value is pinned here so the two sides drift loudly, not silently.
     expect(MAX_BODY_BYTES).toBe(2_000_000);
+  });
+});
+
+describe('handleNotesPut — sync v2 seq stamping', () => {
+  it('hands out the batch sequence in row order, base read from the user max', async () => {
+    const db = new ScriptedDb([
+      // The user's sequence already stands at 41 — this batch hands out 42, 43.
+      { match: 'coalesce(max(seq)', rows: [{ base: 41 }] },
+    ]);
+    const response = await handleNotesPut(
+      db,
+      jsonRequest('PUT', {
+        rows: [
+          { id: 'a', content: 'one', updated_at: 5, deleted: false },
+          { id: 'b', content: 'two', updated_at: 6, deleted: false },
+        ],
+      }),
+      user,
+    );
+    expect(response.status).toBe(200);
+
+    // The base read happened exactly once, before the batch.
+    expect(db.sqls.filter((sql) => sql.includes('coalesce(max(seq)'))).toHaveLength(1);
+
+    const seqs = db.statements.map((statement) => statement.args?.[9]);
+    expect(seqs).toEqual([42, 43]);
+    // Both rows carry the seq column in their INSERT — fresh writes get
+    // stamped exactly like conflict updates.
+    expect(db.statements.every((statement) => statement.sql.includes('seq = excluded.seq'))).toBe(
+      true,
+    );
+  });
+
+  it('an empty script answers base 0 — a fresh database stamps 1..n', async () => {
+    const db = new ScriptedDb();
+    await handleNotesPut(
+      db,
+      jsonRequest('PUT', { rows: [{ id: 'a', content: 'x', updated_at: 1, deleted: false }] }),
+      user,
+    );
+    expect(db.statements[0]?.args?.[9]).toBe(1);
+  });
+});
+
+describe('handleNotesGet — the v2 cursor pull', () => {
+  const v2Rows = [
+    {
+      id: 'n2',
+      name: null,
+      content: '<p>newer</p>',
+      position: 1,
+      created_at: 10,
+      updated_at: 20,
+      deleted: 0,
+      note_type: null,
+      seq: 12,
+    },
+    {
+      // seq 0: a row the stamping builds never wrote — delivered regardless
+      // of the cursor, so a fresh v2 server never hides an untouched note.
+      id: 'n1',
+      name: null,
+      content: '<p>legacy body</p>',
+      position: 0,
+      created_at: 5,
+      updated_at: 6,
+      deleted: 0,
+      note_type: null,
+      seq: 0,
+    },
+  ];
+
+  it('answers changed rows, the full order, and the next cursor', async () => {
+    const db = new ScriptedDb([
+      { match: 'seq > ? or seq = 0', rows: v2Rows },
+      { match: 'order by position asc', rows: [{ id: 'n1' }, { id: 'n2' }] },
+    ]);
+    const response = await handleNotesGet(
+      db,
+      new Request('http://api.test/api/notes?v=2&cursor=9'),
+      user,
+    );
+    const body = await bodyOf(response);
+
+    expect(body.v).toBe(2);
+    const rows = body.rows as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toMatchObject({ id: 'n1', seq: 0, deleted: false });
+    expect(body.order).toEqual(['n1', 'n2']);
+    // The cursor advanced past the highest delivered seq (12); the seq-0
+    // row does not drag it back.
+    expect(body.cursor).toBe(12);
+    // V2 rows speak one key — the rename's legacy twin is dead here.
+    expect(JSON.stringify(body)).not.toContain('"html"');
+  });
+
+  it('a cursor past everything answers an empty page and keeps the cursor', async () => {
+    const db = new ScriptedDb([
+      { match: 'seq > ? or seq = 0', rows: [] },
+      { match: 'order by position asc', rows: [{ id: 'n1' }] },
+    ]);
+    const response = await handleNotesGet(
+      db,
+      new Request('http://api.test/api/notes?v=2&cursor=500'),
+      user,
+    );
+    const body = await bodyOf(response);
+    expect(body.rows).toEqual([]);
+    expect(body.cursor).toBe(500);
+    expect(body.order).toEqual(['n1']);
+  });
+
+  it('v1 keeps the full dual-key answer untouched', async () => {
+    const db = new ScriptedDb([
+      {
+        match: 'order by position asc',
+        rows: [
+          {
+            id: 'n1',
+            user_id: 'user-1',
+            name: null,
+            content: '<p>body</p>',
+            position: 0,
+            created_at: 1,
+            updated_at: 2,
+            deleted: 0,
+            note_type: null,
+          },
+        ],
+      },
+    ]);
+    const response = await handleNotesGet(db, new Request('http://api.test/api/notes'), user);
+    const body = await bodyOf(response);
+    expect(body.v).toBeUndefined();
+    // The legacy twin rides v1 responses until every install crossed over.
+    expect(JSON.stringify(body)).toContain('"html"');
   });
 });

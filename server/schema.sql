@@ -48,10 +48,18 @@ create table if not exists notes (
   created_at integer not null default 0,
   updated_at integer not null default 0,
   deleted    integer not null default 0,
-  note_type  text
+  note_type  text,
+  -- Sync v2: a per-user monotonic sequence, stamped by the server on every
+  -- write. Ordering and incremental pulls key off it (see handlers.ts);
+  -- 0 = never written by a seq-stamping build (delivered unconditionally).
+  seq        integer not null default 0
 );
 
 create index if not exists notes_user_id_idx on notes(user_id);
+-- Sync v2's incremental pull filters on (user_id, seq) and the position
+-- convergence read walks (user_id, position).
+create index if not exists notes_user_id_seq_idx on notes(user_id, seq);
+create index if not exists notes_user_id_position_idx on notes(user_id, position);
 
 -- ---------------------------------------------------------------------------
 -- Shares (read-only note links — /share/?t=<token>).
