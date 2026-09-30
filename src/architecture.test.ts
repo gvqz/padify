@@ -10,6 +10,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { MARKUP_CONTRACT } from './ui/contract';
+import type { EditorPort } from './editor/port';
 
 // Vitest runs from the repo root; import.meta.url is not file-scheme here.
 const read = (path: string): string => readFileSync(resolve(process.cwd(), path), 'utf-8');
@@ -93,10 +94,9 @@ describe('bootstrap single source of truth', () => {
       devDependencies: Record<string, string>;
     };
     const banned = ['jquery', 'bootstrap', '@types/jquery'];
-    const present = [
-      ...Object.keys(pkg.dependencies),
-      ...Object.keys(pkg.devDependencies),
-    ].filter((name) => banned.includes(name));
+    const present = [...Object.keys(pkg.dependencies), ...Object.keys(pkg.devDependencies)].filter(
+      (name) => banned.includes(name),
+    );
     expect(present).toEqual([]);
   });
 });
@@ -167,7 +167,8 @@ describe('layering rules', () => {
     for (const file of featureFiles) {
       const featureRoot = file.split('/features/')[1]!.split('/')[0]!;
       for (const target of importTargets(file)) {
-        const m = target.match(/(?:\.\.\/)+features\/([\w-]+)\//) ?? target.match(/^features\/([\w-]+)\//);
+        const m =
+          target.match(/(?:\.\.\/)+features\/([\w-]+)\//) ?? target.match(/^features\/([\w-]+)\//);
         if (m && m[1] !== featureRoot) violators.push(`${rel(file)} -> ${target}`);
       }
     }
@@ -199,5 +200,58 @@ describe('layering rules', () => {
       }
     }
     expect(violators).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The editor seam — the swap contract.
+//
+// The editor engine is being replaced behind EditorPort. These rules pin
+// the interface properties that make the swap a drop-in: handles instead
+// of DOM elements, and the render/commit split that lets the manager open
+// a note without writing it.
+// ---------------------------------------------------------------------------
+
+describe('the editor seam (the swap contract)', () => {
+  it('the math API speaks id handles, never DOM elements', () => {
+    // Type-level pins — they fail to COMPILE the moment someone reintroduces
+    // an HTMLElement into the port's math surface. An engine that keeps a
+    // document model cannot hand out its internal nodes; the contract is
+    // "a string updateMath understands".
+    type MathAtCaret = ReturnType<EditorPort['queryMathAtCaret']>;
+    type UpdateTarget = Parameters<EditorPort['updateMath']>[0];
+
+    const atCaretIsIdShaped: NonNullable<MathAtCaret> extends { latex: string; id: string }
+      ? true
+      : never = true;
+    const atCaretHasNoElement: NonNullable<MathAtCaret> extends { element: unknown }
+      ? never
+      : true = true;
+    const targetIsAHandle: UpdateTarget extends string ? true : never = true;
+
+    expect(atCaretIsIdShaped).toBe(true);
+    expect(atCaretHasNoElement).toBe(true);
+    expect(targetIsAHandle).toBe(true);
+  });
+
+  it('render and commit are separate entries on the port', () => {
+    // Opening a note paints the surface (renderHtml); replacing its content
+    // persists exactly once (setHtml). One entry that does both is the bug
+    // the split removed — the manager had to bypass the port to open a
+    // note without writing it.
+    const renders: EditorPort['renderHtml'] extends (html: string) => void ? true : never = true;
+    const commits: EditorPort['setHtml'] extends (html: string) => void ? true : never = true;
+
+    expect(renders).toBe(true);
+    expect(commits).toBe(true);
+  });
+
+  it('TabManager never touches engine APIs — the port is its only editor', () => {
+    // The manager owns the note MODEL; the engine owns the surface. The
+    // moment tabs.ts calls execCommand or selection APIs, the engine swap
+    // has two homes instead of one.
+    const source = read(resolve(process.cwd(), 'src/tabs.ts'));
+    expect(source).not.toMatch(/document\.execCommand/);
+    expect(source).not.toMatch(/(?:window|document)\.getSelection/);
   });
 });
