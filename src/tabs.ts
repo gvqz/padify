@@ -59,6 +59,14 @@ export interface NoteTab {
   id: string;
   /** User-provided name; null derives the title from the content. */
   name: string | null;
+  /**
+   * The note's content, in the format its type owns (see
+   * editor/note-types.ts — contentKindFor). The field name is history:
+   * it says html because that is all the first Padify stored, but for a
+   * non-html type it holds that type's format — Markdown source, JSON,
+   * an unknown build's bytes — verbatim, and the sanitizer never touches
+   * it. A rename to `content` is queued; semantics first, spelling second.
+   */
   html: string;
   createdAt: number;
   updatedAt: number;
@@ -1347,12 +1355,13 @@ export function getEditorText(): string {
 }
 
 /**
- * The active note's content for snapshot capture. Html notes read the LIVE
- * editor (keystrokes still inside the debounce window are worth keeping);
- * every other kind reads the model, because the editor is showing a
- * placeholder card — the note's real content never entered the editor DOM.
+ * The active note's true content — the capture path for snapshots AND
+ * share links. Html notes read the LIVE editor (keystrokes still inside
+ * the debounce window are worth keeping); every other kind reads the
+ * model, because the editor is showing a placeholder card — the note's
+ * real content never entered the editor DOM.
  */
-export function getActiveNoteForSnapshot(): {
+export function getActiveNoteContent(): {
   content: string;
   noteType: NoteType | undefined;
 } | null {

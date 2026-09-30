@@ -246,8 +246,11 @@ export async function applySchema(db: Db): Promise<void> {
  * missing, so startup stays idempotent on every database state.
  */
 const REQUIRED_COLUMNS: Array<{ table: string; column: string; definition: string }> = [
-  // note_type carries the note kind (rich text etc.); null = standard.
+  // note_type carries the note kind (rich text, a future type, …); null = standard.
   { table: 'notes', column: 'note_type', definition: 'text' },
+  // Shares carry the note's type alongside the denormalised content so the
+  // public viewer can render by kind (see public/share/share.js).
+  { table: 'shares', column: 'note_type', definition: 'text' }
 ];
 
 async function migrateColumns(db: Db): Promise<void> {

@@ -37,6 +37,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { applySchema, createDb, type Db, type SqlValue, type SqlStatement } from './db';
+import { asBool, asInt, asString, parseNoteRows, parseNoteType } from './notes';
 import {
   createSession,
   destroySession,
@@ -114,19 +115,6 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
   } catch {
     return null;
   }
-}
-
-function asString(value: unknown, fallback = ''): string {
-  return typeof value === 'string' ? value : fallback;
-}
-
-function asInt(value: unknown, fallback: number): number {
-  const parsed = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(parsed) ? Math.round(parsed) : fallback;
-}
-
-function asBool(value: unknown, fallback = false): boolean {
-  return typeof value === 'boolean' ? value : fallback;
 }
 
 // ---------------------------------------------------------------------------
@@ -251,46 +239,6 @@ async function handleNotesGet(db: Db, request: Request, user: SessionUser): Prom
   });
 }
 
-interface IncomingNoteRow {
-  id: string;
-  name: string | null;
-  html: string;
-  position: number;
-  created_at: number;
-  updated_at: number;
-  deleted: boolean;
-  note_type: string | null;
-}
-
-function parseNoteRows(value: unknown): IncomingNoteRow[] | null {
-  if (!Array.isArray(value) || value.length === 0 || value.length > 500) {
-    return null;
-  }
-  const rows: IncomingNoteRow[] = [];
-  for (const entry of value) {
-    if (!entry || typeof entry !== 'object') {
-      return null;
-    }
-    const row = entry as Record<string, unknown>;
-    const id = asString(row.id);
-    if (!id || id.length > 100) {
-      return null;
-    }
-    rows.push({
-      id,
-      name: row.name === null || row.name === undefined ? null : asString(row.name).slice(0, 300),
-      html: asString(row.html),
-      position: asInt(row.position, 0),
-      created_at: asInt(row.created_at, 0),
-      updated_at: asInt(row.updated_at, 0),
-      deleted: asBool(row.deleted),
-      // Only known note kinds are stored; anything else = the default.
-      note_type: row.note_type === 'rich' ? 'rich' : null
-    });
-  }
-  return rows;
-}
-
 async function handleNotesPut(db: Db, request: Request, user: SessionUser): Promise<Response> {
   const body = await readJson(request);
   if (!body) {
@@ -351,6 +299,7 @@ async function handleSharesPost(db: Db, request: Request, user: SessionUser): Pr
   const noteId = asString(body.note_id).slice(0, 100) || null;
   const title = asString(body.title).slice(0, 200);
   const html = asString(body.html);
+  const noteType = parseNoteType(body.note_type);
   const days = Math.min(3650, Math.max(1, asInt(body.days, 7)));
 
   const token = createShareToken();
@@ -359,9 +308,9 @@ async function handleSharesPost(db: Db, request: Request, user: SessionUser): Pr
 
   try {
     await db.run(
-      `insert into shares (token, user_id, note_id, title, html, created_at, expires_at, revoked)
-       values (?, ?, ?, ?, ?, ?, ?, 0)`,
-      [token, user.id, noteId, title, html, now, expiresAt]
+      `insert into shares (token, user_id, note_id, title, html, note_type, created_at, expires_at, revoked)
+       values (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      [token, user.id, noteId, title, html, noteType, now, expiresAt]
     );
   } catch {
     // Token collision (vanishingly rare) — ask the client to retry.
@@ -369,7 +318,7 @@ async function handleSharesPost(db: Db, request: Request, user: SessionUser): Pr
   }
 
   return json(request, {
-    row: { token, note_id: noteId, title, html, created_at: now, expires_at: expiresAt, revoked: false }
+    row: { token, note_id: noteId, title, html, note_type: noteType, created_at: now, expires_at: expiresAt, revoked: false }
   }, 201);
 }
 
@@ -423,9 +372,9 @@ async function handleSharesPatch(db: Db, request: Request, user: SessionUser): P
       continue;
     }
     statements.push({
-      sql: `update shares set title = ?, html = ?
+      sql: `update shares set title = ?, html = ?, note_type = ?
             where user_id = ? and note_id = ? and revoked = 0 and expires_at > ?`,
-      args: [asString(item.title).slice(0, 200), asString(item.html), user.id, noteId, now]
+      args: [asString(item.title).slice(0, 200), asString(item.html), parseNoteType(item.note_type), user.id, noteId, now]
     });
   }
   if (statements.length > 0) {
@@ -437,7 +386,7 @@ async function handleSharesPatch(db: Db, request: Request, user: SessionUser): P
 
 async function handlePublicShareGet(db: Db, request: Request, token: string): Promise<Response> {
   const rows = await db.all(
-    `select title, html, created_at, expires_at from shares
+    `select title, html, note_type, created_at, expires_at from shares
      where token = ? and revoked = 0 and expires_at > ?`,
     [token, Date.now()]
   );
@@ -450,6 +399,7 @@ async function handlePublicShareGet(db: Db, request: Request, token: string): Pr
     row: {
       title: row.title,
       html: row.html,
+      note_type: row.note_type ?? null,
       created_at: Number(row.created_at),
       expires_at: Number(row.expires_at)
     }

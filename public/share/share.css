@@ -286,6 +286,13 @@ body {
   overflow-wrap: break-word;
 }
 
+/* A raw (non-html) shared note: the whole content IS the pre — Markdown
+   source, a board's JSON, a newer type this viewer doesn't render. */
+.share-content > .share-raw-content {
+  display: block;
+  margin: 0;
+}
+
 .share-content hr {
   border: 0;
   border-top: 1px solid var(--s-border);

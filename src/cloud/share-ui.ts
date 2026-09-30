@@ -11,7 +11,7 @@ import { $ } from '../lib/q';
 import { openModal, closeModal } from '../ui/behavior/modal';
 import Swal from 'sweetalert2';
 import { showToast } from '../utils';
-import { deriveTabTitle, getEditorHtml, getTabManager } from '../tabs';
+import { deriveTabTitle, getActiveNoteContent, getTabManager } from '../tabs';
 import { getCloudSync } from './sync';
 import {
   createShare,
@@ -82,7 +82,13 @@ function renderPanes(): void {
 
 // ---- note card + expiry preview ----------------------------------------------
 
-function activeNote(): { id: string; title: string; words: number } | null {
+function activeNote(): {
+  id: string;
+  title: string;
+  words: number;
+  content: string;
+  noteType: string | null;
+} | null {
   const manager = getTabManager();
   const active = manager?.getActive();
   if (!manager || !active) {
@@ -92,7 +98,16 @@ function activeNote(): { id: string; title: string; words: number } | null {
   const title = deriveTabTitle(active);
   const text = manager.getActiveText();
   const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-  return { id: active.id, title, words };
+  // The note's TRUE content: html notes read the live editor, every other
+  // kind reads the model (its editor shows a placeholder card).
+  const captured = getActiveNoteContent();
+  return {
+    id: active.id,
+    title,
+    words,
+    content: captured?.content ?? '',
+    noteType: captured?.noteType ?? null,
+  };
 }
 
 function renderNoteCard(): void {
@@ -256,7 +271,13 @@ async function createFromEditor(): Promise<void> {
   }
 
   renderLinksBusy(true);
-  const result = await createShare(note.id, note.title, getEditorHtml(), selectedDays());
+  const result = await createShare(
+    note.id,
+    note.title,
+    note.content,
+    selectedDays(),
+    note.noteType ?? undefined,
+  );
   renderLinksBusy(false);
 
   if (!result.ok) {

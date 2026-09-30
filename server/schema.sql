@@ -56,9 +56,12 @@ create index if not exists notes_user_id_idx on notes(user_id);
 -- ---------------------------------------------------------------------------
 -- Shares (read-only note links — /share/?t=<token>).
 --
--- The html column is a denormalised copy of the note at share time; the app
--- keeps it fresh while the note is edited. Viewers are anonymous: the public
--- endpoint only ever returns rows that are neither revoked nor expired.
+-- The html column is a denormalised copy of the note at share time and
+-- note_type carries the note's type, so the public viewer can render by
+-- kind (sanitized HTML for the classic types, raw text for everything
+-- else — see public/share/share.js); the app keeps both fresh while the
+-- note is edited. Viewers are anonymous: the public endpoint only ever
+-- returns rows that are neither revoked nor expired.
 -- ---------------------------------------------------------------------------
 
 create table if not exists shares (
@@ -67,6 +70,7 @@ create table if not exists shares (
   note_id    text,
   title      text not null default '',
   html       text not null default '',
+  note_type  text,
   created_at integer not null default 0,
   expires_at integer not null,
   revoked    integer not null default 0

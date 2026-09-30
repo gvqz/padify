@@ -3,7 +3,7 @@ import { $ } from './lib/q';
 import { openModal, closeModal } from './ui/behavior/modal';
 import Swal from 'sweetalert2';
 import {
-  getActiveNoteForSnapshot,
+  getActiveNoteContent,
   getEditorText,
   getTabManager,
   htmlToText,
@@ -158,7 +158,7 @@ export class SnapshotsManager {
 
     // Capture from the note itself, not the editor DOM: a non-html note's
     // editor shows a placeholder card — its real content lives in the model.
-    const captured = getActiveNoteForSnapshot();
+    const captured = getActiveNoteContent();
     if (!captured) {
       return;
     }

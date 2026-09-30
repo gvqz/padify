@@ -18,7 +18,7 @@
 
 import { getCloudConfig } from './config';
 import { getCloudUserId } from './sync';
-import { deriveTabTitle, type TabManager, type TabsSyncPayload } from '../tabs';
+import { deriveTabTitle, type NoteType, type TabManager, type TabsSyncPayload } from '../tabs';
 
 // ---------------------------------------------------------------------------
 // Public surface
@@ -29,6 +29,8 @@ export interface ShareRecord {
   note_id: string | null;
   title: string;
   html: string;
+  /** The shared note's type; null = html (the classic note). */
+  note_type: string | null;
   created_at: number;
   /** Epoch milliseconds; the link stops working after this moment. */
   expires_at: number;
@@ -81,6 +83,7 @@ export async function createShare(
   title: string,
   html: string,
   days: number,
+  noteType?: NoteType,
 ): Promise<ShareActionResult> {
   if (!signedIn()) {
     return { ok: false, message: 'Sign in to share notes.' };
@@ -89,7 +92,13 @@ export async function createShare(
   try {
     const data = await shareApi<ShareRowResponse>('/api/shares', {
       method: 'POST',
-      body: { note_id: noteId, title: title.slice(0, 200), html, days },
+      body: {
+        note_id: noteId,
+        title: title.slice(0, 200),
+        html,
+        note_type: noteType ?? null,
+        days,
+      },
     });
     return { ok: true, token: data.row.token, url: shareUrlFor(data.row.token) };
   } catch (error) {
@@ -172,6 +181,7 @@ async function flushShareUpdates(): Promise<void> {
           note_id: tab.id,
           title: deriveTabTitle(tab).slice(0, 200),
           html: tab.html,
+          note_type: tab.noteType ?? null,
         }));
 
       if (refresh.length > 0) {

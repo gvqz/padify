@@ -149,6 +149,21 @@
     return fragment;
   }
 
+  /**
+   * The note types whose content is the app's sanitized-HTML subset. Only
+   * these render as markup — and always through the sanitizer. Absent type
+   * = the classic note = html (links created before types existed).
+   *
+   * Every OTHER type renders as raw text, no exceptions: this page cannot
+   * know what a future type's markup means, and unknown never means
+   * executable. When a new html-flavored type ships, add its id here.
+   */
+  var HTML_TYPES = ['standard', 'rich'];
+
+  function isHtmlNote(type) {
+    return !type || HTML_TYPES.indexOf(String(type)) !== -1;
+  }
+
   function render(row) {
     clearLoading();
     stateBox.hidden = true;
@@ -166,7 +181,18 @@
 
     var content = document.getElementById('shareContent');
     content.innerHTML = '';
-    content.appendChild(sanitizeShareHtml(row.html));
+
+    if (isHtmlNote(row.note_type)) {
+      content.appendChild(sanitizeShareHtml(row.html));
+      return;
+    }
+
+    // A non-html note (Markdown source, a board's JSON, a newer type):
+    // honest raw text, never markup. The <pre> keeps structure readable.
+    var pre = document.createElement('pre');
+    pre.className = 'share-raw-content';
+    pre.textContent = String(row.html == null ? '' : row.html);
+    content.appendChild(pre);
   }
 
   function fail(kind) {
