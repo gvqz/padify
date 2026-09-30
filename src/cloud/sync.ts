@@ -587,6 +587,19 @@ export function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): Me
 const PUSH_BATCH_BYTES = 1_500_000;
 
 /**
+ * Measures a row the way the server will: in UTF-8 bytes, not UTF-16
+ * characters. The server's first gate is the Content-Length header, and a
+ * CJK note is 3 bytes per character on the wire — a row counting as 1 MB in
+ * .length can be 3 MB in flight. Character counts are only correct for
+ * ASCII, and notes are not guaranteed to be.
+ */
+const utf8 = new TextEncoder();
+
+function rowBytes(row: NoteRow): number {
+  return utf8.encode(JSON.stringify(row)).length;
+}
+
+/**
  * Packs rows into request bodies the server will accept. Rows join the
  * current batch while it stays under PUSH_BATCH_BYTES; a row too large to
  * share a body becomes a batch of one. Such a row can never sync — the
@@ -599,7 +612,7 @@ export function batchRowsForPush(rows: NoteRow[]): NoteRow[][] {
   let currentBytes = 0;
 
   for (const row of rows) {
-    const size = JSON.stringify(row).length;
+    const size = rowBytes(row);
     if (current.length > 0 && currentBytes + size > PUSH_BATCH_BYTES) {
       batches.push(current);
       current = [];

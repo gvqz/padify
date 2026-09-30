@@ -47,4 +47,23 @@ describe('batchRowsForPush', () => {
   it('answers no bodies for an empty queue', () => {
     expect(batchRowsForPush([])).toEqual([]);
   });
+
+  it('counts bytes, not characters — CJK notes do not co-assemble', () => {
+    // Two rows of 550,000 CJK characters: 1.1M characters by .length —
+    // comfortably inside the 1.5M cap, so the old character-counting
+    // packed them into ONE body. On the wire each row is ~1.65 MB of
+    // UTF-8 (3 bytes per character), past the cap on its own — and the
+    // pair together would be a 3.3 MB body the server rejects outright.
+    // Counted in bytes, each row gets a body of its own.
+    const cjk = '語'.repeat(550_000);
+    const a = { ...row('a', 10), html: cjk };
+    const b = { ...row('b', 10), html: cjk };
+
+    const batches = batchRowsForPush([a, b]);
+
+    expect(batches.map((batch) => batch.map((entry) => entry.id))).toEqual([
+      ['a'],
+      ['b'],
+    ]);
+  });
 });
