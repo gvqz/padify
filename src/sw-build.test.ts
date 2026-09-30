@@ -112,4 +112,17 @@ describe('fetch strategy', () => {
     expect(handler).toContain("request.headers.has('range')");
     expect(handler).toContain('origin !== self.location.origin');
   });
+
+  it('never answers /api from a cache — live data bypasses the worker', () => {
+    write('index.html', '<html><body>padify</body></html>');
+    const handler = fetchHandler(generateServiceWorker(fixtureDir).source);
+
+    // The /api escape must fire BEFORE any respondWith — a cached note
+    // list or a revoked share served from the cache is the regression
+    // this pins out.
+    const apiPosition = handler.indexOf("url.pathname.startsWith('/api/')");
+    const respondPosition = handler.indexOf('event.respondWith');
+    expect(apiPosition).toBeGreaterThan(-1);
+    expect(respondPosition).toBeGreaterThan(apiPosition);
+  });
 });

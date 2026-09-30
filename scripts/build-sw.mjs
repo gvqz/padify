@@ -5,8 +5,10 @@
  * The generated service worker serves same-origin GET requests cache-first
  * (stale-while-revalidate): precached content paints instantly and keeps
  * working offline, while a background network pass freshens the cache for
- * the next load. Range requests (audio seeking) and cross-origin traffic
- * bypass the worker entirely.
+ * the next load. Range requests (audio seeking), cross-origin traffic and
+ * — above all — API calls bypass the worker entirely: /api responses are
+ * live data (note lists, share links that can be revoked), never cache
+ * fodder.
  *
  * Files larger than MAX_PRECACHE_BYTES (the ambient sound loops) are not
  * precached — the fetch handler runtime-caches them on first use instead,
@@ -98,7 +100,17 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET' || request.headers.has('range')) {
     return;
   }
-  if (new URL(request.url).origin !== self.location.origin) {
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  // The API is never the worker's business either. A cached /api/notes
+  // would hand back a stale note list — and a cached /api/share/:token
+  // keeps a REVOKED share readable long after its owner cancelled it.
+  // API calls go straight to the network; offline means offline, which
+  // the sync layer already surfaces as its own retry state.
+  if (url.pathname.startsWith('/api/')) {
     return;
   }
 
