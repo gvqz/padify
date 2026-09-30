@@ -85,7 +85,7 @@ export { mountMusicPlayer } from './markup';
 
 type PlayerSource = 'none' | 'free' | 'spotify';
 /** How the *current* sound is actually being produced. */
-type SpotifyMode = 'sdk' | 'resolve' | 'preview';
+type SpotifyMode = 'sdk' | 'resolve';
 
 const PROGRESS_INTERVAL_MS = 250;
 const SDK_POLL_INTERVAL_MS = 5000;
@@ -390,10 +390,8 @@ class MusicPlayerApp {
 
   /** Reflects <audio> play/pause in the bar, rows, mini player and navbar. */
   private handleFreePlaybackState(playing: boolean): void {
-    const isFreeEngine =
-      this.source === 'free' || (this.source === 'spotify' && this.spotifyMode === 'preview');
-    if (!isFreeEngine) return;
-    if (playing && this.source === 'free') {
+    if (this.source !== 'free') return;
+    if (playing) {
       const track = this.currentFreeTrack();
       if (track && this.pbSub.textContent === 'Finding a stream…') {
         this.pbSub.textContent = trackArtistNames(track);
@@ -628,9 +626,6 @@ class MusicPlayerApp {
       return this.freeAudio !== null && !this.freeAudio.paused;
     }
     if (this.source === 'spotify') {
-      if (this.spotifyMode === 'preview') {
-        return this.freeAudio !== null && !this.freeAudio.paused;
-      }
       if (this.activeDeviceId) return this.sdkRestPlaying;
       return this.sdkState ? !this.sdkState.paused : false;
     }
@@ -660,10 +655,6 @@ class MusicPlayerApp {
       return 0;
     }
     if (this.source === 'spotify') {
-      if (this.spotifyMode === 'preview') {
-        const audio = this.freeAudio;
-        return audio ? audio.currentTime * 1000 : 0;
-      }
       if (this.sdkState) {
         if (this.sdkState.paused) return this.sdkState.position;
         const elapsed = Date.now() - this.sdkStateAt;
@@ -702,12 +693,7 @@ class MusicPlayerApp {
     this.updateMini();
   }
 
-  private syncPlayerBarSpotify(
-    track: SpotifyTrack,
-    sub: string,
-    playing: boolean,
-    mode: SpotifyMode,
-  ): void {
+  private syncPlayerBarSpotify(track: SpotifyTrack, sub: string, playing: boolean): void {
     this.pbPlaceholder.hidden = true;
     const art = pickImage(track.album?.images, 1) ?? pickImage(track.album?.images, 0);
     if (art) {
@@ -721,15 +707,13 @@ class MusicPlayerApp {
     this.pbTitle.textContent = track.name;
     this.pbSub.textContent = sub || trackArtistNames(track);
     this.pbSource.hidden = false;
-    this.pbSource.textContent = mode === 'sdk' ? 'Spotify' : PREVIEW_LABEL;
-    this.timeTotal.textContent = formatMs(
-      mode === 'preview' ? 30_000 : (this.sdkState?.duration ?? track.duration_ms),
-    );
+    this.pbSource.textContent = 'Spotify';
+    this.timeTotal.textContent = formatMs(this.sdkState?.duration ?? track.duration_ms);
     this.playerBar.classList.toggle('is-playing', playing);
     this.updatePlayIcon();
     this.updateProgress();
     this.updateMediaSessionTrack(track);
-    this.deviceWrap.hidden = !(mode === 'sdk' && this.profile?.product === 'premium');
+    this.deviceWrap.hidden = !(this.profile?.product === 'premium');
     this.updateMini();
   }
 
@@ -812,11 +796,6 @@ class MusicPlayerApp {
       return;
     }
     if (this.source === 'spotify') {
-      if (this.spotifyMode === 'preview' && this.freeAudio) {
-        if (this.freeAudio.paused) void this.freeAudio.play().catch(() => undefined);
-        else this.freeAudio.pause();
-        return;
-      }
       if (this.spotifyMode === 'sdk') {
         if (this.activeDeviceId) {
           // Playback lives on another device — control it via REST.
@@ -842,14 +821,8 @@ class MusicPlayerApp {
       this.freeNext();
       return;
     }
-    if (this.source === 'spotify') {
-      if (this.spotifyMode === 'preview') {
-        this.freeNext();
-        return;
-      }
-      if (this.spotifyMode === 'sdk') {
-        void this.skipSdk('next');
-      }
+    if (this.source === 'spotify' && this.spotifyMode === 'sdk') {
+      void this.skipSdk('next');
     }
   }
 
@@ -858,14 +831,8 @@ class MusicPlayerApp {
       this.freePrev();
       return;
     }
-    if (this.source === 'spotify') {
-      if (this.spotifyMode === 'preview') {
-        this.freePrev();
-        return;
-      }
-      if (this.spotifyMode === 'sdk') {
-        void this.skipSdk('previous');
-      }
+    if (this.source === 'spotify' && this.spotifyMode === 'sdk') {
+      void this.skipSdk('previous');
     }
   }
 
@@ -987,9 +954,7 @@ class MusicPlayerApp {
         audio.currentTime = Math.min(posMs / 1000, max);
       }
     } else if (this.source === 'spotify') {
-      if (this.spotifyMode === 'preview' && this.freeAudio) {
-        this.freeAudio.currentTime = Math.min(posMs / 1000, 29.5);
-      } else if (this.spotifyMode === 'sdk') {
+      if (this.spotifyMode === 'sdk') {
         if (this.activeDeviceId) {
           void spotify
             .playOnDevice(this.activeDeviceId, { positionMs: Math.round(posMs) })
@@ -1047,7 +1012,7 @@ class MusicPlayerApp {
     this.source = 'spotify';
     this.spotifyMode = 'sdk';
     const track = state.track_window.current_track;
-    this.syncPlayerBarSpotify(track, trackArtistNames(track), !state.paused, 'sdk');
+    this.syncPlayerBarSpotify(track, trackArtistNames(track), !state.paused);
     this.updateRowStates();
     this.updateQueueView();
     this.startProgressTimer();
@@ -1105,12 +1070,7 @@ class MusicPlayerApp {
           throw err;
         }
       }
-      this.syncPlayerBarSpotify(
-        tracks[startIndex],
-        trackArtistNames(tracks[startIndex]),
-        true,
-        'sdk',
-      );
+      this.syncPlayerBarSpotify(tracks[startIndex], trackArtistNames(tracks[startIndex]), true);
       this.updateRowStates();
     } catch {
       // SDK unavailable (blocked iframe, network…) — fall back to free engine.
@@ -1211,12 +1171,7 @@ class MusicPlayerApp {
         this.sdkRestProgressMs = state.progress_ms ?? 0;
         if (this.activeDeviceId) {
           // Away-device playback — reflect REST state in the bar.
-          this.syncPlayerBarSpotify(
-            state.item,
-            trackArtistNames(state.item),
-            state.is_playing,
-            'sdk',
-          );
+          this.syncPlayerBarSpotify(state.item, trackArtistNames(state.item), state.is_playing);
           this.timeTotal.textContent = formatMs(state.item.duration_ms);
           this.timeCurrent.textContent = formatMs(state.progress_ms ?? 0);
           const ratio =
@@ -1473,7 +1428,6 @@ class MusicPlayerApp {
   private currentTrackUri(): string | null {
     if (this.source === 'free') return this.currentFreeTrack()?.uri ?? null;
     if (this.source === 'spotify') {
-      if (this.spotifyMode === 'preview') return this.currentFreeTrack()?.uri ?? null;
       return this.sdkState?.track_window.current_track?.uri ?? this.sdkRestTrack?.uri ?? null;
     }
     return null;
@@ -1984,10 +1938,7 @@ class MusicPlayerApp {
   private updateMini(): void {
     const hasContent =
       (this.source === 'free' && this.currentFreeTrack() !== null) ||
-      (this.source === 'spotify' &&
-        (this.spotifyMode === 'preview'
-          ? this.currentFreeTrack() !== null
-          : this.sdkState?.track_window.current_track != null));
+      (this.source === 'spotify' && this.sdkState?.track_window.current_track != null);
     const modalOpen = this.root.classList.contains('in');
     this.mini.hidden = !hasContent || modalOpen || this.miniDismissed;
     if (!hasContent) return;
@@ -2004,20 +1955,11 @@ class MusicPlayerApp {
         artUrl = pickImage(track.album?.images, 1);
       }
     } else if (this.source === 'spotify') {
-      if (this.spotifyMode === 'preview') {
-        const track = this.currentFreeTrack();
-        if (track) {
-          title = track.name;
-          sub = trackArtistNames(track);
-          artUrl = pickImage(track.album?.images, 1);
-        }
-      } else {
-        const track = this.sdkState?.track_window.current_track ?? this.sdkRestTrack;
-        if (track) {
-          title = track.name;
-          sub = trackArtistNames(track);
-          artUrl = pickImage(track.album?.images, 1);
-        }
+      const track = this.sdkState?.track_window.current_track ?? this.sdkRestTrack;
+      if (track) {
+        title = track.name;
+        sub = trackArtistNames(track);
+        artUrl = pickImage(track.album?.images, 1);
       }
     }
 
