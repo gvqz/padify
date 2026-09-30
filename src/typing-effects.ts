@@ -1,6 +1,7 @@
 import { $ } from './lib/q';
 import type { NotepadUI, EditorConfig } from './selector';
-import { stateGet, stateSet, stateRemove } from './storage';
+import { stateGet, stateRemove } from './storage';
+import { setSetting } from './state/settings';
 
 /**
  * Typing effects — optional typewriter key sounds (key, space, carriage
@@ -259,7 +260,7 @@ export function initTypingEffects(
   // Handle typewriter sound toggle
   $('#typewriterSound').on('change', function () {
     const isEnabled = $(this).is(':checked');
-    stateSet('userChosenTypewriterSound', isEnabled ? 'Yes' : 'No');
+    setSetting('userChosenTypewriterSound', isEnabled ? 'Yes' : 'No');
     typewriterSoundEnabled = isEnabled;
 
     if (isEnabled) {
@@ -272,7 +273,7 @@ export function initTypingEffects(
   // Handle explosion effect toggle
   $('#explodingEffect').on('change', function () {
     const isEnabled = $(this).is(':checked');
-    stateSet('userChosenExplodingEffect', isEnabled ? 'Yes' : 'No');
+    setSetting('userChosenExplodingEffect', isEnabled ? 'Yes' : 'No');
     explodingEffectEnabled = isEnabled;
   });
 
@@ -280,7 +281,7 @@ export function initTypingEffects(
   let volumePreviewTimer: ReturnType<typeof setTimeout> | null = null;
   $('#typewriterVolume').on('input', function () {
     const volume = $(this).val() as string;
-    stateSet('userChosenTypewriterVolume', volume);
+    setSetting('userChosenTypewriterVolume', volume);
 
     if (typewriterSoundEnabled) {
       typeSound.volume = Number(volume) / 100;

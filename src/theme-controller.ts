@@ -1,6 +1,6 @@
 import { $ } from './lib/q';
 import { enableDarkMode, enableLightMode, enableDeviceTheme } from './utils';
-import { stateSet } from './storage';
+import { setSetting } from './state/settings';
 import { selector } from './selector';
 
 interface ThemeConfig {
@@ -22,7 +22,9 @@ export function initThemeController(themeConfig: ThemeConfig): {
   const { state } = selector();
 
   if (!state.isUserPreferredTheme) {
-    stateSet('isUserPreferredTheme', 'false');
+    // Through the settings choke point (src/state/settings.ts): the write
+    // notifies like every other setting write, instead of bypassing.
+    setSetting('isUserPreferredTheme', 'false');
   }
 
   if (state.mode && state.mode === 'dark') {
