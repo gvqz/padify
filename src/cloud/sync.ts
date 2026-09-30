@@ -489,8 +489,13 @@ interface MergeResult {
   changed: boolean;
 }
 
-/** Last-write-wins merge of remote rows into the local tab list. */
-function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): MergeResult {
+/**
+ * Last-write-wins merge of remote rows into the local tab list. Tombstones
+ * lose to newer local edits: a note edited here AFTER it was closed
+ * elsewhere stays, and the cycle's step 3 re-pushes it — the edit
+ * resurrects the note instead of the delete burying the edit.
+ */
+export function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): MergeResult {
   const tabs: NoteTab[] = payload.tabs.map((tab) => ({ ...tab }));
   const byId = new Map(tabs.map((tab) => [tab.id, tab]));
   const freshRemote: NoteTab[] = [];
@@ -498,7 +503,16 @@ function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): MergeResu
 
   remoteRows.forEach((row) => {
     if (row.deleted) {
-      if (byId.has(row.id)) {
+      const local = byId.get(row.id);
+      if (local && local.updatedAt > row.updated_at) {
+        // The local edit is newer than the remote delete. The note stays
+        // exactly as it is (changed: false), and step 3 of the cycle sees
+        // remote.updated_at < tab.updatedAt and re-pushes it — deleted=false
+        // — so the note returns on every device. A delete may remove a
+        // note; it may not bury a newer edit.
+        return;
+      }
+      if (local) {
         byId.delete(row.id);
         const index = tabs.findIndex((tab) => tab.id === row.id);
         if (index >= 0) {
