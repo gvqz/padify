@@ -50,6 +50,30 @@ Recommended: enable branch protection on `main` with the
 *Enforce commit identity* check as a required status check, so direct pushes
 cannot bypass CI.
 
+## Listener lifecycle
+
+Padify is a long-lived singleton page, not a component tree that mounts
+and unmounts. Every feature initializes once at boot and its DOM lives
+until the page dies, so there is no teardown phase for event listeners —
+the ~190 `addEventListener` calls against a handful of `removeEventListener`
+is a *design*, not an accident. Two idioms keep it leak-free, and new
+code must follow one of them:
+
+- **Bind once at init** — listeners attach in a constructor or `initXxx()`
+  (all of which are singleton-guarded) to DOM that never leaves the
+  document: the modal shells, the navbar, `document` itself.
+- **Delegate for dynamic content** — anything rendered through
+  `innerHTML` (track rows, menus, search results) gets *no* per-node
+  listeners; the nearest persistent ancestor owns one delegated handler,
+  so dead nodes take their listeners with them into garbage collection.
+
+The moment a feature introduces a *removable* surface — a picture-in-page
+window, a teleprompter, a canvas that can close — that feature owns the
+teardown: bind through an `AbortController` and call `.abort()` on close
+(see `src/voice.ts` for the pattern). Do not add a global listener
+registry for the singleton surfaces; it would be churn across every file
+with no behavior to show for it.
+
 ## Everything else
 
 - **Runtime**: Node 22 for tooling; Bun owns the lockfile
