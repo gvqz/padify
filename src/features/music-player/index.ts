@@ -33,7 +33,6 @@ import { openModal, closeModal } from '../../ui/behavior/modal';
 import Swal from 'sweetalert2';
 import type { SweetAlertResult } from 'sweetalert2';
 import { showToast } from '../../utils';
-import { stateGet, stateSet } from '../../storage';
 import { LocalMusicLibrary } from './music/library';
 import {
   fetchMusicCapabilities,
@@ -66,6 +65,22 @@ import type { WebPlaybackPlayerState } from './spotify/sdk';
 
 import { eqMarkup, ICONS } from './markup';
 import { byId, formatMs, trackArtistNames, pickImage, escapeHtml } from './helpers';
+import {
+  REPEAT_MODES,
+  loadPlayerState,
+  savePlayerState,
+  type MusicPlayerState,
+  type ViewId,
+} from './state';
+import {
+  endedAction,
+  enqueueTrack,
+  freeQueueRemaining,
+  nextPlayIndex,
+  normalizePlayIndex,
+  prevPlayIndex,
+  removeQueueAt,
+} from './queue';
 
 export { mountMusicPlayer } from './markup';
 
@@ -73,24 +88,10 @@ export { mountMusicPlayer } from './markup';
 // Types & constants
 // ---------------------------------------------------------------------------
 
-type RepeatMode = 'off' | 'all' | 'one';
-type ViewId = 'music' | 'queue' | 'ambience';
 type PlayerSource = 'none' | 'free' | 'spotify';
 /** How the *current* sound is actually being produced. */
 type SpotifyMode = 'sdk' | 'resolve' | 'preview';
 
-interface MusicPlayerState {
-  volume: number;
-  shuffle: boolean;
-  repeat: RepeatMode;
-  view: ViewId;
-  /** The anonymous/free queue (track snapshots), restored across reloads. */
-  freeQueue: SpotifyTrack[];
-  freeIndex: number;
-}
-
-const STORAGE_KEY = 'padify-music-state';
-const REPEAT_MODES: RepeatMode[] = ['off', 'all', 'one'];
 const PROGRESS_INTERVAL_MS = 250;
 const SDK_POLL_INTERVAL_MS = 5000;
 const SEARCH_DEBOUNCE_MS = 350;
@@ -98,15 +99,6 @@ const PREVIEW_LABEL = '30s preview';
 const FREE_LABEL = 'Free';
 const FREE_SEARCH_LIMIT = 24;
 const PLAYLIST_MENU_ITEMS = 8;
-
-const DEFAULT_STATE: MusicPlayerState = {
-  volume: 0.7,
-  shuffle: false,
-  repeat: 'off',
-  view: 'music',
-  freeQueue: [],
-  freeIndex: -1,
-};
 
 // ---------------------------------------------------------------------------
 // The application controller
@@ -362,47 +354,11 @@ class MusicPlayerApp {
   // ---- persistence ---------------------------------------------------------
 
   private loadState(): MusicPlayerState {
-    try {
-      const raw = stateGet(STORAGE_KEY);
-      if (!raw) return { ...DEFAULT_STATE };
-      const parsed = JSON.parse(raw) as Partial<MusicPlayerState>;
-      const freeQueue = Array.isArray(parsed.freeQueue)
-        ? parsed.freeQueue
-            .filter(
-              (track): track is SpotifyTrack =>
-                Boolean(track) && typeof track.id === 'string' && typeof track.name === 'string',
-            )
-            .slice(0, 200)
-        : [];
-      return {
-        volume:
-          typeof parsed.volume === 'number' && !Number.isNaN(parsed.volume)
-            ? Math.max(0, Math.min(1, parsed.volume))
-            : DEFAULT_STATE.volume,
-        shuffle: Boolean(parsed.shuffle),
-        repeat: REPEAT_MODES.includes(parsed.repeat as RepeatMode)
-          ? (parsed.repeat as RepeatMode)
-          : DEFAULT_STATE.repeat,
-        view: ['music', 'queue', 'ambience'].includes(parsed.view as ViewId)
-          ? (parsed.view as ViewId)
-          : DEFAULT_STATE.view,
-        freeQueue,
-        freeIndex:
-          typeof parsed.freeIndex === 'number'
-            ? Math.min(Math.max(-1, Math.round(parsed.freeIndex)), freeQueue.length - 1)
-            : -1,
-      };
-    } catch {
-      return { ...DEFAULT_STATE };
-    }
+    return loadPlayerState();
   }
 
   private persist(): void {
-    try {
-      stateSet(STORAGE_KEY, JSON.stringify(this.state));
-    } catch {
-      /* storage unavailable — playback still works, just not restored */
-    }
+    savePlayerState(this.state);
   }
 
   // ========================================================================
@@ -466,19 +422,13 @@ class MusicPlayerApp {
   /** Starts playing the queue at `index` through the free engine. */
   private async playFreeAt(index: number, auto = false): Promise<void> {
     const queue = this.state.freeQueue;
-    if (queue.length === 0) return;
-    let idx = index;
-    if (idx >= queue.length) {
-      if (this.state.repeat === 'all') idx = 0;
-      else return;
-    }
-    if (idx < 0) idx = queue.length - 1;
-
-    if (this.state.shuffle && queue.length > 1 && !auto) {
-      let randomIdx = idx;
-      while (randomIdx === idx) randomIdx = Math.floor(Math.random() * queue.length);
-      idx = randomIdx;
-    }
+    const idx = normalizePlayIndex(
+      queue.length,
+      index,
+      { shuffle: this.state.shuffle, repeat: this.state.repeat },
+      auto,
+    );
+    if (idx === null) return;
 
     const track = queue[idx];
     if (!track) return;
@@ -591,40 +541,38 @@ class MusicPlayerApp {
 
   private handleFreeEnded(): void {
     if (this.source !== 'free') return;
-    if (this.state.repeat === 'one') {
+    const action = endedAction(
+      this.state.freeQueue.length,
+      this.state.freeIndex,
+      this.state.repeat,
+    );
+    if (action.kind === 'replay') {
       void this.playFreeAt(this.state.freeIndex, true);
       return;
     }
-    const nextIdx = this.state.freeIndex + 1;
-    if (nextIdx < this.state.freeQueue.length || this.state.repeat === 'all') {
-      void this.playFreeAt(nextIdx, true);
-    } else {
-      this.updatePlayerBarEmpty();
-      this.updateRowStates();
-      this.updateQueueView();
+    if (action.kind === 'play') {
+      void this.playFreeAt(action.index, true);
+      return;
     }
+    this.updatePlayerBarEmpty();
+    this.updateRowStates();
+    this.updateQueueView();
   }
 
   private freeNext(auto = false): void {
     const queue = this.state.freeQueue;
-    if (queue.length === 0) return;
-    const idx = this.state.freeIndex;
-    if (this.state.shuffle) {
-      if (queue.length <= 1) return;
-      let randomIdx = idx;
-      while (randomIdx === idx) randomIdx = Math.floor(Math.random() * queue.length);
-      void this.playFreeAt(randomIdx);
+    const next = nextPlayIndex(
+      queue.length,
+      this.state.freeIndex,
+      { shuffle: this.state.shuffle, repeat: this.state.repeat },
+      auto,
+    );
+    if (next === null) return;
+    if (next === 'stop') {
+      this.updatePlayerBarEmpty();
       return;
     }
-    let nextIdx = idx + 1;
-    if (nextIdx >= queue.length) {
-      if (auto && this.state.repeat === 'off') {
-        this.updatePlayerBarEmpty();
-        return;
-      }
-      nextIdx = 0;
-    }
-    void this.playFreeAt(nextIdx);
+    void this.playFreeAt(next);
   }
 
   private freePrev(): void {
@@ -642,27 +590,28 @@ class MusicPlayerApp {
       return;
     }
     const queue = this.state.freeQueue;
-    if (queue.length === 0) return;
-    let prevIdx = this.state.freeIndex - 1;
-    if (prevIdx < 0) prevIdx = queue.length - 1;
+    const prevIdx = prevPlayIndex(queue.length, this.state.freeIndex);
+    if (prevIdx === null) return;
     void this.playFreeAt(prevIdx);
   }
 
   /** Appends a track to the free queue (the "+ button"). */
   private enqueueFree(track: SpotifyTrack): void {
-    const queue = this.state.freeQueue;
-    if (this.source === 'free' || queue.length > 0) {
-      queue.push(track);
-      this.state.freeIndex = Math.min(this.state.freeIndex, queue.length - 1);
-      this.persist();
+    const result = enqueueTrack(
+      this.state.freeQueue,
+      this.state.freeIndex,
+      track,
+      this.source === 'free',
+    );
+    this.state.freeQueue = result.queue as SpotifyTrack[];
+    this.state.freeIndex = result.index;
+    this.persist();
+    if (result.kind === 'appended') {
       this.updateQueueView();
       showToast('Added to queue.');
       return;
     }
-    // Nothing playing yet — this becomes the track up next (and now).
-    this.state.freeQueue = [track];
-    this.state.freeIndex = 0;
-    this.persist();
+    // Nothing playing yet — this became the track up next (and now).
     void this.playFreeAt(0);
   }
 
@@ -1990,7 +1939,7 @@ class MusicPlayerApp {
   private updateQueueCount(): void {
     const remaining =
       this.source === 'free' || this.state.freeQueue.length > 0
-        ? Math.max(0, this.state.freeQueue.length - Math.max(0, this.state.freeIndex) - 1)
+        ? freeQueueRemaining(this.state.freeQueue.length, this.state.freeIndex)
         : (this.sdkState?.track_window.next_tracks.length ?? 0);
     this.queueCount.textContent = remaining > 0 ? String(remaining) : '';
     this.queueCount.hidden = remaining === 0;
@@ -2032,14 +1981,12 @@ class MusicPlayerApp {
   }
 
   private removeFromQueue(index: number): void {
-    const queue = this.state.freeQueue;
-    if (index < 0 || index >= queue.length) return;
-    const wasCurrent = index === this.state.freeIndex;
-    queue.splice(index, 1);
-    if (index < this.state.freeIndex) this.state.freeIndex -= 1;
-    if (wasCurrent) {
-      this.state.freeIndex = Math.min(this.state.freeIndex, queue.length - 1);
-      if (queue.length === 0) {
+    const result = removeQueueAt(this.state.freeQueue, this.state.freeIndex, index);
+    if (!result) return;
+    this.state.freeQueue = result.queue as SpotifyTrack[];
+    this.state.freeIndex = result.index;
+    if (result.wasCurrent) {
+      if (result.emptied) {
         this.source = 'none';
         this.freeResolveToken++;
         if (this.freeAudio) this.freeAudio.removeAttribute('src');
