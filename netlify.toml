@@ -10,11 +10,11 @@
 [build.environment]
   NODE_VERSION = "22"
 
-# Keep the service worker fresh so PWA updates roll out immediately.
-[[headers]]
-  for = "/sw.js"
-  [headers.values]
-    Cache-Control = "public, max-age=0, must-revalidate"
+# HTTP headers are generated at build time: `npm run build` writes
+# dist/_headers (scripts/build-headers.mjs) with the security baseline —
+# nosniff, referrer policy, HSTS, frame protection and a content security
+# policy whose script-src pins the build's inline scripts by hash. Netlify
+# picks the file up from the publish directory automatically.
 
 # Route the cloud API (server/) under the same origin. The API runs on
 # AlwaysData (see docs/CLOUD_SETUP.md §2); replace the host below with your

@@ -86,7 +86,16 @@ function corsHeaders(request: Request): Record<string, string> {
 function json(request: Request, data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8', ...corsHeaders(request) }
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      // API bodies are JSON, never markup: never let a proxy or browser
+      // sniff them into something executable, never let a cache serve a
+      // stale answer to a signed-in reader.
+      'x-content-type-options': 'nosniff',
+      'referrer-policy': 'strict-origin-when-cross-origin',
+      'cache-control': 'no-store',
+      ...corsHeaders(request)
+    }
   });
 }
 

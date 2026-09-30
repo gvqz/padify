@@ -1,5 +1,16 @@
 :81 {
         handle {
+                header {
+                        # Mirror of the generated dist/_headers baseline (scripts/
+                        # build-headers.mjs). The content security policy itself is
+                        # per-build (it hash-pins the entry page's inline scripts),
+                        # so self-hosted deployments should copy it from dist/_headers
+                        # after a build rather than hardcode it here.
+                        X-Content-Type-Options nosniff
+                        Referrer-Policy strict-origin-when-cross-origin
+                        X-Frame-Options DENY
+                }
+
                 reverse_proxy localhost:3000 {
                         header_up Host {host}
                         header_up X-Forwarded-For {remote_host}
