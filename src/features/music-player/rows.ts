@@ -96,3 +96,41 @@ export function queueRow(track: SpotifyTrack, index: number): string {
             <button type="button" class="sp-row-remove" data-remove title="Remove from queue" aria-label="Remove ${name} from queue">${ICONS.remove}</button>
         </div>`;
 }
+
+/**
+ * The row action menu's items — pure markup from connection state.
+ * Anonymous users get the local playlist action; connected users get
+ * their playlists (capped), behind a divider. The caller owns mounting,
+ * focus, and teardown.
+ */
+export function rowMenuItems(options: {
+  connected: boolean;
+  localPlaylistName: string | null;
+  spotifyPlaylists: SpotifyPlaylist[];
+  maxPlaylists?: number;
+}): string {
+  const items: string[] = [];
+  items.push(
+    `<button type="button" class="mp-row-menu-item" data-action="queue">${ICONS.queueTab}<span>Add to queue</span></button>`,
+  );
+  if (!options.connected) {
+    items.push(
+      `<button type="button" class="mp-row-menu-item" data-action="local-playlist">${ICONS.playlist}<span>${
+        options.localPlaylistName
+          ? `Add to ${escapeHtml(options.localPlaylistName)}`
+          : 'Start your playlist'
+      }</span></button>`,
+    );
+    return items.join('');
+  }
+  const playlists = options.spotifyPlaylists.slice(0, options.maxPlaylists ?? 8);
+  if (playlists.length > 0) {
+    items.push('<div class="mp-row-menu-divider"></div>');
+    for (const playlist of playlists) {
+      items.push(
+        `<button type="button" class="mp-row-menu-item" data-action="spotify-playlist" data-playlist-id="${playlist.id}" title="${escapeHtml(playlist.name)}">${ICONS.playlist}<span>${escapeHtml(playlist.name)}</span></button>`,
+      );
+    }
+  }
+  return items.join('');
+}

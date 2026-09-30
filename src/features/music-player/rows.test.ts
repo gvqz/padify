@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { albumCard, artistCard, playlistCard, queueRow, trackRow } from './rows';
+import { albumCard, artistCard, playlistCard, queueRow, rowMenuItems, trackRow } from './rows';
 import type {
   SpotifyAlbum,
   SpotifyPlaylist,
@@ -136,5 +136,60 @@ describe('cards', () => {
     expect(html).toContain('DJ &quot;Quote&quot;');
     expect(html).toContain('src="face"');
     expect(html).toContain('>Artist</span>');
+  });
+});
+
+describe('rowMenuItems (the row action menu)', () => {
+  it('anonymous with no playlist yet offers queue + start-your-playlist', () => {
+    const markup = rowMenuItems({
+      connected: false,
+      localPlaylistName: null,
+      spotifyPlaylists: [],
+    });
+    expect(markup).toContain('data-action="queue"');
+    expect(markup).toContain('Start your playlist');
+    expect(markup).not.toContain('mp-row-menu-divider');
+    expect(markup).not.toContain('data-action="spotify-playlist"');
+  });
+
+  it('anonymous with a playlist names it, escaped', () => {
+    const markup = rowMenuItems({
+      connected: false,
+      localPlaylistName: 'My <Mix> & Things',
+      spotifyPlaylists: [],
+    });
+    expect(markup).toContain('Add to My &lt;Mix&gt; &amp; Things');
+    expect(markup).not.toContain('<Mix>');
+  });
+
+  it('connected users get their playlists behind a divider, capped', () => {
+    const playlists: SpotifyPlaylist[] = Array.from({ length: 12 }, (_, i) => ({
+      id: `pl-${i}`,
+      uri: `spotify:playlist:pl-${i}`,
+      name: `Playlist ${i}`,
+      images: [],
+      tracks: { total: 1 },
+    }));
+    const markup = rowMenuItems({
+      connected: true,
+      localPlaylistName: null,
+      spotifyPlaylists: playlists,
+      maxPlaylists: 8,
+    });
+    expect(markup).toContain('mp-row-menu-divider');
+    expect(markup).toContain('data-playlist-id="pl-0"');
+    expect(markup).toContain('data-playlist-id="pl-7"');
+    expect(markup).not.toContain('data-playlist-id="pl-8"');
+    expect(markup).not.toContain('local-playlist');
+  });
+
+  it('connected with no playlists gets only the queue action', () => {
+    const markup = rowMenuItems({
+      connected: true,
+      localPlaylistName: null,
+      spotifyPlaylists: [],
+    });
+    expect(markup).toContain('data-action="queue"');
+    expect(markup).not.toContain('mp-row-menu-divider');
   });
 });

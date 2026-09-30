@@ -58,7 +58,7 @@ import type { WebPlaybackPlayerState } from './spotify/sdk';
 
 import { ICONS } from './markup';
 import { byId, formatMs, trackArtistNames, pickImage, escapeHtml } from './helpers';
-import { albumCard, artistCard, playlistCard, queueRow, trackRow } from './rows';
+import { albumCard, artistCard, playlistCard, queueRow, rowMenuItems, trackRow } from './rows';
 import {
   REPEAT_MODES,
   loadPlayerState,
@@ -1463,32 +1463,12 @@ class MusicPlayerApp {
     if (!track) return;
     this.closeRowMenu();
 
-    const connected = isAuthenticated();
-    const items: string[] = [];
-    items.push(
-      `<button type="button" class="mp-row-menu-item" data-action="queue">${ICONS.queueTab}<span>Add to queue</span></button>`,
-    );
-    if (!connected) {
-      items.push(
-        `<button type="button" class="mp-row-menu-item" data-action="local-playlist">${ICONS.playlist}<span>${
-          this.library.playlist
-            ? `Add to ${escapeHtml(this.library.playlist.name)}`
-            : 'Start your playlist'
-        }</span></button>`,
-      );
-    } else {
-      const playlists = this.playlistsCache.slice(0, PLAYLIST_MENU_ITEMS);
-      if (playlists.length > 0) {
-        items.push('<div class="mp-row-menu-divider"></div>');
-        for (const playlist of playlists) {
-          items.push(
-            `<button type="button" class="mp-row-menu-item" data-action="spotify-playlist" data-playlist-id="${playlist.id}" title="${escapeHtml(playlist.name)}">${ICONS.playlist}<span>${escapeHtml(playlist.name)}</span></button>`,
-          );
-        }
-      }
-    }
-
-    this.rowMenu.innerHTML = items.join('');
+    this.rowMenu.innerHTML = rowMenuItems({
+      connected: isAuthenticated(),
+      localPlaylistName: this.library.playlist?.name ?? null,
+      spotifyPlaylists: this.playlistsCache,
+      maxPlaylists: PLAYLIST_MENU_ITEMS,
+    });
     row.appendChild(this.rowMenu);
     this.rowMenu.hidden = false;
     button.setAttribute('aria-expanded', 'true');
