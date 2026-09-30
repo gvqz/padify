@@ -185,7 +185,7 @@ test.describe('delete everything after typing', () => {
     const noteId = await page.evaluate(async () => {
       // Rewrite the stored html of the active (only) rich note the way a
       // pre-fix build would have stored it after a delete-all.
-      const request = indexedDB.open('padify', 1);
+      const request = indexedDB.open('padify'); // no version pin — opens whatever the app created
       const database: IDBDatabase = await new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);

@@ -19,6 +19,7 @@
  */
 
 import { api as apiCall, ApiError } from './api';
+import { flushAttachmentUploads } from './attachments';
 import { stateGet, stateSet, stateRemove } from '../storage';
 import { normalizeNoteType } from '../editor/note-types';
 import type { NoteTab, TabManager, TabTombstone, TabsSyncPayload } from '../tabs';
@@ -406,6 +407,10 @@ async function syncCycle(_reason: string): Promise<void> {
     await runSyncOnce();
     lastSyncAt = Date.now();
     setStatus(signedInStatus(pendingPush.size > 0 ? 'pending' : 'idle'));
+    // Attachments ride along after the cycle — never inside it, so a
+    // multi-megabyte upload can never delay note sync. Fire-and-forget:
+    // the flush reports its own failures to the console.
+    void flushAttachmentUploads();
   } catch (error) {
     console.warn('[cloud] sync failed', error);
 

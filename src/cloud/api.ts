@@ -22,6 +22,36 @@ export interface ApiOptions {
   body?: unknown;
 }
 
+/**
+ * Fetch for non-JSON traffic (attachments: raw-byte uploads, binary
+ * downloads). Same bearer + error translation as api(), but the caller
+ * owns the headers and gets the bare Response to read as bytes.
+ */
+export async function apiRaw(
+  path: string,
+  options: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: ArrayBuffer;
+  } = {},
+): Promise<Response> {
+  const headers = { ...options.headers };
+  const token = readSessionToken();
+  if (token) {
+    headers.authorization = `Bearer ${token}`;
+  }
+
+  try {
+    return await fetch(`${getCloudConfig().apiBase}${path}`, {
+      method: options.method ?? 'GET',
+      headers,
+      body: options.body,
+    });
+  } catch (error) {
+    throw new ApiError(0, error instanceof Error ? error.message : String(error));
+  }
+}
+
 export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (options.body !== undefined) {
