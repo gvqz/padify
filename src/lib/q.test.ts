@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { $, Q, type ElementOrDocument } from './q';
+import { $, Q } from './q';
 
 describe('q — the DOM facade that replaced jQuery', () => {
   beforeEach(() => {
@@ -35,9 +35,11 @@ describe('q — the DOM facade that replaced jQuery', () => {
 
   it('each/map use the (index, element) argument order', () => {
     const seen: string[] = [];
-    $('#box').children().each((i, el) => {
-      seen.push(`${i}:${(el as Element).textContent}`);
-    });
+    $('#box')
+      .children()
+      .each((i, el) => {
+        seen.push(`${i}:${(el as Element).textContent}`);
+      });
     expect(seen).toEqual(['0:one', '1:two']);
 
     const texts = $('#box')
@@ -51,7 +53,12 @@ describe('q — the DOM facade that replaced jQuery', () => {
     expect($('#target').find('.deep').text()).toBe('deep');
     expect($('.deep').closest('#target').length).toBe(1);
     expect($('#box').children('.child').length).toBe(2);
-    expect($('#box').children().filter((i) => i === 0).text()).toBe('one');
+    expect(
+      $('#box')
+        .children()
+        .filter((i) => i === 0)
+        .text(),
+    ).toBe('one');
     expect($('#box').children().not('.child').length).toBe(0);
     expect($('#check').is(':checked')).toBe(true);
     expect($('#text').is(':checked')).toBe(false);
@@ -142,9 +149,9 @@ describe('q — the DOM facade that replaced jQuery', () => {
     $(document).on('click', '.child', function (this: HTMLElement) {
       seen.push(this as Element);
     });
-    document.querySelector('#box .child')?.dispatchEvent(
-      new MouseEvent('click', { bubbles: true }),
-    );
+    document
+      .querySelector('#box .child')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(seen).toHaveLength(1);
     expect(seen[0].textContent).toBe('one');
   });

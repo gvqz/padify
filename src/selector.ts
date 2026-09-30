@@ -1,6 +1,12 @@
 import { $, type Q } from './lib/q';
 import { stateGet, stateSet, stateRemove } from './storage';
-import { DEFAULT_EDITOR_CONFIG, getSetting, isSettingKey, removeSetting, setSetting } from './state/settings';
+import {
+  DEFAULT_EDITOR_CONFIG,
+  getSetting,
+  isSettingKey,
+  removeSetting,
+  setSetting,
+} from './state/settings';
 
 export type StateKey = string;
 

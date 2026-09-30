@@ -21,9 +21,8 @@ function htmlIncludes(): Plugin {
     transformIndexHtml: {
       order: 'pre',
       handler(html) {
-        return html.replace(
-          /<!--#include\s+(.+?)\s*-->/g,
-          (_match, file: string) => readFileSync(repoRoot + file.trim(), 'utf-8'),
+        return html.replace(/<!--#include\s+(.+?)\s*-->/g, (_match, file: string) =>
+          readFileSync(repoRoot + file.trim(), 'utf-8'),
         );
       },
     },

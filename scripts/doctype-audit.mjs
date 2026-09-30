@@ -250,7 +250,9 @@ const run = async () => {
     await mobile.waitForTimeout(700);
     await shot(mobile, '24-mobile-editor');
     // drawer
-    const hamburger = mobile.locator('[data-toggle="collapse"][data-target="#navbar"], .navbar-toggle').first();
+    const hamburger = mobile
+      .locator('[data-toggle="collapse"][data-target="#navbar"], .navbar-toggle')
+      .first();
     if ((await hamburger.count()) > 0) {
       await hamburger.click();
       await mobile.waitForTimeout(350);

@@ -29,9 +29,7 @@ async function createRichNote(page: Page): Promise<void> {
 }
 
 test.describe('docs toolbar', () => {
-  test('size, color, alignment, divider and superscript survive a reload', async ({
-    page,
-  }) => {
+  test('size, color, alignment, divider and superscript survive a reload', async ({ page }) => {
     await page.goto('/');
     await createRichNote(page);
 
@@ -70,9 +68,10 @@ test.describe('docs toolbar', () => {
     await editor.press('Control+End');
     await editor.press('Shift+Home');
     await toolbar.locator('[data-rich-action="align-center"]').click();
-    await expect(
-      editor.locator('div', { hasText: 'Styled line' }).first(),
-    ).toHaveCSS('text-align', 'center');
+    await expect(editor.locator('div', { hasText: 'Styled line' }).first()).toHaveCSS(
+      'text-align',
+      'center',
+    );
 
     // The caret label echoes the styled run, Docs-style.
     await editor.locator('span').first().click();
@@ -96,9 +95,10 @@ test.describe('docs toolbar', () => {
     const reloaded = page.locator('#note');
     expect(await runStyle('font-size')).toBe('24px');
     expect(await runStyle('color')).toBe('rgb(66, 133, 244)');
-    await expect(
-      reloaded.locator('div', { hasText: 'Styled line' }).first(),
-    ).toHaveCSS('text-align', 'center');
+    await expect(reloaded.locator('div', { hasText: 'Styled line' }).first()).toHaveCSS(
+      'text-align',
+      'center',
+    );
     await expect(reloaded.locator('hr')).toHaveCount(1);
     await expect(reloaded.locator('sup')).toHaveText('4');
     await expect(page.locator('#richToolbar')).toBeVisible();
@@ -352,9 +352,7 @@ test.describe('docs toolbar', () => {
     await expect(panel.locator('.rich-cp-grid-recent .rich-swatch')).toHaveCount(1);
   });
 
-  test('the highlight picker offers pastels plus None and applies both ways', async ({
-    page,
-  }) => {
+  test('the highlight picker offers pastels plus None and applies both ways', async ({ page }) => {
     await page.goto('/');
     await createRichNote(page);
 
@@ -369,10 +367,7 @@ test.describe('docs toolbar', () => {
     await expect(panel.locator('.rich-swatch')).toHaveCount(7); // 6 pastels + None
 
     await panel.locator('[data-rich-highlight="#d0ebff"]').click();
-    await expect(editor.locator('span')).toHaveCSS(
-      'background-color',
-      'rgb(208, 235, 255)',
-    );
+    await expect(editor.locator('span')).toHaveCSS('background-color', 'rgb(208, 235, 255)');
 
     // None clears the highlight entirely.
     await editor.press('Control+A');

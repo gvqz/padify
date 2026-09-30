@@ -64,7 +64,13 @@ describe('settings read/write', () => {
     setSetting('mode', 'light');
     setSetting('selectedFont', 'serif');
     setSetting('userChosenTexture', 'paper'); // only the wildcard sees this
-    expect(seen).toEqual(['*:mode', 'sub:mode', '*:selectedFont', 'sub:selectedFont', '*:userChosenTexture']);
+    expect(seen).toEqual([
+      '*:mode',
+      'sub:mode',
+      '*:selectedFont',
+      'sub:selectedFont',
+      '*:userChosenTexture',
+    ]);
     offAll();
     offTwo();
   });

@@ -2,7 +2,18 @@ import { $ } from './lib/q';
 import { closeModal } from './ui/behavior/modal';
 import Swal from 'sweetalert2';
 import type { AppState, EditorConfig, NotepadUI, StateKey } from './selector';
-import { resetFontSize, resetLineHeight, resetFontWeight, resetShowWordCountPill, resetWriteDirection, resetTexture, resetOptimalLineLength, resetFont, showToast, updateWordCountPill } from './utils';
+import {
+  resetFontSize,
+  resetLineHeight,
+  resetFontWeight,
+  resetShowWordCountPill,
+  resetWriteDirection,
+  resetTexture,
+  resetOptimalLineLength,
+  resetFont,
+  showToast,
+  updateWordCountPill,
+} from './utils';
 import { getEditorText } from './tabs';
 import { stateGet, stateSet, stateRemove } from './storage';
 import { selector } from './selector';

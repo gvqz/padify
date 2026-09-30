@@ -54,9 +54,7 @@ test.describe('delete everything after typing', () => {
     // another heading.
     await expect.poll(() => innerHtml(editor)).toBe('');
     await expect
-      .poll(() =>
-        editor.evaluate((node) => getComputedStyle(node, '::before').content !== 'none'),
-      )
+      .poll(() => editor.evaluate((node) => getComputedStyle(node, '::before').content !== 'none'))
       .toBe(true);
 
     await page.keyboard.type('plain again');
@@ -168,8 +166,7 @@ test.describe('delete everything after typing', () => {
       return range.getBoundingClientRect().top;
     });
     const contentEdge = await editor.evaluate(
-      (node) =>
-        node.getBoundingClientRect().top + parseFloat(getComputedStyle(node).paddingTop),
+      (node) => node.getBoundingClientRect().top + parseFloat(getComputedStyle(node).paddingTop),
     );
     expect(Math.abs(xTop - contentEdge)).toBeLessThan(5);
   });

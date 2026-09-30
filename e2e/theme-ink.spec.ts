@@ -60,9 +60,7 @@ test.describe('theme ink', () => {
     await expect.poll(() => inkColorOf(page)).toBe('rgb(26, 26, 26)');
   });
 
-  test('a note saved in dark ink re-inks when reopened in light mode', async ({
-    page,
-  }) => {
+  test('a note saved in dark ink re-inks when reopened in light mode', async ({ page }) => {
     test.info().annotations.push({ type: 'note', description: 'storage round trip' });
     await newRichNote(page);
     const editor = page.locator('#note');
@@ -89,11 +87,7 @@ test.describe('theme ink', () => {
     // Flip the device to light through preferences: the stored dark ink
     // re-maps for display.
     await page.keyboard.press('Control+,');
-    await page
-      .locator('#preferencesModal')
-      .locator('label', { hasText: 'Light' })
-      .first()
-      .click();
+    await page.locator('#preferencesModal').locator('label', { hasText: 'Light' }).first().click();
     await page.keyboard.press('Escape');
     await expect.poll(() => inkColorOf(page)).toBe('rgb(26, 26, 26)');
 

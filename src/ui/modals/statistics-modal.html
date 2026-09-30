@@ -1,139 +1,139 @@
-    <!-- Stats modal -->
-    <div id="statisticsModal" class="modal fade" role="dialog">
-      <div class="modal-dialog modal-lg">
-        <!-- Modal content-->
-        <div class="modal-content">
-          <div class="modal-header">
-            <button type="button" class="close" data-dismiss="modal">&times;</button>
-            <h4 class="modal-title custom-modal-title">Statistics</h4>
+<!-- Stats modal -->
+<div id="statisticsModal" class="modal fade" role="dialog">
+  <div class="modal-dialog modal-lg">
+    <!-- Modal content-->
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+        <h4 class="modal-title custom-modal-title">Statistics</h4>
+      </div>
+      <div class="modal-body modal-container">
+        <div class="statistics-grid">
+          <div class="stat-item">
+            <div class="stat-label">Words</div>
+            <div class="stat-value" id="statWords">0</div>
           </div>
-          <div class="modal-body modal-container">
-            <div class="statistics-grid">
-              <div class="stat-item">
-                <div class="stat-label">Words</div>
-                <div class="stat-value" id="statWords">0</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">Characters</div>
-                <div class="stat-value" id="statCharacters">0</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">Sentences</div>
-                <div class="stat-value" id="statSentences">0</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">Paragraphs</div>
-                <div class="stat-value" id="statParagraphs">0</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">
-                  Avg Word Length
-                  <a
-                    href="#"
-                    data-toggle="tooltip"
-                    title="This signifies the complexity and readability of your writing. The more the average word length, the more complex and challenging the reading experience."
-                  >
-                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-                  </a>
-                </div>
-                <div class="stat-value" id="statAvgWordLength">0</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">
-                  Reading Time
-                  <a
-                    href="#"
-                    data-toggle="tooltip"
-                    title="The time it takes for an average adult to read the text which is 200 words per minute."
-                  >
-                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-                  </a>
-                </div>
-                <div class="stat-value" id="statReadingTime">0 min</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">
-                  Unique Words
-                  <a
-                    href="#"
-                    data-toggle="tooltip"
-                    title="Unique words refer to the distinct words in a text, excluding duplicates. This metric helps in assessing the diversity of vocabulary used in the text."
-                  >
-                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-                  </a>
-                </div>
-                <div class="stat-value" id="statUniqueWords">0</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">
-                  Most Common Word
-                  <a
-                    href="#"
-                    data-toggle="tooltip"
-                    title="Most common content word refers to the non-stop word that appears most frequently in the text. This helps highlight the words that carry meaning."
-                  >
-                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-                  </a>
-                </div>
-                <div class="stat-value" id="statMostCommonWord">N/A</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">
-                  Lexical Density
-                  <a
-                    href="#"
-                    data-toggle="tooltip"
-                    title="The percentage of content words in the text. Higher lexical density usually means the writing is more information-rich."
-                  >
-                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-                  </a>
-                </div>
-                <div class="stat-value" id="statLexicalDensity">0%</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">
-                  Readability Score
-                  <a
-                    href="#"
-                    data-toggle="tooltip"
-                    title="A Flesch Reading Ease score. Higher values mean easier text; lower values usually mean more complex text."
-                  >
-                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-                  </a>
-                </div>
-                <div class="stat-value" id="statReadabilityScore">0.0</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">
-                  Estimated Pages
-                  <a
-                    href="#"
-                    data-toggle="tooltip"
-                    title="An approximate page count based on standard formatting and about 250 words per page."
-                  >
-                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-                  </a>
-                </div>
-                <div class="stat-value" id="statEstimatedPages">0 pages</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">
-                  Estimated Speaking Time
-                  <a
-                    href="#"
-                    data-toggle="tooltip"
-                    title="A rough speaking-time estimate based on a normal pace of about 130 words per minute."
-                  >
-                    <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-                  </a>
-                </div>
-                <div class="stat-value" id="statEstimatedSpeakingTime">0 min</div>
-              </div>
+          <div class="stat-item">
+            <div class="stat-label">Characters</div>
+            <div class="stat-value" id="statCharacters">0</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Sentences</div>
+            <div class="stat-value" id="statSentences">0</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Paragraphs</div>
+            <div class="stat-value" id="statParagraphs">0</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">
+              Avg Word Length
+              <a
+                href="#"
+                data-toggle="tooltip"
+                title="This signifies the complexity and readability of your writing. The more the average word length, the more complex and challenging the reading experience."
+              >
+                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+              </a>
             </div>
+            <div class="stat-value" id="statAvgWordLength">0</div>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
+          <div class="stat-item">
+            <div class="stat-label">
+              Reading Time
+              <a
+                href="#"
+                data-toggle="tooltip"
+                title="The time it takes for an average adult to read the text which is 200 words per minute."
+              >
+                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+              </a>
+            </div>
+            <div class="stat-value" id="statReadingTime">0 min</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">
+              Unique Words
+              <a
+                href="#"
+                data-toggle="tooltip"
+                title="Unique words refer to the distinct words in a text, excluding duplicates. This metric helps in assessing the diversity of vocabulary used in the text."
+              >
+                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+              </a>
+            </div>
+            <div class="stat-value" id="statUniqueWords">0</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">
+              Most Common Word
+              <a
+                href="#"
+                data-toggle="tooltip"
+                title="Most common content word refers to the non-stop word that appears most frequently in the text. This helps highlight the words that carry meaning."
+              >
+                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+              </a>
+            </div>
+            <div class="stat-value" id="statMostCommonWord">N/A</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">
+              Lexical Density
+              <a
+                href="#"
+                data-toggle="tooltip"
+                title="The percentage of content words in the text. Higher lexical density usually means the writing is more information-rich."
+              >
+                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+              </a>
+            </div>
+            <div class="stat-value" id="statLexicalDensity">0%</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">
+              Readability Score
+              <a
+                href="#"
+                data-toggle="tooltip"
+                title="A Flesch Reading Ease score. Higher values mean easier text; lower values usually mean more complex text."
+              >
+                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+              </a>
+            </div>
+            <div class="stat-value" id="statReadabilityScore">0.0</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">
+              Estimated Pages
+              <a
+                href="#"
+                data-toggle="tooltip"
+                title="An approximate page count based on standard formatting and about 250 words per page."
+              >
+                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+              </a>
+            </div>
+            <div class="stat-value" id="statEstimatedPages">0 pages</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">
+              Estimated Speaking Time
+              <a
+                href="#"
+                data-toggle="tooltip"
+                title="A rough speaking-time estimate based on a normal pace of about 130 words per minute."
+              >
+                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
+              </a>
+            </div>
+            <div class="stat-value" id="statEstimatedSpeakingTime">0 min</div>
           </div>
         </div>
       </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
+      </div>
     </div>
+  </div>
+</div>

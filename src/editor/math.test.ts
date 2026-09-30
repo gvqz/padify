@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildMathShell,
-  escapeHtmlAttr,
-  MATH_LATEX_PATTERN,
-} from './math';
+import { buildMathShell, escapeHtmlAttr, MATH_LATEX_PATTERN } from './math';
 
 describe('math shell building', () => {
   it('escapes quotes and angle brackets in the latex attribute', () => {

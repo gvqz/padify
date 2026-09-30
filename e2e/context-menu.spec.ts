@@ -63,9 +63,7 @@ test.describe('context menu follows the note type', () => {
     await expect(menu.locator('.padify-ctx-sep.padify-ctx-rich')).toBeVisible();
   });
 
-  test('switching to a plain note after a rich one shrinks the menu again', async ({
-    page,
-  }) => {
+  test('switching to a plain note after a rich one shrinks the menu again', async ({ page }) => {
     await page.goto('/');
     await page.locator('#addTabTypeMenu').click();
     await page

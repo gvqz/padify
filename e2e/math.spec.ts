@@ -33,9 +33,7 @@ test.describe('math equations', () => {
     await page.goto('/');
   });
 
-  test('insert an equation, reload, it re-renders from the stored source', async ({
-    page,
-  }) => {
+  test('insert an equation, reload, it re-renders from the stored source', async ({ page }) => {
     await newRichNote(page);
     const editor = page.locator('#note');
     await editor.pressSequentially('Euler said ');
@@ -62,16 +60,14 @@ test.describe('math equations', () => {
     await page.reload();
     await expect(page.locator('#note .padify-math .katex')).toHaveCount(1);
     const storedLatex = await page.evaluate(() => {
-      return (
-        document.querySelector('#note .padify-math') as HTMLElement | null
-      )?.getAttribute('data-latex');
+      return (document.querySelector('#note .padify-math') as HTMLElement | null)?.getAttribute(
+        'data-latex',
+      );
     });
     expect(storedLatex).toBe('e^{i\\pi} + 1 = 0');
   });
 
-  test('one undo removes the whole equation, clicking reopens it for edit', async ({
-    page,
-  }) => {
+  test('one undo removes the whole equation, clicking reopens it for edit', async ({ page }) => {
     await newRichNote(page);
     const editor = page.locator('#note');
     await editor.pressSequentially('before');

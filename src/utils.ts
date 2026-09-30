@@ -76,9 +76,10 @@ export function saveTextAsFile(textToWrite: string, fileNameToSaveAs: string): v
   downloadLink.innerHTML = 'Download File';
 
   const webkitURL = (window as Window & { webkitURL?: typeof URL }).webkitURL;
-  const url = webkitURL != null
-    ? webkitURL.createObjectURL(textFileAsBlob)
-    : window.URL.createObjectURL(textFileAsBlob);
+  const url =
+    webkitURL != null
+      ? webkitURL.createObjectURL(textFileAsBlob)
+      : window.URL.createObjectURL(textFileAsBlob);
   downloadLink.href = url;
   if (webkitURL == null) {
     downloadLink.style.display = 'none';

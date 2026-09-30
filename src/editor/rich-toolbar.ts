@@ -22,7 +22,6 @@ import {
   type BlockFormat,
   type EditorCommand,
   type ListKind,
-  type ScriptType,
 } from './port';
 import { isRichNote } from './note-types';
 import { currentThemeMode, resolvePaletteColor } from './theme-colors';
@@ -809,7 +808,7 @@ export function initRichToolbar(tabManager: TabManager): void {
     scratch.style.opacity = '0';
     document.body.appendChild(scratch);
     scratch.select();
-    let copied = false;
+    let copied: boolean;
     try {
       copied = document.execCommand('copy');
     } catch {

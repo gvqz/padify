@@ -1,365 +1,364 @@
-    <nav class="navbar navbar-default navbar-inverse navbar-fixed-top">
-      <div class="container">
-        <div class="navbar-header">
-          <span>
-            <button
-              type="button"
-              class="navbar-toggle collapsed"
-              data-toggle="collapse"
-              data-target="#navbar"
-              aria-expanded="false"
-              aria-controls="navbar"
+<nav class="navbar navbar-default navbar-inverse navbar-fixed-top">
+  <div class="container">
+    <div class="navbar-header">
+      <span>
+        <button
+          type="button"
+          class="navbar-toggle collapsed"
+          data-toggle="collapse"
+          data-target="#navbar"
+          aria-expanded="false"
+          aria-controls="navbar"
+        >
+          <span class="sr-only">Toggle navigation</span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+        </button>
+      </span>
+      <span class="brand-menu-wrap">
+        <a
+          class="navbar-brand app-heading glow-text tilt-css"
+          href="javascript:void(0);"
+          id="brandMenuButton"
+          role="button"
+          title="About, keyboard shortcuts & help"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-controls="brandMenu"
+          ><span>P</span><span>a</span><span>d</span><span>i</span><span>f</span><span>y</span></a
+        >
+        <div id="brandMenu" class="dropdown-menu brand-menu" role="menu">
+          <a
+            class="brand-menu-item"
+            role="menuitem"
+            href="#about"
+            data-toggle="modal"
+            data-target="#aboutModal"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
             >
-              <span class="sr-only">Toggle navigation</span>
-              <span class="icon-bar"></span>
-              <span class="icon-bar"></span>
-              <span class="icon-bar"></span>
-            </button>
-          </span>
-          <span class="brand-menu-wrap">
-            <a
-              class="navbar-brand app-heading glow-text tilt-css"
-              href="javascript:void(0);"
-              id="brandMenuButton"
-              role="button"
-              title="About, keyboard shortcuts & help"
-              aria-haspopup="menu"
-              aria-expanded="false"
-              aria-controls="brandMenu"
-              ><span>P</span><span>a</span><span>d</span><span>i</span><span>f</span
-              ><span>y</span></a
+              <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
+            </svg>
+            <span class="brand-menu-text">About</span>
+          </a>
+          <a
+            class="brand-menu-item"
+            role="menuitem"
+            href="#keyboard-shortcuts"
+            data-toggle="modal"
+            data-target="#keyboardShortcutsModal"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
             >
-            <div id="brandMenu" class="dropdown-menu brand-menu" role="menu">
-              <a
-                class="brand-menu-item"
-                role="menuitem"
-                href="#about"
-                data-toggle="modal"
-                data-target="#aboutModal"
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
-                </svg>
-                <span class="brand-menu-text">About</span>
-              </a>
-              <a
-                class="brand-menu-item"
-                role="menuitem"
-                href="#keyboard-shortcuts"
-                data-toggle="modal"
-                data-target="#keyboardShortcutsModal"
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <rect x="2.5" y="5.5" width="19" height="13" rx="2.5" />
-                  <path
-                    d="M6.25 9.25h.01M10 9.25h.01M13.75 9.25h.01M17.5 9.25h.01M6.25 15h.01M17.5 15h.01M9 15h6"
-                  />
-                </svg>
-                <span class="brand-menu-text">Keyboard shortcuts</span>
-                <span class="brand-menu-kbd">ctrl + K</span>
-              </a>
-              <a
-                class="brand-menu-item"
-                role="menuitem"
-                href="#help"
-                data-toggle="modal"
-                data-target="#helpModal"
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-2.91 2.91-1.08.217-1.09.605-1.09 1.09M12 17h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"
-                  />
-                </svg>
-                <span class="brand-menu-text">Help</span>
-              </a>
-            </div>
-          </span>
-          <span class="icon-container">
-            <span title="Your notes" id="tabRailToggleContainer">
-              <a
-                href="javascript:void(0);"
-                id="tabRailToggle"
-                class="nav-icon-btn"
-                aria-controls="tabRail"
-                aria-expanded="false"
-                title="Your notes"
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.9"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <rect x="3" y="4" width="18" height="16" rx="2" />
-                  <path d="M9 4v16" />
-                  <path d="m15 10-2 2 2 2" />
-                </svg>
-                <span class="sr-only">Your notes</span>
-              </a>
+              <rect x="2.5" y="5.5" width="19" height="13" rx="2.5" />
+              <path
+                d="M6.25 9.25h.01M10 9.25h.01M13.75 9.25h.01M17.5 9.25h.01M6.25 15h.01M17.5 15h.01M9 15h6"
+              />
+            </svg>
+            <span class="brand-menu-text">Keyboard shortcuts</span>
+            <span class="brand-menu-kbd">ctrl + K</span>
+          </a>
+          <a
+            class="brand-menu-item"
+            role="menuitem"
+            href="#help"
+            data-toggle="modal"
+            data-target="#helpModal"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path
+                d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-2.91 2.91-1.08.217-1.09.605-1.09 1.09M12 17h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"
+              />
+            </svg>
+            <span class="brand-menu-text">Help</span>
+          </a>
+        </div>
+      </span>
+      <span class="icon-container">
+        <span title="Your notes" id="tabRailToggleContainer">
+          <a
+            href="javascript:void(0);"
+            id="tabRailToggle"
+            class="nav-icon-btn"
+            aria-controls="tabRail"
+            aria-expanded="false"
+            title="Your notes"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <path d="M9 4v16" />
+              <path d="m15 10-2 2 2 2" />
+            </svg>
+            <span class="sr-only">Your notes</span>
+          </a>
+        </span>
+        <span class="downaload-notes-container">
+          <a id="downloadNotes" class="download-icon" title="Download Notes">
+            <img src="/img/navbar/download.svg" alt="Download Icon" />
+          </a>
+          <!-- Dropdown Menu -->
+          <div id="iconDropdown" class="dropdown-menu">
+            <li><a class="dropdown-item" id="downloadNotesPlain">Download as plain text</a></li>
+            <li><a class="dropdown-item" id="downloadNotesPdf">Download as PDF</a></li>
+            <li><a class="dropdown-item" id="downloadNotesDocx">Download as DOCX</a></li>
+            <li><a class="dropdown-item" id="downloadNotesHtml">Download as HTML</a></li>
+          </div>
+        </span>
+        <span>
+          <a
+            href="javascript:void(0);"
+            id="copyToClipboard"
+            class=""
+            title="Copy notes to clipboard [alt/option + C]"
+          >
+            <img src="/img/navbar/copy.svg" alt="Copy Icon" />
+          </a>
+        </span>
+        <span title="Voice type [alt/option + v]" id="voiceTypeContainer" hidden>
+          <a
+            href="javascript:void(0);"
+            id="voiceTypeButton"
+            class="nav-icon-btn voice-nav-button"
+            aria-pressed="false"
+            title="Voice type [alt/option + v]"
+          >
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <path d="M12 19v3" />
+            </svg>
+            <span class="sr-only">Voice type</span>
+          </a>
+        </span>
+        <span title="Preferences [ctrl/command + ,]">
+          <a
+            href="#preferences"
+            data-toggle="modal"
+            data-target="#preferencesModal"
+            id="preferences"
+            class="preference-icon"
+          >
+            <img src="/img/navbar/preferences.svg" alt="Preferences" id="Preferences" />
+          </a>
+        </span>
+        <span title="Open Music Player">
+          <a
+            href="#music"
+            data-toggle="modal"
+            data-target="#musicPlayerModal"
+            title="Open Music Player"
+          >
+            <span class="ambient-noise-icon">
+              <img src="/img/navbar/music.svg" alt="Open Music Player" />
+              <span class="ambient-noise-status-dot" aria-hidden="true"></span>
             </span>
-            <span class="downaload-notes-container">
-              <a id="downloadNotes" class="download-icon" title="Download Notes">
-                <img src="/img/navbar/download.svg" alt="Download Icon" />
-              </a>
-              <!-- Dropdown Menu -->
-              <div id="iconDropdown" class="dropdown-menu">
-                <li><a class="dropdown-item" id="downloadNotesPlain">Download as plain text</a></li>
-                <li><a class="dropdown-item" id="downloadNotesPdf">Download as PDF</a></li>
-                <li><a class="dropdown-item" id="downloadNotesDocx">Download as DOCX</a></li>
-                <li><a class="dropdown-item" id="downloadNotesHtml">Download as HTML</a></li>
-              </div>
-            </span>
+          </a>
+        </span>
+        <span title="Start a Writing Session" id="timerContainer">
+          <a
+            href="#timerModal"
+            data-toggle="modal"
+            data-target="#timerModal"
+            title="Start a Writing Session"
+          >
             <span>
-              <a
-                href="javascript:void(0);"
-                id="copyToClipboard"
-                class=""
-                title="Copy notes to clipboard [alt/option + C]"
+              <img src="/img/navbar/timer.svg" alt="Start a Writing Session" />
+            </span>
+          </a>
+        </span>
+        <span title="Cloud sync" id="cloudNavContainer" hidden>
+          <a href="javascript:void(0);" id="cloudNavButton" class="cloud-nav-button">
+            <span class="cloud-nav-icon">
+              <svg
+                width="19"
+                height="19"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                stroke="currentColor"
+                stroke-width="1.9"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
               >
-                <img src="/img/navbar/copy.svg" alt="Copy Icon" />
-              </a>
+                <path
+                  d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"
+                />
+                <path d="M12 12v6" />
+                <path d="m9.5 15.5 2.5-2.5 2.5 2.5" />
+              </svg>
+              <span class="cloud-status-dot off" id="cloudStatusDot" aria-hidden="true"></span>
             </span>
-            <span title="Voice type [alt/option + v]" id="voiceTypeContainer" hidden>
-              <a
-                href="javascript:void(0);"
-                id="voiceTypeButton"
-                class="nav-icon-btn voice-nav-button"
-                aria-pressed="false"
-                title="Voice type [alt/option + v]"
-              >
-                <svg
-                  width="17"
-                  height="17"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.9"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                  <path d="M12 19v3" />
-                </svg>
-                <span class="sr-only">Voice type</span>
-              </a>
+            <span class="sr-only">Cloud sync</span>
+          </a>
+        </span>
+        <span title="Share this note" id="shareNotesContainer" hidden>
+          <a id="shareNotes" title="Share this note">
+            <span>
+              <img src="/img/navbar/share.svg" alt="Share this note" />
             </span>
-            <span title="Preferences [ctrl/command + ,]">
-              <a
-                href="#preferences"
-                data-toggle="modal"
-                data-target="#preferencesModal"
-                id="preferences"
-                class="preference-icon"
-              >
-                <img src="/img/navbar/preferences.svg" alt="Preferences" id="Preferences" />
-              </a>
-            </span>
-            <span title="Open Music Player">
-              <a
-                href="#music"
-                data-toggle="modal"
-                data-target="#musicPlayerModal"
-                title="Open Music Player"
-              >
-                <span class="ambient-noise-icon">
-                  <img src="/img/navbar/music.svg" alt="Open Music Player" />
-                  <span class="ambient-noise-status-dot" aria-hidden="true"></span>
-                </span>
-              </a>
-            </span>
-            <span title="Start a Writing Session" id="timerContainer">
-              <a
-                href="#timerModal"
-                data-toggle="modal"
-                data-target="#timerModal"
-                title="Start a Writing Session"
-              >
-                <span>
-                  <img src="/img/navbar/timer.svg" alt="Start a Writing Session" />
-                </span>
-              </a>
-            </span>
-            <span title="Cloud sync" id="cloudNavContainer" hidden>
-              <a href="javascript:void(0);" id="cloudNavButton" class="cloud-nav-button">
-                <span class="cloud-nav-icon">
-                  <svg
-                    width="19"
-                    height="19"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                    stroke="currentColor"
-                    stroke-width="1.9"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"
-                    />
-                    <path d="M12 12v6" />
-                    <path d="m9.5 15.5 2.5-2.5 2.5 2.5" />
-                  </svg>
-                  <span class="cloud-status-dot off" id="cloudStatusDot" aria-hidden="true"></span>
-                </span>
-                <span class="sr-only">Cloud sync</span>
-              </a>
-            </span>
-            <span title="Share this note" id="shareNotesContainer" hidden>
-              <a id="shareNotes" title="Share this note">
-                <span>
-                  <img src="/img/navbar/share.svg" alt="Share this note" />
-                </span>
-                <span class="sr-only">Share this note</span>
-              </a>
-            </span>
-          </span>
-        </div>
-        <div id="navbar" class="collapse navbar-collapse">
-          <ul class="nav navbar-nav navbar-flex">
-            <li class="keyboard-icon" id="pipContainer" title="Activate Floating Window">
-              <a id="pip" class="pip-icon">
-                <img src="/img/navbar/pip.svg" alt="Activate Floating Window" />
-              </a>
-            </li>
-            <li class="snapshots-icon">
-              <a href="javascript:void(0);" id="snapshotsButton" title="View Snapshots">
-                <svg
-                  class="snapshot-icon"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  stroke="#000000"
-                >
-                  <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                  <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
-                  <g id="SVGRepo_iconCarrier">
-                    <g id="System / Save">
-                      <path
-                        id="Vector"
-                        d="M17 21.0002L7 21M17 21.0002L17.8031 21C18.921 21 19.48 21 19.9074 20.7822C20.2837 20.5905 20.5905 20.2843 20.7822 19.908C21 19.4806 21 18.921 21 17.8031V9.21955C21 8.77072 21 8.54521 20.9521 8.33105C20.9095 8.14 20.8393 7.95652 20.7432 7.78595C20.6366 7.59674 20.487 7.43055 20.1929 7.10378L17.4377 4.04241C17.0969 3.66374 16.9242 3.47181 16.7168 3.33398C16.5303 3.21 16.3242 3.11858 16.1073 3.06287C15.8625 3 15.5998 3 15.075 3H6.2002C5.08009 3 4.51962 3 4.0918 3.21799C3.71547 3.40973 3.40973 3.71547 3.21799 4.0918C3 4.51962 3 5.08009 3 6.2002V17.8002C3 18.9203 3 19.4796 3.21799 19.9074C3.40973 20.2837 3.71547 20.5905 4.0918 20.7822C4.5192 21 5.07899 21 6.19691 21H7M17 21.0002V17.1969C17 16.079 17 15.5192 16.7822 15.0918C16.5905 14.7155 16.2837 14.4097 15.9074 14.218C15.4796 14 14.9203 14 13.8002 14H10.2002C9.08009 14 8.51962 14 8.0918 14.218C7.71547 14.4097 7.40973 14.7155 7.21799 15.0918C7 15.5196 7 16.0801 7 17.2002V21M15 7H9"
-                        stroke="#ffffff"
-                        stroke-width="2.3"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      ></path>
-                    </g>
-                  </g>
-                </svg>
-                <span class="snapshot-text">Snapshots</span>
-              </a>
-            </li>
-            <li class="unicode-icon" title="Insert Unicode Symbol [ctrl/command + shift + o]">
-              <a
-                href="javascript:void(0);"
-                id="unicodePickerTrigger"
-                aria-label="Insert Unicode Symbol"
-              >
-                <svg
-                  fill="#ffffff"
-                  version="1.1"
-                  id="Capa_1"
-                  xmlns="http://www.w3.org/2000/svg"
-                  xmlns:xlink="http://www.w3.org/1999/xlink"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 98.82 98.82"
-                  xml:space="preserve"
-                  stroke="#ffffff"
-                >
-                  <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                  <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
-                  <g id="SVGRepo_iconCarrier">
-                    <g>
-                      <path
-                        d="M96.82,85.474H86.357c6.945-9.213,10.77-20.733,10.77-32.438c0-28.343-21.406-51.402-47.72-51.402 c-26.313,0-47.72,23.06-47.72,51.402c0,11.707,3.823,23.227,10.767,32.438H2c-1.104,0-2,0.896-2,2v7.714c0,1.104,0.896,2,2,2 h28.551c1.104,0,2-0.896,2-2v-8.593c0-0.476-0.169-0.935-0.477-1.296l-0.111-0.131c-0.112-0.133-0.242-0.25-0.385-0.348 c-9.826-6.81-15.931-18.988-15.931-31.785c0-20.646,15.145-37.442,33.76-37.442c18.614,0,33.759,16.797,33.759,37.442 c0,12.851-6.143,25.055-16.029,31.851c-0.543,0.373-0.867,0.989-0.867,1.647v8.653c0,1.104,0.896,2,2,2H96.82c1.104,0,2-0.896,2-2 v-7.714C98.82,86.369,97.926,85.474,96.82,85.474z"
-                      ></path>
-                    </g>
-                  </g>
-                </svg>
-              </a>
-            </li>
-            <li class="fullscreen-icon">
-              <a href="javascript:void(0);" id="fullScreenButton" title="Toggle Full Screen">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  id="arrowPointsOut"
-                  height="18px"
-                  width="18px"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke-width="2.5"
-                  stroke="#fff"
-                  class="size-6"
-                >
+            <span class="sr-only">Share this note</span>
+          </a>
+        </span>
+      </span>
+    </div>
+    <div id="navbar" class="collapse navbar-collapse">
+      <ul class="nav navbar-nav navbar-flex">
+        <li class="keyboard-icon" id="pipContainer" title="Activate Floating Window">
+          <a id="pip" class="pip-icon">
+            <img src="/img/navbar/pip.svg" alt="Activate Floating Window" />
+          </a>
+        </li>
+        <li class="snapshots-icon">
+          <a href="javascript:void(0);" id="snapshotsButton" title="View Snapshots">
+            <svg
+              class="snapshot-icon"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              stroke="#000000"
+            >
+              <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+              <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
+              <g id="SVGRepo_iconCarrier">
+                <g id="System / Save">
                   <path
+                    id="Vector"
+                    d="M17 21.0002L7 21M17 21.0002L17.8031 21C18.921 21 19.48 21 19.9074 20.7822C20.2837 20.5905 20.5905 20.2843 20.7822 19.908C21 19.4806 21 18.921 21 17.8031V9.21955C21 8.77072 21 8.54521 20.9521 8.33105C20.9095 8.14 20.8393 7.95652 20.7432 7.78595C20.6366 7.59674 20.487 7.43055 20.1929 7.10378L17.4377 4.04241C17.0969 3.66374 16.9242 3.47181 16.7168 3.33398C16.5303 3.21 16.3242 3.11858 16.1073 3.06287C15.8625 3 15.5998 3 15.075 3H6.2002C5.08009 3 4.51962 3 4.0918 3.21799C3.71547 3.40973 3.40973 3.71547 3.21799 4.0918C3 4.51962 3 5.08009 3 6.2002V17.8002C3 18.9203 3 19.4796 3.21799 19.9074C3.40973 20.2837 3.71547 20.5905 4.0918 20.7822C4.5192 21 5.07899 21 6.19691 21H7M17 21.0002V17.1969C17 16.079 17 15.5192 16.7822 15.0918C16.5905 14.7155 16.2837 14.4097 15.9074 14.218C15.4796 14 14.9203 14 13.8002 14H10.2002C9.08009 14 8.51962 14 8.0918 14.218C7.71547 14.4097 7.40973 14.7155 7.21799 15.0918C7 15.5196 7 16.0801 7 17.2002V21M15 7H9"
+                    stroke="#ffffff"
+                    stroke-width="2.3"
                     stroke-linecap="round"
                     stroke-linejoin="round"
-                    d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"
-                  />
-                </svg>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  id="arrowPointsIn"
-                  height="18px"
-                  width="18px"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke-width="2.5"
-                  stroke="#fff"
-                  class="size-6"
-                  style="display: none"
-                >
+                  ></path>
+                </g>
+              </g>
+            </svg>
+            <span class="snapshot-text">Snapshots</span>
+          </a>
+        </li>
+        <li class="unicode-icon" title="Insert Unicode Symbol [ctrl/command + shift + o]">
+          <a
+            href="javascript:void(0);"
+            id="unicodePickerTrigger"
+            aria-label="Insert Unicode Symbol"
+          >
+            <svg
+              fill="#ffffff"
+              version="1.1"
+              id="Capa_1"
+              xmlns="http://www.w3.org/2000/svg"
+              xmlns:xlink="http://www.w3.org/1999/xlink"
+              width="16"
+              height="16"
+              viewBox="0 0 98.82 98.82"
+              xml:space="preserve"
+              stroke="#ffffff"
+            >
+              <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+              <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
+              <g id="SVGRepo_iconCarrier">
+                <g>
                   <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5 5.25 5.25"
-                  />
-                </svg>
-              </a>
-            </li>
-          </ul>
-        </div>
-      </div>
+                    d="M96.82,85.474H86.357c6.945-9.213,10.77-20.733,10.77-32.438c0-28.343-21.406-51.402-47.72-51.402 c-26.313,0-47.72,23.06-47.72,51.402c0,11.707,3.823,23.227,10.767,32.438H2c-1.104,0-2,0.896-2,2v7.714c0,1.104,0.896,2,2,2 h28.551c1.104,0,2-0.896,2-2v-8.593c0-0.476-0.169-0.935-0.477-1.296l-0.111-0.131c-0.112-0.133-0.242-0.25-0.385-0.348 c-9.826-6.81-15.931-18.988-15.931-31.785c0-20.646,15.145-37.442,33.76-37.442c18.614,0,33.759,16.797,33.759,37.442 c0,12.851-6.143,25.055-16.029,31.851c-0.543,0.373-0.867,0.989-0.867,1.647v8.653c0,1.104,0.896,2,2,2H96.82c1.104,0,2-0.896,2-2 v-7.714C98.82,86.369,97.926,85.474,96.82,85.474z"
+                  ></path>
+                </g>
+              </g>
+            </svg>
+          </a>
+        </li>
+        <li class="fullscreen-icon">
+          <a href="javascript:void(0);" id="fullScreenButton" title="Toggle Full Screen">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              id="arrowPointsOut"
+              height="18px"
+              width="18px"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="2.5"
+              stroke="#fff"
+              class="size-6"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"
+              />
+            </svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              id="arrowPointsIn"
+              height="18px"
+              width="18px"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="2.5"
+              stroke="#fff"
+              class="size-6"
+              style="display: none"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5 5.25 5.25"
+              />
+            </svg>
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
 
-      <div class="overlay"></div>
-    </nav>
+  <div class="overlay"></div>
+</nav>

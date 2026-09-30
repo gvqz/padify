@@ -1,9 +1,5 @@
 import { $ } from './lib/q';
-import {
-  enableDarkMode,
-  enableLightMode,
-  enableDeviceTheme,
-} from './utils';
+import { enableDarkMode, enableLightMode, enableDeviceTheme } from './utils';
 import { stateSet } from './storage';
 import { selector } from './selector';
 
@@ -30,11 +26,19 @@ export function initThemeController(themeConfig: ThemeConfig): {
   }
 
   if (state.mode && state.mode === 'dark') {
-    enableDarkMode(themeConfig.lightmodeText, themeConfig.darkMetaColor, themeConfig.metaThemeColor);
+    enableDarkMode(
+      themeConfig.lightmodeText,
+      themeConfig.darkMetaColor,
+      themeConfig.metaThemeColor,
+    );
 
     $('input[name="themes"][value="dark"]').prop('checked', true);
   } else if (state.mode && state.mode === 'light') {
-    enableLightMode(themeConfig.darkmodeText, themeConfig.lightMetaColor, themeConfig.metaThemeColor);
+    enableLightMode(
+      themeConfig.darkmodeText,
+      themeConfig.lightMetaColor,
+      themeConfig.metaThemeColor,
+    );
 
     $('input[name="themes"][value="light"]').prop('checked', true);
   } else {
@@ -49,10 +53,18 @@ export function initThemeController(themeConfig: ThemeConfig): {
     radio.addEventListener('change', (event) => {
       switch ((event.target as HTMLInputElement).value) {
         case 'dark':
-          enableDarkMode(themeConfig.lightmodeText, themeConfig.darkMetaColor, themeConfig.metaThemeColor);
+          enableDarkMode(
+            themeConfig.lightmodeText,
+            themeConfig.darkMetaColor,
+            themeConfig.metaThemeColor,
+          );
           break;
         case 'light':
-          enableLightMode(themeConfig.darkmodeText, themeConfig.lightMetaColor, themeConfig.metaThemeColor);
+          enableLightMode(
+            themeConfig.darkmodeText,
+            themeConfig.lightMetaColor,
+            themeConfig.metaThemeColor,
+          );
           break;
         case 'device':
           enableDeviceTheme(themeConfig);

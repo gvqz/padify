@@ -35,9 +35,7 @@ async function clickCheckbox(page: Page, index: number): Promise<void> {
 }
 
 test.describe('checklists', () => {
-  test('toolbar toggle, gutter check, Enter behavior and reload persistence', async ({
-    page,
-  }) => {
+  test('toolbar toggle, gutter check, Enter behavior and reload persistence', async ({ page }) => {
     await page.goto('/');
     await createRichNote(page);
 

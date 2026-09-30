@@ -281,9 +281,7 @@ export class Q {
    */
   trigger(type: string): this {
     const nativeMethod: 'focus' | 'select' | 'click' | 'blur' | null =
-      type === 'focus' || type === 'select' || type === 'click' || type === 'blur'
-        ? type
-        : null;
+      type === 'focus' || type === 'select' || type === 'click' || type === 'blur' ? type : null;
     this.els.forEach((el) => {
       if (nativeMethod && isElement(el)) {
         const html = el as HTMLElement & { select?: () => void };
@@ -396,13 +394,15 @@ export class Q {
           : '';
       }
       this.els.forEach((el) => {
-        if (isElement(el)) (el as HTMLElement).style.setProperty(camelToKebab(nameOrStyles), String(value));
+        if (isElement(el))
+          (el as HTMLElement).style.setProperty(camelToKebab(nameOrStyles), String(value));
       });
       return this;
     }
     Object.entries(nameOrStyles).forEach(([name, styleValue]) => {
       this.els.forEach((el) => {
-        if (isElement(el)) (el as HTMLElement).style.setProperty(camelToKebab(name), String(styleValue));
+        if (isElement(el))
+          (el as HTMLElement).style.setProperty(camelToKebab(name), String(styleValue));
       });
     });
     return this;

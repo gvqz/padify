@@ -24,8 +24,7 @@ describe('hex/hsv conversions', () => {
   it('reads a mid tone back to within one step per channel', () => {
     const hex = '#4285f4';
     const round = hsvToHex(hexToHsv(hex));
-    const channel = (value: string, at: number): number =>
-      parseInt(value.slice(at, at + 2), 16);
+    const channel = (value: string, at: number): number => parseInt(value.slice(at, at + 2), 16);
     for (const at of [1, 3, 5]) {
       expect(Math.abs(channel(round, at) - channel(hex, at))).toBeLessThanOrEqual(1);
     }

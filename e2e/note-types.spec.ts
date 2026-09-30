@@ -44,7 +44,9 @@ test.describe('note types', () => {
 
     const popover = page.locator('#addTabTypeMenuPopover');
     await expect(popover.locator('.tab-type-menu-item', { hasText: 'Plain note' })).toBeVisible();
-    await expect(popover.locator('.tab-type-menu-item', { hasText: 'Rich text note' })).toBeVisible();
+    await expect(
+      popover.locator('.tab-type-menu-item', { hasText: 'Rich text note' }),
+    ).toBeVisible();
 
     // Escape closes and returns focus to the trigger.
     await page.keyboard.press('Escape');
@@ -203,7 +205,7 @@ test.describe('note types', () => {
     await expect(editor.locator('a')).toHaveText('docs');
     await expect(page.locator('#richLinkPopover')).toBeHidden();
 
-        // A collapsed caret now pastes the URL itself as linked text (Docs'
+    // A collapsed caret now pastes the URL itself as linked text (Docs'
     // paste-a-link gesture) instead of the old dead-end guidance.
     // Home parks the caret at the note start, outside any anchor (the anchor
     // is the note's last block, so End would clamp back INSIDE it).
@@ -226,9 +228,7 @@ test.describe('note types', () => {
     await page.locator('#richLinkInput').fill('https://example.com/docs/v2');
     await page.locator('#richLinkApply').click();
 
-    await expect(
-      editor.locator('a[href="https://example.com/docs/v2"]'),
-    ).toHaveCount(1);
+    await expect(editor.locator('a[href="https://example.com/docs/v2"]')).toHaveCount(1);
     await expect(editor.locator('a[href="https://example.com/docs/v2"]')).toHaveText(
       'https://example.com/stray',
     );

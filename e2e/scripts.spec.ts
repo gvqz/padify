@@ -19,9 +19,7 @@ async function newRichNote(page: import('@playwright/test').Page): Promise<void>
   await page
     .locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Rich text note' })
     .click();
-  await expect
-    .poll(async () => page.locator('#richToolbar').isHidden())
-    .toBe(false);
+  await expect.poll(async () => page.locator('#richToolbar').isHidden()).toBe(false);
   await page.locator('#note').focus();
 }
 
@@ -30,9 +28,7 @@ test.describe('scripts', () => {
     await page.goto('/');
   });
 
-  test('a selected run toggles superscript off again and typing stays plain', async ({
-    page,
-  }) => {
+  test('a selected run toggles superscript off again and typing stays plain', async ({ page }) => {
     await newRichNote(page);
     const note = page.locator('#note');
     await note.pressSequentially('hello world');
@@ -63,9 +59,7 @@ test.describe('scripts', () => {
     await expect(note).toHaveText('hello world ok');
   });
 
-  test('a collapsed caret inside superscript leaves it with one press', async ({
-    page,
-  }) => {
+  test('a collapsed caret inside superscript leaves it with one press', async ({ page }) => {
     await newRichNote(page);
     const note = page.locator('#note');
     await note.pressSequentially('ab');
@@ -79,14 +73,10 @@ test.describe('scripts', () => {
     // The caret splits out of the script; typing continues plain.
     await note.pressSequentially('Z');
     await expect(note.locator('sup')).toHaveText('XY');
-    await expect
-      .poll(async () => visibleText(await note.textContent()))
-      .toBe('abXYZ');
+    await expect.poll(async () => visibleText(await note.textContent())).toBe('abXYZ');
   });
 
-  test('the engine-nested superscript chain is repaired by toggling off', async ({
-    page,
-  }) => {
+  test('the engine-nested superscript chain is repaired by toggling off', async ({ page }) => {
     await newRichNote(page);
     const note = page.locator('#note');
     // Seed the compounding damage the old engine path produced:
@@ -112,9 +102,7 @@ test.describe('scripts', () => {
     await expect(note.locator('sup')).toHaveCount(2);
     // The seed caret sat between "Y" and "u" — the typed char lands exactly
     // there, plain (Docs types at the caret, scripted runs keep their ink).
-    await expect
-      .poll(async () => visibleText(await note.textContent()))
-      .toBe('abXYZucd');
+    await expect.poll(async () => visibleText(await note.textContent())).toBe('abXYZucd');
     const zInsideScript = await page.evaluate(() => {
       const note = document.getElementById('note')!;
       return [...note.querySelectorAll('sup, sub')].some((el) =>

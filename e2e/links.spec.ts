@@ -23,9 +23,7 @@ test.describe('links', () => {
     await page.goto('/');
   });
 
-  test('Ctrl+K opens the bubble and a bare domain completes to https://', async ({
-    page,
-  }) => {
+  test('Ctrl+K opens the bubble and a bare domain completes to https://', async ({ page }) => {
     await newRichNote(page);
     const editor = page.locator('#note');
     await editor.pressSequentially('read this');
@@ -38,9 +36,7 @@ test.describe('links', () => {
     await page.locator('#richLinkInput').fill('example.com/guide');
     await page.locator('#richLinkApply').click();
 
-    await expect(editor.locator('a[href="https://example.com/guide"]')).toHaveText(
-      'read this',
-    );
+    await expect(editor.locator('a[href="https://example.com/guide"]')).toHaveText('read this');
     await expect(page.locator('#richLinkPopover')).toBeHidden();
     // The link button answers pressed while the caret sits in the link.
     await expect(page.locator('#richLinkButton')).toHaveAttribute('aria-pressed', 'true');
@@ -58,9 +54,7 @@ test.describe('links', () => {
 
     // Caret sits in the link after the wrap — Ctrl+K answers with the chip.
     await editor.press('Control+K');
-    await expect(page.locator('#richLinkView')).toHaveText(
-      'https://docs.example.dev/start',
-    );
+    await expect(page.locator('#richLinkView')).toHaveText('https://docs.example.dev/start');
 
     await page.locator('#richLinkCopy').click();
     await expect(page.locator('#toast')).toContainText('Link copied');
@@ -72,9 +66,7 @@ test.describe('links', () => {
     await expect(editor).toHaveText('docs or it did not happen');
   });
 
-  test('clicking a link floats its chip under the link and keeps typing', async ({
-    page,
-  }) => {
+  test('clicking a link floats its chip under the link and keeps typing', async ({ page }) => {
     await newRichNote(page);
     const editor = page.locator('#note');
     await editor.pressSequentially('see the manual here plus padding');

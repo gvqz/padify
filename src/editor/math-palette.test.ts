@@ -114,7 +114,9 @@ describe('mounted palette interactions', () => {
     input.value = 'x+';
     input.setSelectionRange(2, 2);
     const visible = host.querySelectorAll<HTMLButtonElement>('.rich-math-symbol:not([hidden])');
-    (Array.from(visible).find((button) => button.dataset.label === 'gamma')!).click();
+    Array.from(visible)
+      .find((button) => button.dataset.label === 'gamma')!
+      .click();
     expect(input.value).toBe('x+\\gamma');
     expect(input.selectionStart).toBe('x+\\gamma'.length);
     expect(onChange).toHaveBeenCalledTimes(1);
@@ -125,7 +127,9 @@ describe('mounted palette interactions', () => {
     const tabs = host.querySelectorAll<HTMLButtonElement>('.rich-math-tab');
     tabs[1].click(); // Operations
     const visible = host.querySelectorAll<HTMLButtonElement>('.rich-math-symbol:not([hidden])');
-    (Array.from(visible).find((button) => button.dataset.label === 'fraction')!).click();
+    Array.from(visible)
+      .find((button) => button.dataset.label === 'fraction')!
+      .click();
     expect(input.value).toBe('\\frac{}{}');
     expect(input.selectionStart).toBe('\\frac{'.length);
   });
@@ -137,7 +141,9 @@ describe('mounted palette interactions', () => {
     const tabs = host.querySelectorAll<HTMLButtonElement>('.rich-math-tab');
     tabs[1].click(); // Operations
     const visible = host.querySelectorAll<HTMLButtonElement>('.rich-math-symbol:not([hidden])');
-    (Array.from(visible).find((button) => button.dataset.label === 'pm')!).click();
+    Array.from(visible)
+      .find((button) => button.dataset.label === 'pm')!
+      .click();
     expect(input.value).toBe('a\\pm b');
   });
 

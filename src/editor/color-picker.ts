@@ -172,9 +172,7 @@ export function mountColorPicker(
     grid.appendChild(
       swatchFor(
         entry,
-        entry.value === 'transparent'
-          ? 'rich-swatch rich-swatch-none'
-          : 'rich-swatch',
+        entry.value === 'transparent' ? 'rich-swatch rich-swatch-none' : 'rich-swatch',
       ),
     ),
   );

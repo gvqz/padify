@@ -1,79 +1,79 @@
-    <div
-      id="unicodePickerModal"
-      class="modal fade ucp-modal"
-      role="dialog"
-      aria-hidden="true"
-      aria-labelledby="unicodePickerTitle"
-    >
-      <div class="modal-dialog modal-lg ucp-dialog">
-        <div class="modal-content ucp-content">
-          <div class="modal-header ucp-header">
-            <button type="button" class="close ucp-close" data-dismiss="modal" aria-label="Close">
-              &times;
-            </button>
-            <h4 class="modal-title ucp-title" id="unicodePickerTitle">Insert character</h4>
-            <div class="ucp-search">
-              <svg
-                class="ucp-search-icon"
-                viewBox="0 0 24 24"
-                width="16"
-                height="16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
-              <input
-                type="search"
-                id="unicodeSearch"
-                class="ucp-search-input"
-                placeholder="Search characters — try “arrow”, “heart”, “chess”, “superscript”…"
-                autocomplete="off"
-                spellcheck="false"
-                aria-label="Search characters by name, category, or code point"
-              />
-              <button
-                type="button"
-                id="unicodeSearchClear"
-                class="ucp-search-clear"
-                aria-label="Clear search"
-                hidden
-              >
-                &times;
-              </button>
-            </div>
+<div
+  id="unicodePickerModal"
+  class="modal fade ucp-modal"
+  role="dialog"
+  aria-hidden="true"
+  aria-labelledby="unicodePickerTitle"
+>
+  <div class="modal-dialog modal-lg ucp-dialog">
+    <div class="modal-content ucp-content">
+      <div class="modal-header ucp-header">
+        <button type="button" class="close ucp-close" data-dismiss="modal" aria-label="Close">
+          &times;
+        </button>
+        <h4 class="modal-title ucp-title" id="unicodePickerTitle">Insert character</h4>
+        <div class="ucp-search">
+          <svg
+            class="ucp-search-icon"
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input
+            type="search"
+            id="unicodeSearch"
+            class="ucp-search-input"
+            placeholder="Search characters — try “arrow”, “heart”, “chess”, “superscript”…"
+            autocomplete="off"
+            spellcheck="false"
+            aria-label="Search characters by name, category, or code point"
+          />
+          <button
+            type="button"
+            id="unicodeSearchClear"
+            class="ucp-search-clear"
+            aria-label="Clear search"
+            hidden
+          >
+            &times;
+          </button>
+        </div>
+      </div>
+      <div class="modal-body ucp-body">
+        <nav class="ucp-cats" id="unicodeCategories" aria-label="Character categories"></nav>
+        <div class="ucp-main">
+          <div
+            class="ucp-grid"
+            id="unicodeGrid"
+            role="listbox"
+            aria-label="Characters"
+            tabindex="0"
+          >
+            <div class="ucp-grid-inner" id="unicodeGridInner"></div>
           </div>
-          <div class="modal-body ucp-body">
-            <nav class="ucp-cats" id="unicodeCategories" aria-label="Character categories"></nav>
-            <div class="ucp-main">
-              <div
-                class="ucp-grid"
-                id="unicodeGrid"
-                role="listbox"
-                aria-label="Characters"
-                tabindex="0"
-              >
-                <div class="ucp-grid-inner" id="unicodeGridInner"></div>
-              </div>
-              <aside class="ucp-detail" id="unicodeDetail" aria-live="polite"></aside>
-            </div>
-          </div>
-          <div class="modal-footer ucp-footer">
-            <div class="ucp-status" id="unicodeStatus">Loading characters…</div>
-            <div class="ucp-hints">
-              <span class="ucp-hint"><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> move</span>
-              <span class="ucp-hint"><kbd>Enter</kbd> insert</span>
-              <span class="ucp-hint"><kbd>Shift</kbd>+<kbd>Enter</kbd> insert, keep open</span>
-              <span class="ucp-hint"><kbd>F</kbd> favorite</span>
-              <span class="ucp-hint"><kbd>C</kbd> copy</span>
-              <span class="ucp-hint"><kbd>/</kbd> search</span>
-            </div>
-          </div>
+          <aside class="ucp-detail" id="unicodeDetail" aria-live="polite"></aside>
+        </div>
+      </div>
+      <div class="modal-footer ucp-footer">
+        <div class="ucp-status" id="unicodeStatus">Loading characters…</div>
+        <div class="ucp-hints">
+          <span class="ucp-hint"><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> move</span>
+          <span class="ucp-hint"><kbd>Enter</kbd> insert</span>
+          <span class="ucp-hint"><kbd>Shift</kbd>+<kbd>Enter</kbd> insert, keep open</span>
+          <span class="ucp-hint"><kbd>F</kbd> favorite</span>
+          <span class="ucp-hint"><kbd>C</kbd> copy</span>
+          <span class="ucp-hint"><kbd>/</kbd> search</span>
         </div>
       </div>
     </div>
+  </div>
+</div>

@@ -60,7 +60,8 @@ export const MATH_LATEX_PATTERN = /^[\s\S]{1,2000}$/;
  * legitimately, but the editor surface itself is the only place those should
  * ever execute.
  */
-const MATH_FORBIDDEN_MACROS = /\\(href|url|htmlData|htmlStyle|htmlClass|includegraphics|mathchoice)\b/;
+const MATH_FORBIDDEN_MACROS =
+  /\\(href|url|htmlData|htmlStyle|htmlClass|includegraphics|mathchoice)\b/;
 
 /** Escapes a string for safe use inside an HTML attribute (insertHTML). */
 export function escapeHtmlAttr(value: string): string {

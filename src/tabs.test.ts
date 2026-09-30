@@ -90,9 +90,9 @@ describe('sanitizeNoteHtml', () => {
     expect(sanitizeNoteHtml('<span style="color:#e64980">s</span>')).toBe(
       '<span style="color: #e64980">s</span>',
     );
-    expect(
-      sanitizeNoteHtml('<span style="background-color: rgb(255, 243, 191)">s</span>'),
-    ).toBe('<span style="background-color: rgb(255, 243, 191)">s</span>');
+    expect(sanitizeNoteHtml('<span style="background-color: rgb(255, 243, 191)">s</span>')).toBe(
+      '<span style="background-color: rgb(255, 243, 191)">s</span>',
+    );
     expect(sanitizeNoteHtml('<span style="font-size: 24px">s</span>')).toBe(
       '<span style="font-size: 24px">s</span>',
     );
@@ -180,12 +180,14 @@ describe('sanitizeNoteHtml', () => {
     );
     // Cell alignment is the one style a cell may carry (the align buttons).
     expect(
-      sanitizeNoteHtml('<table><tbody><tr><td style="text-align: center">c</td></tr></tbody></table>'),
+      sanitizeNoteHtml(
+        '<table><tbody><tr><td style="text-align: center">c</td></tr></tbody></table>',
+      ),
     ).toBe('<table><tbody><tr><td style="text-align: center">c</td></tr></tbody></table>');
     // A hostile attribute rides the same wall as everywhere else.
-    expect(sanitizeNoteHtml('<table><tbody><tr><td bgcolor="red">c</td></tr></tbody></table>')).toBe(
-      '<table><tbody><tr><td>c</td></tr></tbody></table>',
-    );
+    expect(
+      sanitizeNoteHtml('<table><tbody><tr><td bgcolor="red">c</td></tr></tbody></table>'),
+    ).toBe('<table><tbody><tr><td>c</td></tr></tbody></table>');
   });
 });
 

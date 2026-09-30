@@ -90,7 +90,13 @@ let currentSnapshotForMirror: NotesSnapshot | null = null;
  */
 const lastWritten = new Map<
   string,
-  { name: string | null; position: number; updatedAt: number; deleted: boolean; noteType: NoteType | undefined }
+  {
+    name: string | null;
+    position: number;
+    updatedAt: number;
+    deleted: boolean;
+    noteType: NoteType | undefined;
+  }
 >();
 
 // ---- compatibility mirror state ---------------------------------------------
@@ -126,7 +132,7 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
       colorTheme:
         (record as { colorTheme?: unknown }).colorTheme === 'light' ||
         (record as { colorTheme?: unknown }).colorTheme === 'dark'
-          ? ((record as { colorTheme: 'light' | 'dark' }).colorTheme)
+          ? (record as { colorTheme: 'light' | 'dark' }).colorTheme
           : undefined,
     }));
 

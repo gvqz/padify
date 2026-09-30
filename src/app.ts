@@ -1,5 +1,4 @@
 import { $ } from './lib/q';
-import Swal from 'sweetalert2';
 import { selector } from './selector';
 import {
   calculateCharactersAndWords,

@@ -1,4 +1,4 @@
-import { $, type Q } from '../lib/q';
+import { $ } from '../lib/q';
 import { openModal, closeModal } from '../ui/behavior/modal';
 import type { NotepadUI } from '../selector';
 import type { UnicodeSymbol } from './types';
