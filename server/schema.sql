@@ -13,6 +13,7 @@
 --   sessions  bearer tokens (stored hashed) — one per signed-in device
 --   notes     one row per note tab (tombstoned on delete)
 --   shares    read-only share links with expiry + revoke
+--   attachments  user-scoped binary blobs (voice notes and future media)
 -- ===========================================================================
 
 create table if not exists users (
@@ -104,3 +105,34 @@ create table if not exists music_resolutions (
   resolved_at  integer not null default 0,
   expires_at   integer not null
 );
+
+-- ---------------------------------------------------------------------------
+-- Attachments (user-scoped binary blobs — voice notes and future media).
+--
+-- The bytes are stored base64-encoded in a TEXT column on purpose: the
+-- Turso HTTP pipeline in db.ts speaks string/number/null arguments only,
+-- and base64 text provably round-trips through BOTH backends (local
+-- bun:sqlite and Turso) with one code path. The 4/3 size penalty is
+-- bounded by the upload cap (see attachments.ts); if native BLOB
+-- arguments ever get wired into the Turso layer, migrating data → BLOB
+-- is a mechanical one-off.
+--
+-- `id` is chosen by the CLIENT (x-padify-id) so an upload retry after a
+-- dropped connection is idempotent: the server answers 200 for an
+-- identical (id, sha256) pair and 409 for a collision. There is no
+-- note→attachment linkage yet — features that reference attachments
+-- own their garbage collection; deleting a user cascades.
+-- ---------------------------------------------------------------------------
+
+create table if not exists attachments (
+  id         text primary key,
+  user_id    text not null references users(id) on delete cascade,
+  name       text not null default '',
+  mime       text not null default 'application/octet-stream',
+  size       integer not null,
+  sha256     text not null,
+  data       text not null,
+  created_at integer not null
+);
+
+create index if not exists attachments_user_id_idx on attachments(user_id, created_at);

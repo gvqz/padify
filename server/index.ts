@@ -11,6 +11,7 @@
 import { applySchema, createDb } from './db';
 import { sweepMusicCache } from './music';
 import { MAX_BODY_BYTES, json, route } from './handlers';
+import { MAX_ATTACHMENT_BYTES } from './attachments';
 
 const PORT = Number(process.env.PORT ?? 3041);
 
@@ -29,7 +30,10 @@ Bun.serve({
   // runtime level (the default allows 128 MB to be buffered before any
   // handler runs) and keep Bun's development error pages (with stack traces)
   // out of responses. The handler already returns safe JSON errors itself.
-  maxRequestBodySize: MAX_BODY_BYTES,
+  // The ceiling covers attachment uploads (raw bytes, capped at
+  // MAX_ATTACHMENT_BYTES by the handler) plus header slack; JSON routes
+  // keep their own tighter 2 MB check in readJson.
+  maxRequestBodySize: MAX_ATTACHMENT_BYTES + MAX_BODY_BYTES,
   development: false,
   async fetch(request) {
     const { pathname } = new URL(request.url);

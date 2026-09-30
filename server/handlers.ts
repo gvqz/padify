@@ -21,6 +21,16 @@ import {
   type SessionUser
 } from './auth';
 import { musicSearch, resolveTrackStream, resolveConfigured, searchConfigured } from './music';
+import {
+  attachmentIdFrom,
+  attachmentMetaFromRow,
+  attachmentMimeFrom,
+  attachmentNameFrom,
+  decodeAttachmentData,
+  encodeAttachmentData,
+  MAX_ATTACHMENT_BYTES,
+  sha256Hex
+} from './attachments';
 
 export const MAX_BODY_BYTES = 2_000_000;
 const DAY_MS = 86_400_000;
@@ -334,6 +344,136 @@ export async function handleSharesGet(db: Db, request: Request, user: SessionUse
   });
 }
 
+// ---------------------------------------------------------------------------
+// Attachments (the blob store — voice notes and future media). The wire
+// contract and the base64-in-TEXT decision are documented in
+// server/attachments.ts and schema.sql.
+// ---------------------------------------------------------------------------
+
+export async function handleAttachmentsList(
+  db: Db,
+  request: Request,
+  user: SessionUser
+): Promise<Response> {
+  const rows = await db.all(
+    `select id, name, mime, size, sha256, created_at
+     from attachments where user_id = ? order by created_at desc limit 1000`,
+    [user.id]
+  );
+  const metas = rows
+    .map((row) => attachmentMetaFromRow(row))
+    .filter((meta): meta is NonNullable<typeof meta> => meta !== null);
+  return json(request, { rows: metas });
+}
+
+export async function handleAttachmentPost(
+  db: Db,
+  request: Request,
+  user: SessionUser
+): Promise<Response> {
+  const id = attachmentIdFrom(request.headers.get('x-padify-id'));
+  if (!id) {
+    return json(request, { error: 'Missing or invalid attachment id (x-padify-id).' }, 400);
+  }
+
+  // Cheap early exit when the client declares an over-cap length; the
+  // measured check below is the one that counts.
+  const declared = Number(request.headers.get('content-length') ?? '0');
+  if (declared > MAX_ATTACHMENT_BYTES) {
+    return json(request, { error: 'Attachments are capped at 5 MB.' }, 413);
+  }
+
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await request.arrayBuffer());
+  } catch {
+    return json(request, { error: 'Could not read the upload.' }, 400);
+  }
+  if (bytes.byteLength === 0) {
+    return json(request, { error: 'Empty attachment.' }, 400);
+  }
+  if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+    return json(request, { error: 'Attachments are capped at 5 MB.' }, 413);
+  }
+
+  const sha256 = sha256Hex(bytes);
+
+  // Idempotent retries: the same (id, digest) is a success; the same id
+  // with different bytes is a collision, never a silent overwrite.
+  const existing = await db.all(
+    'select sha256 from attachments where id = ? and user_id = ?',
+    [id, user.id]
+  );
+  if (existing.length > 0) {
+    if (String(existing[0]?.sha256) === sha256) {
+      return json(request, { ok: true, id, duplicate: true });
+    }
+    return json(request, { error: 'That attachment id already has different bytes.' }, 409);
+  }
+
+  const meta = {
+    id,
+    name: attachmentNameFrom(request.headers.get('x-padify-name')),
+    mime: attachmentMimeFrom(request.headers.get('content-type'))
+  };
+  const createdAt = Date.now();
+  await db.run(
+    `insert into attachments (id, user_id, name, mime, size, sha256, data, created_at)
+     values (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, user.id, meta.name, meta.mime, bytes.byteLength, sha256, encodeAttachmentData(bytes), createdAt]
+  );
+  return json(request, { ...meta, size: bytes.byteLength, sha256, createdAt }, 201);
+}
+
+export async function handleAttachmentGet(
+  db: Db,
+  request: Request,
+  user: SessionUser,
+  id: string
+): Promise<Response> {
+  const rows = await db.all(
+    'select name, mime, sha256, data from attachments where id = ? and user_id = ?',
+    [id, user.id]
+  );
+  if (rows.length === 0) {
+    return json(request, { error: 'Not found.' }, 404);
+  }
+  const row = rows[0]!;
+  const sha256 = String(row.sha256);
+
+  // Attachments are immutable per id, so the digest is a perfect ETag.
+  const etag = `"${sha256}"`;
+  if (request.headers.get('if-none-match') === etag) {
+    return new Response(null, { status: 304, headers: { etag, ...corsHeaders(request) } });
+  }
+
+  const bytes = decodeAttachmentData(String(row.data));
+  const name = typeof row.name === 'string' && row.name ? row.name : 'attachment';
+  const mime = typeof row.mime === 'string' && row.mime ? row.mime : 'application/octet-stream';
+  return new Response(bytes, {
+    status: 200,
+    headers: {
+      'content-type': mime,
+      'content-length': String(bytes.byteLength),
+      'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(name)}`,
+      etag,
+      'cache-control': 'private, max-age=31536000, immutable',
+      ...corsHeaders(request)
+    }
+  });
+}
+
+export async function handleAttachmentDelete(
+  db: Db,
+  request: Request,
+  user: SessionUser,
+  id: string
+): Promise<Response> {
+  // Idempotent by design — deleting an already-deleted id is a success.
+  await db.run('delete from attachments where id = ? and user_id = ?', [id, user.id]);
+  return json(request, { ok: true });
+}
+
 function createShareToken(): string {
   const bytes = randomBytes(18);
   return bytes.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -614,6 +754,25 @@ export async function route(db: Db, request: Request, pathname: string): Promise
 
   if (pathname === '/api/shares' && method === 'PATCH' && user) {
     return handleSharesPatch(db, request, user);
+  }
+
+  // ---- attachments (the blob store) ---------------------------------------
+
+  if (pathname === '/api/attachments' && method === 'GET' && user) {
+    return handleAttachmentsList(db, request, user);
+  }
+
+  if (pathname === '/api/attachments' && method === 'POST' && user) {
+    return handleAttachmentPost(db, request, user);
+  }
+
+  const attachment = /^\/api\/attachments\/([A-Za-z0-9_-]{8,64})$/.exec(pathname);
+  if (attachment && method === 'GET' && user) {
+    return handleAttachmentGet(db, request, user, attachment[1]);
+  }
+
+  if (attachment && method === 'DELETE' && user) {
+    return handleAttachmentDelete(db, request, user, attachment[1]);
   }
 
   return json(request, { error: 'Not found.' }, 404);

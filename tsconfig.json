@@ -21,5 +21,9 @@
   // The server contract tests import the API directly (../server/*), which
   // would drag the Bun-typed server program into this one. They are
   // typechecked by server/tsconfig.json instead, alongside the server.
-  "exclude": ["src/server-notes.test.ts", "src/server-handlers.test.ts"]
+  "exclude": [
+    "src/server-notes.test.ts",
+    "src/server-handlers.test.ts",
+    "src/server-attachments.test.ts"
+  ]
 }

@@ -13,6 +13,11 @@
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["*.ts", "../src/server-notes.test.ts", "../src/server-handlers.test.ts"],
+  "include": [
+    "*.ts",
+    "../src/server-notes.test.ts",
+    "../src/server-handlers.test.ts",
+    "../src/server-attachments.test.ts"
+  ],
   "exclude": ["local.db"]
 }
