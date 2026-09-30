@@ -52,3 +52,42 @@ jobs:
           name: dist
           path: dist
           retention-days: 7
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      # Same toolchain split as the client job: Bun owns the lockfile,
+      # Node runs the tooling (Vite dev server + Playwright).
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright's Chromium
+        run: npx playwright install --with-deps chromium
+
+      # The suite starts its own Vite dev server (playwright.config.ts
+      # webServer, port 5199). Network-dependent features (cloud sync,
+      # music search) are deliberately out of scope — the app degrades
+      # gracefully without the API, and these specs pin the offline core:
+      # editor, tabs, vocabulary, modals, theming.
+      - name: Run the e2e suite
+        run: npm run test:e2e
+
+      - name: Upload traces of failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
