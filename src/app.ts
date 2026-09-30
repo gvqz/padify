@@ -18,7 +18,13 @@ import {
   getHtmlFileName,
 } from './utils';
 import { initUnicodePicker } from './unicode/picker';
-import { TabManager, setTabManager, getEditorText, getEditorHtml, sanitizeNoteHtml } from './tabs';
+import {
+  TabManager,
+  setTabManager,
+  getEditorText,
+  getActiveNoteExportBody,
+  sanitizeNoteHtml,
+} from './tabs';
 import { setEditorPort, getEditorPort } from './editor/port';
 import { ContentEditablePort } from './editor/contenteditable-port';
 import { initMusicPlayer } from './features/music-player';
@@ -320,8 +326,13 @@ export async function initApp(): Promise<void> {
   });
 
   notepad.downloadNotesHtml.click(function () {
-    // HTML export keeps the formatting the editor rendered.
-    downloadHTML(sanitizeNoteHtml(getEditorHtml()), getHtmlFileName());
+    // HTML export carries the note, not the editor surface: for a non-html
+    // note that surface is a read-only card, and the export must read the
+    // model instead (see getActiveNoteExportBody).
+    const body = getActiveNoteExportBody();
+    if (body !== null) {
+      downloadHTML(body, getHtmlFileName());
+    }
   });
 
   // Close dropdown if clicked outside

@@ -1379,6 +1379,30 @@ export function getActiveNoteContent(): {
 }
 
 /**
+ * The body for the "Download as HTML" export — the third capture path
+ * beside snapshots and share links, and the same rule: html notes read the
+ * LIVE editor, every other kind reads the model. Exporting must never
+ * serialize whatever the editor SURFACE happens to be showing: for a
+ * non-html note that surface is a read-only placeholder card, and the
+ * export would ship the card instead of the note.
+ *
+ * Non-html content is escaped into a <pre>: a JSON note exported as raw
+ * markup would be broken by its own angle brackets, and the point of the
+ * export is what the note holds, not an approximation of it re-parsed as
+ * HTML. Returns null when no note is open.
+ */
+export function getActiveNoteExportBody(): string | null {
+  const captured = getActiveNoteContent();
+  if (!captured) {
+    return null;
+  }
+  if (isHtmlContent(captured.noteType)) {
+    return sanitizeNoteHtml(captured.content);
+  }
+  return `<pre>${escapeHtml(captured.content)}</pre>`;
+}
+
+/**
  * HTML of the note currently shown in the editor. Routed through the
  * EditorPort (see editor/port.ts) with a bare-DOM fallback for the rare
  * paths that run before the composition root installed the port.

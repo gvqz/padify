@@ -18,6 +18,8 @@ import { $ } from './lib/q';
 import {
   deriveTabTitle,
   escapeHtml,
+  getActiveNoteExportBody,
+  setTabManager,
   htmlToText,
   legacyTextToHtml,
   sanitizeNoteHtml,
@@ -957,5 +959,80 @@ describe('dirty lifecycle (the sync handshake)', () => {
     $('#note').html('<p>edited after sync</p>');
     manager.saveActiveFromEditor();
     expect(manager.exportForSync().dirty).toContain(id);
+  });
+});
+
+describe('html export of typed notes (the capture rule)', () => {
+  const stored = (
+    id: string,
+    html: string,
+    overrides: Partial<StoredNoteTab> = {},
+  ): StoredNoteTab => ({
+    id,
+    name: null,
+    html,
+    createdAt: 0,
+    updatedAt: 0,
+    ...overrides,
+  });
+
+  async function bootedManager(): Promise<TabManager> {
+    const manager = new TabManager($('#note'));
+    await manager.init();
+    // The export body is a module-level function routed through the
+    // singleton, exactly like the app wires it (app.ts calls setTabManager
+    // during boot). Without this the function answers null and the test
+    // would pass for the wrong reason.
+    setTabManager(manager);
+    return manager;
+  }
+
+  it('an html note exports the live editor surface, sanitized', async () => {
+    saveNotes(
+      {
+        tabs: [stored('src', '<p>hello <b>world</b></p>')],
+        tombstones: [],
+      },
+      'src',
+      { immediate: true },
+    );
+    await flushAndReboot();
+
+    await bootedManager();
+
+    // An unsaved keystroke's worth of markup still inside the surface —
+    // the export must carry it (live read), but not verbatim: the same
+    // sanitizer gate as every other html write applies.
+    $('#note').append('<script>alert(1)</script><p>tail</p>');
+
+    const body = getActiveNoteExportBody();
+    expect(body).toBe(sanitizeNoteHtml($('#note').html()));
+    expect(body).toContain('<p>tail</p>');
+    expect(body).not.toContain('<script');
+  });
+
+  it('a non-html note exports its model content, never the placeholder card', async () => {
+    const board = '{"columns":["Todo","<b>Done</b>"],"cards":[]}';
+    saveNotes(
+      {
+        tabs: [
+          stored('src', board, {
+            noteType: 'board' as StoredNoteTab['noteType'],
+          }),
+        ],
+        tombstones: [],
+      },
+      'src',
+      { immediate: true },
+    );
+    await flushAndReboot();
+
+    await bootedManager();
+
+    // The editor surface shows the read-only card; the export must not
+    // ship it. The note's real content goes out, escaped, in a <pre>.
+    const body = getActiveNoteExportBody();
+    expect(body).toBe(`<pre>${escapeHtml(board)}</pre>`);
+    expect(body).toContain('&lt;b&gt;Done&lt;/b&gt;');
   });
 });
