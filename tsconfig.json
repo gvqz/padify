@@ -17,5 +17,9 @@
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts"],
+  // The server contract tests import the API directly (../server/*), which
+  // would drag the Bun-typed server program into this one. They are
+  // typechecked by server/tsconfig.json instead, alongside the server.
+  "exclude": ["src/server-notes.test.ts", "src/server-handlers.test.ts"]
 }

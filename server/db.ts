@@ -80,7 +80,10 @@ class TursoHttpDb implements Db {
         body: JSON.stringify({ requests: statements })
       });
     } catch (error) {
-      throw new Error(`Turso is unreachable: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Turso is unreachable: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error }
+      );
     }
 
     if (!response.ok) {
@@ -150,15 +153,18 @@ class TursoHttpDb implements Db {
 // Local SQLite file (bun:sqlite)
 // ---------------------------------------------------------------------------
 
+// Type-only: the runtime import stays dynamic (see createDb) so nothing
+// bun-specific loads unless the local backend is actually chosen. The
+// field is typed as the real Database instead of a hand-rolled structural
+// stand-in — the stand-in drifted from bun-types' signatures.
+import type { Database } from 'bun:sqlite';
+
 class LocalSqliteDb implements Db {
   readonly kind = 'sqlite-file';
 
-  constructor(private db: {
-    query: (sql: string) => { all: (...args: unknown[]) => unknown[]; run: (...args: unknown[]) => unknown };
-    transaction?: (fn: () => void) => () => void;
-  }) {}
+  constructor(private db: Database) {}
 
-  private normalize(args: SqlValue[]): unknown[] {
+  private normalize(args: SqlValue[]): import('bun:sqlite').SQLQueryBindings[] {
     return args.map(value => (value === undefined ? null : value));
   }
 

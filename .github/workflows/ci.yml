@@ -34,6 +34,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # The API is its own package with its own tsconfig (Bun's runtime
+      # types, see server/tsconfig.json) — the root typecheck does not
+      # see it, so it gets its own gate.
+      - name: Typecheck the API server
+        run: npx tsc -p server/tsconfig.json
+
       - name: Lint
         run: npm run lint
 
