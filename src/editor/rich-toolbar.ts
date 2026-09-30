@@ -214,14 +214,15 @@ export function initRichToolbar(tabManager: TabManager): void {
   };
 
   /**
-   * Docs dims undo/redo at the ends of the history. Chrome answers
-   * queryCommandEnabled for both reliably on the editor surface — the
-   * buttons stay focusable and clickable (a dead undo click is a harmless
-   * no-op), only the ink changes.
+   * Docs dims undo/redo at the ends of the history. The port answers from
+   * its own history (engine-specific: the browser stack for the legacy
+   * adapter, the model stacks for the model engine) — the buttons stay
+   * focusable and clickable (a dead undo click is a harmless no-op), only
+   * the ink changes.
    */
   const refreshHistoryButtons = (): void => {
-    const canUndo = safeQuery(() => document.queryCommandEnabled('undo')) ?? false;
-    const canRedo = safeQuery(() => document.queryCommandEnabled('redo')) ?? false;
+    const canUndo = safeQuery(() => getEditorPort()?.canUndo()) ?? false;
+    const canRedo = safeQuery(() => getEditorPort()?.canRedo()) ?? false;
     const undoButton = toolbar.querySelector<HTMLElement>('[data-rich-action="undo"]');
     const redoButton = toolbar.querySelector<HTMLElement>('[data-rich-action="redo"]');
     undoButton?.setAttribute('aria-disabled', String(!canUndo));

@@ -811,6 +811,26 @@ export class ContentEditablePort implements EditorPort {
     return document.execCommand('redo', false);
   }
 
+  canUndo(): boolean {
+    try {
+      return (
+        typeof document.queryCommandEnabled === 'function' && document.queryCommandEnabled('undo')
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  canRedo(): boolean {
+    try {
+      return (
+        typeof document.queryCommandEnabled === 'function' && document.queryCommandEnabled('redo')
+      );
+    } catch {
+      return false;
+    }
+  }
+
   // -------------------------------------------------------------------------
   // The Docs-style vocabulary.
   //

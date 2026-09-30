@@ -192,6 +192,14 @@ export interface EditorPort {
   undo(): boolean;
   redo(): boolean;
 
+  /**
+   * True when there is something to undo/redo — the history availability
+   * the undo/redo buttons dim against. An engine answers from its own
+   * history (the model engine's stacks), never from a browser-global.
+   */
+  canUndo(): boolean;
+  canRedo(): boolean;
+
   // -------------------------------------------------------------------------
   // The Docs-style vocabulary — fonts, sizes, colors, alignment, indentation
   // and rules. Inline styles are stored as sanitized span/block styles (see
