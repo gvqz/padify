@@ -26,7 +26,7 @@ import {
   sanitizeNoteHtml,
 } from './tabs';
 import { setEditorPort, getEditorPort } from './editor/port';
-import { ContentEditablePort } from './editor/contenteditable-port';
+import { ModelPort } from './editor/model-port';
 import { initMusicPlayer } from './features/music-player';
 import { storageReady } from './storage';
 import { initCloudSync } from './cloud/sync';
@@ -93,12 +93,14 @@ export async function initApp(): Promise<void> {
   setTabManager(tabManager);
 
   // The editor seam — every reader/writer of the note surface goes through
-  // this port (see editor/port.ts). The legacy contenteditable adapter is
-  // installed here; the document-model editor will install its own.
+  // this port (see editor/port.ts). The document-model engine is installed
+  // here: typing flows natively through the contenteditable surface, every
+  // structured change flows through the canonical model (see
+  // editor/model-port.ts and editor/model/).
   const noteElement = document.getElementById('note');
   if (noteElement) {
     setEditorPort(
-      new ContentEditablePort(noteElement, {
+      new ModelPort(noteElement, {
         sanitize: sanitizeNoteHtml,
         onDocumentReplaced: () => tabManager.syncAfterExternalEdit(),
       }),
@@ -172,9 +174,6 @@ export async function initApp(): Promise<void> {
   });
 
   notepad.wordCount.text(characterAndWordCountText);
-
-  // Plain tags over inline CSS come with the editor port (see
-  // ContentEditablePort — styleWithCSS lives with the editor now).
 
   // Paste always lands as plain text — the editor keeps its own
   // formatting (bold/italic/underline/strike) and nothing else.

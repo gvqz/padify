@@ -187,15 +187,15 @@ describe('layering rules', () => {
     expect(violators).toEqual([]);
   });
 
-  it('the legacy editor adapter is wired only by the shell', () => {
+  it('the engine implementation is wired only by the shell', () => {
     // editor/port.ts is the public contract (any module may resolve the
-    // port through it); editor/contenteditable-port.ts is the legacy
-    // IMPLEMENTATION — only app.ts (which installs the port) may touch it,
-    // so the future document-model editor swaps in one place.
+    // port through it); editor/model-port.ts is the engine IMPLEMENTATION —
+    // only app.ts (which installs the port) may touch it, so a future
+    // engine swaps in one place.
     const violators: string[] = [];
     for (const file of srcFiles) {
       if (rel(file) === 'src/app.ts' || file.includes('/editor/')) continue;
-      if (importTargets(file).some((t) => t.includes('editor/contenteditable-port'))) {
+      if (importTargets(file).some((t) => t.includes('editor/model-port'))) {
         violators.push(rel(file));
       }
     }

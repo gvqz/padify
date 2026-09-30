@@ -74,11 +74,13 @@ import {
 import { CHECKLIST_ATTR } from './model/document';
 import { ModelHistory } from './model/history';
 
-const FORMAT_MARKS: Readonly<Record<FormatCommand, 'b' | 'i' | 'u' | 's'>> = {
+const FORMAT_MARKS: Readonly<Record<FormatCommand, 'b' | 'i' | 'u' | 'strike'>> = {
   bold: 'b',
   italic: 'i',
   underline: 'u',
-  strikeThrough: 's',
+  // The long spelling: the surface and the specs speak <strike> (the
+  // subset admits both; the engine emits one).
+  strikeThrough: 'strike',
 };
 
 /** The caret-parking gutter the checklist boxes paint (CSS left column). */
@@ -886,7 +888,23 @@ export class ModelPort implements EditorPort {
     if (!at) {
       return false;
     }
-    return this.command((model) => runTableActionAt(model, at.table, at.cell, action));
+    // cellAtCaret reads the live surface; the operation runs on the model.
+    // Same structure after absorb, so the surface nodes map to their model
+    // counterparts by child-index path.
+    return this.command((model) => {
+      const table = this.surfaceNodeInModel(at.table) as HTMLTableElement | null;
+      const cell = this.surfaceNodeInModel(at.cell) as HTMLTableCellElement | null;
+      if (!(table instanceof HTMLTableElement) || !(cell instanceof HTMLTableCellElement)) {
+        return { changed: false };
+      }
+      return runTableActionAt(model, table, cell, action);
+    });
+  }
+
+  /** The model counterpart of a surface node (same structure, by path). */
+  private surfaceNodeInModel(node: Node): Node | null {
+    const path = pathTo(this.element, node);
+    return path ? nodeAtPath(this.model, path) : null;
   }
 
   // -------------------------------------------------------------------------
@@ -1036,7 +1054,7 @@ export class ModelPort implements EditorPort {
       this.pendingMark = null;
       const data = event.data;
       if (data !== '') {
-        this.commandInOpenGroup((model, coverage) => {
+        const wrapped = this.commandInOpenGroup((model, coverage) => {
           if (coverage[1] > coverage[0]) {
             return { changed: false };
           }
@@ -1049,6 +1067,18 @@ export class ModelPort implements EditorPort {
             mark === 'super' ? 'sup' : mark === 'sub' ? 'sub' : FORMAT_MARKS[mark as FormatCommand],
           );
         });
+        if (wrapped) {
+          // Mid-burst: the caret must be a COLLAPSED caret at the wrapped
+          // run's end — the wrap's keep-selected restore would otherwise
+          // make the next keystroke REPLACE the just-wrapped text.
+          const selection = captureOffsets(this.element);
+          if (selection) {
+            this.reselect(
+              { anchor: selection.focus, focus: selection.focus },
+              streamLengthOf(this.element),
+            );
+          }
+        }
       }
       return;
     }

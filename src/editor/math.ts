@@ -52,7 +52,7 @@ export const MATH_LATEX_PATTERN = /^[\s\S]{1,2000}$/;
  * KaTeX macros that can produce clickable links, embed external resources, or
  * smuggle HTML. `\href{url}{text}` renders as `<a href="url">text</a>` — a
  * `javascript:` URL there is a self-XSS in the math preview element (which
- * lives outside the editor's link-click interceptor in contenteditable-port.ts).
+ * lives outside the editor's link-click interceptor in the engine port).
  * `\url{}` is the same surface. `\includegraphics`, `\htmlData`, `\htmlClass`,
  * `\htmlStyle`, and `\mathchoice` round out the dangerous set. We refuse to
  * render LaTeX containing these macros and fall back to showing the source —

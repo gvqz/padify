@@ -147,9 +147,18 @@ export function blockAt(model: HTMLElement, coverage: [number, number]): HTMLEle
  * block, and every block sibling between them when they share a parent.
  */
 export function coveredBlocks(model: HTMLElement, coverage: [number, number]): HTMLElement[] {
-  const startSpot = spotAtStream(model, coverage[0]);
+  let start = blockAt(model, [coverage[0], coverage[0]]);
+  // Bare root text at the coverage start: materialize its root-level run
+  // into a real block first, so a coverage reaching from typed root text
+  // into following blocks addresses ALL of them (line semantics — the
+  // whole covered range becomes list items, not just its first line).
+  if (!start) {
+    const materialized = materializeRootRun(model, coverage);
+    if (materialized) {
+      start = materialized;
+    }
+  }
   const endSpot = spotAtStream(model, coverage[1]);
-  const start = startSpot ? blockAt(model, [coverage[0], coverage[0]]) : null;
   const end = endSpot ? blockAt(model, [coverage[1], coverage[1]]) : null;
   if (!start) {
     return [];
@@ -278,7 +287,7 @@ function wrapTextNode(text: Text, tag: string): HTMLElement {
 export function toggleMark(
   model: HTMLElement,
   coverage: [number, number],
-  tag: 'b' | 'i' | 'u' | 's' | 'sub' | 'sup',
+  tag: 'b' | 'i' | 'u' | 'strike' | 'sub' | 'sup',
 ): OpResult {
   if (coverage[1] <= coverage[0]) {
     return UNCHANGED;
@@ -736,12 +745,21 @@ export function toggleListKind(
       blocks = [materialized];
     }
   }
-  if (blocks.length === 0) {
-    return UNCHANGED;
-  }
   const list = document.createElement(kind === 'ol' ? 'ol' : 'ul');
   if (kind === 'checklist') {
     list.setAttribute(CHECKLIST_ATTR, 'true');
+  }
+  if (blocks.length === 0) {
+    // Nothing to wrap — a bare caret on an empty note (or a textless
+    // context): the list is born with ONE empty item, caret inside it.
+    // An intentional empty block, never a normalization away.
+    const item = document.createElement('li');
+    if (kind === 'checklist') {
+      item.setAttribute(CHECKED_ATTR, 'false');
+    }
+    list.append(item);
+    model.append(list);
+    return { changed: true, intent: { spot: { kind: 'element', node: item, childIndex: 0 } } };
   }
   const first = blocks[0]!;
   for (const block of blocks) {
@@ -1171,12 +1189,7 @@ function coverageTouchesFully(node: Text): boolean {
  * paragraph is appended when nothing follows, so typing continues below.
  */
 export function plantRule(model: HTMLElement, at: number): OpResult {
-  let target = at;
-  const escaped = escapeListAt(model, at);
-  if (escaped !== null) {
-    target = escaped;
-  }
-  const spot = spotAtStream(model, target);
+  const spot = escapeListAt(model, at) ?? spotAtStream(model, at);
   if (!spot) {
     return UNCHANGED;
   }
@@ -1261,12 +1274,7 @@ function splitBlockAt(block: HTMLElement, spot: DomSpot): HTMLElement {
 export function plantTable(model: HTMLElement, at: number, rows: number, cols: number): OpResult {
   const safeRows = Math.min(Math.max(Math.floor(rows), 1), 20);
   const safeCols = Math.min(Math.max(Math.floor(cols), 1), 10);
-  let target = at;
-  const escaped = escapeListAt(model, at);
-  if (escaped !== null) {
-    target = escaped;
-  }
-  const spot = spotAtStream(model, target);
+  const spot = escapeListAt(model, at) ?? spotAtStream(model, at);
   if (!spot) {
     return UNCHANGED;
   }
@@ -1469,13 +1477,14 @@ function spotBlock(spot: DomSpot): HTMLElement | null {
 
 /**
  * Escapes a list at the caret: when the spot sits inside a list item, the
- * return is the offset of the start of the block after the list (a fresh
+ * return is a SPOT at the start of the block after the list (a fresh
  * paragraph appended after it when nothing usable follows); null when the
- * caret is not in a list.
+ * caret is not in a list. A spot, not an offset: the escape target is an
+ * empty paragraph — zero stream — which offsets cannot address.
  */
-function escapeListAt(model: HTMLElement, at: number): number | null {
-  const spot = spotAtStream(model, at);
-  const item = spot ? closestByTagFrom(spot, 'li') : null;
+function escapeListAt(model: HTMLElement, at: number): DomSpot | null {
+  const start = spotAtStream(model, at);
+  const item = start ? closestByTagFrom(start, 'li') : null;
   const list = item?.parentElement ?? null;
   if (!item || !list || (list.tagName !== 'UL' && list.tagName !== 'OL')) {
     return null;
@@ -1487,7 +1496,7 @@ function escapeListAt(model: HTMLElement, at: number): number | null {
     list.parentElement?.insertBefore(paragraph, list.nextSibling);
     next = paragraph;
   }
-  return boundaryStartOf(model, next);
+  return { kind: 'element', node: next, childIndex: 0 };
 }
 
 function closestByTagFrom(spot: DomSpot, tag: 'li' | 'sup' | 'sub'): HTMLElement | null {
@@ -1500,31 +1509,6 @@ function closestByTagFrom(spot: DomSpot, tag: 'li' | 'sup' | 'sub'): HTMLElement
     el = el.parentElement;
   }
   return null;
-}
-
-/** The stream offset of a node's start (boundary walk). */
-function boundaryStartOf(model: HTMLElement, node: Node): number {
-  const parent = node.parentElement;
-  if (!parent) {
-    return 0;
-  }
-  let count = 0;
-  for (let index = 0; index < parent.childNodes.length; index += 1) {
-    const child = parent.childNodes[index]!;
-    if (child === node) {
-      break;
-    }
-    count += streamLengthOfNode(child);
-  }
-  // Offsets are stream-wide: rebase by the parent's own start.
-  return parentStart(model, parent) + count;
-}
-
-function parentStart(model: HTMLElement, parent: Node): number {
-  if (parent === model) {
-    return 0;
-  }
-  return boundaryStartOf(model, parent);
 }
 
 // ---------------------------------------------------------------------------
@@ -1553,7 +1537,11 @@ export function splitScriptChain(
   let splitAny = false;
   let caret: DomSpot | null = null;
   for (let pass = 0; pass < 8; pass += 1) {
-    const spot = spotAtStream(model, at);
+    // Each pass follows the guard the previous pass planted: the caret
+    // MOVES one level up with every split, and re-resolving from the
+    // original offset would re-split the same wrapper forever (the guard
+    // contributes no stream, so the offset cannot see the escape).
+    const spot = caret ?? spotAtStream(model, at);
     if (!spot) {
       break;
     }

@@ -78,9 +78,12 @@ describe('stream → spot placements', () => {
     expect(inHello.container).toBe(element.firstChild);
     expect(inHello.offset).toBe(3);
 
-    const beforeWorld = caretSpot(element, 9); // between </b> and ' world'
-    expect((beforeWorld.container as Text).nodeValue).toBe(' world');
-    expect(beforeWorld.offset).toBe(0);
+    // The boundary at the b's END resolves INSIDE the mark, at its text
+    // tail (the earlier run — the convention the legacy engine restored
+    // by; typing there continues the mark).
+    const afterBig = caretSpot(element, 9);
+    expect((afterBig.container as Text).nodeValue).toBe('big');
+    expect(afterBig.offset).toBe(3);
     element.remove();
   });
 

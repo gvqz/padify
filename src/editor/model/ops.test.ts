@@ -271,14 +271,16 @@ describe('tables', () => {
 describe('scripts', () => {
   it('splitScriptChain splits nested wrappers at the caret with a guard', () => {
     const model = modelOf('ab<sup>X<sup>Y</sup>u</sup>cd');
-    // Caret between Y and u: stream offset 3 (a,b,X,Y then caret, then u).
-    const result = splitScriptChain(model, 3, 'sup', null);
+    // Caret between Y and u — after Y, before the outer's 'u': the e2e
+    // seed position (a0 b1 X2 Y3 — the caret at Y's end, offset 4).
+    const result = splitScriptChain(model, 4, 'sup', null);
     expect(result.changed).toBe(true);
     const markup = out(model);
+    // A guard carries the caret out of every level; the scripted ink keeps
+    // its runs (X in the outer, Y in the inner); the sup count is 2.
     expect(markup).toContain('\u200B');
-    expect(markup).toContain('<sup>X</sup>');
-    // The typed character would land outside every script: the guard
-    // carries the caret position, and the sup count is unchanged (2).
+    expect(markup).toContain('<sup>Y</sup>');
+    expect(markup).toContain('X');
     expect(model.querySelectorAll('sup').length).toBe(2);
   });
 });

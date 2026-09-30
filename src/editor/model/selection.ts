@@ -216,6 +216,38 @@ function descend(element: Element, target: number, withinMarker: boolean): DomSp
       }
       continue; // comments and other streamless nodes
     }
+    if (target === consumed + length && child.nodeType === Node.TEXT_NODE && length > 0) {
+      // The offset sits exactly at this text child's END. When an inline
+      // MARK follows (a covered run starts there — the selection's anchor
+      // belongs INSIDE the mark, or a marker run answers withinMarker),
+      // the boundary is the next child's; otherwise the caret continues
+      // THIS run (typing joins it, the convention the legacy engine
+      // restored by) — a block or nothing follows.
+      const next = kids[index + 1];
+      const nextIsMark =
+        next instanceof Element &&
+        /^(B|STRONG|I|EM|U|S|STRIKE|DEL|SUB|SUP|A|SPAN)$/.test(next.tagName);
+      if (!withinMarker && !nextIsMark) {
+        return { kind: 'text', node: child as Text, raw: (child.nodeValue ?? '').length };
+      }
+    }
+    if (target === consumed + length && child instanceof Element && length > 0) {
+      // The offset sits exactly at this BLOCK child's end: the caret
+      // belongs INSIDE that block, at its content's tail (the end of a
+      // list item addresses the item's last text, not the next item) —
+      // unless an inline MARK follows, which claims the boundary at its
+      // start, or the next child is an EMPTY caret-holding block, whose
+      // own line is the only spot this side of the boundary.
+      const next = kids[index + 1];
+      const nextIsMark =
+        next instanceof Element &&
+        /^(B|STRONG|I|EM|U|S|STRIKE|DEL|SUB|SUP|A|SPAN)$/.test(next.tagName);
+      const nextIsEmptyBlock =
+        next instanceof Element && streamOfSubtree(next) === 0 && holdsCaretWhenEmpty(next);
+      if (!nextIsMark && !nextIsEmptyBlock) {
+        return endOfContent(child, withinMarker);
+      }
+    }
     if (target === consumed && length === 0) {
       // The offset sits exactly on a zero-length child. Tie-breaks: a
       // guard text node or marker run the caller asked to sit inside

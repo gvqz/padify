@@ -6,11 +6,11 @@
  * exports) goes through this interface instead of reaching into the editor
  * DOM or calling document.execCommand directly.
  *
- * Why: the editor is being revamped (markdown / rich text on a real
- * document model). The revamp ships as a second EditorPort implementation
- * over that model — the app around it does not change. The current
- * implementation (`contenteditable-port.ts`) keeps the existing
- * contenteditable + execCommand editor alive behind the same contract.
+ * The document-model engine (`model-port.ts` over editor/model/) is the
+ * implementation behind this contract: typing flows natively through the
+ * contenteditable surface, every structured change flows through a
+ * canonical model — one parse, one serializer, one repaint, one history,
+ * one announce (see model-port.ts for the discipline).
  *
  * Contract notes:
  *  - `setHtml` accepts arbitrary markup and sanitizes it down to the
