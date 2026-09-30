@@ -26,6 +26,9 @@
  * div/span + text). Everything that goes into the editor from storage passes
  * through sanitizeNoteHtml, which strips unknown tags and attributes, so the
  * editor surface only ever contains the formatting the app itself produces.
+ * The subset's definition — tags, attributes, style properties and their
+ * value patterns — lives in editor/storage-subset.ts, shared with the
+ * editor engine so its model can only ever occupy the stored format.
  */
 
 import { $, type Q } from './lib/q';
@@ -41,6 +44,7 @@ import {
 } from './storage';
 import { getEditorPort } from './editor/port';
 import { renderMathIn } from './editor/math';
+import { sanitizeNoteHtml } from './editor/storage-subset';
 import { currentThemeMode, noteRenderedForTheme } from './editor/theme-colors';
 import {
   contentKindFor,
@@ -54,6 +58,7 @@ import {
 } from './editor/note-types';
 
 export type { NoteType } from './editor/note-types';
+export { sanitizeNoteHtml } from './editor/storage-subset';
 
 export interface NoteTab {
   id: string;
@@ -183,224 +188,6 @@ export function legacyTextToHtml(text: string): string {
     .replace(/__([^_\n]+?)__/g, '<u>$1</u>')
     .replace(/~~([^~\n]+?)~~/g, '<s>$1</s>')
     .replace(/\*([^*\n]+?)\*/g, '<i>$1</i>');
-}
-
-/**
- * The tags a note may contain. Inline tags are the classic formatting
- * subset; the block + link tags are the rich text note vocabulary; sup/sub/
- * hr serve the scripts and rules; the checklist data attributes and the
- * table subset (table/thead/tbody/tr/td/th) complete the Docs-style
- * controls. Everything else is unwrapped to its text on load.
- */
-const ALLOWED_TAGS = new Set([
-  'B',
-  'STRONG',
-  'I',
-  'EM',
-  'U',
-  'S',
-  'STRIKE',
-  'DEL',
-  'BR',
-  'DIV',
-  'SPAN',
-  'P',
-  'H1',
-  'H2',
-  'H3',
-  'UL',
-  'OL',
-  'LI',
-  'BLOCKQUOTE',
-  'PRE',
-  'SUP',
-  'SUB',
-  'HR',
-  'A',
-  'TABLE',
-  'THEAD',
-  'TBODY',
-  'TR',
-  'TD',
-  'TH',
-]);
-
-/**
- * Attributes a surviving tag may keep. Everything else is stripped — the
- * editor only ever produces these itself. `a[href]` is gated to safe
- * schemes below; `style` is gated to the property allowlist beneath it;
- * the checklist data attributes are gated to their fixed vocabularies.
- */
-const ALLOWED_ATTRS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-  ['A', new Set(['href'])],
-  ['SPAN', new Set(['style'])],
-  ['DIV', new Set(['style'])],
-  ['P', new Set(['style'])],
-  ['H1', new Set(['style'])],
-  ['H2', new Set(['style'])],
-  ['H3', new Set(['style'])],
-  ['UL', new Set(['data-rich-checklist'])],
-  ['LI', new Set(['style', 'data-checked'])],
-  ['BLOCKQUOTE', new Set(['style'])],
-  ['PRE', new Set(['style'])],
-  ['TD', new Set(['style'])],
-  ['TH', new Set(['style'])],
-]);
-
-/**
- * The math-shell class and the shape of its stored LaTeX source. A shell
- * survives as exactly `<span class="padify-math" data-latex="…"></span>`
- * — no style, no rendered children, nothing else (see editor/math.ts).
- */
-const MATH_CLASS = 'padify-math';
-const MATH_LATEX_PATTERN = /^[\s\S]{1,2000}$/;
-
-/**
- * Data-attribute values that may survive, by attribute. The checklist mark
- * is a boolean flag and the item state a boolean pair — anything else is a
- * crafted payload, not editor output.
- */
-const ALLOWED_DATA_ATTR_VALUES: ReadonlyMap<string, RegExp> = new Map([
-  ['data-rich-checklist', /^true$/],
-  ['data-checked', /^(true|false)$/],
-]);
-
-/**
- * CSS a stored note may keep, split by tag class. The editor only ever
- * produces these declarations itself (the Docs-style controls), but notes
- * also come back from storage and cloud sync — the allowlist is the wall
- * that keeps a crafted payload from carrying url()/expression() or layout
- * hijacks into the surface.
- */
-const COLOR_VALUE_PATTERN =
-  /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(,\s*(0?\.\d+|1)\s*)?\)|[a-z]+)$/i;
-const FONT_FAMILY_VALUE_PATTERN = /^[-a-z0-9\s,'’]{1,120}$/i;
-
-const INLINE_STYLE_PROPS: ReadonlyMap<string, RegExp> = new Map([
-  ['color', COLOR_VALUE_PATTERN],
-  ['background-color', COLOR_VALUE_PATTERN],
-  ['font-size', /^\d+(\.\d+)?(px|pt)$/],
-  ['font-family', FONT_FAMILY_VALUE_PATTERN],
-]);
-
-const BLOCK_STYLE_PROPS: ReadonlyMap<string, RegExp> = new Map([
-  ['text-align', /^(left|center|right|justify)$/i],
-  ['margin-left', /^\d+(\.\d+)?px$/],
-]);
-
-function sanitizeStyle(raw: string, inline: boolean): string | null {
-  const allowed = inline ? INLINE_STYLE_PROPS : BLOCK_STYLE_PROPS;
-  const kept: string[] = [];
-  for (const declaration of raw.split(';')) {
-    const colon = declaration.indexOf(':');
-    if (colon <= 0) {
-      continue;
-    }
-    const prop = declaration.slice(0, colon).trim().toLowerCase();
-    const value = declaration.slice(colon + 1).trim();
-    const pattern = allowed.get(prop);
-    if (pattern && pattern.test(value)) {
-      kept.push(`${prop}: ${value}`);
-    }
-  }
-  return kept.length > 0 ? kept.join('; ') : null;
-}
-
-/**
- * Link schemes a stored href may use. javascript:/data:/vbscript: and
- * friends are dropped (the anchor keeps its text, just without a target).
- */
-const SAFE_HREF_PATTERN = /^(https?:|mailto:|#|\/)/i;
-
-function sanitizeHref(raw: string): string | null {
-  const href = raw.trim();
-  return href.length > 0 && SAFE_HREF_PATTERN.test(href) ? href : null;
-}
-
-/**
- * Strips the stored HTML down to the formatting subset the editor produces:
- * known inline/block tags survive (with their one allowed attribute where
- * declared), everything else is unwrapped to its text. Guards the innerHTML
- * round-trip against stray markup.
- */
-export function sanitizeNoteHtml(html: string): string {
-  const parsed = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
-
-  const walk = (node: Node): Node[] => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      return [node];
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) {
-      return [];
-    }
-
-    const element = node as HTMLElement;
-    const children: Node[] = [];
-    element.childNodes.forEach((child) => {
-      children.push(...walk(child));
-    });
-
-    if (!ALLOWED_TAGS.has(element.tagName)) {
-      return children;
-    }
-
-    const clone = document.createElement(element.tagName);
-
-    // Math shells are their own vocabulary: fixed class + capped LaTeX
-    // source, rendered children never store (the shell is the truth).
-    if (element.tagName === 'SPAN' && element.classList.contains(MATH_CLASS)) {
-      const latex = element.getAttribute('data-latex') ?? '';
-      if (!MATH_LATEX_PATTERN.test(latex)) {
-        return children;
-      }
-      clone.setAttribute('class', MATH_CLASS);
-      clone.setAttribute('data-latex', latex);
-      return [clone];
-    }
-
-    const allowedAttrs = ALLOWED_ATTRS.get(element.tagName);
-    if (allowedAttrs) {
-      allowedAttrs.forEach((attr) => {
-        const value = element.getAttribute(attr);
-        if (value === null) {
-          return;
-        }
-        if (attr === 'href') {
-          const safe = sanitizeHref(value);
-          if (safe !== null) {
-            clone.setAttribute(attr, safe);
-          }
-          return;
-        }
-        if (attr === 'style') {
-          const safe = sanitizeStyle(value, element.tagName === 'SPAN');
-          if (safe !== null) {
-            clone.setAttribute(attr, safe);
-          }
-          return;
-        }
-        const dataPattern = ALLOWED_DATA_ATTR_VALUES.get(attr);
-        if (dataPattern) {
-          if (dataPattern.test(value)) {
-            clone.setAttribute(attr, value);
-          }
-          return;
-        }
-        clone.setAttribute(attr, value);
-      });
-    }
-
-    children.forEach((child) => clone.appendChild(child));
-    return [clone];
-  };
-
-  const container = parsed.body;
-  const out: Node[] = [];
-  container.childNodes.forEach((child) => out.push(...walk(child)));
-
-  const fragment = document.createElement('div');
-  out.forEach((node) => fragment.appendChild(node));
-  return fragment.innerHTML;
 }
 
 /** Plain text of a stored HTML snippet (newlines preserved). */
