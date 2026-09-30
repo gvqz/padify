@@ -377,3 +377,102 @@ describe('boot semantics', () => {
     expect(stateGet('mode')).toBe('dark');
   });
 });
+
+// ---------------------------------------------------------------------------
+// dual-write reconciliation — the page-death race
+// ---------------------------------------------------------------------------
+
+describe('kv reconciliation (writes lost between the stores)', () => {
+  beforeEach(freshBoot);
+
+  /**
+   * Simulates the page dying with a flush in flight: module state and the
+   * pending batch vanish, localStorage and IndexedDB keep whatever they
+   * had. This is exactly the 150ms window a fast tab close / reload hits.
+   */
+  async function dieWithFlushInFlight(): Promise<void> {
+    resetStorageForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  it('a set whose flush died recovers from the localStorage mirror', async () => {
+    stateSet('mode', 'dark');
+    await flushKv(); // v1 committed
+    stateSet('mode', 'light'); // v2 lives only in localStorage
+    await dieWithFlushInFlight();
+
+    await storageReady();
+    expect(stateGet('mode')).toBe('light');
+  });
+
+  it('the recovered value is durable — it survives the next boot too', async () => {
+    stateSet('mode', 'dark');
+    await flushKv();
+    stateSet('mode', 'light');
+    await dieWithFlushInFlight();
+
+    await storageReady();
+    await reboot();
+    expect(stateGet('mode')).toBe('light');
+  });
+
+  it('a delete whose flush died does not resurrect the row', async () => {
+    stateSet('mode', 'dark');
+    await flushKv();
+    stateRemove('mode'); // the tombstone lives only in the vseq record
+    await dieWithFlushInFlight();
+
+    await storageReady();
+    expect(stateGet('mode')).toBeNull();
+  });
+
+  it('committed writes reconcile to nothing — evidence prunes on flush', async () => {
+    stateSet('mode', 'dark');
+    stateSet('mode', 'light');
+    await flushKv(); // only v2 committed; the v1 evidence is gone with it
+    stateSet('selectedFont', 'serif');
+    await flushKv();
+    await dieWithFlushInFlight();
+
+    await storageReady();
+    expect(stateGet('mode')).toBe('light');
+    expect(stateGet('selectedFont')).toBe('serif');
+    // The vseq record should have pruned to empty — nothing pending.
+    expect(localStorage.getItem('padify-kv-vseq')).toBe('{"n":3,"keys":{}}');
+  });
+
+  it('non-mirrored writes flush immediately — no coalescing window to lose', async () => {
+    stateSet('padify-spotify-auth', 'session-json', { localStorage: false });
+    // The immediate flush is async but already drained the pending batch;
+    // a few macrotask ticks let the transaction commit.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await dieWithFlushInFlight();
+
+    await storageReady();
+    expect(stateGet('padify-spotify-auth')).toBe('session-json');
+  });
+
+  it('pre-versioning rows keep working: IndexedDB stays the incumbent', async () => {
+    // A row written by a pre-fix build (no v) with a matching mirror —
+    // no vseq evidence exists, so nothing reconciles and nothing breaks.
+    await writeAll('kv', [{ key: 'mode', value: 'dark' }], []);
+    localStorage.setItem('mode', 'dark');
+    await dieWithFlushInFlight();
+
+    await storageReady();
+    expect(stateGet('mode')).toBe('dark');
+  });
+
+  it('a corrupted vseq record degrades to the pre-fix behaviour', async () => {
+    stateSet('mode', 'dark');
+    await flushKv();
+    stateSet('mode', 'light');
+    localStorage.setItem('padify-kv-vseq', '{not json');
+    await dieWithFlushInFlight();
+
+    await storageReady();
+    // No readable evidence → IndexedDB (stale) wins — the documented
+    // limitation, not a crash.
+    expect(stateGet('mode')).toBe('dark');
+  });
+});

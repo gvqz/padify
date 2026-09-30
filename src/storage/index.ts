@@ -46,6 +46,7 @@ import {
   flushKv,
   hydrateKv,
   importLegacyKey,
+  reconcileKv,
   resetKvForTests,
   stateGet,
   stateRemove,
@@ -225,6 +226,12 @@ async function boot(): Promise<StorageBackend> {
 
   if (backend === 'indexeddb') {
     hydrateKv(await readAll<KvRow>(KV_STORE));
+
+    // The newest kv operation per key may live only in localStorage (a
+    // flush that died with the page) — reconcile before anything reads.
+    if (reconcileKv()) {
+      await flushKv();
+    }
 
     if (stateGet(MIGRATED_FLAG_KEY) !== '1') {
       await migrateLegacyLocalStorage();
