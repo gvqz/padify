@@ -14,16 +14,16 @@ import {
 } from './index';
 import { flushKv } from './kv';
 import { flushNotesMirror, type NoteRecord } from './notes';
-import { DB_NAME, readAll, NOTES_STORE } from './idb';
+import { DB_NAME, readAll, writeAll, NOTES_STORE } from './idb';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const note = (id: string, html: string, updatedAt = 1): StoredNoteTab => ({
+const note = (id: string, content: string, updatedAt = 1): StoredNoteTab => ({
   id,
   name: null,
-  html,
+  content,
   createdAt: 0,
   updatedAt,
 });
@@ -132,7 +132,7 @@ describe('notes repository', () => {
 
     const snapshot = await loadNotes();
     expect(snapshot.tabs.map((tab) => tab.id)).toEqual(['a', 'b']);
-    expect(snapshot.tabs[0].html).toBe('<b>one</b>');
+    expect(snapshot.tabs[0].content).toBe('<b>one</b>');
     expect(snapshot.tombstones).toEqual([{ id: 'x', updatedAt: 5 }]);
     expect(stateGet('padifyActiveTab')).toBe('b');
   });
@@ -180,6 +180,43 @@ describe('notes repository', () => {
     expect(after).toBe(before);
   });
 
+  it('loads rows persisted by a pre-rename build (html key) through the dual-read', async () => {
+    // Hand-write rows exactly as an older build persisted them: the note
+    // body under `html`, no `content` key anywhere. The rename transition
+    // reads either key — an existing installation's notes must keep
+    // loading after the upgrade, byte for byte.
+    await writeAll(
+      NOTES_STORE,
+      [
+        {
+          id: 'old-a',
+          name: null,
+          html: '<p>legacy one</p>',
+          createdAt: 1,
+          updatedAt: 2,
+          position: 0,
+          deleted: false,
+        },
+        {
+          id: 'old-b',
+          name: null,
+          html: '<i>legacy two</i>',
+          createdAt: 1,
+          updatedAt: 2,
+          position: 1,
+          deleted: false,
+        },
+      ],
+      [],
+    );
+
+    await reboot();
+    const snapshot = await loadNotes();
+    expect(snapshot.tabs.map((tab) => tab.id)).toEqual(['old-a', 'old-b']);
+    expect(snapshot.tabs[0].content).toBe('<p>legacy one</p>');
+    expect(snapshot.tabs[1].content).toBe('<i>legacy two</i>');
+  });
+
   it('updates a changed note with the new content', async () => {
     saveNotes({ tabs: [note('a', 'v1', 10)], tombstones: [] }, 'a');
     await whenNotesIdle();
@@ -189,7 +226,7 @@ describe('notes repository', () => {
 
     const records = await readAll<NoteRecord>(NOTES_STORE);
     expect(records).toHaveLength(1);
-    expect(records[0].html).toBe('v2');
+    expect(records[0].content).toBe('v2');
     expect(records[0].updatedAt).toBe(20);
   });
 });
@@ -238,8 +275,8 @@ describe('legacy migration', () => {
     localStorage.setItem(
       'padifyTabs',
       JSON.stringify([
-        { id: 't1', name: 'First', html: '<i>hi</i>', createdAt: 1, updatedAt: 2 },
-        { id: 't2', name: null, html: 'plain', createdAt: 3, updatedAt: 4 },
+        { id: 't1', name: 'First', content: '<i>hi</i>', createdAt: 1, updatedAt: 2 },
+        { id: 't2', name: null, content: 'plain', createdAt: 3, updatedAt: 4 },
       ]),
     );
     localStorage.setItem('padifyTabTombstones', JSON.stringify([{ id: 'gone', updatedAt: 9 }]));

@@ -34,7 +34,14 @@ export interface StoredNoteTab {
   id: string;
   /** User-provided name; null derives the title from the content. */
   name: string | null;
-  html: string;
+  /**
+   * The note's content in its type's format. The persisted JSON has said
+   * `content` since the typed content model renamed it; rows written by
+   * every build before that say `html`, and the loaders read both —
+   * `content ?? html` — so an existing installation's notes keep loading
+   * after the upgrade. Writers only ever emit `content`.
+   */
+  content: string;
   createdAt: number;
   updatedAt: number;
   /** The note kind — absent means the default (standard). */
@@ -54,10 +61,18 @@ export interface NotesSnapshot {
   tombstones: StoredTombstone[];
 }
 
-/** The stored record: a tab (or tombstone) plus its strip position. */
+/**
+ * The stored record: a tab (or tombstone) plus its strip position.
+ *
+ * `html` is the legacy spelling of StoredNoteTab.content: rows persisted
+ * by every build before the rename carry their note under that key, and
+ * the loaders dual-read `content ?? html`. It is typed optional here so
+ * the dual-read can run against raw records; new writers never set it.
+ */
 export interface NoteRecord extends StoredNoteTab {
   position: number;
   deleted: boolean;
+  html?: string;
 }
 
 /** The active tab id is a plain kv setting. */
@@ -86,7 +101,7 @@ let currentSnapshotForMirror: NotesSnapshot | null = null;
 /**
  * The last-written index powering the diff. Values are the fields that
  * matter for persistence — content changes always bump `updatedAt` in
- * TabManager, so html does not need to be compared (or copied) here.
+ * TabManager, so content does not need to be compared (or copied) here.
  */
 const lastWritten = new Map<
   string,
@@ -125,7 +140,13 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
     .map((record) => ({
       id: record.id,
       name: typeof record.name === 'string' ? record.name : null,
-      html: typeof record.html === 'string' ? record.html : '',
+      // Dual-read the rename: rows persisted by older builds say `html`.
+      content:
+        typeof record.content === 'string'
+          ? record.content
+          : typeof record.html === 'string'
+            ? record.html
+            : '',
       createdAt: typeof record.createdAt === 'number' ? record.createdAt : Date.now(),
       updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now(),
       noteType: normalizeNoteType((record as { noteType?: unknown }).noteType),
@@ -197,7 +218,13 @@ function loadLegacySnapshot(): NotesSnapshot {
           tabs.push({
             id: entry.id,
             name: typeof entry.name === 'string' ? entry.name : null,
-            html: typeof entry.html === 'string' ? entry.html : '',
+            // Dual-read the rename: rows persisted by older builds say `html`.
+            content:
+              typeof entry.content === 'string'
+                ? entry.content
+                : typeof entry.html === 'string'
+                  ? entry.html
+                  : '',
             createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : Date.now(),
             updatedAt: typeof entry.updatedAt === 'number' ? entry.updatedAt : Date.now(),
             noteType: normalizeNoteType(entry.noteType),
@@ -247,7 +274,7 @@ export function parseLegacyNoteRecords(): NoteRecord[] {
     records.push({
       id: tombstone.id,
       name: null,
-      html: '',
+      content: '',
       createdAt: tombstone.updatedAt,
       updatedAt: tombstone.updatedAt,
       position: -1,
@@ -344,7 +371,7 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
       upserts.push({
         id: tombstone.id,
         name: null,
-        html: '',
+        content: '',
         createdAt: tombstone.updatedAt,
         updatedAt: tombstone.updatedAt,
         position: -1,

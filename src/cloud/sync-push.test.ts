@@ -61,9 +61,6 @@ describe('batchRowsForPush', () => {
 
     const batches = batchRowsForPush([a, b]);
 
-    expect(batches.map((batch) => batch.map((entry) => entry.id))).toEqual([
-      ['a'],
-      ['b'],
-    ]);
+    expect(batches.map((batch) => batch.map((entry) => entry.id))).toEqual([['a'], ['b']]);
   });
 });

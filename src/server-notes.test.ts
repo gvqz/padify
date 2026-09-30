@@ -48,10 +48,21 @@ describe('parseNoteRows', () => {
   });
 
   it('keeps unknown note types — a newer build’s note must survive', () => {
-    const rows = parseNoteRows([row({ note_type: 'kanban', html: '{"cards":[]}' })]);
+    const rows = parseNoteRows([row({ note_type: 'kanban', content: '{"cards":[]}' })]);
 
     expect(rows![0].note_type).toBe('kanban');
-    expect(rows![0].html).toBe('{"cards":[]}');
+    expect(rows![0].content).toBe('{"cards":[]}');
+  });
+
+  it('accepts the legacy html key from a pre-rename client, content wins', () => {
+    // The rename transition: the server takes `content` or `html` (or
+    // both, same value) so a deploy gap between site and API never
+    // costs a note its body. `content` is preferred when both appear.
+    const legacy = parseNoteRows([row({ html: 'legacy body' })]);
+    const both = parseNoteRows([row({ content: 'new body', html: 'legacy body' })]);
+
+    expect(legacy![0].content).toBe('legacy body');
+    expect(both![0].content).toBe('new body');
   });
 
   it('nulls malformed note types instead of rejecting the batch', () => {

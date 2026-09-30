@@ -183,7 +183,10 @@
     content.innerHTML = '';
 
     if (isHtmlNote(row.note_type)) {
-      content.appendChild(sanitizeShareHtml(row.html));
+      // The rename transition: rows from a newer server say `content`,
+      // older ones say `html` — read either, prefer `content`.
+      var body = row.content == null ? row.html : row.content;
+      content.appendChild(sanitizeShareHtml(body));
       return;
     }
 
@@ -191,7 +194,8 @@
     // honest raw text, never markup. The <pre> keeps structure readable.
     var pre = document.createElement('pre');
     pre.className = 'share-raw-content';
-    pre.textContent = String(row.html == null ? '' : row.html);
+    var raw = row.content == null ? row.html : row.content;
+    pre.textContent = String(raw == null ? '' : raw);
     content.appendChild(pre);
   }
 

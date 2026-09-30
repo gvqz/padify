@@ -61,13 +61,14 @@ export interface NoteTab {
   name: string | null;
   /**
    * The note's content, in the format its type owns (see
-   * editor/note-types.ts — contentKindFor). The field name is history:
-   * it says html because that is all the first Padify stored, but for a
-   * non-html type it holds that type's format — Markdown source, JSON,
-   * an unknown build's bytes — verbatim, and the sanitizer never touches
-   * it. A rename to `content` is queued; semantics first, spelling second.
+   * editor/note-types.ts — contentKindFor). For the classic types that is
+   * the sanitized HTML subset; for every other type it is that type's
+   * format — Markdown source, JSON, an unknown build's bytes — verbatim,
+   * and the sanitizer never touches it. Named `content` since the typed
+   * content model; it was born as `html` because that is all the first
+   * Padify stored, and the name outlived its accuracy by a year.
    */
-  html: string;
+  content: string;
   createdAt: number;
   updatedAt: number;
   /**
@@ -496,7 +497,7 @@ export function deriveTabTitle(tab: NoteTab): string {
   if (!isHtmlContent(tab.noteType)) {
     const kind = contentKindFor(tab.noteType);
     if (kind === 'text') {
-      const firstLine = tab.html
+      const firstLine = tab.content
         .split('\n')
         .map((line) => line.trim())
         .find((line) => line.length > 0);
@@ -509,7 +510,7 @@ export function deriveTabTitle(tab: NoteTab): string {
     return noteTypeLabel(tab.noteType ?? DEFAULT_NOTE_TYPE);
   }
 
-  const firstLine = htmlToText(tab.html)
+  const firstLine = htmlToText(tab.content)
     .split('\n')
     .map((line) => line.trim())
     .find((line) => line.length > 0);
@@ -528,12 +529,12 @@ function createTabId(): string {
 }
 
 function createTab(
-  html: string = '',
+  content: string = '',
   name: string | null = null,
   noteType: NoteType = DEFAULT_NOTE_TYPE,
 ): NoteTab {
   const now = Date.now();
-  const tab: NoteTab = { id: createTabId(), name, html, createdAt: now, updatedAt: now };
+  const tab: NoteTab = { id: createTabId(), name, content, createdAt: now, updatedAt: now };
   if (noteType !== DEFAULT_NOTE_TYPE) {
     tab.noteType = noteType;
   }
@@ -605,11 +606,11 @@ export class TabManager {
           // The sanitizer belongs to html notes ONLY — any other format
           // passing through it would have its angle brackets rewritten and
           // its data corrupted in place.
-          html:
-            typeof entry.html === 'string' && isHtmlContent(noteType)
-              ? sanitizeNoteHtml(entry.html)
-              : typeof entry.html === 'string'
-                ? entry.html
+          content:
+            typeof entry.content === 'string' && isHtmlContent(noteType)
+              ? sanitizeNoteHtml(entry.content)
+              : typeof entry.content === 'string'
+                ? entry.content
                 : '',
           createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : Date.now(),
           updatedAt: typeof entry.updatedAt === 'number' ? entry.updatedAt : Date.now(),
@@ -757,7 +758,7 @@ export class TabManager {
       ...tab,
       // Sanitize is the html discipline; every other kind crosses the
       // merge byte-exact.
-      html: isHtmlContent(tab.noteType) ? sanitizeNoteHtml(tab.html) : tab.html,
+      content: isHtmlContent(tab.noteType) ? sanitizeNoteHtml(tab.content) : tab.content,
     }));
 
     if (!this.tabs.some((tab) => tab.id === this.activeId)) {
@@ -778,7 +779,7 @@ export class TabManager {
       const contentChanged =
         !activeBefore || activeBefore.id !== active.id
           ? true
-          : activeBefore.html !== active.html || activeBefore.name !== active.name;
+          : activeBefore.content !== active.content || activeBefore.name !== active.name;
 
       if (contentChanged && !editorFocused) {
         this.loadActiveIntoEditor();
@@ -817,11 +818,11 @@ export class TabManager {
     // Through the port: sanitized, and math shells stored as their LaTeX
     // source (the rendered KaTeX markup lives only in the editing DOM).
     const html = getEditorPort()?.getHtml() ?? this.editor.html();
-    if (html === active.html) {
+    if (html === active.content) {
       return;
     }
 
-    active.html = html;
+    active.content = html;
     active.updatedAt = Date.now();
     active.colorTheme = currentThemeMode();
     this.dirtyIds.add(active.id);
@@ -841,7 +842,7 @@ export class TabManager {
     }
 
     // Same port routing as saveActiveFromEditor — sanitized on store.
-    active.html = getEditorPort()?.getHtml() ?? this.editor.html();
+    active.content = getEditorPort()?.getHtml() ?? this.editor.html();
     active.updatedAt = Date.now();
     active.colorTheme = currentThemeMode();
     this.dirtyIds.add(active.id);
@@ -875,12 +876,12 @@ export class TabManager {
       // The port's display-only entry: sanitized, math rendered, empty
       // state collapsed — and nothing persists, because opening a note
       // must not write on its own.
-      port.renderHtml(active ? active.html : '');
+      port.renderHtml(active ? active.content : '');
     } else {
       // Bare fallback (tests, pre-boot): the same paint, by hand. The
       // empty-state normalization is a port capability — without a port
       // it is skipped, exactly like the pre-split code did.
-      this.editor.html(active ? active.html : '');
+      this.editor.html(active ? active.content : '');
       renderMathIn(this.editor.get(0) as HTMLElement);
     }
     this.editor.scrollTop(0);
@@ -926,7 +927,7 @@ export class TabManager {
     // Non-html formats read as their raw content — statistics and exports
     // must never report the placeholder card's copy as the note's text.
     if (active && !isHtmlContent(active.noteType)) {
-      return active.html.trim() === '' ? '' : active.html;
+      return active.content.trim() === '' ? '' : active.content;
     }
     const element = this.editor.get(0) as HTMLElement | undefined;
     if (!element) {
@@ -950,7 +951,7 @@ export class TabManager {
     }
 
     this.editor.html('');
-    active.html = '';
+    active.content = '';
     active.updatedAt = Date.now();
     this.dirtyIds.add(active.id);
     this.persist();
@@ -983,7 +984,7 @@ export class TabManager {
       return;
     }
 
-    active.html = content;
+    active.content = content;
     if (noteType) {
       active.noteType = noteType;
     } else {
@@ -1180,7 +1181,7 @@ export class TabManager {
     }
 
     const isActive = tabId === this.activeId;
-    const text = isActive ? this.getActiveText() : htmlToText(tab.html);
+    const text = isActive ? this.getActiveText() : htmlToText(tab.content);
 
     const closeNow = async (): Promise<void> => {
       // Keep a safety snapshot behind the user's back, like delete-notes does.
@@ -1375,7 +1376,7 @@ export function getActiveNoteContent(): {
   if (isHtmlContent(active.noteType)) {
     return { content: getEditorHtml(), noteType: active.noteType };
   }
-  return { content: active.html, noteType: active.noteType };
+  return { content: active.content, noteType: active.noteType };
 }
 
 /**

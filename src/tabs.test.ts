@@ -12,7 +12,7 @@ import {
 const tab = (overrides: Partial<NoteTab> = {}): NoteTab => ({
   id: 't1',
   name: null,
-  html: '',
+  content: '',
   createdAt: 0,
   updatedAt: 0,
   ...overrides,
@@ -232,19 +232,19 @@ describe('deriveTabTitle', () => {
   });
 
   it('uses the first non-empty content line when unnamed', () => {
-    expect(deriveTabTitle(tab({ html: '<div></div>second line' }))).toBe('second line');
+    expect(deriveTabTitle(tab({ content: '<div></div>second line' }))).toBe('second line');
   });
 
   it('truncates long derived titles at 42 characters', () => {
     const longLine = 'x'.repeat(60);
-    const title = deriveTabTitle(tab({ html: longLine }));
+    const title = deriveTabTitle(tab({ content: longLine }));
     expect(title.length).toBe(42);
     expect(title.endsWith('…')).toBe(true);
   });
 
   it('falls back to Untitled for empty notes', () => {
     expect(deriveTabTitle(tab())).toBe('Untitled');
-    expect(deriveTabTitle(tab({ html: '<div></div>' }))).toBe('Untitled');
+    expect(deriveTabTitle(tab({ content: '<div></div>' }))).toBe('Untitled');
   });
 });
 

@@ -22,7 +22,7 @@ export const NOTE_TYPE_ID_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
 export interface IncomingNoteRow {
   id: string;
   name: string | null;
-  html: string;
+  content: string;
   position: number;
   created_at: number;
   updated_at: number;
@@ -70,7 +70,11 @@ export function parseNoteRows(value: unknown): IncomingNoteRow[] | null {
     rows.push({
       id,
       name: row.name === null || row.name === undefined ? null : asString(row.name).slice(0, 300),
-      html: asString(row.html),
+      // The rename transition: clients built before it send `html`, clients
+      // after it send `content`, some send both with the same value. Either
+      // key is accepted; a deploy gap between site and API must never cost
+      // a note its body. Readers prefer `content`.
+      content: asString(row.content ?? row.html),
       position: asInt(row.position, 0),
       created_at: asInt(row.created_at, 0),
       updated_at: asInt(row.updated_at, 0),

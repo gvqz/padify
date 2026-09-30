@@ -237,6 +237,7 @@ export async function applySchema(db: Db): Promise<void> {
   }
 
   await migrateColumns(db);
+  await migrateRenames(db);
 }
 
 /**
@@ -260,6 +261,37 @@ async function migrateColumns(db: Db): Promise<void> {
     if (!exists) {
       await db.run(`alter table ${table} add column ${column} ${definition}`);
       console.log(`[padify-api] schema migration: added ${table}.${column}`);
+    }
+  }
+}
+
+/**
+ * Column renames for databases created before a rename — `create table if
+ * not exists` cannot rename, and rewriting every row through a temp table
+ * would be a migration for what SQLite can do in one statement. Each entry
+ * renames only when PRAGMA reports the old name present AND the new name
+ * absent, so startup stays idempotent on every database state: fresh
+ * installs already have the new name (nothing to do), renamed databases
+ * have the new name (nothing to do), and a database that somehow ended up
+ * with BOTH keeps its `content` and ignores the stale `html` — the
+ * application reads by the new name only.
+ */
+const RENAMED_COLUMNS: Array<{ table: string; from: string; to: string }> = [
+  // The note content column was born `html` (that is all the first Padify
+  // stored); the typed content model made the name a lie, and it is
+  // `content` now — see src/tabs.ts, NoteTab.content.
+  { table: 'notes', from: 'html', to: 'content' },
+  // Shares carry the same denormalised content; same story.
+  { table: 'shares', from: 'html', to: 'content' }
+];
+
+async function migrateRenames(db: Db): Promise<void> {
+  for (const { table, from, to } of RENAMED_COLUMNS) {
+    const rows = await db.all(`pragma table_info(${table})`);
+    const names = new Set(rows.map(row => String(row.name)));
+    if (names.has(from) && !names.has(to)) {
+      await db.run(`alter table ${table} rename column ${from} to ${to}`);
+      console.log(`[padify-api] schema migration: renamed ${table}.${from} -> ${table}.${to}`);
     }
   }
 }

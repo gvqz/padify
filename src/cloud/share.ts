@@ -28,7 +28,14 @@ export interface ShareRecord {
   token: string;
   note_id: string | null;
   title: string;
-  html: string;
+  /**
+   * The shared content. The wire carries it as both `content` and a
+   * legacy `html` key during the rename transition (same value) — rows
+   * and pages built before the rename read `html`, everything after it
+   * reads `content`, and a deploy gap must never blank a shared note.
+   */
+  content: string;
+  html?: string;
   /** The shared note's type; null = html (the classic note). */
   note_type: string | null;
   created_at: number;
@@ -81,7 +88,7 @@ async function shareApi<T>(
 export async function createShare(
   noteId: string,
   title: string,
-  html: string,
+  content: string,
   days: number,
   noteType?: NoteType,
 ): Promise<ShareActionResult> {
@@ -95,7 +102,9 @@ export async function createShare(
       body: {
         note_id: noteId,
         title: title.slice(0, 200),
-        html,
+        // Both keys, same value — the transition contract (see ShareRecord).
+        content,
+        html: content,
         note_type: noteType ?? null,
         days,
       },
@@ -180,7 +189,9 @@ async function flushShareUpdates(): Promise<void> {
         .map((tab) => ({
           note_id: tab.id,
           title: deriveTabTitle(tab).slice(0, 200),
-          html: tab.html,
+          // Both keys, same value — the transition contract (see ShareRecord).
+          content: tab.content,
+          html: tab.content,
           note_type: tab.noteType ?? null,
         }));
 

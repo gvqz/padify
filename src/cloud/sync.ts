@@ -58,13 +58,30 @@ export interface NoteRow {
   id: string;
   user_id: string;
   name: string | null;
-  html: string;
+  /**
+   * The note's content, in the key the rename transition settled on.
+   * Every participant emits BOTH keys carrying the same value for now:
+   * rows built before the rename speak `html`, rows after it speak
+   * `content`, and a deploy gap between the site and the API (either
+   * direction) must never cost a note its body. Readers take either,
+   * prefer `content`; the legacy twin dies with sync v2.
+   */
+  content?: string;
+  html?: string;
   position: number;
   created_at: number;
   updated_at: number;
   deleted: boolean;
   /** The note kind; null = the default (standard). Absent on old servers. */
   note_type: string | null;
+}
+
+/**
+ * A wire row's content, whichever key it arrived under. See NoteRow —
+ * during the rename transition either key may be the only one present.
+ */
+function wireRowContent(row: { content?: string; html?: string }): string {
+  return row.content ?? row.html ?? '';
 }
 
 interface StoredSession {
@@ -528,7 +545,7 @@ export function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): Me
       freshRemote.push({
         id: row.id,
         name: row.name,
-        html: row.html ?? '',
+        content: wireRowContent(row),
         createdAt: typeof row.created_at === 'number' ? row.created_at : Date.now(),
         updatedAt: typeof row.updated_at === 'number' ? row.updated_at : Date.now(),
         noteType: normalizeNoteType(row.note_type),
@@ -537,9 +554,12 @@ export function mergeRemote(remoteRows: NoteRow[], payload: TabsSyncPayload): Me
       return;
     }
 
-    if (row.updated_at > local.updatedAt && (row.html !== local.html || row.name !== local.name)) {
+    if (
+      row.updated_at > local.updatedAt &&
+      (wireRowContent(row) !== local.content || row.name !== local.name)
+    ) {
       local.name = row.name;
-      local.html = row.html ?? '';
+      local.content = wireRowContent(row);
       local.createdAt = typeof row.created_at === 'number' ? row.created_at : local.createdAt;
       local.updatedAt = row.updated_at;
       // Type only ever rides along; an old server row (undefined) keeps the
@@ -632,7 +652,9 @@ function tabToRow(tab: NoteTab, userId: string, position: number): NoteRow {
     id: tab.id,
     user_id: userId,
     name: tab.name,
-    html: tab.html,
+    // Both keys, same value — the transition contract (see NoteRow).
+    content: tab.content,
+    html: tab.content,
     position,
     created_at: tab.createdAt,
     updated_at: tab.updatedAt,
@@ -646,6 +668,8 @@ function tombstoneToRow(tombstone: TabTombstone, userId: string): NoteRow {
     id: tombstone.id,
     user_id: userId,
     name: null,
+    // Both keys, same value — the transition contract (see NoteRow).
+    content: '',
     html: '',
     position: 0,
     created_at: tombstone.updatedAt,

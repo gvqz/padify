@@ -10,7 +10,7 @@ import { mergeRemote, type NoteRow } from './sync';
 const tab = (id: string, overrides: Partial<NoteTab> = {}): NoteTab => ({
   id,
   name: null,
-  html: `<p>${id}</p>`,
+  content: `<p>${id}</p>`,
   createdAt: 1_000,
   updatedAt: 2_000,
   ...overrides,
@@ -20,7 +20,7 @@ const row = (id: string, overrides: Partial<NoteRow> = {}): NoteRow => ({
   id,
   user_id: 'user',
   name: null,
-  html: `<p>${id}</p>`,
+  content: `<p>${id}</p>`,
   position: 0,
   created_at: 1_000,
   updated_at: 2_000,
@@ -48,13 +48,13 @@ describe('mergeRemote — deletes', () => {
 
   it('a delete may not bury a newer local edit — the note stays and re-pushes', () => {
     // Closed on the phone at t=2000; edited here at t=5000.
-    const local = tab('a', { updatedAt: 5_000, html: '<p>the newer edit</p>' });
+    const local = tab('a', { updatedAt: 5_000, content: '<p>the newer edit</p>' });
     const remote = row('a', { deleted: true, updated_at: 2_000 });
 
     const merge = mergeRemote([remote], payloadOf([local]));
 
     expect(merge.tabs).toHaveLength(1);
-    expect(merge.tabs[0].html).toBe('<p>the newer edit</p>');
+    expect(merge.tabs[0].content).toBe('<p>the newer edit</p>');
     expect(merge.changed).toBe(false); // nothing local changed…
     // …but the cycle's step 3 must see it as newer-than-remote and
     // re-push it (deleted=false): the edit resurrects the note.
@@ -74,12 +74,26 @@ describe('mergeRemote — deletes', () => {
 describe('mergeRemote — edits and arrivals', () => {
   it('a newer remote edit lands locally', () => {
     const merge = mergeRemote(
-      [row('a', { updated_at: 9_000, html: '<p>from the cloud</p>' })],
+      [row('a', { updated_at: 9_000, content: '<p>from the cloud</p>' })],
       payloadOf([tab('a')]),
     );
 
-    expect(merge.tabs[0].html).toBe('<p>from the cloud</p>');
+    expect(merge.tabs[0].content).toBe('<p>from the cloud</p>');
     expect(merge.tabs[0].updatedAt).toBe(9_000);
+    expect(merge.changed).toBe(true);
+  });
+
+  it('a row from a pre-rename server (html key only) still merges', () => {
+    // The rename transition: rows built before the rename carry the note
+    // under `html` and nothing else; the merge must read either key.
+    const legacy = {
+      ...row('a', { updated_at: 9_000 }),
+      content: undefined,
+      html: '<p>old wire</p>',
+    } as NoteRow;
+    const merge = mergeRemote([legacy], payloadOf([tab('a')]));
+
+    expect(merge.tabs[0].content).toBe('<p>old wire</p>');
     expect(merge.changed).toBe(true);
   });
 

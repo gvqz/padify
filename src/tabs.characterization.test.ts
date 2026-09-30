@@ -285,10 +285,10 @@ describe('htmlToText (characterization)', () => {
 // ---------------------------------------------------------------------------
 
 describe('deriveTabTitle (characterization)', () => {
-  const tab = (html: string, name: string | null = null): NoteTab => ({
+  const tab = (content: string, name: string | null = null): NoteTab => ({
     id: 't',
     name,
-    html,
+    content,
     createdAt: 0,
     updatedAt: 0,
   });
@@ -355,12 +355,12 @@ describe('legacyTextToHtml (characterization)', () => {
 describe('TabManager (characterization)', () => {
   const stored = (
     id: string,
-    html: string,
+    content: string,
     overrides: Partial<StoredNoteTab> = {},
   ): StoredNoteTab => ({
     id,
     name: null,
-    html,
+    content,
     createdAt: 0,
     updatedAt: 0,
     ...overrides,
@@ -382,7 +382,7 @@ describe('TabManager (characterization)', () => {
     await flushAndReboot();
     const persisted = await loadNotes();
     expect(persisted.tabs).toHaveLength(1);
-    expect(persisted.tabs[0].html).toBe(WELCOME_HTML);
+    expect(persisted.tabs[0].content).toBe(WELCOME_HTML);
   });
 
   it('rehydrates stored tabs and sanitizes their html on the way in', async () => {
@@ -402,7 +402,7 @@ describe('TabManager (characterization)', () => {
     const tabs = manager.exportForSync().tabs;
     // script TEXT survives (inert), the tag itself does not — matches the
     // sanitizeNoteHtml characterization above.
-    expect(tabs.find((t) => t.id === 't2')!.html).toBe('bad()<i>ok</i>');
+    expect(tabs.find((t) => t.id === 't2')!.content).toBe('bad()<i>ok</i>');
     expect(tabs).toHaveLength(2);
   });
 
@@ -431,7 +431,9 @@ describe('TabManager (characterization)', () => {
     manager.switchTo('t2', false);
 
     expect(manager.getActive()!.id).toBe('t2');
-    expect(manager.exportForSync().tabs.find((t) => t.id === 't1')!.html).toBe('<b>one edited</b>');
+    expect(manager.exportForSync().tabs.find((t) => t.id === 't1')!.content).toBe(
+      '<b>one edited</b>',
+    );
     expect(document.getElementById('note')!.innerHTML).toBe('<b>two</b>');
   });
 
@@ -442,7 +444,7 @@ describe('TabManager (characterization)', () => {
     manager.addTab(false);
 
     expect(manager.exportForSync().tabs).toHaveLength(before + 1);
-    expect(manager.getActive()!.html).toBe('');
+    expect(manager.getActive()!.content).toBe('');
     expect(document.getElementById('note')!.innerHTML).toBe('');
     expect(document.getElementById('tabRailCount')!.textContent).toBe(String(before + 1));
   });
@@ -483,7 +485,7 @@ describe('TabManager (characterization)', () => {
     const tabs = manager.exportForSync().tabs;
     expect(tabs).toHaveLength(1);
     expect(tabs[0].id).not.toBe(onlyId);
-    expect(manager.getActive()!.html).toBe('');
+    expect(manager.getActive()!.content).toBe('');
   });
 
   it('records a tombstone on close and clears it once confirmed', async () => {
@@ -598,7 +600,7 @@ describe('TabManager (characterization)', () => {
     expect(payloads.length).toBeGreaterThanOrEqual(1);
     const last = payloads[payloads.length - 1];
     expect(last.tabs).toHaveLength(2);
-    expect(last.tabs[1].html).toBe('');
+    expect(last.tabs[1].content).toBe('');
   });
 
   it('getActiveText reads the editor surface and normalizes nbsp to spaces', async () => {
@@ -644,7 +646,7 @@ describe('TabManager (characterization)', () => {
     // editor not clobbered: user was focused
     expect(document.getElementById('note')!.innerHTML).toBe('<b>user is typing here</b>');
     // but the model holds the merged (sanitized) row
-    expect(manager.getActive()!.html).toBe('<div>fresh from the cloud</div>');
+    expect(manager.getActive()!.content).toBe('<div>fresh from the cloud</div>');
   });
 
   it('applyExternalMerge recreates a welcome tab when the merge empties the list', async () => {
@@ -654,7 +656,7 @@ describe('TabManager (characterization)', () => {
 
     const tabs = manager.exportForSync().tabs;
     expect(tabs).toHaveLength(1);
-    expect(tabs[0].html).toBe(WELCOME_HTML);
+    expect(tabs[0].content).toBe(WELCOME_HTML);
   });
 });
 
@@ -665,12 +667,12 @@ describe('TabManager (characterization)', () => {
 describe('note types (characterization)', () => {
   const stored = (
     id: string,
-    html: string,
+    content: string,
     overrides: Partial<StoredNoteTab> = {},
   ): StoredNoteTab => ({
     id,
     name: null,
-    html,
+    content,
     createdAt: 0,
     updatedAt: 0,
     ...overrides,
@@ -769,12 +771,12 @@ describe('note types (characterization)', () => {
 describe('non-html content (the typed content model)', () => {
   const stored = (
     id: string,
-    html: string,
+    content: string,
     overrides: Partial<StoredNoteTab> = {},
   ): StoredNoteTab => ({
     id,
     name: null,
-    html,
+    content,
     createdAt: 0,
     updatedAt: 0,
     ...overrides,
@@ -805,7 +807,7 @@ describe('non-html content (the typed content model)', () => {
     // Byte-exact: angle brackets, quotes and ampersands all survive. The
     // pre-content-model pipeline sanitized this row on load and silently
     // rewrote the data.
-    expect(board.html).toBe(json);
+    expect(board.content).toBe(json);
     expect(board.noteType).toBe('kanban');
   });
 
@@ -899,7 +901,7 @@ describe('snapshots of typed notes', () => {
 
     const active = manager.getActive()!;
     expect(active.noteType).toBe('kanban');
-    expect(active.html).toBe(board); // byte-exact, never sanitized
+    expect(active.content).toBe(board); // byte-exact, never sanitized
     // The surface explains itself instead of editing the data.
     const surface = document.getElementById('note')!;
     expect(surface.getAttribute('contenteditable')).toBe('false');
@@ -913,7 +915,7 @@ describe('snapshots of typed notes', () => {
 
     const active = manager.getActive()!;
     expect(active.noteType).toBeUndefined();
-    expect(active.html).toContain('an html snapshot');
+    expect(active.content).toContain('an html snapshot');
     expect(document.getElementById('note')!.innerHTML).toContain('an html snapshot');
   });
 });
@@ -965,12 +967,12 @@ describe('dirty lifecycle (the sync handshake)', () => {
 describe('html export of typed notes (the capture rule)', () => {
   const stored = (
     id: string,
-    html: string,
+    content: string,
     overrides: Partial<StoredNoteTab> = {},
   ): StoredNoteTab => ({
     id,
     name: null,
-    html,
+    content,
     createdAt: 0,
     updatedAt: 0,
     ...overrides,

@@ -17,7 +17,7 @@
  *   GET  /api/notes         (auth)                     → {rows}
  *   PUT  /api/notes         (auth) {rows}              → {ok}
  *   GET  /api/shares        (auth)                     → {rows}
- *   POST /api/shares        (auth) {note_id,title,html,days} → {row}
+ *   POST /api/shares        (auth) {note_id,title,content,days} → {row}
  *   PATCH /api/shares       (auth) {token|note_ids|refresh}  → {ok}
  *   GET  /api/share/:token  (public)                   → {row} | 404
  *
@@ -230,12 +230,15 @@ async function handleSignin(db: Db, request: Request): Promise<Response> {
 
 async function handleNotesGet(db: Db, request: Request, user: SessionUser): Promise<Response> {
   const rows = await db.all(
-    `select id, user_id, name, html, position, created_at, updated_at, deleted, note_type
+    `select id, user_id, name, content, position, created_at, updated_at, deleted, note_type
      from notes where user_id = ? order by position asc`,
     [user.id]
   );
   return json(request, {
-    rows: rows.map(row => ({ ...row, deleted: Number(row.deleted) === 1 }))
+    // Dual-key during the rename transition (see handleSharesGet): rows
+    // built before the rename read `html`, everything after it reads
+    // `content`, and a deploy gap must never blank a note on pull.
+    rows: rows.map(row => ({ ...row, html: row.content, deleted: Number(row.deleted) === 1 }))
   });
 }
 
@@ -256,18 +259,18 @@ async function handleNotesPut(db: Db, request: Request, user: SessionUser): Prom
   // single local transaction) instead of one round-trip per row.
   await db.runMany(
     rows.map(row => ({
-      sql: `insert into notes (id, user_id, name, html, position, created_at, updated_at, deleted, note_type)
+      sql: `insert into notes (id, user_id, name, content, position, created_at, updated_at, deleted, note_type)
        values (?, ?, ?, ?, ?, ?, ?, ?, ?)
        on conflict(id) do update set
          name = excluded.name,
-         html = excluded.html,
+         content = excluded.content,
          position = excluded.position,
          created_at = excluded.created_at,
          updated_at = excluded.updated_at,
          deleted = excluded.deleted,
          note_type = excluded.note_type
        where notes.user_id = excluded.user_id`,
-      args: [row.id, user.id, row.name, row.html, row.position, row.created_at, row.updated_at, row.deleted ? 1 : 0, row.note_type]
+      args: [row.id, user.id, row.name, row.content, row.position, row.created_at, row.updated_at, row.deleted ? 1 : 0, row.note_type]
     }))
   );
 
@@ -276,12 +279,19 @@ async function handleNotesPut(db: Db, request: Request, user: SessionUser): Prom
 
 async function handleSharesGet(db: Db, request: Request, user: SessionUser): Promise<Response> {
   const rows = await db.all(
-    `select token, note_id, title, html, created_at, expires_at, revoked
+    `select token, note_id, title, content, created_at, expires_at, revoked
      from shares where user_id = ? order by created_at desc limit 200`,
     [user.id]
   );
   return json(request, {
-    rows: rows.map(row => ({ ...row, revoked: Number(row.revoked) === 1 }))
+    // The rename transition: every response carries the content under both
+    // keys — rows and pages built before the rename read `html`, everything
+    // after it reads `content`, and a deploy gap must never blank a share.
+    rows: rows.map(row => ({
+      ...row,
+      html: row.content,
+      revoked: Number(row.revoked) === 1
+    }))
   });
 }
 
@@ -298,7 +308,7 @@ async function handleSharesPost(db: Db, request: Request, user: SessionUser): Pr
 
   const noteId = asString(body.note_id).slice(0, 100) || null;
   const title = asString(body.title).slice(0, 200);
-  const html = asString(body.html);
+  const content = asString(body.content ?? body.html);
   const noteType = parseNoteType(body.note_type);
   const days = Math.min(3650, Math.max(1, asInt(body.days, 7)));
 
@@ -308,9 +318,9 @@ async function handleSharesPost(db: Db, request: Request, user: SessionUser): Pr
 
   try {
     await db.run(
-      `insert into shares (token, user_id, note_id, title, html, note_type, created_at, expires_at, revoked)
+      `insert into shares (token, user_id, note_id, title, content, note_type, created_at, expires_at, revoked)
        values (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-      [token, user.id, noteId, title, html, noteType, now, expiresAt]
+      [token, user.id, noteId, title, content, noteType, now, expiresAt]
     );
   } catch {
     // Token collision (vanishingly rare) — ask the client to retry.
@@ -318,7 +328,7 @@ async function handleSharesPost(db: Db, request: Request, user: SessionUser): Pr
   }
 
   return json(request, {
-    row: { token, note_id: noteId, title, html, note_type: noteType, created_at: now, expires_at: expiresAt, revoked: false }
+    row: { token, note_id: noteId, title, content, html: content, note_type: noteType, created_at: now, expires_at: expiresAt, revoked: false }
   }, 201);
 }
 
@@ -372,9 +382,9 @@ async function handleSharesPatch(db: Db, request: Request, user: SessionUser): P
       continue;
     }
     statements.push({
-      sql: `update shares set title = ?, html = ?, note_type = ?
+      sql: `update shares set title = ?, content = ?, note_type = ?
             where user_id = ? and note_id = ? and revoked = 0 and expires_at > ?`,
-      args: [asString(item.title).slice(0, 200), asString(item.html), parseNoteType(item.note_type), user.id, noteId, now]
+      args: [asString(item.title).slice(0, 200), asString(item.content ?? item.html), parseNoteType(item.note_type), user.id, noteId, now]
     });
   }
   if (statements.length > 0) {
@@ -386,7 +396,7 @@ async function handleSharesPatch(db: Db, request: Request, user: SessionUser): P
 
 async function handlePublicShareGet(db: Db, request: Request, token: string): Promise<Response> {
   const rows = await db.all(
-    `select title, html, note_type, created_at, expires_at from shares
+    `select title, content, note_type, created_at, expires_at from shares
      where token = ? and revoked = 0 and expires_at > ?`,
     [token, Date.now()]
   );
@@ -398,7 +408,9 @@ async function handlePublicShareGet(db: Db, request: Request, token: string): Pr
   return json(request, {
     row: {
       title: row.title,
-      html: row.html,
+      // Dual-key during the rename transition — see handleSharesGet.
+      content: row.content,
+      html: row.content,
       note_type: row.note_type ?? null,
       created_at: Number(row.created_at),
       expires_at: Number(row.expires_at)
