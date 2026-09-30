@@ -139,6 +139,25 @@ Resolved stream URLs are cached in the `music_resolutions` table (TTL 3 h,
 swept at boot), so repeat plays are one cheap SELECT and repeat requests for
 the same track dedupe into a single yt-dlp run.
 
+### Attachments (the blob store)
+
+Voice notes and future media note types store their bytes on the API, in the
+`attachments` table (user-scoped, 5 MB per attachment, bytes kept base64 in
+a TEXT column — see `server/schema.sql` for the reasoning). Four routes, all
+session-authenticated:
+
+- `GET /api/attachments` — the caller's attachments as metas (no bytes).
+- `POST /api/attachments` — raw bytes as the body; the client-chosen id
+  rides in `x-padify-id` (retries with the same id and bytes are idempotent,
+  same id with different bytes is a 409).
+- `GET /api/attachments/:id` — the bytes, ETagged by their sha256
+  (`If-None-Match` answers 304).
+- `DELETE /api/attachments/:id` — idempotent.
+
+No environment variables are needed. Clients upload pending attachments in
+the background after each sync cycle and download other devices' attachments
+on demand — blobs never ride along with note sync.
+
 ## 3. Route the app to the API
 
 The frontend calls the API at `apiBase` (default `''` = same origin, i.e.

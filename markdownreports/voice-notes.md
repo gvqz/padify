@@ -57,6 +57,7 @@ Each recording renders as an item with:
 ## Notes for rebuilding inside the main app
 
 - A "voice note" type for the main app should store **audio blobs** — IndexedDB is the right store for that (localStorage can't hold blobs), so the main app will need an IndexedDB attachment store keyed by note/tab id, since the current note sync only covers text HTML.
+  - **Foundation landed (2026-10):** that store now exists — `src/storage/attachments.ts` (offline-first IDB records, `uploaded` flag) and the server's `attachments` table + routes (`server/attachments.ts`), with the background upload flush in `src/cloud/attachments.ts`. Recordings land locally as pending and reach the server after the next sync cycle; other devices pull them on demand. The 5 MB per-attachment cap comfortably covers the WebM/Opus sizes above.
 - The record-per-session stream teardown (mic released after every recording) is privacy-correct behavior to keep.
 - The WebM→MP3 conversion exists for portability of downloads; if the main app keeps recordings internal, storing the original compressed WebM/Opus and converting only on download would save CPU and quality loss.
 - The timestamp-keyed schema (`{ timestamp, blob, notes }`) maps naturally to `{ noteId, blob, text }`; per-recording notes become the note's own text once a recording is a first-class note.
