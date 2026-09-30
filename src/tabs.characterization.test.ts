@@ -717,13 +717,17 @@ describe('note types (characterization)', () => {
     expect(rebooted.getActive()!.noteType).toBe('rich');
   });
 
-  it('rehydrates a stored rich note and normalizes unknown type values to standard', async () => {
+  it('rehydrates a stored rich note and keeps unknown types for the ride home', async () => {
+    // Updated with the typed content model: an unknown type (a newer
+    // Padify's note) must survive rehydration VERBATIM — normalizing it to
+    // standard is how a note ends up edited as the wrong format.
     saveNotes(
       {
         tabs: [
           stored('t1', '<b>rich</b>', { noteType: 'rich' }),
           stored('t2', '<b>plain</b>', { noteType: 'standard' as StoredNoteTab['noteType'] }),
-          stored('t3', '<b>alien</b>', { noteType: 'markdown' as StoredNoteTab['noteType'] }),
+          stored('t3', '# alien markdown', { noteType: 'markdown' as StoredNoteTab['noteType'] }),
+          stored('t4', '<b>junk</b>', { noteType: 'NOT A TYPE' as StoredNoteTab['noteType'] }),
         ],
         tombstones: [],
       },
@@ -736,7 +740,11 @@ describe('note types (characterization)', () => {
     const tabs = manager.exportForSync().tabs;
     expect(tabs.find((t) => t.id === 't1')!.noteType).toBe('rich');
     expect(tabs.find((t) => t.id === 't2')!.noteType).toBeUndefined();
-    expect(tabs.find((t) => t.id === 't3')!.noteType).toBeUndefined();
+    // Unknown-but-well-formed: kept, so the note round-trips to a newer
+    // build untouched.
+    expect(tabs.find((t) => t.id === 't3')!.noteType).toBe('markdown');
+    // Malformed junk (fails the id pattern): reads as the default.
+    expect(tabs.find((t) => t.id === 't4')!.noteType).toBeUndefined();
   });
 
   it('applyExternalMerge rides noteType along with the merged rows', async () => {
@@ -753,6 +761,158 @@ describe('note types (characterization)', () => {
     const tabs = manager.exportForSync().tabs;
     expect(tabs.find((t) => t.id === localRichId)!.noteType).toBe('rich');
     expect(tabs.find((t) => t.id === 'remote-1')!.noteType).toBe('rich');
+  });
+});
+
+describe('non-html content (the typed content model)', () => {
+  const stored = (
+    id: string,
+    html: string,
+    overrides: Partial<StoredNoteTab> = {},
+  ): StoredNoteTab => ({
+    id,
+    name: null,
+    html,
+    createdAt: 0,
+    updatedAt: 0,
+    ...overrides,
+  });
+
+  async function bootedManager(): Promise<TabManager> {
+    const manager = new TabManager($('#note'));
+    await manager.init();
+    return manager;
+  }
+
+  it('stores and reloads a non-html note byte-exact — the sanitizer never touches it', async () => {
+    const json =
+      '{"columns":[{"title":"Todo"},{"title":"Doing"}],"cards":[{"col":0,"text":"a <b>bold</b> item"}]}';
+    saveNotes(
+      {
+        tabs: [stored('board', json, { noteType: 'kanban' as StoredNoteTab['noteType'] })],
+        tombstones: [],
+      },
+      'board',
+      { immediate: true },
+    );
+    await flushAndReboot();
+
+    const manager = await bootedManager();
+    const board = manager.exportForSync().tabs.find((t) => t.id === 'board')!;
+
+    // Byte-exact: angle brackets, quotes and ampersands all survive. The
+    // pre-content-model pipeline sanitized this row on load and silently
+    // rewrote the data.
+    expect(board.html).toBe(json);
+    expect(board.noteType).toBe('kanban');
+  });
+
+  it('shows a read-only card for a note this build cannot edit', async () => {
+    saveNotes(
+      {
+        tabs: [
+          stored('plain', '<p>hello</p>'),
+          stored('board', '{"cards":[]}', { noteType: 'kanban' as StoredNoteTab['noteType'] }),
+        ],
+        tombstones: [],
+      },
+      'board',
+      { immediate: true },
+    );
+    await flushAndReboot();
+
+    const manager = await bootedManager();
+    const surface = document.getElementById('note')!;
+
+    // The card is present and the surface is not editable — no input
+    // event can fire, so nothing can dirty the note from here.
+    expect(surface.getAttribute('contenteditable')).toBe('false');
+    expect(surface.querySelector('.unsupported-note')).not.toBeNull();
+    expect(surface.querySelector('.unsupported-note-title')!.textContent).toContain('kanban');
+
+    // Switching back to an html note restores the editable surface.
+    const plain = manager.exportForSync().tabs.find((t) => t.id === 'plain')!;
+    manager.switchTo(plain.id, false);
+    expect(surface.getAttribute('contenteditable')).toBe('true');
+    expect(surface.querySelector('.unsupported-note')).toBeNull();
+    expect(surface.innerHTML).toBe('<p>hello</p>');
+  });
+
+  it('getActiveText reads the raw content, never the placeholder card', async () => {
+    saveNotes(
+      {
+        tabs: [
+          stored('src', '# Heading\n\nbody text', {
+            noteType: 'markdown' as StoredNoteTab['noteType'],
+          }),
+        ],
+        tombstones: [],
+      },
+      'src',
+      { immediate: true },
+    );
+    await flushAndReboot();
+
+    const manager = await bootedManager();
+    expect(manager.getActiveText()).toBe('# Heading\n\nbody text');
+  });
+
+  it('an unknown-typed note titles from its type label, never its raw content', async () => {
+    // 'markdown' is a NEWER build's type: this build treats it as opaque,
+    // and the strip shows the type id instead of guessing at the content
+    // (the first line of an unknown format could be anything).
+    saveNotes(
+      {
+        tabs: [
+          stored('src', '# Heading\n\nbody text', {
+            noteType: 'markdown' as StoredNoteTab['noteType'],
+          }),
+        ],
+        tombstones: [],
+      },
+      'src',
+      { immediate: true },
+    );
+    await flushAndReboot();
+
+    await bootedManager();
+    const title = document.querySelector('#tabStripTabs .tab-strip-title')!.textContent;
+    expect(title).toBe('markdown');
+  });
+});
+
+describe('snapshots of typed notes', () => {
+  async function bootedManager(): Promise<TabManager> {
+    const manager = new TabManager($('#note'));
+    await manager.init();
+    return manager;
+  }
+
+  it('restoring a non-html snapshot switches the note to that type, byte-exact', async () => {
+    const manager = await bootedManager();
+
+    // The active note is a plain html note; the snapshot holds a board.
+    const board = '{"columns":["Todo","Done"],"cards":[]}';
+    manager.applySnapshotToActive(board, 'kanban');
+
+    const active = manager.getActive()!;
+    expect(active.noteType).toBe('kanban');
+    expect(active.html).toBe(board); // byte-exact, never sanitized
+    // The surface explains itself instead of editing the data.
+    const surface = document.getElementById('note')!;
+    expect(surface.getAttribute('contenteditable')).toBe('false');
+    expect(surface.querySelector('.unsupported-note')).not.toBeNull();
+  });
+
+  it('restoring an html snapshot keeps the editor path', async () => {
+    const manager = await bootedManager();
+
+    manager.applySnapshotToActive('<p>an html snapshot</p>', undefined);
+
+    const active = manager.getActive()!;
+    expect(active.noteType).toBeUndefined();
+    expect(active.html).toContain('an html snapshot');
+    expect(document.getElementById('note')!.innerHTML).toContain('an html snapshot');
   });
 });
 

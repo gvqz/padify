@@ -3065,6 +3065,32 @@ body.dark #note:has(> br:only-child)::before {
   text-underline-offset: 2px;
 }
 
+/* ---- Unsupported note card ----
+   A note whose type this build can't edit (a non-html format, or a type
+   from a newer Padify) renders this read-only explanation instead of a
+   surface. Content stays byte-exact in the model; the card is pure UI. */
+
+#note .unsupported-note {
+  max-width: 520px;
+  margin: 48px auto;
+  padding: 24px 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  text-align: center;
+}
+
+#note .unsupported-note-title {
+  margin: 0 0 8px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+#note .unsupported-note-body {
+  margin: 0;
+  color: var(--fg-subtle);
+}
+
 /* ---- Rich text note vocabulary ----
    Headings, lists, quotes, code blocks and links inside the note surface.
    Sized to sit calmly inside the note's 15px line rhythm; tokens keep dark

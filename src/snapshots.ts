@@ -2,13 +2,22 @@
 import { $ } from './lib/q';
 import { openModal, closeModal } from './ui/behavior/modal';
 import Swal from 'sweetalert2';
-import { getEditorHtml, getEditorText, htmlToText, setEditorHtml } from './tabs';
+import {
+  getActiveNoteForSnapshot,
+  getEditorText,
+  getTabManager,
+  htmlToText,
+  setEditorHtml,
+} from './tabs';
+import { isHtmlContent, noteTypeLabel, type NoteType } from './editor/note-types';
 import { showToast, updateWordCountPill } from './utils';
 
 interface Snapshot {
   id?: number;
   title: string;
   content: string;
+  /** The note's type at capture time; absent = html (the classic note). */
+  noteType?: string;
   preview: string;
   timestamp: number;
   formattedDate: string;
@@ -147,7 +156,14 @@ export class SnapshotsManager {
       return;
     }
 
-    const noteContent = getEditorHtml();
+    // Capture from the note itself, not the editor DOM: a non-html note's
+    // editor shows a placeholder card — its real content lives in the model.
+    const captured = getActiveNoteForSnapshot();
+    if (!captured) {
+      return;
+    }
+    const noteContent = captured.content;
+    const noteType = captured.noteType;
     if (!getEditorText().trim()) {
       Swal.fire({
         toast: true,
@@ -164,13 +180,14 @@ export class SnapshotsManager {
     }
 
     // Generate a title from the first line of the note if not provided
-    const noteTitle = title || this.generateSnapshotTitle(noteContent);
+    const noteTitle = title || this.generateSnapshotTitle(noteContent, noteType);
 
     const timestamp = Date.now();
     const snapshot: Snapshot = {
       title: noteTitle,
       content: noteContent,
-      preview: this.generatePreview(noteContent),
+      ...(noteType ? { noteType } : {}),
+      preview: this.generatePreview(noteContent, noteType),
       timestamp: timestamp,
       formattedDate: this.formatDate(timestamp),
     };
@@ -325,9 +342,15 @@ export class SnapshotsManager {
           return;
         }
 
-        // Restore the content (old snapshots hold plain text — the
-        // editor renders it faithfully, newlines and all).
-        setEditorHtml(snapshot.content);
+        // Restore the content. Html snapshots ride the editor path (old
+        // snapshots hold plain text — the editor renders it faithfully,
+        // newlines and all); every other kind is written to the model
+        // through the manager, because no editor surface exists for it.
+        if (snapshot.noteType && !isHtmlContent(snapshot.noteType as NoteType)) {
+          getTabManager()?.applySnapshotToActive(snapshot.content, snapshot.noteType as NoteType);
+        } else {
+          setEditorHtml(snapshot.content);
+        }
         updateWordCountPill(getEditorText());
 
         Swal.fire({
@@ -485,11 +508,17 @@ export class SnapshotsManager {
   }
 
   // Generate a title from note content
-  generateSnapshotTitle(content: string): string {
-    // Content is stored as HTML — derive the title from the plain text.
-    const firstLine = htmlToText(content)
-      .split('\n')
-      .find((line) => line.trim() !== '');
+  generateSnapshotTitle(content: string, noteType?: string): string {
+    // Html content derives the title from its plain text. Raw formats
+    // title from their type — never from a guessed reading of the content
+    // (the first line of an unknown format could be anything).
+    const firstLine = isHtmlContent(noteType)
+      ? htmlToText(content)
+          .split('\n')
+          .find((line) => line.trim() !== '')
+      : noteType
+        ? noteTypeLabel(noteType as NoteType)
+        : undefined;
     let title = firstLine || 'Untitled Snapshot';
 
     // Limit title length
@@ -501,9 +530,12 @@ export class SnapshotsManager {
   }
 
   // Generate a preview of the note content
-  generatePreview(content: string): string {
-    // Content is stored as HTML — preview the rendered text.
-    let preview = htmlToText(content).replace(/\s+\n/g, '\n').trim();
+  generatePreview(content: string, noteType?: string): string {
+    // Html content previews as its rendered text; raw formats preview as
+    // their raw bytes — an honest window into what the snapshot holds.
+    let preview = (
+      isHtmlContent(noteType) ? htmlToText(content).replace(/\s+\n/g, '\n') : content
+    ).trim();
 
     // Get first 100 characters
     if (preview.length > 100) {
