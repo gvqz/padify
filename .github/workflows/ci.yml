@@ -82,11 +82,11 @@ jobs:
       - name: Install Playwright's Chromium
         run: npx playwright install --with-deps chromium
 
-      # The suite starts its own Vite dev server (playwright.config.ts
-      # webServer, port 5199). Network-dependent features (cloud sync,
-      # music search) are deliberately out of scope — the app degrades
-      # gracefully without the API, and these specs pin the offline core:
-      # editor, tabs, vocabulary, modals, theming.
+      # The suite starts its own servers (playwright.config.ts webServer):
+      # Vite on :5199 plus the real API on :3041, running against a
+      # throwaway SQLite DB in a per-run temp dir. The cloud-api spec
+      # signs up, pushes, and pulls through that API — the wire protocol
+      # is pinned in CI, not just the offline core.
       - name: Run the e2e suite
         run: npm run test:e2e
 
