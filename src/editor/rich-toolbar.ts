@@ -25,16 +25,9 @@ import {
   type ScriptType,
 } from './port';
 import { isRichNote } from './note-types';
-import {
-  currentThemeMode,
-  resolvePaletteColor,
-} from './theme-colors';
-import {
-  mountColorPicker,
-  type ColorPickerEntry,
-  type ColorPickerHandle,
-} from './color-picker';
-import { renderMathPreview } from './math';
+import { currentThemeMode, resolvePaletteColor } from './theme-colors';
+import { mountColorPicker, type ColorPickerEntry, type ColorPickerHandle } from './color-picker';
+import { MATH_CLASS, MATH_ID_ATTR, renderMathPreview } from './math';
 import { mountMathPalette } from './math-palette';
 
 /** href schemes the toolbar offers inline (mirrors the storage sanitizer). */
@@ -306,9 +299,7 @@ export function initRichToolbar(tabManager: TabManager): void {
     // the range at open — the same deal as the link popover — so "select
     // text, then drag a custom color" applies to what was selected.
     if (button.dataset.richMenu === 'color' || button.dataset.richMenu === 'highlight') {
-      parkedRange = selectionIsInNote()
-        ? window.getSelection()!.getRangeAt(0).cloneRange()
-        : null;
+      parkedRange = selectionIsInNote() ? window.getSelection()!.getRangeAt(0).cloneRange() : null;
     }
     panel.hidden = false;
     button.setAttribute('aria-expanded', 'true');
@@ -340,9 +331,7 @@ export function initRichToolbar(tabManager: TabManager): void {
       // The picker marks the swatch matching the caret's ink; highlight has
       // no reliable queryCommandValue dialect, so nothing is marked there.
       const current =
-        kind === 'color'
-          ? safeQuery(() => getEditorPort()?.queryTextColor()) ?? null
-          : null;
+        kind === 'color' ? (safeQuery(() => getEditorPort()?.queryTextColor()) ?? null) : null;
       (kind === 'color' ? textColorPicker : highlightPicker)?.refresh(current);
       return;
     }
@@ -409,8 +398,7 @@ export function initRichToolbar(tabManager: TabManager): void {
     if (step === 0 && key !== 'Home' && key !== 'End') {
       return;
     }
-    const target =
-      key === 'Home' ? 0 : key === 'End' ? items.length - 1 : current + step;
+    const target = key === 'Home' ? 0 : key === 'End' ? items.length - 1 : current + step;
     const next = ((target % items.length) + items.length) % items.length;
     items[next]?.focus();
   };
@@ -444,9 +432,7 @@ export function initRichToolbar(tabManager: TabManager): void {
   const selectionIsInNote = (): boolean => {
     const note = document.getElementById('note');
     const selection = window.getSelection();
-    return (
-      !!note && !!selection && selection.rangeCount > 0 && note.contains(selection.anchorNode)
-    );
+    return !!note && !!selection && selection.rangeCount > 0 && note.contains(selection.anchorNode);
   };
 
   /**
@@ -486,8 +472,7 @@ export function initRichToolbar(tabManager: TabManager): void {
   };
 
   const openLinkPopover = (): void => {
-    parkedRange =
-      selectionIsInNote() ? window.getSelection()!.getRangeAt(0).cloneRange() : null;
+    parkedRange = selectionIsInNote() ? window.getSelection()!.getRangeAt(0).cloneRange() : null;
     const existing = safeQuery(() => getEditorPort()?.queryLinkHref()) ?? '';
     if (existing) {
       // Docs-style chip: the link under the caret with its actions.
@@ -526,8 +511,7 @@ export function initRichToolbar(tabManager: TabManager): void {
    * editor keeps it and typing flows on.
    */
   const openLinkChipAtAnchor = (anchor: HTMLAnchorElement, href: string): void => {
-    parkedRange =
-      selectionIsInNote() ? window.getSelection()!.getRangeAt(0).cloneRange() : null;
+    parkedRange = selectionIsInNote() ? window.getSelection()!.getRangeAt(0).cloneRange() : null;
     floatingAnchor = anchor;
     showChipMode(href);
     elements.popover.hidden = false;
@@ -634,7 +618,11 @@ export function initRichToolbar(tabManager: TabManager): void {
   // runs — the menus behave like Docs' (choose a color mid-selection).
   toolbar.addEventListener('pointerdown', (event) => {
     const target = event.target as HTMLElement;
-    if (target.closest('.rich-btn') || target.closest('.rich-menu-item') || target.closest('.rich-swatch')) {
+    if (
+      target.closest('.rich-btn') ||
+      target.closest('.rich-menu-item') ||
+      target.closest('.rich-swatch')
+    ) {
       event.preventDefault();
     }
   });
@@ -788,7 +776,12 @@ export function initRichToolbar(tabManager: TabManager): void {
     if (!panel) {
       return;
     }
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    if (
+      event.key === 'ArrowDown' ||
+      event.key === 'ArrowUp' ||
+      event.key === 'ArrowLeft' ||
+      event.key === 'ArrowRight'
+    ) {
       event.preventDefault();
       roveMenu(panel, event.key);
     } else if (event.key === 'Home' || event.key === 'End') {
@@ -856,14 +849,16 @@ export function initRichToolbar(tabManager: TabManager): void {
   });
 
   const HIGHLIGHT_PALETTE: ReadonlyArray<ColorPickerEntry> = [
-    ...([
-      ['#fff3bf', 'yellow'],
-      ['#ffe3e3', 'pink'],
-      ['#d3f9d8', 'green'],
-      ['#d0ebff', 'blue'],
-      ['#e5dbff', 'purple'],
-      ['#ffe8cc', 'orange'],
-    ] as ReadonlyArray<readonly [string, string]>).map(([value, label]) => ({
+    ...(
+      [
+        ['#fff3bf', 'yellow'],
+        ['#ffe3e3', 'pink'],
+        ['#d3f9d8', 'green'],
+        ['#d0ebff', 'blue'],
+        ['#e5dbff', 'purple'],
+        ['#ffe8cc', 'orange'],
+      ] as ReadonlyArray<readonly [string, string]>
+    ).map(([value, label]) => ({
       value,
       label,
       swatch: value,
@@ -982,7 +977,13 @@ export function initRichToolbar(tabManager: TabManager): void {
       elements.mathPopover &&
       !elements.mathPopover.hidden &&
       !elements.mathPopover.contains(target) &&
-      !(mathShellHost && mathShellHost.contains(target)) &&
+      // A click on the equation being edited must not close its bubble —
+      // compare the click's shell handle against the open edit target.
+      !(
+        editingMath &&
+        (event.target as HTMLElement).closest?.(`.${MATH_CLASS}`)?.getAttribute(MATH_ID_ATTR) ===
+          editingMath
+      ) &&
       !(event.target as HTMLElement).closest?.('[data-rich-action="math"]')
     ) {
       closeMathPopover();
@@ -1038,9 +1039,8 @@ export function initRichToolbar(tabManager: TabManager): void {
   // Opens from the toolbar button, the context menu (padify:open-equation)
   // or a click on an existing equation (padify:math-click, edit mode).
   // ---------------------------------------------------------------------------
-  let editingMath: HTMLElement | null = null;
-  /** The equation shell whose click opened the bubble (click must not close). */
-  let mathShellHost: HTMLElement | null = null;
+  /** The handle of the equation being edited, when the bubble edits one. */
+  let editingMath: string | null = null;
   /** The palette builds once, on the first open (KaTeX glyphs take a beat). */
   let paletteMounted = false;
 
@@ -1066,13 +1066,12 @@ export function initRichToolbar(tabManager: TabManager): void {
     }
     elements.mathPopover.hidden = true;
     editingMath = null;
-    mathShellHost = null;
     if (refocusEditor) {
       getEditorPort()?.focus();
     }
   };
 
-  const openMathPopover = (existing?: { latex: string; element: HTMLElement }): void => {
+  const openMathPopover = (existing?: { latex: string; id: string }): void => {
     if (!elements.mathPopover || !elements.mathInput || !elements.mathPreview) {
       return;
     }
@@ -1080,8 +1079,7 @@ export function initRichToolbar(tabManager: TabManager): void {
     closeMathPopover();
     closeLinkPopover();
     mountPalette();
-    editingMath = existing?.element ?? null;
-    mathShellHost = existing?.element ?? null;
+    editingMath = existing?.id ?? null;
     elements.mathInput.value = existing?.latex ?? '';
     renderMathPreview(elements.mathPreview, elements.mathInput.value);
     // The button labels the gesture: inserting is new, applying retargets.
@@ -1136,7 +1134,7 @@ export function initRichToolbar(tabManager: TabManager): void {
       return;
     }
     const detail = (event as CustomEvent).detail as {
-      element: HTMLElement;
+      id: string;
       latex: string;
     };
     openMathPopover(detail);

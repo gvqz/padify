@@ -20,18 +20,15 @@ import type {
 } from './port';
 import { rgbStringToHex } from './color-picker';
 import {
+  ensureMathId,
   MATH_CLASS,
+  MATH_ID_ATTR,
   MATH_LATEX_PATTERN,
   buildMathShell,
   renderMathIn,
 } from './math';
 
-const FORMAT_COMMANDS: readonly FormatCommand[] = [
-  'bold',
-  'italic',
-  'underline',
-  'strikeThrough',
-];
+const FORMAT_COMMANDS: readonly FormatCommand[] = ['bold', 'italic', 'underline', 'strikeThrough'];
 
 const BLOCK_TAGS: readonly BlockFormat[] = ['p', 'h1', 'h2', 'h3', 'blockquote', 'pre'];
 
@@ -43,12 +40,7 @@ const INDENTABLE_TAGS = new Set(['DIV', 'P', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'PR
  * list (tables/dividers nest inside <li> otherwise) — the note's block set
  * plus the lists and tables themselves.
  */
-const BLOCK_SIBLING_TAGS = new Set([
-  ...INDENTABLE_TAGS,
-  'UL',
-  'OL',
-  'TABLE',
-]);
+const BLOCK_SIBLING_TAGS = new Set([...INDENTABLE_TAGS, 'UL', 'OL', 'TABLE']);
 
 /** px added per indent step — the classic contenteditable indent depth. */
 const INDENT_STEP_PX = 40;
@@ -138,8 +130,9 @@ export interface ContentEditablePortDeps {
   sanitize: (html: string) => string;
 
   /**
-   * Called after setHtml replaces the content — the TabManager hook that
-   * persists the replacement and refreshes the tab label.
+   * Called after setHtml replaces the content — the commit hook. The
+   * TabManager wiring persists the replacement and refreshes the tab
+   * label. renderHtml never fires it: painting a surface is not an edit.
    */
   onDocumentReplaced?: () => void;
 }
@@ -202,7 +195,9 @@ export class ContentEditablePort implements EditorPort {
       if (shell instanceof HTMLElement && element.contains(shell)) {
         document.dispatchEvent(
           new CustomEvent('padify:math-click', {
-            detail: { element: shell, latex: shell.getAttribute('data-latex') ?? '' },
+            // An id handle, never the element — the toolbar must stay
+            // engine-agnostic (see MATH_ID_ATTR in math.ts).
+            detail: { id: ensureMathId(shell), latex: shell.getAttribute('data-latex') ?? '' },
           }),
         );
       }
@@ -248,6 +243,13 @@ export class ContentEditablePort implements EditorPort {
   }
 
   setHtml(html: string): void {
+    this.renderHtml(html);
+    // The commit half: the TabManager hook persists the replacement and
+    // refreshes the tab label.
+    this.deps.onDocumentReplaced?.();
+  }
+
+  renderHtml(html: string): void {
     this.element.innerHTML = this.deps.sanitize(html);
     // Stored pre-fix notes can carry Chrome's bare `<br>` as their "empty"
     // state — collapse it on the way in so the caret never sits one line
@@ -255,7 +257,6 @@ export class ContentEditablePort implements EditorPort {
     normalizeEmptyEditorSurface(this.element);
     // Math shells arrive empty from storage — render them into view.
     renderMathIn(this.element);
-    this.deps.onDocumentReplaced?.();
   }
 
   getText(): string {
@@ -533,7 +534,13 @@ export class ContentEditablePort implements EditorPort {
     }
     // insertHTML (not a manual range.insertNode) so the run stays on
     // Chrome's native undo stack — one Ctrl+Z removes it, style included.
-    if (!document.execCommand('insertHTML', false, `<span style="${styleAttr}">${ZERO_WIDTH_SPACE}</span>`)) {
+    if (
+      !document.execCommand(
+        'insertHTML',
+        false,
+        `<span style="${styleAttr}">${ZERO_WIDTH_SPACE}</span>`,
+      )
+    ) {
       return false;
     }
     // Chrome leaves the caret right after the inserted run; move it inside,
@@ -559,7 +566,7 @@ export class ContentEditablePort implements EditorPort {
     const anchor = selection.anchorNode;
     const candidates: (Node | null)[] = [
       anchor,
-      anchor ? anchor.childNodes[selection.anchorOffset - 1] ?? null : null,
+      anchor ? (anchor.childNodes[selection.anchorOffset - 1] ?? null) : null,
     ];
     for (const candidate of candidates) {
       if (
@@ -754,7 +761,7 @@ export class ContentEditablePort implements EditorPort {
     return true;
   }
 
-  queryMathAtCaret(): { latex: string; element: HTMLElement } | null {
+  queryMathAtCaret(): { latex: string; id: string } | null {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
       return null;
@@ -765,22 +772,25 @@ export class ContentEditablePort implements EditorPort {
     if (!(shell instanceof HTMLElement) || !this.element.contains(shell)) {
       return null;
     }
-    return { latex: shell.getAttribute('data-latex') ?? '', element: shell };
+    return { latex: shell.getAttribute('data-latex') ?? '', id: ensureMathId(shell) };
   }
 
-  updateMath(element: HTMLElement, latex: string): boolean {
+  updateMath(id: string, latex: string): boolean {
     const value = latex.trim();
-    if (
-      value === '' ||
-      !MATH_LATEX_PATTERN.test(value) ||
-      !element.classList.contains(MATH_CLASS) ||
-      !this.element.contains(element)
-    ) {
+    // Handles are generated (m<digits>) — anything else is not one of
+    // ours, and rejecting by pattern keeps the selector injection-free.
+    if (value === '' || !MATH_LATEX_PATTERN.test(value) || !/^m\d+$/.test(id)) {
       return false;
     }
-    element.setAttribute('data-latex', value);
-    element.removeAttribute('data-rendered');
-    renderMathIn(element);
+    const shell = this.element.querySelector<HTMLElement>(
+      `.${MATH_CLASS}[${MATH_ID_ATTR}="${id}"]`,
+    );
+    if (!shell) {
+      return false;
+    }
+    shell.setAttribute('data-latex', value);
+    shell.removeAttribute('data-rendered');
+    renderMathIn(shell);
     // Attribute mutations don't fire input events — announce manually so
     // autosave and the save indicator follow.
     this.announceEdit();
@@ -1047,11 +1057,7 @@ export class ContentEditablePort implements EditorPort {
   }
 
   /** Every same-script ancestor of a text node, nearest last. */
-  private collectScriptAncestors(
-    text: Text,
-    tagName: 'sup' | 'sub',
-    into: Set<HTMLElement>,
-  ): void {
+  private collectScriptAncestors(text: Text, tagName: 'sup' | 'sub', into: Set<HTMLElement>): void {
     let el = text.parentElement;
     while (el && el !== this.element) {
       if (el.tagName.toLowerCase() === tagName) {
@@ -1063,9 +1069,7 @@ export class ContentEditablePort implements EditorPort {
 
   /** Unwraps a set of nested wrappers without detaching the inner ones. */
   private unwrapOutermostFirst(wrappers: Set<HTMLElement>): void {
-    const ordered = [...wrappers].sort((a, b) =>
-      a.contains(b) ? -1 : b.contains(a) ? 1 : 0,
-    );
+    const ordered = [...wrappers].sort((a, b) => (a.contains(b) ? -1 : b.contains(a) ? 1 : 0));
     ordered.forEach((el) => this.unwrapElement(el));
   }
 
@@ -1308,7 +1312,10 @@ export class ContentEditablePort implements EditorPort {
     const targetRow = context.rowIndex;
     const targetCol = context.colIndex + step;
     // Row wrap: past the last/first cell of a row, move to the next/prev row.
-    const clampedRow = Math.min(Math.max(targetRow + Math.floor(targetCol / context.cols), 0), rows.length - 1);
+    const clampedRow = Math.min(
+      Math.max(targetRow + Math.floor(targetCol / context.cols), 0),
+      rows.length - 1,
+    );
     const clampedCol = ((targetCol % context.cols) + context.cols) % context.cols;
     if (clampedRow === context.rowIndex && clampedCol === context.colIndex) {
       return false;
@@ -1774,8 +1781,7 @@ export class ContentEditablePort implements EditorPort {
         return kids
           .slice(from, to + 1)
           .filter(
-            (el): el is HTMLElement =>
-              el instanceof HTMLElement && INDENTABLE_TAGS.has(el.tagName),
+            (el): el is HTMLElement => el instanceof HTMLElement && INDENTABLE_TAGS.has(el.tagName),
           );
       }
     }

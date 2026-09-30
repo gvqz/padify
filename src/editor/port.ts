@@ -49,8 +49,24 @@ export interface EditorPort {
   /** The note's HTML in the stored formatting subset. */
   getHtml(): string;
 
-  /** Replaces the whole note (sanitized on entry) and persists it. */
+  /**
+   * Replaces the whole note (sanitized on entry) and persists it.
+   * The COMMIT half of the pair — external replacements (snapshot
+   * restore, editor-facing features) come through here so the change
+   * lands in storage exactly once.
+   */
   setHtml(html: string): void;
+
+  /**
+   * Replaces the whole note for DISPLAY ONLY (sanitized on entry, math
+   * rendered, empty state collapsed) — the RENDER half of the pair.
+   * Opening a note uses this: painting the surface must never count as
+   * an edit, so nothing persists, no autosave is announced, and the
+   * caller stays in charge of when the note is written. A replacement
+   * engine implements this as “put the document on screen”; the undo
+   * history of a freshly opened note starts empty either way.
+   */
+  renderHtml(html: string): void;
 
   /** Plain text of the note, `\n`-separated, nbsp normalized to spaces. */
   getText(): string;
@@ -160,15 +176,18 @@ export interface EditorPort {
 
   /**
    * The equation the caret sits in (nearest padify-math shell), or null.
-   * Powers the equation bubble's edit mode and the toolbar's state.
+   * Powers the equation bubble's edit mode and the toolbar's state. The
+   * id is an engine-side handle (see math.ts) — never a DOM element — so
+   * any engine, DOM-backed or document-modeled, can answer it.
    */
-  queryMathAtCaret(): { latex: string; element: HTMLElement } | null;
+  queryMathAtCaret(): { latex: string; id: string } | null;
 
   /**
-   * Re-points an existing equation to new LaTeX and re-renders it.
-   * Returns false when the element is not a math shell in this note.
+   * Re-points the equation with this handle to new LaTeX and re-renders
+   * it. Returns false when no equation with that handle sits in this
+   * note.
    */
-  updateMath(element: HTMLElement, latex: string): boolean;
+  updateMath(id: string, latex: string): boolean;
 
   undo(): boolean;
   redo(): boolean;

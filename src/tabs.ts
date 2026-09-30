@@ -870,16 +870,19 @@ export class TabManager {
       surface.setAttribute('contenteditable', 'true');
     }
 
-    this.editor.html(active ? active.html : '');
-    // Stored pre-fix notes can carry a bare `<br>` as their "empty" state —
-    // collapse it for display (visual only, opening never writes; without
-    // this the caret blinks one line below the placeholder until the first
-    // edit). The port method has no persistence side effects.
-    getEditorPort()?.normalizeEmptySurface();
-    // Stored math shells arrive empty — render them into view (the port's
-    // setHtml would also work, but its document-replaced hook persists,
-    // and opening a note must not write on its own).
-    renderMathIn(this.editor.get(0) as HTMLElement);
+    const port = getEditorPort();
+    if (port) {
+      // The port's display-only entry: sanitized, math rendered, empty
+      // state collapsed — and nothing persists, because opening a note
+      // must not write on its own.
+      port.renderHtml(active ? active.html : '');
+    } else {
+      // Bare fallback (tests, pre-boot): the same paint, by hand. The
+      // empty-state normalization is a port capability — without a port
+      // it is skipped, exactly like the pre-split code did.
+      this.editor.html(active ? active.html : '');
+      renderMathIn(this.editor.get(0) as HTMLElement);
+    }
     this.editor.scrollTop(0);
     // A note whose stored colors were written under the other theme is
     // re-inked for display right away (visual only — storage catches up on

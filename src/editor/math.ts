@@ -21,6 +21,30 @@ import 'katex/dist/katex.min.css';
 
 export const MATH_CLASS = 'padify-math';
 
+/**
+ * Session-stable handle for a rendered equation shell — the id the
+ * EditorPort's math API speaks (queryMathAtCaret / updateMath / the
+ * padify:math-click event). Deliberately NOT part of the stored format:
+ * getHtml strips it with the rendered markup, so ids are per-render
+ * handles, exactly like the KaTeX output itself. Engines that keep a
+ * document model answer with their own node ids — the contract is “a
+ * string that updateMath understands”, never a DOM element.
+ */
+export const MATH_ID_ATTR = 'data-math-id';
+
+let mathIdCounter = 0;
+
+/** The shell's handle — assigned on first ask, stable for this render. */
+export function ensureMathId(shell: HTMLElement): string {
+  const existing = shell.getAttribute(MATH_ID_ATTR);
+  if (existing) {
+    return existing;
+  }
+  const id = `m${(mathIdCounter += 1)}`;
+  shell.setAttribute(MATH_ID_ATTR, id);
+  return id;
+}
+
 /** Stored LaTeX is capped — an editor needs ~10, a crafted payload less. */
 export const MATH_LATEX_PATTERN = /^[\s\S]{1,2000}$/;
 
@@ -65,29 +89,27 @@ export function buildMathShell(latex: string): string {
  * renderToString stays — same output, fewer moving parts.
  */
 export function renderMathIn(root: HTMLElement): void {
-  root
-    .querySelectorAll<HTMLElement>(`.${MATH_CLASS}:not([data-rendered])`)
-    .forEach((span) => {
-      span.setAttribute('contenteditable', 'false');
-      span.innerHTML = '';
-      const latex = span.getAttribute('data-latex') ?? '';
-      if (MATH_FORBIDDEN_MACROS.test(latex)) {
-        // Refuse to render LaTeX containing dangerous macros. Falls back to
-        // the source text so the user still sees what they typed — and so a
-        // malicious note can't smuggle a `javascript:` link through \href.
-        span.textContent = latex;
-        span.setAttribute('data-rendered', '1');
-        return;
-      }
-      try {
-        span.innerHTML = katex.renderToString(latex, { throwOnError: false });
-      } catch {
-        // katex with throwOnError:false shouldn't throw, but never let a
-        // rendering quirk take the editor down: show the source instead.
-        span.textContent = latex;
-      }
+  root.querySelectorAll<HTMLElement>(`.${MATH_CLASS}:not([data-rendered])`).forEach((span) => {
+    span.setAttribute('contenteditable', 'false');
+    span.innerHTML = '';
+    const latex = span.getAttribute('data-latex') ?? '';
+    if (MATH_FORBIDDEN_MACROS.test(latex)) {
+      // Refuse to render LaTeX containing dangerous macros. Falls back to
+      // the source text so the user still sees what they typed — and so a
+      // malicious note can't smuggle a `javascript:` link through \href.
+      span.textContent = latex;
       span.setAttribute('data-rendered', '1');
-    });
+      return;
+    }
+    try {
+      span.innerHTML = katex.renderToString(latex, { throwOnError: false });
+    } catch {
+      // katex with throwOnError:false shouldn't throw, but never let a
+      // rendering quirk take the editor down: show the source instead.
+      span.textContent = latex;
+    }
+    span.setAttribute('data-rendered', '1');
+  });
 }
 
 /** Live-renders LaTeX into a preview element (throws never). */
