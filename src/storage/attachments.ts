@@ -19,7 +19,7 @@
  * limitation at capture time, not at sync time.
  */
 
-import { ATTACHMENTS_STORE, readAll, storageBackend, writeAll } from './idb';
+import { ATTACHMENTS_STORE, readAll, readOne, storageBackend, writeAll } from './idb';
 
 /** The meta everyone sees; the bytes never leave this module's callers. */
 export interface AttachmentMeta {
@@ -78,15 +78,16 @@ export async function putAttachment(
 
 /** The stored bytes as a Blob, or null when unknown or degraded. */
 export async function getAttachmentBlob(id: string): Promise<Blob | null> {
-  const rows = await readAll<AttachmentRecord>(ATTACHMENTS_STORE);
-  const record = rows.find((row) => row.id === id);
+  // Point lookup: records carry whole ArrayBuffers, so a store-wide scan
+  // here would deserialize every attachment's bytes to play one.
+  const record = await readOne<AttachmentRecord>(ATTACHMENTS_STORE, id);
   return record ? new Blob([record.bytes], { type: record.mime }) : null;
 }
 
 /** The stored bytes, or null — for the upload flush (no Blob needed). */
 export async function getAttachmentBytes(id: string): Promise<ArrayBuffer | null> {
-  const rows = await readAll<AttachmentRecord>(ATTACHMENTS_STORE);
-  return rows.find((row) => row.id === id)?.bytes ?? null;
+  const record = await readOne<AttachmentRecord>(ATTACHMENTS_STORE, id);
+  return record?.bytes ?? null;
 }
 
 /** Every attachment's meta, newest first, bytes stripped. */
@@ -103,8 +104,7 @@ export async function listPendingAttachments(): Promise<AttachmentMeta[]> {
 
 /** Marks an attachment as safely on the server. */
 export async function markAttachmentUploaded(id: string): Promise<void> {
-  const rows = await readAll<AttachmentRecord>(ATTACHMENTS_STORE);
-  const record = rows.find((row) => row.id === id);
+  const record = await readOne<AttachmentRecord>(ATTACHMENTS_STORE, id);
   if (!record || record.uploaded === 1) return;
   record.uploaded = 1;
   await writeAll(ATTACHMENTS_STORE, [record], []);
@@ -127,6 +127,8 @@ export async function clearAttachments(): Promise<void> {
 
 /** The meta of one record, or null. */
 export async function getAttachmentMeta(id: string): Promise<AttachmentMeta | null> {
-  const metas = await listAttachmentMetas();
-  return metas.find((meta) => meta.id === id) ?? null;
+  const record = await readOne<AttachmentRecord>(ATTACHMENTS_STORE, id);
+  if (!record) return null;
+  const { bytes: _bytes, ...meta } = record;
+  return meta;
 }

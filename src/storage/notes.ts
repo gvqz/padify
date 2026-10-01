@@ -27,6 +27,7 @@
 
 import { NOTES_STORE, storageBackend, writeAll } from './idb';
 import { stateSet } from './kv';
+import { reportSaveFailure, reportSaveRecovered } from './persistence';
 import { normalizeNoteType, type NoteType } from '../editor/note-types';
 
 /** A live note, structurally identical to NoteTab in tabs.ts. */
@@ -319,13 +320,24 @@ export function saveNotes(
   const { upserts, deletes } = diffAgainstLastWritten(snapshot);
 
   if (upserts.length > 0 || deletes.length > 0) {
-    const write = writeAll(NOTES_STORE, upserts, deletes).catch((error) => {
-      console.warn('[storage] notes save failed — retrying on the next change', error);
-      // Drop the affected entries from the diff index so the next save
-      // re-writes them.
-      upserts.forEach((record) => lastWritten.delete(record.id));
-      deletes.forEach((id) => lastWritten.delete(id));
-    });
+    const write = writeAll(NOTES_STORE, upserts, deletes)
+      .then(() => {
+        // The write landed: any earlier failure is over. The save
+        // indicator hears the transition and stops warning.
+        reportSaveRecovered();
+      })
+      .catch((error) => {
+        console.warn('[storage] notes save failed — retrying on the next change', error);
+        // A failed save must not stay a console-only fact: the
+        // persistence layer turns it into the persistent warning the
+        // save indicator shows (quota causes get the storage-full
+        // wording and a re-ask for navigator.storage.persist()).
+        reportSaveFailure(error);
+        // Drop the affected entries from the diff index so the next save
+        // re-writes them.
+        upserts.forEach((record) => lastWritten.delete(record.id));
+        deletes.forEach((id) => lastWritten.delete(id));
+      });
     trackWrite(write);
   }
 

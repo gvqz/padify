@@ -47,6 +47,8 @@ import { initThemeController } from './theme-controller';
 import { initEditorPreferences, clearTabIndentation } from './editor-preferences';
 import { setBreakRemindersEnabled, trackWritingActivity } from './break-reminder';
 import { registerServiceWorker, initInstallPrompt } from './install-pwa';
+import { requestPersistentStorage, checkQuotaOnce } from './storage/persistence';
+import { showToast } from './utils';
 
 // The editor is a contenteditable <div id="note"> — see tabs.ts for the tab
 // model and the storage format. Text readers go through getEditorText().
@@ -284,19 +286,19 @@ export async function initApp(): Promise<void> {
           : lines.map((line) => tabCharacter + line)
       ).join('\n');
 
-      // Replace through a text node, then re-select it so
-      // Tab/Shift+Tab can be applied repeatedly.
-      const range = selection.getRangeAt(0);
-      range.deleteContents();
-      const inserted = document.createTextNode(replacement);
-      range.insertNode(inserted);
-
-      const reselect = document.createRange();
-      reselect.setStart(inserted, 0);
-      reselect.setEnd(inserted, replacement.length);
-      selection.removeAllRanges();
-      selection.addRange(reselect);
-      notepad.note.trigger('input');
+      // The replacement rides the editor port, like every structured
+      // edit: one command, one history group — undo removes the whole
+      // indent, and the model/serialize/paint pipeline stays canonical.
+      // (The old raw-DOM range surgery here bypassed history entirely:
+      // Ctrl+Z jumped over the indent as if it never happened.)
+      // selectInserted keeps the block selected so Tab/Shift+Tab can be
+      // applied repeatedly.
+      const port = getEditorPort();
+      if (port) {
+        port.insertText(replacement, { selectInserted: true });
+        return;
+      }
+      document.execCommand('insertText', false, replacement);
     }
   });
 
@@ -474,4 +476,28 @@ export async function initApp(): Promise<void> {
 
   registerServiceWorker();
   initInstallPrompt();
+  initDurableStorage();
+}
+
+/**
+ * Durable storage: ask for navigator.storage.persist() at boot and once
+ * more after the first real interaction (the grant heuristics favour
+ * engaged installs), and warn once when the quota estimate says the app
+ * is nearly out of room. Silent when the browser cannot answer — the
+ * fallback backend changes nothing about this wiring.
+ */
+function initDurableStorage(): void {
+  void requestPersistentStorage().then(async () => {
+    const message = await checkQuotaOnce();
+    if (message) {
+      showToast(message);
+    }
+  });
+
+  const reask = (): void => {
+    window.removeEventListener('pointerdown', reask);
+    void requestPersistentStorage();
+  };
+  window.addEventListener('keydown', reask, { once: true });
+  window.addEventListener('pointerdown', reask, { once: true });
 }

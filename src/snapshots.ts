@@ -23,6 +23,58 @@ interface Snapshot {
   formattedDate: string;
 }
 
+/**
+ * Snapshots are safety copies, not an archive: every Ctrl+U, every
+ * delete-safety capture adds one, and an unbounded store grows forever on
+ * a long-lived install. The cap keeps the oldest history — the newest
+ * MAX_SNAPSHOTS entries stay, older ones go (the timestamp index's
+ * ascending order is the deletion order).
+ */
+export const MAX_SNAPSHOTS = 200;
+
+/**
+ * Deletes the oldest snapshots beyond the cap. Resolves with the number
+ * pruned once the transaction commits; 0 when under the cap. Exported so
+ * the cap is testable against a raw database without the manager's DOM
+ * dependencies.
+ */
+export function pruneSnapshots(
+  db: IDBDatabase,
+  storeName: string,
+  cap: number = MAX_SNAPSHOTS,
+): Promise<number> {
+  return new Promise((resolve, reject) => {
+    let excess = 0;
+    const transaction = db.transaction([storeName], 'readwrite');
+    const store = transaction.objectStore(storeName);
+    const countRequest = store.count();
+    countRequest.onsuccess = () => {
+      excess = Math.max(0, countRequest.result - cap);
+      if (excess === 0) {
+        return; // under the cap — nothing to delete in this transaction
+      }
+      // Oldest first: ascending timestamp order is exactly the eviction
+      // order a capped history wants.
+      const cursorRequest = store.index('timestamp').openCursor();
+      let deleted = 0;
+      cursorRequest.onsuccess = () => {
+        const cursor = cursorRequest.result;
+        if (!cursor || deleted >= excess) {
+          return;
+        }
+        cursor.delete();
+        deleted += 1;
+        cursor.continue();
+      };
+      cursorRequest.onerror = () => reject(cursorRequest.error);
+    };
+    countRequest.onerror = () => reject(countRequest.error);
+    transaction.oncomplete = () => resolve(excess);
+    transaction.onabort = () => reject(transaction.error);
+    transaction.onerror = () => reject(transaction.error);
+  });
+}
+
 export class SnapshotsManager {
   dbName: string;
   storeName: string;
@@ -194,6 +246,9 @@ export class SnapshotsManager {
 
     const transaction = this.db.transaction([this.storeName], 'readwrite');
     const store = transaction.objectStore(this.storeName);
+    // The prune call below needs a stable reference after this callback
+    // returns — `this.db` narrowing does not survive into event callbacks.
+    const database = this.db;
 
     const request = store.add(snapshot);
 
@@ -209,6 +264,19 @@ export class SnapshotsManager {
           popup: 'swal-toast-bottom-offset',
         },
       });
+
+      // A store that only ever grows is a slow leak: retire the oldest
+      // snapshots beyond the cap so safety copies stay bounded.
+      pruneSnapshots(database, this.storeName)
+        .then((pruned) => {
+          if (pruned > 0) {
+            this.loadSnapshots();
+            this.updateSnapshotsCount();
+          }
+        })
+        .catch((error) => {
+          console.warn('[snapshots] prune failed — the cap will retry on the next snapshot', error);
+        });
 
       this.loadSnapshots();
       this.updateSnapshotsCount();
