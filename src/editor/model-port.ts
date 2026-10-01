@@ -161,6 +161,18 @@ export class ModelPort implements EditorPort {
     element.addEventListener('input', (event) => this.handleInput(event as InputEvent));
     element.addEventListener('compositionstart', () => {
       this.composing = true;
+      // Snapshot BEFORE the first composition text lands, joining the
+      // open typing burst or opening one: the whole composed phrase is
+      // one undo step, and the state to restore on undo is the
+      // pre-composition state. Without this the composition's final
+      // text arrived after every group boundary — composed input was
+      // undo-bypassing, exactly the class of edit the history module
+      // claims to have eliminated.
+      if (!this.typingGroupOpen) {
+        this.typingGroupOpen = true;
+        this.absorb();
+        this.history.openGroup(serialize(this.model));
+      }
     });
     element.addEventListener('compositionend', () => {
       this.composing = false;
@@ -433,11 +445,21 @@ export class ModelPort implements EditorPort {
   // Formatting.
   // -------------------------------------------------------------------------
 
-  insertText(text: string): boolean {
+  insertText(text: string, options?: { selectInserted?: boolean }): boolean {
     if (text === '') {
       return false;
     }
-    return this.command((model, coverage) => insertPlainText(model, coverage, text));
+    return this.command((model, coverage) => {
+      const result = insertPlainText(model, coverage, text);
+      if (result.changed && options?.selectInserted) {
+        // The replacement spans exactly [start, start + text.length) in
+        // stream offsets — re-selecting it lets the caller repeat the
+        // gesture (Tab/Shift+Tab) over the same lines. The paint→placement
+        // machinery maps the offsets onto the repainted surface.
+        return { ...result, intent: { range: [coverage[0], coverage[0] + text.length] } };
+      }
+      return result;
+    });
   }
 
   applyFormat(command: EditorCommand): boolean {

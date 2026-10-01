@@ -455,3 +455,80 @@ describe('reading the note', () => {
     expect(committed).toBe('committed <b>content</b>');
   });
 });
+
+describe('insertText with selectInserted — the multi-line indent gesture', () => {
+  it('replaces the selection, keeps the replacement selected, undoes whole', () => {
+    const { port, surface } = makePort();
+    port.renderHtml('one\ntwo');
+    // "one\ntwo" renders as a single text node (pre-wrap renders the \n).
+    selectRange(surface, 0, 7);
+    const replacement = '\tone\n\ttwo';
+
+    expect(port.insertText(replacement, { selectInserted: true })).toBe(true);
+
+    // The port owns the change: the surface holds the replacement …
+    expect(port.getText()).toBe(replacement);
+    // … and it stays SELECTED, so a repeated Tab/Shift+Tab applies to the
+    // same lines.
+    const selection = window.getSelection();
+    expect(selection?.toString()).toBe(replacement);
+
+    // One command, one undo step: the whole indent vanishes in one press.
+    expect(port.undo()).toBe(true);
+    expect(port.getText()).toBe('one\ntwo');
+  });
+
+  it('a plain insertText still collapses the caret at the end', () => {
+    const { port, surface } = makePort();
+    port.renderHtml('hello');
+    selectRange(surface, 0, 5);
+    port.insertText('world');
+    const selection = window.getSelection();
+    expect(selection?.isCollapsed).toBe(true);
+  });
+});
+
+describe('IME composition — composed input joins the history', () => {
+  it('a composition is one undo step (undo restores the pre-composition state)', () => {
+    const { port, surface } = makePort();
+    port.renderHtml('');
+    caretAt(surface, 0);
+
+    // The browser's IME sequence: compositionstart, the composed text
+    // lands natively (insertCompositionText), compositionend.
+    surface.dispatchEvent(new Event('compositionstart', { bubbles: true }));
+    // No beforeinput/input of the engine's own pipeline fires mid-IME
+    // (the guards return early), the text arrives by native edit:
+    surface.append('こんにちは');
+    surface.dispatchEvent(new Event('compositionend', { bubbles: true }));
+
+    expect(port.getText()).toBe('こんにちは');
+
+    // THE regression: undo must remove the composed phrase — before the
+    // fix, no group ever opened and undo walked straight past it.
+    expect(port.undo()).toBe(true);
+    expect(port.getText()).toBe('');
+  });
+
+  it('typing before the composition shares its burst (one undo for the phrase)', () => {
+    const { port, surface } = makePort();
+    port.renderHtml('');
+    caretAt(surface, 0);
+
+    nativeEdit(
+      surface,
+      'insertText',
+      () => {
+        surface.append('ka');
+      },
+      'ka',
+    );
+    surface.dispatchEvent(new Event('compositionstart', { bubbles: true }));
+    surface.append('nn');
+    surface.dispatchEvent(new Event('compositionend', { bubbles: true }));
+
+    // "ka" + composition = the one burst the group opened before "ka".
+    expect(port.undo()).toBe(true);
+    expect(port.getText()).toBe('');
+  });
+});

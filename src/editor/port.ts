@@ -105,8 +105,13 @@ export interface EditorPort {
   /**
    * Inserts plain text at the caret, replacing the selection (the voice,
    * unicode and tab-indentation path). Returns false if unsupported.
+   *
+   * With `selectInserted` the replacement stays selected after the edit
+   * instead of leaving the caret at its end — the multi-line
+   * indent/outdent gesture relies on it so Tab/Shift+Tab can be applied
+   * repeatedly over the same block.
    */
-  insertText(text: string): boolean;
+  insertText(text: string, options?: { selectInserted?: boolean }): boolean;
 
   /**
    * Applies/toggles a formatting command over the current selection.
