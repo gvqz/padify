@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { batchRowsForPush, type NoteRow } from './sync';
+import { batchRowsForPush, rowUnsyncable, type NoteRow } from './sync';
 
 // The push queue must drain even when one note can never leave: the server
 // caps request bodies at 2 MB, so a giant note has to fail alone instead of
@@ -62,5 +62,49 @@ describe('batchRowsForPush', () => {
     const batches = batchRowsForPush([a, b]);
 
     expect(batches.map((batch) => batch.map((entry) => entry.id))).toEqual([['a'], ['b']]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// rowUnsyncable — the rows the server will always refuse, measured the way
+// it measures: in UTF-8 bytes (its Content-Length gate) and in UTF-16
+// characters (its readJson text.length gate). Such a row is filtered out of
+// the push instead of 413-ing every cycle forever and drowning the queue's
+// error state.
+// ---------------------------------------------------------------------------
+
+describe('rowUnsyncable', () => {
+  it('a normal row is syncable', () => {
+    expect(rowUnsyncable(row('a', 100_000))).toBe(false);
+  });
+
+  it('a row under both caps with margin stays syncable', () => {
+    // 1.9 M characters = 1.9 M UTF-8 bytes: near the ceiling, still inside.
+    expect(rowUnsyncable(row('a', 1_900_000))).toBe(false);
+  });
+
+  it('an ASCII row past the cap can never leave', () => {
+    // 2.5 M characters = 2.5 M UTF-8 bytes — past the server's 2 MB cap.
+    expect(rowUnsyncable(row('a', 2_500_000))).toBe(true);
+  });
+
+  it('a CJK row over the byte cap is caught even though its character count is fine', () => {
+    // ~700 K CJK characters are ~2.1 M UTF-8 bytes but only ~700 K
+    // characters: character-counting alone would call this syncable and
+    // ship a guaranteed 413 — the byte measure is the one that tells the
+    // truth. (This is the same trap the batcher's byte-counting fixed.)
+    const cjk = { ...row('a', 10), html: '語'.repeat(700_000) };
+
+    expect(rowUnsyncable(cjk)).toBe(true);
+  });
+
+  it('an oversized row is still batched by the batcher — the filter is upstream', () => {
+    // The two contracts compose: the batcher isolates big rows, the
+    // filter removes impossible ones before any body is built.
+    const batches = batchRowsForPush([row('giant', 3_000_000), row('small', 10)]);
+
+    expect(batches.map((batch) => batch.map((entry) => entry.id))).toEqual([['giant'], ['small']]);
+    expect(rowUnsyncable(batches[0][0])).toBe(true);
+    expect(rowUnsyncable(batches[1][0])).toBe(false);
   });
 });

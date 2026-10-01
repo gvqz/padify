@@ -6,9 +6,12 @@
  *    src/storage/) stays the source of truth for the UI; the cloud is a
  *    durable backup + transport between devices. Every feature works
  *    exactly as before while signed out.
- *  • Last-write-wins per note, compared by the client `updatedAt` clock that
- *    padify already stamps on every edit. Conflicts resolve to the most
- *    recent edit; snapshots (local, unsynced) still hold every prior version.
+ *  • Conflicts never discard words. The merge is still last-write-wins
+ *    per note, but a version that would be silently overwritten — a dirty
+ *    local tab losing to a newer remote row, an unpushed edit losing to
+ *    a tombstone, a clean local meeting the read-max race's equal-seq
+ *    twin — is first copied to a fresh "conflicted copy" tab that rides
+ *    the next push, so the losing words survive on every device.
  *  • Deletions are tombstoned (row kept with deleted=true) so closing a tab
  *    on one device removes it everywhere.
  *  • Every cloud failure is non-fatal: the UI degrades to an error/offline
@@ -31,7 +34,13 @@ import type { NoteTab, TabManager, TabTombstone, TabsSyncPayload } from '../tabs
 export type CloudStatus =
   | { state: 'unconfigured' }
   | { state: 'signed-out' }
-  | { state: 'signed-in'; email: string; sync: SyncPhase; lastSyncAt: number | null }
+  | {
+      state: 'signed-in';
+      email: string;
+      sync: SyncPhase;
+      lastSyncAt: number | null;
+      warning?: string;
+    }
   | { state: 'error'; email: string; message: string; retryable: boolean };
 
 export type SyncPhase = 'idle' | 'syncing' | 'pending' | 'offline';
@@ -129,6 +138,15 @@ let syncing = false;
 let syncQueued = false;
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 let syncTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * The stuck-note warning carried by every signed-in status — null when
+ * every queued note fits what the server accepts. Set by the push step
+ * when a note is too large to ever leave, cleared the moment the queue
+ * holds no such note (it was shortened, or its tab left as a small
+ * tombstone). See rowUnsyncable.
+ */
+let syncWarning: string | null = null;
 
 /** Local tab ids that changed and still need a push. */
 const pendingPush = new Set<string>();
@@ -275,6 +293,7 @@ function syncingStatus(): CloudStatus {
     email: currentUserEmail ?? '',
     sync: 'syncing',
     lastSyncAt,
+    ...(syncWarning ? { warning: syncWarning } : {}),
   };
 }
 
@@ -284,6 +303,7 @@ function signedInStatus(phase: SyncPhase): CloudStatus {
     email: currentUserEmail ?? '',
     sync: phase,
     lastSyncAt,
+    ...(syncWarning ? { warning: syncWarning } : {}),
   };
 }
 
@@ -291,6 +311,7 @@ function handleSignedOut(): void {
   currentUserId = null;
   currentUserEmail = null;
   lastSyncAt = null;
+  syncWarning = null;
   pendingPush.clear();
   stopSyncTimer();
   setStatus({ state: 'signed-out' });
@@ -443,6 +464,13 @@ async function runSyncOnce(): Promise<void> {
 
   const userId = currentUserId;
 
+  // An empty queue means nothing is stuck: clear any size warning that
+  // no longer has a note behind it (the oversized note was shortened, or
+  // its tab — now a small tombstone — finally left the device).
+  if (pendingPush.size === 0) {
+    syncWarning = null;
+  }
+
   // 1. Push whatever is pending (a no-op with an empty queue). Rows go out
   //    in body-capped batches (see batchRowsForPush) so one oversized note
   //    can never hold the rest of the queue hostage — it fails alone.
@@ -464,8 +492,30 @@ async function runSyncOnce(): Promise<void> {
     });
 
     const pushed: string[] = [];
+
+    // Rows the server would refuse on size never leave the device — but
+    // they stay queued (a stuck id costs one stringify per cycle and ships
+    // the moment the note is trimmed under the cap), the rest of the queue
+    // flows on without them, and the failure stops being silent: the
+    // status carries the reason until the note shrinks or goes.
+    const shippable: NoteRow[] = [];
+    const stuckNames: string[] = [];
+    for (const row of rows) {
+      if (rowUnsyncable(row)) {
+        stuckNames.push(row.name ?? 'A note');
+      } else {
+        shippable.push(row);
+      }
+    }
+    syncWarning =
+      stuckNames.length === 0
+        ? null
+        : stuckNames.length === 1
+          ? `“${stuckNames[0]}” is over the 2 MB sync limit — it stays on this device until it is shortened.`
+          : `${stuckNames.length} notes are over the 2 MB sync limit — they stay on this device until they are shortened.`;
+
     try {
-      for (const batch of batchRowsForPush(rows)) {
+      for (const batch of batchRowsForPush(shippable)) {
         await api('/api/notes', { method: 'PUT', body: { v: 2, rows: batch } });
         batch.forEach((row) => pushed.push(row.id));
       }
@@ -491,6 +541,18 @@ async function runSyncOnce(): Promise<void> {
 
   if (merge.changed) {
     manager.applyExternalMerge(merge.tabs);
+  }
+
+  if (merge.conflicts.length > 0) {
+    // A rescue the user never sees is half a rescue. The toast is loaded
+    // lazily so this module stays import-clean for its tests.
+    void import('../utils')
+      .then(({ showToast }) => {
+        showToast(`${merge.conflicts.join('. ')}.`);
+      })
+      .catch(() => {
+        /* the merge itself already succeeded — a lost toast is cosmetic */
+      });
   }
 
   // 3. Push anything the pull revealed as missing or newer locally, and
@@ -599,6 +661,12 @@ async function pullNotes(userId: string): Promise<PullResult> {
 interface MergeResult {
   tabs: NoteTab[];
   changed: boolean;
+  /**
+   * One sentence per conflicted copy created this merge, phrased for the
+   * toast (e.g. "Groceries — conflicted copy was kept"). Empty when no
+   * version needed rescuing.
+   */
+  conflicts: string[];
 }
 
 /**
@@ -614,6 +682,17 @@ interface MergeResult {
  * here AFTER it was closed elsewhere stays, and the cycle's step 3
  * re-pushes it — the edit resurrects the note instead of the delete
  * burying the edit.
+ *
+ * Nothing is ever silently discarded. When the winner would overwrite
+ * words the cloud never confirmed, the loser becomes a conflicted copy —
+ * a fresh tab with its own id that rides the next push, so BOTH versions
+ * exist everywhere. Three shapes trigger this: a dirty local tab losing
+ * an edit race, a dirty local tab losing to a tombstone (the delete still
+ * removes the note — the copy keeps the unconfirmed words), and the
+ * equal-seq twin the old read-max race could stamp onto two different
+ * versions (a clean local meeting its twin lets the remote take the row
+ * and keeps the local words in a copy; a dirty local edited FROM that
+ * version and simply wins).
  */
 export function mergeRemote(
   remoteRows: NoteRow[],
@@ -623,6 +702,8 @@ export function mergeRemote(
   const tabs: NoteTab[] = payload.tabs.map((tab) => ({ ...tab }));
   const byId = new Map(tabs.map((tab) => [tab.id, tab]));
   const freshRemote: NoteTab[] = [];
+  const conflicts: string[] = [];
+  const dirty = new Set(payload.dirty);
   let touched = false;
 
   /** The local row wins the delete: newer by seq when both carry one,
@@ -641,10 +722,17 @@ export function mergeRemote(
 
   /** The remote row wins the edit: by seq when both carry one, by clock
    *  otherwise. A local row without a seq takes an identical remote row
-   *  wholesale (adoption) and a differing one only on the clock. */
-  const remoteWinsEdit = (local: NoteTab, row: NoteRow): boolean => {
+   *  wholesale (adoption) and a differing one only on the clock. An equal
+   *  seq with differing content is the read-max race's artifact — two
+   *  versions, one number: a clean local defers to the row (its words
+   *  leave a copy behind), a dirty local is the newer branch and keeps
+   *  the note. */
+  const remoteWinsEdit = (local: NoteTab, row: NoteRow, localDirty: boolean): boolean => {
     const differs = wireRowContent(row) !== local.content || row.name !== local.name;
     if (row.seq && local.syncSeq) {
+      if (row.seq === local.syncSeq) {
+        return !localDirty && differs;
+      }
       return row.seq > local.syncSeq && differs;
     }
     if (row.seq && !local.syncSeq) {
@@ -655,6 +743,36 @@ export function mergeRemote(
     }
     return row.updated_at > local.updatedAt && differs;
   };
+
+  /** True when the row carries the same seq as the local tab's last sync
+   *  — the fingerprint of the race this merge now has to heal. */
+  const tieRaced = (local: NoteTab, row: NoteRow): boolean =>
+    !!row.seq && !!local.syncSeq && row.seq === local.syncSeq;
+
+  /**
+   * The losing side of a race, kept as its own note. A conflicted copy is
+   * a brand-new tab (fresh id, no syncSeq, nothing dirty to inherit) with
+   * the exact content that was about to be overwritten: the cycle's step 3
+   * pushes every local tab the pull did not deliver, so the copy rides the
+   * very next push and the losing words end up backed up on every device —
+   * not merely rescued on the one that typed them. Tag-stripped emptiness
+   * (<p></p>, <br>) does not deserve a copy; blank losers vanish quietly.
+   */
+  const conflictCopyFrom = (local: NoteTab, deletedElsewhere: boolean): NoteTab => {
+    const base = (local.name ?? 'Note').slice(0, 40);
+    return {
+      id: crypto.randomUUID(),
+      name: deletedElsewhere ? `${base} — copy (deleted elsewhere)` : `${base} — conflicted copy`,
+      content: local.content,
+      createdAt: local.createdAt,
+      updatedAt: Date.now(),
+      noteType: local.noteType,
+      colorTheme: local.colorTheme,
+    };
+  };
+
+  /** Words worth keeping: non-blank once tags are stripped. */
+  const hasWords = (content: string): boolean => content.replace(/<[^>]*>/g, '').trim() !== '';
 
   remoteRows.forEach((row) => {
     if (row.deleted) {
@@ -668,6 +786,15 @@ export function mergeRemote(
         return;
       }
       if (local) {
+        if (dirty.has(local.id) && hasWords(local.content)) {
+          // Unconfirmed words about to be buried by a tombstone: the
+          // delete still takes the note, the copy keeps the words.
+          const copy = conflictCopyFrom(local, true);
+          freshRemote.push(copy);
+          conflicts.push(
+            `"${copy.name}" was deleted on another device — this device's unsynced changes were kept as a copy`,
+          );
+        }
         byId.delete(row.id);
         const index = tabs.findIndex((tab) => tab.id === row.id);
         if (index >= 0) {
@@ -693,7 +820,19 @@ export function mergeRemote(
       return;
     }
 
-    if (remoteWinsEdit(local, row)) {
+    if (remoteWinsEdit(local, row, dirty.has(local.id))) {
+      const contentDiffers = wireRowContent(row) !== local.content;
+      if (
+        contentDiffers &&
+        (dirty.has(local.id) || tieRaced(local, row)) &&
+        hasWords(local.content)
+      ) {
+        // Words the cloud never confirmed are about to be overwritten:
+        // the remote takes the canonical row, the copy takes the words.
+        const copy = conflictCopyFrom(local, false);
+        freshRemote.push(copy);
+        conflicts.push(`"${copy.name}" was changed on two devices — both versions were kept`);
+      }
       local.name = row.name;
       local.content = wireRowContent(row);
       local.createdAt = typeof row.created_at === 'number' ? row.created_at : local.createdAt;
@@ -720,7 +859,6 @@ export function mergeRemote(
   // for the other side to adopt. Under v2 the remote ordering is the
   // order array (unchanged rows included); under v1 it is the rows'
   // positions.
-  const dirty = new Set(payload.dirty);
   if (!tabs.some((tab) => dirty.has(tab.id))) {
     const remotePosition = options.order
       ? new Map(options.order.map((id, index) => [id, index] as const))
@@ -741,11 +879,25 @@ export function mergeRemote(
     }
   }
 
-  return { tabs, changed: touched };
+  return { tabs, changed: touched, conflicts };
 }
 
 /** The server rejects request bodies over 2 MB (its MAX_BODY_BYTES). */
 const PUSH_BATCH_BYTES = 1_500_000;
+
+/**
+ * The server's request-body ceiling, mirrored from server/handlers.ts
+ * (MAX_BODY_BYTES). The client cannot import the server's constant — the
+ * two packages build against different tsconfigs — so it is redeclared
+ * here, and their sameness is pinned by the e2e wire tests.
+ */
+const SERVER_BODY_CAP = 2_000_000;
+
+/**
+ * Envelope of a single-row PUT body around the row's own JSON
+ * ({"v":2,"rows":[…]}) plus JSON-escaping headroom for the wrapper.
+ */
+const BODY_ENVELOPE_SLACK = 64;
 
 /**
  * Measures a row the way the server will: in UTF-8 bytes, not UTF-16
@@ -756,6 +908,24 @@ const PUSH_BATCH_BYTES = 1_500_000;
  */
 const utf8 = new TextEncoder();
 
+/**
+ * A row the server will always refuse, measured the way the server
+ * measures it: readJson counts the body in UTF-16 characters AND the
+ * runtime gates the Content-Length header in UTF-8 bytes — a CJK-heavy
+ * note can pass one and fail the other, so both must clear. Such a row
+ * cannot share a body (the batcher already isolates it) and cannot ride
+ * one alone either: pushing it would 413 every cycle forever, pinning
+ * the queue's error state and drowning notes that sync perfectly well.
+ * The push step filters these out instead and tells the user why.
+ */
+export function rowUnsyncable(row: NoteRow): boolean {
+  const json = JSON.stringify(row);
+  return (
+    json.length + BODY_ENVELOPE_SLACK > SERVER_BODY_CAP ||
+    utf8.encode(json).length + BODY_ENVELOPE_SLACK > SERVER_BODY_CAP
+  );
+}
+
 function rowBytes(row: NoteRow): number {
   return utf8.encode(JSON.stringify(row)).length;
 }
@@ -763,9 +933,9 @@ function rowBytes(row: NoteRow): number {
 /**
  * Packs rows into request bodies the server will accept. Rows join the
  * current batch while it stays under PUSH_BATCH_BYTES; a row too large to
- * share a body becomes a batch of one. Such a row can never sync — the
- * server caps bodies at 2 MB — but by failing alone it stops being able to
- * block every other note in the queue, which is the property that matters.
+ * share a body becomes a batch of one. Rows too large to ride even alone
+ * never reach this function — rowUnsyncable filters them out upstream —
+ * so every batch that leaves here is one the server will take.
  */
 export function batchRowsForPush(rows: NoteRow[]): NoteRow[][] {
   const batches: NoteRow[][] = [];
