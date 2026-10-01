@@ -80,7 +80,18 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_VERSION).then((cache) => cache.addAll(CACHE_FILES))
   );
-  self.skipWaiting();
+  // No skipWaiting() here. Taking over mid-session swaps the running
+  // page's worker and (on activate) deletes the previous build's caches —
+  // deferred chunks of the RUNNING version would then 404 against the
+  // NEW precache. Activation waits for the page's consent: it sends
+  // { type: 'SKIP_WAITING' } only after the user accepted the update
+  // prompt, and the controllerchange handler reloads into the new build.
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('activate', (event) => {
