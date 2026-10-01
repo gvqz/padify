@@ -29,9 +29,12 @@ const row = (id: string, overrides: Partial<NoteRow> = {}): NoteRow => ({
   ...overrides,
 });
 
-const payloadOf = (tabs: NoteTab[]): TabsSyncPayload => ({
+const payloadOf = (
+  tabs: NoteTab[],
+  dirty: string[] = tabs.map((entry) => entry.id),
+): TabsSyncPayload => ({
   tabs,
-  dirty: tabs.map((entry) => entry.id),
+  dirty,
   tombstones: [],
 });
 
@@ -39,11 +42,12 @@ describe('mergeRemote — deletes', () => {
   it('a remote tombstone removes the local note when nothing newer is here', () => {
     const merge = mergeRemote(
       [row('a', { deleted: true, updated_at: 3_000 })],
-      payloadOf([tab('a')]),
+      payloadOf([tab('a')], []), // clean: the local copy never changed
     );
 
     expect(merge.tabs).toEqual([]);
     expect(merge.changed).toBe(true);
+    expect(merge.conflicts).toEqual([]);
   });
 
   it('a delete may not bury a newer local edit — the note stays and re-pushes', () => {
@@ -64,7 +68,7 @@ describe('mergeRemote — deletes', () => {
   it('a tie goes to the delete — the common case, no surprise resurrects', () => {
     const merge = mergeRemote(
       [row('a', { deleted: true, updated_at: 2_000 })],
-      payloadOf([tab('a', { updatedAt: 2_000 })]),
+      payloadOf([tab('a', { updatedAt: 2_000 })], []),
     );
 
     expect(merge.tabs).toEqual([]);
@@ -259,5 +263,146 @@ describe('mergeRemote — v2 seq ordering', () => {
     const merge = mergeRemote([remote], payloadOf([local]));
 
     expect(merge.tabs[0].content).toBe('<p>newer remote</p>');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Conflict preservation — the contract that nothing is silently discarded.
+// A version about to be overwritten (or buried) that the cloud never
+// confirmed becomes a conflicted copy: a fresh tab that rides the next
+// push, so both versions exist on every device.
+// ---------------------------------------------------------------------------
+
+describe('mergeRemote — conflict preservation', () => {
+  it('a dirty local losing an edit race keeps its words as a copy', () => {
+    // The two-device story: this device edited offline (dirty, never
+    // pushed); the other device pushed first. The remote takes the note;
+    // the local words take a copy.
+    const local = tab('a', {
+      name: 'Groceries',
+      syncSeq: 5,
+      updatedAt: 4_000,
+      content: '<p>milk and eggs</p>',
+    });
+    const remote = row('a', {
+      seq: 9,
+      updated_at: 9_000,
+      content: '<p>flour and sugar</p>',
+    });
+
+    const merge = mergeRemote([remote], payloadOf([local], ['a']));
+
+    // The canonical note holds the remote version.
+    expect(merge.tabs[0]).toMatchObject({
+      id: 'a',
+      content: '<p>flour and sugar</p>',
+      syncSeq: 9,
+    });
+    // The losing words survive as a fresh tab.
+    expect(merge.tabs).toHaveLength(2);
+    const copy = merge.tabs[1];
+    expect(copy.id).not.toBe('a');
+    expect(copy.content).toBe('<p>milk and eggs</p>');
+    expect(copy.name).toBe('Groceries — conflicted copy');
+    expect(copy.syncSeq).toBeUndefined(); // brand new: nothing synced yet
+    expect(merge.changed).toBe(true);
+    expect(merge.conflicts).toHaveLength(1);
+    expect(merge.conflicts[0]).toContain('Groceries — conflicted copy');
+    expect(merge.conflicts[0]).toContain('both versions');
+  });
+
+  it('a clean local losing an edit race is overwritten with no copy', () => {
+    // Nothing was lost: the local content is the version the cloud
+    // already holds. The copy would be noise.
+    const local = tab('a', { syncSeq: 5, content: '<p>already pushed</p>' });
+    const remote = row('a', { seq: 9, updated_at: 9_000, content: '<p>newer</p>' });
+
+    const merge = mergeRemote([remote], payloadOf([local], []));
+
+    expect(merge.tabs).toHaveLength(1);
+    expect(merge.tabs[0].content).toBe('<p>newer</p>');
+    expect(merge.conflicts).toEqual([]);
+  });
+
+  it('the copy preserves the note type exactly', () => {
+    const local = tab('a', { noteType: 'markdown', content: '# kept', updatedAt: 4_000 });
+    const remote = row('a', { updated_at: 9_000, content: '# winner' });
+
+    const merge = mergeRemote([remote], payloadOf([local], ['a']));
+
+    expect(merge.tabs[1]).toMatchObject({ noteType: 'markdown', content: '# kept' });
+  });
+
+  it('a dirty local losing to a tombstone keeps its words, loses the note', () => {
+    // Deleted on the phone while this device held unpushed edits: the
+    // delete still takes the note (the strip removes it), but the
+    // unconfirmed words leave as a copy instead of dying with the tab.
+    const local = tab('a', {
+      name: 'Draft',
+      updatedAt: 5_000,
+      content: '<p>the unsynced edit</p>',
+    });
+    const remote = row('a', { deleted: true, updated_at: 9_000 });
+
+    const merge = mergeRemote([remote], payloadOf([local], ['a']));
+
+    expect(merge.tabs).toHaveLength(1);
+    expect(merge.tabs[0].id).not.toBe('a');
+    expect(merge.tabs[0].content).toBe('<p>the unsynced edit</p>');
+    expect(merge.tabs[0].name).toBe('Draft — copy (deleted elsewhere)');
+    expect(merge.conflicts[0]).toContain('deleted on another device');
+  });
+
+  it('a blank dirty local losing to a tombstone leaves no copy', () => {
+    // Tag-stripped emptiness does not deserve a rescue.
+    const local = tab('a', { updatedAt: 5_000, content: '<p></p>' });
+    const remote = row('a', { deleted: true, updated_at: 9_000 });
+
+    const merge = mergeRemote([remote], payloadOf([local], ['a']));
+
+    expect(merge.tabs).toEqual([]);
+    expect(merge.conflicts).toEqual([]);
+  });
+
+  it('the read-max race\u2019s equal-seq twin heals: clean local defers, copy keeps its words', () => {
+    // Two different versions stamped with the same seq by the old racy
+    // base read. A clean local is one of the twins: the remote takes the
+    // canonical row, the local twin\u2019s words leave a copy. Both survive.
+    const local = tab('a', { syncSeq: 4, content: '<p>mine</p>' });
+    const remote = row('a', { seq: 4, content: '<p>theirs</p>' });
+
+    const merge = mergeRemote([remote], payloadOf([local], []));
+
+    expect(merge.tabs).toHaveLength(2);
+    expect(merge.tabs[0].content).toBe('<p>theirs</p>');
+    expect(merge.tabs[1].content).toBe('<p>mine</p>');
+    expect(merge.conflicts).toHaveLength(1);
+  });
+
+  it('an equal-seq twin against a dirty local keeps the local, no copy', () => {
+    // The dirty local edited FROM that version — it is the newer branch:
+    // it keeps the note and the cycle re-pushes it.
+    const local = tab('a', { syncSeq: 4, updatedAt: 12_000, content: '<p>mine, edited</p>' });
+    const remote = row('a', { seq: 4, updated_at: 2_000, content: '<p>theirs</p>' });
+
+    const merge = mergeRemote([remote], payloadOf([local], ['a']));
+
+    expect(merge.tabs).toHaveLength(1);
+    expect(merge.tabs[0].content).toBe('<p>mine, edited</p>');
+    expect(merge.conflicts).toEqual([]);
+  });
+
+  it('both devices dirty: the loser keeps a copy, the winner takes the note', () => {
+    // D2 pushed first (seq 9); D1 pulls it while holding its own unsynced
+    // edit from seq 5. One copy, both versions alive.
+    const local = tab('a', { syncSeq: 5, updatedAt: 4_000, content: '<p>device one words</p>' });
+    const remote = row('a', { seq: 9, updated_at: 9_000, content: '<p>device two words</p>' });
+
+    const merge = mergeRemote([remote], payloadOf([local], ['a']));
+
+    expect(merge.tabs.map((entry) => entry.content)).toEqual([
+      '<p>device two words</p>',
+      '<p>device one words</p>',
+    ]);
   });
 });

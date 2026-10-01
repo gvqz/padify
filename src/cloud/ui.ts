@@ -72,6 +72,12 @@ export function initCloudUI(): void {
             title = 'Cloud sync — offline, will retry automatically';
             break;
         }
+        // A stuck note is not an error state — the rest of the queue
+        // still syncs — but it must be visible from the navbar, not only
+        // inside the modal.
+        if (status.warning) {
+          title = `Cloud sync — ${status.warning}`;
+        }
         break;
       case 'error':
         dot = DotState.ERROR;
@@ -242,7 +248,10 @@ export function initCloudUI(): void {
           case 'offline':
             return 'Offline — will retry automatically';
           default:
-            return 'Everything is backed up';
+            // "Everything is backed up" stops being true the moment one
+            // note cannot leave the device: the warning replaces the
+            // reassurance, because the reassurance is now a lie.
+            return status.warning ?? 'Everything is backed up';
         }
       case 'error':
         return status.message;
