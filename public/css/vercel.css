@@ -4479,6 +4479,21 @@ body.pip-host #tabRailBackdrop {
   display: none;
 }
 
+/* A failing save: the indicator turns into a persistent, un-fading
+   warning — the note is NOT being saved and the user must see it. */
+.save-state.save-error {
+  color: var(--danger, #ee0000);
+  opacity: 1;
+}
+
+.save-state.save-error .save-state-spinner {
+  display: none;
+}
+
+.save-state.save-error .save-state-check {
+  display: none;
+}
+
 @keyframes save-state-spin {
   to {
     transform: rotate(360deg);

@@ -143,6 +143,25 @@ export function readAll<T>(storeName: string): Promise<T[]> {
 }
 
 /**
+ * Reads ONE row by its key — a point lookup, not a scan. The blob store's
+ * records carry whole ArrayBuffers, so readAll() here would deserialize
+ * every attachment's bytes just to find one; this is the O(1) door for
+ * get-by-id callers. Resolves with null outside IndexedDB mode.
+ */
+export function readOne<T>(storeName: string, key: string): Promise<T | null> {
+  if (!db || backend !== 'indexeddb') {
+    return Promise.resolve(null);
+  }
+  try {
+    const transaction = db.transaction(storeName, 'readonly');
+    const request = transaction.objectStore(storeName).get(key) as IDBRequest<T | undefined>;
+    return requestToPromise<T | undefined>(request).then((row) => row ?? null);
+  } catch {
+    return Promise.resolve(null);
+  }
+}
+
+/**
  * Applies puts + deletes in ONE readwrite transaction, so a save is atomic.
  * Rejects only when the transaction actually aborts (quota, corruption);
  * resolves as a no-op outside IndexedDB mode.
