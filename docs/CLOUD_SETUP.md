@@ -111,6 +111,18 @@ Other environment variables:
   browser. Not needed when the API is served under the same origin as the
   app (see below — the Netlify redirect in step 3 makes everything
   same-origin).
+- `TRUST_PROXY_HOPS` — how many proxies in front of this server you trust to
+  report truthful client addresses. The rate limiter only reads
+  `X-Forwarded-For` when this is set, and then uses the value the CLOSEST
+  trusted proxy saw — never the first entry (which any client can forge).
+  Default `0` trusts nothing: every caller shares one global bucket, which
+  is over-strict but cannot be bypassed. Set `1` when exactly one known
+  proxy fronts the API (the repo's `Caddyfile`, which sets
+  `X-Forwarded-For` to the address it actually saw; a typical
+  alwaysdata/nginx setup). Signed-in traffic is always rate-limited per
+  account instead of per address, and failed sign-ins are counted per
+  account (8 failures locks that account's sign-in for 15 minutes), so
+  brute-force protection does not depend on this setting.
 
 ### Free music (no-login search + playback)
 

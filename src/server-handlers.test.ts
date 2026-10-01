@@ -1,14 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Db, Row, SqlStatement, SqlValue } from '../server/db';
 import {
+  clientKey,
   handleNotesGet,
   handleNotesPut,
   handlePublicShareGet,
   handleSharesPatch,
   handleSignup,
   MAX_BODY_BYTES,
+  rateLimited,
+  resetRateLimitsForTests,
   route,
 } from '../server/handlers';
+import { hashPassword } from '../server/auth';
 
 // The server's first handler tests. The handlers were extracted from
 // index.ts precisely so this file can exist: they are pure functions over
@@ -434,5 +438,158 @@ describe('handleNotesGet — the v2 cursor pull', () => {
     expect(body.v).toBeUndefined();
     // The legacy twin rides v1 responses until every install crossed over.
     expect(JSON.stringify(body)).toContain('"html"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Rate limiting and lockout — the address-independence contract
+// ---------------------------------------------------------------------------
+
+describe('clientKey — X-Forwarded-For is only read through declared trust', () => {
+  const forwarded = (value: string): Request =>
+    new Request('http://api.test/api/x', { headers: { 'x-forwarded-for': value } });
+
+  afterEach(() => {
+    delete process.env.TRUST_PROXY_HOPS;
+  });
+
+  it('trusts nothing by default — a forged header changes nothing', () => {
+    expect(clientKey(forwarded('1.2.3.4'))).toBe('local');
+    expect(clientKey(new Request('http://api.test/api/x'))).toBe('local');
+  });
+
+  it('with one trusted hop, uses the address the proxy actually saw', () => {
+    process.env.TRUST_PROXY_HOPS = '1';
+    // The client claimed to be google.com's resolver; the proxy appended
+    // the address it saw. Rightmost wins, the forgery is ignored.
+    expect(clientKey(forwarded('8.8.8.8, 203.0.113.9'))).toBe('203.0.113.9');
+  });
+
+  it('with two trusted hops, skips both proxies to the client they saw', () => {
+    process.env.TRUST_PROXY_HOPS = '2';
+    expect(clientKey(forwarded('8.8.8.8, 203.0.113.9, 198.51.100.7'))).toBe('203.0.113.9');
+  });
+
+  it('a chain shorter than the declared hops falls back to the global bucket', () => {
+    process.env.TRUST_PROXY_HOPS = '3';
+    expect(clientKey(forwarded('203.0.113.9'))).toBe('local');
+  });
+});
+
+describe('rateLimited — buckets key on the account when one is known', () => {
+  beforeEach(() => {
+    resetRateLimitsForTests();
+  });
+
+  it('counts per subject, not per request origin', () => {
+    const request = new Request('http://api.test/api/notes');
+    let limited = false;
+    for (let i = 0; i < 305; i++) {
+      limited = rateLimited(request, 'api', 'user-1');
+    }
+    expect(limited).toBe(true);
+    // A different account is unaffected — shared address or not.
+    expect(rateLimited(request, 'api', 'user-2')).toBe(false);
+  });
+
+  it('the share bucket exists and caps public share reads', () => {
+    const request = new Request('http://api.test/api/share/token-x');
+    let limited = false;
+    for (let i = 0; i < 121; i++) {
+      limited = rateLimited(request, 'share');
+    }
+    expect(limited).toBe(true);
+  });
+});
+
+describe('route — the public share endpoint is rate limited', () => {
+  beforeEach(() => {
+    resetRateLimitsForTests();
+  });
+
+  it('answers 429 once the share bucket is spent', async () => {
+    const db = new ScriptedDb([
+      {
+        match: 'from shares',
+        rows: [
+          {
+            title: 'Shared note',
+            content: '<p>hello</p>',
+            note_type: null,
+            created_at: 1,
+            expires_at: Date.now() + 60_000,
+          },
+        ],
+      },
+    ]);
+    const shareRequest = () => new Request('http://api.test/api/share/some-token-value');
+
+    // Prime the bucket to its limit (120): all succeed.
+    for (let i = 0; i < 120; i++) {
+      const response = await route(db, shareRequest(), '/api/share/some-token-value');
+      expect(response.status).toBe(200);
+    }
+    // The next one is the one that gets told to slow down.
+    const response = await route(db, shareRequest(), '/api/share/some-token-value');
+    expect(response.status).toBe(429);
+    expect((await bodyOf(response)).error).toContain('Too many requests');
+  });
+});
+
+describe('signin lockout — failed verifications are counted per account', () => {
+  beforeEach(() => {
+    resetRateLimitsForTests();
+  });
+
+  const signinRequest = (password: string): Request =>
+    new Request('http://api.test/api/auth/signin', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'victim@example.test', password }),
+    });
+
+  it('locks the account after 8 failures — even before the password is checked', async () => {
+    // No user row: every attempt fails (no scrypt runs — cheap failures
+    // are also what a brute-forcer produces).
+    const db = new ScriptedDb([]);
+
+    for (let i = 0; i < 8; i++) {
+      const response = await route(db, signinRequest('guess' + i), '/api/auth/signin');
+      expect(response.status).toBe(401);
+    }
+
+    // The 9th attempt is refused before any verification — even the
+    // CORRECT password cannot be tested while the lockout holds.
+    const locked = await route(db, signinRequest('correct horse'), '/api/auth/signin');
+    expect(locked.status).toBe(429);
+    expect((await bodyOf(locked)).error).toContain('Too many failed attempts');
+  });
+
+  it('a successful sign-in clears the failure count', async () => {
+    const stored = hashPassword('correct horse');
+    const db = new ScriptedDb([
+      {
+        match: 'from users where email',
+        rows: [{ id: 'u1', email: 'victim@example.test', password_hash: stored }],
+      },
+      { match: 'insert into sessions', rows: [] },
+    ]);
+
+    // Seven failures …
+    const emptyDb = new ScriptedDb([]);
+    for (let i = 0; i < 7; i++) {
+      const response = await route(emptyDb, signinRequest('wrong' + i), '/api/auth/signin');
+      expect(response.status).toBe(401);
+    }
+
+    // … then the real sign-in succeeds and wipes the slate …
+    const ok = await route(db, signinRequest('correct horse'), '/api/auth/signin');
+    expect(ok.status).toBe(200);
+
+    // … so the next failure counts from zero again (not an instant lock).
+    const again = await route(emptyDb, signinRequest('wrong-again'), '/api/auth/signin');
+    expect(again.status).toBe(401);
+    const still = await route(emptyDb, signinRequest('wrong-again'), '/api/auth/signin');
+    expect(still.status).toBe(401);
   });
 });

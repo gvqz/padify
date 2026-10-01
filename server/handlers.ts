@@ -91,13 +91,13 @@ export async function readJson(request: Request): Promise<Record<string, unknown
 }
 
 // ---------------------------------------------------------------------------
-// Rate limiting (fixed window, per IP, in memory)
+// Rate limiting (fixed window, per key, in memory)
 // ---------------------------------------------------------------------------
 
 const RATE_WINDOW_MS = 60_000;
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 
-// Buckets for IPs that never come back would otherwise sit in the map for
+// Buckets for keys that never come back would otherwise sit in the map for
 // the lifetime of the process; sweep expired entries so memory stays flat
 // on a long-lived always-data host.
 const rateSweep = setInterval(() => {
@@ -107,25 +107,108 @@ const rateSweep = setInterval(() => {
       rateBuckets.delete(key);
     }
   }
+  for (const [key, entry] of authFailures) {
+    if (entry.resetAt <= now) {
+      authFailures.delete(key);
+    }
+  }
 }, 5 * 60_000);
 // Never keep a process alive for the sweeper (tests import this module).
 ;(rateSweep as unknown as { unref?: () => void }).unref?.();
 rateSweep.unref?.();
 
-export function rateLimited(request: Request, bucket: 'auth' | 'api' | 'music-search' | 'music-resolve'): boolean {
-  const limits: Record<string, number> = { auth: 30, api: 300, 'music-search': 60, 'music-resolve': 30 };
+/** Test hook — forget every bucket and lockout between tests. */
+export function resetRateLimitsForTests(): void {
+  rateBuckets.clear();
+  authFailures.clear();
+}
+
+/**
+ * The key a rate-limit bucket hangs on.
+ *
+ * x-forwarded-for is client-forgeable end to end: any hop that appends
+ * instead of replacing lets a spoofed value ride the whole chain, and with
+ * no proxy in front at all the header is just attacker text. The chain is
+ * therefore only read when TRUST_PROXY_HOPS declares how many proxies in
+ * front of this server are trusted to append truthful addresses — and the
+ * value taken is the one the CLOSEST trusted proxy observed (rightmost
+ * minus hops), never the first entry. With the default 0 nothing is
+ * trusted and every caller shares the one 'local' bucket: over-strict,
+ * never spoofable. Deployments behind the repo's Caddyfile (which sets
+ * X-Forwarded-For to the address it actually saw) set TRUST_PROXY_HOPS=1
+ * to get honest per-IP buckets back; see docs/CLOUD_SETUP.md.
+ */
+export function clientKey(request: Request): string {
+  const hops = Number(process.env.TRUST_PROXY_HOPS ?? '0');
+  if (Number.isFinite(hops) && hops > 0) {
+    const forwarded = request.headers.get('x-forwarded-for');
+    const parts = forwarded?.split(',').map((part) => part.trim()).filter(Boolean) ?? [];
+    const index = parts.length - Math.floor(hops);
+    if (index >= 0 && index < parts.length) {
+      return parts[index]!;
+    }
+  }
+  return 'local';
+}
+
+export function rateLimited(
+  request: Request,
+  bucket: 'auth' | 'api' | 'music-search' | 'music-resolve' | 'share',
+  subject?: string,
+): boolean {
+  const limits: Record<string, number> = {
+    auth: 30,
+    api: 300,
+    'music-search': 60,
+    'music-resolve': 30,
+    share: 120
+  };
   const limit = limits[bucket] ?? 300;
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-    || request.headers.get('x-real-ip')
-    || 'local';
+  // Authenticated traffic keys its bucket on the account, not the address:
+  // a shared or spoofed IP then cannot pace someone else's requests, and
+  // a signing-in stranger cannot get fresh buckets by rotating addresses.
+  const key = subject ?? clientKey(request);
   const now = Date.now();
-  const entry = rateBuckets.get(`${bucket}:${ip}`);
+  const entry = rateBuckets.get(`${bucket}:${key}`);
   if (!entry || entry.resetAt <= now) {
-    rateBuckets.set(`${bucket}:${ip}`, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    rateBuckets.set(`${bucket}:${key}`, { count: 1, resetAt: now + RATE_WINDOW_MS });
     return false;
   }
   entry.count += 1;
   return entry.count > limit;
+}
+
+// ---------------------------------------------------------------------------
+// Sign-in lockout — the brute-force defense that does not depend on
+// addresses at all: failed verifications are counted PER ACCOUNT. A lockout
+// outlives any IP rotation because it keys on the one thing the attacker
+// cannot change: the account being guessed at.
+// ---------------------------------------------------------------------------
+
+const AUTH_FAILURE_WINDOW_MS = 15 * 60_000;
+const AUTH_FAILURE_LIMIT = 8;
+const authFailures = new Map<string, { count: number; resetAt: number }>();
+
+/** True when this account burned through its failed-verification budget. */
+function signinBlocked(email: string): boolean {
+  const entry = authFailures.get(email);
+  return !!entry && entry.resetAt > Date.now() && entry.count >= AUTH_FAILURE_LIMIT;
+}
+
+/** One more failed verification against this account. */
+function recordSigninFailure(email: string): void {
+  const now = Date.now();
+  const entry = authFailures.get(email);
+  if (!entry || entry.resetAt <= now) {
+    authFailures.set(email, { count: 1, resetAt: now + AUTH_FAILURE_WINDOW_MS });
+    return;
+  }
+  entry.count += 1;
+}
+
+/** A successful sign-in clears the account's failure count. */
+function clearSigninFailures(email: string): void {
+  authFailures.delete(email);
 }
 
 // ---------------------------------------------------------------------------
@@ -193,11 +276,21 @@ export async function handleSignin(db: Db, request: Request): Promise<Response> 
     return json(request, { error: 'Wrong email or password.' }, 401);
   }
 
+  // The lockout check runs before the scrypt verify: a locked account
+  // costs the caller one cheap map lookup, not the expensive hash — the
+  // brute-forcer's own budget is what gets spent, not the server's.
+  if (signinBlocked(email)) {
+    return json(request, { error: 'Too many failed attempts for this account — try again in a few minutes.' }, 429);
+  }
+
   const rows = await db.all('select id, email, password_hash from users where email = ?', [email]);
   const user = rows[0];
   if (!user || !verifyPassword(password, String(user.password_hash))) {
+    recordSigninFailure(email);
     return json(request, { error: 'Wrong email or password.' }, 401);
   }
+
+  clearSigninFailures(email);
 
   const token = await createSession(db, String(user.id));
   return json(request, { token, user: { id: String(user.id), email: String(user.email) } });
@@ -628,6 +721,12 @@ export async function route(db: Db, request: Request, pathname: string): Promise
 
   const publicShare = /^\/api\/share\/([A-Za-z0-9_-]+)$/.exec(pathname);
   if (publicShare && method === 'GET') {
+    // Share tokens are unguessable, but the endpoint itself is public and
+    // unauthenticated — cap the request rate so a scraper cannot hammer
+    // the shares table (and the database behind it) through it.
+    if (rateLimited(request, 'share')) {
+      return json(request, { error: 'Too many requests — wait a moment and try again.' }, 429);
+    }
     return handlePublicShareGet(db, request, publicShare[1]);
   }
 
@@ -731,11 +830,15 @@ export async function route(db: Db, request: Request, pathname: string): Promise
 
   // ---- authenticated ----------------------------------------------------------
 
-  if (rateLimited(request, 'api')) {
+  const user = await userForRequest(db, request);
+
+  // Keyed on the account when one is present (see rateLimited): signed-in
+  // traffic cannot be paced by address games, and anonymous traffic falls
+  // back to the client key — 'local' unless TRUST_PROXY_HOPS is set.
+  if (rateLimited(request, 'api', user?.id)) {
     return json(request, { error: 'Too many requests — slow down a little.' }, 429);
   }
 
-  const user = await userForRequest(db, request);
   const needsAuth = pathname !== '/api/auth/signout';
   if (!user) {
     if (needsAuth) {
