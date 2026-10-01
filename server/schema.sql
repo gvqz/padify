@@ -63,6 +63,24 @@ create index if not exists notes_user_id_seq_idx on notes(user_id, seq);
 create index if not exists notes_user_id_position_idx on notes(user_id, position);
 
 -- ---------------------------------------------------------------------------
+-- Sync v2's sequence source — the CAS counter the stamping build deferred.
+--
+-- Every PUT reserves its batch's numbers with ONE atomic statement
+-- (insert … on conflict do update … returning — see handlers.ts), so two
+-- racing pushes can never read the same base and hand out identical
+-- numbers. Reserved numbers always advance, even if a batch's writes
+-- never land: the sequence may gap, but it can never repeat — a gap is
+-- invisible to a cursor, a repeat is a lie about which version is newer.
+--
+-- Seeded from max(notes.seq) per user by the boot migration (see
+-- db.ts migrateSyncCounters); users cascade like their notes do.
+-- ---------------------------------------------------------------------------
+create table if not exists sync_counters (
+  user_id text primary key references users(id) on delete cascade,
+  value   integer not null default 0
+);
+
+-- ---------------------------------------------------------------------------
 -- Shares (read-only note links — /share/?t=<token>).
 --
 -- The content column is a denormalised copy of the note at share time and

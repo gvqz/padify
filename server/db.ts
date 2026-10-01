@@ -244,6 +244,7 @@ export async function applySchema(db: Db): Promise<void> {
 
   await migrateColumns(db);
   await migrateRenames(db);
+  await migrateSyncCounters(db);
 }
 
 /**
@@ -303,4 +304,23 @@ async function migrateRenames(db: Db): Promise<void> {
       console.log(`[padify-api] schema migration: renamed ${table}.${from} -> ${table}.${to}`);
     }
   }
+}
+
+/**
+ * Seeds sync_counters from each user's highest stamped seq, once per user.
+ *
+ * The reservation in handleNotesPut only ever INCREASES a counter, so the
+ * one thing this must guarantee is that no counter starts BELOW the seqs
+ * its user already carries — otherwise a reservation could hand out a
+ * number a row already owns, and two different versions would tie forever.
+ * `insert or ignore` keeps it idempotent: fresh installs seed empty sets
+ * (nothing to do), migrated users seed once, and already-seeded boots are
+ * untouched no matter how many times it runs. Users who never wrote a
+ * stamped row seed at 0 — their first reservation starts the sequence.
+ */
+async function migrateSyncCounters(db: Db): Promise<void> {
+  await db.run(
+    `insert or ignore into sync_counters (user_id, value)
+     select user_id, coalesce(max(seq), 0) from notes group by user_id`
+  );
 }
