@@ -27,7 +27,7 @@ Built as a Progressive Web App using the [Service Worker API](https://developer.
 - Monospaced, serif and dyslexic fonts
 - Optional typewriter sound, break reminders, and a built-in music player — free song search and playback with no account (local favorites, queue and playlist), or connect Spotify Premium for native streaming with your playlists and Liked Songs — plus a 12-sound ambience mixer
 - Unicode character picker — 5,400+ symbols, math, arrows, currency, box drawing, braille and emoji with search, favorites and recents (`Ctrl/Cmd + Shift + O`)
-- Privacy-focused — nothing you type is ever collected or sent anywhere
+- Privacy-focused — nothing is collected, there are no analytics or trackers, and with cloud sync off nothing you type ever leaves the device
 
 ## Retired mini tools
 
@@ -35,7 +35,9 @@ The standalone companion-tool pages (Rich Text Notes, Markdown Editor, Voice Not
 
 ## Privacy
 
-Everything stays on your device by default: notes, snapshots, settings. Nothing is collected and no analytics exist. Cloud sync is strictly opt-in — when a user signs in, only their note tabs are stored in the app owner's sync project, locked to that account. Sign out and new edits never leave the device again.
+Everything stays on your device by default: notes, snapshots, settings. Nothing is collected, no analytics or trackers exist. Cloud sync and share links are strictly opt-in.
+
+Be equally clear about what opting in means: when a user signs in, their notes (and any attachments or shared links they create) are **stored in plaintext on the sync server** — the app owner's self-hosted project (see [docs/CLOUD_SETUP.md](docs/CLOUD_SETUP.md)). Storage is locked to the account and revocable, but it is not end-to-end encrypted: the server operator can read the synced content. Sign out and new edits never leave the device again.
 
 ## Running locally
 
