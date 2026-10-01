@@ -217,10 +217,11 @@ describe('MAX_BODY_BYTES', () => {
 });
 
 describe('handleNotesPut — sync v2 seq stamping', () => {
-  it('hands out the batch sequence in row order, base read from the user max', async () => {
+  it('reserves the batch sequence atomically, handing it out in row order', async () => {
     const db = new ScriptedDb([
-      // The user's sequence already stands at 41 — this batch hands out 42, 43.
-      { match: 'coalesce(max(seq)', rows: [{ base: 41 }] },
+      // The user's counter already stands at 41 — reserving this batch's
+      // 2 numbers answers 43, and the rows stamp 42, 43.
+      { match: 'sync_counters', rows: [{ value: 43 }] },
     ]);
     const response = await handleNotesPut(
       db,
@@ -234,8 +235,12 @@ describe('handleNotesPut — sync v2 seq stamping', () => {
     );
     expect(response.status).toBe(200);
 
-    // The base read happened exactly once, before the batch.
-    expect(db.sqls.filter((sql) => sql.includes('coalesce(max(seq)'))).toHaveLength(1);
+    // The reservation is one atomic statement — upsert with RETURNING —
+    // run exactly once, before the batch.
+    const reservations = db.sqls.filter((sql) => sql.includes('sync_counters'));
+    expect(reservations).toHaveLength(1);
+    expect(reservations[0]).toContain('on conflict(user_id) do update');
+    expect(reservations[0]).toContain('returning value');
 
     const seqs = db.statements.map((statement) => statement.args?.[9]);
     expect(seqs).toEqual([42, 43]);
@@ -246,7 +251,7 @@ describe('handleNotesPut — sync v2 seq stamping', () => {
     );
   });
 
-  it('an empty script answers base 0 — a fresh database stamps 1..n', async () => {
+  it('a reservation that answers nothing falls back to the notes max — stamps 1..n', async () => {
     const db = new ScriptedDb();
     await handleNotesPut(
       db,
@@ -254,6 +259,86 @@ describe('handleNotesPut — sync v2 seq stamping', () => {
       user,
     );
     expect(db.statements[0]?.args?.[9]).toBe(1);
+  });
+
+  it('the fallback reads the user max when RETURNING cannot be answered', async () => {
+    // A backend that cannot answer RETURNING (none of the two we ship):
+    // the reservation answers nothing, the fallback reads max(seq) = 7,
+    // and the row stamps 8. Garbage seqs must never leave the handler.
+    const db = new ScriptedDb([{ match: 'coalesce(max(seq)', rows: [{ base: 7 }] }]);
+    await handleNotesPut(
+      db,
+      jsonRequest('PUT', { rows: [{ id: 'a', content: 'x', updated_at: 1, deleted: false }] }),
+      user,
+    );
+    expect(db.statements[0]?.args?.[9]).toBe(8);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The race the reservation exists to kill. The old base read keyed the
+// sequence on max(notes.seq): two pushes whose WRITES had not landed yet
+// read the same base and stamped identical numbers onto different
+// versions — a tie in seq is a lie about which version is newer. The
+// reservation is the sequence's only authority: numbers always advance,
+// so a lost write leaves a gap, never a duplicate.
+// ---------------------------------------------------------------------------
+
+/**
+ * A Db that answers the reservation the way the real one does (the
+ * counter advances by the reserved amount) while the notes writes never
+ * land — max(notes.seq) stays stale forever, which is exactly the
+ * interleaving the old code duplicated numbers under.
+ */
+class ReservingDb extends ScriptedDb {
+  private counter = 0;
+
+  async all(sql: string, args: SqlValue[] = []): Promise<Row[]> {
+    this.sqls.push(sql);
+    if (sql.includes('sync_counters')) {
+      this.counter += Number(args[1] ?? 0);
+      return [{ value: this.counter }];
+    }
+    if (sql.includes('coalesce(max(seq)')) {
+      return [{ base: 0 }]; // the writes never landed: stale max
+    }
+    return [];
+  }
+}
+
+describe('handleNotesPut — the reservation is the sequence authority', () => {
+  it('a lost write leaves a gap, never a duplicate', async () => {
+    const db = new ReservingDb();
+
+    await handleNotesPut(
+      db,
+      jsonRequest('PUT', {
+        rows: [
+          { id: 'a', content: 'one', updated_at: 5, deleted: false },
+          { id: 'b', content: 'two', updated_at: 6, deleted: false },
+        ],
+      }),
+      user,
+    );
+    const first = db.statements.map((statement) => statement.args?.[9]);
+    db.statements.length = 0;
+
+    await handleNotesPut(
+      db,
+      jsonRequest('PUT', {
+        rows: [
+          { id: 'a', content: 'one again', updated_at: 7, deleted: false },
+          { id: 'b', content: 'two again', updated_at: 8, deleted: false },
+        ],
+      }),
+      user,
+    );
+    const second = db.statements.map((statement) => statement.args?.[9]);
+
+    // The second batch stamps 3, 4 — the notes max stayed 0 the whole
+    // time. Under the old read-max code both batches stamped 1, 2.
+    expect(first).toEqual([1, 2]);
+    expect(second).toEqual([3, 4]);
   });
 });
 

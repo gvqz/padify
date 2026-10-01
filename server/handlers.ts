@@ -277,18 +277,34 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
     return json(request, { error: 'Invalid notes payload.' }, 400);
   }
 
-  // Sync v2 stamping: every write assigns the row the next number in the
-  // user's monotonic sequence — fresh inserts and conflict updates alike,
-  // so a re-push, a position drift and a delete all surface to cursored
-  // pulls. The base is read once per batch and handed out in row order;
-  // two racing batches can hand out the same numbers (the sequence stays
-  // monotonic, deliveries never drop — only their order ties), which is
-  // the documented cost of doing this without a CAS counter table.
-  const seqRows = await db.all(
-    'select coalesce(max(seq), 0) as base from notes where user_id = ?',
-    [user.id]
+  // Sync v2 stamping: every write reserves its batch's numbers from the
+  // user's sequence counter in ONE atomic statement — fresh inserts and
+  // conflict updates alike, so a re-push, a position drift and a delete
+  // all surface to cursored pulls. The reservation is the sequence's only
+  // authority: reserved numbers always advance (a batch whose writes never
+  // land leaves a gap, never a repeat), and two racing pushes get
+  // disjoint ranges — the read-max race this replaces could hand
+  // identical numbers to two different versions, and a tie in seq is a
+  // lie about which version is newer.
+  const reserved = await db.all(
+    `insert into sync_counters (user_id, value) values (?, ?)
+     on conflict(user_id) do update set value = sync_counters.value + excluded.value
+     returning value`,
+    [user.id, rows.length]
   );
-  const base = Number(seqRows[0]?.base ?? 0) || 0;
+  let base = Number(reserved[0]?.value ?? 0) - rows.length;
+  if (!Number.isFinite(base) || base < 0) {
+    // A backend that cannot answer RETURNING (none of the two we ship,
+    // but this handler must never stamp garbage): fall back to reading
+    // the user's highest stamped seq — the old, racy base. Duplicates
+    // under a lost race are recoverable; seq 0 on a conflict update is
+    // an unconditional re-delivery on every pull.
+    const seqRows = await db.all(
+      'select coalesce(max(seq), 0) as base from notes where user_id = ?',
+      [user.id]
+    );
+    base = Number(seqRows[0]?.base ?? 0) || 0;
+  }
 
   // The owner comes from the session, never from the payload; the conflict
   // clause pins updates to rows the user already owns (no cross-user writes).
