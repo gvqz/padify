@@ -126,3 +126,31 @@ describe('fetch strategy', () => {
     expect(respondPosition).toBeGreaterThan(apiPosition);
   });
 });
+
+describe('the update contract — activation waits for the page', () => {
+  it('install does NOT skipWaiting: a running page must consent first', () => {
+    write('index.html', '<html><body>padify</body></html>');
+    const source = generateServiceWorker(fixtureDir).source;
+    const installHandler = source.slice(
+      source.indexOf("self.addEventListener('install'"),
+      source.indexOf("self.addEventListener('message'"),
+    );
+
+    expect(installHandler).not.toContain('self.skipWaiting()');
+    // The takeover happens on the page's message, never on install —
+    // and the whole worker owns exactly one skipWaiting call site.
+    expect(source.match(/self\.skipWaiting\(\)/g)?.length).toBe(1);
+  });
+
+  it('the worker answers { type: "SKIP_WAITING" } with self.skipWaiting()', () => {
+    write('index.html', '<html><body>padify</body></html>');
+    const source = generateServiceWorker(fixtureDir).source;
+
+    const messageHandler = source.slice(
+      source.indexOf("self.addEventListener('message'"),
+      source.indexOf("self.addEventListener('activate'"),
+    );
+    expect(messageHandler).toContain("event.data.type === 'SKIP_WAITING'");
+    expect(messageHandler).toContain('self.skipWaiting()');
+  });
+});
