@@ -264,7 +264,9 @@ describe('module graph', () => {
 
     const cyclePath = foundCycle();
     expect(
-      cyclePath === null ? 'no cycles' : cyclePath.map((f) => relative(process.cwd(), f)).join(' -> '),
+      cyclePath === null
+        ? 'no cycles'
+        : cyclePath.map((f) => relative(process.cwd(), f)).join(' -> '),
     ).toBe('no cycles');
   });
 

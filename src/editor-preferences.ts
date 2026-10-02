@@ -376,19 +376,19 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
       // set NOW, not what was set when the module booted.
 
       const userChosenFontSize = getSetting('userChosenFontSize');
-  if (userChosenFontSize) {
+      if (userChosenFontSize) {
         removeState('userChosenFontSize');
         resetFontSize(editorConfig.defaultFontSize);
       }
 
       const userChosenLineHeight = getSetting('userChosenLineHeight');
-  if (userChosenLineHeight) {
+      if (userChosenLineHeight) {
         removeState('userChosenLineHeight');
         resetLineHeight(editorConfig.defaultLineHeight);
       }
 
       const userChosenFontWeight = getSetting('userChosenFontWeight');
-  if (userChosenFontWeight) {
+      if (userChosenFontWeight) {
         removeState('userChosenFontWeight');
         resetFontWeight(editorConfig.defaultFontWeight);
       }
@@ -399,7 +399,7 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
       }
 
       const userChosenWriteDirection = getSetting('userChosenWriteDirection');
-  if (userChosenWriteDirection) {
+      if (userChosenWriteDirection) {
         removeState('userChosenWriteDirection');
         resetWriteDirection(editorConfig.defaultWriteDirection);
       }

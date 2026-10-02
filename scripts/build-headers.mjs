@@ -51,7 +51,7 @@ import { join } from 'node:path';
  */
 const API_BASE_PATTERN = /^https:\/\/[^/?#]+\/?$/;
 const API_BASE_ERROR =
-  '[build-headers] VITE_API_BASE must be \'\' (same-origin /api) or an absolute origin like ' +
+  "[build-headers] VITE_API_BASE must be '' (same-origin /api) or an absolute origin like " +
   'https://api.example.com — no path, no query (got "{}"). It feeds the client bundle, ' +
   'dist/share/config.js, the CSP connect-src and the Netlify /api proxy redirect, so a ' +
   'malformed value must fail the build instead of shipping a site whose parts disagree.';
@@ -69,7 +69,12 @@ export function normalizeApiBase(raw) {
 /** The connect-src entry list: the app itself, the configured API origin
  * (if any) and the music player's Spotify calls. */
 function connectSrcFor(apiBase) {
-  return ["'self'", ...(apiBase ? [apiBase] : []), 'https://api.spotify.com', 'wss://*.spotify.com'].join(' ');
+  return [
+    "'self'",
+    ...(apiBase ? [apiBase] : []),
+    'https://api.spotify.com',
+    'wss://*.spotify.com',
+  ].join(' ');
 }
 
 const INLINE_SCRIPT_PATTERN = /<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/gi;
@@ -174,9 +179,7 @@ if (process.argv[1] && process.argv[1].endsWith('build-headers.mjs')) {
 
     console.log(`[build-headers] wrote dist/_headers`);
     console.log(`[build-headers] pinned ${scriptHashes.length} inline script hash(es)`);
-    console.log(
-      `[build-headers] api origin: ${apiBase === '' ? 'same-origin (/api)' : apiBase}`,
-    );
+    console.log(`[build-headers] api origin: ${apiBase === '' ? 'same-origin (/api)' : apiBase}`);
     if (redirectsFile) {
       console.log(`[build-headers] wrote dist/_redirects (/api/* proxy)`);
     }
