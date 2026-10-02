@@ -53,21 +53,11 @@
 
 .timer-pill {
   display: inline-block;
-  background: #c9c7c7;
   margin-left: auto;
-  padding: 5px 14px;
-  border-radius: 20px;
-  color: #403333;
-  font-weight: bold;
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
   gap: 6px;
   align-items: center;
-}
-
-.timer-pill.timer-ending {
-  animation: timer-pill-blink 1.2s ease-in-out infinite;
 }
 
 @keyframes timer-pill-blink {
@@ -78,12 +68,6 @@
 
   50% {
     opacity: 0.45;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .timer-pill.timer-ending {
-    animation: none;
   }
 }
 
@@ -297,17 +281,8 @@
 
 .checkbox.checbox-switch label span,
 .checkbox-inline.checbox-switch span {
-  width: 35px;
-  border-radius: 20px;
-  height: 18px;
-  border: 1px solid #dbdbdb;
   background-color: rgb(255, 255, 255);
   border-color: rgb(211 211 211);
-  box-shadow: rgb(223, 223, 223) 0px 0px 0px 0px inset;
-  transition: border 0.4s ease 0s, box-shadow 0.4s ease 0s;
-  display: inline-block;
-  vertical-align: middle;
-  margin-right: 5px;
 }
 
 .checkbox.checbox-switch label span:before,
@@ -333,8 +308,6 @@
 .checkbox.checbox-switch label>input:checked+span,
 .checkbox-inline.checbox-switch>input:checked+span {
   background-color: rgb(180, 182, 183);
-  border-color: rgb(180, 182, 183);
-  box-shadow: rgb(180, 182, 183) 0px 0px 0px 8px inset;
   transition: border 0.4s ease 0s, box-shadow 0.4s ease 0s, background-color 1.2s ease 0s;
 }
 
