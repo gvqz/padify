@@ -60,16 +60,6 @@
   align-items: center;
 }
 
-@keyframes timer-pill-blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.45;
-  }
-}
 
 .pip .timer-pill {
   display: none;

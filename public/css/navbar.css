@@ -23,16 +23,6 @@
   border-radius: 6px;
 }
 
-@keyframes glow {
-  0% {
-    text-shadow: 0 0 5px #91ceff, 0 0 10px #91ceff, 0 0 20px #91ceff, 0 0 40px #91ceff, 0 0 80px #91ceff;
-  }
-
-  100% {
-    /* Return to normal text shadow */
-    text-shadow: 0 0 5px #2196f3;
-  }
-}
 
 .dark .dropdown-menu {
   background-color: #26313f;
