@@ -96,6 +96,23 @@ describe('precache manifest', () => {
     expect(build.precacheUrls).not.toContain('/sw.js');
     expect(build.runtimeCachedFiles).not.toContain('sw.js');
   });
+
+  it('never caches Netlify deploy config files dropped by build-headers', () => {
+    // build-headers.mjs now runs BEFORE this script and writes _headers
+    // (and _redirects when VITE_API_BASE is set) into dist/. They are CDN
+    // directives, not site assets — the worker must ignore them entirely.
+    write('index.html', shellHtml());
+    write('assets/main.js', 'console.log("padify main");');
+    write('_headers', '/*\n  X-Content-Type-Options: nosniff\n');
+    write('_redirects', '/api/*  https://api.example.com/:splat  200!\n');
+
+    const build = generateServiceWorker(fixtureDir);
+
+    expect(build.precacheUrls).not.toContain('/_headers');
+    expect(build.precacheUrls).not.toContain('/_redirects');
+    expect(build.runtimeCachedFiles).not.toContain('_headers');
+    expect(build.runtimeCachedFiles).not.toContain('_redirects');
+  });
 });
 
 describe('cache version', () => {

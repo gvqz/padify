@@ -15,12 +15,9 @@
 # nosniff, referrer policy, HSTS, frame protection and a content security
 # policy whose script-src pins the build's inline scripts by hash. Netlify
 # picks the file up from the publish directory automatically.
-
-# Route the cloud API (server/) under the same origin. The API runs on
-# AlwaysData (see docs/CLOUD_SETUP.md §2); replace the host below with your
-# AlwaysData domain before going live.
-[[redirects]]
-  from = "/api/*"
-  to = "https://YOUR-ACCOUNT.alwaysdata.net/:splat"
-  status = 200
-  force = true
+#
+# The /api proxy redirect is generated too — scripts/build-headers.mjs
+# writes dist/_redirects from VITE_API_BASE (set it in Site settings →
+# Environment variables; see docs/CLOUD_SETUP.md §3). With the variable
+# unset the site is purely same-origin: /api must be routed by whatever
+# serves it, and nothing here stands in the way.

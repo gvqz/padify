@@ -6,7 +6,7 @@
   "description": "Offline-capable notepad with a suite of mini tools, built with TypeScript and Vite",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build && node scripts/build-sw.mjs && node scripts/build-headers.mjs",
+    "build": "tsc --noEmit && vite build && node scripts/build-headers.mjs && node scripts/build-sw.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

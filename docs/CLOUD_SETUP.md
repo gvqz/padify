@@ -196,35 +196,30 @@ No environment variables are needed. Clients upload pending attachments in
 the background after each sync cycle and download other devices' attachments
 on demand — blobs never ride along with note sync.
 
-## 3. Route the app to the API
+## 3. Point the site at the API
 
-The frontend calls the API at `apiBase` (default `''` = same origin, i.e.
-`/api/...` on your site). Easiest production setup: reverse-proxy `/api/*`
-from your static host to the API so everything is same-origin.
+One variable — `VITE_API_BASE` — decides where the API lives for every
+part of the deployment. The build bakes it into the client bundle
+(`src/cloud/config.ts`), writes the share viewer's config
+(`dist/share/config.js`), adds it to the CSP `connect-src`, and — on
+Netlify — emits the `/api/*` proxy redirect (`dist/_redirects`). The parts
+physically cannot disagree about the API's address:
 
-**Netlify** — the redirect is already wired in `netlify.toml`; just replace
-the placeholder with your AlwaysData domain:
+- **unset or empty** (default) → same-origin `/api`: route `/api/*` to the
+  API from whatever serves the site (the bundled `Caddyfile` already does
+  this for self-hosting; the Vite dev server proxies to `localhost:3041`).
+- **`https://api.example.com`** (an absolute origin, no path) → the app
+  and the share viewer call that origin directly (CORS), and the generated
+  `_redirects` additionally proxies `/api/*` there so curl and tests on
+  the same host work too.
 
-```toml
-[[redirects]]
-  from = "/api/*"
-  to = "https://YOUR-ACCOUNT.alwaysdata.net/:splat"
-  status = 200
-  force = true
-```
+Set it where the build runs (Netlify: Site settings → Environment
+variables), rebuild, deploy. A malformed value — a relative URL, a URL
+with a path — **fails the build** instead of shipping a site whose parts
+guessed differently.
 
-**Or point at a separate host** — set the build-time constant in
-`src/cloud/config.ts`:
-
-```ts
-export const CLOUD_BUILD_CONFIG: CloudConfig = {
-  apiBase: 'https://your-api-host.example'
-};
-```
-
-Rebuild and deploy (`npm run build` — Netlify does this on push). That's it:
-the **Cloud sync** icon appears in the padify navbar, Settings gains a
-"Cloud sync" section, and users can create accounts and sync.
+That's it: the **Cloud sync** icon appears in the padify navbar, Settings
+gains a "Cloud sync" section, and users can create accounts and sync.
 
 ## 4. Enable share links (/share/)
 
@@ -233,15 +228,10 @@ Share links let signed-in users publish a read-only copy of a note at
 and instant cancellation. The API and the `shares` table are already
 configured for it.
 
-The share page is static, so it cannot read `src/cloud/config.ts` — it has
-its own config file. With the same-origin proxy from step 3 the shipped
-default already works; otherwise open `public/share/config.js`:
-
-```js
-window.PADIFY_SHARE_CONFIG = {
-  apiBase: 'https://your-api-host.example'
-};
-```
+The share page is static, so it cannot read `src/cloud/config.ts` — but
+it doesn't need to: the build writes its config (`dist/share/config.js`)
+from the same `VITE_API_BASE`, so the app and the share page always agree
+on the API's address. Nothing to edit by hand.
 
 Behaviour reference:
 
@@ -302,7 +292,10 @@ localStorage.setItem('padifyCloudConfig', JSON.stringify({
 ```
 
 (The storage layer reads this key through its mirrors, so the plain
-localStorage call works.)
+localStorage call works. The override is a dev escape hatch: production
+ships a CSP whose `connect-src` admits only the baked-in origin, so a
+runtime override to a different origin works only where the headers are
+absent — i.e. on `vite dev`/`vite preview`.)
 
 Remove the key (or rely on the Vite proxy — `vite.config.ts` already proxies
 `/api` to `localhost:3041` in dev) to go back to the default.

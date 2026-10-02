@@ -204,7 +204,7 @@
       showState(
         ALERT_ICON,
         'Sharing isn\u2019t set up yet',
-        'This Padify deployment is missing its share configuration. If you own this site, fill in public/share/config.js \u2014 see docs/CLOUD_SETUP.md.'
+        'This Padify deployment is missing its share configuration. If you own this site, rebuild with VITE_API_BASE set to your API origin \u2014 see docs/CLOUD_SETUP.md.'
       );
       return;
     }

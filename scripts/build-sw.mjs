@@ -85,6 +85,11 @@ export function generateServiceWorker(distDir) {
       size: statSync(full).size,
     }))
     .filter((entry) => entry.rel !== 'sw.js')
+    // build-headers.mjs runs before this script and drops Netlify's own
+    // config files (_headers, _redirects) into dist/. They are deploy
+    // directives for the CDN, not site assets — the worker must not
+    // precache or runtime-cache them.
+    .filter((entry) => entry.rel !== '_headers' && entry.rel !== '_redirects')
     .sort((a, b) => a.rel.localeCompare(b.rel));
 
   const shell = shellAssetPaths(distDir);
