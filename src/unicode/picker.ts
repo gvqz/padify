@@ -2,7 +2,7 @@ import { $ } from '../lib/q';
 import { openModal, closeModal } from '../ui/behavior/modal';
 import type { NotepadUI } from '../selector';
 import type { UnicodeSymbol } from './types';
-import { showToast } from '../utils';
+import { showToast } from '../ui/toast';
 import { getEditorPort } from '../editor/port';
 import { stateGet, stateSet } from '../storage';
 

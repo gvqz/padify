@@ -1,5 +1,6 @@
 import { $ } from './lib/q';
-import { showToast, saveTextAsFile, getFileName } from './utils';
+import { showToast } from './ui/toast';
+import { saveTextAsFile, getFileName } from './exports';
 import { getEditorText } from './tabs';
 import type { TabManager } from './tabs';
 import { isListening, stopVoiceTyping } from './voice';

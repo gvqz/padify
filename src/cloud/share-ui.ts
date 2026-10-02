@@ -10,7 +10,7 @@
 import { $ } from '../lib/q';
 import { openModal, closeModal } from '../ui/behavior/modal';
 import Swal from 'sweetalert2';
-import { showToast } from '../utils';
+import { showToast } from '../ui/toast';
 import { deriveTabTitle, getActiveNoteContent, getTabManager } from '../tabs';
 import { getCloudSync } from './sync';
 import {

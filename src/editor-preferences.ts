@@ -2,21 +2,67 @@ import { $ } from './lib/q';
 import { closeModal } from './ui/behavior/modal';
 import Swal from 'sweetalert2';
 import type { AppState, EditorConfig, NotepadUI, StateKey } from './selector';
-import {
-  resetFontSize,
-  resetLineHeight,
-  resetFontWeight,
-  resetShowWordCountPill,
-  resetWriteDirection,
-  resetTexture,
-  resetOptimalLineLength,
-  resetFont,
-  showToast,
-  updateWordCountPill,
-} from './utils';
+import { showToast } from './ui/toast';
+import { updateWordCountPill } from './word-count-pill';
 import { getEditorText } from './tabs';
 import { stateGet, stateSet, stateRemove } from './storage';
 import { selector } from './selector';
+
+// --- "Reset to defaults" primitives ---------------------------------
+// Every editor preference has a reset that returns the surface AND its
+// control to the shipped default. They live here — with the module that
+// owns the preferences — instead of a shared utils file, because no one
+// outside the editor-preferences flow ever calls them.
+
+export function resetFontSize(defaultFontSize: number): void {
+  $('#note').css('font-size', defaultFontSize + 'px');
+  $('#fontSize').val(defaultFontSize);
+}
+
+export function resetLineHeight(defaultLineHeight: number): void {
+  $('#note').css('line-height', defaultLineHeight + 'px');
+  $('#lineHeight').val(defaultLineHeight);
+}
+
+export function resetFontWeight(defaultFontWeight: string): void {
+  $('#note').css('font-weight', defaultFontWeight);
+  $('#fontWeight').val(defaultFontWeight);
+}
+
+export function resetShowWordCountPill(defaultShowWordCountPill: string): void {
+  if (defaultShowWordCountPill === 'Yes') {
+    $('.word-count-container').show();
+  } else {
+    $('.word-count-container').hide();
+  }
+  $('#showWordCountPill').prop('checked', defaultShowWordCountPill === 'Yes');
+}
+
+export function resetWriteDirection(defaultWriteDirection: string): void {
+  $('#note').css('direction', defaultWriteDirection);
+  $('#writeDirection').val(defaultWriteDirection);
+}
+
+export function resetTexture(defaultTexture: string): void {
+  // The retired textures (chessboard/linen/marble) stay in this cleanup so
+  // a body still carrying one of their classes from an old session lands
+  // back on a paper that exists.
+  $(document.body).removeClass(
+    'dotted-paper graph-paper chessboard-paper starfield-paper grain-paper linen-paper recycled-paper newspaper-paper marble-paper',
+  );
+  $('#texture').val(defaultTexture);
+}
+
+export function resetFont(defaultFont: string): void {
+  $('#note').removeClass('dyslexic monospaced serif handwritten humanist pixel typewriter crayon');
+  $('#font').val(defaultFont);
+}
+
+export function resetOptimalLineLength(defaultEditorPadding: string, defaultOption: boolean): void {
+  const textArea = document.getElementById('note')!;
+  textArea.style.padding = defaultEditorPadding;
+  $('#optimalLineLength').prop('checked', defaultOption);
+}
 
 export interface EditorPreferencesContext {
   notepad: NotepadUI;

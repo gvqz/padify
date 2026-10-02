@@ -1,22 +1,19 @@
 import { $ } from './lib/q';
 import { selector } from './selector';
+import { calculateCharactersAndWords, calculateNoteStatistics } from './lib/text-stats';
+import { debounce } from './lib/debounce';
+import { copyNotesToClipboard, deleteNotes } from './context-menu';
 import {
-  calculateCharactersAndWords,
-  calculateNoteStatistics,
-  copyNotesToClipboard,
-  debounce,
   saveTextAsFile,
-  deleteNotes,
-  toggleFullScreen,
   exportNotesAsPDF,
   exportNotesAsDocx,
   downloadHTML,
-  updateWordCountPill,
   getFileName,
   getPdfFileName,
   getDocxFileName,
   getHtmlFileName,
-} from './utils';
+} from './exports';
+import { updateWordCountPill } from './word-count-pill';
 import { initUnicodePicker } from './unicode/picker';
 import {
   TabManager,
@@ -47,7 +44,7 @@ import { initEditorPreferences, clearTabIndentation } from './editor-preferences
 import { setBreakRemindersEnabled, trackWritingActivity } from './break-reminder';
 import { registerServiceWorker, initInstallPrompt } from './install-pwa';
 import { requestPersistentStorage, checkQuotaOnce } from './storage/persistence';
-import { showToast } from './utils';
+import { showToast } from './ui/toast';
 
 // The editor is a contenteditable <div id="note"> — see tabs.ts for the tab
 // model and the storage format. Text readers go through getEditorText().
@@ -343,7 +340,19 @@ export async function initApp(): Promise<void> {
   });
 
   notepad.fullScreenButton.click(function () {
-    toggleFullScreen();
+    // Fullscreen is shell chrome with one caller — it lives here. The
+    // arrows are the fullscreen toggle icon in the navbar.
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+      $('#arrowPointsOut').hide();
+      $('#arrowPointsIn').show();
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+        $('#arrowPointsIn').hide();
+        $('#arrowPointsOut').show();
+      }
+    }
   });
 
   // Update statistics when modal is shown

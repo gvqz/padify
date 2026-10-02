@@ -1,9 +1,9 @@
 import { $ } from './lib/q';
-import { enableDarkMode, enableLightMode, enableDeviceTheme } from './utils';
+import { stateSet } from './storage';
 import { setSetting } from './state/settings';
 import { selector } from './selector';
 
-interface ThemeConfig {
+export interface ThemeConfig {
   lightmodeText: string;
   darkmodeText: string;
   lightMetaColor: string;
@@ -11,10 +11,60 @@ interface ThemeConfig {
   metaThemeColor: HTMLElement | null;
 }
 
+export function enableDarkMode(
+  lightmodeText: string,
+  darkMetaColor: string,
+  metaThemeColor: HTMLElement | null,
+): void {
+  $(document.body).addClass('dark');
+  $('.navbar').removeClass('navbar-default');
+  metaThemeColor!.setAttribute('content', darkMetaColor);
+  stateSet('mode', 'dark');
+  announceTheme('dark');
+}
+
+export function enableLightMode(
+  darkmodeText: string,
+  lightMetaColor: string,
+  metaThemeColor: HTMLElement | null,
+): void {
+  $(document.body).removeClass('dark');
+  $('.navbar').addClass('navbar-default');
+  metaThemeColor!.setAttribute('content', lightMetaColor);
+  stateSet('mode', 'light');
+  announceTheme('light');
+}
+
+/** Rich notes re-map their ink when this fires (editor/theme-colors.ts). */
+function announceTheme(mode: 'light' | 'dark'): void {
+  document.dispatchEvent(new CustomEvent('padify:theme', { detail: { mode } }));
+}
+
+export function enableDeviceTheme(themeConfig: ThemeConfig): void {
+  if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    enableDarkMode(
+      themeConfig.lightmodeText,
+      themeConfig.darkMetaColor,
+      themeConfig.metaThemeColor,
+    );
+  } else {
+    enableLightMode(
+      themeConfig.darkmodeText,
+      themeConfig.lightMetaColor,
+      themeConfig.metaThemeColor,
+    );
+  }
+
+  stateSet('mode', 'device');
+}
+
 /**
- * Theme controller — applies the stored light/dark/device preference on
- * boot, wires the preference radios, follows the OS scheme while in
- * "device" mode, and exposes the reset used by "Reset to defaults".
+ * Theme controller — owns every way the app changes skin: applies the
+ * stored light/dark/device preference on boot, wires the preference
+ * radios, follows the OS scheme while in "device" mode, and exposes the
+ * reset used by "Reset to defaults". The enable* primitives below are the
+ * only writers of the 'mode' setting; nothing outside this module flips
+ * body classes or the meta theme color.
  */
 export function initThemeController(themeConfig: ThemeConfig): {
   resetToDevice: () => void;

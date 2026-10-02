@@ -10,7 +10,8 @@ import {
   setEditorHtml,
 } from './tabs';
 import { isHtmlContent, noteTypeLabel, type NoteType } from './editor/note-types';
-import { showToast, updateWordCountPill } from './utils';
+import { showToast } from './ui/toast';
+import { updateWordCountPill } from './word-count-pill';
 
 interface Snapshot {
   id?: number;

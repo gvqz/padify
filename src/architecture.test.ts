@@ -7,7 +7,7 @@
  */
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { MARKUP_CONTRACT } from './ui/contract';
 import type { EditorPort } from './editor/port';
@@ -209,6 +209,62 @@ describe('layering rules', () => {
       }
     }
     expect(violators).toEqual([]);
+  });
+});
+
+describe('module graph', () => {
+  it('has no static import cycles', () => {
+    // The repo carried exactly one cycle (utils ↔ tabs) for its whole
+    // life: utils reached into tabs for the delete flow, tabs reached
+    // back for a toast. Untangling it only stays untangled if the next
+    // cycle fails CI. Static imports count — a lazy import() is a
+    // legitimate cycle breaker (cloud/sync.ts, the music engines), so
+    // dynamic imports are excluded on purpose.
+    const srcFiles = walk(resolve(process.cwd(), 'src')).filter(
+      (f) => f.endsWith('.ts') && !f.endsWith('.test.ts'),
+    );
+
+    const graph = new Map<string, string[]>();
+    for (const file of srcFiles) {
+      const targets = [...read(file).matchAll(/from\s+['"]([^'"]+)['"]/g)]
+        .map((m) => m[1]!)
+        .filter((t) => t.startsWith('.'))
+        .map((t) => resolve(dirname(file), t) + '.ts');
+      graph.set(file, targets);
+    }
+
+    const visiting = new Set<string>();
+    const done = new Set<string>();
+    let cycle: string[] | null = null;
+
+    // Read through a function: the closure mutations TS cannot track would
+    // otherwise narrow `cycle` to its initializer type at the assertion.
+    const foundCycle = (): string[] | null => cycle;
+
+    const visit = (file: string, path: string[]): void => {
+      if (cycle !== null || done.has(file)) return;
+      if (visiting.has(file)) {
+        cycle = [...path.slice(path.indexOf(file)), file];
+        return;
+      }
+      visiting.add(file);
+      for (const target of graph.get(file) ?? []) {
+        if (graph.has(target)) visit(target, [...path, file]);
+        if (cycle !== null) return;
+      }
+      visiting.delete(file);
+      done.add(file);
+    };
+
+    for (const file of srcFiles) {
+      visit(file, []);
+      if (cycle !== null) break;
+    }
+
+    const cyclePath = foundCycle();
+    expect(
+      cyclePath === null ? 'no cycles' : cyclePath.map((f) => relative(process.cwd(), f)).join(' -> '),
+    ).toBe('no cycles');
   });
 });
 

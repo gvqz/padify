@@ -15,7 +15,7 @@
  * selectionchange + input, the way word processors do.
  */
 import type { TabManager } from '../tabs';
-import { showToast } from '../utils';
+import { showToast } from '../ui/toast';
 import {
   getEditorPort,
   type EditorPort,

@@ -32,7 +32,7 @@ import { $ } from '../../lib/q';
 import { openModal, closeModal } from '../../ui/behavior/modal';
 import Swal from 'sweetalert2';
 import type { SweetAlertResult } from 'sweetalert2';
-import { showToast } from '../../utils';
+import { showToast } from '../../ui/toast';
 import { LocalMusicLibrary } from './music/library';
 import {
   fetchMusicCapabilities,

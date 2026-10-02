@@ -25,11 +25,82 @@
  * Ctrl/Cmd + Shift + X while typing in the note.
  */
 
-import { showToast } from './utils';
+import Swal from 'sweetalert2';
+import { showToast } from './ui/toast';
 import { CASES } from './case-conversions';
 import { getEditorPort, type EditorCommand, type FormatCommand } from './editor/port';
 import { getTabManager } from './tabs';
 import { isRichNote } from './editor/note-types';
+
+// --- Note-level actions -----------------------------------------------
+// "Copy the note" and "Delete the note" are menu/keyboard actions, so
+// they live with the menu wiring that triggers them (the download menu
+// item, Alt+C, Ctrl+Shift+Del). They used to sit in the shared utils
+// grab-bag — whose import of getTabManager was half of the repo's only
+// import cycle.
+
+export function copyNotesToClipboard(note: string): void {
+  navigator.clipboard.writeText(note).then(
+    function () {
+      Swal.fire({
+        toast: true,
+        position: 'bottom',
+        icon: 'success',
+        title: 'Notes copied to clipboard!',
+        showConfirmButton: false,
+        timer: 2000,
+        customClass: {
+          popup: 'swal-toast-bottom-offset',
+        },
+      });
+    },
+    function () {
+      Swal.fire({
+        toast: true,
+        position: 'bottom',
+        icon: 'error',
+        title: 'Fail to copy. Check permissions for clipboard.',
+        showConfirmButton: false,
+        timer: 2000,
+        customClass: {
+          popup: 'swal-toast-bottom-offset',
+        },
+      });
+    },
+  );
+}
+
+export function deleteNotes(): void {
+  Swal.fire({
+    title: 'Want to delete notes?',
+    text: "You won't be able to revert this!",
+    icon: 'warning',
+    showCancelButton: true,
+    customClass: {
+      confirmButton: 'swal-btn-danger',
+    },
+    confirmButtonText: 'Yes, Delete!',
+    cancelButtonText: 'No, keep it.',
+  }).then(async (result) => {
+    if (result.value) {
+      // Save a safety snapshot before deleting — await so the snapshot
+      // actually lands before the note is wiped. Previously the call was
+      // fire-and-forget and could lose the snapshot if the IDB open hadn't
+      // completed yet, or if the page navigated away mid-write.
+      try {
+        await window.snapshotsManager!.createSnapshot();
+      } catch {
+        /* snapshots unavailable — the delete still proceeds */
+      }
+
+      // Clear the active tab (delete-notes only ever deleted the note
+      // that was on screen, so it stays per-tab now that tabs exist).
+      getTabManager()?.clearActiveTab();
+
+      Swal.fire('Deleted!', 'Your notes has been deleted.', 'success');
+    }
+  });
+}
 
 interface FormatDef {
   id: 'bold' | 'italic' | 'underline' | 'strike';

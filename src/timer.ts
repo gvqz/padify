@@ -1,6 +1,6 @@
 import { $ } from './lib/q';
 import { closeModal } from './ui/behavior/modal';
-import { showToast } from './utils';
+import { showToast } from './ui/toast';
 import { stateGet, stateSet } from './storage';
 
 // Timer configuration

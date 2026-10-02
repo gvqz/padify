@@ -33,7 +33,7 @@
 
 import { $, type Q } from './lib/q';
 import Swal from 'sweetalert2';
-import { showToast } from './utils';
+import { showToast } from './ui/toast';
 import {
   ACTIVE_TAB_KEY,
   loadNotes,

@@ -1,13 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   countWords,
   extractWordTokens,
   countSyllables,
   calculateCharactersAndWords,
   calculateNoteStatistics,
-  debounce,
   STOP_WORDS,
-} from './utils';
+} from './text-stats';
 
 describe('countWords', () => {
   it('returns 0 for empty and whitespace-only text', () => {
@@ -108,42 +107,6 @@ describe('calculateNoteStatistics', () => {
 
   it('separates paragraphs on blank lines', () => {
     expect(calculateNoteStatistics('one two\n\nthree').paragraphs).toBe(2);
-  });
-});
-
-describe('debounce', () => {
-  it('coalesces rapid calls into one trailing invocation', () => {
-    vi.useFakeTimers();
-    try {
-      const fn = vi.fn();
-      const debounced = debounce(fn, 100);
-
-      debounced();
-      debounced();
-      debounced();
-      expect(fn).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(100);
-      expect(fn).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('fires immediately when immediate=true, then ignores the trailing edge', () => {
-    vi.useFakeTimers();
-    try {
-      const fn = vi.fn();
-      const debounced = debounce(fn, 100, true);
-
-      debounced();
-      expect(fn).toHaveBeenCalledTimes(1);
-
-      vi.advanceTimersByTime(200);
-      expect(fn).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });
 

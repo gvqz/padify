@@ -16,7 +16,7 @@
  */
 
 import { $, type Q } from './lib/q';
-import { showToast } from './utils';
+import { showToast } from './ui/toast';
 import { getEditorPort } from './editor/port';
 
 // ---------------------------------------------------------------------------

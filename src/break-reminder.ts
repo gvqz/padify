@@ -1,5 +1,6 @@
 import { $ } from './lib/q';
-import { showToast, debounce } from './utils';
+import { showToast } from './ui/toast';
+import { debounce } from './lib/debounce';
 import { stateGet, stateSet, stateRemove } from './storage';
 
 /**

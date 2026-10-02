@@ -9,7 +9,7 @@
 
 import { $ } from '../lib/q';
 import { openModal, closeModal } from '../ui/behavior/modal';
-import { showToast } from '../utils';
+import { showToast } from '../ui/toast';
 import { getCloudConfig } from './config';
 import { getCloudSync, type CloudStatus } from './sync';
 

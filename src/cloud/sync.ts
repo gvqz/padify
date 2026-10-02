@@ -546,7 +546,7 @@ async function runSyncOnce(): Promise<void> {
   if (merge.conflicts.length > 0) {
     // A rescue the user never sees is half a rescue. The toast is loaded
     // lazily so this module stays import-clean for its tests.
-    void import('../utils')
+    void import('../ui/toast')
       .then(({ showToast }) => {
         showToast(`${merge.conflicts.join('. ')}.`);
       })

@@ -1,6 +1,21 @@
 import Swal from 'sweetalert2';
-import { showToast, getPWADisplayMode } from './utils';
+import { showToast } from './ui/toast';
 import { selector } from './selector';
+
+/** How the app is currently framed: a Trusted Web Activity, an installed
+ * standalone window, or a plain browser tab. Only this module asks — it
+ * decides whether the install pitch makes sense at all. */
+export function getPWADisplayMode(): 'twa' | 'standalone' | 'browser' {
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+
+  if (document.referrer.startsWith('android-app://')) {
+    return 'twa';
+  } else if ((navigator as Navigator & { standalone?: boolean }).standalone || isStandalone) {
+    return 'standalone';
+  }
+
+  return 'browser';
+}
 
 // `beforeinstallprompt` is not part of lib.dom's WindowEventMap.
 declare global {
