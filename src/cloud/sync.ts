@@ -26,6 +26,10 @@ import { flushAttachmentUploads } from './attachments';
 import { stateGet, stateSet, stateRemove } from '../storage';
 import { normalizeNoteType } from '../editor/note-types';
 import type { NoteTab, TabManager, TabTombstone, TabsSyncPayload } from '../tabs';
+// The wire contract both sides of the HTTP boundary share — types below,
+// and the one request-body ceiling the client batches under.
+import { MAX_BODY_BYTES } from '../../shared/wire';
+import type { IncomingNoteRow } from '../../shared/wire';
 
 // ---------------------------------------------------------------------------
 // Public surface
@@ -66,7 +70,10 @@ export interface CloudSync {
 
 export interface NoteRow {
   id: string;
-  user_id: string;
+  /** v1-pull-only: the server's v2 pull never sends it (shared/wire.ts —
+   * PullRowV2), and its PUT parser never reads it. Kept optional so the
+   * lenient v1 parse keeps compiling. */
+  user_id?: string;
   name: string | null;
   /**
    * The note's content. The rename transition's legacy twin is dead on
@@ -482,12 +489,12 @@ async function runSyncOnce(): Promise<void> {
     pendingPush.forEach((id) => {
       const tab = byId.get(id);
       if (tab) {
-        rows.push(tabToRow(tab, userId, payload.tabs.indexOf(tab)));
+        rows.push(tabToRow(tab, payload.tabs.indexOf(tab)));
         return;
       }
       const tombstone = payload.tombstones.find((entry) => entry.id === id);
       if (tombstone) {
-        rows.push(tombstoneToRow(tombstone, userId));
+        rows.push(tombstoneToRow(tombstone));
       }
     });
 
@@ -579,14 +586,14 @@ async function runSyncOnce(): Promise<void> {
       // since the cursor (its place alone decides), or brand-new to the
       // server — the first upload of a local-only note.
       if (remotePosition === null || remotePosition !== index) {
-        diffRows.push(tabToRow(tab, userId, index));
+        diffRows.push(tabToRow(tab, index));
       }
       return;
     }
     // After the merge kept the local version, its updatedAt is the newer
     // one; equal clocks mean nothing changed — no churn.
     if (remote.updated_at < tab.updatedAt || remotePosition !== index) {
-      diffRows.push(tabToRow(tab, userId, index));
+      diffRows.push(tabToRow(tab, index));
     }
   });
 
@@ -595,7 +602,7 @@ async function runSyncOnce(): Promise<void> {
     if (remote?.deleted) {
       confirmIds.push(tombstone.id);
     } else if (!remote || remote.updated_at < tombstone.updatedAt) {
-      diffRows.push(tombstoneToRow(tombstone, userId));
+      diffRows.push(tombstoneToRow(tombstone));
     }
   });
 
@@ -882,16 +889,8 @@ export function mergeRemote(
   return { tabs, changed: touched, conflicts };
 }
 
-/** The server rejects request bodies over 2 MB (its MAX_BODY_BYTES). */
+/** The server rejects request bodies over 2 MB (see shared/wire.ts). */
 const PUSH_BATCH_BYTES = 1_500_000;
-
-/**
- * The server's request-body ceiling, mirrored from server/http.ts
- * (MAX_BODY_BYTES). The client cannot import the server's constant — the
- * two packages build against different tsconfigs — so it is redeclared
- * here, and their sameness is pinned by the e2e wire tests.
- */
-const SERVER_BODY_CAP = 2_000_000;
 
 /**
  * Envelope of a single-row PUT body around the row's own JSON
@@ -921,8 +920,8 @@ const utf8 = new TextEncoder();
 export function rowUnsyncable(row: NoteRow): boolean {
   const json = JSON.stringify(row);
   return (
-    json.length + BODY_ENVELOPE_SLACK > SERVER_BODY_CAP ||
-    utf8.encode(json).length + BODY_ENVELOPE_SLACK > SERVER_BODY_CAP
+    json.length + BODY_ENVELOPE_SLACK > MAX_BODY_BYTES ||
+    utf8.encode(json).length + BODY_ENVELOPE_SLACK > MAX_BODY_BYTES
   );
 }
 
@@ -958,13 +957,12 @@ export function batchRowsForPush(rows: NoteRow[]): NoteRow[][] {
   return batches;
 }
 
-function tabToRow(tab: NoteTab, userId: string, position: number): NoteRow {
+function tabToRow(tab: NoteTab, position: number): IncomingNoteRow {
   return {
     id: tab.id,
-    user_id: userId,
     name: tab.name,
     // One key: v2 clients stopped emitting the rename's legacy twin (see
-    // NoteRow). V1 servers read either and prefer `content`.
+    // shared/wire.ts). V1 servers read either and prefer `content`.
     content: tab.content,
     position,
     created_at: tab.createdAt,
@@ -974,10 +972,9 @@ function tabToRow(tab: NoteTab, userId: string, position: number): NoteRow {
   };
 }
 
-function tombstoneToRow(tombstone: TabTombstone, userId: string): NoteRow {
+function tombstoneToRow(tombstone: TabTombstone): IncomingNoteRow {
   return {
     id: tombstone.id,
-    user_id: userId,
     name: null,
     content: '',
     position: 0,

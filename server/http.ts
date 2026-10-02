@@ -7,7 +7,9 @@
  * src/server-handlers.test.ts).
  */
 
-export const MAX_BODY_BYTES = 2_000_000;
+import { MAX_BODY_BYTES } from '../shared/wire';
+
+export { MAX_BODY_BYTES };
 
 export function corsHeaders(request: Request): Record<string, string> {
   const allowList = (process.env.ALLOWED_ORIGINS ?? '*')

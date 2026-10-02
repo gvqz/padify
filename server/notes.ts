@@ -15,6 +15,12 @@
 import { type Db } from './db';
 import { json, readJson } from './http';
 import type { SessionUser } from './auth';
+import type { IncomingNoteRow, NotesPullV2 } from '../shared/wire';
+
+// The PUT row contract lives in shared/wire.ts — the one definition the
+// client (src/cloud/sync.ts) and this parser both read from. Re-exported
+// here for existing importers.
+export type { IncomingNoteRow };
 
 /**
  * Type ids are url-safe slugs. The client enforces the same shape
@@ -22,17 +28,6 @@ import type { SessionUser } from './auth';
  * agree, or types would silently fall off notes at the border.
  */
 export const NOTE_TYPE_ID_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
-
-export interface IncomingNoteRow {
-  id: string;
-  name: string | null;
-  content: string;
-  position: number;
-  created_at: number;
-  updated_at: number;
-  deleted: boolean;
-  note_type: string | null;
-}
 
 export function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
@@ -120,24 +115,25 @@ export async function handleNotesGet(db: Db, request: Request, user: SessionUser
       (max, row) => Math.max(max, Number(row.seq) || 0),
       cursor
     );
-    return json(request, {
+    const payload: NotesPullV2 = {
       v: 2,
       rows: rows.map(row => ({
         id: String(row.id),
-        name: row.name ?? null,
-        content: row.content ?? '',
+        name: row.name == null ? null : String(row.name),
+        content: String(row.content ?? ''),
         position: Number(row.position) || 0,
         created_at: Number(row.created_at) || 0,
         updated_at: Number(row.updated_at) || 0,
         deleted: Number(row.deleted) === 1,
-        note_type: row.note_type ?? null,
+        note_type: row.note_type == null ? null : String(row.note_type),
         seq: Number(row.seq) || 0
       })),
       // The full remote position order, by id — unchanged rows included.
       order: order.map(row => String(row.id)),
       // The client's next cursor: everything at or below this has been seen.
       cursor: nextCursor
-    });
+    };
+    return json(request, payload);
   }
 
   const rows = await db.all(
