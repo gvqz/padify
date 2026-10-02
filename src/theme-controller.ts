@@ -1,7 +1,5 @@
 import { $ } from './lib/q';
-import { stateSet } from './storage';
-import { setSetting } from './state/settings';
-import { selector } from './selector';
+import { getSetting, setSetting } from './state/settings';
 
 export interface ThemeConfig {
   lightmodeText: string;
@@ -19,7 +17,7 @@ export function enableDarkMode(
   $(document.body).addClass('dark');
   $('.navbar').removeClass('navbar-default');
   metaThemeColor!.setAttribute('content', darkMetaColor);
-  stateSet('mode', 'dark');
+  setSetting('mode', 'dark');
   announceTheme('dark');
 }
 
@@ -31,7 +29,7 @@ export function enableLightMode(
   $(document.body).removeClass('dark');
   $('.navbar').addClass('navbar-default');
   metaThemeColor!.setAttribute('content', lightMetaColor);
-  stateSet('mode', 'light');
+  setSetting('mode', 'light');
   announceTheme('light');
 }
 
@@ -55,7 +53,7 @@ export function enableDeviceTheme(themeConfig: ThemeConfig): void {
     );
   }
 
-  stateSet('mode', 'device');
+  setSetting('mode', 'device');
 }
 
 /**
@@ -69,15 +67,18 @@ export function enableDeviceTheme(themeConfig: ThemeConfig): void {
 export function initThemeController(themeConfig: ThemeConfig): {
   resetToDevice: () => void;
 } {
-  const { state } = selector();
-
-  if (!state.isUserPreferredTheme) {
+  if (!getSetting('isUserPreferredTheme')) {
     // Through the settings choke point (src/state/settings.ts): the write
     // notifies like every other setting write, instead of bypassing.
     setSetting('isUserPreferredTheme', 'false');
   }
 
-  if (state.mode && state.mode === 'dark') {
+  // Fresh read (getSetting), never the boot-time snapshot — this module
+  // runs at boot but also reacts later, and 'mode' is written by its own
+  // radios below.
+  const mode = getSetting('mode');
+
+  if (mode === 'dark') {
     enableDarkMode(
       themeConfig.lightmodeText,
       themeConfig.darkMetaColor,
@@ -85,7 +86,7 @@ export function initThemeController(themeConfig: ThemeConfig): {
     );
 
     $('input[name="themes"][value="dark"]').prop('checked', true);
-  } else if (state.mode && state.mode === 'light') {
+  } else if (mode === 'light') {
     enableLightMode(
       themeConfig.darkmodeText,
       themeConfig.lightMetaColor,
@@ -128,9 +129,9 @@ export function initThemeController(themeConfig: ThemeConfig): {
   // This changes the application's theme when
   // user toggles device's theme preference
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    const current = selector().state;
-
-    if (current.mode && current.mode === 'device') {
+    // Fresh read — the snapshot at boot would still say whatever the user
+    // picked at boot, not what the radios have written since.
+    if (getSetting('mode') === 'device') {
       enableDeviceTheme(themeConfig);
     }
   });

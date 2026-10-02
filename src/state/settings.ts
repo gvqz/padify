@@ -17,10 +17,10 @@
  *  - offers onChangeSetting(key | keys | '*', cb) so features can REACT to
  *    preference changes instead of polling or re-reading stale snapshots
  *
- * All writes should go through here. selector.ts's setState delegates to
- * settings.set, which makes every existing writer notify automatically;
- * direct stateSet() callers (still in a few modules) bypass notifications
- * until they migrate — see the note on `setSetting`.
+ * All writes go through here. selector.ts's setState delegates to
+ * settings.set, and the last direct stateSet callers (theme, font
+ * selection, typing-effects resets) migrated — see the choke-point pin in
+ * architecture.test.ts, which fails the build if a raw write comes back.
  */
 
 import { stateGet, stateRemove, stateSet } from '../storage';
@@ -142,8 +142,9 @@ export function getSetting(key: SettingKey): string | null {
 /**
  * Writes a setting and notifies subscribers. Values persist exactly as
  * they always have (plain strings in the storage layer), so nothing needs
- * migrating. NOTE: writes that bypass this module (direct stateSet calls
- * in a few modules) persist fine but do not notify.
+ * migrating. Every enumerated-key write in the codebase routes through
+ * here — enforced by architecture.test.ts (no raw stateSet/stateRemove on
+ * a setting key outside this module and the storage layer).
  */
 export function setSetting(key: SettingKey, value: string): void {
   stateSet(key, value);

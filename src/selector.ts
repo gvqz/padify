@@ -43,36 +43,6 @@ export interface NotepadUI {
   statisticsModal: Q;
 }
 
-export interface AppState {
-  /**
-   * A SNAPSHOT taken when selector() runs — values go stale as settings
-   * change. New code should read through src/state/settings.ts instead;
-   * this shape stays for the legacy consumers that destructure it once.
-   */
-  note: string | null;
-  mode: string | null;
-  isUserPreferredTheme: string | null;
-  userChosenFontSize: string | null;
-  userChosenFontWeight: string | null;
-  userChosenLineHeight: string | null;
-  hasUserDismissedDonationPopup: string | null;
-  userChosenWordCountPillSelected: string | null;
-  userChosenWriteDirection: string | null;
-  userChosenTexture: string | null;
-  userChosenOptimalLineLengthSelected: string | null;
-  isMonospaced: string | null;
-  isDyslexic: string | null;
-  isSerif: string | null;
-  userChosenSpellCheck: string | null;
-  userChosenTabIndentation: string | null;
-  userChosenTransparentWordCountPillSelected: string | null;
-  userChosenTypewriterSound: string | null;
-  userChosenTypewriterVolume: string | null;
-  userChosenBreakReminders: string | null;
-  userChosenExplodingEffect: string | null;
-  selectedFont: string | null;
-}
-
 export interface EditorConfig {
   defaultFontSize: number;
   defaultLineHeight: number;
@@ -92,7 +62,6 @@ export interface EditorConfig {
 
 export interface AppSelector {
   notepad: NotepadUI;
-  state: AppState;
   defaultConfig: EditorConfig;
   get: (context: string | HTMLElement | Q) => Q;
   getState: (state: StateKey) => string | null;
@@ -174,32 +143,6 @@ export function selector(): AppSelector {
       explodingEffect: selectById('explodingEffect'),
       bottomLine: selectByClassName('bottom-line'),
       statisticsModal: selectById('statisticsModal'),
-    },
-    state: {
-      note: getState('note'),
-      mode: getState('mode'),
-      isUserPreferredTheme: getState('isUserPreferredTheme'),
-      userChosenFontSize: getState('userChosenFontSize'),
-      userChosenFontWeight: getState('userChosenFontWeight'),
-      userChosenLineHeight: getState('userChosenLineHeight'),
-      hasUserDismissedDonationPopup: getState('hasUserDismissedDonationPopup'),
-      userChosenWordCountPillSelected: getState('userChosenWordCountPillSelected'),
-      userChosenWriteDirection: getState('userChosenWriteDirection'),
-      userChosenTexture: getState('userChosenTexture'),
-      userChosenOptimalLineLengthSelected: getState('userChosenOptimalLineLengthSelected'),
-      isMonospaced: getState('monospaced'),
-      isDyslexic: getState('dyslexicFont'),
-      isSerif: getState('serifFont'),
-      userChosenSpellCheck: getState('userChosenSpellCheck'),
-      userChosenTabIndentation: getState('userChosenTabIndentation'),
-      userChosenTransparentWordCountPillSelected: getState(
-        'userChosenTransparentWordCountPillSelected',
-      ),
-      userChosenTypewriterSound: getState('userChosenTypewriterSound'),
-      userChosenTypewriterVolume: getState('userChosenTypewriterVolume'),
-      userChosenBreakReminders: getState('userChosenBreakReminders'),
-      userChosenExplodingEffect: getState('userChosenExplodingEffect'),
-      selectedFont: getState('selectedFont'),
     },
     defaultConfig: DEFAULT_EDITOR_CONFIG,
     get,

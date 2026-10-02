@@ -1,12 +1,12 @@
 import { $ } from './lib/q';
 import { closeModal } from './ui/behavior/modal';
 import Swal from 'sweetalert2';
-import type { AppState, EditorConfig, NotepadUI, StateKey } from './selector';
+import type { EditorConfig, NotepadUI, StateKey } from './selector';
 import { showToast } from './ui/toast';
 import { updateWordCountPill } from './word-count-pill';
 import { getEditorText } from './tabs';
-import { stateGet, stateSet, stateRemove } from './storage';
-import { selector } from './selector';
+import { stateGet } from './storage';
+import { getSetting, removeSetting, setSetting } from './state/settings';
 
 // --- "Reset to defaults" primitives ---------------------------------
 // Every editor preference has a reset that returns the surface AND its
@@ -66,7 +66,6 @@ export function resetOptimalLineLength(defaultEditorPadding: string, defaultOpti
 
 export interface EditorPreferencesContext {
   notepad: NotepadUI;
-  state: AppState;
   setState: (key: StateKey, value: string) => void;
   editorConfig: EditorConfig;
   optimalLineLengthPadding: string;
@@ -81,8 +80,8 @@ export interface EditorPreferencesContext {
 export function initEditorPreferences(ctx: EditorPreferencesContext): {
   resetToDefaults: () => void;
 } {
-  const { notepad, state, setState, editorConfig, optimalLineLengthPadding } = ctx;
-  const removeState = stateRemove;
+  const { notepad, setState, editorConfig, optimalLineLengthPadding } = ctx;
+  const removeState = removeSetting;
 
   // Retired textures (chessboard, linen, marble) are deliberately absent:
   // a stored choice of one of them fails this check and migrates to normal.
@@ -118,28 +117,31 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
 
   // ---- restore stored preferences ---------------------------------
 
-  if (state.userChosenFontSize) {
-    notepad.note.css('font-size', state.userChosenFontSize + 'px');
-    notepad.fontSize.val(state.userChosenFontSize);
+  const userChosenFontSize = getSetting('userChosenFontSize');
+  if (userChosenFontSize) {
+    notepad.note.css('font-size', userChosenFontSize + 'px');
+    notepad.fontSize.val(userChosenFontSize);
   } else {
     resetFontSize(editorConfig.defaultFontSize);
   }
 
-  if (state.userChosenFontWeight) {
-    notepad.note.css('font-weight', state.userChosenFontWeight);
-    notepad.fontWeight.val(state.userChosenFontWeight);
+  const userChosenFontWeight = getSetting('userChosenFontWeight');
+  if (userChosenFontWeight) {
+    notepad.note.css('font-weight', userChosenFontWeight);
+    notepad.fontWeight.val(userChosenFontWeight);
   } else {
     resetFontWeight(editorConfig.defaultFontWeight);
   }
 
-  if (state.userChosenLineHeight) {
-    notepad.note.css('line-height', state.userChosenLineHeight + 'px');
-    notepad.lineHeight.val(state.userChosenLineHeight);
+  const userChosenLineHeight = getSetting('userChosenLineHeight');
+  if (userChosenLineHeight) {
+    notepad.note.css('line-height', userChosenLineHeight + 'px');
+    notepad.lineHeight.val(userChosenLineHeight);
   } else {
     resetLineHeight(editorConfig.defaultLineHeight);
   }
 
-  const userChosenWordCountPillSelected = state.userChosenWordCountPillSelected;
+  const userChosenWordCountPillSelected = getSetting('userChosenWordCountPillSelected');
 
   if (userChosenWordCountPillSelected) {
     if (userChosenWordCountPillSelected === 'Yes') {
@@ -156,46 +158,50 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
   // The word count pill always uses the counter pill style.
   notepad.wordCountContainer.addClass('transparency');
 
-  if (state.userChosenWriteDirection) {
-    notepad.note.css('direction', state.userChosenWriteDirection);
-    notepad.writeDirection.val(state.userChosenWriteDirection);
+  const userChosenWriteDirection = getSetting('userChosenWriteDirection');
+  if (userChosenWriteDirection) {
+    notepad.note.css('direction', userChosenWriteDirection);
+    notepad.writeDirection.val(userChosenWriteDirection);
   } else {
     resetWriteDirection(editorConfig.defaultWriteDirection);
   }
 
-  if (state.userChosenTexture) {
-    if (allowedTextures.includes(state.userChosenTexture)) {
-      applyTexture(state.userChosenTexture);
+  const userChosenTexture = getSetting('userChosenTexture');
+  if (userChosenTexture) {
+    if (allowedTextures.includes(userChosenTexture)) {
+      applyTexture(userChosenTexture);
 
-      notepad.texture.val(state.userChosenTexture);
+      notepad.texture.val(userChosenTexture);
     } else {
       removeState('userChosenTexture');
       resetTexture(editorConfig.defaultTexture);
     }
   }
 
-  if (state.userChosenOptimalLineLengthSelected) {
+  const userChosenOptimalLineLengthSelected = getSetting('userChosenOptimalLineLengthSelected');
+  if (userChosenOptimalLineLengthSelected) {
     const textArea = document.getElementById('note')!;
 
-    if (state.userChosenOptimalLineLengthSelected === 'Yes') {
+    if (userChosenOptimalLineLengthSelected === 'Yes') {
       textArea.style.padding = optimalLineLengthPadding;
     } else {
       textArea.style.padding = editorConfig.defaultOptimalLineLengthPadding;
     }
 
-    notepad.optimalLineLength.prop('checked', state.userChosenOptimalLineLengthSelected === 'Yes');
+    notepad.optimalLineLength.prop('checked', userChosenOptimalLineLengthSelected === 'Yes');
   } else {
     notepad.optimalLineLength.prop('checked', false);
   }
 
-  if (state.userChosenSpellCheck) {
-    if (state.userChosenSpellCheck === 'Yes') {
+  const userChosenSpellCheck = getSetting('userChosenSpellCheck');
+  if (userChosenSpellCheck) {
+    if (userChosenSpellCheck === 'Yes') {
       notepad.note.attr('spellcheck', true as unknown as string);
     } else {
       notepad.note.attr('spellcheck', false as unknown as string);
     }
 
-    notepad.spellCheck.prop('checked', state.userChosenSpellCheck === 'Yes');
+    notepad.spellCheck.prop('checked', userChosenSpellCheck === 'Yes');
   } else {
     notepad.spellCheck.prop('checked', true);
   }
@@ -280,19 +286,19 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
     const serifFont = stateGet('serifFont') === 'true';
 
     if (dyslexicFont) {
-      stateSet('selectedFont', 'dyslexic');
+      setSetting('selectedFont', 'dyslexic');
     } else if (monospacedFont) {
-      stateSet('selectedFont', 'monospaced');
+      setSetting('selectedFont', 'monospaced');
     } else if (serifFont) {
-      stateSet('selectedFont', 'serif');
+      setSetting('selectedFont', 'serif');
     } else {
-      stateSet('selectedFont', 'default');
+      setSetting('selectedFont', 'default');
     }
 
     // Clear old preferences
-    stateRemove('dyslexicFont');
-    stateRemove('monospaced');
-    stateRemove('serifFont');
+    removeSetting('dyslexicFont');
+    removeSetting('monospaced');
+    removeSetting('serifFont');
   }
 
   // Apply font based on selection
@@ -356,7 +362,7 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
   // Handle font selection change
   fontSelect.addEventListener('change', (e) => {
     const selectedFont = (e.target as HTMLSelectElement).value;
-    stateSet('selectedFont', selectedFont);
+    setSetting('selectedFont', selectedFont);
     applyFont(selectedFont);
   });
 
@@ -366,41 +372,44 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
   return {
     /** Clears the persisted appearance preferences and restores defaults. */
     resetToDefaults(): void {
-      // Read the CURRENT state — the boot-time snapshot captured in ctx
-      // is stale once the user has changed preferences this session.
-      const state = selector().state;
+      // Fresh reads (getSetting) — the point of reset is to clear what is
+      // set NOW, not what was set when the module booted.
 
-      if (state.userChosenFontSize) {
+      const userChosenFontSize = getSetting('userChosenFontSize');
+  if (userChosenFontSize) {
         removeState('userChosenFontSize');
         resetFontSize(editorConfig.defaultFontSize);
       }
 
-      if (state.userChosenLineHeight) {
+      const userChosenLineHeight = getSetting('userChosenLineHeight');
+  if (userChosenLineHeight) {
         removeState('userChosenLineHeight');
         resetLineHeight(editorConfig.defaultLineHeight);
       }
 
-      if (state.userChosenFontWeight) {
+      const userChosenFontWeight = getSetting('userChosenFontWeight');
+  if (userChosenFontWeight) {
         removeState('userChosenFontWeight');
         resetFontWeight(editorConfig.defaultFontWeight);
       }
 
-      if (state.userChosenWordCountPillSelected) {
+      if (getSetting('userChosenWordCountPillSelected')) {
         removeState('userChosenWordCountPillSelected');
         resetShowWordCountPill(editorConfig.defaultShowWordCountPill);
       }
 
-      if (state.userChosenWriteDirection) {
+      const userChosenWriteDirection = getSetting('userChosenWriteDirection');
+  if (userChosenWriteDirection) {
         removeState('userChosenWriteDirection');
         resetWriteDirection(editorConfig.defaultWriteDirection);
       }
 
-      if (state.userChosenTexture) {
+      if (getSetting('userChosenTexture')) {
         removeState('userChosenTexture');
         resetTexture(editorConfig.defaultTexture);
       }
 
-      if (state.userChosenOptimalLineLengthSelected) {
+      if (getSetting('userChosenOptimalLineLengthSelected')) {
         removeState('userChosenOptimalLineLengthSelected');
         resetOptimalLineLength(
           editorConfig.defaultOptimalLineLengthPadding,
@@ -408,19 +417,19 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
         );
       }
 
-      if (state.selectedFont) {
+      if (getSetting('selectedFont')) {
         removeState('selectedFont');
         resetFont(editorConfig.defaultFont);
       }
 
-      if (state.userChosenSpellCheck) {
+      if (getSetting('userChosenSpellCheck')) {
         removeState('userChosenSpellCheck');
         notepad.note.attr('spellcheck', false as unknown as string);
         notepad.spellCheck.prop('checked', editorConfig.defaultSpellCheck);
       }
 
       // Tab indentation is always enabled now — drop any legacy state.
-      if (state.userChosenTabIndentation) {
+      if (getSetting('userChosenTabIndentation')) {
         removeState('userChosenTabIndentation');
       }
     },

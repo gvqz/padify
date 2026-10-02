@@ -45,6 +45,7 @@ import { setBreakRemindersEnabled, trackWritingActivity } from './break-reminder
 import { registerServiceWorker, initInstallPrompt } from './install-pwa';
 import { requestPersistentStorage, checkQuotaOnce } from './storage/persistence';
 import { showToast } from './ui/toast';
+import { getSetting, onChangeSetting, removeSetting } from './state/settings';
 
 // The editor is a contenteditable <div id="note"> — see tabs.ts for the tab
 // model and the storage format. Text readers go through getEditorText().
@@ -70,7 +71,7 @@ export async function initApp(): Promise<void> {
   const darkMetaColor = '#0a0a0a';
   const lightMetaColor = '#ffffff';
   const metaThemeColor = document.querySelector('meta[name=theme-color]') as HTMLElement | null;
-  const { notepad, state, setState, removeState } = selector();
+  const { notepad, setState } = selector();
   const optimalLineLengthPadding = '15px 15vw 40px';
 
   const editorConfig = selector().defaultConfig;
@@ -210,21 +211,23 @@ export async function initApp(): Promise<void> {
   // Editor appearance preferences (font, texture, pill, …).
   const editorPreferences = initEditorPreferences({
     notepad,
-    state,
     setState,
     editorConfig,
     optimalLineLengthPadding,
   });
 
-  if (state.userChosenBreakReminders) {
-    const isBreakRemindersEnabled = state.userChosenBreakReminders === 'Yes';
-    notepad.breakReminders.prop('checked', isBreakRemindersEnabled);
-
-    setBreakRemindersEnabled(isBreakRemindersEnabled);
-  } else {
-    notepad.breakReminders.prop('checked', editorConfig.defaultBreakReminders);
-    setBreakRemindersEnabled(editorConfig.defaultBreakReminders);
-  }
+  // Break reminders react to the setting itself, not to whoever wrote it:
+  // the checkbox, the boot restore and "Reset to defaults" all flow through
+  // one subscription instead of three copies of the same apply logic.
+  const applyBreakReminders = (value: string | null): void => {
+    const isEnabled = value === null ? editorConfig.defaultBreakReminders : value === 'Yes';
+    notepad.breakReminders.prop('checked', isEnabled);
+    setBreakRemindersEnabled(isEnabled);
+  };
+  applyBreakReminders(getSetting('userChosenBreakReminders'));
+  onChangeSetting('userChosenBreakReminders', ({ value }) => {
+    applyBreakReminders(value);
+  });
 
   notepad.note.on(
     'input',
@@ -380,20 +383,15 @@ export async function initApp(): Promise<void> {
   notepad.breakReminders.on('change', function () {
     const isEnabled = $(this).is(':checked');
     setState('userChosenBreakReminders', isEnabled ? 'Yes' : 'No');
-
-    setBreakRemindersEnabled(isEnabled);
   });
 
   notepad.resetPreferences.click(function () {
     editorPreferences.resetToDefaults();
     typingEffects.reset(editorConfig);
 
-    if (selector().state.userChosenBreakReminders) {
-      removeState('userChosenBreakReminders');
-    }
-
-    setBreakRemindersEnabled(editorConfig.defaultBreakReminders);
-    notepad.breakReminders.prop('checked', editorConfig.defaultBreakReminders);
+    // The break-reminders subscription applies the default when the
+    // setting clears — no separate restore call needed here.
+    removeSetting('userChosenBreakReminders');
 
     themeController.resetToDevice();
   });

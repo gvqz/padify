@@ -10,6 +10,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { MARKUP_CONTRACT } from './ui/contract';
+import { SETTING_KEYS } from './state/settings';
 import type { EditorPort } from './editor/port';
 
 // Vitest runs from the repo root; import.meta.url is not file-scheme here.
@@ -265,6 +266,31 @@ describe('module graph', () => {
     expect(
       cyclePath === null ? 'no cycles' : cyclePath.map((f) => relative(process.cwd(), f)).join(' -> '),
     ).toBe('no cycles');
+  });
+
+  it('no setting write bypasses the settings choke point', () => {
+    // Every enumerated-key write routes through setSetting/removeSetting
+    // (src/state/settings.ts) so subscribers see it — the last bypasses
+    // (theme's mode, the font selection, typing-effects' reset) migrated.
+    // A raw stateSet/stateRemove on a setting key persists fine but
+    // silently skips notifications: exactly the drift this pins out.
+    // Reads (stateGet) are exempt — they have nothing to notify.
+    const exempt = (path: string): boolean =>
+      path.includes('/state/') || path.includes('/storage/');
+    const files = walk(resolve(process.cwd(), 'src')).filter(
+      (f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !exempt(f),
+    );
+    const writePattern = /\bstate(?:Set|Remove)\(\s*['"]([^'"]+)['"]/g;
+    const rel = (file: string): string => file.slice(process.cwd().length + 1);
+    const offenders: string[] = [];
+    for (const file of files) {
+      for (const m of read(file).matchAll(writePattern)) {
+        if (SETTING_KEYS.includes(m[1] as never)) {
+          offenders.push(`${rel(file)} -> ${m[1]}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });
 

@@ -1,7 +1,7 @@
 import { $ } from './lib/q';
 import type { NotepadUI, EditorConfig } from './selector';
-import { stateGet, stateRemove } from './storage';
-import { setSetting } from './state/settings';
+import { stateGet } from './storage';
+import { removeSetting, setSetting } from './state/settings';
 
 /**
  * Typing effects — optional typewriter key sounds (key, space, carriage
@@ -304,16 +304,16 @@ export function initTypingEffects(
      * defaults in the UI (used by "Reset to defaults" in preferences).
      */
     reset(config: EditorConfig): void {
-      stateRemove('userChosenTypewriterSound');
+      removeSetting('userChosenTypewriterSound');
       typewriterSoundEnabled = config.defaultTypewriterSound;
       $('#typewriterSound').prop('checked', typewriterSoundEnabled);
       $('.typewriter-switch-volume').hide();
 
-      stateRemove('userChosenTypewriterVolume');
+      removeSetting('userChosenTypewriterVolume');
       $('#typewriterVolume').val(config.defaultTypewriterVolume);
       $('#typewriterVolumeValue').text(config.defaultTypewriterVolume + '%');
 
-      stateRemove('userChosenExplodingEffect');
+      removeSetting('userChosenExplodingEffect');
       explodingEffectEnabled = config.defaultExplodingEffect;
       $('#explodingEffect').prop('checked', explodingEffectEnabled);
     },
