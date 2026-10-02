@@ -9,19 +9,12 @@
 .statistics-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-  margin: 20px 0;
 }
 
 .stat-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 20px 12px;
-  border-radius: 10px;
-  background: #e5e6e7;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  box-shadow: 1px 1px 4px 0px #0000001f;
 }
 
 body.dark .stat-item {
@@ -33,12 +26,6 @@ body.dark .stat-item:hover {
 }
 
 .stat-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #5d5b5b;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 8px;
   text-align: center;
 }
 
@@ -48,12 +35,6 @@ body.dark .stat-item:hover {
 
 .stat-label .tooltip {
   text-transform: none;
-}
-
-.stat-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--c-text-primary);
 }
 
 body.dark .stat-value {
@@ -66,29 +47,13 @@ body.dark .stat-value {
 
 @media (max-width: 720px) {
   .statistics-grid {
-    gap: 15px;
     grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 480px) {
-  .statistics-grid {
-    gap: 15px;
-  }
-
-  .stat-value {
-    font-size: 22px;
-  }
-
-  .stat-label {
-    font-size: 10px;
   }
 }
 
 @media (max-width: 360px) {
   .statistics-grid {
     grid-template-columns: 1fr;
-    gap: 15px;
   }
 }
 
@@ -135,7 +100,6 @@ body.dark .stat-value {
 .dark .modal-content {
   background-color: #2d3748;
   border: 1px solid #4a5568;
-  color: #e2e8f0;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
 }
 
@@ -145,22 +109,6 @@ body.dark .stat-value {
 
 .dark .modal-footer {
   border-top: 1px solid #4a5568;
-}
-
-.dark .modal-title,
-.dark .custom-modal-title {
-  color: #e2e8f0;
-}
-
-.dark .modal-header .close,
-.dark .modal-header .close:hover {
-  color: #e2e8f0;
-  text-shadow: none;
-  opacity: 0.85;
-}
-
-.dark .modal-body {
-  color: #cbd5e0;
 }
 
 .dark .modal-body label,
@@ -174,30 +122,10 @@ body.dark .stat-value {
   color: #a0aec0;
 }
 
-.dark .modal-body a {
-  color: #63b3ed;
-}
-
-.dark .modal-body a:hover,
-.dark .modal-body a:focus {
-  color: #90cdf4;
-}
-
 /* ---- form controls ------------------------------------------------------ */
 
 .dark .form-control {
-  background-color: #1a2332;
   border: 1px solid #4a5568;
-  color: #e2e8f0;
-}
-
-.dark .form-control::placeholder {
-  color: #a0aec0;
-}
-
-.dark .form-control:focus {
-  border-color: #63b3ed;
-  box-shadow: 0 0 0 0.2rem rgba(99, 179, 237, 0.25);
 }
 
 /* ---- buttons ------------------------------------------------------------ */
@@ -231,8 +159,6 @@ body.dark .stat-value {
 /* ---- keyboard shortcuts keycaps ------------------------------------------ */
 
 .dark kbd {
-  color: #e2e8f0;
-  background: #1a2332;
   border: 2px solid #4a5568;
   box-shadow: 0 4px #10161f, inset 0 -2px 4px rgba(0, 0, 0, 0.35);
   text-shadow: none;
@@ -258,9 +184,6 @@ body.dark .stat-value {
 }
 
 /* ---- volume slider dark accent (preferences typewriter volume) ------------ */
-.dark .volume-slider {
-  accent-color: #63b3ed;
-}
 
 /* ---- preferences toggles + theme switcher --------------------------------- */
 
@@ -279,11 +202,6 @@ body.dark .stat-value {
 }
 
 /* ---- SweetAlert2 non-toast dialogs ---------------------------------------- */
-
-.dark .swal2-popup:not(.swal-toast-bottom-offset) {
-  background: #2d3748 !important;
-  color: #e2e8f0;
-}
 
 .dark .swal2-title {
   color: #e2e8f0;
@@ -328,11 +246,6 @@ body.dark .stat-value {
 
 .dark .modal-body table tr:nth-child(n+2) {
   border-top: 1px solid #4a5568;
-}
-
-.dark .modal-body table tr td,
-.dark .modal-body table td {
-  color: #cbd5e0;
 }
 
 /* ---- brand (wordmark) menu -------------------------------------------------- */
