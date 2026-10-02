@@ -32,6 +32,12 @@ export interface Db {
   runMany(statements: SqlStatement[]): Promise<void>;
   /** Human-readable kind for boot logs. */
   readonly kind: string;
+  /**
+   * Releases backend resources (the local file handle). Optional: the
+   * HTTP backend holds nothing to release. Called by the shutdown path
+   * after in-flight requests have drained.
+   */
+  close?(): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +72,15 @@ class TursoHttpDb implements Db {
   /** Stay well under Turso's per-pipeline-request statement limit. */
   private static readonly CHUNK = 100;
 
+  /**
+   * Every request funnels through this one fetch. Without a deadline, a
+   * wedged Turso connection hangs every request that touches the database
+   * forever (Bun.serve has no per-request timeout of its own) — a panel
+   * restart becomes the only recovery, and users see a dead API instead
+   * of an error they can retry.
+   */
+  private static readonly REQUEST_TIMEOUT_MS = 10_000;
+
   constructor(private endpoint: string, private token: string) {}
 
   private async pipeline(statements: TursoStmt[]): Promise<Row[][]> {
@@ -77,11 +92,21 @@ class TursoHttpDb implements Db {
           authorization: `Bearer ${this.token}`,
           'content-type': 'application/json'
         },
-        body: JSON.stringify({ requests: statements })
+        body: JSON.stringify({ requests: statements }),
+        signal: AbortSignal.timeout(TursoHttpDb.REQUEST_TIMEOUT_MS)
       });
     } catch (error) {
+      // AbortSignal.timeout aborts as a DOMException named TimeoutError
+      // (older runtimes may surface AbortError) — and DOMException is not
+      // an Error subclass in every runtime, so read the name without
+      // instanceof. This fetch is never aborted any other way, so both
+      // names mean the deadline hit.
+      const name = (error as { name?: unknown } | null | undefined)?.name;
+      const timedOut = name === 'TimeoutError' || name === 'AbortError';
       throw new Error(
-        `Turso is unreachable: ${error instanceof Error ? error.message : String(error)}`,
+        timedOut
+          ? `Turso request timed out after ${TursoHttpDb.REQUEST_TIMEOUT_MS / 1000}s`
+          : `Turso is unreachable: ${error instanceof Error ? error.message : String(error)}`,
         { cause: error }
       );
     }
@@ -164,6 +189,10 @@ class LocalSqliteDb implements Db {
 
   constructor(private db: Database) {}
 
+  close(): void {
+    this.db.close();
+  }
+
   private normalize(args: SqlValue[]): import('bun:sqlite').SQLQueryBindings[] {
     return args.map(value => (value === undefined ? null : value));
   }
@@ -213,7 +242,11 @@ export async function createDb(): Promise<Db> {
   }
 
   // Dev fallback: a local SQLite file next to this source file.
-  const { Database } = await import('bun:sqlite');
+  // The specifier rides a variable so vite's import analysis (vitest loads
+  // this module too) leaves it alone — it only resolves under Bun, where
+  // this branch actually runs.
+  const bunSqlite = 'bun:sqlite';
+  const { Database } = await import(/* @vite-ignore */ bunSqlite);
   const file = url ? url.replace(/^file:/i, '') : new URL('./local.db', import.meta.url).pathname;
   const db = new Database(file, { create: true });
   db.exec('pragma journal_mode = wal;');

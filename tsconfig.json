@@ -24,6 +24,7 @@
   "exclude": [
     "src/server-notes.test.ts",
     "src/server-handlers.test.ts",
-    "src/server-attachments.test.ts"
+    "src/server-attachments.test.ts",
+    "src/server-db.test.ts"
   ]
 }

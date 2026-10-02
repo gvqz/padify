@@ -124,6 +124,32 @@ Other environment variables:
   account (8 failures locks that account's sign-in for 15 minutes), so
   brute-force protection does not depend on this setting.
 
+### 2c. Backups — the only durable copy
+
+Sync is a *second* copy on the user's device — the database this server
+writes is the only *durable* one. A nightly dump is the whole safety net
+for "my laptop died" and "I deleted the wrong thing a week ago" alike:
+
+```bash
+# once, by hand, to prove it works:
+cd server && ./backup.sh
+
+# then nightly (crontab -e) — keeps 14 days by default:
+15 3 * * * cd /path/to/padify/server && ./backup.sh >> backups/backup.log 2>&1
+```
+
+`server/backup.sh` dumps through the `turso` CLI (set `TURSO_DATABASE_NAME`
+— the *name* from `turso db list`, the URL alone is not enough — plus a
+read token) or plain `sqlite3` for a `file:` database, gzips the result
+under `server/backups/`, refuses to keep a suspiciously small dump, and
+prunes files older than `BACKUP_KEEP_DAYS` (default 14). Off-box copies
+are still worth it: point the output directory at a mounted volume, or
+`rsync`/`rclone` `server/backups/` elsewhere from a second cron line.
+
+The API itself now exits politely: `SIGTERM`/`SIGINT` stop the listener,
+wait for in-flight requests to drain (a hard ceiling of 10 s), then close
+the database — panel restarts no longer cut a sync push mid-flight.
+
 ### Free music (no-login search + playback)
 
 The music player's free path runs through two extra public endpoints on this

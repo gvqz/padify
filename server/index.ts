@@ -24,7 +24,18 @@ await applySchema(db);
 await db.run('delete from sessions where expires_at <= ?', [Date.now()]);
 await sweepMusicCache(db);
 
-Bun.serve({
+// ---------------------------------------------------------------------------
+// Serve + shutdown
+// ---------------------------------------------------------------------------
+
+// Drain bookkeeping: SIGTERM/SIGINT must not cut requests mid-flight (a
+// half-finished sync push is exactly the kind of write the seq reservation
+// exists to protect), so the fetch wrapper counts what is in flight and
+// the shutdown path waits for the counter to hit zero before exiting.
+let inFlight = 0;
+let drained: (() => void) | null = null;
+
+const server = Bun.serve({
   port: PORT,
   // Memory guardrails for small always-on hosts: cap request bodies at the
   // runtime level (the default allows 128 MB to be buffered before any
@@ -37,13 +48,56 @@ Bun.serve({
   development: false,
   async fetch(request) {
     const { pathname } = new URL(request.url);
+    inFlight++;
     try {
       return await route(db, request, pathname);
     } catch (error) {
       console.error(`[padify-api] ${request.method} ${pathname} failed:`, error);
       return json(request, { error: 'Something went wrong on the server. Try again.' }, 500);
+    } finally {
+      inFlight--;
+      if (drained && inFlight === 0) {
+        drained();
+      }
     }
   }
 });
+
+/** Hard ceiling on how long a drain may take before we stop waiting. */
+const DRAIN_TIMEOUT_MS = 10_000;
+
+let shuttingDown = false;
+
+const shutdown = (signal: string): void => {
+  // A second signal during a drain means "exit NOW" — the operator knows
+  // something the graceful path does not.
+  if (shuttingDown) {
+    process.exit(0);
+  }
+  shuttingDown = true;
+
+  console.log(`[padify-api] ${signal} received — draining ${inFlight} in-flight request(s)`);
+  server.stop(); // stop accepting; active connections finish their work
+
+  const exit = (): void => {
+    db.close?.();
+    process.exit(0);
+  };
+
+  if (inFlight === 0) {
+    exit();
+    return;
+  }
+
+  const force = setTimeout(exit, DRAIN_TIMEOUT_MS);
+  force.unref();
+  drained = () => {
+    clearTimeout(force);
+    exit();
+  };
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 console.log(`[padify-api] listening on http://localhost:${PORT}`);
