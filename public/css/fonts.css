@@ -121,9 +121,6 @@
 }
 
 #typewriterVolumeValue {
-  font-size: 13px;
-  color: #2c2c2c;
-  font-variant-numeric: tabular-nums;
   width: 30px;
 }
 
@@ -199,10 +196,6 @@
   font-size: 13px;
   color: var(--c-text-secondary, #737374);
   margin: 0;
-}
-
-.dark .chime-label {
-  color: #cbd5e0;
 }
 
 .tilt-css:hover span {
