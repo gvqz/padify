@@ -50,12 +50,7 @@ body.dark .ucp-modal {
   display: flex;
   flex-direction: column;
   height: min(86vh, 740px);
-  background: var(--ucp-bg);
-  color: var(--ucp-text);
-  border: 1px solid var(--ucp-border);
-  border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.24);
 }
 
 body.dark .ucp-modal .modal-content {
@@ -490,7 +485,6 @@ body.dark .ucp-modal .modal-content {
   padding: 8px 12px;
   font: inherit;
   font-size: 13px;
-  border-radius: 8px;
   border: 1px solid var(--ucp-border);
   background: var(--ucp-bg);
   color: var(--ucp-text);
@@ -505,17 +499,12 @@ body.dark .ucp-modal .modal-content {
 .ucp-btn-primary {
   border-color: transparent;
   background: var(--ucp-accent);
-  color: #ffffff;
   font-weight: 600;
 }
 
 .ucp-btn-primary:hover {
   background: var(--ucp-accent-strong);
   border-color: transparent;
-}
-
-body.dark .ucp-btn-primary {
-  color: #0a0a0a;
 }
 
 .ucp-btn-star .ucp-btn-star-icon {
@@ -627,8 +616,6 @@ body.dark .ucp-btn-primary {
 
   .ucp-modal .modal-content {
     height: 100%;
-    border-radius: 0;
-    border: none;
   }
 
   .ucp-header {
