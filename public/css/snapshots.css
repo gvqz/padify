@@ -3,25 +3,12 @@
   max-width: 800px;
 }
 
-#snapshotsModal .modal-content {
-  border-radius: 14px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-  border: none;
-}
-
 #snapshotsModal .modal-header {
-  border-bottom: 1px solid #e9ecef;
-  padding: 15px 20px;
   background-color: #f8f9fa;
-  border-top-left-radius: 14px;
-  border-top-right-radius: 14px;
 }
 
 #snapshotsModal .modal-title {
-  font-weight: 600;
-  color: #333;
   margin: 0;
-  line-height: 1.5;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -80,24 +67,13 @@
 }
 
 #searchSnapshots {
-  border-radius: 6px;
   padding: 8px 12px;
-  border: 1px solid #ced4da;
   width: 100%;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  height: 38px;
-}
-
-#searchSnapshots:focus {
-  border-color: #80bdff;
-  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-  outline: none;
 }
 
 /* Snapshots List */
 .snapshots-list-container {
-  border: 1px solid #e9ecef;
-  border-radius: 6px;
   min-height: 200px;
   position: relative;
   overflow: hidden;
@@ -110,7 +86,6 @@
   justify-content: center;
   padding: 40px 20px;
   text-align: center;
-  color: #6c757d;
 }
 
 .no-snapshots svg {
@@ -121,8 +96,6 @@
 
 .no-snapshots p {
   margin: 0;
-  font-size: 16px;
-  color: #6c757d;
 }
 
 .snapshots-list {
@@ -134,15 +107,9 @@
 
 .snapshot-item {
   padding: 12px 15px;
-  border-bottom: 1px solid #e9ecef;
-  transition: background-color 0.2s ease;
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.snapshot-item:last-child {
-  border-bottom: none;
 }
 
 .snapshot-item:hover {
@@ -158,16 +125,12 @@
 }
 
 .snapshot-title {
-  font-weight: 500;
   margin: 0 0 4px 0;
   white-space: nowrap;
   text-overflow: ellipsis;
-  color: #333;
 }
 
 .snapshot-preview {
-  font-size: 13px;
-  color: #6c757d;
   margin: 0;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -176,8 +139,6 @@
 .snapshot-meta {
   display: flex;
   align-items: center;
-  font-size: 12px;
-  color: #6c757d;
   margin-top: 7px;
 }
 
@@ -202,22 +163,14 @@
   background: none;
   border: none;
   padding: 4px 8px;
-  border-radius: 4px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
-  color: #6c757d;
 }
 
 .snapshot-btn:hover {
   background-color: #e9ecef;
-  color: #495057;
-}
-
-.snapshot-btn.restore {
-  color: #28a745;
 }
 
 .snapshot-btn.restore:hover {
@@ -228,16 +181,8 @@
   margin-bottom: 10px;
 }
 
-.snapshot-btn.delete {
-  color: #dc3545;
-}
-
 .snapshot-btn.delete:hover {
   background-color: rgba(220, 53, 69, 0.1);
-}
-
-.snapshot-btn.copy {
-  color: #007bff;
 }
 
 .snapshot-btn.copy:hover {
@@ -249,21 +194,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 15px;
-  border-top: 1px solid #e9ecef;
   background-color: #f8f9fa;
   border-bottom-left-radius: 14px;
   border-bottom-right-radius: 14px;
-}
-
-.snapshots-stats {
-  font-size: 14px;
-  color: #6c757d;
-}
-
-#snapshotsCount {
-  font-weight: 600;
-  color: #495057;
 }
 
 /* Responsive */
