@@ -2,7 +2,7 @@ import { $ } from './lib/q';
 import Swal from 'sweetalert2';
 import type { SweetAlertResult } from 'sweetalert2';
 import { stateGet, stateSet, storageReady } from './storage';
-import { escapeHtml } from './tabs';
+import { escapeHtml } from './lib/escape';
 
 interface SoundEntry {
   url: string;
@@ -717,12 +717,25 @@ export class WhiteNoisePlayer {
 
 /**
  * Constructs the ambience player after storage hydration (its constructor
- * loads persisted presets). Called by boot.ts; used to be a
- * $(document).ready callback.
+ * loads persisted presets). Called by the music lazy seam (app.ts) before
+ * the player engines load; used to be a $(document).ready callback.
  */
+let instance: WhiteNoisePlayer | null = null;
+
+/**
+ * The constructed ambience player, or null before initWhiteNoisePlayer()
+ * runs — the module accessor the music player and the shell read instead
+ * of a window global (the getTabManager/getEditorPort idiom). The lazy
+ * seam loads the mixer BEFORE the player engines precisely so this never
+ * answers null to them.
+ */
+export function getWhiteNoisePlayer(): WhiteNoisePlayer | null {
+  return instance;
+}
+
 export async function initWhiteNoisePlayer(): Promise<void> {
   await storageReady();
-  window.whiteNoisePlayer = new WhiteNoisePlayer();
+  instance = new WhiteNoisePlayer();
 
   // Global mute state
   let isGlobalMuted = false;
@@ -733,14 +746,15 @@ export async function initWhiteNoisePlayer(): Promise<void> {
     const playingIcon = document.getElementById('globalPlayingIcon') as HTMLElement;
     const globalMuteIcon = document.getElementById('globalMuteIcon') as HTMLElement;
 
-    const player = window.whiteNoisePlayer!;
-
-    // Mute/unmute all sounds
-    Object.values(player.sounds).forEach((sound) => {
-      if (sound.audio) {
-        sound.audio.muted = isGlobalMuted;
-      }
-    });
+    const player = instance;
+    if (player) {
+      // Mute/unmute all sounds
+      Object.values(player.sounds).forEach((sound) => {
+        if (sound.audio) {
+          sound.audio.muted = isGlobalMuted;
+        }
+      });
+    }
 
     if (isGlobalMuted) {
       playingIcon.style.display = 'none';
@@ -762,7 +776,7 @@ export async function initWhiteNoisePlayer(): Promise<void> {
   const stopButton = document.getElementById('globalStopButton');
   if (stopButton) {
     stopButton.addEventListener('click', () => {
-      window.whiteNoisePlayer!.stopAll();
+      instance?.stopAll();
     });
     stopButton.style.display = 'none';
   }

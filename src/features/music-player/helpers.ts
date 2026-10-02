@@ -5,6 +5,11 @@
  */
 
 import type { SpotifyTrack } from './spotify/api';
+import { escapeHtml } from '../../lib/escape';
+
+// The one implementation lives in lib/escape.ts; re-exported here so the
+// feature's row/markup builders keep importing it from their own helpers.
+export { escapeHtml };
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -34,13 +39,4 @@ export function trackArtistNames(track: SpotifyTrack): string {
 export function pickImage(images: { url: string }[] | undefined, preferred = 2): string | null {
   if (!images || images.length === 0) return null;
   return (images[Math.min(preferred, images.length - 1)] ?? images[0]).url;
-}
-
-export function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }

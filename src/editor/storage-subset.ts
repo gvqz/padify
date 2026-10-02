@@ -148,6 +148,30 @@ function sanitizeStyle(raw: string, inline: boolean): string | null {
  */
 const SAFE_HREF_PATTERN = /^(https?:|mailto:|#|\/)/i;
 
+/**
+ * Rendering-only variations of the storage policy. The DEFAULT is the
+ * storage format itself (what the editor writes and reloads); read-only
+ * renderers — today the public share viewer, whose sanitizer is GENERATED
+ * from this file by scripts/build-share.mjs — pass options to adapt the
+ * same policy for display.
+ */
+export interface SanitizeOptions {
+  /**
+   * Hardens surviving anchors for read-only rendering: target="_blank"
+   * plus rel="noopener noreferrer nofollow". The stored format never
+   * carries these (they are presentation, not content), so the option
+   * exists for surfaces that render unknown-safe markup to third parties.
+   */
+  hardenLinks?: boolean;
+  /**
+   * Renders math shells as their LaTeX source text instead of keeping the
+   * empty `<span class="padify-math" data-latex="…">` shell. A read-only
+   * viewer without KaTeX would otherwise show nothing where an equation
+   * belongs — the shell is a storage container, not a display form.
+   */
+  mathToText?: boolean;
+}
+
 function sanitizeHref(raw: string): string | null {
   const href = raw.trim();
   return href.length > 0 && SAFE_HREF_PATTERN.test(href) ? href : null;
@@ -158,8 +182,14 @@ function sanitizeHref(raw: string): string | null {
  * known inline/block tags survive (with their one allowed attribute where
  * declared), everything else is unwrapped to its text. Guards the innerHTML
  * round-trip against stray markup.
+ *
+ * With no options this is the storage-format canonicalizer (what a note's
+ * HTML IS); with the SanitizeOptions flags it is also the read-only render
+ * policy — one allowlist, two dialects, and the public share viewer's copy
+ * is generated from this source (scripts/build-share.mjs) so the two can
+ * never drift apart again.
  */
-export function sanitizeNoteHtml(html: string): string {
+export function sanitizeNoteHtml(html: string, options: SanitizeOptions = {}): string {
   const parsed = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
 
   const walk = (node: Node): Node[] => {
@@ -189,6 +219,11 @@ export function sanitizeNoteHtml(html: string): string {
       if (!MATH_LATEX_PATTERN.test(latex)) {
         return children;
       }
+      if (options.mathToText) {
+        // A reader without KaTeX gets the equation's source, not an
+        // invisible empty span (what the shell renders as, unpainted).
+        return [document.createTextNode(latex)];
+      }
       clone.setAttribute('class', MATH_CLASS);
       clone.setAttribute('data-latex', latex);
       return [clone];
@@ -205,6 +240,13 @@ export function sanitizeNoteHtml(html: string): string {
           const safe = sanitizeHref(value);
           if (safe !== null) {
             clone.setAttribute(attr, safe);
+            if (options.hardenLinks) {
+              // Read-only rendering: the link opens in its own tab, walled
+              // off from the viewer's origin and followed without leaking
+              // the share URL as a referrer.
+              clone.setAttribute('target', '_blank');
+              clone.setAttribute('rel', 'noopener noreferrer nofollow');
+            }
           }
           return;
         }

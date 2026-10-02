@@ -1,6 +1,10 @@
 node_modules/
 dist/
 coverage/
+
+# Bun owns the lockfile (CONTRIBUTING.md); npm installs (CI tooling runs on
+# Node/npm) must not leave a competing one behind
+package-lock.json
 scripts/.unicode-cache/
 upload/
 

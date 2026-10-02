@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { batchRowsForPush, rowUnsyncable, type NoteRow } from './sync';
+import { MAX_ROWS_PER_PUSH } from '../../shared/wire';
 
 // The push queue must drain even when one note can never leave: the server
-// caps request bodies at 2 MB, so a giant note has to fail alone instead of
-// failing everyone. These tests pin the batching contract.
+// caps request bodies at 2 MB AND row count at MAX_ROWS_PER_PUSH (both live
+// in shared/wire.ts), so a giant note has to fail alone instead of failing
+// everyone, and a huge QUEUE of tiny notes has to split on count, not just
+// bytes. These tests pin the batching contract.
 
 const row = (id: string, htmlLength: number): NoteRow => ({
   id,
@@ -62,6 +65,35 @@ describe('batchRowsForPush', () => {
     const batches = batchRowsForPush([a, b]);
 
     expect(batches.map((batch) => batch.map((entry) => entry.id))).toEqual([['a'], ['b']]);
+  });
+
+  it('splits on row count too — a 600-note queue never builds one 600-row body', () => {
+    // The byte-only batcher packed any number of tiny rows into one body:
+    // a user with 600 small notes produced one ~60 KB body that the
+    // server rejected on ROW COUNT alone (parseNoteRows refuses >500) —
+    // and re-assembled the same body on every 30 s cycle forever.
+    const many = Array.from({ length: 600 }, (_v, index) => row(`note-${index}`, 50));
+
+    const batches = batchRowsForPush(many);
+
+    // Every batch respects the row cap…
+    for (const batch of batches) {
+      expect(batch.length).toBeLessThanOrEqual(MAX_ROWS_PER_PUSH);
+    }
+    // …and the queue drains completely, in order.
+    expect(batches.flatMap((batch) => batch.map((entry) => entry.id))).toEqual(
+      many.map((entry) => entry.id),
+    );
+    expect(batches.map((batch) => batch.length)).toEqual([500, 100]);
+  });
+
+  it('a full-cap batch closes exactly at the row limit', () => {
+    const exact = Array.from({ length: MAX_ROWS_PER_PUSH }, (_v, index) => row(`n${index}`, 10));
+
+    const batches = batchRowsForPush(exact);
+
+    expect(batches).toHaveLength(1);
+    expect(batches[0]).toHaveLength(MAX_ROWS_PER_PUSH);
   });
 });
 

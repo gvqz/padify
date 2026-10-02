@@ -15,19 +15,22 @@
 import { type Db } from './db';
 import { json, readJson } from './http';
 import type { SessionUser } from './auth';
-import type { IncomingNoteRow, NotesPullV2 } from '../shared/wire';
+import {
+  MAX_ROWS_PER_PUSH,
+  NOTE_TYPE_ID_PATTERN,
+  type IncomingNoteRow,
+  type NotesPullV2,
+} from '../shared/wire';
 
 // The PUT row contract lives in shared/wire.ts — the one definition the
 // client (src/cloud/sync.ts) and this parser both read from. Re-exported
 // here for existing importers.
 export type { IncomingNoteRow };
 
-/**
- * Type ids are url-safe slugs. The client enforces the same shape
- * (NOTE_TYPE_ID_PATTERN in src/editor/note-types.ts); both sides must
- * agree, or types would silently fall off notes at the border.
- */
-export const NOTE_TYPE_ID_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
+// The slug shape a note type id must carry — NOTE_TYPE_ID_PATTERN — is
+// likewise defined once in shared/wire.ts and re-exported here for the
+// server's tests and importers.
+export { NOTE_TYPE_ID_PATTERN };
 
 export function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
@@ -49,11 +52,12 @@ export function parseNoteType(value: unknown): string | null {
 
 /**
  * Validates a PUT /api/notes body into storable rows. One malformed row
- * rejects the whole batch — the client batches by size, so a rejected
- * batch is retried as smaller batches, never partially applied.
+ * rejects the whole batch — the client batches by size AND row count (see
+ * shared/wire.ts MAX_ROWS_PER_PUSH), so a rejected batch is retried as
+ * smaller batches, never partially applied.
  */
 export function parseNoteRows(value: unknown): IncomingNoteRow[] | null {
-  if (!Array.isArray(value) || value.length === 0 || value.length > 500) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_ROWS_PER_PUSH) {
     return null;
   }
   const rows: IncomingNoteRow[] = [];

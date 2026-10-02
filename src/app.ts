@@ -512,7 +512,7 @@ function initMusicSubsystem(): void {
 
   const loadEngines = (): Promise<void> => {
     engines ??= (async () => {
-      // Ambience first: the player reads window.whiteNoisePlayer while
+      // Ambience first: the player reads getWhiteNoisePlayer() while
       // constructing (navbar icon state), so the mixer must exist by then.
       const { initWhiteNoisePlayer } = await import('./white-noise-player');
       await initWhiteNoisePlayer();

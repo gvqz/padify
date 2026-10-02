@@ -29,6 +29,7 @@
  */
 
 import { $ } from '../../lib/q';
+import { getWhiteNoisePlayer } from '../../white-noise-player';
 import { openModal, closeModal } from '../../ui/behavior/modal';
 import Swal from 'sweetalert2';
 import type { SweetAlertResult } from 'sweetalert2';
@@ -1935,7 +1936,8 @@ class MusicPlayerApp {
     const iconEl = document.querySelector('.ambient-noise-icon');
     if (!iconEl) return;
     this.ensureNavbarIconObserver(iconEl);
-    const ambientOn = window.whiteNoisePlayer ? window.whiteNoisePlayer.isAnySoundPlaying() : false;
+    const ambient = getWhiteNoisePlayer();
+    const ambientOn = ambient ? ambient.isAnySoundPlaying() : false;
     const playerOn = this.isPlaying();
     const should = playerOn || ambientOn;
     const has = iconEl.classList.contains('is-playing');

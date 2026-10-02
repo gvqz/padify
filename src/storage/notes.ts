@@ -72,11 +72,66 @@ export interface NotesSnapshot {
  * by every build before the rename carry their note under that key, and
  * the loaders dual-read `content ?? html`. It is typed optional here so
  * the dual-read can run against raw records; new writers never set it.
+ *
+ * `v` is the row's SCHEMA VERSION — the local twin of the server's
+ * PRAGMA-guarded migrations (server/db.ts). v1 (and every unversioned
+ * row) is the pre-rename shape above; writers today stamp
+ * NOTE_RECORD_VERSION. The point is forward determinism: when a future
+ * shape lands (an encoded body, a restructured field), its migration
+ * dispatches on record.v instead of sniffing field shapes — and shapes
+ * that happen to look alike can never be misread as each other. The
+ * field is local-only: it never crosses the wire (the sync layer copies
+ * NoteTab, which has no v) and the server's row parser ignores unknown
+ * keys anyway.
  */
 export interface NoteRecord extends StoredNoteTab {
   position: number;
   deleted: boolean;
   html?: string;
+  /** Local schema version — absent means v1 (the legacy dual-read shape). */
+  v?: number;
+}
+
+/**
+ * The current local note-row schema. Version history:
+ *  • 1 (implied, unversioned rows) — the pre-rename shape: body under
+ *    `html`, dual-read by the loaders.
+ *  • 2 — the typed-content-model shape: body under `content`, note type
+ *    and color theme optional fields. Writers stamp v=2 since this
+ *    constant landed.
+ *
+ * Bump it WITH a case in migrateNoteRecord — never one without the other.
+ */
+export const NOTE_RECORD_VERSION = 2;
+
+/**
+ * Reads a raw stored record into the current shape, running any needed
+ * migration and stamping the result's version. Pure (no writes): callers
+ * decide whether a migrated row is worth writing back — hydrateNotes
+ * feeds it to the snapshot, saveNotes re-stamps on its next write anyway.
+ */
+export function migrateNoteRecord(record: NoteRecord): NoteRecord {
+  // Only a positive INTEGER counts as a version stamp: junk (NaN,
+  // negatives, 2.5, a string) reads as v1 — the conservative path that
+  // only ever normalizes the body read, never skips it.
+  const stamped = typeof record.v === 'number' && Number.isInteger(record.v) && record.v > 0;
+  const version = stamped ? (record.v as number) : 1;
+
+  let migrated = record;
+  if (version < 2) {
+    // v1 → v2: the rename transition. The body may sit under the legacy
+    // `html` key (content wins when both appear — the dual-read order the
+    // loaders have always used).
+    const body =
+      typeof record.content === 'string'
+        ? record.content
+        : typeof record.html === 'string'
+          ? record.html
+          : '';
+    migrated = { ...record, content: body };
+  }
+
+  return { ...migrated, v: NOTE_RECORD_VERSION };
 }
 
 /** The active tab id is a plain kv setting. */
@@ -141,25 +196,24 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
   const live = valid
     .filter((record) => !record.deleted)
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-    .map((record) => ({
-      id: record.id,
-      name: typeof record.name === 'string' ? record.name : null,
-      // Dual-read the rename: rows persisted by older builds say `html`.
-      content:
-        typeof record.content === 'string'
-          ? record.content
-          : typeof record.html === 'string'
-            ? record.html
-            : '',
-      createdAt: typeof record.createdAt === 'number' ? record.createdAt : Date.now(),
-      updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now(),
-      noteType: normalizeNoteType((record as { noteType?: unknown }).noteType),
-      colorTheme:
-        (record as { colorTheme?: unknown }).colorTheme === 'light' ||
-        (record as { colorTheme?: unknown }).colorTheme === 'dark'
-          ? (record as { colorTheme: 'light' | 'dark' }).colorTheme
-          : undefined,
-    }));
+    .map((raw) => {
+      // Route through the migration so unversioned (v1) rows read their
+      // body the same way the hand-rolled dual-read always did.
+      const record = migrateNoteRecord(raw);
+      return {
+        id: record.id,
+        name: typeof record.name === 'string' ? record.name : null,
+        content: typeof record.content === 'string' ? record.content : '',
+        createdAt: typeof record.createdAt === 'number' ? record.createdAt : Date.now(),
+        updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now(),
+        noteType: normalizeNoteType((record as { noteType?: unknown }).noteType),
+        colorTheme:
+          (record as { colorTheme?: unknown }).colorTheme === 'light' ||
+          (record as { colorTheme?: unknown }).colorTheme === 'dark'
+            ? (record as { colorTheme: 'light' | 'dark' }).colorTheme
+            : undefined,
+      };
+    });
 
   const tombstones = valid
     .filter((record) => record.deleted)
@@ -374,7 +428,9 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
       previous.noteType !== signature.noteType ||
       previous.deleted
     ) {
-      upserts.push({ ...tab, position: index, deleted: false });
+      // Every writer stamps the current schema version (see
+      // NOTE_RECORD_VERSION); v is local-only and never crosses the wire.
+      upserts.push({ ...tab, position: index, deleted: false, v: NOTE_RECORD_VERSION });
       lastWritten.set(tab.id, signature);
     }
   });
@@ -391,6 +447,7 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
         updatedAt: tombstone.updatedAt,
         position: -1,
         deleted: true,
+        v: NOTE_RECORD_VERSION,
       });
       lastWritten.set(tombstone.id, {
         name: null,

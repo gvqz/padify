@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NOTE_TYPE_ID_PATTERN, parseNoteRows, parseNoteType } from '../server/notes';
+import { MAX_ROWS_PER_PUSH, NOTE_TYPE_ID_PATTERN as WIRE_PATTERN } from '../shared/wire';
 
 // The server's side of the note contract. The client registry owns what a
 // type MEANS; the server stores any well-formed id verbatim so a note can
@@ -27,9 +28,12 @@ describe('parseNoteType', () => {
     expect(parseNoteType('<script>')).toBeNull();
   });
 
-  it('mirrors the client pattern exactly (NOTE_TYPE_ID_PATTERN)', () => {
-    // The client uses the same regex (src/editor/note-types.ts); drift
-    // here would silently strip types at the border.
+  it('is the wire contract’s one definition, not a server-local copy', () => {
+    // NOTE_TYPE_ID_PATTERN used to be hand-mirrored in server/notes.ts and
+    // src/editor/note-types.ts, equality pinned only by this literal-string
+    // test. It now lives once in shared/wire.ts and both sides re-export
+    // it — this pins that the re-export really is the same definition.
+    expect(NOTE_TYPE_ID_PATTERN).toBe(WIRE_PATTERN);
     expect(NOTE_TYPE_ID_PATTERN.source).toBe('^[a-z][a-z0-9-]{0,31}$');
   });
 });
@@ -76,7 +80,16 @@ describe('parseNoteRows', () => {
     expect(parseNoteRows([row(), 'not an object'])).toBeNull();
     expect(parseNoteRows([])).toBeNull();
     expect(parseNoteRows('nope')).toBeNull();
-    expect(parseNoteRows(new Array(501).fill(row()))).toBeNull();
+    expect(parseNoteRows(new Array(MAX_ROWS_PER_PUSH + 1).fill(row()))).toBeNull();
+  });
+
+  it('accepts a batch at exactly the row cap — the client batcher relies on it', () => {
+    // batchRowsForPush (src/cloud/sync.ts) closes batches AT 500 rows
+    // because this parser accepts exactly 500; the boundary belongs to
+    // both sides and is pinned on both sides (sync-push.test.ts).
+    const rows = parseNoteRows(new Array(MAX_ROWS_PER_PUSH).fill(row()));
+
+    expect(rows).toHaveLength(MAX_ROWS_PER_PUSH);
   });
 
   it('coerces the scalar fields the way storage expects', () => {

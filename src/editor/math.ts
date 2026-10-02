@@ -19,6 +19,12 @@
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
+import { escapeHtmlAttr } from '../lib/escape';
+
+// Re-exported for its existing importer (math.test.ts); the implementation
+// lives beside escapeHtml in lib/escape.ts.
+export { escapeHtmlAttr };
+
 export const MATH_CLASS = 'padify-math';
 
 /**
@@ -62,15 +68,6 @@ export const MATH_LATEX_PATTERN = /^[\s\S]{1,2000}$/;
  */
 const MATH_FORBIDDEN_MACROS =
   /\\(href|url|htmlData|htmlStyle|htmlClass|includegraphics|mathchoice)\b/;
-
-/** Escapes a string for safe use inside an HTML attribute (insertHTML). */
-export function escapeHtmlAttr(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
 
 /** The stored shell for a LaTeX equation (empty — rendered in the DOM). */
 export function buildMathShell(latex: string): string {

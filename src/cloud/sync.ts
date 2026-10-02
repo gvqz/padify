@@ -28,7 +28,7 @@ import { normalizeNoteType } from '../editor/note-types';
 import type { NoteTab, TabManager, TabTombstone, TabsSyncPayload } from '../tabs';
 // The wire contract both sides of the HTTP boundary share — types below,
 // and the one request-body ceiling the client batches under.
-import { MAX_BODY_BYTES } from '../../shared/wire';
+import { MAX_BODY_BYTES, MAX_ROWS_PER_PUSH } from '../../shared/wire';
 import type { IncomingNoteRow } from '../../shared/wire';
 
 // ---------------------------------------------------------------------------
@@ -892,6 +892,10 @@ export function mergeRemote(
 /** The server rejects request bodies over 2 MB (see shared/wire.ts). */
 const PUSH_BATCH_BYTES = 1_500_000;
 
+/** The server also rejects PUT bodies carrying over 500 rows (see
+ * shared/wire.ts MAX_ROWS_PER_PUSH) — the batcher splits on BOTH caps. */
+const PUSH_BATCH_ROWS = MAX_ROWS_PER_PUSH;
+
 /**
  * Envelope of a single-row PUT body around the row's own JSON
  * ({"v":2,"rows":[…]}) plus JSON-escaping headroom for the wrapper.
@@ -931,10 +935,14 @@ function rowBytes(row: NoteRow): number {
 
 /**
  * Packs rows into request bodies the server will accept. Rows join the
- * current batch while it stays under PUSH_BATCH_BYTES; a row too large to
- * share a body becomes a batch of one. Rows too large to ride even alone
- * never reach this function — rowUnsyncable filters them out upstream —
- * so every batch that leaves here is one the server will take.
+ * current batch while it stays under PUSH_BATCH_BYTES AND the batch holds
+ * fewer than PUSH_BATCH_ROWS rows — a queue of 600 tiny notes would
+ * otherwise pack into one 60 KB body that the server rejects on row count
+ * alone, on every 30 s cycle, with nothing in the byte-only logic that
+ * ever shrinks it. A row too large to share a body becomes a batch of
+ * one. Rows too large to ride even alone never reach this function —
+ * rowUnsyncable filters them out upstream — so every batch that leaves
+ * here is one the server will take.
  */
 export function batchRowsForPush(rows: NoteRow[]): NoteRow[][] {
   const batches: NoteRow[][] = [];
@@ -943,7 +951,10 @@ export function batchRowsForPush(rows: NoteRow[]): NoteRow[][] {
 
   for (const row of rows) {
     const size = rowBytes(row);
-    if (current.length > 0 && currentBytes + size > PUSH_BATCH_BYTES) {
+    if (
+      current.length > 0 &&
+      (currentBytes + size > PUSH_BATCH_BYTES || current.length >= PUSH_BATCH_ROWS)
+    ) {
       batches.push(current);
       current = [];
       currentBytes = 0;

@@ -23,7 +23,7 @@ async function newRichNote(page: import('@playwright/test').Page): Promise<void>
   await page.locator('#note').focus();
 }
 
-test.describe('scripts', () => {
+test.describe('superscript/subscript', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
   });

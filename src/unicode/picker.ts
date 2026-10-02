@@ -4,6 +4,7 @@ import type { NotepadUI } from '../selector';
 import type { UnicodeSymbol } from './types';
 import { showToast } from '../ui/toast';
 import { getEditorPort } from '../editor/port';
+import { escapeHtml } from '../lib/escape';
 import { stateGet, stateSet } from '../storage';
 
 export interface UnicodePickerHandle {
@@ -73,15 +74,6 @@ function loadData(): Promise<LoadedData> {
     });
   }
   return dataPromise;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 function highlightName(name: string, tokens: string[]): string {

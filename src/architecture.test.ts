@@ -347,4 +347,33 @@ describe('the editor seam (the swap contract)', () => {
     expect(source).not.toMatch(/document\.execCommand/);
     expect(source).not.toMatch(/(?:window|document)\.getSelection/);
   });
+
+  it('TabManager presents notes through the surface registry, not its own DOM dialect', () => {
+    // The note-surface seam (editor/surface.ts) is what a new note kind
+    // plugs into: display/capture/visibleText/commit/clear live behind
+    // noteSurfaceFor(), and the manager must not grow its own per-kind
+    // painting back. contenteditable, unsupported-note cards and math
+    // re-rendering are surface mechanics — finding them in tabs.ts means
+    // the if/else dispatch crept back in.
+    const source = read(resolve(process.cwd(), 'src/tabs.ts'));
+    expect(source).toContain("from './editor/surface'");
+    expect(source).not.toMatch(/contenteditable/);
+    expect(source).not.toMatch(/unsupported-note/);
+    expect(source).not.toMatch(/renderMathIn/);
+  });
+
+  it('every note kind resolves to a surface — the registry has no holes', async () => {
+    // The four content kinds, plus the fallback rule: an UNREGISTERED
+    // kind must answer the opaque surface (an old build meeting a new
+    // kind degrades to the read-only card, never to a crash).
+    const { noteSurfaceForKind, opaqueNoteSurface } = await import('./editor/surface');
+    for (const kind of ['html', 'text', 'json', 'opaque'] as const) {
+      expect(noteSurfaceForKind(kind)).toBeDefined();
+    }
+    expect(noteSurfaceForKind('text')).toBe(opaqueNoteSurface);
+    expect(noteSurfaceForKind('json')).toBe(opaqueNoteSurface);
+    // And the registered html surface is the only editable one today.
+    expect(noteSurfaceForKind('html').editable).toBe(true);
+    expect(noteSurfaceForKind('opaque').editable).toBe(false);
+  });
 });

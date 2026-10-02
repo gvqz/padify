@@ -27,8 +27,9 @@ interface Window {
 declare const documentPictureInPicture: DocumentPictureInPicture | undefined;
 
 // Legacy global contract kept for modules that still read window state.
+// (whiteNoisePlayer moved to the module accessor getWhiteNoisePlayer(); the
+// snapshots pair stays until the snapshot rewrite lands.)
 interface Window {
-  whiteNoisePlayer?: import('./white-noise-player').WhiteNoisePlayer;
   snapshotsManager?: import('./snapshots').SnapshotsManager;
   createSnapshot?: (title?: string) => Promise<void> | void;
 }

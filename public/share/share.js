@@ -6,237 +6,160 @@
  * read-only with the same formatting subset the editor produces. Any
  * problem — bad token, cancelled link, expired link, network failure —
  * lands in the same calm "this link isn't available" state.
+ *
+ * ES module: the sanitizer comes from ./sanitize-note.js, GENERATED from
+ * src/editor/storage-subset.ts by scripts/build-share.mjs, so the viewer's
+ * policy and the app's are one policy. The hand-copied twin this replaced
+ * had drifted (it dropped math shells, so shared notes lost their
+ * equations) and nothing in CI could see it.
  */
 
-(function () {
-  'use strict';
+import { sanitizeNoteHtml } from './sanitize-note.js';
 
-  var params = new URLSearchParams(window.location.search);
-  var token = params.get('t');
-  var config = window.PADIFY_SHARE_CONFIG || {};
+const params = new URLSearchParams(window.location.search);
+const token = params.get('t');
+const config = window.PADIFY_SHARE_CONFIG || {};
 
-  var stateBox = document.getElementById('shareState');
-  var article = document.getElementById('shareArticle');
+const stateBox = document.getElementById('shareState');
+const article = document.getElementById('shareArticle');
 
-  function showState(iconSvg, title, copy) {
-    clearLoading();
-    article.hidden = true;
-    stateBox.hidden = false;
-    document.getElementById('shareStateIcon').innerHTML = iconSvg;
-    document.getElementById('shareStateTitle').textContent = title;
-    document.getElementById('shareStateCopy').textContent = copy;
-  }
+function showState(iconSvg, title, copy) {
+  clearLoading();
+  article.hidden = true;
+  stateBox.hidden = false;
+  document.getElementById('shareStateIcon').innerHTML = iconSvg;
+  document.getElementById('shareStateTitle').textContent = title;
+  document.getElementById('shareStateCopy').textContent = copy;
+}
 
-  var NOTE_ICON =
-    '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>';
-  var OFF_ICON =
-    '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>';
-  var ALERT_ICON =
-    '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>';
-  var LOADING_ICON =
-    '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/></svg>';
+const NOTE_ICON =
+  '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>';
+const OFF_ICON =
+  '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>';
+const ALERT_ICON =
+  '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>';
+const LOADING_ICON =
+  '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/></svg>';
 
-  // Immediate feedback while the share row is being fetched.
-  function showLoading() {
-    article.hidden = true;
-    stateBox.hidden = false;
-    stateBox.classList.add('loading');
-    document.getElementById('shareStateIcon').innerHTML = LOADING_ICON;
-    document.getElementById('shareStateTitle').textContent = 'Loading note\u2026';
-    document.getElementById('shareStateCopy').textContent = 'Fetching the shared note.';
-  }
+// Immediate feedback while the share row is being fetched.
+function showLoading() {
+  article.hidden = true;
+  stateBox.hidden = false;
+  stateBox.classList.add('loading');
+  document.getElementById('shareStateIcon').innerHTML = LOADING_ICON;
+  document.getElementById('shareStateTitle').textContent = 'Loading note\u2026';
+  document.getElementById('shareStateCopy').textContent = 'Fetching the shared note.';
+}
 
-  function clearLoading() {
-    stateBox.classList.remove('loading');
-  }
+function clearLoading() {
+  stateBox.classList.remove('loading');
+}
 
-  function formatDate(iso) {
-    try {
-      return new Date(iso).toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric'
-      });
-    } catch (e) {
-      return '';
-    }
-  }
-
-  /**
-   * Strips the stored note HTML down to the same formatting subset the
-   * editor produces (b/strong/i/em/u/s/strike/del/br/div/span/p + the rich
-   * text vocabulary h1/h2/h3/ul/ol/li/blockquote/pre + sup/sub/hr) so a
-   * crafted share payload cannot inject markup. `a[href]` is kept only for
-   * safe schemes, `style` only for the app sanitizer's property allowlist —
-   * identical policy to sanitizeNoteHtml in src/tabs.ts. Keep the two in
-   * sync.
-   */
-  function sanitizeShareHtml(html) {
-    var parsed = new DOMParser().parseFromString('<body>' + String(html == null ? '' : html) + '</body>', 'text/html');
-    var allowed = { B: 1, STRONG: 1, I: 1, EM: 1, U: 1, S: 1, STRIKE: 1, DEL: 1, BR: 1, DIV: 1, SPAN: 1, P: 1, H1: 1, H2: 1, H3: 1, UL: 1, OL: 1, LI: 1, BLOCKQUOTE: 1, PRE: 1, SUP: 1, SUB: 1, HR: 1, A: 1, TABLE: 1, THEAD: 1, TBODY: 1, TR: 1, TD: 1, TH: 1 };
-    var safeHref = /^(https?:|mailto:|#|\/)/i;
-    var colorValue = /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(,\s*(0?\.\d+|1)\s*)?\)|[a-z]+)$/i;
-    var fontFamilyValue = /^[-a-z0-9\s,'’]{1,120}$/i;
-    var inlineStyles = { 'color': colorValue, 'background-color': colorValue, 'font-size': /^\d+(\.\d+)?(px|pt)$/, 'font-family': fontFamilyValue };
-    var blockStyles = { 'text-align': /^(left|center|right|justify)$/i, 'margin-left': /^\d+(\.\d+)?px$/ };
-
-    function sanitizeStyle(raw, inline) {
-      var allowedProps = inline ? inlineStyles : blockStyles;
-      var kept = [];
-      raw.split(';').forEach(function (declaration) {
-        var colon = declaration.indexOf(':');
-        if (colon <= 0) return;
-        var prop = declaration.slice(0, colon).trim().toLowerCase();
-        var value = declaration.slice(colon + 1).trim();
-        var pattern = allowedProps[prop];
-        if (pattern && pattern.test(value)) kept.push(prop + ': ' + value);
-      });
-      return kept.length ? kept.join('; ') : null;
-    }
-
-    function walk(node) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        return [document.createTextNode(node.nodeValue || '')];
-      }
-      if (node.nodeType !== Node.ELEMENT_NODE) {
-        return [];
-      }
-      var element = node;
-      var children = [];
-      for (var i = 0; i < element.childNodes.length; i += 1) {
-        children = children.concat(walk(element.childNodes[i]));
-      }
-      if (!allowed[element.tagName]) {
-        return children;
-      }
-      var clone = document.createElement(element.tagName);
-      if (element.tagName === 'A') {
-        var href = (element.getAttribute('href') || '').trim();
-        if (href && safeHref.test(href)) {
-          clone.setAttribute('href', href);
-          clone.setAttribute('rel', 'noopener noreferrer nofollow');
-          clone.setAttribute('target', '_blank');
-        }
-      } else if (element.tagName === 'SPAN' || element.tagName === 'DIV' || element.tagName === 'P' || element.tagName === 'H1' || element.tagName === 'H2' || element.tagName === 'H3' || element.tagName === 'LI' || element.tagName === 'BLOCKQUOTE' || element.tagName === 'PRE' || element.tagName === 'TD' || element.tagName === 'TH') {
-        var rawStyle = element.getAttribute('style');
-        if (rawStyle) {
-          var safeStyle = sanitizeStyle(rawStyle, element.tagName === 'SPAN');
-          if (safeStyle) clone.setAttribute('style', safeStyle);
-        }
-      }
-      // Checklists ride the same fixed vocabularies as the app sanitizer:
-      // the list keeps its boolean mark, items their boolean box state.
-      if (element.tagName === 'UL' && element.getAttribute('data-rich-checklist') === 'true') {
-        clone.setAttribute('data-rich-checklist', 'true');
-      } else if (element.tagName === 'LI' && /^(true|false)$/.test(element.getAttribute('data-checked') || '')) {
-        clone.setAttribute('data-checked', element.getAttribute('data-checked'));
-      }
-      children.forEach(function (child) {
-        clone.appendChild(child);
-      });
-      return [clone];
-    }
-
-    var out = [];
-    for (var i = 0; i < parsed.body.childNodes.length; i += 1) {
-      out = out.concat(walk(parsed.body.childNodes[i]));
-    }
-
-    var fragment = document.createElement('div');
-    out.forEach(function (node) {
-      fragment.appendChild(node);
+function formatDate(iso) {
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
     });
-    return fragment;
+  } catch (e) {
+    return '';
   }
+}
 
-  /**
-   * The note types whose content is the app's sanitized-HTML subset. Only
-   * these render as markup — and always through the sanitizer. Absent type
-   * = the classic note = html (links created before types existed).
-   *
-   * Every OTHER type renders as raw text, no exceptions: this page cannot
-   * know what a future type's markup means, and unknown never means
-   * executable. When a new html-flavored type ships, add its id here.
-   */
-  var HTML_TYPES = ['standard', 'rich'];
+/**
+ * The note types whose content is the app's sanitized-HTML subset. Only
+ * these render as markup — and always through the shared sanitizer. Absent
+ * type = the classic note = html (links created before types existed).
+ *
+ * Every OTHER type renders as raw text, no exceptions: this page cannot
+ * know what a future type's markup means, and unknown never means
+ * executable. When a new html-flavored type ships, add its id here.
+ */
+const HTML_TYPES = ['standard', 'rich'];
 
-  function isHtmlNote(type) {
-    return !type || HTML_TYPES.indexOf(String(type)) !== -1;
+function isHtmlNote(type) {
+  return !type || HTML_TYPES.indexOf(String(type)) !== -1;
+}
+
+function render(row) {
+  clearLoading();
+  stateBox.hidden = true;
+  article.hidden = false;
+
+  const title = row.title && row.title.trim() ? row.title : 'Shared note';
+  document.title = title + ' — Padify';
+  document.getElementById('shareTitle').textContent = title;
+
+  let meta = 'Shared on ' + formatDate(new Date(Number(row.created_at)).toISOString());
+  if (row.expires_at) {
+    meta += ' · available until ' + formatDate(row.expires_at);
   }
+  document.getElementById('shareMeta').textContent = meta;
 
-  function render(row) {
-    clearLoading();
-    stateBox.hidden = true;
-    article.hidden = false;
+  const content = document.getElementById('shareContent');
+  content.innerHTML = '';
 
-    var title = (row.title && row.title.trim()) ? row.title : 'Shared note';
-    document.title = title + ' — Padify';
-    document.getElementById('shareTitle').textContent = title;
-
-    var meta = 'Shared on ' + formatDate(new Date(Number(row.created_at)).toISOString());
-    if (row.expires_at) {
-      meta += ' · available until ' + formatDate(row.expires_at);
-    }
-    document.getElementById('shareMeta').textContent = meta;
-
-    var content = document.getElementById('shareContent');
-    content.innerHTML = '';
-
-    if (isHtmlNote(row.note_type)) {
-      // The rename transition: rows from a newer server say `content`,
-      // older ones say `html` — read either, prefer `content`.
-      var body = row.content == null ? row.html : row.content;
-      content.appendChild(sanitizeShareHtml(body));
-      return;
-    }
-
-    // A non-html note (Markdown source, a board's JSON, a newer type):
-    // honest raw text, never markup. The <pre> keeps structure readable.
-    var pre = document.createElement('pre');
-    pre.className = 'share-raw-content';
-    var raw = row.content == null ? row.html : row.content;
-    pre.textContent = String(raw == null ? '' : raw);
-    content.appendChild(pre);
-  }
-
-  function fail(kind) {
-    if (kind === 'setup') {
-      showState(
-        ALERT_ICON,
-        'Sharing isn\u2019t set up yet',
-        'This Padify deployment is missing its share configuration. If you own this site, rebuild with VITE_API_BASE set to your API origin \u2014 see docs/CLOUD_SETUP.md.'
-      );
-      return;
-    }
-    if (kind === 'badlink') {
-      showState(
-        OFF_ICON,
-        'This link is incomplete',
-        'The address doesn\u2019t contain a share token, so there\u2019s nothing to show here.'
-      );
-      return;
-    }
-    if (kind === 'network') {
-      showState(
-        ALERT_ICON,
-        'Couldn\u2019t load this note',
-        'The sharing service didn\u2019t respond. Check your connection and refresh the page.'
-      );
-      return;
-    }
-    showState(
-      OFF_ICON,
-      'This link isn\u2019t available',
-      'The note isn\u2019t shared anymore \u2014 the link was cancelled by its owner or it has expired.'
-    );
-  }
-
-  if (!token) {
-    fail('badlink');
+  if (isHtmlNote(row.note_type)) {
+    // The rename transition: rows from a newer server say `content`,
+    // older ones say `html` — read either, prefer `content`.
+    const body = row.content == null ? row.html : row.content;
+    // The app's own sanitizer, generated from the canonical source: same
+    // tag/attribute/style policy as the editor, plus the read-only
+    // dialect — links hardened to noopener new-tabs, math shells shown
+    // as their LaTeX source (this page runs no KaTeX).
+    content.innerHTML = sanitizeNoteHtml(String(body == null ? '' : body), {
+      hardenLinks: true,
+      mathToText: true,
+    });
     return;
   }
 
-  var apiBase = String(config.apiBase || '').replace(/\/+$/, '');
+  // A non-html note (Markdown source, a board's JSON, a newer type):
+  // honest raw text, never markup. The <pre> keeps structure readable.
+  const pre = document.createElement('pre');
+  pre.className = 'share-raw-content';
+  const raw = row.content == null ? row.html : row.content;
+  pre.textContent = String(raw == null ? '' : raw);
+  content.appendChild(pre);
+}
+
+function fail(kind) {
+  if (kind === 'setup') {
+    showState(
+      ALERT_ICON,
+      'Sharing isn\u2019t set up yet',
+      'This Padify deployment is missing its share configuration. If you own this site, rebuild with VITE_API_BASE set to your API origin \u2014 see docs/CLOUD_SETUP.md.',
+    );
+    return;
+  }
+  if (kind === 'badlink') {
+    showState(
+      OFF_ICON,
+      'This link is incomplete',
+      'The address doesn\u2019t contain a share token, so there\u2019s nothing to show here.',
+    );
+    return;
+  }
+  if (kind === 'network') {
+    showState(
+      ALERT_ICON,
+      'Couldn\u2019t load this note',
+      'The sharing service didn\u2019t respond. Check your connection and refresh the page.',
+    );
+    return;
+  }
+  showState(
+    OFF_ICON,
+    'This link isn\u2019t available',
+    'The note isn\u2019t shared anymore \u2014 the link was cancelled by its owner or it has expired.',
+  );
+}
+
+if (!token) {
+  fail('badlink');
+} else {
+  const apiBase = String(config.apiBase || '').replace(/\/+$/, '');
 
   showLoading();
 
@@ -259,4 +182,4 @@
       console.error('[share] load failed', error);
       fail('network');
     });
-})();
+}

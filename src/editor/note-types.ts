@@ -21,6 +21,13 @@
  * and the note round-trips untouched. Unknown never means damaged.
  */
 
+// The one definition of the slug shape lives in the wire contract
+// (shared/wire.ts) so the client registry and the server's border parser
+// cannot drift apart; re-exported here for this module's importers.
+import { NOTE_TYPE_ID_PATTERN } from '../../shared/wire';
+
+export { NOTE_TYPE_ID_PATTERN };
+
 export const DEFAULT_NOTE_TYPE = 'standard' as const;
 
 /**
@@ -107,9 +114,6 @@ export const NOTE_TYPE_ICONS: Record<KnownNoteType, (size: number) => string> = 
   rich: (size) =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 20 12 4l5.5 16"/><path d="M8.3 14.5h7.4"/><path d="M4 20h16" opacity=".45"/></svg>`,
 };
-
-/** Type ids are url-safe slugs; the server enforces the same shape. */
-export const NOTE_TYPE_ID_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
 
 /**
  * Reads a stored/unknown value into the note's type. The default type is

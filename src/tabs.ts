@@ -42,12 +42,17 @@ import {
   stateRemove,
   type StoredNoteTab,
 } from './storage';
-import { getEditorPort } from './editor/port';
-import { renderMathIn } from './editor/math';
 import { sanitizeNoteHtml } from './editor/storage-subset';
-import { currentThemeMode, noteRenderedForTheme } from './editor/theme-colors';
+import { currentThemeMode } from './editor/theme-colors';
+import { htmlNoteSurface, noteSurfaceFor, noteSurfaceForKind } from './editor/surface';
 import {
-  contentKindFor,
+  deriveTabTitle,
+  escapeHtml,
+  htmlToText,
+  legacyTextToHtml,
+  WELCOME_HTML,
+} from './editor/note-content';
+import {
   DEFAULT_NOTE_TYPE,
   isHtmlContent,
   normalizeNoteType,
@@ -59,6 +64,17 @@ import {
 
 export type { NoteType } from './editor/note-types';
 export { sanitizeNoteHtml } from './editor/storage-subset';
+// Re-exported for their existing importers (snapshots, the share layers, the
+// test suites): the functions themselves live in editor/note-content.ts now,
+// where the cross-domain consumers can reach them without dragging the tab
+// model along.
+export {
+  deriveTabTitle,
+  escapeHtml,
+  htmlToText,
+  legacyTextToHtml,
+  WELCOME_HTML,
+} from './editor/note-content';
 
 export interface NoteTab {
   id: string;
@@ -121,203 +137,6 @@ export interface TabsSyncPayload {
   dirty: string[];
   /** Full tombstone list (pending deletions, some possibly old news). */
   tombstones: TabTombstone[];
-}
-
-const MAX_TITLE_LENGTH = 42;
-
-/** Welcome note shown for brand-new installs (rich HTML). */
-export const WELCOME_HTML = [
-  'Welcome! Padify is an offline-capable notepad which is a Progressive Web App.',
-  '',
-  'The app serves the following features:',
-  '',
-  '- Your notes are saved in real-time as you type.',
-  '- Multiple notes live in the sidebar on the left — plus bold, italic,',
-  '  underline and strikethrough formatting that renders right inside the',
-  '  editor (right-click to try it).',
-  '- Note types: use the arrow beside "New note" to create rich text',
-  '  notes with headings, lists, quotes, code blocks and links.',
-  '- Voice typing: click the mic in the top bar (or press alt/option + v)',
-  '  and just talk.',
-  '- Optional cloud sync: click the cloud icon in the top bar to back up',
-  '  your notes and pick them up on any other device.',
-  '- Signed in? Share any note with a read-only link that expires on its',
-  '  own and can be cancelled any time (share icon in the top bar).',
-  '- Installable on supported browsers for offline usage.',
-  '- "Add To Home Screen" feature on Android-supported devices to launch the app from the home screen.',
-  '- Dark mode.',
-  '- Privacy-focused - Never collects your precious data.',
-  '- Light-weight - Loads almost instantly.',
-  '- Writing sessions with a pick-a-duration timer.',
-  '- View Note Statistics.',
-  '- Snapshots.',
-  '- Ability to mimic typewriter sound when typing.',
-  '- Optional break reminders after long writing sessions.',
-  '- Keyboard shortcuts for common actions.',
-  '- Full-screen mode for a distraction-free writing experience.',
-  '- Floating window (in supported browsers) to effectively take notes across other apps.',
-  '- Download notes as plain text, PDF, HTML, and DOCX file.',
-  '- Play music while you write — free song search with no account, or connect your Spotify — and mix 12 ambience sounds to help you focus.',
-  '',
-  "CAUTION: Since the app stores your notes on your own device, it's",
-  'recommended that you take a backup of your notes more often using the',
-  '"Download Notes" button or by pressing the "ctrl/command + s" keys.',
-  '',
-  '<b>Delete this text and start writing your notes</b>',
-].join('\n');
-
-// ---------------------------------------------------------------------------
-// Content helpers
-// ---------------------------------------------------------------------------
-
-/** Escapes a plain-text string so it can be embedded as HTML text. */
-export function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-/**
- * Converts the legacy plain-text note (with markdown-style formatting
- * wrappers) into the rich HTML subset the editor stores. Newlines stay as
- * literal \n characters — the editor renders with white-space: pre-wrap.
- */
-export function legacyTextToHtml(text: string): string {
-  const escaped = escapeHtml(text);
-
-  const unwrap = (pattern: RegExp, tag: string): string =>
-    escaped.replace(pattern, (_match, inner: string) => `<${tag}>${inner}</${tag}>`);
-
-  // Order matters: the longer asterisk run (bold) before the single-star
-  // italic, underline's `__` before nothing else that clashes.
-  return unwrap(/\*\*([^*\n]+?)\*\*/g, 'b')
-    .replace(/__([^_\n]+?)__/g, '<u>$1</u>')
-    .replace(/~~([^~\n]+?)~~/g, '<s>$1</s>')
-    .replace(/\*([^*\n]+?)\*/g, '<i>$1</i>');
-}
-
-/** Plain text of a stored HTML snippet (newlines preserved). */
-export function htmlToText(html: string): string {
-  const probe = document.createElement('div');
-  probe.innerHTML = html;
-
-  const parts: string[] = [];
-
-  /** Block tags read as line boundaries, like innerText would report them. */
-  const BLOCK_TAGS = new Set(['DIV', 'P', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'PRE', 'LI', 'HR']);
-
-  const walk = (node: Node): void => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      parts.push(node.nodeValue ?? '');
-      return;
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) {
-      return;
-    }
-
-    const element = node as HTMLElement;
-    if (element.tagName === 'BR') {
-      parts.push('\n');
-      return;
-    }
-    // A math shell reads as its LaTeX source (titles/previews/exports get
-    // the equation, not KaTeX's markup or nothing).
-    if (element.classList && element.classList.contains('padify-math')) {
-      parts.push(element.getAttribute('data-latex') ?? '');
-      return;
-    }
-    // Checklist items read with their box state — the plain-text twin of
-    // the rendered checkbox.
-    if (element.tagName === 'LI') {
-      const list = element.parentElement;
-      if (list instanceof HTMLElement && list.hasAttribute('data-rich-checklist')) {
-        if (parts.length > 0) {
-          parts.push('\n');
-        }
-        parts.push(element.getAttribute('data-checked') === 'true' ? '[x] ' : '[ ] ');
-        element.childNodes.forEach(walk);
-        return;
-      }
-    }
-    // Table rows read as lines, cells tab-separated (Docs' export shape).
-    if (element.tagName === 'TR') {
-      if (parts.length > 0) {
-        parts.push('\n');
-      }
-      let cells = 0;
-      element.childNodes.forEach((child) => {
-        if (child.nodeType === Node.ELEMENT_NODE) {
-          const tag = (child as HTMLElement).tagName;
-          if (tag === 'TD' || tag === 'TH') {
-            if (cells > 0) {
-              parts.push('\t');
-            }
-            cells += 1;
-            child.childNodes.forEach(walk);
-          }
-        }
-      });
-      return;
-    }
-    if (BLOCK_TAGS.has(element.tagName)) {
-      // Block boundaries read as newlines, like innerText would report them.
-      if ((element.textContent ?? '') === '') {
-        parts.push('\n');
-        return;
-      }
-      if (parts.length > 0) {
-        parts.push('\n');
-      }
-      element.childNodes.forEach(walk);
-      return;
-    }
-    element.childNodes.forEach(walk);
-  };
-
-  probe.childNodes.forEach(walk);
-  // The styled-caret marker (U+200B) is editor plumbing, not content.
-  return parts.join('').replace(/\u200B/g, '');
-}
-
-/** Derives the tab label: user name, else the format's own first line. */
-export function deriveTabTitle(tab: NoteTab): string {
-  if (tab.name && tab.name.trim()) {
-    return tab.name.trim();
-  }
-
-  // Non-html formats title from their raw content — never from the HTML
-  // reading of it (htmlToText would eat the markup-shaped data whole).
-  if (!isHtmlContent(tab.noteType)) {
-    const kind = contentKindFor(tab.noteType);
-    if (kind === 'text') {
-      const firstLine = tab.content
-        .split('\n')
-        .map((line) => line.trim())
-        .find((line) => line.length > 0);
-      if (firstLine) {
-        return firstLine.length > MAX_TITLE_LENGTH
-          ? `${firstLine.slice(0, MAX_TITLE_LENGTH - 1).trimEnd()}…`
-          : firstLine;
-      }
-    }
-    return noteTypeLabel(tab.noteType ?? DEFAULT_NOTE_TYPE);
-  }
-
-  const firstLine = htmlToText(tab.content)
-    .split('\n')
-    .map((line) => line.trim())
-    .find((line) => line.length > 0);
-
-  if (!firstLine) {
-    return 'Untitled';
-  }
-
-  return firstLine.length > MAX_TITLE_LENGTH
-    ? `${firstLine.slice(0, MAX_TITLE_LENGTH - 1).trimEnd()}…`
-    : firstLine;
 }
 
 function createTabId(): string {
@@ -601,22 +420,23 @@ export class TabManager {
     return this.tabs.find((tab) => tab.id === this.activeId) ?? null;
   }
 
-  /** Saves the editor's current HTML into the active tab. */
+  /** Saves the editor's live content into the active tab. */
   saveActiveFromEditor(): void {
     const active = this.getActive();
     if (!active) {
       return;
     }
-    // Only html notes have an editor surface — anything else shows a
-    // placeholder this build cannot edit, so there is nothing to save.
-    if (!isHtmlContent(active.noteType)) {
+    // Only editable surfaces have anything to save — a display-only
+    // surface holds a card, not the note (see editor/surface.ts).
+    const surface = noteSurfaceFor(active);
+    if (!surface.editable) {
       return;
     }
 
-    // Through the port: sanitized, and math shells stored as their LaTeX
-    // source (the rendered KaTeX markup lives only in the editing DOM).
-    const html = getEditorPort()?.getHtml() ?? this.editor.html();
-    if (html === active.content) {
+    const html = surface.capture(this.editorHost());
+    // Editable surfaces always answer a string; null (a display-only
+    // surface) reads as "nothing to save" and exits the same way.
+    if (html === null || html === active.content) {
       return;
     }
 
@@ -634,13 +454,13 @@ export class TabManager {
     if (!active) {
       return;
     }
-    // Same surface rule as saveActiveFromEditor: html notes only.
-    if (!isHtmlContent(active.noteType)) {
+    // Same surface rule as saveActiveFromEditor: editable kinds only.
+    const surface = noteSurfaceFor(active);
+    if (!surface.editable) {
       return;
     }
 
-    // Same port routing as saveActiveFromEditor — sanitized on store.
-    active.content = getEditorPort()?.getHtml() ?? this.editor.html();
+    active.content = surface.capture(this.editorHost()) ?? active.content;
     active.updatedAt = Date.now();
     active.colorTheme = currentThemeMode();
     this.dirtyIds.add(active.id);
@@ -650,96 +470,34 @@ export class TabManager {
 
   // ---- editor sync -----------------------------------------------------------
 
-  private loadActiveIntoEditor(): void {
-    const active = this.getActive();
-
-    // A note whose type this build doesn't edit (a non-html format, or a
-    // type from a newer Padify) gets a read-only explanation instead of a
-    // surface. The content itself never enters the editor DOM — it is
-    // kept byte-exact in the model and syncs untouched.
-    if (active && !isHtmlContent(active.noteType)) {
-      this.renderUnsupportedNote(active);
-      return;
-    }
-
-    const surface = this.editor.get(0) as HTMLElement | null;
-    if (surface) {
-      // html notes own an editable surface — restore it in case an
-      // unsupported note parked here before.
-      surface.setAttribute('contenteditable', 'true');
-    }
-
-    const port = getEditorPort();
-    if (port) {
-      // The port's display-only entry: sanitized, math rendered, empty
-      // state collapsed — and nothing persists, because opening a note
-      // must not write on its own.
-      port.renderHtml(active ? active.content : '');
-    } else {
-      // Bare fallback (tests, pre-boot): the same paint, by hand. The
-      // empty-state normalization is a port capability — without a port
-      // it is skipped, exactly like the pre-split code did.
-      this.editor.html(active ? active.content : '');
-      renderMathIn(this.editor.get(0) as HTMLElement);
-    }
-    this.editor.scrollTop(0);
-    // A note whose stored colors were written under the other theme is
-    // re-inked for display right away (visual only — storage catches up on
-    // the next edit, so opening a note never writes on its own).
-    noteRenderedForTheme(this.editor.get(0) as HTMLElement | undefined, active?.colorTheme);
+  /** The editor host element — the DOM node surfaces paint into. */
+  private editorHost(): HTMLElement | null {
+    return this.editor.get(0) as HTMLElement | null;
   }
 
-  /**
-   * Paints the read-only card for a note this build cannot edit. The
-   * surface turns non-editable (no input events can fire, so nothing can
-   * dirty the note) and the note's real content stays in the model only.
-   */
-  private renderUnsupportedNote(active: NoteTab): void {
-    const surface = this.editor.get(0) as HTMLElement | null;
-    if (!surface) {
+  private loadActiveIntoEditor(): void {
+    const host = this.editorHost();
+    if (!host) {
       return;
     }
-    surface.setAttribute('contenteditable', 'false');
-    surface.textContent = '';
-
-    const card = document.createElement('div');
-    card.className = 'unsupported-note';
-    card.dataset.noteType = active.noteType ?? DEFAULT_NOTE_TYPE;
-
-    const title = document.createElement('p');
-    title.className = 'unsupported-note-title';
-    title.textContent = `${noteTypeLabel(active.noteType ?? DEFAULT_NOTE_TYPE)} — this Padify can't open it yet`;
-
-    const body = document.createElement('p');
-    body.className = 'unsupported-note-body';
-    body.textContent =
-      'The note is stored safely and syncs untouched. Open it on a device with a newer Padify to edit it.';
-
-    card.append(title, body);
-    surface.append(card);
-    this.editor.scrollTop(0);
+    // The surface registry owns what a note kind shows (editor/surface.ts):
+    // html notes get the port-driven editing pipeline, everything this
+    // build can't edit gets the read-only card. The manager no longer
+    // knows how — that is the seam a new note kind (Markdown, a board)
+    // plugs into.
+    noteSurfaceFor(this.getActive()).display(host, this.getActive());
   }
 
   getActiveText(): string {
     const active = this.getActive();
-    // Non-html formats read as their raw content — statistics and exports
-    // must never report the placeholder card's copy as the note's text.
-    if (active && !isHtmlContent(active.noteType)) {
-      return active.content.trim() === '' ? '' : active.content;
-    }
-    const element = this.editor.get(0) as HTMLElement | undefined;
-    if (!element) {
+    if (!active) {
       return '';
     }
-    const text = element.innerText
-      .replace(/\u00a0/g, ' ')
-      // The styled-caret run (U+200B) is formatting, not content.
-      .replace(/\u200B/g, '');
-    // A bare <br> — the empty state a delete-all leaves — reports "\n"
-    // through innerText, which read as a phantom character on an empty
-    // note ("1 character • 0 words"). Whitespace-only means empty for
-    // every consumer of this text (count pill, statistics, share cards).
-    return text.trim() === '' ? '' : text;
+    // The surface owns the text projection: editing surfaces read the live
+    // host, display-only ones read the model's raw content — statistics
+    // and exports must never report the placeholder card's copy as the
+    // note's text.
+    return noteSurfaceFor(active).visibleText(this.editorHost(), active);
   }
 
   clearActiveTab(): void {
@@ -748,7 +506,7 @@ export class TabManager {
       return;
     }
 
-    this.editor.html('');
+    noteSurfaceFor(active).clear(this.editorHost()!);
     active.content = '';
     active.updatedAt = Date.now();
     this.dirtyIds.add(active.id);
@@ -759,10 +517,10 @@ export class TabManager {
 
   /**
    * Restores a snapshot into the active note — the snapshot restore path.
-   * Html snapshots go through the port (sanitized + persisted there, same
-   * as setEditorHtml); every other kind is written to the model directly,
-   * switching the note to the snapshot's type, because no editor surface
-   * exists for it.
+   * Html snapshots commit through the surface (the port sanitizes and
+   * persists, same as setEditorHtml); every other kind is written to the
+   * model directly, switching the note to the snapshot's type, because no
+   * editing surface exists for it.
    */
   applySnapshotToActive(content: string, noteType?: NoteType): void {
     const active = this.getActive();
@@ -771,14 +529,12 @@ export class TabManager {
     }
 
     if (isHtmlContent(noteType)) {
-      const port = getEditorPort();
-      if (port) {
-        port.setHtml(content);
-        return;
+      const committed = noteSurfaceForKind('html').commit(this.editorHost(), content);
+      if (!committed) {
+        // Bare-DOM fallback (pre-boot paths): the surface painted the
+        // sanitized content; the save is ours.
+        this.syncAfterExternalEdit();
       }
-      // Bare-DOM fallback (pre-boot paths): same write-then-save shape.
-      this.editor.html(sanitizeNoteHtml(content));
-      this.syncAfterExternalEdit();
       return;
     }
 
@@ -1158,10 +914,10 @@ export function getEditorText(): string {
 
 /**
  * The active note's true content — the capture path for snapshots AND
- * share links. Html notes read the LIVE editor (keystrokes still inside
- * the debounce window are worth keeping); every other kind reads the
- * model, because the editor is showing a placeholder card — the note's
- * real content never entered the editor DOM.
+ * share links. Notes with an editing surface read the LIVE host
+ * (keystrokes still inside the debounce window are worth keeping);
+ * display-only kinds read the model, because the host is showing a
+ * placeholder card — the note's real content never entered it.
  */
 export function getActiveNoteContent(): {
   content: string;
@@ -1171,7 +927,7 @@ export function getActiveNoteContent(): {
   if (!active) {
     return null;
   }
-  if (isHtmlContent(active.noteType)) {
+  if (noteSurfaceFor(active).editable) {
     return { content: getEditorHtml(), noteType: active.noteType };
   }
   return { content: active.content, noteType: active.noteType };
@@ -1179,11 +935,11 @@ export function getActiveNoteContent(): {
 
 /**
  * The body for the "Download as HTML" export — the third capture path
- * beside snapshots and share links, and the same rule: html notes read the
- * LIVE editor, every other kind reads the model. Exporting must never
- * serialize whatever the editor SURFACE happens to be showing: for a
- * non-html note that surface is a read-only placeholder card, and the
- * export would ship the card instead of the note.
+ * beside snapshots and share links, and the same rule: notes with an
+ * editing surface read the LIVE host, display-only kinds read the model.
+ * Exporting must never serialize whatever the host SURFACE happens to be
+ * showing: for a non-editable note that surface is a read-only placeholder
+ * card, and the export would ship the card instead of the note.
  *
  * Non-html content is escaped into a <pre>: a JSON note exported as raw
  * markup would be broken by its own angle brackets, and the point of the
@@ -1202,32 +958,25 @@ export function getActiveNoteExportBody(): string | null {
 }
 
 /**
- * HTML of the note currently shown in the editor. Routed through the
- * EditorPort (see editor/port.ts) with a bare-DOM fallback for the rare
- * paths that run before the composition root installed the port.
+ * HTML of the note currently shown in the editor — the html surface's
+ * live capture, routed through the EditorPort (see editor/port.ts) with
+ * the bare-DOM fallback for the rare paths that run before the
+ * composition root installed the port.
  */
 export function getEditorHtml(): string {
-  const port = getEditorPort();
-  if (port) {
-    return port.getHtml();
-  }
-  const element = document.getElementById('note') as HTMLElement | null;
-  return element ? element.innerHTML : '';
+  return htmlNoteSurface.capture(document.getElementById('note'));
 }
 
-/** Replaces the editor content (sanitized in the port) and persists. */
+/** Replaces the editor content (sanitized in the surface/port) and persists. */
 export function setEditorHtml(html: string): void {
-  const port = getEditorPort();
-  if (port) {
-    port.setHtml(html);
+  const element = document.getElementById('note');
+  if (htmlNoteSurface.commit(element, html)) {
+    // The port applied it and persisted via its onDocumentReplaced wiring.
     return;
   }
-
-  const element = document.getElementById('note') as HTMLElement | null;
-  if (!element) {
+  if (element === null) {
     return;
   }
-
-  element.innerHTML = sanitizeNoteHtml(html);
+  // Bare fallback: the surface painted the sanitized content — persist now.
   tabManagerInstance?.syncAfterExternalEdit();
 }

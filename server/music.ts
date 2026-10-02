@@ -175,8 +175,35 @@ interface Candidate {
   url: string;
 }
 
+/**
+ * Test seam for the yt-dlp process runner. Production runs Bun.spawn
+ * (below); the vitest suite (src/server-music-resolve.test.ts) swaps in a
+ * fake so the whole resolver pipeline — candidate parsing, duration
+ * selection, SQLite + memory caching, fresh-bypass, in-flight dedupe —
+ * runs under Node, where Bun.spawn does not exist. The old coverage was
+ * a hand-rolled bun-only script outside CI; the seam puts it in `npm run
+ * test` with the rest of the gates. Null restores the real runner.
+ */
+let ytDlpRunnerForTests: ((query: string) => Promise<Candidate[]>) | null = null;
+
+/** Test hook — see the seam doc above. */
+export function setYtDlpRunnerForTests(
+  runner: ((query: string) => Promise<Candidate[]>) | null,
+): void {
+  ytDlpRunnerForTests = runner;
+}
+
+/** Test hook — clears the memory cache and the in-flight dedupe map. */
+export function resetMusicResolverForTests(): void {
+  memoryCache.clear();
+  inFlight.clear();
+}
+
 /** Runs yt-dlp over YouTube search and returns the parsed candidates. */
 function runYtDlp(query: string): Promise<Candidate[]> {
+  if (ytDlpRunnerForTests) {
+    return ytDlpRunnerForTests(query);
+  }
   return withResolverSlot(
     () =>
       new Promise<Candidate[]>((resolve, reject) => {

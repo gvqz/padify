@@ -72,3 +72,21 @@ export interface NotesPullV2 {
  * would catch.
  */
 export const MAX_BODY_BYTES = 2_000_000;
+
+/**
+ * The most rows one PUT /api/notes body may carry (server/notes.ts
+ * parseNoteRows rejects anything over). The client's push batcher splits
+ * on BOTH this cap and the byte cap: a queue of >500 small notes must
+ * become several bodies, or the single oversized-count body would be
+ * rejected on every sync cycle forever with no code path that shrinks it.
+ */
+export const MAX_ROWS_PER_PUSH = 500;
+
+/**
+ * Note type ids are url-safe slugs. Both sides enforce the same shape —
+ * the client registry (src/editor/note-types.ts) and the server's border
+ * parser (server/notes.ts) — or types would silently fall off notes at
+ * the boundary. This constant is the one definition; the sides re-export
+ * it from here.
+ */
+export const NOTE_TYPE_ID_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
