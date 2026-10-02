@@ -1,0 +1,237 @@
+/* vercel design system — part 5/16: Dialog frames — one recipe for every popup
+   Split from the former vercel.css (cascade order preserved —
+   index.html loads these files in numeric order, last in the
+   stylesheet chain, exactly where the monolith sat). */
+/* --------------------------------------------------------------------------
+   5. Dialog frames — one recipe for every popup
+   -------------------------------------------------------------------------- */
+
+body .modal-content,
+body #snapshotsModal .modal-content,
+body #musicPlayerModal .modal-content,
+body .ucp-modal .modal-content {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-lg) !important;
+  box-shadow: var(--vz-shadow-dialog);
+  color: var(--vz-fg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+body.dark .modal-content,
+body.dark #snapshotsModal .modal-content,
+body.dark #musicPlayerModal .modal-content,
+body.dark .ucp-modal .modal-content {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-border);
+  color: var(--vz-fg);
+}
+
+/* Enter animation: rise + settle, no bootstrap slide */
+.modal.fade .modal-dialog {
+  transform: translate(0, 14px) scale(0.98);
+  opacity: 0;
+  transition: transform 200ms var(--vz-ease), opacity 200ms var(--vz-ease);
+}
+
+.modal.in .modal-dialog {
+  transform: translate(0, 0) scale(1);
+  opacity: 1;
+}
+
+/* Header / footer — quiet dividers */
+body .modal-header,
+body #snapshotsModal .modal-header {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--vz-border);
+  border-top-left-radius: var(--vz-radius-lg);
+  border-top-right-radius: var(--vz-radius-lg);
+  padding: 16px 20px 12px;
+}
+
+body .modal-footer,
+body #snapshotsModal .modal-footer {
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--vz-border);
+  padding: 14px 20px 16px;
+}
+
+body .modal-title,
+body .custom-modal-title,
+body #snapshotsModal .modal-title,
+body.dark .modal-title,
+body.dark .custom-modal-title {
+  color: var(--vz-fg);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
+body .modal-body,
+body.dark .modal-body {
+  color: var(--vz-fg);
+}
+
+/* Body copy stays one step calmer */
+body .modal-body p,
+body .modal-body ul,
+body .modal-body li {
+  color: var(--vz-fg-muted);
+}
+
+body .modal-body b {
+  color: var(--vz-fg);
+}
+
+/* Modal links — quiet underline that sharpens on hover */
+body .modal-body a,
+body.dark .modal-body a {
+  color: var(--vz-fg);
+  text-decoration: underline;
+  text-decoration-color: var(--vz-border-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--vz-dur) ease, color var(--vz-dur) ease;
+}
+
+body .modal-body a:hover,
+body .modal-body a:focus,
+body.dark .modal-body a:hover,
+body.dark .modal-body a:focus {
+  color: var(--vz-fg);
+  text-decoration-color: var(--vz-fg);
+}
+
+/* Close button — a real target, not a floating glyph */
+body .modal-header .close,
+body.dark .modal-header .close,
+body.dark .modal-header .close:hover {
+  width: 32px;
+  height: 32px;
+  margin: -4px -6px 0 0;
+  padding: 0;
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg-muted);
+  opacity: 1;
+  font-size: 20px;
+  line-height: 32px;
+  text-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+body .modal-header .close:hover,
+body .modal-header .close:focus,
+body.dark .modal-header .close:hover,
+body.dark .modal-header .close:focus {
+  color: var(--vz-fg);
+  background: var(--vz-bg-hover);
+  opacity: 1;
+}
+
+/* Backdrop */
+body .modal-backdrop,
+body.dark .modal-backdrop {
+  background: #000000;
+  opacity: 0.55;
+}
+
+@media (max-width: 768px) {
+  body .modal-backdrop,
+  body.dark .modal-backdrop {
+    opacity: 0.65;
+  }
+}
+
+/* Modal footer buttons sit right, gap consistent */
+body .modal-footer .btn + .btn {
+  margin-left: 8px;
+}
+
+/* Keyboard shortcuts table */
+body .modal-body table tr,
+body.dark .modal-body table tr {
+  background: transparent;
+  border-top: 1px solid var(--vz-border);
+  padding: 12px 10px;
+}
+
+body .modal-body table tr:first-child {
+  border-top: none;
+}
+
+body .modal-body table tr td,
+body.dark .modal-body table tr td,
+body.dark .modal-body table td {
+  color: var(--vz-fg-muted);
+  font-size: 13px;
+}
+
+body .modal-body table tr td:first-child,
+body.dark .modal-body table tr td:first-child {
+  color: var(--vz-fg);
+}
+
+body .about-notice {
+  color: var(--vz-fg-muted);
+  font-size: 12px;
+}
+
+body .about-modal-logo {
+  border-radius: var(--vz-radius-md);
+}
+
+/* Install button — primary */
+body .install-app-btn {
+  background: var(--vz-primary);
+  color: var(--vz-primary-fg) !important;
+  font-weight: 500;
+  font-size: 12.5px;
+  padding: 5px 14px;
+  border-radius: var(--vz-radius);
+  border: 1px solid var(--vz-primary);
+  transition: background-color var(--vz-dur) ease, transform 100ms ease;
+}
+
+body .install-app-btn:hover,
+body .install-app-btn:focus {
+  background: var(--vz-primary-hover);
+  text-decoration: none;
+  transform: none;
+}
+
+body .install-app-btn:active {
+  transform: scale(0.98);
+}
+
+/* PWA update notice — inverted bar */
+body .sticky-notice {
+  background: var(--vz-primary);
+  color: var(--vz-primary-fg);
+  border-radius: var(--vz-radius);
+  box-shadow: var(--vz-shadow-pill);
+  font-weight: 500;
+  border: none;
+}
+
+body .sticky-notice a {
+  color: var(--vz-primary-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+body.dark .sticky-notice {
+  background: var(--vz-primary);
+  color: var(--vz-primary-fg);
+}
+
+body.dark .sticky-notice a {
+  color: var(--vz-primary-fg);
+}
+

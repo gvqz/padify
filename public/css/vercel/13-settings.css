@@ -1,0 +1,639 @@
+/* vercel design system — part 13/16: Settings — Vercel-style preferences
+   Split from the former vercel.css (cascade order preserved —
+   index.html loads these files in numeric order, last in the
+   stylesheet chain, exactly where the monolith sat). */
+/* --------------------------------------------------------------------------
+   13. Settings — Vercel-style preferences
+   -------------------------------------------------------------------------- */
+
+#preferencesModal .modal-dialog {
+  width: min(560px, calc(100vw - 24px));
+}
+
+#preferencesModal .modal-header {
+  padding: 20px 24px 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#preferencesModal .modal-header .close {
+  margin: 0;
+}
+
+#preferencesModal .modal-body {
+  padding: 6px 20px 18px;
+  max-height: calc(100vh - 190px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+#preferencesModal .modal-footer {
+  padding: 14px 24px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Header */
+.pref-header-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pref-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--vz-fg-subtle);
+}
+
+#preferencesModal .custom-modal-title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--vz-fg);
+}
+
+.pref-subtitle {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--vz-fg-muted);
+  line-height: 1.5;
+}
+
+/* Sections */
+.pref-section {
+  margin: 10px 0;
+}
+
+.pref-section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 6px;
+  margin: 14px 2px 8px;
+}
+
+.pref-section-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  box-shadow: none;
+}
+
+.pref-section-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.pref-section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vz-fg);
+  letter-spacing: -0.005em;
+}
+
+.pref-section-hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--vz-fg-muted);
+  line-height: 1.4;
+}
+
+/* Cards — bordered rows with hairline dividers */
+.pref-card {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+body.dark .pref-card {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-border);
+  box-shadow: none;
+}
+
+/* Rows */
+.pref-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 16px;
+  border-top: 1px solid var(--vz-border);
+  transition: background-color 100ms ease;
+}
+
+.pref-row:first-child {
+  border-top: none;
+}
+
+.pref-row:hover {
+  background-color: var(--vz-bg-subtle);
+}
+
+body.dark .pref-row:hover {
+  background-color: var(--vz-bg-subtle);
+}
+
+.pref-row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.pref-row-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--vz-fg);
+  line-height: 1.35;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.pref-row-hint {
+  font-size: 11.5px;
+  color: var(--vz-fg-muted);
+  line-height: 1.45;
+}
+
+.pref-row-control {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.pref-row-control .form-control {
+  min-width: 168px;
+}
+
+/* NEW badge — mono */
+.pref-new-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  box-shadow: none;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+/* Segmented theme control */
+.pref-theme-seg {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  padding: 3px;
+  box-shadow: none;
+  position: relative;
+}
+
+.pref-theme-seg input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pref-theme-seg label {
+  margin: 0;
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--vz-fg-muted);
+  cursor: pointer;
+  transition: background-color var(--vz-dur) ease, color var(--vz-dur) ease,
+    box-shadow var(--vz-dur) ease;
+  white-space: nowrap;
+}
+
+.pref-theme-seg label svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+/* The blanket `.dark .modal-body label` rule in modals.css out-specifies the
+   token ink below; re-assert the muted base so the :hover step stays visible. */
+.dark .pref-theme-seg label {
+  color: var(--vz-fg-muted);
+}
+
+.pref-theme-seg label:hover {
+  color: var(--vz-fg);
+  background: var(--vz-bg-hover);
+  border-radius: var(--vz-radius-sm);
+}
+
+.pref-theme-seg input:checked + label {
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+  box-shadow: 0 0 0 1px var(--vz-border), var(--vz-shadow-card);
+}
+
+body.dark .pref-theme-seg input:checked + label {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg);
+  box-shadow: 0 0 0 1px var(--vz-border);
+}
+
+/* Custom select */
+#preferencesModal select.form-control {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--vz-bg-elevated);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23888888' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  box-shadow: none;
+  color: var(--vz-fg);
+  font-size: 12.5px;
+  font-weight: 500;
+  height: 34px;
+  padding: 0 30px 0 12px;
+  cursor: pointer;
+  transition: border-color var(--vz-dur) ease, box-shadow var(--vz-dur) ease;
+}
+
+#preferencesModal select.form-control:hover {
+  border-color: var(--vz-border-strong);
+}
+
+#preferencesModal select.form-control:focus {
+  border-color: var(--vz-border-strong);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
+  outline: none;
+}
+
+body.dark #preferencesModal select.form-control {
+  background-color: var(--vz-bg-subtle);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23a1a1a1' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  border-color: var(--vz-border);
+  color: var(--vz-fg);
+}
+
+/* Same specificity as the dark base above, but later — keeps the hover step
+   alive in dark mode (the unscoped :hover rule loses the cascade tie). */
+body.dark #preferencesModal select.form-control:hover {
+  border-color: var(--vz-border-strong);
+}
+
+#preferencesModal select.form-control:focus-visible {
+  outline: none;
+}
+
+body.dark #preferencesModal select.form-control option {
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+}
+
+/* Volume slider */
+#preferencesModal .pref-volume-row .pref-row-control {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 190px;
+}
+
+#preferencesModal .volume-control {
+  width: 100%;
+}
+
+#preferencesModal .volume-slider {
+  width: 100%;
+  height: 22px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+#preferencesModal .volume-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--vz-bg-chip);
+  box-shadow: none;
+}
+
+#preferencesModal .volume-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid var(--vz-border-strong);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: box-shadow var(--vz-dur) ease, border-color var(--vz-dur) ease;
+}
+
+#preferencesModal .volume-slider::-webkit-slider-thumb:hover {
+  border-color: var(--vz-fg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+#preferencesModal .volume-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--vz-bg-chip);
+  box-shadow: none;
+}
+
+#preferencesModal .volume-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid var(--vz-border-strong);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+body.dark #preferencesModal .volume-slider::-webkit-slider-runnable-track,
+body.dark #preferencesModal .volume-slider::-moz-range-track {
+  background: var(--vz-bg-chip);
+}
+
+body.dark #preferencesModal .volume-slider::-webkit-slider-thumb,
+body.dark #preferencesModal .volume-slider::-moz-range-thumb {
+  background: #ededed;
+  border-color: var(--vz-border-strong);
+}
+
+#typewriterVolumeValue {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vz-fg-muted);
+  min-width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Always on" pill — mono status */
+.pref-always-on {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.pref-always-on::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--vz-fg-muted);
+  box-shadow: none;
+}
+
+body.dark .pref-always-on {
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-chip);
+  border-color: var(--vz-border);
+}
+
+body.dark .pref-always-on::before {
+  background: var(--vz-fg-muted);
+}
+
+/* Action row (Clear formatting) — danger-secondary */
+.pref-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 16px;
+  border-top: 1px solid var(--vz-border);
+}
+
+.pref-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: var(--vz-radius);
+  border: 1px solid var(--vz-border);
+  background: var(--vz-bg-elevated);
+  color: var(--vz-danger);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease,
+    transform 100ms ease;
+}
+
+.pref-action-btn svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.pref-action-btn:hover,
+.pref-action-btn:focus {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-danger);
+  transform: none;
+  box-shadow: none;
+  color: var(--vz-danger);
+  text-decoration: none;
+  outline: none;
+}
+
+.pref-action-btn:active {
+  transform: scale(0.98);
+}
+
+body.dark .pref-action-btn {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-border);
+  color: var(--vz-danger);
+  box-shadow: none;
+}
+
+body.dark .pref-action-btn:hover,
+body.dark .pref-action-btn:focus {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-danger);
+  color: var(--vz-danger);
+  box-shadow: none;
+}
+
+/* Footer */
+#resetPreferences {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--vz-fg-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border-radius: var(--vz-radius);
+  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease;
+}
+
+#resetPreferences svg {
+  width: 14px;
+  height: 14px;
+}
+
+#resetPreferences:hover,
+#resetPreferences:focus {
+  color: var(--vz-fg);
+  background: var(--vz-bg-subtle);
+  text-decoration: none;
+  outline: none;
+}
+
+.pref-done-btn {
+  border: 1px solid var(--vz-primary);
+  border-radius: var(--vz-radius);
+  padding: 8px 22px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vz-primary-fg);
+  background: var(--vz-primary);
+  box-shadow: none;
+  cursor: pointer;
+  transition: background-color var(--vz-dur) ease, transform 100ms ease;
+}
+
+.pref-done-btn:hover,
+.pref-done-btn:focus {
+  background: var(--vz-primary-hover);
+  transform: none;
+  box-shadow: none;
+  color: var(--vz-primary-fg);
+  outline: none;
+}
+
+.pref-done-btn:active {
+  transform: scale(0.98);
+}
+
+body.dark .pref-done-btn {
+  background: var(--vz-primary);
+  border-color: var(--vz-primary);
+  color: var(--vz-primary-fg);
+  box-shadow: none;
+}
+
+body.dark .pref-done-btn:hover {
+  background: var(--vz-primary-hover);
+  color: var(--vz-primary-fg);
+}
+
+/* Settings mobile layout */
+@media (max-width: 540px) {
+  #preferencesModal .modal-header {
+    padding: 16px 18px 12px;
+  }
+
+  #preferencesModal .modal-body {
+    padding: 4px 12px 14px;
+    max-height: calc(100vh - 170px);
+  }
+
+  #preferencesModal .modal-footer {
+    padding: 12px 18px 16px;
+    flex-wrap: wrap;
+  }
+
+  .pref-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 13px 14px;
+  }
+
+  .pref-row-control,
+  .pref-row-control .form-control {
+    width: 100%;
+  }
+
+  #preferencesModal select.form-control {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .pref-theme-seg {
+    width: 100%;
+  }
+
+  .pref-theme-seg label {
+    padding: 8px 6px;
+    font-size: 11px;
+  }
+
+  .pref-theme-seg label svg {
+    display: none;
+  }
+
+  #preferencesModal .pref-volume-row .pref-row-control {
+    align-items: stretch;
+    min-width: 0;
+  }
+
+  #preferencesModal .pref-volume-row .volume-control {
+    width: 100%;
+  }
+
+  .pref-action-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .pref-action-btn {
+    justify-content: center;
+  }
+
+  .pref-section-head {
+    padding: 2px 4px;
+  }
+}
+

@@ -18,8 +18,10 @@
       Bootstrap fork, then the app areas split out of the old monolithic
       style.css (base -> editor -> navbar -> components -> timer ->
       effects -> switches -> animations -> fonts), then the feature
-      stylesheets and the vercel design system last — mirroring the
-      pre-split order.
+      stylesheets, and the vercel design system last — split into its
+      16 sections (css/vercel/01..16) in the same order the monolith
+      carried them, so a settings tweak touches one small file instead
+      of the most-churned file in the repo.
     -->
     <link href="/css/tokens.css" rel="stylesheet" />
     <link href="/css/bootstrap.min.css" rel="stylesheet" />
@@ -36,7 +38,22 @@
     <link href="/css/snapshots.css" rel="stylesheet" />
     <link href="/css/unicode-picker.css" rel="stylesheet" />
     <link href="/css/music-player.css" rel="stylesheet" />
-    <link href="/css/vercel.css" rel="stylesheet" />
+    <link href="/css/vercel/01-tokens.css" rel="stylesheet" />
+    <link href="/css/vercel/02-base.css" rel="stylesheet" />
+    <link href="/css/vercel/03-topbar.css" rel="stylesheet" />
+    <link href="/css/vercel/04-dropdowns.css" rel="stylesheet" />
+    <link href="/css/vercel/05-dialogs.css" rel="stylesheet" />
+    <link href="/css/vercel/06-buttons.css" rel="stylesheet" />
+    <link href="/css/vercel/07-switches.css" rel="stylesheet" />
+    <link href="/css/vercel/08-toasts.css" rel="stylesheet" />
+    <link href="/css/vercel/09-pills.css" rel="stylesheet" />
+    <link href="/css/vercel/10-statistics.css" rel="stylesheet" />
+    <link href="/css/vercel/11-snapshots.css" rel="stylesheet" />
+    <link href="/css/vercel/12-timer.css" rel="stylesheet" />
+    <link href="/css/vercel/13-settings.css" rel="stylesheet" />
+    <link href="/css/vercel/14-unicode-picker.css" rel="stylesheet" />
+    <link href="/css/vercel/15-textures.css" rel="stylesheet" />
+    <link href="/css/vercel/16-accessibility.css" rel="stylesheet" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="manifest" href="/manifest.json" />

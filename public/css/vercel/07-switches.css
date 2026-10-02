@@ -1,0 +1,84 @@
+/* vercel design system — part 7/16: Switches — global (Settings + Writing Session chime)
+   Split from the former vercel.css (cascade order preserved —
+   index.html loads these files in numeric order, last in the
+   stylesheet chain, exactly where the monolith sat). */
+/* --------------------------------------------------------------------------
+   7. Switches — global (Settings + Writing Session chime)
+   -------------------------------------------------------------------------- */
+
+body .checkbox.checbox-switch label span,
+body .checkbox-inline.checbox-switch span,
+body.dark .modal .checkbox.checbox-switch label span,
+body.dark .modal .checkbox-inline.checbox-switch span {
+  width: 40px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--vz-bg-chip);
+  border: 1px solid var(--vz-border);
+  box-shadow: none;
+  transition: background-color 200ms var(--vz-ease), border-color 200ms var(--vz-ease);
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 5px;
+  position: relative;
+}
+
+body .checkbox.checbox-switch label span::before,
+body .checkbox-inline.checbox-switch span::before,
+body.dark .modal .checkbox.checbox-switch label span::before,
+body.dark .modal .checkbox-inline.checbox-switch span::before {
+  content: " ";
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: none;
+  top: 2px;
+  left: 2px;
+  position: absolute;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: left 220ms var(--vz-spring), background-color 200ms ease;
+}
+
+body .checkbox.checbox-switch label > input:checked + span,
+body .checkbox-inline.checbox-switch > input:checked + span,
+body.dark .modal .checkbox.checbox-switch label > input:checked + span,
+body.dark .modal .checkbox-inline.checbox-switch > input:checked + span {
+  background: var(--vz-primary);
+  border-color: var(--vz-primary);
+  box-shadow: none;
+}
+
+body .checkbox.checbox-switch label > input:checked + span::before,
+body .checkbox-inline.checbox-switch > input:checked + span::before,
+body.dark .modal .checkbox.checbox-switch label > input:checked + span::before,
+body.dark .modal .checkbox-inline.checbox-switch > input:checked + span::before {
+  left: 18px;
+  background: #ffffff;
+}
+
+body.dark .modal .checkbox.checbox-switch label > input:checked + span::before,
+body.dark .modal .checkbox-inline.checbox-switch > input:checked + span::before {
+  background: var(--vz-primary-fg);
+}
+
+body .checkbox.checbox-switch label > input:disabled + span,
+body.dark .modal .checkbox.checbox-switch label > input:disabled + span {
+  background: var(--vz-bg-chip);
+  border-color: var(--vz-border);
+  opacity: 0.6;
+}
+
+/* Legacy native sliders (accent-color) */
+body .volume-slider,
+body.dark .volume-slider {
+  accent-color: var(--vz-fg);
+}
+
+/* Keyboard focus on the switch */
+body .checkbox.checbox-switch label:focus-within span {
+  outline: 2px solid var(--vz-fg);
+  outline-offset: 2px;
+}
+

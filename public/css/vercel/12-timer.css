@@ -1,0 +1,358 @@
+/* vercel design system — part 12/16: Writing session (timer modal)
+   Split from the former vercel.css (cascade order preserved —
+   index.html loads these files in numeric order, last in the
+   stylesheet chain, exactly where the monolith sat). */
+/* --------------------------------------------------------------------------
+   12. Writing session (timer modal)
+   -------------------------------------------------------------------------- */
+
+body .timer-subtitle {
+  color: var(--vz-fg-muted);
+  font-size: 13.5px;
+  margin: 14px 4px 16px;
+}
+
+body .timer-presets {
+  gap: 10px;
+  margin: 0 4px 18px;
+}
+
+body .timer-preset {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  padding: 14px 8px 12px;
+  transition: border-color var(--vz-dur) ease, transform var(--vz-dur) ease,
+    box-shadow var(--vz-dur) ease, background-color var(--vz-dur) ease;
+}
+
+body .timer-preset:hover,
+body .timer-preset:focus-visible {
+  border-color: var(--vz-border-strong);
+  background: var(--vz-bg-elevated);
+  transform: translateY(-1px);
+  box-shadow: var(--vz-shadow-card);
+  outline: none;
+}
+
+body .timer-preset:focus-visible {
+  border-color: var(--vz-fg);
+}
+
+body .timer-preset:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+body .timer-preset-clock {
+  color: var(--vz-fg-subtle);
+}
+
+body .timer-preset-minutes {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--vz-fg);
+}
+
+body .timer-preset-minutes small,
+body .timer-preset-label {
+  color: var(--vz-fg-muted);
+  font-weight: 500;
+}
+
+body .timer-custom {
+  margin: 0 4px 16px;
+}
+
+body .timer-custom-label {
+  font-size: 13px;
+  color: var(--vz-fg-muted);
+}
+
+body .timer-stepper {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  padding: 4px 8px;
+}
+
+body .timer-stepper-btn {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--vz-border);
+  border-radius: 4px;
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg);
+  font-size: 15px;
+  font-weight: 600;
+  transition: border-color var(--vz-dur) ease, background-color var(--vz-dur) ease;
+}
+
+body .timer-stepper-btn:hover,
+body .timer-stepper-btn:focus-visible {
+  background: var(--vz-bg-chip);
+  border-color: var(--vz-border-strong);
+  outline: none;
+}
+
+body .timer-stepper input[type="number"] {
+  color: var(--vz-fg);
+}
+
+body .timer-stepper-unit {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--vz-fg-muted);
+}
+
+body .timer-start-btn {
+  border-radius: var(--vz-radius);
+}
+
+body .timer-running-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vz-fg-muted);
+  margin: 18px 0 6px;
+}
+
+body .timer-running-clock {
+  font-size: 46px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--vz-fg);
+  font-variant-numeric: tabular-nums;
+  margin: 0 0 14px;
+}
+
+body .timer-modal .timer-ending + * .timer-running-clock,
+body .timer-running-clock.timer-ending {
+  color: var(--vz-danger);
+}
+
+body .timer-running-progress {
+  height: 6px;
+  background: var(--vz-bg-chip);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 0 22px 12px;
+}
+
+body .timer-running-progress-fill {
+  background: var(--vz-fg);
+  border-radius: 999px;
+  transition: width 0.9s linear;
+}
+
+body .timer-running-hint {
+  font-size: 12.5px;
+  color: var(--vz-fg-muted);
+}
+
+body .timer-running-actions .btn {
+  border-radius: var(--vz-radius);
+}
+
+body .chime-container .chime-label {
+  color: var(--vz-fg-muted);
+  font-size: 13px;
+}
+
+body.dark .chime-label {
+  color: var(--vz-fg-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Chime picker — four selectable sound cards under the chime toggle
+   -------------------------------------------------------------------------- */
+
+body .chime-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+  animation: vz-menu-in 180ms var(--vz-ease) both;
+}
+
+@media (max-width: 560px) {
+  body .chime-picker {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+body .chime-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  color: var(--vz-fg);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--vz-dur) var(--vz-ease),
+    background-color var(--vz-dur) var(--vz-ease),
+    box-shadow var(--vz-dur) var(--vz-ease),
+    transform var(--vz-dur) var(--vz-ease);
+}
+
+body .chime-option:hover {
+  border-color: var(--vz-border-strong);
+  background: var(--vz-bg-subtle);
+}
+
+body .chime-option:active {
+  transform: scale(0.98);
+}
+
+body .chime-option:focus-visible {
+  outline: none;
+  border-color: var(--vz-primary);
+  box-shadow: 0 0 0 2px var(--vz-bg), 0 0 0 4px var(--vz-primary);
+}
+
+body .chime-option.is-selected {
+  border-color: var(--vz-primary);
+  background: var(--vz-bg-subtle);
+  box-shadow: var(--vz-shadow-card);
+}
+
+body.dark .chime-option.is-selected {
+  background: var(--vz-bg-subtle);
+}
+
+body .chime-option-icon {
+  display: inline-flex;
+  color: var(--vz-fg-muted);
+  transition: color var(--vz-dur) var(--vz-ease);
+}
+
+body .chime-option.is-selected .chime-option-icon {
+  color: var(--vz-fg);
+}
+
+body .chime-option-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+body .chime-option-name {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* three-bar wave that animates while the preview plays */
+body .chime-option-wave {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  visibility: hidden;
+}
+
+body .chime-option.is-playing .chime-option-wave {
+  visibility: visible;
+}
+
+body .chime-option-wave span {
+  width: 2px;
+  border-radius: 1px;
+  background: var(--vz-fg);
+  height: 4px;
+}
+
+body .chime-option.is-playing .chime-option-wave span {
+  animation: chime-wave 700ms ease-in-out infinite;
+}
+
+body .chime-option.is-playing .chime-option-wave span:nth-child(2) {
+  animation-delay: 140ms;
+}
+
+body .chime-option.is-playing .chime-option-wave span:nth-child(3) {
+  animation-delay: 280ms;
+}
+
+@keyframes chime-wave {
+  0%, 100% { height: 4px; }
+  50% { height: 12px; }
+}
+
+body .chime-option.is-playing {
+  border-color: var(--vz-primary);
+}
+
+/* dark-mode timer leftovers from the old warm theme */
+body.dark .timer-preset {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-border);
+}
+
+body.dark .timer-preset:hover,
+body.dark .timer-preset:focus-visible {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-border-strong);
+}
+
+body.dark .timer-preset-minutes {
+  color: var(--vz-fg);
+}
+
+body.dark .timer-preset-minutes small,
+body.dark .timer-preset-label,
+body.dark .timer-preset-clock {
+  color: var(--vz-fg-muted);
+}
+
+body.dark .timer-stepper {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-border);
+}
+
+body.dark .timer-stepper-btn {
+  background: var(--vz-bg-subtle);
+  border-color: var(--vz-border);
+  color: var(--vz-fg);
+}
+
+body.dark .timer-stepper-btn:hover,
+body.dark .timer-stepper-btn:focus-visible {
+  background: var(--vz-bg-chip);
+  border-color: var(--vz-border-strong);
+}
+
+body.dark .timer-stepper input[type="number"] {
+  color: var(--vz-fg);
+}
+
+body.dark .timer-running-clock {
+  color: var(--vz-fg);
+}
+
+body.dark .timer-running-progress {
+  background: var(--vz-bg-chip);
+}
+
+body.dark .timer-running-progress-fill {
+  background: var(--vz-fg);
+}
+
+body.dark .timer-subtitle,
+body.dark .timer-running-hint,
+body.dark .timer-custom-label,
+body.dark .timer-stepper-unit {
+  color: var(--vz-fg-muted);
+}
+
+body.dark .timer-running-eyebrow {
+  color: var(--vz-fg-muted);
+}
+

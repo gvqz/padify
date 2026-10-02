@@ -1,0 +1,85 @@
+/* vercel design system — part 4/16: Dropdown menus — Vercel popovers
+   Split from the former vercel.css (cascade order preserved —
+   index.html loads these files in numeric order, last in the
+   stylesheet chain, exactly where the monolith sat). */
+/* --------------------------------------------------------------------------
+   4. Dropdown menus — Vercel popovers
+   -------------------------------------------------------------------------- */
+
+.navbar .dropdown-menu {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  box-shadow: var(--vz-shadow-menu);
+  padding: 4px;
+  margin-top: 6px;
+  min-width: 216px;
+  animation: vz-menu-in 130ms var(--vz-ease);
+  transform-origin: top center;
+}
+
+.navbar .dropdown-menu > li > a {
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 10px;
+  line-height: 1.5;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+.navbar .dropdown-menu > li > a:hover,
+.navbar .dropdown-menu > li > a:focus {
+  background-color: var(--vz-bg-hover);
+  color: var(--vz-fg);
+  outline: none;
+}
+
+.navbar .dropdown-menu > li > a .dropdown-item span,
+.navbar .dropdown-menu .dropdown-item > span {
+  /* BETA chip */
+  background: transparent;
+  border: 1px solid var(--vz-border);
+  color: var(--vz-fg-muted);
+  padding: 1px 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  margin-left: auto;
+  line-height: 1.5;
+}
+
+.navbar .dropdown-menu > li > a .dropdown-item,
+.navbar .dropdown-menu .dropdown-item {
+  gap: 9px;
+}
+
+.navbar .dropdown-menu > li > a .new-tag,
+.navbar .dropdown-menu .dropdown-item .new-tag,
+.navbar .dropdown-menu .new-tag {
+  background: var(--vz-bg-subtle) !important;
+  border: 1px solid var(--vz-border);
+  color: var(--vz-fg-muted) !important;
+  padding: 1px 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  margin-left: auto;
+  line-height: 1.5;
+}
+
+@keyframes vz-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+

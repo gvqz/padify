@@ -1,0 +1,30 @@
+/* vercel design system — part 14/16: Unicode picker — align controls (the music player v2 styles live
+   Split from the former vercel.css (cascade order preserved —
+   index.html loads these files in numeric order, last in the
+   stylesheet chain, exactly where the monolith sat). */
+/* --------------------------------------------------------------------------
+   14. Unicode picker — align controls (the music player v2 styles live
+       entirely in music-player.css, built on the same --vz-* tokens)
+   -------------------------------------------------------------------------- */
+
+
+/* Unicode picker — align controls (palette re-tokened in unicode-picker.css) */
+
+body .ucp-modal .modal-content {
+  box-shadow: var(--vz-shadow-dialog);
+}
+
+body .ucp-btn {
+  border-radius: var(--vz-radius);
+}
+
+body .ucp-btn-primary,
+body .ucp-btn-primary:hover {
+  color: #ffffff;
+}
+
+body.dark .ucp-btn-primary,
+body.dark .ucp-btn-primary:hover {
+  color: #0a0a0a;
+}
+

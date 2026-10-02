@@ -1,0 +1,144 @@
+/* vercel design system — part 11/16: Snapshots — list with dividers, ghost icon buttons
+   Split from the former vercel.css (cascade order preserved —
+   index.html loads these files in numeric order, last in the
+   stylesheet chain, exactly where the monolith sat). */
+/* --------------------------------------------------------------------------
+   11. Snapshots — list with dividers, ghost icon buttons
+   -------------------------------------------------------------------------- */
+
+body #snapshotsModal .modal-header {
+  background: transparent;
+}
+
+body #snapshotsModal .modal-footer {
+  background: transparent;
+}
+
+body .snapshots-list-container {
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  background: var(--vz-bg-elevated);
+}
+
+body #searchSnapshots {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg);
+  height: 34px;
+  font-size: 13px;
+  box-shadow: none;
+}
+
+body #searchSnapshots:focus {
+  border-color: var(--vz-border-strong);
+  box-shadow: none;
+  outline: none;
+}
+
+body #searchSnapshots::placeholder {
+  color: var(--vz-fg-subtle);
+}
+
+body.dark #searchSnapshots {
+  background: var(--vz-bg-subtle);
+  border-color: var(--vz-border);
+  color: var(--vz-fg);
+}
+
+body.dark #searchSnapshots::placeholder {
+  color: var(--vz-fg-subtle);
+}
+
+body .snapshot-item {
+  border-bottom: 1px solid var(--vz-border);
+  transition: background-color 100ms ease;
+}
+
+body .snapshot-item:last-child {
+  border-bottom: none;
+}
+
+body .snapshot-item:hover {
+  background: var(--vz-bg-subtle);
+}
+
+body .snapshot-title {
+  color: var(--vz-fg);
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+body .snapshot-preview {
+  color: var(--vz-fg-muted);
+  font-size: 12.5px;
+}
+
+body .snapshot-meta {
+  color: var(--vz-fg-subtle);
+  font-size: 11.5px;
+}
+
+body .snapshots-stats {
+  color: var(--vz-fg-muted);
+  font-size: 12.5px;
+}
+
+body #snapshotsCount {
+  color: var(--vz-fg);
+  font-weight: 600;
+}
+
+body .no-snapshots {
+  color: var(--vz-fg-muted);
+}
+
+body .no-snapshots svg path {
+  stroke: var(--vz-border-strong);
+}
+
+body .no-snapshots p {
+  color: var(--vz-fg-muted);
+  font-size: 13.5px;
+}
+
+/* Ghost icon buttons — mono; delete reads as danger */
+body .snapshot-btn {
+  color: var(--vz-fg-muted);
+  border-radius: var(--vz-radius);
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+body .snapshot-btn:hover {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg);
+}
+
+body .snapshot-btn.restore,
+body .snapshot-btn.copy {
+  color: var(--vz-fg-muted);
+}
+
+body .snapshot-btn.restore:hover {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg);
+}
+
+body .snapshot-btn.copy:hover {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg);
+}
+
+body .snapshot-btn.delete {
+  color: var(--vz-danger);
+}
+
+body .snapshot-btn.delete:hover {
+  background: var(--vz-danger-soft);
+  color: var(--vz-danger);
+}
+
+body.dark .snapshot-btn.delete {
+  color: var(--vz-danger);
+}
+

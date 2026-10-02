@@ -1,0 +1,169 @@
+/* vercel design system — part 3/16: Top bar — solid, crisp, 1px hairline
+   Split from the former vercel.css (cascade order preserved —
+   index.html loads these files in numeric order, last in the
+   stylesheet chain, exactly where the monolith sat). */
+/* --------------------------------------------------------------------------
+   3. Top bar — solid, crisp, 1px hairline
+   -------------------------------------------------------------------------- */
+
+.navbar.navbar-fixed-top {
+  background: var(--vz-bg-navbar);
+  border: none;
+  border-bottom: 1px solid var(--vz-border);
+  box-shadow: none;
+  min-height: var(--navbar-h);
+  transition: background-color var(--vz-dur) ease;
+}
+
+/* Brand */
+.navbar.navbar-fixed-top .app-heading,
+.navbar-inverse .app-heading,
+.navbar-default .app-heading {
+  color: var(--vz-fg);
+  text-shadow: none;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  transition: opacity var(--vz-dur) ease;
+}
+
+.navbar.navbar-fixed-top .app-heading:hover {
+  text-decoration: none;
+}
+
+body.dark .app-heading,
+body.dark .glow-text,
+body.dark .navbar-inverse .app-heading,
+body.dark .navbar-default .app-heading {
+  animation: none;
+  text-shadow: none;
+  color: var(--vz-fg);
+}
+
+/* Navbar icons (dark artwork on dark navbar) — flip for the light bar */
+.navbar.navbar-fixed-top .icon-container img,
+.navbar.navbar-fixed-top .navbar-header > span > a img,
+.navbar.navbar-fixed-top #pipContainer img {
+  filter: invert(1);
+  opacity: 0.72;
+  transition: opacity var(--vz-dur) ease, filter var(--vz-dur) ease;
+}
+
+.navbar.navbar-fixed-top .icon-container a:hover img,
+.navbar.navbar-fixed-top .icon-container a:focus img,
+.navbar.navbar-fixed-top .navbar-header > span > a:hover img,
+.navbar.navbar-fixed-top #pipContainer a:hover img {
+  filter: invert(1);
+  opacity: 1;
+}
+
+body.dark .navbar.navbar-fixed-top .icon-container img,
+body.dark .navbar.navbar-fixed-top .navbar-header > span > a img,
+body.dark .navbar.navbar-fixed-top #pipContainer img {
+  filter: none;
+  opacity: 0.72;
+}
+
+body.dark .navbar.navbar-fixed-top .icon-container a:hover img,
+body.dark .navbar.navbar-fixed-top .icon-container a:focus img,
+body.dark .navbar.navbar-fixed-top .navbar-header > span > a:hover img,
+body.dark .navbar.navbar-fixed-top #pipContainer a:hover img {
+  filter: none;
+  opacity: 1;
+}
+
+/* The desktop tool row uses inline white SVGs — flip them in light mode */
+.navbar.navbar-fixed-top .navbar-nav svg {
+  filter: invert(1);
+}
+
+body.dark .navbar.navbar-fixed-top .navbar-nav svg {
+  filter: none;
+}
+
+/* Icon hover = a quiet square chip, not a glow */
+.icon-container a,
+.navbar-header > span > a {
+  border-radius: var(--vz-radius-md);
+}
+
+.icon-container a {
+  padding: 6px;
+  margin: -6px;
+  transition: background-color var(--vz-dur) ease;
+}
+
+.icon-container a:hover,
+.icon-container a:focus {
+  background-color: var(--vz-bg-hover);
+}
+
+/* Kill the old blue drop-shadow hovers */
+.dark .icon-container span > a:hover {
+  -webkit-filter: none;
+  filter: none;
+}
+
+/* Hamburger */
+.navbar.navbar-fixed-top .navbar-toggle {
+  border-color: var(--vz-border);
+  background: transparent;
+  transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease;
+}
+
+.navbar.navbar-fixed-top .navbar-toggle:hover,
+.navbar.navbar-fixed-top .navbar-toggle:focus {
+  background-color: var(--vz-bg-hover) !important;
+  border-color: var(--vz-border-strong);
+}
+
+.navbar.navbar-fixed-top .navbar-toggle .icon-bar {
+  background-color: var(--vz-fg);
+}
+
+/* Mobile expanded menu */
+.navbar.navbar-fixed-top .navbar-collapse {
+  border-color: var(--vz-border);
+}
+
+.navbar.navbar-fixed-top .navbar-nav > li > a {
+  color: var(--vz-fg-muted);
+  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease;
+  border-radius: var(--vz-radius-md);
+}
+
+/* The right-hand tool row inherited bootstrap's full-height text-link boxes:
+   15px vertical padding plus a legacy 2px/12px horizontal split (kept from the
+   old text links) made every anchor a ~50px box, off-center around its glyph
+   and 46/48/50px tall depending on the icon, so the hover wash painted an
+   edge-to-edge ragged pill. Render them as the same compact chips the left
+   icon row uses: a fixed 32px square centered in the 50px bar. Desktop only —
+   below 768px the collapse is the expanded text menu and keeps link layout. */
+@media (min-width: 768px) {
+  .navbar.navbar-fixed-top .navbar-nav > li > a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    margin: 9px 1px 0;
+    padding: 0;
+  }
+}
+
+.navbar.navbar-fixed-top .navbar-nav > li > a:hover,
+.navbar.navbar-fixed-top .navbar-nav > li > a:focus {
+  color: var(--vz-fg);
+  background-color: var(--vz-bg-hover);
+}
+
+.navbar.navbar-fixed-top .navbar-nav > li > a .snapshot-text {
+  color: inherit;
+}
+
+/* Music playing indicator — a small green status dot */
+.ambient-noise-icon .ambient-noise-status-dot {
+  background: var(--vz-success);
+  box-shadow: 0 0 0 2px var(--vz-bg-navbar);
+}
+

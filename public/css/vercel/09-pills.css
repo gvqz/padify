@@ -1,0 +1,143 @@
+/* vercel design system — part 9/16: Bottom pills — quiet bordered capsules
+   Split from the former vercel.css (cascade order preserved —
+   index.html loads these files in numeric order, last in the
+   stylesheet chain, exactly where the monolith sat). */
+/* --------------------------------------------------------------------------
+   9. Bottom pills — quiet bordered capsules
+   -------------------------------------------------------------------------- */
+
+body .bottom-line .transparency.word-count-container {
+  background: var(--vz-bg-elevated) !important;
+  border: 1px solid var(--vz-border);
+  border-radius: 999px;
+  box-shadow: var(--vz-shadow-pill) !important;
+  color: var(--vz-fg-muted);
+  font-weight: 500;
+  font-size: 12px;
+  padding: 6px 14px;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transition: border-color var(--vz-dur) ease, color var(--vz-dur) ease;
+}
+
+body .bottom-line .transparency.word-count-container:hover {
+  border-color: var(--vz-border-strong);
+  color: var(--vz-fg);
+}
+
+body .bottom-line .transparency.word-count-container p {
+  color: inherit;
+}
+
+body .bottom-line .transparency.word-count-container a,
+body .bottom-line .transparency.word-count-container a svg {
+  color: var(--vz-fg-subtle);
+  transition: color var(--vz-dur) ease;
+}
+
+body .bottom-line .transparency.word-count-container a:hover,
+body .bottom-line .transparency.word-count-container a:focus {
+  color: var(--vz-fg);
+}
+
+body.dark .bottom-line .transparency.word-count-container {
+  background: var(--vz-bg-elevated) !important;
+  border-color: var(--vz-border);
+  box-shadow: var(--vz-shadow-pill) !important;
+  color: var(--vz-fg-muted);
+}
+
+body.dark .bottom-line .transparency.word-count-container:hover {
+  border-color: var(--vz-border-strong);
+  color: var(--vz-fg);
+}
+
+body.dark .bottom-line .transparency.word-count-container a,
+body.dark .bottom-line .transparency.word-count-container a svg {
+  color: var(--vz-fg-subtle);
+}
+
+body.dark .bottom-line .transparency.word-count-container a:hover,
+body.dark .bottom-line .transparency.word-count-container a:focus {
+  color: var(--vz-fg);
+}
+
+/* Timer pill — same capsule */
+body .timer-pill {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: 999px;
+  box-shadow: var(--vz-shadow-pill);
+  color: var(--vz-fg-muted);
+  font-weight: 500;
+  font-size: 12px;
+  padding: 5px 12px;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+body .timer-pill .timer-display {
+  color: var(--vz-fg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+body .timer-pill a,
+body .timer-pill a svg {
+  color: var(--vz-fg-subtle);
+  transition: color var(--vz-dur) ease;
+}
+
+body .timer-pill a:hover,
+body .timer-pill a:focus {
+  color: var(--vz-danger);
+}
+
+body.dark .timer-pill {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-border);
+  box-shadow: var(--vz-shadow-pill);
+  color: var(--vz-fg-muted);
+}
+
+body.dark .timer-pill .timer-display {
+  color: var(--vz-fg);
+}
+
+body.dark .timer-pill a,
+body.dark .timer-pill a svg {
+  color: var(--vz-fg-subtle);
+}
+
+body.dark .timer-pill a:hover,
+body.dark .timer-pill a:focus {
+  color: var(--vz-danger);
+}
+
+/* Ending state — a calm red pulse */
+body .timer-pill.timer-ending,
+body.dark .timer-pill.timer-ending {
+  animation: vz-pill-blink 1.2s ease-in-out infinite;
+}
+
+@keyframes vz-pill-blink {
+  0%,
+  100% {
+    box-shadow: var(--vz-shadow-pill);
+    border-color: var(--vz-border);
+  }
+  50% {
+    box-shadow: 0 0 0 3px var(--vz-danger-soft), var(--vz-shadow-pill);
+    border-color: var(--vz-danger);
+  }
+}
+
+/* Mobile: breathing room + iOS safe area */
+@media (max-width: 540px) {
+  .bottom-line {
+    bottom: calc(1em + env(safe-area-inset-bottom, 0px));
+    right: 1em;
+    gap: 8px;
+  }
+}
+

@@ -1,0 +1,143 @@
+/* vercel design system — part 2/16: Base
+   Split from the former vercel.css (cascade order preserved —
+   index.html loads these files in numeric order, last in the
+   stylesheet chain, exactly where the monolith sat). */
+/* --------------------------------------------------------------------------
+   2. Base
+   -------------------------------------------------------------------------- */
+
+body {
+  background-color: var(--vz-bg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body.dark {
+  background-color: var(--vz-bg);
+}
+
+/* The selection wash must be unmistakable — the neutral 14% wash read as
+   "nothing is selected" (user-reported). An accent blue is the universal
+   selection affordance and survives both themes; text keeps its own ink. */
+::selection {
+  background: rgba(59, 130, 246, 0.3);
+}
+
+body.dark ::selection {
+  background: rgba(96, 165, 250, 0.45);
+}
+
+/* Slim, quiet scrollbars everywhere */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d4 transparent;
+}
+
+body.dark * {
+  scrollbar-color: #2e2e2e transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d4d4d4;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #b8b8b8;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+body.dark ::-webkit-scrollbar-thumb {
+  background: #2e2e2e;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+body.dark ::-webkit-scrollbar-thumb:hover {
+  background: #444444;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Editor canvas */
+textarea,
+#note {
+  border-color: var(--vz-border);
+  caret-color: var(--vz-fg);
+}
+
+body.dark textarea,
+body.dark #note {
+  color: var(--vz-fg);
+  border-color: var(--vz-border);
+  border-left-color: var(--vz-border);
+  border-right-color: var(--vz-border);
+}
+
+body.dark textarea::placeholder {
+  color: var(--vz-fg-subtle);
+}
+
+textarea::placeholder {
+  color: var(--vz-fg-subtle);
+  opacity: 1;
+}
+
+/* Keyboard chips — flat, quiet, monospace */
+kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  border-radius: 4px;
+  box-shadow: none;
+  text-shadow: none;
+  line-height: 1.5;
+  margin: 0 3px;
+  white-space: nowrap;
+  transition: none;
+}
+
+body.dark kbd {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg-muted);
+}
+
+kbd > span {
+  font-size: 11.5px;
+}
+
+/* Global focus ring — monochrome, visible only for keyboard users */
+:focus-visible {
+  outline: 2px solid var(--vz-fg);
+  outline-offset: 2px;
+  border-radius: var(--vz-radius);
+}
+
+body.dark :focus-visible {
+  outline-color: var(--vz-fg);
+}
+

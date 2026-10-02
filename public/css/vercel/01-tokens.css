@@ -1,0 +1,126 @@
+/* vercel design system — part 1/16: Design tokens — ALIASES
+   Split from the former vercel.css (cascade order preserved —
+   index.html loads these files in numeric order, last in the
+   stylesheet chain, exactly where the monolith sat). */
+/* ==========================================================================
+   Padify — Vercel design system.
+
+   Applied to the MAIN PAGE only (loaded from index.html, never from the
+   mini-tools). One consistent visual language for every surface:
+
+     • Monochrome palette — white / near-black / grays, no mixed hues.
+       Black is the primary color, red is the only semantic tint (danger).
+     • 1px borders (#eaeaea light / #262626 dark) instead of glows.
+     • A single elevation scale (menu, dialog, pill).
+     • A single radius scale — 6px controls, 8px cards, 12px dialogs.
+     • 150ms ease transitions, scale-in popups, 0.98 press feedback.
+
+   This file loads LAST so equal-specificity rules below intentionally
+   override style.css / music-player.css / unicode-picker.css /
+   snapshots.css.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Design tokens — ALIASES
+
+   The values live in tokens.css (loaded FIRST, before the vendored
+   bootstrap fork) under vocabulary-neutral names; the --vz-* names below
+   are this file's compatibility aliases, so the 28+ consumers inside the
+   vercel layer and elsewhere keep working. Re-theme by editing
+   tokens.css — never by editing these aliases.
+   -------------------------------------------------------------------------- */
+
+:root {
+  /* surfaces */
+  --vz-bg: var(--surface-page);
+  --vz-bg-navbar: var(--surface-nav);
+  --vz-bg-elevated: var(--surface-raised);
+  --vz-bg-subtle: var(--surface-subtle);
+  --vz-bg-chip: var(--surface-chip);
+  --vz-bg-hover: var(--surface-hover);
+
+  /* ink */
+  --vz-fg: var(--fg);
+  --vz-fg-muted: var(--fg-muted);
+  --vz-fg-subtle: var(--fg-subtle);
+
+  /* lines */
+  --vz-border: var(--border);
+  --vz-border-strong: var(--border-strong);
+
+  /* primary (black) */
+  --vz-primary: var(--primary);
+  --vz-primary-hover: var(--primary-hover);
+  --vz-primary-fg: var(--primary-fg);
+
+  /* danger (the single semantic color) */
+  --vz-danger: var(--danger);
+  --vz-danger-hover: var(--danger-hover);
+  --vz-danger-soft: var(--danger-soft);
+
+  /* semantic status + starred content (kept deliberately small) */
+  --vz-success: var(--success);
+  --vz-star: var(--star);
+
+  /* elevation */
+  --vz-shadow-card: var(--shadow-card);
+  --vz-shadow-pill: var(--shadow-pill);
+  --vz-shadow-menu: var(--shadow-menu);
+  --vz-shadow-dialog: var(--shadow-dialog);
+
+  /* radii */
+  --vz-radius: var(--radius-sm);
+  --vz-radius-md: var(--radius-md);
+  --vz-radius-lg: var(--radius-lg);
+
+  /* motion */
+  --vz-dur: var(--dur-fast);
+  --vz-ease: var(--ease-out);
+  --vz-spring: var(--ease-spring);
+}
+
+/* The aliases MUST be re-declared under body.dark: a custom property is
+   substituted at the element where it is DECLARED, so a :root-only alias
+   would freeze the light value of var(--surface-*) and inherit that down,
+   no matter what body.dark sets (this exact bug made dark mode render
+   light with invisible icons when the aliases first shipped). */
+body.dark {
+  --vz-bg: var(--surface-page);
+  --vz-bg-navbar: var(--surface-nav);
+  --vz-bg-elevated: var(--surface-raised);
+  --vz-bg-subtle: var(--surface-subtle);
+  --vz-bg-chip: var(--surface-chip);
+  --vz-bg-hover: var(--surface-hover);
+
+  --vz-fg: var(--fg);
+  --vz-fg-muted: var(--fg-muted);
+  --vz-fg-subtle: var(--fg-subtle);
+
+  --vz-border: var(--border);
+  --vz-border-strong: var(--border-strong);
+
+  --vz-primary: var(--primary);
+  --vz-primary-hover: var(--primary-hover);
+  --vz-primary-fg: var(--primary-fg);
+
+  --vz-danger: var(--danger);
+  --vz-danger-hover: var(--danger-hover);
+  --vz-danger-soft: var(--danger-soft);
+
+  --vz-success: var(--success);
+  --vz-star: var(--star);
+
+  --vz-shadow-card: var(--shadow-card);
+  --vz-shadow-pill: var(--shadow-pill);
+  --vz-shadow-menu: var(--shadow-menu);
+  --vz-shadow-dialog: var(--shadow-dialog);
+
+  --vz-radius: var(--radius-sm);
+  --vz-radius-md: var(--radius-md);
+  --vz-radius-lg: var(--radius-lg);
+
+  --vz-dur: var(--dur-fast);
+  --vz-ease: var(--ease-out);
+  --vz-spring: var(--ease-spring);
+}
+

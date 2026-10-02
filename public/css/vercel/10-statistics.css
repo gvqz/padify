@@ -1,0 +1,49 @@
+/* vercel design system — part 10/16: Statistics — bordered stat cards
+   Split from the former vercel.css (cascade order preserved —
+   index.html loads these files in numeric order, last in the
+   stylesheet chain, exactly where the monolith sat). */
+/* --------------------------------------------------------------------------
+   10. Statistics — bordered stat cards
+   -------------------------------------------------------------------------- */
+
+body .statistics-grid {
+  gap: 12px;
+  margin: 18px 0;
+}
+
+body .stat-item,
+body.dark .statistics-grid .stat-item {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  box-shadow: var(--vz-shadow-card);
+  padding: 16px 12px;
+  transition: border-color var(--vz-dur) ease;
+}
+
+body .stat-item:hover,
+body.dark .statistics-grid .stat-item:hover {
+  border-color: var(--vz-border-strong);
+  box-shadow: var(--vz-shadow-card);
+}
+
+body .stat-label,
+body.dark .statistics-grid .stat-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--vz-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+
+body .stat-value,
+body.dark .statistics-grid .stat-value {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--vz-fg);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+

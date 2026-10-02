@@ -1,0 +1,311 @@
+/* vercel design system — part 15/16: Paper textures — neutral gray (not warm cream)
+   Split from the former vercel.css (cascade order preserved —
+   index.html loads these files in numeric order, last in the
+   stylesheet chain, exactly where the monolith sat). */
+/* --------------------------------------------------------------------------
+   15. Paper textures — neutral gray (not warm cream)
+   -------------------------------------------------------------------------- */
+
+body.dotted-paper {
+  background-image: radial-gradient(#d4d4d480 1px, #0000 1px);
+  background-size: 24px 24px;
+}
+
+body.dark.dotted-paper {
+  background-image: radial-gradient(#30303080 1px, #0000 1px);
+}
+
+body.graph-paper {
+  background-image: linear-gradient(#e5e5e580 1px, transparent 1px),
+    linear-gradient(90deg, #e5e5e580 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+body.dark.graph-paper {
+  background-image: linear-gradient(#26262680 1px, transparent 1px),
+    linear-gradient(90deg, #26262680 1px, transparent 1px);
+}
+
+body.grain-paper {
+  background-color: var(--vz-bg);
+}
+
+body.newspaper-paper {
+  background-color: #f6f6f4;
+}
+
+body.dark.newspaper-paper {
+  background-color: #0a0a0a;
+}
+
+/* Recycled keeps its imagery but sits on neutral paper */
+body.recycled-paper {
+  background-color: var(--vz-bg);
+}
+
+/* --------------------------------------------------------------------------
+   15b. Custom right-click menu (editor context menu + case converter)
+   -------------------------------------------------------------------------- */
+
+.padify-ctx {
+  position: fixed;
+  z-index: 3000;
+  min-width: 232px;
+  max-width: 264px;
+  padding: 5px;
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  box-shadow: var(--vz-shadow-menu);
+  animation: vz-menu-in 130ms var(--vz-ease) both;
+}
+
+.padify-ctx[hidden] {
+  display: none;
+}
+
+/* Context-menu items toggle visibility by context (Remove link, the table
+   operations) — the class's display:flex would defeat the UA rule. */
+.padify-ctx-item[hidden] {
+  display: none;
+}
+
+.padify-ctx-item.padify-ctx-danger {
+  color: var(--vz-danger);
+}
+
+.padify-ctx-scroll {
+  display: flex;
+  flex-direction: column;
+}
+
+.padify-ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: none;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--vz-dur) var(--vz-ease);
+}
+
+.padify-ctx-item:hover:not([disabled]) {
+  background: var(--vz-bg-subtle);
+}
+
+.padify-ctx-item:focus-visible {
+  outline: none;
+  background: var(--vz-bg-subtle);
+}
+
+.padify-ctx-item[disabled] {
+  color: var(--vz-fg-subtle);
+  cursor: default;
+}
+
+.padify-ctx-item > svg {
+  flex: none;
+  color: var(--vz-fg-muted);
+}
+
+.padify-ctx-item:hover:not([disabled]) > svg {
+  color: var(--vz-fg);
+}
+
+.padify-ctx-item span {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.padify-ctx-item kbd {
+  flex: none;
+  display: inline-block;
+  min-width: 3.5ch;
+  padding: 2px 5px;
+  border: 1px solid var(--vz-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.padify-ctx-sep {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--vz-border);
+}
+
+/* one-row format group: Bold · Italic · Underline · Strikethrough */
+.padify-ctx-formats {
+  display: flex;
+  gap: 4px;
+  padding: 1px 0;
+}
+
+/* Hidden with the rest of the rich-only group on plain notes — the
+   display:flex above defeats the UA [hidden] rule without this. */
+.padify-ctx-formats[hidden] {
+  display: none;
+}
+
+.padify-ctx-fmt {
+  flex: 1 1 0;
+  width: auto;
+  justify-content: center;
+  gap: 0;
+  padding: 6px 0;
+  font-size: 14.5px;
+}
+
+.padify-ctx-fmt > span {
+  flex: none;
+  min-width: 1.5ch;
+  overflow: visible;
+  text-align: center;
+}
+
+.padify-fmt-bold > span {
+  font-weight: 700;
+}
+
+.padify-fmt-italic > span {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+}
+
+.padify-fmt-underline > span {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+}
+
+.padify-fmt-strike > span {
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+/* parent row that owns the flyout */
+.padify-ctx-parent {
+  position: relative;
+  padding: 0;
+  border-radius: var(--vz-radius);
+}
+
+.padify-ctx-parent:hover {
+  background: var(--vz-bg-subtle);
+}
+
+.padify-ctx-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: none;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.padify-ctx-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--vz-bg-elevated), 0 0 0 4px var(--vz-primary);
+}
+
+.padify-ctx-trigger > svg:first-child {
+  flex: none;
+  color: var(--vz-fg-muted);
+}
+
+.padify-ctx-trigger > svg:last-child {
+  flex: none;
+  color: var(--vz-fg-muted);
+  margin-left: auto;
+}
+
+/* flyout submenu */
+.padify-ctx-submenu {
+  position: absolute;
+  top: -5px;
+  left: calc(100% + 4px);
+  z-index: 1;
+  min-width: 230px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 5px;
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  box-shadow: var(--vz-shadow-menu);
+  animation: vz-menu-in 130ms var(--vz-ease) both;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vz-border-strong) transparent;
+}
+
+.padify-ctx-submenu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.padify-ctx-submenu::-webkit-scrollbar-thumb {
+  background: var(--vz-border-strong);
+  border-radius: 3px;
+}
+
+.padify-ctx-submenu.is-flipped {
+  left: auto;
+  right: calc(100% + 4px);
+}
+
+.padify-ctx-submenu[hidden] {
+  display: none;
+}
+
+/* Narrow screens: the flyout can't fit beside the menu, so overlay it. */
+@media (max-width: 520px) {
+  .padify-ctx-submenu,
+  .padify-ctx-submenu.is-flipped {
+    top: 0;
+    right: 5px;
+    left: 5px;
+    min-width: 0;
+  }
+}
+
+/* Roomier rows for touch input. */
+@media (pointer: coarse) {
+  .padify-ctx-item,
+  .padify-ctx-trigger {
+    min-height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .padify-ctx,
+  .padify-ctx-submenu {
+    animation: none;
+  }
+}
+
