@@ -27,7 +27,6 @@ import {
 } from './tabs';
 import { setEditorPort, getEditorPort } from './editor/port';
 import { ModelPort } from './editor/model-port';
-import { initMusicPlayer } from './features/music-player';
 import { storageReady } from './storage';
 import { initCloudSync } from './cloud/sync';
 import { initCloudUI } from './cloud/ui';
@@ -122,10 +121,11 @@ export async function initApp(): Promise<void> {
   // Voice typing (Web Speech API) — hides its own UI when unsupported.
   initVoiceTyping();
 
-  // Music player — constructed after storage hydration (its constructor
-  // restores the persisted player state). The modal markup itself is
-  // already in the DOM from the module's import-time injection.
-  initMusicPlayer();
+  // Music + ambience — the app's heaviest subsystem (~5k lines) loads on
+  // demand now. The modal markup is in the DOM from boot (features/
+  // music-player/markup.ts); the engines arrive on the first attempt to
+  // open the player — see initMusicSubsystem below.
+  initMusicSubsystem();
 
   // Cloud sync boots only when a sync project is configured; the UI
   // (navbar icon, modal, settings section) stays hidden otherwise.
@@ -477,6 +477,72 @@ export async function initApp(): Promise<void> {
   registerServiceWorker();
   initInstallPrompt();
   initDurableStorage();
+}
+
+/**
+ * Music + ambience lazy seam.
+ *
+ * The player engines (features/music-player — player, Spotify SDK,
+ * free-song resolver — plus the white-noise mixer) used to ride the main
+ * bundle so every visitor downloaded ~5k lines most never play. They now
+ * live in a lazy chunk: the modal markup mounts at boot (markup.ts is
+ * pure markup), and the engines load on the first attempt to open the
+ * player.
+ *
+ * The navbar click is intercepted in the CAPTURE phase — ahead of the
+ * delegated modal opener in ui/behavior/modal.ts — so the modal opens
+ * only after the engine wired its handlers. Opening it first would drop
+ * any click that lands during the load window (tabs, play, search: all
+ * bound by the engine's init). After the engines are in, the interception
+ * stands down and the normal delegated open flow takes over.
+ */
+function initMusicSubsystem(): void {
+  const modal = document.getElementById('musicPlayerModal');
+  if (!modal) return;
+
+  let engines: Promise<void> | null = null;
+  let engineReady = false;
+
+  const loadEngines = (): Promise<void> => {
+    engines ??= (async () => {
+      // Ambience first: the player reads window.whiteNoisePlayer while
+      // constructing (navbar icon state), so the mixer must exist by then.
+      const { initWhiteNoisePlayer } = await import('./white-noise-player');
+      await initWhiteNoisePlayer();
+      const { initMusicPlayer } = await import('./features/music-player');
+      initMusicPlayer();
+    })();
+    return engines;
+  };
+
+  document.addEventListener(
+    'click',
+    (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const trigger = target.closest<HTMLElement>('a[data-target="#musicPlayerModal"]');
+      // Stand down once the engines are wired — the delegated opener in
+      // ui/behavior/modal.ts owns every open from here on.
+      if (!trigger || engineReady) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      void loadEngines().then(() => {
+        engineReady = true;
+        openModal(modal, trigger);
+      });
+    },
+    true,
+  );
+
+  // Belt and braces for opens that bypass the navbar trigger (programmatic
+  // opens, tests): the modal's own show event loads the engines too, so a
+  // visible-but-unwired player still finishes wiring itself.
+  modal.addEventListener('show.bs.modal', () => {
+    void loadEngines().then(() => {
+      engineReady = true;
+    });
+  });
 }
 
 /**

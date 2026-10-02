@@ -13,8 +13,9 @@ import { bootPadify } from './boot';
 
 // Kick the IndexedDB open + hydration at module evaluation — the earliest
 // possible moment — so it overlaps bundle evaluation and DOM parsing. Every
-// consumer (app.ts, white-noise-player.ts) awaits storageReady() before
-// reading any state, and app.ts constructs the music player only after.
+// consumer awaits storageReady() before reading any state; the music
+// subsystem loads its engines on demand (app.ts's initMusicSubsystem)
+// because their constructors read persisted state after hydration.
 void storageReady();
 
 // Everything else starts through the composition root — boot.ts owns the

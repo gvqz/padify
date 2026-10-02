@@ -13,24 +13,24 @@
  * of the import list in main.ts. The explicit sequence replaces that while
  * preserving the original ordering guarantees:
  *
- *   1. feature markup + DOM-only wiring (help, timer, music, snapshots,
- *      context menu) — everything that needs the DOM but no hydrated state
+ *   1. feature markup + DOM-only wiring (help, timer, music markup,
+ *      snapshots, context menu) — everything that needs the DOM but no
+ *      hydrated state
  *   2. initApp() — the shell: awaits storageReady(), builds the tab
- *      manager + editor port, wires cloud/voice/music/tabs/shortcuts
- *   3. initWhiteNoisePlayer() — the last ready-callback of the old order,
- *      awaiting storage hydration itself
+ *      manager + editor port, wires cloud/voice/tabs/shortcuts
  *
- * The music player's construction stays inside initApp (via
- * initMusicPlayer) because its constructor reads persisted state and must
- * run after hydration; mountMusicPlayer only puts its markup in the DOM.
+ * The music/ambience ENGINES no longer boot at all: they load on demand
+ * when the player is first opened (see initMusicSubsystem in app.ts).
+ * Only their markup mounts here, from the pure-markup submodule — a
+ * static import of the feature barrel would drag the whole engine into
+ * the main bundle, which is exactly what the lazy seam removes.
  */
 
 import { initApp } from './app';
 import { initHelp } from './help';
 import { initSnapshots } from './snapshots';
 import { initTimer } from './timer';
-import { initWhiteNoisePlayer } from './white-noise-player';
-import { mountMusicPlayer } from './features/music-player';
+import { mountMusicPlayer } from './features/music-player/markup';
 import { initContextMenu } from './context-menu';
 import { mountModals } from './ui/modals';
 import { assertMarkupContract } from './ui/contract';
@@ -65,7 +65,9 @@ export async function bootPadify(): Promise<void> {
   // features are about to dereference is not in the document.
   assertMarkupContract();
 
-  // 1. Markup + DOM-only feature wiring.
+  // 1. Markup + DOM-only feature wiring. The music MARKUP mounts here
+  //    (from the pure-markup module, not the feature barrel); its engines
+  //    load on first open — app.ts's initMusicSubsystem.
   initHelp();
   initTimer();
   initTooltips(); // after initTimer so the timer modal's tooltip is covered
@@ -73,9 +75,6 @@ export async function bootPadify(): Promise<void> {
   initSnapshots();
   initContextMenu();
 
-  // 2. The app shell (tabs, editor port, cloud, voice, music, shortcuts).
+  // 2. The app shell (tabs, editor port, cloud, voice, shortcuts).
   await initApp();
-
-  // 3. Late features that hydrate their own state.
-  await initWhiteNoisePlayer();
 }

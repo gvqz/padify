@@ -135,7 +135,14 @@ describe('markup ↔ JS contract', () => {
 // ---------------------------------------------------------------------------
 
 function importTargets(file: string): string[] {
-  return [...read(file).matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
+  // Static imports AND dynamic imports — the music engines ride a lazy
+  // chunk now, and a layering rule that can't see `import(...)` is a rule
+  // the next feature slips past by moving behind a dynamic import.
+  const source = read(file);
+  return [
+    ...source.matchAll(/from\s+['"]([^'"]+)['"]/g),
+    ...source.matchAll(/import\s*\(\s*['"]([^'"]+)['"]/g),
+  ].map((m) => m[1]!);
 }
 
 describe('layering rules', () => {
@@ -147,8 +154,10 @@ describe('layering rules', () => {
   it('features/music-player is imported only by the composition roots', () => {
     // The music feature (music-player + music/ + spotify/) is the biggest
     // module in the app; its public surface is initMusicPlayer/mountMusic-
-    // Player and its only legitimate consumers are the shell (app.ts) and
-    // the boot sequence (boot.ts). Everything else must go through seams.
+    // Player and its only legitimate consumers are the shell (app.ts —
+    // which loads the engines as a lazy chunk on first open — and boot.ts,
+    // which mounts the markup from the pure-markup submodule). Everything
+    // else must go through seams.
     const allowed = new Set(['src/app.ts', 'src/boot.ts']);
     const violators: string[] = [];
     for (const file of srcFiles) {

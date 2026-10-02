@@ -94,6 +94,9 @@ test.describe('music player', () => {
 
   test('the debug probe reports a resting, signed-out player', async ({ page }) => {
     await page.goto('/');
+    // The player engines are a lazy chunk — the probe exists once the
+    // player has been opened (see initMusicSubsystem in src/app.ts).
+    await openPlayer(page);
     const snapshot = await page.evaluate(() =>
       (window as unknown as { __musicProbe: () => Record<string, unknown> }).__musicProbe(),
     );
