@@ -28,7 +28,6 @@ body {
      bar or the first lines of every note sit behind it.
      Picture-in-Picture host windows zero this out separately. */
   padding-top: var(--navbar-h);
-  background-color: var(--dough-white);
 }
 
 a:focus {
