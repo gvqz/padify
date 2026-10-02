@@ -886,7 +886,7 @@ export function mergeRemote(
 const PUSH_BATCH_BYTES = 1_500_000;
 
 /**
- * The server's request-body ceiling, mirrored from server/handlers.ts
+ * The server's request-body ceiling, mirrored from server/http.ts
  * (MAX_BODY_BYTES). The client cannot import the server's constant — the
  * two packages build against different tsconfigs — so it is redeclared
  * here, and their sameness is pinned by the e2e wire tests.

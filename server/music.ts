@@ -419,3 +419,69 @@ export async function sweepMusicCache(db: Db): Promise<void> {
     /* table may not exist on first boot before applySchema */
   }
 }
+
+// ---------------------------------------------------------------------------
+// Route handlers — the no-login endpoints, HTTP-shaped.
+// ---------------------------------------------------------------------------
+
+import { json } from './http';
+import { asInt } from './notes';
+
+export async function handleMusicCapabilities(request: Request): Promise<Response> {
+  return json(request, { search: searchConfigured(), resolve: resolveConfigured() });
+}
+
+export async function handleMusicSearch(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const q = (url.searchParams.get('q') ?? '').trim().slice(0, 200);
+  const limit = Math.min(30, Math.max(1, asInt(url.searchParams.get('limit'), 20)));
+  if (q.length < 1) {
+    return json(request, { error: 'Missing search query.' }, 400);
+  }
+  if (!searchConfigured()) {
+    return json(request, {
+      error: 'Free search is not configured on this server (SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET missing).'
+    }, 503);
+  }
+  try {
+    const tracks = await musicSearch(q, limit);
+    return json(request, { tracks });
+  } catch {
+    return json(request, { error: 'Search is temporarily unavailable — try again.' }, 502);
+  }
+}
+
+export async function handleMusicResolve(db: Db, request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const trackId = (url.searchParams.get('trackId') ?? '').trim();
+  const title = (url.searchParams.get('title') ?? '').trim().slice(0, 200);
+  const artist = (url.searchParams.get('artist') ?? '').trim().slice(0, 300);
+  const durationMs = asInt(url.searchParams.get('durationMs'), 0);
+  const fresh = url.searchParams.get('fresh') === '1';
+  if (!/^[A-Za-z0-9_-]{6,64}$/.test(trackId)) {
+    return json(request, { error: 'Missing or invalid track id.' }, 400);
+  }
+  if (!title) {
+    return json(request, { error: 'Missing track title.' }, 400);
+  }
+  if (!resolveConfigured()) {
+    return json(request, {
+      error: 'Free playback is not configured on this server (yt-dlp missing).'
+    }, 503);
+  }
+  try {
+    const stream = await resolveTrackStream(db, {
+      key: trackId,
+      title,
+      artist,
+      durationMs: durationMs > 0 ? durationMs : null,
+      fresh
+    });
+    return json(request, stream);
+  } catch (error) {
+    const message = error instanceof Error && /timed out/.test(error.message)
+      ? 'Resolving this song took too long — try again.'
+      : 'Could not find a stream for this song.';
+    return json(request, { error: message }, 404);
+  }
+}

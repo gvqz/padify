@@ -1,16 +1,17 @@
 /**
  * Padify API — boot and serve.
  *
- * The HTTP surface (handlers, router, rate limits) lives in handlers.ts,
- * extracted so it can be imported by tests; this file is deliberately the
- * only place that touches Bun, and keeps only the boot sequence: create
- * the database, apply the schema, sweep expired sessions and the music
+ * The HTTP surface lives in routes.ts (the route table + dispatcher) and
+ * the domain modules it wires; this file is deliberately the only place
+ * that touches Bun, and keeps only the boot sequence: create the
+ * database, apply the schema, sweep expired sessions and the music
  * cache, and answer every request through route().
  */
 
 import { applySchema, createDb } from './db';
 import { sweepMusicCache } from './music';
-import { MAX_BODY_BYTES, json, route } from './handlers';
+import { MAX_BODY_BYTES, json } from './http';
+import { route } from './routes';
 import { MAX_ATTACHMENT_BYTES } from './attachments';
 
 const PORT = Number(process.env.PORT ?? 3041);

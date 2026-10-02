@@ -1,17 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Db, Row, SqlStatement, SqlValue } from '../server/db';
-import {
-  clientKey,
-  handleNotesGet,
-  handleNotesPut,
-  handlePublicShareGet,
-  handleSharesPatch,
-  handleSignup,
-  MAX_BODY_BYTES,
-  rateLimited,
-  resetRateLimitsForTests,
-  route,
-} from '../server/handlers';
+import { clientKey, rateLimited, resetRateLimitsForTests } from '../server/ratelimit';
+import { MAX_BODY_BYTES } from '../server/http';
+import { handleNotesGet, handleNotesPut } from '../server/notes';
+import { handlePublicShareGet, handleSharesPatch } from '../server/shares';
+import { handleSignup } from '../server/auth-routes';
+import { route } from '../server/routes';
 import { hashPassword } from '../server/auth';
 
 // The server's first handler tests. The handlers were extracted from
@@ -209,6 +203,75 @@ describe('route — dispatch edges', () => {
 
     expect(response.status).toBe(404);
     expect(await bodyOf(response)).toEqual({ error: 'Not found.' });
+  });
+});
+
+describe('route — wrong method on a known path is a 405, not a 404', () => {
+  const sessionDb = (): ScriptedDb =>
+    new ScriptedDb([
+      {
+        match: 'select sessions.expires_at',
+        rows: [{ expires_at: Date.now() + 60_000, user_id: 'user-1', email: 'user@example.test' }],
+      },
+    ]);
+
+  it('answers 405 with the allowed method set, signed in', async () => {
+    const db = sessionDb();
+    const response = await route(
+      db,
+      new Request('http://api.test/api/notes', {
+        method: 'POST',
+        headers: { authorization: 'Bearer anything' },
+      }),
+      '/api/notes',
+    );
+
+    expect(response.status).toBe(405);
+    const allow = response.headers.get('allow') ?? '';
+    expect(allow).toContain('GET');
+    expect(allow).toContain('PUT');
+    expect(allow).toContain('OPTIONS');
+    expect(allow).not.toContain('POST');
+    expect(await bodyOf(response)).toEqual({ error: 'Method not allowed.' });
+  });
+
+  it('auth gates before the 405 — a signed-out probe on a protected path sees 401', async () => {
+    // 401 first, 405 second: the method set of a protected endpoint must
+    // not be revealed to an unauthenticated caller.
+    const db = new ScriptedDb();
+    const response = await route(
+      db,
+      new Request('http://api.test/api/notes', { method: 'POST' }),
+      '/api/notes',
+    );
+
+    expect(response.status).toBe(401);
+    expect(await bodyOf(response)).toEqual({ error: 'Not signed in.' });
+  });
+
+  it('public paths 405 without touching a session', async () => {
+    const db = new ScriptedDb();
+    const response = await route(
+      db,
+      new Request('http://api.test/api/auth/signin', { method: 'GET' }),
+      '/api/auth/signin',
+    );
+
+    expect(response.status).toBe(405);
+    // No session lookup was attempted — the db stayed untouched.
+    expect(db.sqls).toEqual([]);
+  });
+
+  it('unknown /api/music/ subpaths 404 directly, without a session lookup', async () => {
+    const db = new ScriptedDb();
+    const response = await route(
+      db,
+      new Request('http://api.test/api/music/xyz'),
+      '/api/music/xyz',
+    );
+
+    expect(response.status).toBe(404);
+    expect(db.sqls).toEqual([]);
   });
 });
 

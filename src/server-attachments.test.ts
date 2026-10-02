@@ -5,15 +5,13 @@ import {
   attachmentNameFrom,
   decodeAttachmentData,
   encodeAttachmentData,
-  MAX_ATTACHMENT_BYTES,
-} from '../server/attachments';
-import {
   handleAttachmentDelete,
   handleAttachmentGet,
   handleAttachmentPost,
   handleAttachmentsList,
-  route,
-} from '../server/handlers';
+  MAX_ATTACHMENT_BYTES,
+} from '../server/attachments';
+import { route } from '../server/routes';
 
 /**
  * Attachment handler contracts, same harness as server-handlers.test.ts:
