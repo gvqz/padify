@@ -10,15 +10,27 @@
  * live data (note lists, share links that can be revoked), never cache
  * fodder.
  *
- * Files larger than MAX_PRECACHE_BYTES (the ambient sound loops) are not
- * precached — the fetch handler runtime-caches them on first use instead,
- * so first install stays small while sounds still work offline once used.
+ * What gets precached is a three-way classification:
+ *
+ *   1. The APP SHELL — every asset the entry page references (the main
+ *      bundle, the stylesheets, the icons, the manifest) — is precached
+ *      regardless of size. The shell is what "offline-capable" promises;
+ *      runtime-caching it instead meant offline only worked from the
+ *      SECOND controlled visit, because the first visit's requests never
+ *      went through the worker.
+ *   2. Other public/ files (fonts, small sounds, images) up to
+ *      MAX_PRECACHE_BYTES — same as before.
+ *   3. Everything else — lazy feature chunks (exports, the unicode table,
+ *      the music engines) and oversized files — is runtime-cached on
+ *      first use: never downloaded until the feature asks for it, offline
+ *      from then on.
  */
 import { createHash } from 'node:crypto';
 import { readdirSync, statSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
-/** Assets over this size are runtime-cached on first use, never precached. */
+/** Public assets over this size are runtime-cached on first use, never
+ * precached. Does NOT apply to the app shell — see shellAssetPaths. */
 export const MAX_PRECACHE_BYTES = 512 * 1024;
 
 function walk(dir) {
@@ -36,11 +48,31 @@ function walk(dir) {
 }
 
 /**
+ * Assets the entry page references directly (script src / link href /
+ * img src): the app shell. Root-relative, same-origin URLs only — the
+ * Spotify SDK and other cross-origin references are none of the precache's
+ * business.
+ * @returns {Set<string>} dist-relative paths
+ */
+export function shellAssetPaths(distDir) {
+  const html = readFileSync(join(distDir, 'index.html'), 'utf-8');
+  const paths = new Set();
+  for (const m of html.matchAll(/(?:src|href)=["']([^"']+)["']/g)) {
+    const url = m[1];
+    // Root-relative (starts with a single /), not protocol-relative or
+    // absolute, not an in-page anchor.
+    if (!url.startsWith('/') || url.startsWith('//') || url.startsWith('/#')) continue;
+    paths.add(url.slice(1));
+  }
+  return paths;
+}
+
+/**
  * Builds the service worker source for a build output directory.
  * Exported so tests can exercise the generator against a fixture tree;
  * the CLI wrapper at the bottom runs it against ../dist after `vite build`.
  *
- * @returns {{ source: string, cacheVersion: string, precacheUrls: string[], skippedFiles: string[] }}
+ * @returns {{ source: string, cacheVersion: string, precacheUrls: string[], runtimeCachedFiles: string[] }}
  */
 export function generateServiceWorker(distDir) {
   if (!existsSync(distDir)) {
@@ -55,8 +87,19 @@ export function generateServiceWorker(distDir) {
     .filter((entry) => entry.rel !== 'sw.js')
     .sort((a, b) => a.rel.localeCompare(b.rel));
 
-  const precached = entries.filter((entry) => entry.size <= MAX_PRECACHE_BYTES);
-  const skipped = entries.filter((entry) => entry.size > MAX_PRECACHE_BYTES);
+  const shell = shellAssetPaths(distDir);
+  const isShell = (rel) => shell.has(rel);
+  const isLazyChunk = (rel) => rel.startsWith('assets/') && !shell.has(rel);
+
+  // Precache: the shell (any size) + other public files up to the cap.
+  // Runtime: lazy chunks + oversized files — cached by the fetch handler
+  // the first time the feature actually asks for them.
+  const precached = entries.filter(
+    (entry) => !isLazyChunk(entry.rel) && (entry.size <= MAX_PRECACHE_BYTES || isShell(entry.rel)),
+  );
+  const runtimeCached = entries.filter(
+    (entry) => isLazyChunk(entry.rel) || (entry.size > MAX_PRECACHE_BYTES && !isShell(entry.rel)),
+  );
 
   // Cache URLs are root-relative. Directories are served with a trailing
   // slash by static hosts, so precache both spellings for the entry page.
@@ -64,8 +107,9 @@ export function generateServiceWorker(distDir) {
 
   // Hash the CONTENT of the precached files (not just URLs) so that edits
   // to public/ assets (css, images) bump the cache version even when their
-  // URLs stay stable. Oversized files are deliberately excluded: they are
-  // refreshed by the fetch handler's background revalidation instead.
+  // URLs stay stable. Runtime-cached files (lazy chunks, oversized) are
+  // deliberately excluded: they are refreshed by the fetch handler's
+  // background revalidation instead.
   const hash = createHash('sha256').update(precacheUrls.join('|'));
   for (const entry of precached) {
     hash.update(readFileSync(join(distDir, entry.rel)));
@@ -158,7 +202,7 @@ self.addEventListener('fetch', (event) => {
     source,
     cacheVersion,
     precacheUrls,
-    skippedFiles: skipped.map((entry) => entry.rel),
+    runtimeCachedFiles: runtimeCached.map((entry) => entry.rel),
   };
 }
 
@@ -166,17 +210,20 @@ self.addEventListener('fetch', (event) => {
 if (process.argv[1] && process.argv[1].endsWith('build-sw.mjs')) {
   const distDir = new URL('../dist', import.meta.url).pathname;
   try {
-    const { source, cacheVersion, precacheUrls, skippedFiles } = generateServiceWorker(distDir);
+    const { source, cacheVersion, precacheUrls, runtimeCachedFiles } =
+      generateServiceWorker(distDir);
     writeFileSync(join(distDir, 'sw.js'), source);
 
     console.log(`[build-sw] wrote dist/sw.js`);
     console.log(`[build-sw] cache version: ${cacheVersion}`);
-    console.log(`[build-sw] precached ${precacheUrls.length} entries`);
-    if (skippedFiles.length > 0) {
+    console.log(
+      `[build-sw] precached ${precacheUrls.length} entries (app shell + small public assets)`,
+    );
+    if (runtimeCachedFiles.length > 0) {
       console.log(
-        `[build-sw] skipped ${skippedFiles.length} oversized files (runtime-cached on first use):`,
+        `[build-sw] ${runtimeCachedFiles.length} lazy/oversized files runtime-cached on first use:`,
       );
-      for (const file of skippedFiles) {
+      for (const file of runtimeCachedFiles) {
         console.log(`[build-sw]   ${file}`);
       }
     }
