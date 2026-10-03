@@ -65,9 +65,12 @@ function loadData(): Promise<LoadedData> {
         count: categoryCounts.get(label) ?? 0,
       }));
 
-      const haystacks = symbols.map(
-        (symbol) =>
-          `${symbol.char} ${symbol.name} ${symbol.category} u+${symbol.codepoint.toString(16)}`,
+      // Lowercased so search is case-insensitive end to end: the query is
+      // lowercased by normalizeQuery, so the haystack must meet it there.
+      // Without this, the placeholder's own suggestion (“superscript”)
+      // found nothing — names are Title Case (“Superscript two”).
+      const haystacks = symbols.map((symbol) =>
+        `${symbol.char} ${symbol.name} ${symbol.category} u+${symbol.codepoint.toString(16)}`.toLowerCase(),
       );
 
       return { symbols, categories, byChar, haystacks, totalCount: symbols.length };
@@ -365,10 +368,18 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
   }
 
   function renderEmptyState(): void {
-    if (gridEl.querySelector('.ucp-empty')) return;
+    // Replace any empty state already on screen: the reason for emptiness
+    // changes (empty category → dead search → cleared search), and the old
+    // early-return let the previous copy outlive the state that produced it.
+    const stale = gridEl.querySelector('.ucp-empty');
     const wrapper = document.createElement('div');
     wrapper.innerHTML = emptyStateMarkup();
-    gridEl.appendChild(wrapper.firstElementChild as HTMLElement);
+    const element = wrapper.firstElementChild as HTMLElement;
+    if (stale) {
+      stale.replaceWith(element);
+    } else {
+      gridEl.appendChild(element);
+    }
     gridEl.removeAttribute('aria-activedescendant');
   }
 

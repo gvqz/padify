@@ -7,7 +7,9 @@
  *  - the search pipeline: input events debounce 60 ms, the query
  *    lowercases/whitespace-normalizes into space-split tokens, and a
  *    symbol matches only when EVERY token appears in its haystack
- *    (char + name + category + u+hex) — AND semantics, not OR;
+ *    (char + name + category + u+hex, all lowercased — matching is
+ *    case-insensitive, as the placeholder promises) — AND semantics,
+ *    not OR;
  *  - the category-widening fallback: a search that dies inside the
  *    current category but lives in "All characters" auto-switches the
  *    scope, so a user never hits a dead end;
@@ -58,12 +60,12 @@ import type { NotepadUI } from '../selector';
 
 /**
  * The dataset's search haystack, replicated — char + name + category +
- * u+hex, in the data's ORIGINAL casing (the picker lowercases the QUERY
- * but never the haystack — see the case-sensitivity quirk pinned below).
+ * u+hex, lowercased exactly as the picker now builds it (matching the
+ * lowercased query — search is case-insensitive end to end).
  * Expectations derive from this so the suite survives data regeneration.
  */
 function haystack(symbol: (typeof UNICODE_SYMBOLS)[number]): string {
-  return `${symbol.char} ${symbol.name} ${symbol.category} u+${symbol.codepoint.toString(16)}`;
+  return `${symbol.char} ${symbol.name} ${symbol.category} u+${symbol.codepoint.toString(16)}`.toLowerCase();
 }
 
 /** The first symbol whose haystack genuinely contains the token. */
@@ -274,8 +276,8 @@ describe('boot (characterization)', () => {
 
 describe('search (characterization)', () => {
   it('narrows to the symbols whose haystack contains the single token', async () => {
-    // 'heart' appears as a lowercase word inside title-cased names
-    // ("White heart suit"), so it genuinely matches the haystack probe.
+    // 'heart' sits inside title-cased names ("White heart suit") — a
+    // probe that matched even before search went case-insensitive.
     const target = symbolMatching('heart')!;
     expect(target).toBeDefined();
 
@@ -292,10 +294,10 @@ describe('search (characterization)', () => {
   });
 
   it('multiple tokens are ANDed — every token must appear in the haystack', async () => {
-    // Two lowercase tokens that co-occur in one haystack, verified against
-    // the data: 'heart' and 'suit' both sit inside "White heart suit".
-    // ('white' itself cannot serve — the name capitalizes it; see the
-    // casing quirk pinned below.)
+    // Two tokens that co-occur in one haystack, verified against the data:
+    // 'heart' and 'suit' both sit inside "White heart suit". (When this
+    // suite was written, only lowercase words could serve as tokens — the
+    // casing fix removed that constraint.)
     const target = UNICODE_SYMBOLS.find(
       (s) => haystack(s).includes('heart') && haystack(s).includes('suit'),
     )!;
@@ -316,26 +318,27 @@ describe('search (characterization)', () => {
     }
   });
 
-  it('the haystack keeps its original casing — a capitalized first word never matches lowercase', async () => {
-    // The QUIRK, pinned: normalizeQuery lowercases the query, but the
-    // haystacks are built from the dataset's Title Case names
-    // ("Superscript two") — so a user typing a note type's first word
-    // in lowercase ("superscript") finds nothing, while the lowercase
-    // second word ("two") matches. Search is case-sensitive against
-    // the data, whatever the placeholder promises.
+  it('search is case-insensitive — a lowercase query matches Title Case names', async () => {
+    // The FIXED QUIRK, pinned as a regression: the haystacks used to keep
+    // the dataset's Title Case names ("Superscript two"), so a user typing
+    // the placeholder's own suggestion in lowercase ("superscript") found
+    // nothing while the lowercase second word ("two") matched. The
+    // haystack is now lowercased at build time, meeting the already-
+    // lowercased query — matching and highlighting finally agree.
     expect(symbolNamed('superscript')!.name).toBe('Superscript two');
 
     await search('superscript');
-
-    expect(statusText()).toContain('0 matches for');
-
-    await search('two');
 
     expect(statusText()).not.toContain('0 matches');
     const glyphs = Array.from(document.querySelectorAll('.ucp-card .ucp-glyph')).map(
       (el) => el.textContent,
     );
     expect(glyphs).toContain('²');
+
+    // The capitalized query finds the same symbol — case no longer
+    // changes the result set.
+    await search('Superscript');
+    expect(statusText()).not.toContain('0 matches');
   });
 
   it('a dead search paints the empty state and pluralizes to zero matches', async () => {
@@ -400,7 +403,7 @@ describe('categories (characterization)', () => {
     expect(document.querySelectorAll('.ucp-card').length).toBeGreaterThan(0);
   });
 
-  it('a search that dies everywhere stays in the category (and the stale empty state survives)', async () => {
+  it('a search that dies everywhere stays in the category (and the empty state reflects the search)', async () => {
     click('.ucp-cat[data-cat="favorites"]');
 
     await search('zzz-nothing');
@@ -410,11 +413,17 @@ describe('categories (characterization)', () => {
     expect(activeChip.dataset.cat).toBe('favorites');
     // The status line tells the truth…
     expect(statusText()).toContain('0 matches for');
-    // …but the empty-state card does not: renderEmptyState early-returns
-    // when an empty state is already on screen, so the category's
-    // "No favorites yet" copy outlives a no-match search. Quirk pinned —
-    // only the FIRST empty state a user sees is the right one.
-    expect(document.querySelector('.ucp-empty-title')?.textContent).toContain('No favorites yet');
+    // …and so does the empty-state card now: renderEmptyState REPLACES
+    // the card already on screen instead of early-returning, so the
+    // category's "No favorites yet" copy no longer outlives a no-match
+    // search. The FIXED QUIRK, pinned as a regression — only ever the
+    // empty state that matches the current reason for emptiness.
+    expect(document.querySelector('.ucp-empty-title')?.textContent).toContain(
+      'No characters match',
+    );
+    expect(document.querySelector('.ucp-empty-title')?.textContent).not.toContain(
+      'No favorites yet',
+    );
   });
 });
 
