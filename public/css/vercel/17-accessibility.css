@@ -1,0 +1,37 @@
+/* vercel design system — part 17/17: Accessibility (prefers-reduced-motion)
+   Re-cut from the former part 16, which misleadingly carried the whole
+   editor-shell layout under this name; the shell moved to
+   16-editor-shell.css and this file loads after it. That reorder is safe:
+   the two halves share no selector text, and among equal-specificity
+   crossovers only .btn (here) vs .cloud-submit (there) can co-match one
+   element — the cloud submit button now honors reduced motion, which is
+   this block's intent. */
+
+/* --------------------------------------------------------------------------
+   17. Accessibility
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .navbar.navbar-fixed-top,
+  .icon-container a,
+  .navbar .dropdown-menu,
+  .btn,
+  .pref-theme-seg label,
+  .pref-action-btn,
+  .pref-done-btn,
+  body .checkbox.checbox-switch label span,
+  body .checkbox.checbox-switch label span::before,
+  .modal.fade .modal-dialog {
+    transition: none;
+    animation: none;
+  }
+
+  .navbar .dropdown-menu {
+    animation: none;
+  }
+
+  .timer-pill.timer-ending,
+  body.dark .timer-pill.timer-ending {
+    animation: none;
+  }
+}

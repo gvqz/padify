@@ -1,36 +1,10 @@
-/* vercel design system — part 16/16: Accessibility
-   Split from the former vercel.css (cascade order preserved —
-   index.html loads these files in numeric order, last in the
-   stylesheet chain, exactly where the monolith sat). */
-/* --------------------------------------------------------------------------
-   16. Accessibility
-   -------------------------------------------------------------------------- */
-
-@media (prefers-reduced-motion: reduce) {
-  .navbar.navbar-fixed-top,
-  .icon-container a,
-  .navbar .dropdown-menu,
-  .btn,
-  .pref-theme-seg label,
-  .pref-action-btn,
-  .pref-done-btn,
-  body .checkbox.checbox-switch label span,
-  body .checkbox.checbox-switch label span::before,
-  .modal.fade .modal-dialog {
-    transition: none;
-    animation: none;
-  }
-
-  .navbar .dropdown-menu {
-    animation: none;
-  }
-
-  .timer-pill.timer-ending,
-  body.dark .timer-pill.timer-ending {
-    animation: none;
-  }
-}
-
+/* vercel design system — part 16/17: Editor shell — the rich text surface
+   (contenteditable #note), the left note rail, the tab strip, the rich
+   toolbar and the overlays that hang off them. Re-cut from the former
+   part 16, which carried this layout under an "Accessibility" name for
+   historical reasons; the cascade position is unchanged — index.html
+   loads this file exactly where the old 16-accessibility.css sat, with
+   17-accessibility.css immediately after. */
 /* --------------------------------------------------------------------------
    Rich text editor surface (contenteditable #note) + left note rail
    -------------------------------------------------------------------------- */
