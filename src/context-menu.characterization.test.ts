@@ -223,20 +223,31 @@ function visible(selector: string): boolean {
 /**
  * Right-clicks inside the editor at the given viewport coordinates.
  *
- * Two jsdom realities are absorbed here so tests read like the browser:
+ * Three jsdom realities are absorbed here so tests read like the browser:
  *  - the reopen gesture: restoreFocus() (undo, link hand-offs…) suppresses
  *    the NEXT contextmenu until a requestAnimationFrame clears the flag.
  *    jsdom runs rAF on a timer, so the helper lets it settle first — what a
- *    user's second right-click sees.
+ *    user's second right-click sees. Under load (CI runners) that timer can
+ *    lag past the head start: the first right-click is then consumed and the
+ *    menu never opens. The helper detects the suppressed gesture and
+ *    re-issues the right-click until the menu is genuinely open — without
+ *    this, downstream assertions can pass on STALE focus (jsdom keeps
+ *    activeElement inside a hidden menu) and fail one keypress later.
  *  - jsdom's focus() collapses the window selection (browsers keep it).
  *    Callers that exercise selection-reading actions re-select AFTER this
  *    opens (the menu's own enablement is computed before the focus lands).
  */
 async function openMenuAt(x = 300, y = 200): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 25));
-  note().dispatchEvent(
-    new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }),
-  );
+  const rightClick = () =>
+    note().dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }),
+    );
+  rightClick();
+  await vi.waitFor(() => {
+    if (menu().hidden) rightClick(); // the gesture was consumed — try again
+    expect(menu().hidden).toBe(false);
+  });
 }
 
 function clickItem(selector: string): void {
