@@ -974,13 +974,15 @@ class ContextMenu {
       this.close();
       return;
     }
-
+    // Every action closes the menu like a native one does — cut used to
+    // leave it hanging open on screen after the deletion.
+    this.close();
+    editor.focus({ preventScroll: true });
     // Never block the cut on the async Clipboard API: in several browsers
     // (no permission, unfocused document, Firefox/Safari quirks) writeText
     // either rejects or hangs forever. Copy synchronously through
     // execCommand first, fall back to the async API in the background,
     // and always delete the selection like a native cut would.
-    editor.focus({ preventScroll: true });
     let copied = false;
     try {
       copied = this.execCommand('copy');
@@ -1019,6 +1021,9 @@ class ContextMenu {
       this.close();
       return;
     }
+    // Closes like every other action — delete used to leave the menu
+    // hanging open over the text it had just removed.
+    this.close();
     this.replaceSelection('');
   }
 

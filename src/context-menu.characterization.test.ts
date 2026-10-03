@@ -221,18 +221,25 @@ function visible(selector: string): boolean {
 }
 
 /**
- * Right-clicks inside the editor at the given viewport coordinates.
+ * Right-clicks inside the editor at the given viewport coordinates and
+ * returns only once that gesture has GENUINELY opened the menu.
  *
- * Three jsdom realities are absorbed here so tests read like the browser:
+ * Two jsdom realities are absorbed here so tests read like the browser:
  *  - the reopen gesture: restoreFocus() (undo, link hand-offs…) suppresses
  *    the NEXT contextmenu until a requestAnimationFrame clears the flag.
  *    jsdom runs rAF on a timer, so the helper lets it settle first — what a
  *    user's second right-click sees. Under load (CI runners) that timer can
- *    lag past the head start: the first right-click is then consumed and the
- *    menu never opens. The helper detects the suppressed gesture and
- *    re-issues the right-click until the menu is genuinely open — without
- *    this, downstream assertions can pass on STALE focus (jsdom keeps
- *    activeElement inside a hidden menu) and fail one keypress later.
+ *    lag past the head start, and the suppression has two failure modes:
+ *    with the menu closed, later assertions pass on STALE focus (jsdom
+ *    keeps activeElement inside a hidden menu) and fail one keypress
+ *    later; with the menu left open by a previous test, every assertion
+ *    runs against that test's enablement and port. A fresh open always
+ *    recomputes the menu's coordinates — a suppressed gesture returns
+ *    before open() and leaves them untouched — so a sentinel on the
+ *    position detects the real thing, and the retry re-issues the
+ *    right-click until it lands. Exactly one dispatch ever opens the menu
+ *    (a double open would collapse the selection twice and re-run
+ *    enablement against the collapsed state).
  *  - jsdom's focus() collapses the window selection (browsers keep it).
  *    Callers that exercise selection-reading actions re-select AFTER this
  *    opens (the menu's own enablement is computed before the focus lands).
@@ -243,10 +250,13 @@ async function openMenuAt(x = 300, y = 200): Promise<void> {
     note().dispatchEvent(
       new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }),
     );
-  rightClick();
+  // open() always assigns a real left/top; the sentinel survives only a
+  // suppressed gesture. waitFor retries every 50 ms, re-right-clicking
+  // until the flag clears and the menu genuinely (re)opens.
   await vi.waitFor(() => {
-    if (menu().hidden) rightClick(); // the gesture was consumed — try again
-    expect(menu().hidden).toBe(false);
+    menu().style.left = '-9999px';
+    rightClick();
+    expect(menu().style.left).not.toBe('-9999px');
   });
 }
 
@@ -596,6 +606,9 @@ describe('actions through the EditorPort', () => {
     clickItem('[data-action="delete"]');
 
     expect(vi.mocked(port.insertText)).toHaveBeenCalledWith('');
+    // Delete closes the menu like every other action — it used to leave
+    // it hanging open over the text it had just removed.
+    expect(menu().hidden).toBe(true);
   });
 
   it('select-all selects the whole editor contents', async () => {
@@ -757,6 +770,9 @@ describe('clipboard flows', () => {
     // execCommand copy, so the fallback write fires in the background).
     expect(clipboardWriteText).toHaveBeenCalledWith('world');
     expect(vi.mocked(port.insertText)).toHaveBeenCalledWith('');
+    // Cut closes the menu like every other action — it used to leave it
+    // hanging open after the deletion.
+    expect(menu().hidden).toBe(true);
   });
 });
 
