@@ -147,6 +147,21 @@ export class ModelPort implements EditorPort {
   /** Re-entrancy guard for the delete normalization pass. */
   private normalizing = false;
 
+  /**
+   * True while ANOTHER surface (Markdown, a future board) owns the host:
+   * every listener and mutation below parks so a non-html editor's events
+   * never reach this pipeline, and getHtml() serves the parked model
+   * instead of absorbing whatever markup the other surface painted. The
+   * display entries (renderHtml/setHtml) stay live — they are how the host
+   * comes home when an html note opens again.
+   */
+  private inert = false;
+
+  /** Parks/unparks the engine while another note-kind surface owns the host. */
+  setInert(inert: boolean): void {
+    this.inert = inert;
+  }
+
   constructor(element: HTMLElement, deps: ModelPortDeps) {
     this.element = element;
     this.deps = deps;
@@ -155,11 +170,24 @@ export class ModelPort implements EditorPort {
     // Checklist gutter clicks live on the surface itself; link clicks and
     // equation clicks announce themselves for the toolbar's popovers. All
     // three only REPORT — the mutations route through the model.
-    element.addEventListener('click', (event) => this.onSurfaceClick(event as MouseEvent));
-    element.addEventListener('keydown', (event) => this.onKeyDown(event));
-    element.addEventListener('beforeinput', (event) => this.onBeforeInput(event as InputEvent));
-    element.addEventListener('input', (event) => this.handleInput(event as InputEvent));
+    element.addEventListener('click', (event) => {
+      if (this.inert) return;
+      this.onSurfaceClick(event as MouseEvent);
+    });
+    element.addEventListener('keydown', (event) => {
+      if (this.inert) return;
+      this.onKeyDown(event);
+    });
+    element.addEventListener('beforeinput', (event) => {
+      if (this.inert) return;
+      this.onBeforeInput(event as InputEvent);
+    });
+    element.addEventListener('input', (event) => {
+      if (this.inert) return;
+      this.handleInput(event as InputEvent);
+    });
     element.addEventListener('compositionstart', () => {
+      if (this.inert) return;
       this.composing = true;
       // Snapshot BEFORE the first composition text lands, joining the
       // open typing burst or opening one: the whole composed phrase is
@@ -217,6 +245,9 @@ export class ModelPort implements EditorPort {
    * makes undo complete and the output canonical for all of them.
    */
   private command(build: (model: HTMLElement, coverage: [number, number]) => OpResult): boolean {
+    if (this.inert) {
+      return false;
+    }
     this.typingGroupOpen = false;
     const selection = captureOffsets(this.element);
     if (!selection) {
@@ -248,6 +279,9 @@ export class ModelPort implements EditorPort {
   private commandInOpenGroup(
     build: (model: HTMLElement, coverage: [number, number]) => OpResult,
   ): boolean {
+    if (this.inert) {
+      return false;
+    }
     const selection = captureOffsets(this.element);
     if (!selection) {
       return false;
@@ -359,7 +393,12 @@ export class ModelPort implements EditorPort {
   // -------------------------------------------------------------------------
 
   getHtml(): string {
-    this.absorb();
+    // Inert (another surface owns the host): serve the parked model —
+    // absorbing now would parse the OTHER surface's markup into the html
+    // note's model and corrupt it.
+    if (!this.inert) {
+      this.absorb();
+    }
     return this.deps.sanitize(serialize(this.model));
   }
 

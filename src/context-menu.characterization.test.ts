@@ -148,6 +148,7 @@ function createFakePort(): EditorPort {
   return {
     getHtml: vi.fn(() => ''),
     setHtml: vi.fn(),
+    setInert: vi.fn(),
     renderHtml: vi.fn(),
     getText: vi.fn(() => ''),
     isEmpty: vi.fn(() => true),

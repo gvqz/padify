@@ -55,8 +55,8 @@ describe('normalizeNoteType', () => {
     // The typed content model's forward-compat rule: a type this build has
     // never heard of survives storage and sync verbatim, so the note can
     // go home to a Padify that understands it.
-    expect(normalizeNoteType('markdown')).toBe('markdown');
     expect(normalizeNoteType('kanban')).toBe('kanban');
+    expect(normalizeNoteType('teleprompter')).toBe('teleprompter');
   });
 
   it('keeps non-default registered types', () => {
@@ -69,7 +69,7 @@ describe('isNoteType / isRichNote', () => {
     for (const def of NOTE_TYPES) {
       expect(isNoteType(def.id)).toBe(true);
     }
-    expect(isNoteType('markdown')).toBe(false);
+    expect(isNoteType('kanban')).toBe(false);
     expect(isNoteType(undefined)).toBe(false);
   });
 
@@ -94,10 +94,14 @@ describe('contentKindFor', () => {
     expect(contentKindFor(DEFAULT_NOTE_TYPE)).toBe('html');
   });
 
+  it('markdown notes are text — the sanitizer never touches their source', () => {
+    expect(contentKindFor('markdown')).toBe('text');
+  });
+
   it('unknown types answer opaque — stored verbatim, never sanitized, never edited', () => {
-    expect(contentKindFor('markdown')).toBe('opaque');
     expect(contentKindFor('kanban')).toBe('opaque');
     expect(contentKindFor('voice-note')).toBe('opaque');
+    expect(contentKindFor('drawingpad')).toBe('opaque');
   });
 
   it('isHtmlContent is the sanitizer gate', () => {

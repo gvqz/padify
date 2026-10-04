@@ -92,6 +92,13 @@ export interface NoteSurface {
    * the sanitized content) or nothing was applied at all.
    */
   commit(host: HTMLElement | null, content: string): boolean;
+  /**
+   * Optional: inserts plain text at the live caret — the seam voice typing
+   * and the unicode picker use so they serve EVERY editing surface instead
+   * of hard-wiring the html port. Absent (or a false answer) means this
+   * surface cannot take the insertion and the caller's fallbacks stand.
+   */
+  insertText?(host: HTMLElement | null, text: string): boolean;
   /** Empties the surface (the clear-note flow). */
   clear(host: HTMLElement): void;
 }
@@ -177,6 +184,20 @@ export class HtmlNoteSurface implements NoteSurface {
 
   clear(host: HTMLElement): void {
     host.innerHTML = '';
+  }
+
+  insertText(host: HTMLElement | null, text: string): boolean {
+    // The port carries it through the model (history, canonical output);
+    // before the port exists the native command is the honest fallback.
+    const port = getEditorPort();
+    if (port) {
+      return port.insertText(text);
+    }
+    if (host && typeof document.execCommand === 'function') {
+      host.focus({ preventScroll: true });
+      return document.execCommand('insertText', false, text);
+    }
+    return false;
   }
 }
 

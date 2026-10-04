@@ -198,6 +198,16 @@ export interface EditorPort {
   redo(): boolean;
 
   /**
+   * Parks/unparks the engine while ANOTHER note-kind surface (Markdown,
+   * a future board) owns the editor host: listeners and mutations stop
+   * answering, getHtml() serves the parked model, and the display
+   * entries (renderHtml/setHtml) stay live so the host can come home.
+   * The shell (app.ts) calls this on every active-note change; engines
+   * without a host to share may ignore it.
+   */
+  setInert(inert: boolean): void;
+
+  /**
    * True when there is something to undo/redo — the history availability
    * the undo/redo buttons dim against. An engine answers from its own
    * history (the model engine's stacks), never from a browser-global.

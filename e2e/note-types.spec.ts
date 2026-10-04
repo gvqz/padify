@@ -47,6 +47,9 @@ test.describe('note types', () => {
     await expect(
       popover.locator('.tab-type-menu-item', { hasText: 'Rich text note' }),
     ).toBeVisible();
+    await expect(
+      popover.locator('.tab-type-menu-item', { hasText: 'Markdown note' }),
+    ).toBeVisible();
 
     // Escape closes and returns focus to the trigger.
     await page.keyboard.press('Escape');
@@ -64,6 +67,8 @@ test.describe('note types', () => {
     // Arrows rove focus (from the trigger into the list, wrapping), Home/End jump.
     await page.keyboard.press('ArrowDown');
     await expect(popover.locator('.tab-type-menu-item').first()).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(popover.locator('.tab-type-menu-item').nth(1)).toBeFocused();
     await page.keyboard.press('ArrowDown');
     await expect(popover.locator('.tab-type-menu-item').last()).toBeFocused();
     await page.keyboard.press('ArrowDown'); // wraps to the first item

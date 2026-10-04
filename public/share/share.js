@@ -15,6 +15,7 @@
  */
 
 import { sanitizeNoteHtml } from './sanitize-note.js';
+import { renderMarkdownToHtml } from './markdown-render.js';
 
 const params = new URLSearchParams(window.location.search);
 const token = params.get('t');
@@ -115,8 +116,27 @@ function render(row) {
     return;
   }
 
-  // A non-html note (Markdown source, a board's JSON, a newer type):
-  // honest raw text, never markup. The <pre> keeps structure readable.
+  if (String(row.note_type) === 'markdown') {
+    // Markdown notes render through the OWNED renderer, generated from
+    // src/editor/markdown/render.ts by the same build script — a module
+    // that only ever emits tags it wrote itself, with every href past
+    // the safe-href gate (hostile URLs render as their literal text).
+    // No sanitizer pass on top: the renderer's output IS the policy, and
+    // the sanitizer's allowlist would strip the subset it doesn't know
+    // (inline <code>, task checkboxes, h4-h6).
+    const body = row.content == null ? row.html : row.content;
+    content.innerHTML = renderMarkdownToHtml(String(body == null ? '' : body));
+    // The one read-only adaptation: this island runs no KaTeX, so the
+    // equation shells show their LaTeX source — the same answer the
+    // html-note path gives through mathToText.
+    content.querySelectorAll('.padify-math').forEach((shell) => {
+      shell.textContent = shell.getAttribute('data-latex') ?? '';
+    });
+    return;
+  }
+
+  // Any other non-html note (a board's JSON, a newer type): honest raw
+  // text, never markup. The <pre> keeps structure readable.
   const pre = document.createElement('pre');
   pre.className = 'share-raw-content';
   const raw = row.content == null ? row.html : row.content;

@@ -1193,6 +1193,400 @@
           <div id="richMathPreview" class="rich-math-preview" aria-hidden="true"></div>
         </div>
       </div>
+      <div
+        id="markdownToolbar"
+        class="rich-toolbar markdown-toolbar"
+        role="toolbar"
+        aria-label="Markdown formatting"
+        aria-controls="note"
+        hidden
+      >
+        <div class="rich-toolbar-group">
+          <button type="button" class="rich-btn" data-md-action="undo" title="Undo">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M4 10h11a5 5 0 0 1 0 10h-4" />
+              <path d="m8 6-4 4 4 4" />
+            </svg>
+            <span class="sr-only">Undo</span>
+          </button>
+          <button type="button" class="rich-btn" data-md-action="redo" title="Redo">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M20 10H9a5 5 0 0 0 0 10h4" />
+              <path d="m16 6 4 4-4 4" />
+            </svg>
+            <span class="sr-only">Redo</span>
+          </button>
+        </div>
+        <div class="rich-toolbar-sep" aria-hidden="true"></div>
+        <div class="rich-toolbar-group">
+          <button
+            type="button"
+            class="rich-btn"
+            data-md-action="bold"
+            aria-pressed="false"
+            title="Bold"
+          >
+            <span class="rich-btn-glyph" aria-hidden="true">B</span
+            ><span class="sr-only">Bold</span>
+          </button>
+          <button
+            type="button"
+            class="rich-btn"
+            data-md-action="italic"
+            aria-pressed="false"
+            title="Italic"
+          >
+            <span class="rich-btn-glyph" aria-hidden="true"><i>I</i></span
+            ><span class="sr-only">Italic</span>
+          </button>
+          <button
+            type="button"
+            class="rich-btn"
+            data-md-action="strikethrough"
+            aria-pressed="false"
+            title="Strikethrough"
+          >
+            <span class="rich-btn-glyph" aria-hidden="true"><s>S</s></span
+            ><span class="sr-only">Strikethrough</span>
+          </button>
+          <button
+            type="button"
+            class="rich-btn"
+            data-md-action="code"
+            aria-pressed="false"
+            title="Inline code"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m16 18 6-6-6-6" />
+              <path d="m8 6-6 6 6 6" />
+            </svg>
+            <span class="sr-only">Inline code</span>
+          </button>
+        </div>
+        <div class="rich-toolbar-sep" aria-hidden="true"></div>
+        <div class="rich-toolbar-group">
+          <div class="rich-menu-host">
+            <button
+              type="button"
+              class="rich-btn rich-menu-btn"
+              data-md-menu="block"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              title="Text styles"
+            >
+              <span class="rich-menu-label" data-md-label="block">Normal text</span>
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+              <span class="sr-only">Text styles</span>
+            </button>
+            <div
+              class="rich-menu-panel rich-menu-panel-block"
+              role="menu"
+              aria-label="Markdown text styles"
+              hidden
+            >
+              <button type="button" role="menuitem" class="rich-menu-item" data-md-block="p">
+                Normal text
+              </button>
+              <button type="button" role="menuitem" class="rich-menu-item" data-md-block="h1">
+                Heading 1
+              </button>
+              <button type="button" role="menuitem" class="rich-menu-item" data-md-block="h2">
+                Heading 2
+              </button>
+              <button type="button" role="menuitem" class="rich-menu-item" data-md-block="h3">
+                Heading 3
+              </button>
+              <button type="button" role="menuitem" class="rich-menu-item" data-md-block="h4">
+                Heading 4
+              </button>
+              <button type="button" role="menuitem" class="rich-menu-item" data-md-block="h5">
+                Heading 5
+              </button>
+              <button type="button" role="menuitem" class="rich-menu-item" data-md-block="h6">
+                Heading 6
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="rich-toolbar-sep" aria-hidden="true"></div>
+        <div class="rich-toolbar-group">
+          <button
+            type="button"
+            class="rich-btn"
+            data-md-action="bullet"
+            aria-pressed="false"
+            title="Bulleted list"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M8 6h13" />
+              <path d="M8 12h13" />
+              <path d="M8 18h13" />
+              <path d="M3.5 6h.01" />
+              <path d="M3.5 12h.01" />
+              <path d="M3.5 18h.01" />
+            </svg>
+            <span class="sr-only">Bulleted list</span>
+          </button>
+          <button
+            type="button"
+            class="rich-btn"
+            data-md-action="ordered"
+            aria-pressed="false"
+            title="Numbered list"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M10 6h11" />
+              <path d="M10 12h11" />
+              <path d="M10 18h11" />
+              <path d="M4 6h1v4" />
+              <path d="M4 10h2" />
+              <path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" />
+            </svg>
+            <span class="sr-only">Numbered list</span>
+          </button>
+          <button
+            type="button"
+            class="rich-btn"
+            data-md-action="quote"
+            aria-pressed="false"
+            title="Quote"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path
+                d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"
+              />
+            </svg>
+            <span class="sr-only">Quote</span>
+          </button>
+          <button
+            type="button"
+            class="rich-btn"
+            data-md-action="codeblock"
+            aria-pressed="false"
+            title="Code block"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect width="18" height="18" x="3" y="3" rx="2" />
+              <path d="m9 9-2 3 2 3" />
+              <path d="m13 9 2 3-2 3" />
+            </svg>
+            <span class="sr-only">Code block</span>
+          </button>
+        </div>
+        <div class="rich-toolbar-sep" aria-hidden="true"></div>
+        <div class="rich-toolbar-group">
+          <button type="button" class="rich-btn" data-md-action="link" title="Insert link">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+            <span class="sr-only">Insert link</span>
+          </button>
+          <button type="button" class="rich-btn" data-md-action="table" title="Insert table">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect width="18" height="18" x="3" y="3" rx="2" />
+              <path d="M3 9h18" />
+              <path d="M3 15h18" />
+              <path d="M9 3v18" />
+              <path d="M15 3v18" />
+            </svg>
+            <span class="sr-only">Insert table</span>
+          </button>
+          <button type="button" class="rich-btn" data-md-action="hr" title="Insert divider">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M5 12h14" />
+            </svg>
+            <span class="sr-only">Insert divider</span>
+          </button>
+        </div>
+        <div class="rich-toolbar-sep" aria-hidden="true"></div>
+        <div class="rich-toolbar-group markdown-view-toggle" role="group" aria-label="View mode">
+          <button
+            type="button"
+            class="rich-btn markdown-view-btn"
+            data-md-view="edit"
+            aria-pressed="true"
+            title="Edit"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+            </svg>
+            <span class="sr-only">Edit</span>
+          </button>
+          <button
+            type="button"
+            class="rich-btn markdown-view-btn"
+            data-md-view="preview"
+            aria-pressed="false"
+            title="Preview"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <span class="sr-only">Preview</span>
+          </button>
+        </div>
+        <div
+          id="markdownLinkPopover"
+          class="rich-link-popover"
+          role="dialog"
+          aria-label="Link"
+          hidden
+        >
+          <div class="rich-link-row" data-link-mode="edit">
+            <input
+              type="text"
+              id="markdownLinkInput"
+              class="rich-link-input"
+              placeholder="Paste or type a link"
+              aria-label="Link address"
+            />
+            <button type="button" id="markdownLinkApply" class="rich-link-apply">Apply</button>
+            <button
+              type="button"
+              id="markdownLinkRemove"
+              class="rich-link-remove"
+              title="Remove link"
+              hidden
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      </div>
       <div class="starter-template">
         <div
           id="note"

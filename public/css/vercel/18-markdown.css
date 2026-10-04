@@ -1,0 +1,255 @@
+/* -------------------------------------------------------------------------
+   18 — Markdown surface
+   The Markdown note's editor chrome: the headless Milkdown root (the
+   WYSIWYG the surface mounts inside #note), the preview pane (the owned
+   renderer's output — the same truth share links and HTML export show),
+   and the few pieces the markdown toolbar adds beyond the rich-toolbar
+   vocabulary it already reuses.
+
+   Typography deliberately MIRRORS the note content vocabulary in
+   16-editor-shell.css (#note h1..h3, blockquote, pre, a, table): a
+   heading reads the same whether a rich note or a markdown note shows
+   it. Everything inherits #note's inline font preferences (the wrapper
+   is its child), so the user's font choices serve markdown notes too.
+   Tokens carry dark mode automatically (01-tokens.css re-declares them
+   under body.dark).
+   ---------------------------------------------------------------------- */
+
+/* The wrapper fills the note host like the contenteditable does. */
+.markdown-surface {
+  min-height: 100%;
+}
+
+/* Milkdown's container + the ProseMirror editable root. The base PM
+   stylesheet (imported from the kit) provides pre-wrap, the gap cursor
+   and table editing chrome; the outline discipline matches #note. */
+.markdown-surface .milkdown {
+  min-height: 100%;
+}
+
+.markdown-surface .ProseMirror {
+  min-height: 100%;
+  outline: none;
+  cursor: text;
+}
+
+/* ProseMirror's default selected-cell wash is blue — the design system
+   is monochrome, so table selection reads through the hover surface. */
+.markdown-surface .ProseMirror .selectedCell {
+  background: var(--vz-bg-hover);
+}
+
+/* ---- Content vocabulary (mirrors #note's, all six heading levels) ---- */
+
+.markdown-surface .padify-markdown h1,
+.markdown-surface .padify-markdown h2,
+.markdown-surface .padify-markdown h3,
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3 {
+  margin: 0.6em 0 0.25em;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--vz-fg);
+}
+
+.markdown-surface .padify-markdown h1,
+.markdown-preview h1 {
+  font-size: 1.55em;
+  letter-spacing: -0.01em;
+}
+
+.markdown-surface .padify-markdown h2,
+.markdown-preview h2 {
+  font-size: 1.3em;
+}
+
+.markdown-surface .padify-markdown h3,
+.markdown-preview h3 {
+  font-size: 1.13em;
+}
+
+.markdown-surface .padify-markdown h4,
+.markdown-surface .padify-markdown h5,
+.markdown-surface .padify-markdown h6,
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  margin: 0.6em 0 0.25em;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--vz-fg);
+}
+
+.markdown-surface .padify-markdown h4,
+.markdown-preview h4 {
+  font-size: 1.05em;
+}
+
+.markdown-surface .padify-markdown h5,
+.markdown-preview h5 {
+  font-size: 1em;
+}
+
+.markdown-surface .padify-markdown h6,
+.markdown-preview h6 {
+  font-size: 0.95em;
+  color: var(--vz-fg-muted);
+}
+
+.markdown-surface .padify-markdown > :first-child,
+.markdown-preview > :first-child {
+  margin-top: 0;
+}
+
+.markdown-surface .padify-markdown p,
+.markdown-preview p {
+  margin: 0.35em 0;
+}
+
+.markdown-surface .padify-markdown ul,
+.markdown-surface .padify-markdown ol,
+.markdown-preview ul,
+.markdown-preview ol {
+  margin: 0.35em 0;
+  padding-left: 1.5em;
+}
+
+.markdown-surface .padify-markdown li,
+.markdown-preview li {
+  margin: 0.15em 0;
+}
+
+/* Task list checkboxes answer the monochrome primary, like the app's
+   switches; the browser's default blue would be the only hue on the
+   page. */
+.markdown-surface .padify-markdown li:has(> input[type='checkbox']),
+.markdown-preview li:has(> input[type='checkbox']) {
+  list-style: none;
+}
+
+.markdown-surface .padify-markdown input[type='checkbox'],
+.markdown-preview input[type='checkbox'] {
+  accent-color: var(--vz-primary);
+  margin-right: 0.35em;
+}
+
+.markdown-surface .padify-markdown blockquote,
+.markdown-preview blockquote {
+  margin: 0.5em 0;
+  padding: 0.15em 0 0.15em 0.9em;
+  border-left: 3px solid var(--vz-border-strong);
+  color: var(--vz-fg-muted);
+}
+
+.markdown-surface .padify-markdown pre,
+.markdown-preview pre {
+  margin: 0.5em 0;
+  padding: 0.6em 0.8em;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg);
+  background: var(--vz-bg-subtle);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.markdown-surface .padify-markdown code,
+.markdown-preview code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  padding: 0.08em 0.3em;
+}
+
+.markdown-surface .padify-markdown pre code,
+.markdown-preview pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.markdown-surface .padify-markdown a,
+.markdown-preview a {
+  /* Monochrome: links read through the underline, like every link in
+     the app — never through a new hue. */
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-surface .padify-markdown hr,
+.markdown-preview hr {
+  border: none;
+  border-top: 1px solid var(--vz-border);
+  margin: 1.2em 0;
+}
+
+.markdown-surface .padify-markdown table,
+.markdown-preview table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+}
+
+.markdown-surface .padify-markdown td,
+.markdown-surface .padify-markdown th,
+.markdown-preview td,
+.markdown-preview th {
+  border: 1px solid var(--vz-border-strong);
+  padding: 3px 10px;
+  min-width: 36px;
+  text-align: left;
+  vertical-align: top;
+  position: relative;
+}
+
+.markdown-surface .padify-markdown th,
+.markdown-preview th {
+  background: var(--vz-bg-subtle);
+  font-weight: 650;
+}
+
+/* Raw HTML the source contains renders as literal text (the security
+   model); showing it on the code surface keeps the "this is data" cue. */
+.markdown-surface [data-type='html'] {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  color: var(--vz-fg-muted);
+}
+
+/* Display math centers like the app's equation chips; the preview runs
+   the same KaTeX pass the html surface does. */
+.markdown-surface .katex-display,
+.markdown-preview .katex-display {
+  margin: 0.75em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}
+
+/* ---- Preview mode ----
+   The preview pane is the owned renderer's output — the exact markup a
+   share link or the HTML export ships. Same vocabulary as above; the
+   editor root stands down. */
+
+.markdown-surface .markdown-preview {
+  min-height: 100%;
+  cursor: default;
+}
+
+.markdown-surface.markdown-preview-mode .milkdown {
+  display: none;
+}
+
+/* ---- The view toggle ----
+   The segmented Edit/Preview control rides the shared rich-btn styles;
+   the active half reads pressed exactly like Bold does when the caret
+   sits in bold text. */
+
+.markdown-toolbar .markdown-view-toggle {
+  margin-left: auto;
+}

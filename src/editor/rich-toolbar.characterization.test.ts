@@ -201,6 +201,7 @@ function createFakePort(overrides: Partial<EditorPort> = {}): EditorPort {
   const base: EditorPort = {
     getHtml: vi.fn(() => ''),
     setHtml: vi.fn(),
+    setInert: vi.fn(),
     renderHtml: vi.fn(),
     getText: vi.fn(() => ''),
     isEmpty: vi.fn(() => true),

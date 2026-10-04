@@ -45,6 +45,7 @@ import {
 import { sanitizeNoteHtml } from './editor/storage-subset';
 import { currentThemeMode } from './editor/theme-colors';
 import { htmlNoteSurface, noteSurfaceFor, noteSurfaceForKind } from './editor/surface';
+import { renderMarkdownToHtml } from './editor/markdown/render';
 import {
   deriveTabTitle,
   escapeHtml,
@@ -914,10 +915,10 @@ export function getEditorText(): string {
 
 /**
  * The active note's true content — the capture path for snapshots AND
- * share links. Notes with an editing surface read the LIVE host
- * (keystrokes still inside the debounce window are worth keeping);
- * display-only kinds read the model, because the host is showing a
- * placeholder card — the note's real content never entered it.
+ * share links. Notes with an editing surface read the LIVE host through
+ * THEIR surface (keystrokes still inside the debounce window are worth
+ * keeping); display-only kinds read the model, because the host is showing
+ * a placeholder card — the note's real content never entered it.
  */
 export function getActiveNoteContent(): {
   content: string;
@@ -928,9 +929,30 @@ export function getActiveNoteContent(): {
     return null;
   }
   if (noteSurfaceFor(active).editable) {
-    return { content: getEditorHtml(), noteType: active.noteType };
+    // THE ACTIVE NOTE'S surface — not the html one: a Markdown note's
+    // content is its markdown source, and reading it through the html
+    // host would capture the wrong surface's DOM.
+    const host = document.getElementById('note');
+    return {
+      content: noteSurfaceFor(active).capture(host) ?? active.content,
+      noteType: active.noteType,
+    };
   }
   return { content: active.content, noteType: active.noteType };
+}
+
+/**
+ * Inserts plain text into the ACTIVE note's surface at its caret — the
+ * seam voice typing and the unicode picker use. Routes through the
+ * active note's surface (every editing kind gets its own insertion path);
+ * false means nobody could take it and the caller's fallbacks stand.
+ */
+export function insertTextIntoActiveNote(text: string): boolean {
+  const active = tabManagerInstance?.getActive();
+  if (!active || text === '') {
+    return false;
+  }
+  return noteSurfaceFor(active).insertText?.(document.getElementById('note'), text) ?? false;
 }
 
 /**
@@ -944,12 +966,18 @@ export function getActiveNoteContent(): {
  * Non-html content is escaped into a <pre>: a JSON note exported as raw
  * markup would be broken by its own angle brackets, and the point of the
  * export is what the note holds, not an approximation of it re-parsed as
- * HTML. Returns null when no note is open.
+ * HTML. Markdown is the one exception — its source IS meant to become
+ * markup, and the owned renderer (editor/markdown/render.ts) produces
+ * exactly what the preview and a share link show, safe by construction.
+ * Returns null when no note is open.
  */
 export function getActiveNoteExportBody(): string | null {
   const captured = getActiveNoteContent();
   if (!captured) {
     return null;
+  }
+  if (captured.noteType === 'markdown') {
+    return renderMarkdownToHtml(captured.content);
   }
   if (isHtmlContent(captured.noteType)) {
     return sanitizeNoteHtml(captured.content);

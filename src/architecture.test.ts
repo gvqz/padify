@@ -366,13 +366,16 @@ describe('the editor seam (the swap contract)', () => {
     // The four content kinds, plus the fallback rule: an UNREGISTERED
     // kind must answer the opaque surface (an old build meeting a new
     // kind degrades to the read-only card, never to a crash).
+    // The Markdown surface registers from its module at import time —
+    // importing the registry alone would leave 'text' unregistered.
+    await import('./editor/markdown/surface');
     const { noteSurfaceForKind, opaqueNoteSurface } = await import('./editor/surface');
     for (const kind of ['html', 'text', 'json', 'opaque'] as const) {
       expect(noteSurfaceForKind(kind)).toBeDefined();
     }
-    expect(noteSurfaceForKind('text')).toBe(opaqueNoteSurface);
+    expect(noteSurfaceForKind('text').editable).toBe(true); // the Markdown surface
     expect(noteSurfaceForKind('json')).toBe(opaqueNoteSurface);
-    // And the registered html surface is the only editable one today.
+    // And the registered surfaces are the editable ones today.
     expect(noteSurfaceForKind('html').editable).toBe(true);
     expect(noteSurfaceForKind('opaque').editable).toBe(false);
   });

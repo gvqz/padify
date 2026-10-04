@@ -862,14 +862,14 @@ describe('non-html content (the typed content model)', () => {
   });
 
   it('an unknown-typed note titles from its type label, never its raw content', async () => {
-    // 'markdown' is a NEWER build's type: this build treats it as opaque,
+    // 'kanban' is a NEWER build's type: this build treats it as opaque,
     // and the strip shows the type id instead of guessing at the content
     // (the first line of an unknown format could be anything).
     saveNotes(
       {
         tabs: [
           stored('src', '# Heading\n\nbody text', {
-            noteType: 'markdown' as StoredNoteTab['noteType'],
+            noteType: 'kanban' as StoredNoteTab['noteType'],
           }),
         ],
         tombstones: [],
@@ -881,7 +881,7 @@ describe('non-html content (the typed content model)', () => {
 
     await bootedManager();
     const title = document.querySelector('#tabStripTabs .tab-strip-title')!.textContent;
-    expect(title).toBe('markdown');
+    expect(title).toBe('kanban');
   });
 });
 

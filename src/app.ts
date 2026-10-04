@@ -36,6 +36,12 @@ import { openModal, closeAllModals } from './ui/behavior/modal';
 import { initSaveIndicator } from './save-indicator';
 import { initTabRailDrawer } from './tab-rail-drawer';
 import { initRichToolbar } from './editor/rich-toolbar';
+import { initMarkdownToolbar } from './editor/markdown/toolbar';
+// The Markdown surface registers itself for the 'text' content kind at
+// import time (editor/markdown/surface.ts) — one import, and every
+// NoteSurface consumer (tabs, snapshots, share) can open markdown notes.
+import './editor/markdown/surface';
+import { isHtmlContent } from './editor/note-types';
 import { initThemeColors } from './editor/theme-colors';
 import { initRichShortcuts } from './editor/rich-shortcuts';
 import { initNoteTypeMenu } from './ui/note-type-menu';
@@ -105,6 +111,15 @@ export async function initApp(): Promise<void> {
       }),
     );
   }
+
+  // The html engine parks while ANOTHER surface owns the host: a Markdown
+  // note mounts its own editor inside #note, and the port's listeners must
+  // never see that editor's events (editor/model-port.ts setInert). The
+  // host comes home through renderHtml/setHtml, which stay live.
+  const syncPortInert = (): void => {
+    getEditorPort()?.setInert(!isHtmlContent(tabManager.getActive()?.noteType));
+  };
+  tabManager.addActiveListener(syncPortInert);
 
   tabManager.onActiveChanged = () => {
     updateWordCountPill(tabManager.getActiveText());
@@ -178,6 +193,11 @@ export async function initApp(): Promise<void> {
   // Paste always lands as plain text — the editor keeps its own
   // formatting (bold/italic/underline/strike) and nothing else.
   notepad.note.on('paste', (e) => {
+    // Markdown notes own their paste path (ProseMirror handles it); the
+    // html-engine insertion below must not steal the event from them.
+    if (!isHtmlContent(tabManager.getActive()?.noteType)) {
+      return;
+    }
     const event = e.originalEvent as ClipboardEvent | undefined;
     const text = event?.clipboardData?.getData('text/plain');
     if (text === null || text === undefined) {
@@ -248,6 +268,10 @@ export async function initApp(): Promise<void> {
   initThemeColors(tabManager);
   initRichToolbar(tabManager);
 
+  // ---- markdown toolbar — visible only for Markdown notes, see
+  // editor/markdown/toolbar.ts ----
+  initMarkdownToolbar(tabManager);
+
   // Docs-style shortcuts for rich notes — registered BEFORE the legacy Tab
   // handler below so lists can claim Tab/Shift+Tab first.
   initRichShortcuts(tabManager);
@@ -258,6 +282,11 @@ export async function initApp(): Promise<void> {
 
   notepad.note.keydown(function (e) {
     if (e.key === 'Tab') {
+      // Markdown notes own their Tab handling (ProseMirror list indent);
+      // the html-engine indent below must not claim the key from them.
+      if (!isHtmlContent(tabManager.getActive()?.noteType)) {
+        return;
+      }
       e.preventDefault();
 
       const selection = window.getSelection();

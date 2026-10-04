@@ -170,5 +170,6 @@ function sanitizeNoteHtml(html, options = {}) {
   return fragment.innerHTML;
 }
 export {
+  sanitizeHref,
   sanitizeNoteHtml
 };

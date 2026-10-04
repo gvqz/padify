@@ -145,6 +145,7 @@ function fakePort(): EditorPort {
   return {
     getHtml: () => '',
     setHtml: () => {},
+    setInert: () => {},
     renderHtml: () => {},
     getText: () => '',
     isEmpty: () => true,

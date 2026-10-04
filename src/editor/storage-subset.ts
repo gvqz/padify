@@ -172,7 +172,13 @@ export interface SanitizeOptions {
   mathToText?: boolean;
 }
 
-function sanitizeHref(raw: string): string | null {
+/**
+ * The one safe-href gate: drops javascript:/data:/vbscript: and friends
+ * (the anchor keeps its text, just without a target). Exported since the
+ * Markdown renderer appeared — its preview links pass the same bar the
+ * stored subset does, and a second copy of the pattern would drift.
+ */
+export function sanitizeHref(raw: string): string | null {
   const href = raw.trim();
   return href.length > 0 && SAFE_HREF_PATTERN.test(href) ? href : null;
 }

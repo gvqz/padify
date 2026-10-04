@@ -30,7 +30,7 @@ import { showToast } from './ui/toast';
 import { CASES } from './case-conversions';
 import { getEditorPort, type EditorCommand, type FormatCommand } from './editor/port';
 import { getTabManager } from './tabs';
-import { isRichNote } from './editor/note-types';
+import { isHtmlContent, isRichNote } from './editor/note-types';
 
 // --- Note-level actions -----------------------------------------------
 // "Copy the note" and "Delete the note" are menu/keyboard actions, so
@@ -386,6 +386,14 @@ class ContextMenu {
     if (!inEditor || this.reopenGesture) {
       if (!this.reopenGesture) this.close();
       this.reopenGesture = false;
+      return;
+    }
+
+    // The menu's vocabulary is the html surface's (every action mutates
+    // through the EditorPort). Markdown notes own their own editing
+    // surface — their clipboard lives in the browser's native menu, and
+    // this one stands down instead of offering rows that cannot apply.
+    if (!isHtmlContent(getTabManager()?.getActive()?.noteType)) {
       return;
     }
 
@@ -778,6 +786,10 @@ class ContextMenu {
         if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
         const target = event.target as HTMLElement | null;
         if (!target || (target.id !== 'note' && target.closest('#note') === null)) return;
+        // These are the html surface's format commands; a Markdown note's
+        // Mod-B/Mod-I belong to its own keymap — swallowing them here would
+        // park the keystroke on an inert port.
+        if (!isHtmlContent(getTabManager()?.getActive()?.noteType)) return;
 
         let formatId: FormatDef['id'] | null = null;
         if (event.shiftKey && event.code === 'KeyX') {

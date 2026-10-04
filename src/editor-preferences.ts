@@ -4,7 +4,8 @@ import Swal from 'sweetalert2';
 import type { EditorConfig, NotepadUI, StateKey } from './selector';
 import { showToast } from './ui/toast';
 import { updateWordCountPill } from './word-count-pill';
-import { getEditorText } from './tabs';
+import { getEditorText, getTabManager } from './tabs';
+import { isHtmlContent } from './editor/note-types';
 import { stateGet } from './storage';
 import { getSetting, removeSetting, setSetting } from './state/settings';
 
@@ -441,6 +442,13 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
  * tab characters from every text node in the editor.
  */
 export function clearTabIndentation(notepad: NotepadUI): void {
+  // Markdown notes own their tabs: inside a code fence a tab IS content,
+  // and the text-node walk below would strip it out of the ProseMirror
+  // document. The cleaner is an html-surface tool.
+  if (!isHtmlContent(getTabManager()?.getActive()?.noteType)) {
+    showToast('Tab cleaning applies to plain and rich notes.');
+    return;
+  }
   const noteText = getEditorText();
   const tabCount = (noteText.match(/\t/g) || []).length;
 

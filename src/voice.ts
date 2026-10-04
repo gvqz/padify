@@ -18,6 +18,8 @@
 import { $, type Q } from './lib/q';
 import { showToast } from './ui/toast';
 import { getEditorPort } from './editor/port';
+import { getTabManager } from './tabs';
+import { isHtmlContent } from './editor/note-types';
 
 // ---------------------------------------------------------------------------
 // Minimal typings for the Web Speech API (not in the default DOM lib)
@@ -299,6 +301,14 @@ function stopListening(): void {
 
 /** Toggled by the mic button and alt/option + v. */
 export function toggleVoiceTyping(): void {
+  // Dictation rides the html surface's port (focus/caret/insertion are
+  // all EditorPort answers). A Markdown note has its own editor, and
+  // dictation into it is future work — the toggle says so instead of
+  // silently doing nothing.
+  if (!isHtmlContent(getTabManager()?.getActive()?.noteType)) {
+    showToast('Voice typing works in plain and rich notes.');
+    return;
+  }
   if (listening) {
     stopVoiceTyping();
   } else {

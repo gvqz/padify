@@ -9,6 +9,12 @@ export declare const SOURCE_PATH: string;
 /** Absolute path of the generated module (public/share/sanitize-note.js). */
 export declare const OUTPUT_PATH: string;
 
+/** Absolute path of the canonical markdown renderer source (editor/markdown/render.ts). */
+export declare const MARKDOWN_SOURCE_PATH: string;
+
+/** Absolute path of the generated module (public/share/markdown-render.js). */
+export declare const MARKDOWN_OUTPUT_PATH: string;
+
 /**
  * Renders the generated share-sanitizer module's content from the
  * canonical source.
@@ -18,3 +24,11 @@ export declare const OUTPUT_PATH: string;
  * @returns the full content of sanitize-note.js, banner included.
  */
 export declare function renderShareSanitizer(source?: string): Promise<string>;
+
+/**
+ * Renders the generated share markdown renderer's content — render.ts
+ * bundled with its pure dependencies, tree-shaken free of KaTeX.
+ *
+ * @returns the full content of markdown-render.js, banner included.
+ */
+export declare function renderShareMarkdown(): Promise<string>;

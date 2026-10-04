@@ -20,12 +20,15 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
 import { escapeHtmlAttr } from '../lib/escape';
+import { MATH_CLASS } from './math-shell';
 
 // Re-exported for its existing importer (math.test.ts); the implementation
 // lives beside escapeHtml in lib/escape.ts.
 export { escapeHtmlAttr };
 
-export const MATH_CLASS = 'padify-math';
+// The shell contract lives in math-shell.ts (pure strings, no katex —
+// the share viewer's generated renderer needs it without the engine).
+export { MATH_CLASS, buildMathShell } from './math-shell';
 
 /**
  * Session-stable handle for a rendered equation shell — the id the
@@ -68,11 +71,6 @@ export const MATH_LATEX_PATTERN = /^[\s\S]{1,2000}$/;
  */
 const MATH_FORBIDDEN_MACROS =
   /\\(href|url|htmlData|htmlStyle|htmlClass|includegraphics|mathchoice)\b/;
-
-/** The stored shell for a LaTeX equation (empty — rendered in the DOM). */
-export function buildMathShell(latex: string): string {
-  return `<span class="${MATH_CLASS}" data-latex="${escapeHtmlAttr(latex)}" contenteditable="false"></span>`;
-}
 
 /**
  * Renders every math shell inside root that isn't rendered yet. Cheap on

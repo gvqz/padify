@@ -4,6 +4,7 @@ import type { NotepadUI } from '../selector';
 import type { UnicodeSymbol } from './types';
 import { showToast } from '../ui/toast';
 import { getEditorPort } from '../editor/port';
+import { insertTextIntoActiveNote } from '../tabs';
 import { escapeHtml } from '../lib/escape';
 import { stateGet, stateSet } from '../storage';
 
@@ -590,12 +591,17 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
       selection?.addRange(range);
     }
 
-    let inserted = false;
-    const port = getEditorPort();
-    if (port) {
-      inserted = port.insertText(symbol.char);
-    } else if (typeof document.execCommand === 'function') {
-      inserted = document.execCommand('insertText', false, symbol.char);
+    // The ACTIVE note's surface gets the first shot (Markdown's own
+    // ProseMirror path — the port ladder below serves the html surface,
+    // and a parked DOM range means nothing to it).
+    let inserted = insertTextIntoActiveNote(symbol.char);
+    if (!inserted) {
+      const port = getEditorPort();
+      if (port) {
+        inserted = port.insertText(symbol.char);
+      } else if (typeof document.execCommand === 'function') {
+        inserted = document.execCommand('insertText', false, symbol.char);
+      }
     }
     if (!inserted && selection && selection.rangeCount > 0) {
       const range = selection.getRangeAt(0);

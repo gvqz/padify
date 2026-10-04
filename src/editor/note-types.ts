@@ -57,7 +57,7 @@ export interface NoteTypeDef {
  * autocomplete for known ids while letting unknown ids (from newer builds,
  * via sync) flow through the system as first-class values.
  */
-export type KnownNoteType = 'standard' | 'rich';
+export type KnownNoteType = 'standard' | 'rich' | 'markdown';
 export type NoteType = KnownNoteType | (string & {});
 
 /** Menu order = menu display order; the default first. */
@@ -73,6 +73,12 @@ export const NOTE_TYPES: readonly NoteTypeDef[] = [
     label: 'Rich text note',
     description: 'Docs-style formatting — fonts, colors, lists & links',
     contentKind: 'html',
+  },
+  {
+    id: 'markdown',
+    label: 'Markdown note',
+    description: 'Write in Markdown — headings, lists, tables & preview',
+    contentKind: 'text',
   },
 ] as const;
 
@@ -103,6 +109,11 @@ export function isHtmlContent(type: NoteType | null | undefined): boolean {
   return contentKindFor(type) === 'html';
 }
 
+/** True when the note shows the Markdown editing surface. */
+export function isMarkdownNote(note: { noteType?: NoteType } | null | undefined): boolean {
+  return note?.noteType === 'markdown';
+}
+
 /**
  * Presentation: the icon a type shows in the creation menu (15px) and, for
  * non-default notes, as the rail badge (10px). Kept beside the registry so
@@ -113,6 +124,8 @@ export const NOTE_TYPE_ICONS: Record<KnownNoteType, (size: number) => string> = 
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>`,
   rich: (size) =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 20 12 4l5.5 16"/><path d="M8.3 14.5h7.4"/><path d="M4 20h16" opacity=".45"/></svg>`,
+  markdown: (size) =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16V8l4 5 4-5v8"/><path d="M15 10.5v6"/><path d="m13.2 14.7 1.8 1.8 1.8-1.8"/></svg>`,
 };
 
 /**
