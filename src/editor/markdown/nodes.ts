@@ -466,7 +466,7 @@ function codeBlockView(
     if (row.querySelector('.md-code-lang-input')) {
       return;
     }
-    const list = ensureCodeLanguageList();
+    ensureCodeLanguageList();
 
     const input = document.createElement('input');
     input.type = 'text';
