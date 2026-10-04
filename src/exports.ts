@@ -35,8 +35,16 @@ export function getHtmlFileName(): string {
   return 'Notes-' + getCurrentDate() + '.html';
 }
 
-export function saveTextAsFile(textToWrite: string, fileNameToSaveAs: string): void {
-  const textFileAsBlob = new Blob([textToWrite], { type: 'text/plain' });
+export function getMarkdownFileName(): string {
+  return 'Notes-' + getCurrentDate() + '.md';
+}
+
+export function saveTextAsFile(
+  textToWrite: string,
+  fileNameToSaveAs: string,
+  mime: string = 'text/plain',
+): void {
+  const textFileAsBlob = new Blob([textToWrite], { type: mime });
   const downloadLink = document.createElement('a');
   downloadLink.download = fileNameToSaveAs;
   downloadLink.innerHTML = 'Download File';

@@ -7,7 +7,7 @@
  * wrap, the GFM table insert…) dispatched through the live editor — no
  * second editing grammar exists to drift from the surface.
  *
- * Beyond the command buttons this module owns three pieces of chrome:
+ * Beyond the command buttons this module owns six pieces of chrome:
  *  • the text-style dropdown (Normal text / Heading 1-6) — the rich
  *    toolbar's one-menu-at-a-time pattern, with the current block's
  *    label following the caret;
@@ -15,7 +15,17 @@
  *    selection, type a URL (bare domains complete to https://, the
  *    SAFE_HREF gate refuses anything else with the same toast), Apply
  *    marks the selection or inserts fresh link text when the caret had
- *    nothing selected; Remove strips the link mark;
+ *    nothing selected; Remove strips the link mark. When the caret
+ *    already sits on a link the popover opens in CHIP mode first —
+ *    Open / Copy / Edit, the rich note's vocabulary;
+ *  • the equation bubble — the rich note's Docs-style symbol palette
+ *    and live KaTeX preview, inserting `$…$` (inline) or `$$…$$`
+ *    (block) as a live math node; clicking a rendered equation opens
+ *    the bubble in edit mode (padify:md-math-click);
+ *  • the table-ops menu — row/column operations when the caret sits
+ *    inside a table (the rich toolbar's table menu vocabulary);
+ *  • the task-list button — the Docs grammar over GFM checkboxes
+ *    (wrap in tasks, swap a plain list into tasks, lift back out);
  *  • the Edit/Preview segmented control — the surface's view toggle
  *    (see surface.ts: preview is the OWNED renderer's output, the same
  *    truth share links and HTML export show).
@@ -28,6 +38,8 @@ import type { TabManager } from '../../tabs';
 import { showToast } from '../../ui/toast';
 import { sanitizeHref } from '../storage-subset';
 import { isMarkdownNote } from '../note-types';
+import { mountMathPalette } from '../math-palette';
+import { renderMathPreview } from '../math';
 import {
   markdownEditorHandle,
   markdownViewMode,
@@ -36,9 +48,21 @@ import {
   setMarkdownViewMode,
   type MarkdownSelectionState,
 } from './surface';
+import { MD_MATH_CLICK_EVENT } from './nodes';
 import { callCommand } from '@milkdown/kit/utils';
-import { TextSelection } from '@milkdown/kit/prose/state';
+import { NodeSelection, TextSelection, type EditorState } from '@milkdown/kit/prose/state';
+import type { Transaction } from '@milkdown/kit/prose/state';
+import type { Node as ProseNode } from '@milkdown/kit/prose/model';
 import { liftListItem } from '@milkdown/kit/prose/schema-list';
+import {
+  addColumnAfter,
+  addColumnBefore,
+  addRowAfter,
+  addRowBefore,
+  deleteColumn,
+  deleteRow,
+  deleteTable,
+} from '@milkdown/kit/prose/tables';
 import type { CmdKey } from '@milkdown/kit/core';
 import {
   createCodeBlockCommand,
@@ -63,25 +87,53 @@ interface ToolbarElements {
   menuButton: HTMLElement | null;
   menuPanel: HTMLElement | null;
   menuLabel: HTMLElement | null;
+  tableMenuHost: HTMLElement | null;
+  tableMenuButton: HTMLElement | null;
+  tableMenuPanel: HTMLElement | null;
   popover: HTMLElement | null;
   input: HTMLInputElement | null;
   apply: HTMLButtonElement | null;
   remove: HTMLButtonElement | null;
+  linkChipRow: HTMLElement | null;
+  linkEditRow: HTMLElement | null;
+  linkOpen: HTMLButtonElement | null;
+  linkCopy: HTMLButtonElement | null;
+  linkEdit: HTMLButtonElement | null;
+  linkHrefLabel: HTMLElement | null;
+  mathPopover: HTMLElement | null;
+  mathPalette: HTMLElement | null;
+  mathInput: HTMLInputElement | null;
+  mathInsert: HTMLButtonElement | null;
+  mathPreview: HTMLElement | null;
+  mathKindButtons: HTMLElement[];
   viewButtons: HTMLElement[];
 }
 
 let elements: ToolbarElements | null = null;
 let menuOpen = false;
+let tableMenuOpen = false;
 
 /** Test seam: forget the wired toolbar so a fresh shell can boot it. */
 export function resetMarkdownToolbarForTests(): void {
   elements = null;
   menuOpen = false;
+  tableMenuOpen = false;
   parked = null;
+  mathPaletteMounted = false;
+  mathKind = 'inline';
 }
 
 /** The selection the popover parks (PM keeps it while the input is focused). */
 let parked: { from: number; to: number } | null = null;
+
+/** The link range for chip mode (the mark's own extent, not the caret). */
+let chipRange: { from: number; to: number } | null = null;
+
+/** The equation bubble's insertion kind (segmented control state). */
+let mathKind: 'inline' | 'block' = 'inline';
+
+/** The equation palette builds once, on the first open. */
+let mathPaletteMounted = false;
 
 const BLOCK_LABELS: Record<string, string> = {
   p: 'Normal text',
@@ -111,17 +163,35 @@ export function initMarkdownToolbar(tabManager: TabManager): void {
     menuButton: toolbar.querySelector('[data-md-menu="block"]'),
     menuPanel: toolbar.querySelector('[data-md-block]')?.closest('.rich-menu-panel') ?? null,
     menuLabel: toolbar.querySelector('[data-md-label="block"]'),
+    tableMenuHost: toolbar.querySelector('[data-md-menu="table"]')?.parentElement ?? null,
+    tableMenuButton: toolbar.querySelector('[data-md-menu="table"]'),
+    tableMenuPanel: toolbar.querySelector('[data-md-table]')?.closest('.rich-menu-panel') ?? null,
     popover: document.getElementById('markdownLinkPopover'),
     input: document.getElementById('markdownLinkInput') as HTMLInputElement | null,
     apply: document.getElementById('markdownLinkApply') as HTMLButtonElement | null,
     remove: document.getElementById('markdownLinkRemove') as HTMLButtonElement | null,
+    linkChipRow: toolbar.querySelector('[data-md-link-mode="chip"]'),
+    linkEditRow: toolbar.querySelector('[data-md-link-mode="edit"]'),
+    linkOpen: document.getElementById('markdownLinkOpen') as HTMLButtonElement | null,
+    linkCopy: document.getElementById('markdownLinkCopy') as HTMLButtonElement | null,
+    linkEdit: document.getElementById('markdownLinkEdit') as HTMLButtonElement | null,
+    linkHrefLabel: document.getElementById('markdownLinkHrefLabel'),
+    mathPopover: document.getElementById('markdownMathPopover'),
+    mathPalette: document.getElementById('markdownMathPalette'),
+    mathInput: document.getElementById('markdownMathInput') as HTMLInputElement | null,
+    mathInsert: document.getElementById('markdownMathInsert') as HTMLButtonElement | null,
+    mathPreview: document.getElementById('markdownMathPreview'),
+    mathKindButtons: Array.from(toolbar.querySelectorAll<HTMLElement>('[data-md-math-kind]')),
     viewButtons: Array.from(toolbar.querySelectorAll<HTMLElement>('[data-md-view]')),
   };
 
   wireCommandButtons();
   wireBlockMenu();
+  wireTableMenu();
   wireLinkPopover();
+  wireMathPopover();
   wireViewToggle();
+  wireDocumentEvents();
 
   // Pressed states follow the caret (the rich toolbar's discipline).
   onMarkdownSelection(syncPressedStates);
@@ -132,7 +202,9 @@ export function initMarkdownToolbar(tabManager: TabManager): void {
     toolbar.hidden = !show;
     if (!show) {
       closeBlockMenu();
+      closeTableMenu();
       closeLinkPopover();
+      closeMathPopover();
     }
   };
   tabManager.addActiveListener(sync);
@@ -154,8 +226,13 @@ function wireCommandButtons(): void {
         return;
       }
       closeBlockMenu();
+      closeTableMenu();
       if (action === 'link') {
         openLinkPopover();
+        return;
+      }
+      if (action === 'math') {
+        openMarkdownEquationBubble();
         return;
       }
       runMarkdownToolbarAction(action);
@@ -206,6 +283,10 @@ function dispatchToolbarAction(action: string): boolean {
       return toggleList(handle, 'bullet');
     case 'ordered':
       return toggleList(handle, 'ordered');
+    case 'task':
+      return toggleTaskList(handle);
+    case 'clear':
+      return clearMarkdownFormatting(handle);
     case 'codeblock':
       return call(createCodeBlockCommand);
     case 'hr':
@@ -257,6 +338,83 @@ function toggleList(
     : handle.editor.action(callCommand(wrapInOrderedListCommand.key));
 }
 
+/**
+ * The task button's Docs grammar: no list → wrap in a bullet list and
+ * arm every item as a task; a plain list → arm its items (become
+ * checkboxes); task items → disarm (become a plain list).
+ */
+function toggleTaskList(handle: NonNullable<ReturnType<typeof markdownEditorHandle>>): boolean {
+  const { view, editor } = handle;
+  let { state } = view;
+  const { from, to } = state.selection;
+
+  const collectItems = (
+    doc: ProseNode,
+    start: number,
+    end: number,
+  ): { pos: number; node: ProseNode }[] => {
+    const items: { pos: number; node: ProseNode }[] = [];
+    doc.nodesBetween(start, end, (node, pos) => {
+      if (node.type.name === 'list_item') {
+        items.push({ pos, node });
+        return false;
+      }
+      return true;
+    });
+    return items;
+  };
+
+  const items = collectItems(state.doc, from, to);
+  if (items.length > 0) {
+    const anyTask = items.some(({ node }) => node.attrs.checked != null);
+    const tr = state.tr;
+    for (const { pos, node } of items) {
+      const nextChecked = anyTask ? null : false;
+      if ((node.attrs.checked ?? null) !== nextChecked) {
+        tr.setNodeMarkup(pos, undefined, { ...node.attrs, checked: nextChecked });
+      }
+    }
+    if (tr.docChanged) {
+      view.dispatch(tr);
+    }
+    return true;
+  }
+
+  // No list: wrap first, then arm the fresh items.
+  const wrapped = editor.action(callCommand(wrapInBulletListCommand.key));
+  if (!wrapped) {
+    return false;
+  }
+  state = view.state;
+  const rangeStart = Math.min(from, state.selection.from);
+  const rangeEnd = Math.max(to, state.selection.to);
+  const tr = state.tr;
+  for (const { pos, node } of collectItems(state.doc, rangeStart, rangeEnd)) {
+    if (node.attrs.checked == null) {
+      tr.setNodeMarkup(pos, undefined, { ...node.attrs, checked: false });
+    }
+  }
+  if (tr.docChanged) {
+    view.dispatch(tr);
+  }
+  return true;
+}
+
+/** Strips every inline mark from the selection (the caret's typing marks too). */
+function clearMarkdownFormatting(
+  handle: NonNullable<ReturnType<typeof markdownEditorHandle>>,
+): boolean {
+  const { view } = handle;
+  const { state } = view;
+  const { from, to, empty } = state.selection;
+  if (empty) {
+    view.dispatch(state.tr.setStoredMarks([]));
+    return true;
+  }
+  view.dispatch(state.tr.removeMark(from, to));
+  return true;
+}
+
 /** Applies a block style from the dropdown (p / h1..h6). */
 export function runMarkdownBlockStyle(block: string): boolean {
   const handle = markdownEditorHandle();
@@ -278,6 +436,33 @@ export function runMarkdownBlockStyle(block: string): boolean {
   return applied;
 }
 
+/** Runs a table structure operation at the caret's cell. */
+export function runMarkdownTableAction(op: string): boolean {
+  const handle = markdownEditorHandle();
+  if (!handle) {
+    return false;
+  }
+  const { view } = handle;
+  const { state } = view;
+  const commands: Record<
+    string,
+    (state: EditorState, dispatch?: (tr: Transaction) => void) => boolean
+  > = {
+    'row-above': addRowBefore,
+    'row-below': addRowAfter,
+    'col-left': addColumnBefore,
+    'col-right': addColumnAfter,
+    'row-delete': deleteRow,
+    'col-delete': deleteColumn,
+    'table-delete': deleteTable,
+  };
+  const command = commands[op];
+  if (!command) {
+    return false;
+  }
+  return command(state, (tr) => view.dispatch(tr));
+}
+
 // ---------------------------------------------------------------------------
 // The text-style dropdown
 // ---------------------------------------------------------------------------
@@ -292,6 +477,7 @@ function wireBlockMenu(): void {
     if (menuOpen) {
       closeBlockMenu();
     } else {
+      closeTableMenu();
       openBlockMenu();
     }
   });
@@ -343,7 +529,65 @@ function closeBlockMenu(): void {
 }
 
 // ---------------------------------------------------------------------------
-// The link popover
+// The table-ops menu (visible while the caret sits inside a table)
+// ---------------------------------------------------------------------------
+
+function wireTableMenu(): void {
+  if (!elements?.tableMenuButton || !elements.tableMenuPanel) {
+    return;
+  }
+  const { tableMenuButton, tableMenuPanel } = elements;
+
+  tableMenuButton.addEventListener('click', () => {
+    if (tableMenuOpen) {
+      closeTableMenu();
+    } else {
+      closeBlockMenu();
+      tableMenuOpen = true;
+      tableMenuPanel.hidden = false;
+      tableMenuButton.setAttribute('aria-expanded', 'true');
+    }
+  });
+
+  tableMenuPanel.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement | null;
+    const item = target?.closest<HTMLElement>('[data-md-table]');
+    if (!item) {
+      return;
+    }
+    closeTableMenu();
+    runMarkdownTableAction(item.dataset.mdTable ?? '');
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!tableMenuOpen || !elements?.tableMenuHost) {
+      return;
+    }
+    if (event.target instanceof Node && elements.tableMenuHost.contains(event.target)) {
+      return;
+    }
+    closeTableMenu();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && tableMenuOpen) {
+      closeTableMenu();
+      elements?.tableMenuButton?.focus();
+    }
+  });
+}
+
+function closeTableMenu(): void {
+  if (!elements?.tableMenuButton || !elements.tableMenuPanel) {
+    return;
+  }
+  tableMenuOpen = false;
+  elements.tableMenuPanel.hidden = true;
+  elements.tableMenuButton.setAttribute('aria-expanded', 'false');
+}
+
+// ---------------------------------------------------------------------------
+// The link popover (chip mode + edit mode)
 // ---------------------------------------------------------------------------
 
 function wireLinkPopover(): void {
@@ -364,28 +608,156 @@ function wireLinkPopover(): void {
       closeLinkPopover();
     }
   });
+  elements.linkOpen?.addEventListener('click', () => {
+    const href = chipHref();
+    if (href) {
+      window.open(href, '_blank', 'noopener,noreferrer');
+    }
+    closeLinkPopover();
+  });
+  elements.linkCopy?.addEventListener('click', () => {
+    const href = chipHref();
+    if (!href) {
+      return;
+    }
+    void copyText(href);
+  });
+  elements.linkEdit?.addEventListener('click', () => {
+    if (!elements?.input || !elements.popover) {
+      return;
+    }
+    const href = chipHref() ?? '';
+    showLinkMode('edit');
+    elements.input.value = href.replace(/^https:\/\//, '');
+    elements.input.focus();
+    elements.input.select();
+  });
 }
 
+/** The href the chip acts on (parked range or chip range). */
+function chipHref(): string | null {
+  const handle = markdownEditorHandle();
+  if (!handle) {
+    return null;
+  }
+  const range = chipRange ?? parked;
+  if (!range) {
+    return null;
+  }
+  let href: string | null = null;
+  handle.view.state.doc.nodesBetween(range.from, Math.max(range.from + 1, range.to), (node) => {
+    const link = node.marks.find((mark) => mark.type.name === 'link');
+    if (link && typeof link.attrs.href === 'string') {
+      href = link.attrs.href;
+    }
+    return true;
+  });
+  return href;
+}
+
+async function copyText(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Link copied.');
+  } catch {
+    showToast('Copy failed — your browser blocked clipboard access.');
+  }
+}
+
+/**
+ * The link mark's full extent around the caret (or the selection's own
+ * range when one is open) — the chip's acting range, since a bare caret
+ * carries no extent. Shared with the context menu's markdown layer.
+ */
+export function linkRangeAround(state: EditorState): { from: number; to: number } | null {
+  const { selection } = state;
+  const { $from } = selection;
+  if (!selection.empty) {
+    let hasLink = false;
+    state.doc.nodesBetween(selection.from, selection.to, (node) => {
+      if (node.marks.some((mark) => mark.type.name === 'link')) {
+        hasLink = true;
+      }
+      return true;
+    });
+    return hasLink ? { from: selection.from, to: selection.to } : null;
+  }
+
+  const caretMark = ($from.marks() ?? []).find((mark) => mark.type.name === 'link');
+  if (!caretMark || !$from.parent.isTextblock) {
+    return null;
+  }
+  const parent = $from.parent;
+  const index = $from.index();
+  const carries = (node: ProseNode): boolean => node.marks.some((mark) => caretMark.eq(mark));
+
+  let start = index;
+  while (start > 0 && carries(parent.child(start - 1))) {
+    start -= 1;
+  }
+  let end = index;
+  while (end < parent.childCount && carries(parent.child(end))) {
+    end += 1;
+  }
+  if (start === end) {
+    return null;
+  }
+  const contentStart = $from.pos - $from.parentOffset;
+  let from = contentStart;
+  for (let i = 0; i < start; i += 1) {
+    from += parent.child(i).nodeSize;
+  }
+  let to = from;
+  for (let i = start; i < end; i += 1) {
+    to += parent.child(i).nodeSize;
+  }
+  return { from, to };
+}
+
+/** Chip first when the caret sits on a link; edit mode otherwise. */
 function openLinkPopover(): void {
   const handle = markdownEditorHandle();
   if (!elements?.popover || !elements.input || !handle) {
     return;
   }
+  closeBlockMenu();
+  closeTableMenu();
+  closeMathPopover();
+
   const { state } = handle.view;
   parked = { from: state.selection.from, to: state.selection.to };
-  const empty = state.selection.empty;
+  chipRange = linkRangeAround(state);
 
-  if (elements.remove) {
-    elements.remove.hidden = empty;
+  if (chipRange && state.selection.empty) {
+    showLinkMode('chip');
+    if (elements.linkHrefLabel) {
+      elements.linkHrefLabel.textContent = chipHref() ?? '';
+    }
+  } else {
+    showLinkMode('edit');
+    const empty = state.selection.empty;
+    if (elements.remove) {
+      elements.remove.hidden = empty;
+    }
+    elements.input.value = '';
+    elements.input.focus();
+    elements.input.select();
   }
-  elements.input.value = '';
   elements.popover.hidden = false;
-  elements.input.focus();
-  elements.input.select();
+}
+
+/** Swaps the popover's chip/edit rows. */
+function showLinkMode(mode: 'chip' | 'edit'): void {
+  if (!elements?.linkChipRow || !elements.linkEditRow) {
+    return;
+  }
+  elements.linkChipRow.hidden = mode !== 'chip';
+  elements.linkEditRow.hidden = mode !== 'edit';
 }
 
 function closeLinkPopover(): void {
   parked = null;
+  chipRange = null;
   if (elements?.popover) {
     elements.popover.hidden = true;
   }
@@ -425,8 +797,21 @@ function applyLink(): void {
   const { view } = handle;
   const { from, to } = parked;
   parked = null;
+  const retargeting = chipRange !== null;
+  chipRange = null;
 
-  if (from === to) {
+  if (retargeting) {
+    // Chip mode's Edit: swap the href over the mark's own extent.
+    const range = linkRangeAround(view.state) ?? { from, to };
+    const linkMark = view.state.schema.marks.link;
+    if (linkMark) {
+      view.dispatch(
+        view.state.tr
+          .removeMark(range.from, range.to, linkMark)
+          .addMark(range.from, range.to, linkMark.create({ href })),
+      );
+    }
+  } else if (from === to) {
     // Nothing selected: insert fresh link text the caret can overtype.
     const { state } = view;
     const linkMark = state.schema.marks.link?.create({ href });
@@ -459,10 +844,10 @@ function removeLink(): void {
     return;
   }
   const { view } = handle;
-  const { from, to } = view.state.selection;
+  const range = chipRange ?? { from: view.state.selection.from, to: view.state.selection.to };
   const linkMark = view.state.schema.marks.link;
   if (linkMark) {
-    view.dispatch(view.state.tr.removeMark(from, to, linkMark));
+    view.dispatch(view.state.tr.removeMark(range.from, range.to, linkMark));
   }
   closeLinkPopover();
   focusEditor(view);
@@ -470,6 +855,204 @@ function removeLink(): void {
 
 function focusEditor(view: { focus: () => void }): void {
   view.focus();
+}
+
+// ---------------------------------------------------------------------------
+// The equation bubble (palette + live preview + inline/block + Insert)
+// ---------------------------------------------------------------------------
+
+function wireMathPopover(): void {
+  if (!elements?.mathPopover || !elements.mathInput) {
+    return;
+  }
+  elements.mathInsert?.addEventListener('click', () => {
+    applyMath();
+  });
+  elements.mathInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      applyMath();
+    } else if (event.key === 'Escape') {
+      closeMathPopover();
+    }
+  });
+  elements.mathInput.addEventListener('input', () => {
+    if (elements?.mathInput && elements.mathPreview) {
+      renderMathPreview(elements.mathPreview, elements.mathInput.value);
+    }
+  });
+  for (const button of elements.mathKindButtons) {
+    button.addEventListener('click', () => {
+      mathKind = button.dataset.mdMathKind === 'block' ? 'block' : 'inline';
+      syncMathKindButtons();
+    });
+  }
+  // Outside click closes the bubble (the rich toolbar's discipline) —
+  // but a click on a rendered EQUATION must not: that very click opens
+  // the bubble in edit mode (nodes.ts fires padify:md-math-click), and
+  // the same bubbling click would close it straight back (the rich
+  // toolbar's "click on the equation being edited" guard).
+  document.addEventListener('click', (event) => {
+    if (
+      !elements?.mathPopover ||
+      elements.mathPopover.hidden ||
+      elements.mathPopover.contains(event.target as Node)
+    ) {
+      return;
+    }
+    const target = event.target as HTMLElement;
+    if (
+      target.closest?.('[data-md-action="math"]') ||
+      target.closest?.('.md-math-inline, .md-math-block')
+    ) {
+      return;
+    }
+    closeMathPopover();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && elements?.mathPopover && !elements.mathPopover.hidden) {
+      closeMathPopover();
+    }
+  });
+}
+
+function syncMathKindButtons(): void {
+  if (!elements) {
+    return;
+  }
+  for (const button of elements.mathKindButtons) {
+    const active = button.dataset.mdMathKind === mathKind;
+    button.setAttribute('aria-pressed', String(active));
+  }
+}
+
+function mountMathPaletteOnce(): void {
+  if (mathPaletteMounted || !elements?.mathPalette || !elements.mathInput) {
+    return;
+  }
+  mathPaletteMounted = true;
+  mountMathPalette(elements.mathPalette, {
+    input: elements.mathInput,
+    onChange: () => {
+      if (elements?.mathInput && elements.mathPreview) {
+        renderMathPreview(elements.mathPreview, elements.mathInput.value);
+      }
+    },
+    onEscape: () => {
+      closeMathPopover();
+    },
+  });
+}
+
+function closeMathPopover(): void {
+  if (!elements?.mathPopover) {
+    return;
+  }
+  elements.mathPopover.hidden = true;
+}
+
+/** Opens the equation bubble — fresh (insert) or over a selected node (apply). */
+export function openMarkdownEquationBubble(options?: { kind?: 'inline' | 'block' }): void {
+  const handle = markdownEditorHandle();
+  if (!elements?.mathPopover || !elements.mathInput || !elements.mathPreview) {
+    return;
+  }
+  closeBlockMenu();
+  closeTableMenu();
+  closeLinkPopover();
+  mountMathPaletteOnce();
+
+  // A node-selected equation is the edit target — its kind leads.
+  const selection = handle?.view.state.selection;
+  const node =
+    selection instanceof NodeSelection &&
+    (selection.node.type.name === 'math_inline' || selection.node.type.name === 'math_block')
+      ? selection.node
+      : null;
+  mathKind = node
+    ? node.type.name === 'math_block'
+      ? 'block'
+      : 'inline'
+    : options?.kind === 'block'
+      ? 'block'
+      : 'inline';
+
+  elements.mathInput.value = node ? node.textContent : '';
+  renderMathPreview(elements.mathPreview, elements.mathInput.value);
+  if (elements.mathInsert) {
+    elements.mathInsert.textContent = node ? 'Apply' : 'Insert';
+  }
+  syncMathKindButtons();
+  elements.mathPopover.hidden = false;
+  elements.mathInput.focus();
+  elements.mathInput.select();
+}
+
+function applyMath(): void {
+  const handle = markdownEditorHandle();
+  if (!elements?.mathInput || !handle) {
+    closeMathPopover();
+    return;
+  }
+  const latex = elements.mathInput.value.trim();
+  const { view } = handle;
+  const { state } = view;
+
+  // An equation selected in the editor is the apply target.
+  const selection = state.selection;
+  const editing =
+    selection instanceof NodeSelection &&
+    (selection.node.type.name === 'math_inline' || selection.node.type.name === 'math_block');
+
+  closeMathPopover();
+  view.focus();
+  if (latex === '') {
+    return;
+  }
+
+  if (editing && selection instanceof NodeSelection) {
+    const type = selection.node.type;
+    const text = state.schema.text(latex);
+    view.dispatch(state.tr.replaceWith(selection.from, selection.to, type.create(null, text)));
+    return;
+  }
+  const type = state.schema.nodes[mathKind === 'block' ? 'math_block' : 'math_inline'];
+  if (!type) {
+    return;
+  }
+  view.dispatch(state.tr.replaceSelectionWith(type.create(null, state.schema.text(latex))));
+}
+
+// ---------------------------------------------------------------------------
+// Document-level handoffs (context menu, shortcuts, equation clicks)
+// ---------------------------------------------------------------------------
+
+function wireDocumentEvents(): void {
+  // Ctrl/Cmd+K (rich-shortcuts) asks for the link bubble.
+  document.addEventListener('padify:open-link', () => {
+    if (!elements?.toolbar || elements.toolbar.hidden) {
+      return;
+    }
+    openLinkPopover();
+  });
+
+  // The context menu's "Insert equation" row.
+  document.addEventListener('padify:open-equation', () => {
+    if (!elements?.toolbar || elements.toolbar.hidden) {
+      return;
+    }
+    openMarkdownEquationBubble();
+  });
+
+  // A click on a rendered equation (nodes.ts) opens the bubble in edit
+  // mode — the click itself node-selected the atom.
+  document.addEventListener(MD_MATH_CLICK_EVENT, (event) => {
+    if (!elements?.toolbar || elements.toolbar.hidden) {
+      return;
+    }
+    const detail = (event as CustomEvent<{ latex?: string; kind?: 'inline' | 'block' }>).detail;
+    openMarkdownEquationBubble({ kind: detail?.kind });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -487,8 +1070,10 @@ function syncPressedStates(state: MarkdownSelectionState): void {
     code: state.code,
     bullet: state.bulletList,
     ordered: state.orderedList,
+    task: state.task,
     quote: state.blockquote,
     codeblock: state.codeBlock,
+    math: state.math !== null,
   };
   for (const button of elements.buttons) {
     const action = button.dataset.mdAction;
@@ -501,6 +1086,14 @@ function syncPressedStates(state: MarkdownSelectionState): void {
   const blockKey = state.heading ? `h${state.heading}` : 'p';
   if (elements.menuLabel) {
     elements.menuLabel.textContent = BLOCK_LABELS[blockKey] ?? 'Normal text';
+  }
+
+  // The table-ops menu exists only inside a table.
+  if (elements.tableMenuHost) {
+    elements.tableMenuHost.hidden = !state.inTable;
+    if (!state.inTable) {
+      closeTableMenu();
+    }
   }
 }
 
@@ -531,5 +1124,14 @@ function syncViewToggle(): void {
   const editing = mode === 'edit';
   for (const button of elements.buttons) {
     (button as HTMLButtonElement).disabled = !editing;
+  }
+  if (elements.tableMenuButton) {
+    (elements.tableMenuButton as HTMLButtonElement).disabled = !editing;
+  }
+  if (!editing) {
+    closeBlockMenu();
+    closeTableMenu();
+    closeLinkPopover();
+    closeMathPopover();
   }
 }

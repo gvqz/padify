@@ -12,6 +12,7 @@ import {
   getPdfFileName,
   getDocxFileName,
   getHtmlFileName,
+  getMarkdownFileName,
 } from './exports';
 import { updateWordCountPill } from './word-count-pill';
 import { initUnicodePicker } from './unicode/picker';
@@ -19,6 +20,7 @@ import {
   TabManager,
   setTabManager,
   getEditorText,
+  getActiveNoteContent,
   getActiveNoteExportBody,
   sanitizeNoteHtml,
 } from './tabs';
@@ -36,12 +38,18 @@ import { openModal, closeAllModals } from './ui/behavior/modal';
 import { initSaveIndicator } from './save-indicator';
 import { initTabRailDrawer } from './tab-rail-drawer';
 import { initRichToolbar } from './editor/rich-toolbar';
-import { initMarkdownToolbar } from './editor/markdown/toolbar';
+import {
+  initMarkdownToolbar,
+  openMarkdownEquationBubble,
+  runMarkdownBlockStyle,
+  runMarkdownToolbarAction,
+} from './editor/markdown/toolbar';
+import { initMarkdownSlash } from './editor/markdown/slash';
 // The Markdown surface registers itself for the 'text' content kind at
 // import time (editor/markdown/surface.ts) — one import, and every
 // NoteSurface consumer (tabs, snapshots, share) can open markdown notes.
 import './editor/markdown/surface';
-import { isHtmlContent } from './editor/note-types';
+import { isHtmlContent, isMarkdownNote } from './editor/note-types';
 import { initThemeColors } from './editor/theme-colors';
 import { initRichShortcuts } from './editor/rich-shortcuts';
 import { initNoteTypeMenu } from './ui/note-type-menu';
@@ -272,6 +280,16 @@ export async function initApp(): Promise<void> {
   // editor/markdown/toolbar.ts ----
   initMarkdownToolbar(tabManager);
 
+  // ---- markdown slash menu ("/" inserts blocks) — the panel + provider;
+  // the insert actions are the toolbar's own commands, injected here so
+  // slash.ts imports none of its siblings (architecture.test.ts pins the
+  // acyclic graph), see editor/markdown/slash.ts ----
+  initMarkdownSlash({
+    runToolbarAction: runMarkdownToolbarAction,
+    runBlockStyle: runMarkdownBlockStyle,
+    openEquation: openMarkdownEquationBubble,
+  });
+
   // Docs-style shortcuts for rich notes — registered BEFORE the legacy Tab
   // handler below so lists can claim Tab/Shift+Tab first.
   initRichShortcuts(tabManager);
@@ -282,8 +300,10 @@ export async function initApp(): Promise<void> {
 
   notepad.note.keydown(function (e) {
     if (e.key === 'Tab') {
-      // Markdown notes own their Tab handling (ProseMirror list indent);
-      // the html-engine indent below must not claim the key from them.
+      // Markdown notes own their Tab handling (the surface's indent
+      // keymap: lists sink/lift, code blocks take two spaces, tables
+      // walk cells); the html-engine indent below must not claim the
+      // key from them.
       if (!isHtmlContent(tabManager.getActive()?.noteType)) {
         return;
       }
@@ -364,6 +384,27 @@ export async function initApp(): Promise<void> {
       downloadHTML(body, getHtmlFileName());
     }
   });
+
+  // The Markdown export ships the SOURCE — the .md a user would hand to
+  // any other tool — captured live through the active note's surface.
+  notepad.downloadNotesMarkdown.click(function () {
+    const captured = getActiveNoteContent();
+    if (captured && captured.noteType === 'markdown') {
+      saveTextAsFile(captured.content, getMarkdownFileName(), 'text/markdown');
+    }
+  });
+
+  // The Markdown row exists only while a Markdown note is active — the
+  // download menu says what THIS note can become, like the toolbar chrome.
+  const syncMarkdownExportRow = (): void => {
+    if (isMarkdownNote(tabManager.getActive())) {
+      notepad.downloadNotesMarkdown.removeAttr('hidden');
+    } else {
+      notepad.downloadNotesMarkdown.attr('hidden', 'hidden');
+    }
+  };
+  tabManager.addActiveListener(syncMarkdownExportRow);
+  syncMarkdownExportRow();
 
   // Close dropdown if clicked outside
   $(document).on('click', function () {

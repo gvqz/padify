@@ -83,3 +83,11 @@
   }
 }
 
+
+/* Conditionally-hidden rows (the Markdown export's, app.ts): the legacy
+   layer's .dropdown-item display:flex !important would override the
+   hidden attribute's display:none — keep [hidden] winning where a row
+   must stand down. */
+.navbar .dropdown-menu .dropdown-item[hidden] {
+  display: none !important;
+}

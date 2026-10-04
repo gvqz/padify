@@ -18,6 +18,7 @@ export interface NotepadUI {
   downloadNotesPdf: Q;
   downloadNotesDocx: Q;
   downloadNotesHtml: Q;
+  downloadNotesMarkdown: Q;
   fontSize: Q;
   fontWeight: Q;
   installApp: Q;
@@ -120,6 +121,7 @@ export function selector(): AppSelector {
       downloadNotesPdf: selectById('downloadNotesPdf'),
       downloadNotesDocx: selectById('downloadNotesDocx'),
       downloadNotesHtml: selectById('downloadNotesHtml'),
+      downloadNotesMarkdown: selectById('downloadNotesMarkdown'),
       fontSize: selectById('fontSize'),
       fontWeight: selectById('fontWeight'),
       installApp: selectById('installApp'),

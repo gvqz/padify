@@ -51,9 +51,12 @@ import { commonmark } from '@milkdown/kit/preset/commonmark';
 import { gfm } from '@milkdown/kit/preset/gfm';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { history } from '@milkdown/kit/plugin/history';
+import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { getMarkdown, replaceAll } from '@milkdown/kit/utils';
+import { NodeSelection } from '@milkdown/kit/prose/state';
 import type { Node as ProseNode } from '@milkdown/kit/prose/model';
 import type { EditorView } from '@milkdown/kit/prose/view';
+import { slash } from './slash';
 
 // ProseMirror's own base styles (outline discipline, table selection,
 // gap cursor) — the katex CSS import in editor/math.ts is the precedent
@@ -66,6 +69,16 @@ import { htmlToText } from '../note-content';
 import { renderMathIn } from '../math';
 import { registerNoteSurface, type NoteSurface, type SurfaceNote } from '../surface';
 import { renderMarkdownToHtml } from './render';
+import {
+  MATH_BLOCK_NODE,
+  MATH_INLINE_NODE,
+  indentKeymapPlugin,
+  markdownMath,
+  markdownNodeViews,
+  openLinkClickPlugin,
+  safeImageSchema,
+  taskTogglePlugin,
+} from './nodes';
 
 /** What the toolbar's pressed-state pass wants to know about the caret. */
 export interface MarkdownSelectionState {
@@ -74,12 +87,22 @@ export interface MarkdownSelectionState {
   strikethrough: boolean;
   code: boolean;
   link: boolean;
+  /** The href at the caret/selection (the link chip's Open/Copy/Edit). */
+  linkHref: string | null;
   /** Heading level when the caret's block IS a heading; null otherwise. */
   heading: number | null;
   blockquote: boolean;
   bulletList: boolean;
   orderedList: boolean;
+  /** The caret sits in a GFM task item (checkbox column). */
+  task: boolean;
   codeBlock: boolean;
+  /** The selection IS an equation node (the bubble's edit mode). */
+  math: 'inline' | 'block' | null;
+  /** The selection IS an image chip. */
+  image: boolean;
+  /** The caret sits inside a table (the table-ops menu). */
+  inTable: boolean;
 }
 
 /** One mounted Milkdown instance + everything its surface needs. */
@@ -256,8 +279,17 @@ export class MarkdownNoteSurface implements NoteSurface {
             role: 'textbox',
             'aria-multiline': 'true',
             translate: 'no',
+            // The empty editor's placeholder — the host's own copy (the
+            // CSS in 18-markdown.css reads it through attr()).
+            'data-placeholder':
+              host.dataset.placeholder ??
+              'Type your notes here and when you come back all your notes will be right here...',
           },
+          // Math equations and image chips are Padify's own pixels — see
+          // nodes.ts (the app's KaTeX pipeline; never an <img> fetch).
+          nodeViews: markdownNodeViews(),
         }));
+        slash.configure(ctx);
         ctx.get(listenerCtx).markdownUpdated(() => {
           announceIfUserEdit();
         });
@@ -267,8 +299,15 @@ export class MarkdownNoteSurface implements NoteSurface {
       })
       .use(commonmark)
       .use(gfm)
+      .use(clipboard)
+      .use(markdownMath)
+      .use(safeImageSchema)
       .use(listener)
       .use(history)
+      .use(taskTogglePlugin)
+      .use(indentKeymapPlugin)
+      .use(openLinkClickPlugin)
+      .use(slash.plugins)
       .create()
       .then((editor) => {
         if (!live || live.root !== root) {
@@ -363,11 +402,24 @@ function selectionStateFrom(view: EditorView): MarkdownSelectionState {
   // (storedMarks win over the block's); across a range, every mark that
   // appears anywhere in it (any-of — the rich toolbar's convention).
   const collected = new Set<string>();
+  let linkHref: string | null = null;
+  const collectLink = (
+    marks: Iterable<{ type: { name: string }; attrs: { href?: unknown } }>,
+  ): void => {
+    for (const mark of marks) {
+      if (mark.type.name === 'link' && linkHref === null && typeof mark.attrs.href === 'string') {
+        linkHref = mark.attrs.href;
+      }
+    }
+  };
   if (empty) {
-    (state.storedMarks ?? $from.marks()).forEach((mark) => collected.add(mark.type.name));
+    const marks = state.storedMarks ?? $from.marks();
+    marks.forEach((mark) => collected.add(mark.type.name));
+    collectLink(marks);
   } else {
     state.doc.nodesBetween(from, to, (node) => {
       node.marks.forEach((mark) => collected.add(mark.type.name));
+      collectLink(node.marks);
       return true;
     });
   }
@@ -381,6 +433,29 @@ function selectionStateFrom(view: EditorView): MarkdownSelectionState {
     return false;
   };
 
+  let task = false;
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    const ancestor = $from.node(depth);
+    if (ancestor.type.name === 'list_item' && ancestor.attrs.checked != null) {
+      task = true;
+      break;
+    }
+  }
+
+  // Node selections answer the atom nodes' own identity.
+  let math: 'inline' | 'block' | null = null;
+  let image = false;
+  if (state.selection instanceof NodeSelection) {
+    const name = state.selection.node.type.name;
+    if (name === MATH_INLINE_NODE) {
+      math = 'inline';
+    } else if (name === MATH_BLOCK_NODE) {
+      math = 'block';
+    } else if (name === 'image') {
+      image = true;
+    }
+  }
+
   const parent = $from.parent;
 
   return {
@@ -389,11 +464,16 @@ function selectionStateFrom(view: EditorView): MarkdownSelectionState {
     strikethrough: collected.has('strike_through'),
     code: collected.has('inlineCode'),
     link: collected.has('link'),
+    linkHref,
     heading: parent.type.name === 'heading' ? (parent.attrs.level as number) : null,
     blockquote: inBlock('blockquote'),
     bulletList: inBlock('bullet_list'),
     orderedList: inBlock('ordered_list'),
+    task,
     codeBlock: parent.type.name === 'code_block',
+    math,
+    image,
+    inTable: inBlock('table'),
   };
 }
 
@@ -405,6 +485,18 @@ function notifySelection(selection: EditorView['state']['selection']): void {
   void selection;
   const state = selectionStateFrom(live.view);
   selectionListeners.forEach((fn) => fn(state));
+}
+
+/**
+ * The caret/selection's state snapshot, on demand — the context menu's
+ * markdown layer (and tests) ask synchronously instead of subscribing.
+ */
+export function markdownSelectionStateNow(): MarkdownSelectionState | null {
+  const handle = markdownEditorHandle();
+  if (!handle) {
+    return null;
+  }
+  return selectionStateFrom(handle.view);
 }
 
 /**
@@ -420,6 +512,25 @@ export function refreshMarkdownSelectionState(): void {
   }
   const state = selectionStateFrom(handle.view);
   selectionListeners.forEach((fn) => fn(state));
+}
+
+/**
+ * The single character before the caret ('' at the note's start) — the
+ * dictation pass's smart spacing/capitalisation input. Answers from the
+ * live markdown document so voice typing behaves exactly as it does on
+ * the html surface.
+ */
+export function markdownCharBeforeCaret(): string {
+  const handle = markdownEditorHandle();
+  if (!handle) {
+    return '';
+  }
+  const { state } = handle.view;
+  const { from, empty } = state.selection;
+  if (!empty || from === 0) {
+    return '';
+  }
+  return state.doc.textBetween(Math.max(0, from - 1), from);
 }
 
 // The registry entry — the seam everything already routes through.

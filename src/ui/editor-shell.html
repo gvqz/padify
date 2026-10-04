@@ -1292,6 +1292,23 @@
             </svg>
             <span class="sr-only">Inline code</span>
           </button>
+          <button type="button" class="rich-btn" data-md-action="clear" title="Clear formatting">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m3 12 4.5 4.5L15 6" />
+              <path d="M13 18h8" />
+            </svg>
+            <span class="sr-only">Clear formatting</span>
+          </button>
         </div>
         <div class="rich-toolbar-sep" aria-hidden="true"></div>
         <div class="rich-toolbar-group">
@@ -1409,6 +1426,29 @@
           <button
             type="button"
             class="rich-btn"
+            data-md-action="task"
+            aria-pressed="false"
+            title="Task list"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3.5" y="3.5" width="17" height="17" rx="3.5" />
+              <path d="m8 12.4 2.7 2.7 5.3-5.8" />
+            </svg>
+            <span class="sr-only">Task list</span>
+          </button>
+          <button
+            type="button"
+            class="rich-btn"
             data-md-action="quote"
             aria-pressed="false"
             title="Quote"
@@ -1494,6 +1534,104 @@
             </svg>
             <span class="sr-only">Insert table</span>
           </button>
+          <div class="rich-menu-host markdown-table-ops" hidden>
+            <button
+              type="button"
+              class="rich-btn rich-menu-btn"
+              data-md-menu="table"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              title="Table options"
+            >
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <rect width="18" height="18" x="3" y="3" rx="2" />
+                <path d="M3 9h18" />
+                <path d="M9 3v18" />
+              </svg>
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+              <span class="sr-only">Table options</span>
+            </button>
+            <div
+              class="rich-menu-panel rich-menu-panel-table"
+              role="menu"
+              aria-label="Table options"
+              hidden
+            >
+              <button
+                type="button"
+                role="menuitem"
+                class="rich-menu-item"
+                data-md-table="row-above"
+              >
+                Insert row above
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                class="rich-menu-item"
+                data-md-table="row-below"
+              >
+                Insert row below
+              </button>
+              <button type="button" role="menuitem" class="rich-menu-item" data-md-table="col-left">
+                Insert column left
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                class="rich-menu-item"
+                data-md-table="col-right"
+              >
+                Insert column right
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                class="rich-menu-item"
+                data-md-table="row-delete"
+              >
+                Delete row
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                class="rich-menu-item"
+                data-md-table="col-delete"
+              >
+                Delete column
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                class="rich-menu-item"
+                data-md-table="table-delete"
+              >
+                Delete table
+              </button>
+            </div>
+          </div>
           <button type="button" class="rich-btn" data-md-action="hr" title="Insert divider">
             <svg
               width="15"
@@ -1509,6 +1647,22 @@
               <path d="M5 12h14" />
             </svg>
             <span class="sr-only">Insert divider</span>
+          </button>
+          <button type="button" class="rich-btn" data-md-action="math" title="Insert equation">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m3 12 3.5 5L11 4h10" />
+            </svg>
+            <span class="sr-only">Insert equation</span>
           </button>
         </div>
         <div class="rich-toolbar-sep" aria-hidden="true"></div>
@@ -1566,7 +1720,13 @@
           aria-label="Link"
           hidden
         >
-          <div class="rich-link-row" data-link-mode="edit">
+          <div class="rich-link-row markdown-link-chip" data-md-link-mode="chip" hidden>
+            <span id="markdownLinkHrefLabel" class="markdown-link-href"></span>
+            <button type="button" id="markdownLinkOpen" class="rich-link-apply">Open</button>
+            <button type="button" id="markdownLinkCopy" class="rich-link-apply">Copy</button>
+            <button type="button" id="markdownLinkEdit" class="rich-link-apply">Edit</button>
+          </div>
+          <div class="rich-link-row" data-md-link-mode="edit">
             <input
               type="text"
               id="markdownLinkInput"
@@ -1585,6 +1745,46 @@
               Remove
             </button>
           </div>
+        </div>
+        <div
+          id="markdownMathPopover"
+          class="rich-link-popover rich-math-popover"
+          role="dialog"
+          aria-label="Equation"
+          hidden
+        >
+          <div class="markdown-math-kind" role="group" aria-label="Equation placement">
+            <button
+              type="button"
+              class="markdown-math-kind-btn"
+              data-md-math-kind="inline"
+              aria-pressed="true"
+              title="Inline — $…$ flows with the text"
+            >
+              Inline
+            </button>
+            <button
+              type="button"
+              class="markdown-math-kind-btn"
+              data-md-math-kind="block"
+              aria-pressed="false"
+              title="Block — $$…$$ on its own lines"
+            >
+              Block
+            </button>
+          </div>
+          <div id="markdownMathPalette"></div>
+          <div class="rich-math-row">
+            <input
+              type="text"
+              id="markdownMathInput"
+              class="rich-link-input"
+              placeholder="e^{i\pi} + 1 = 0"
+              aria-label="LaTeX equation"
+            />
+            <button type="button" id="markdownMathInsert" class="rich-link-apply">Insert</button>
+          </div>
+          <div id="markdownMathPreview" class="rich-math-preview" aria-hidden="true"></div>
         </div>
       </div>
       <div class="starter-template">

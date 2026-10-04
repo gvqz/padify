@@ -30,7 +30,25 @@ import { showToast } from './ui/toast';
 import { CASES } from './case-conversions';
 import { getEditorPort, type EditorCommand, type FormatCommand } from './editor/port';
 import { getTabManager } from './tabs';
-import { isHtmlContent, isRichNote } from './editor/note-types';
+import { isHtmlContent, isMarkdownNote, isRichNote } from './editor/note-types';
+import {
+  mdClearFormatting,
+  mdCopy,
+  mdCut,
+  mdDeleteSelection,
+  mdFocus,
+  mdMenuFormat,
+  mdPaste,
+  mdRedo,
+  mdRemoveLink,
+  mdReplaceSelection,
+  mdSelectAll,
+  mdSelectionText,
+  mdState,
+  mdTableOp,
+  mdUndo,
+  markdownMenuTarget,
+} from './editor/markdown/menu-actions';
 
 // --- Note-level actions -----------------------------------------------
 // "Copy the note" and "Delete the note" are menu/keyboard actions, so
@@ -205,6 +223,14 @@ const FORMAT_META: Record<FormatDef['id'], { hint: string }> = {
   strike: { hint: STRIKE_HINT },
 };
 
+/** The Markdown format row — the same gestures, markdown's grammar. */
+const MD_FORMATS: { id: string; label: string; glyph: string }[] = [
+  { id: 'bold', label: 'Bold', glyph: 'B' },
+  { id: 'italic', label: 'Italic', glyph: 'I' },
+  { id: 'strike', label: 'Strikethrough', glyph: 'S' },
+  { id: 'code', label: 'Inline code', glyph: '</>' },
+];
+
 const menuMarkup = `
 <div class="padify-ctx" id="padifyCtxMenu" role="menu" aria-label="Text actions" hidden>
     <div class="padify-ctx-scroll">
@@ -237,13 +263,20 @@ const menuMarkup = `
             <button type="button" class="padify-ctx-item padify-ctx-fmt padify-fmt-${def.id}" role="menuitemcheckbox" aria-checked="false" data-action="format" data-format="${def.id}" aria-label="${def.label}" title="${def.label} (${FORMAT_META[def.id].hint})"><span aria-hidden="true">${def.glyph}</span></button>`,
             ).join('')}
         </div>
-        <button type="button" class="padify-ctx-item padify-ctx-rich" role="menuitem" data-action="clear-formatting">
+        <div class="padify-ctx-sep padify-ctx-md" role="separator"></div>
+        <div class="padify-ctx-formats padify-ctx-md" role="group" aria-label="Markdown formatting">
+            ${MD_FORMATS.map(
+              (def) => `
+            <button type="button" class="padify-ctx-item padify-ctx-fmt padify-fmt-${def.id}" role="menuitemcheckbox" aria-checked="false" data-action="md-format" data-format="${def.id}" aria-label="${def.label}" title="${def.label}"><span aria-hidden="true">${def.glyph}</span></button>`,
+            ).join('')}
+        </div>
+        <button type="button" class="padify-ctx-item padify-ctx-clear" role="menuitem" data-action="clear-formatting">
             ${ICONS.erase}<span>Clear formatting</span><kbd>${CLEAR_HINT}</kbd>
         </button>
         <button type="button" class="padify-ctx-item" role="menuitem" data-action="insert-link">
             ${ICONS.link}<span>Insert link</span>
         </button>
-        <button type="button" class="padify-ctx-item padify-ctx-rich" role="menuitem" data-action="insert-equation">
+        <button type="button" class="padify-ctx-item padify-ctx-equation" role="menuitem" data-action="insert-equation">
             ${ICONS.math}<span>Insert equation</span>
         </button>
         <button type="button" class="padify-ctx-item" role="menuitem" data-action="remove-link" hidden>
@@ -389,11 +422,12 @@ class ContextMenu {
       return;
     }
 
-    // The menu's vocabulary is the html surface's (every action mutates
-    // through the EditorPort). Markdown notes own their own editing
-    // surface — their clipboard lives in the browser's native menu, and
-    // this one stands down instead of offering rows that cannot apply.
-    if (!isHtmlContent(getTabManager()?.getActive()?.noteType)) {
+    // The menu's vocabulary serves the EDITING surfaces: the html rows
+    // through the EditorPort, the markdown rows through the surface's
+    // own action layer (menu-actions.ts). Non-editing kinds keep the
+    // browser's native menu.
+    const activeNote = getTabManager()?.getActive();
+    if (!isHtmlContent(activeNote?.noteType) && !isMarkdownNote(activeNote)) {
       return;
     }
 
@@ -475,8 +509,8 @@ class ContextMenu {
 
   private refreshEnabledState(): void {
     const hasSelection = this.selection.length > 0;
-    const actions = ['cut', 'copy', 'delete', 'clear-formatting'];
-    for (const action of actions) {
+    const isMd = markdownMenuTarget();
+    for (const action of ['cut', 'copy', 'delete', 'clear-formatting']) {
       const item = this.menu.querySelector<HTMLButtonElement>(
         `.padify-ctx-item[data-action="${action}"]`,
       );
@@ -486,36 +520,48 @@ class ContextMenu {
       }
     }
 
-    // Formatting belongs to rich text notes: the format row, clear
-    // formatting and equations only exist there. On a plain note these
-    // would either be stripped at save (formats) or produce content the
-    // note cannot hold (links, equations) — the menu shrinks to what a
-    // plain note can honestly do: select-all · case converter and friends.
-    // The separator leading the group hides with it, so no doubled rule.
+    // Formatting belongs to the EDITING notes: the rich rows through the
+    // port, the markdown rows through the surface's state. On a plain
+    // note both hide — the menu shrinks to what a plain note can
+    // honestly do: select-all · case converter and friends. The
+    // separator leading each group hides with it, so no doubled rule.
+    // The equation row is SHARED (both editing kinds have the bubble —
+    // each toolbar listens for the same handoff event).
     const isRich = isRichNote(getTabManager()?.getActive());
     this.menu.querySelectorAll<HTMLElement>('.padify-ctx-rich').forEach((item) => {
       item.hidden = !isRich;
     });
+    this.menu.querySelectorAll<HTMLElement>('.padify-ctx-md').forEach((item) => {
+      item.hidden = !isMd;
+    });
+    const editing = isRich || isMd;
+    this.menu.querySelectorAll<HTMLElement>('.padify-ctx-equation').forEach((item) => {
+      item.hidden = !editing;
+    });
+    this.menu.querySelectorAll<HTMLElement>('.padify-ctx-clear').forEach((item) => {
+      item.hidden = !editing;
+    });
 
     // The link and table entries follow the caret's context, the way the
     // toolbar's table menu does — no link under the caret, no Remove link;
-    // not in a table, no table operations. Both are rich-only as well, so
-    // a plain note never shows them no matter what the caret reports.
+    // not in a table, no table operations. On markdown the surface's own
+    // state answers; on html the port does.
     const port = getEditorPort();
-    const inLink = !!safeQueryPort(() => port?.queryLinkHref());
+    const mdCaret = isMd ? mdState() : null;
+    const inLink = isMd ? !!mdCaret?.link : !!safeQueryPort(() => port?.queryLinkHref());
     const removeLinkItem = this.menu.querySelector<HTMLButtonElement>(
       '.padify-ctx-item[data-action="remove-link"]',
     );
     if (removeLinkItem) {
-      removeLinkItem.hidden = !isRich || !inLink;
+      removeLinkItem.hidden = !(isRich || isMd) || !inLink;
     }
     const insertLinkItem = this.menu.querySelector<HTMLButtonElement>(
       '.padify-ctx-item[data-action="insert-link"]',
     );
     if (insertLinkItem) {
-      insertLinkItem.hidden = !isRich || inLink;
+      insertLinkItem.hidden = !(isRich || isMd) || inLink;
     }
-    const inTable = !!safeQueryPort(() => port?.queryTableContext());
+    const inTable = isMd ? !!mdCaret?.inTable : !!safeQueryPort(() => port?.queryTableContext());
     this.menu.querySelectorAll<HTMLElement>('.padify-ctx-table').forEach((item) => {
       item.hidden = !inTable;
     });
@@ -524,10 +570,25 @@ class ContextMenu {
     // the title tooltips tell the truth when the menu opens.
     for (const def of FORMATS) {
       const button = this.menu.querySelector<HTMLButtonElement>(
-        `.padify-ctx-fmt[data-format="${def.id}"]`,
+        `.padify-ctx-rich.padify-ctx-fmt[data-format="${def.id}"], .padify-ctx-formats.padify-ctx-rich .padify-ctx-fmt[data-format="${def.id}"]`,
       );
       if (!button) continue;
       button.setAttribute('aria-checked', String(this.isFormatActive(def)));
+    }
+    if (mdCaret) {
+      const mdActive: Record<string, boolean> = {
+        bold: mdCaret.bold,
+        italic: mdCaret.italic,
+        strike: mdCaret.strikethrough,
+        code: mdCaret.code,
+      };
+      for (const def of MD_FORMATS) {
+        const button = this.menu.querySelector<HTMLButtonElement>(
+          `.padify-ctx-md.padify-ctx-fmt[data-format="${def.id}"], .padify-ctx-formats.padify-ctx-md .padify-ctx-fmt[data-format="${def.id}"]`,
+        );
+        if (!button) continue;
+        button.setAttribute('aria-checked', String(mdActive[def.id] ?? false));
+      }
     }
   }
 
@@ -707,6 +768,12 @@ class ContextMenu {
     formatId?: FormatDef['id'],
     tableOp?: string,
   ): void {
+    // Markdown notes take their own action layer — every mutation
+    // through the surface, never the EditorPort (which is parked).
+    if (markdownMenuTarget()) {
+      this.runMarkdownAction(action, caseId, formatId, tableOp);
+      return;
+    }
     switch (action) {
       case 'undo':
         this.editorUndo();
@@ -763,6 +830,11 @@ class ContextMenu {
   }
 
   private restoreFocus(): void {
+    // Markdown notes focus their own editor (the host is not editable).
+    if (markdownMenuTarget()) {
+      mdFocus();
+      return;
+    }
     // Re-focus the editor so subsequent typing and Ctrl+Z work naturally.
     if (this.editor) {
       this.reopenGesture = true;
@@ -770,6 +842,125 @@ class ContextMenu {
       requestAnimationFrame(() => {
         this.reopenGesture = false;
       });
+    }
+  }
+
+  /** The markdown edition of runAction — the same rows, the surface's answers. */
+  private runMarkdownAction(
+    action: string,
+    caseId?: string,
+    formatId?: FormatDef['id'],
+    tableOp?: string,
+  ): void {
+    switch (action) {
+      case 'undo':
+        mdUndo();
+        this.close();
+        mdFocus();
+        break;
+      case 'redo':
+        mdRedo();
+        this.close();
+        mdFocus();
+        break;
+      case 'cut': {
+        this.close();
+        mdFocus();
+        const cut = mdCut();
+        showToast(cut ? 'Cut to clipboard.' : 'Cut. Clipboard unavailable in this browser.');
+        break;
+      }
+      case 'copy': {
+        this.close();
+        void mdCopy().then((copied) => {
+          showToast(copied ? 'Copied to clipboard.' : 'Copy blocked — press Ctrl/Cmd + C.');
+        });
+        mdFocus();
+        break;
+      }
+      case 'paste': {
+        this.close();
+        mdFocus();
+        void mdPaste().then((result) => {
+          if (result === 'empty') {
+            showToast('Clipboard is empty.');
+          } else if (result === 'blocked') {
+            showToast('Clipboard blocked by the browser — press Ctrl/Cmd + V instead.');
+          }
+        });
+        break;
+      }
+      case 'delete':
+        this.close();
+        mdDeleteSelection();
+        break;
+      case 'select-all':
+        this.close();
+        mdSelectAll();
+        break;
+      case 'md-format': {
+        const def = MD_FORMATS.find((entry) => entry.id === formatId);
+        if (!def) {
+          this.close();
+          break;
+        }
+        this.close();
+        mdFocus();
+        const ok = mdMenuFormat(def.id);
+        const active =
+          mdState()?.[
+            def.id === 'bold'
+              ? 'bold'
+              : def.id === 'italic'
+                ? 'italic'
+                : def.id === 'strike'
+                  ? 'strikethrough'
+                  : 'code'
+          ];
+        showToast(ok ? `${def.label} ${active ? 'on' : 'off'}.` : `${def.label} unavailable.`);
+        break;
+      }
+      case 'clear-formatting': {
+        this.close();
+        mdFocus();
+        const ok = mdClearFormatting();
+        showToast(ok ? 'Formatting removed.' : 'Could not remove formatting.');
+        break;
+      }
+      case 'insert-link':
+        this.close();
+        mdFocus();
+        document.dispatchEvent(new CustomEvent('padify:open-link'));
+        break;
+      case 'insert-equation':
+        this.close();
+        mdFocus();
+        document.dispatchEvent(new CustomEvent('padify:open-equation'));
+        break;
+      case 'remove-link': {
+        this.close();
+        const removed = mdRemoveLink();
+        if (removed) {
+          showToast('Link removed.');
+        }
+        mdFocus();
+        break;
+      }
+      case 'table-op': {
+        this.close();
+        if (tableOp) {
+          mdTableOp(tableOp);
+        }
+        mdFocus();
+        break;
+      }
+      case 'case':
+        if (caseId) {
+          this.convertCaseMarkdown(caseId);
+        }
+        break;
+      default:
+        this.close();
     }
   }
 
@@ -1112,6 +1303,33 @@ class ContextMenu {
     }
 
     showToast(`Converted to ${caseDef.label}.`);
+  }
+
+  /** The markdown edition — the selection is the surface's, not the DOM's. */
+  private convertCaseMarkdown(caseId: string): void {
+    const caseDef = CASES.find((entry) => entry.id === caseId);
+    if (!caseDef) {
+      this.close();
+      return;
+    }
+
+    const selected = mdSelectionText();
+    if (!selected) {
+      this.close();
+      showToast('Select some text first, then convert its case.');
+      mdFocus();
+      return;
+    }
+
+    const converted = caseDef.convert(selected);
+    this.close();
+    if (converted !== selected) {
+      mdReplaceSelection(converted);
+    }
+    mdFocus();
+    if (converted !== selected) {
+      showToast(`Converted to ${caseDef.label}.`);
+    }
   }
 
   /** Text offset of (node, offset) measured across the editor's text. */

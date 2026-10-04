@@ -18,8 +18,9 @@
 import { $, type Q } from './lib/q';
 import { showToast } from './ui/toast';
 import { getEditorPort } from './editor/port';
-import { getTabManager } from './tabs';
-import { isHtmlContent } from './editor/note-types';
+import { getTabManager, insertTextIntoActiveNote } from './tabs';
+import { isHtmlContent, isMarkdownNote } from './editor/note-types';
+import { markdownCharBeforeCaret, markdownEditorHandle } from './editor/markdown/surface';
 
 // ---------------------------------------------------------------------------
 // Minimal typings for the Web Speech API (not in the default DOM lib)
@@ -90,32 +91,68 @@ let supported = false;
 const RESTART_DELAY_MS = 250;
 
 // ---------------------------------------------------------------------------
-// Insertion helpers — all of them through the EditorPort, never the DOM
+// Insertion helpers — every path through the ACTIVE note's surface
 // ---------------------------------------------------------------------------
 
 /**
+ * The dictation target: markdown notes take their own editor's caret,
+ * html notes ride the EditorPort. One interface so the smart-spacing
+ * logic below is shared verbatim.
+ */
+interface DictationTarget {
+  focus(): void;
+  charBefore(): string;
+  insert(text: string): void;
+}
+
+function dictationTarget(): DictationTarget | null {
+  const active = getTabManager()?.getActive();
+  if (active && isMarkdownNote(active)) {
+    const handle = markdownEditorHandle();
+    if (!handle) {
+      return null;
+    }
+    return {
+      focus: () => handle.view.focus(),
+      charBefore: () => markdownCharBeforeCaret(),
+      insert: (text) => {
+        insertTextIntoActiveNote(text);
+      },
+    };
+  }
+  const port = getEditorPort();
+  if (!port) {
+    return null;
+  }
+  return {
+    focus: () => port.focus(),
+    charBefore: () => port.charBeforeCaret(),
+    insert: (text) => {
+      port.insertText(text);
+    },
+  };
+}
+
+/**
  * Inserts dictated text at the caret with tidy spacing/capitalisation.
- * All caret positioning and insertion go through the EditorPort — this
- * module never touches the editor DOM directly (it must survive the
- * contenteditable → document-model swap untouched).
+ * All caret positioning and insertion go through the ACTIVE note's
+ * surface (the EditorPort for html notes, the Markdown surface for
+ * markdown notes) — this module never touches the editor DOM directly.
  */
 function insertDictation(text: string): void {
   if (!text.trim()) {
     return;
   }
-  const port = getEditorPort();
-  if (!port) {
+  const target = dictationTarget();
+  if (!target) {
     return;
   }
 
-  port.focus();
-  // If the caret drifted outside the editor (click on the bar, …), park it at
-  // the end of the note so dictation never lands in the void.
-  port.ensureCaretInside();
+  target.focus();
 
   let insertText = text.trim().replace(/\s+/g, ' ');
 
-  const previous = port.charBeforeCaret();
+  const previous = target.charBefore();
   if (previous) {
     // New sentence → capitalise; mid-sentence → separate with a space
     // unless the dictation itself opens with punctuation.
@@ -131,7 +168,7 @@ function insertDictation(text: string): void {
 
   // Trailing space keeps consecutive dictation bursts (and hand typing after
   // a burst) from gluing words together.
-  port.insertText(`${insertText} `);
+  target.insert(`${insertText} `);
 }
 
 // ---------------------------------------------------------------------------
@@ -270,8 +307,12 @@ export function startVoiceTyping(): void {
   }
 
   // Park the caret in the note first so the very first words land in it.
-  getEditorPort()?.focus();
-  getEditorPort()?.ensureCaretInside();
+  const target = dictationTarget();
+  if (!target) {
+    showToast("The editor isn't ready yet — try again in a moment.");
+    return;
+  }
+  target.focus();
 
   startRecognition();
 }
@@ -301,12 +342,17 @@ function stopListening(): void {
 
 /** Toggled by the mic button and alt/option + v. */
 export function toggleVoiceTyping(): void {
-  // Dictation rides the html surface's port (focus/caret/insertion are
-  // all EditorPort answers). A Markdown note has its own editor, and
-  // dictation into it is future work — the toggle says so instead of
-  // silently doing nothing.
-  if (!isHtmlContent(getTabManager()?.getActive()?.noteType)) {
-    showToast('Voice typing works in plain and rich notes.');
+  // Dictation rides the ACTIVE note's surface: the EditorPort for html
+  // notes, the Markdown surface's own caret for markdown notes. Other
+  // kinds (boards, drawings) have no text caret yet — the toggle says
+  // so instead of silently doing nothing.
+  const active = getTabManager()?.getActive();
+  if (active && !isHtmlContent(active.noteType) && !isMarkdownNote(active)) {
+    showToast('Voice typing works in plain, rich and Markdown notes.');
+    return;
+  }
+  if (active && isMarkdownNote(active) && !markdownEditorHandle()) {
+    showToast('The Markdown editor is still opening — try again in a moment.');
     return;
   }
   if (listening) {

@@ -37,7 +37,9 @@ test.describe('context menu follows the note type', () => {
     await expect(menu.locator('[data-action="clear-formatting"]')).toBeHidden();
     await expect(menu.locator('[data-action="insert-link"]')).toBeHidden();
     await expect(menu.locator('[data-action="remove-link"]')).toBeHidden();
-    await expect(menu.locator('.padify-ctx-formats')).toBeHidden();
+    // Both format groups (rich and markdown) — a plain note has neither.
+    await expect(menu.locator('.padify-ctx-formats.padify-ctx-rich')).toBeHidden();
+    await expect(menu.locator('.padify-ctx-formats.padify-ctx-md')).toBeHidden();
     // The separator leading the rich group hides with it — no doubled rule.
     await expect(menu.locator('.padify-ctx-sep.padify-ctx-rich')).toBeHidden();
     // What a plain note can honestly do: still there.
@@ -59,7 +61,9 @@ test.describe('context menu follows the note type', () => {
     await expect(menu.locator('[data-action="insert-equation"]')).toBeVisible();
     await expect(menu.locator('[data-action="clear-formatting"]')).toBeVisible();
     await expect(menu.locator('[data-action="insert-link"]')).toBeVisible();
-    await expect(menu.locator('.padify-ctx-formats')).toBeVisible();
+    // The rich format row specifically — the markdown one rides the same
+    // class with its own modifier (hidden on rich notes).
+    await expect(menu.locator('.padify-ctx-formats.padify-ctx-rich')).toBeVisible();
     await expect(menu.locator('.padify-ctx-sep.padify-ctx-rich')).toBeVisible();
   });
 
