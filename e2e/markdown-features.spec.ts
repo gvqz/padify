@@ -226,3 +226,152 @@ test.describe('markdown notes — the feature act', () => {
     await expect(page.locator('#downloadNotesMarkdown')).toBeHidden();
   });
 });
+
+test.describe('markdown notes — the Crepe playground parity act', () => {
+  test('the split view: the top bar icon and the segmented control agree', async ({ page }) => {
+    await page.goto('/');
+    await newMarkdownNote(page);
+
+    const editor = page.locator('#note .ProseMirror');
+    await editor.click();
+    await page.keyboard.type('# Split me\n\nSome **bold**.');
+
+    // The top bar icon is a Markdown-only toggle.
+    const splitIcon = page.locator('#splitViewButton');
+    await expect(splitIcon).toBeVisible();
+    await splitIcon.click();
+
+    const surface = page.locator('#note .markdown-surface');
+    const preview = page.locator('#note .markdown-preview');
+    await expect(surface).toHaveClass(/markdown-split-mode/);
+    await expect(preview).toBeVisible();
+    await expect(page.locator('#note .ProseMirror')).toBeVisible();
+    // The owned renderer's output, beside the editor.
+    await expect(preview.locator('h1')).toHaveText('Split me');
+    await expect(preview.locator('b')).toHaveText('bold');
+    // The chrome agrees: the icon reads pressed, the segmented control too.
+    await expect(splitIcon).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-md-view="split"]')).toHaveAttribute('aria-pressed', 'true');
+
+    // The icon toggles back off; the segmented control follows the same truth.
+    await splitIcon.click();
+    await expect(surface).not.toHaveClass(/markdown-split-mode/);
+    await expect(preview).toBeHidden();
+    await expect(splitIcon).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('the split preview follows the typing, a beat behind', async ({ page }) => {
+    await page.goto('/');
+    await newMarkdownNote(page);
+
+    const editor = page.locator('#note .ProseMirror');
+    await editor.click();
+    await page.keyboard.type('# Draft');
+    await page.locator('[data-md-view="split"]').click();
+
+    const preview = page.locator('#note .markdown-preview');
+    await expect(preview.locator('h1')).toHaveText('Draft');
+
+    // Back into the editor (the split button took the focus), caret at
+    // the heading's end — then type.
+    await editor.locator('h1').click();
+    await page.keyboard.press('End');
+    await page.keyboard.type(' updated');
+    // The debounce chain (listener 200ms + pane 250ms) settles.
+    await expect(preview.locator('h1')).toHaveText('Draft updated', { timeout: 3000 });
+  });
+
+  test('the split icon stands down for plain notes', async ({ page }) => {
+    await page.goto('/');
+    await newMarkdownNote(page);
+    await expect(page.locator('#splitViewContainer')).toBeVisible();
+
+    // A plain note: the icon hides with the markdown chrome.
+    await page.locator('#addTab').click();
+    await expect(page.locator('#splitViewContainer')).toBeHidden();
+  });
+
+  test('selecting text floats the selection bubble; Bold applies from it', async ({ page }) => {
+    await page.goto('/');
+    await newMarkdownNote(page);
+
+    const editor = page.locator('#note .ProseMirror');
+    await editor.click();
+    await page.keyboard.type('select these words');
+
+    // Double-click ON the text (the line's start, over "these"): a real
+    // word selection floats the bubble above it.
+    await editor
+      .locator('p')
+      .first()
+      .dblclick({ position: { x: 60, y: 12 } });
+    const bubble = page.locator('.markdown-bubble');
+    await expect(bubble).toBeVisible();
+    await expect(bubble.locator('[data-bubble-id="bold"]')).toBeVisible();
+    await expect(bubble.locator('[data-bubble-id="equation"]')).toBeVisible();
+
+    await bubble.locator('[data-bubble-id="bold"]').click();
+    await expect(editor.locator('strong')).toHaveText('these');
+
+    // Collapse the selection — a click past the line's text (clicking
+    // INSIDE the kept selection would start a drag, not a collapse):
+    // the bubble stands down.
+    await editor
+      .locator('p')
+      .first()
+      .click({ position: { x: 300, y: 12 } });
+    await expect(bubble).toBeHidden();
+  });
+
+  test('the block handle: hover shows the grip, mousedown selects the block', async ({ page }) => {
+    await page.goto('/');
+    await newMarkdownNote(page);
+
+    const editor = page.locator('#note .ProseMirror');
+    await editor.click();
+    await page.keyboard.type('first block to drag');
+
+    // Move the mouse over the text: the grip appears in the gutter.
+    const paragraph = editor.locator('p').first();
+    await paragraph.hover();
+    const handle = page.locator('.md-block-handle');
+    await expect(handle).toHaveAttribute('data-show', 'true');
+    // The grip is armed for the drag the kit's BlockService drives.
+    await expect(handle).toHaveAttribute('draggable', 'true');
+
+    // Mousedown node-selects the block it would carry.
+    await handle.click({ trial: true });
+    const selected = editor.locator('.ProseMirror-selectednode');
+    await handle.dispatchEvent('mousedown');
+    await expect(selected).toHaveText('first block to drag');
+    await handle.dispatchEvent('mouseup');
+  });
+
+  test('the code block carries its language: chip in, fence out', async ({ page }) => {
+    await page.goto('/');
+    await newMarkdownNote(page);
+
+    const editor = page.locator('#note .ProseMirror');
+    await editor.click();
+    await page.keyboard.type('```python');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('print("hi")');
+
+    // The fence rendered: the language chip names the block.
+    const chip = editor.locator('.md-code-lang-chip');
+    await expect(chip).toHaveText('python');
+
+    // Click the chip, retype the language, Enter commits.
+    await chip.click();
+    const input = editor.locator('.md-code-lang-input');
+    await expect(input).toBeVisible();
+    await input.fill('typescript');
+    await input.press('Enter');
+    await expect(chip).toHaveText('typescript');
+
+    // The fence round-trips: the preview's code block carries the class.
+    await page.locator('[data-md-view="preview"]').click();
+    const preview = page.locator('#note .markdown-preview');
+    await expect(preview.locator('pre code')).toHaveClass(/language-typescript/);
+  });
+});

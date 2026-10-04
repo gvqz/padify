@@ -26,9 +26,10 @@
  *    inside a table (the rich toolbar's table menu vocabulary);
  *  • the task-list button — the Docs grammar over GFM checkboxes
  *    (wrap in tasks, swap a plain list into tasks, lift back out);
- *  • the Edit/Preview segmented control — the surface's view toggle
- *    (see surface.ts: preview is the OWNED renderer's output, the same
- *    truth share links and HTML export show).
+ *  • the Edit/Split/Preview segmented control — the surface's view
+ *    toggle (see surface.ts: split parks the owned renderer's live
+ *    output beside the editor, preview is that output full-width —
+ *    the same truth share links and HTML export show).
  *
  * Visibility follows the active note like the rich toolbar's: hidden
  * unless the active note IS a Markdown note (addActiveListener + the
@@ -44,9 +45,11 @@ import {
   markdownEditorHandle,
   markdownViewMode,
   onMarkdownSelection,
+  onMarkdownViewMode,
   refreshMarkdownSelectionState,
   setMarkdownViewMode,
   type MarkdownSelectionState,
+  type MarkdownViewMode,
 } from './surface';
 import { MD_MATH_CLICK_EVENT } from './nodes';
 import { callCommand } from '@milkdown/kit/utils';
@@ -195,6 +198,10 @@ export function initMarkdownToolbar(tabManager: TabManager): void {
 
   // Pressed states follow the caret (the rich toolbar's discipline).
   onMarkdownSelection(syncPressedStates);
+  // The segmented control follows EVERY mode flip — its own buttons,
+  // the top bar's split icon, the surface's own resets — so the chrome
+  // never disagrees with the surface (one source of truth: surface.ts).
+  onMarkdownViewMode(syncViewToggle);
 
   // Chrome follows the active note — Markdown notes only.
   const sync = (): void => {
@@ -228,7 +235,7 @@ function wireCommandButtons(): void {
       closeBlockMenu();
       closeTableMenu();
       if (action === 'link') {
-        openLinkPopover();
+        openMarkdownLinkPopover();
         return;
       }
       if (action === 'math') {
@@ -715,7 +722,7 @@ export function linkRangeAround(state: EditorState): { from: number; to: number 
 }
 
 /** Chip first when the caret sits on a link; edit mode otherwise. */
-function openLinkPopover(): void {
+export function openMarkdownLinkPopover(): void {
   const handle = markdownEditorHandle();
   if (!elements?.popover || !elements.input || !handle) {
     return;
@@ -1033,7 +1040,7 @@ function wireDocumentEvents(): void {
     if (!elements?.toolbar || elements.toolbar.hidden) {
       return;
     }
-    openLinkPopover();
+    openMarkdownLinkPopover();
   });
 
   // The context menu's "Insert equation" row.
@@ -1103,9 +1110,10 @@ function wireViewToggle(): void {
   }
   for (const button of elements.viewButtons) {
     button.addEventListener('click', () => {
-      const mode = button.dataset.mdView === 'preview' ? 'preview' : 'edit';
+      const requested = button.dataset.mdView;
+      const mode: MarkdownViewMode =
+        requested === 'preview' ? 'preview' : requested === 'split' ? 'split' : 'edit';
       setMarkdownViewMode(mode);
-      syncViewToggle();
     });
   }
 }
@@ -1120,8 +1128,9 @@ function syncViewToggle(): void {
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
   }
   // Formatting an invisible document is a no-op at best — park the
-  // command chrome while the preview owns the surface.
-  const editing = mode === 'edit';
+  // command chrome while the preview owns the surface. Split keeps
+  // the editor live, so its buttons stay enabled.
+  const editing = mode !== 'preview';
   for (const button of elements.buttons) {
     (button as HTMLButtonElement).disabled = !editing;
   }

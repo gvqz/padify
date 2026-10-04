@@ -1850,6 +1850,13 @@ body.pip-host #tabRailBackdrop {
   background-color: var(--vz-bg-hover);
 }
 
+/* A toggle that is ON (the split view icon) reads pressed the same way
+   the rich toolbar's buttons do — the chip surface, full ink. */
+.nav-icon-btn[aria-pressed='true'] {
+  opacity: 1;
+  background: var(--vz-bg-chip);
+}
+
 /* ==========================================================================
    Voice typing (Web Speech API) — navbar mic + floating live bar
    ========================================================================== */

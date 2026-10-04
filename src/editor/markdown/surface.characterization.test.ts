@@ -34,6 +34,7 @@ import {
   markdownEditorHandle,
   markdownViewMode,
   onMarkdownSelection,
+  onMarkdownViewMode,
   setMarkdownViewMode,
 } from './surface';
 import {
@@ -395,6 +396,126 @@ describe('the view toggle — preview is the owned renderer', () => {
     setMarkdownViewMode('preview');
     const preview = host.querySelector('.markdown-preview') as HTMLElement;
     expect(preview.querySelectorAll('.katex').length).toBeGreaterThanOrEqual(1);
+    setMarkdownViewMode('edit');
+  });
+});
+
+describe('the view toggle — split is the working mode', () => {
+  it('split shows BOTH panes and renders the preview from the live source', async () => {
+    const host = freshHost();
+    surface.display(host, { content: '# Side by side\n\nSome **bold** text.' });
+    await ready();
+    await settled();
+
+    setMarkdownViewMode('split');
+    expect(markdownViewMode()).toBe('split');
+
+    const root = host.querySelector('.markdown-surface') as HTMLElement;
+    const preview = host.querySelector('.markdown-preview') as HTMLElement;
+    // Both panes on screen: the editor stays, the preview joins it.
+    expect(root.classList.contains('markdown-split-mode')).toBe(true);
+    expect(preview.hidden).toBe(false);
+    expect(host.querySelector('.ProseMirror')).not.toBeNull();
+    expect(preview.querySelector('h1')?.textContent).toBe('Side by side');
+    expect(preview.querySelector('b')?.textContent).toBe('bold');
+
+    setMarkdownViewMode('edit');
+    expect(root.classList.contains('markdown-split-mode')).toBe(false);
+    expect(preview.hidden).toBe(true);
+  });
+
+  it('split re-renders the pane after an edit — a beat behind the typing', async () => {
+    const host = freshHost();
+    surface.display(host, { content: '# First' });
+    await ready();
+    await settled();
+
+    setMarkdownViewMode('split');
+    const preview = host.querySelector('.markdown-preview') as HTMLElement;
+    expect(preview.querySelector('h1')?.textContent).toBe('First');
+
+    // A user edit at the doc's end: the debounce (250ms) + the listener's
+    // own settle (200ms) must both run before the pane updates.
+    const handle = markdownEditorHandle()!;
+    handle.view.dispatch(
+      handle.view.state.tr.insertText(' and live', handle.view.state.doc.content.size - 1),
+    );
+    await settled(700);
+    expect(preview.querySelector('h1')?.textContent).toBe('First and live');
+
+    setMarkdownViewMode('edit');
+  });
+
+  it('split SURVIVES note switches; preview still resets (the working/reading split)', async () => {
+    const host = freshHost();
+    surface.display(host, { content: '# Note one' });
+    await ready();
+    await settled();
+
+    setMarkdownViewMode('split');
+    expect(markdownViewMode()).toBe('split');
+
+    // A display with fresh content (the note-switch path) keeps split.
+    surface.display(host, { content: '# Note two' });
+    await settled(500);
+    expect(markdownViewMode()).toBe('split');
+    const preview = host.querySelector('.markdown-preview') as HTMLElement;
+    expect(preview.hidden).toBe(false);
+    expect(preview.querySelector('h1')?.textContent).toBe('Note two');
+
+    // Preview, by contrast, is a reading gesture — display resets it.
+    setMarkdownViewMode('preview');
+    surface.display(host, { content: '# Note three' });
+    await settled(300);
+    expect(markdownViewMode()).toBe('edit');
+    expect((host.querySelector('.markdown-preview') as HTMLElement | null)?.hidden).toBe(true);
+  });
+
+  it('a fresh mount re-applies split (the wrapper starts in the editing layout)', async () => {
+    const host = freshHost();
+    surface.display(host, { content: '# Before the repaint' });
+    await ready();
+    await settled();
+
+    setMarkdownViewMode('split');
+
+    // The html surface repaints the host (evicting the wrapper).
+    const port = new ModelPort(host, { sanitize: sanitizeNoteHtml });
+    port.renderHtml('<p>an html note</p>');
+    expect(host.querySelector('.markdown-surface')).toBeNull();
+
+    surface.display(host, { content: '# Back in split' });
+    await ready();
+    // The split pane renders through the debounce chain (the listener's
+    // 200ms settle + the pane's own 250ms) — give it a full beat.
+    await settled(800);
+    expect(markdownViewMode()).toBe('split');
+    const root = host.querySelector('.markdown-surface') as HTMLElement;
+    expect(root.classList.contains('markdown-split-mode')).toBe(true);
+    const preview = host.querySelector('.markdown-preview') as HTMLElement;
+    expect(preview.hidden).toBe(false);
+    expect(preview.querySelector('h1')?.textContent).toBe('Back in split');
+
+    setMarkdownViewMode('edit');
+  });
+
+  it('view-mode listeners hear every flip (the segmented control and the top bar icon)', async () => {
+    const host = freshHost();
+    surface.display(host, { content: 'modes' });
+    await ready();
+
+    const seen: string[] = [];
+    const unlisten = onMarkdownViewMode((mode) => seen.push(mode));
+
+    setMarkdownViewMode('split');
+    setMarkdownViewMode('preview');
+    setMarkdownViewMode('edit');
+    expect(seen).toEqual(['split', 'preview', 'edit']);
+
+    unlisten();
+    setMarkdownViewMode('split');
+    expect(seen).toEqual(['split', 'preview', 'edit']);
+
     setMarkdownViewMode('edit');
   });
 });

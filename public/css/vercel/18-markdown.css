@@ -22,9 +22,13 @@
 
 /* Milkdown's container + the ProseMirror editable root. The base PM
    stylesheet (imported from the kit) provides pre-wrap, the gap cursor
-   and table editing chrome; the outline discipline matches #note. */
+   and table editing chrome; the outline discipline matches #note.
+   The left padding reserves the block handle's gutter — the drag grip
+   the kit's BlockService parks there (see the handle section at the
+   bottom of this file and editor/markdown/block-handle.ts). */
 .markdown-surface .milkdown {
   min-height: 100%;
+  padding-left: 24px;
 }
 
 .markdown-surface .ProseMirror {
@@ -245,10 +249,62 @@
   display: none;
 }
 
+/* ---- Split mode ----
+   The working split: the WYSIWYG left, the owned renderer's live output
+   right — the same preview vocabulary, refreshed a beat behind the
+   typing. The surface fills the host's height exactly (the host is the
+   flex-bounded scroll container) and each pane scrolls its own content;
+   the divider is the editor pane's right border on the border token. */
+
+.markdown-surface.markdown-split-mode {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The preview mounts before the editor appends itself, so DOM order
+   alone would put the renderer first — place them explicitly: the
+   WYSIWYG owns the left half, the rendered output the right. */
+.markdown-surface.markdown-split-mode .milkdown {
+  grid-column: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--vz-border);
+}
+
+.markdown-surface.markdown-split-mode .markdown-preview {
+  grid-column: 2;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Narrow screens stack the panes — the editor keeps the top, the
+   preview follows beneath it. */
+@media (max-width: 720px) {
+  .markdown-surface.markdown-split-mode {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .markdown-surface.markdown-split-mode .milkdown {
+    grid-column: 1;
+    grid-row: 1;
+    border-right: none;
+    border-bottom: 1px solid var(--vz-border);
+  }
+
+  .markdown-surface.markdown-split-mode .markdown-preview {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
+
 /* ---- The view toggle ----
-   The segmented Edit/Preview control rides the shared rich-btn styles;
-   the active half reads pressed exactly like Bold does when the caret
-   sits in bold text. */
+   The segmented Edit/Split/Preview control rides the shared rich-btn
+   styles; the active third reads pressed exactly like Bold does when the
+   caret sits in bold text. */
 
 .markdown-toolbar .markdown-view-toggle {
   margin-left: auto;
@@ -506,4 +562,186 @@ body.dark
 .padify-ctx-fmt[data-format='code'] > span {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
+}
+
+/* ---- The selection bubble ----
+   Selecting text floats the format toolbar above the selection — the
+   Crepe playground's signature affordance on the app's own toolbar
+   bones: the same elevated panel the slash menu uses, the same button
+   faces the rich toolbar shows (pressed = chip surface), one row of
+   six. Body-level (the provider positions it absolutely against the
+   selection's rect). */
+
+.markdown-bubble {
+  position: absolute;
+  z-index: 70;
+  display: none;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  background: var(--vz-bg-elevated);
+  box-shadow: var(--vz-shadow-menu);
+}
+
+.markdown-bubble[data-show='true'] {
+  display: flex;
+}
+
+.markdown-bubble-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 4px;
+  border: none;
+  border-radius: var(--vz-radius);
+  background: none;
+  color: var(--vz-fg);
+  cursor: pointer;
+}
+
+.markdown-bubble-btn:hover {
+  background: var(--vz-bg-hover);
+}
+
+.markdown-bubble-btn:focus-visible {
+  outline: 2px solid var(--vz-fg-subtle);
+  outline-offset: -2px;
+}
+
+.markdown-bubble-btn[aria-pressed='true'] {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg);
+}
+
+.markdown-bubble-glyph {
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.markdown-bubble-btn[data-bubble-id='code'] .markdown-bubble-glyph {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ---- The block handle's gutter ----
+   The drag grip lives in the reserved left margin above (the .milkdown
+   rule near the top of this file): content never sits under it, and
+   the grip never pushes the caret line. The preview pane keeps the
+   plain measure. */
+
+.markdown-preview {
+  padding-right: 4px;
+}
+
+/* ---- The block handle (drag to reorder) ----
+   A quiet grip: monochrome, muted, grab cursor. data-show flips with
+   the kit's BlockService (hover the editor); the provider positions it
+   absolutely against the active block. Visibility (not display) keeps
+   the grip measurable — floating-ui sizes it while placing, and a
+   display:none grip measures zero wide. */
+
+.md-block-handle {
+  position: absolute;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 24px;
+  border: none;
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg-muted);
+  opacity: 0.66;
+  visibility: hidden;
+  cursor: grab;
+  transition: opacity var(--vz-dur) ease, background-color var(--vz-dur) ease,
+    color var(--vz-dur) ease;
+}
+
+.md-block-handle[data-show='true'] {
+  visibility: visible;
+}
+
+.md-block-handle:hover {
+  opacity: 1;
+  background: var(--vz-bg-hover);
+  color: var(--vz-fg);
+}
+
+.md-block-handle:active {
+  cursor: grabbing;
+}
+
+/* The drag line — where the block will land (class-driven, so it reads
+   the theme token; the plugin paints the geometry). */
+
+.markdown-surface .md-drop-cursor {
+  background-color: var(--vz-border-strong);
+}
+
+/* ---- The code block's language row ----
+   The ``` fence's info string, in place: a quiet chip above the code
+   (muted while unset, full ink once a language names the block). The
+   chip swaps to a free-text input with the shared datalist's
+   suggestions; the code itself is the contentDOM underneath. */
+
+.markdown-surface .md-code-block {
+  position: relative;
+}
+
+.markdown-surface .md-code-lang-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 20px;
+  margin-bottom: -4px;
+  padding-right: 10px;
+  user-select: none;
+}
+
+.markdown-surface .md-code-lang-chip {
+  padding: 1px 8px;
+  border: 1px solid transparent;
+  border-radius: 99px;
+  background: none;
+  color: var(--vz-fg-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: color var(--vz-dur) ease, border-color var(--vz-dur) ease,
+    background-color var(--vz-dur) ease;
+}
+
+.markdown-surface .md-code-lang-chip:hover {
+  color: var(--vz-fg);
+  border-color: var(--vz-border);
+  background: var(--vz-bg-hover);
+}
+
+.markdown-surface .md-code-lang-chip.md-code-lang-empty {
+  opacity: 0;
+}
+
+.markdown-surface .md-code-block:hover .md-code-lang-chip.md-code-lang-empty {
+  opacity: 1;
+}
+
+.markdown-surface .md-code-lang-input {
+  width: 130px;
+  padding: 2px 8px;
+  border: 1px solid var(--vz-border-strong);
+  border-radius: 99px;
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  text-align: center;
+  outline: none;
 }

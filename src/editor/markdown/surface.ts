@@ -7,9 +7,11 @@
  * WHAT THE USER SEES. The note's SOURCE (markdown text, stored byte-exact
  * like every 'text' note) is edited in a what-you-get-is-what-you-mean
  * view: headings look like headings, lists behave like lists, tables are
- * editable. A Preview toggle swaps to the OWNED renderer's output
- * (editor/markdown/render.ts + the app's KaTeX pass) — the same pipeline
- * share links and HTML export use, so "preview" always means "the truth".
+ * editable. A Split toggle parks the owned renderer's live output beside
+ * the editor (both panes on screen, the preview a beat behind the
+ * typing); a Preview toggle swaps to that output full-width (the same
+ * pipeline share links and HTML export use, so "preview" always means
+ * "the truth").
  *
  * HOW IT OWNS THE HOST. The surface mounts a wrapper inside the #note
  * host and sets the host itself contenteditable=false — the wrapper's
@@ -57,6 +59,8 @@ import { NodeSelection } from '@milkdown/kit/prose/state';
 import type { Node as ProseNode } from '@milkdown/kit/prose/model';
 import type { EditorView } from '@milkdown/kit/prose/view';
 import { slash } from './slash';
+import { bubble } from './bubble';
+import { attachBlockHandle, blockHandle, detachBlockHandle } from './block-handle';
 
 // ProseMirror's own base styles (outline discipline, table selection,
 // gap cursor) — the katex CSS import in editor/math.ts is the precedent
@@ -126,10 +130,17 @@ interface LiveMarkdown {
 
 let live: LiveMarkdown | null = null;
 
-/** Preview toggle state — a surface-level presentation mode. */
-let viewMode: 'edit' | 'preview' = 'edit';
+/**
+ * The surface's presentation modes: 'edit' (the WYSIWYG alone), 'split'
+ * (WYSIWYG left, the owned renderer's live output right), 'preview'
+ * (the renderer alone). Split is a WORKING mode — it survives note
+ * switches; preview is a reading gesture — every display resets it.
+ */
+export type MarkdownViewMode = 'edit' | 'split' | 'preview';
+let viewMode: MarkdownViewMode = 'edit';
 
 const selectionListeners = new Set<(state: MarkdownSelectionState) => void>();
+const viewModeListeners = new Set<(mode: MarkdownViewMode) => void>();
 
 /** The live surface's host — null when no markdown surface is mounted. */
 export function markdownHost(): HTMLElement | null {
@@ -150,24 +161,63 @@ export function onMarkdownSelection(fn: (state: MarkdownSelectionState) => void)
   return () => selectionListeners.delete(fn);
 }
 
-/** Flips edit/preview; preview re-renders from the LIVE markdown. */
-export function setMarkdownViewMode(mode: 'edit' | 'preview'): void {
+/** Registers for view-mode flips (the segmented control, the top bar's split icon); returns unlisten. */
+export function onMarkdownViewMode(fn: (mode: MarkdownViewMode) => void): () => void {
+  viewModeListeners.add(fn);
+  return () => viewModeListeners.delete(fn);
+}
+
+/**
+ * Flips the view mode (edit / split / preview). Split and preview
+ * re-render the pane from the LIVE markdown — the same owned-renderer
+ * pass, so all three views agree by construction.
+ */
+export function setMarkdownViewMode(mode: MarkdownViewMode): void {
   viewMode = mode;
-  if (!live || !live.root.isConnected) {
-    return;
+  if (live && live.root.isConnected) {
+    live.root.classList.toggle('markdown-preview-mode', mode === 'preview');
+    live.root.classList.toggle('markdown-split-mode', mode === 'split');
+    live.preview.hidden = mode === 'edit';
+    if (mode !== 'edit') {
+      renderLivePreview();
+    }
   }
-  live.root.classList.toggle('markdown-preview-mode', mode === 'preview');
-  live.preview.hidden = mode !== 'preview';
-  if (mode === 'preview' && live.editor) {
-    const source = live.editor.action(getMarkdown());
-    live.preview.innerHTML = renderMarkdownToHtml(source);
-    renderMathIn(live.preview);
-  }
+  viewModeListeners.forEach((fn) => fn(mode));
 }
 
 /** The current view mode (the toolbar's segmented control reads it). */
-export function markdownViewMode(): 'edit' | 'preview' {
+export function markdownViewMode(): MarkdownViewMode {
   return viewMode;
+}
+
+/** Renders the preview pane from the live editor's markdown. */
+function renderLivePreview(): void {
+  if (!live || !live.editor) {
+    return;
+  }
+  const source = live.editor.action(getMarkdown());
+  live.preview.innerHTML = renderMarkdownToHtml(source);
+  renderMathIn(live.preview);
+}
+
+/** The split pane's re-render debounce — typing stays smooth, the pane settles a beat behind. */
+const SPLIT_RENDER_DEBOUNCE_MS = 250;
+let splitRenderTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Schedules the split pane's re-render (the markdownUpdated hook). */
+function scheduleSplitRender(): void {
+  if (viewMode !== 'split') {
+    return;
+  }
+  if (splitRenderTimer !== null) {
+    clearTimeout(splitRenderTimer);
+  }
+  splitRenderTimer = setTimeout(() => {
+    splitRenderTimer = null;
+    if (viewMode === 'split') {
+      renderLivePreview();
+    }
+  }, SPLIT_RENDER_DEBOUNCE_MS);
 }
 
 /**
@@ -190,11 +240,11 @@ export class MarkdownNoteSurface implements NoteSurface {
     } else {
       this.mount(host, content);
     }
-    // Every display resets to the editing view — preview is a reading
-    // gesture, not a per-note setting.
-    if (viewMode !== 'edit') {
-      setMarkdownViewMode('edit');
-    }
+    // Preview is a reading gesture, not a per-note setting — every
+    // display resets it. Split is a working mode: it survives note
+    // switches, and a fresh mount re-applies it (the wrapper starts
+    // in the editing layout).
+    setMarkdownViewMode(viewMode === 'preview' ? 'edit' : viewMode);
     host.scrollTop = 0;
   }
 
@@ -290,8 +340,13 @@ export class MarkdownNoteSurface implements NoteSurface {
           nodeViews: markdownNodeViews(),
         }));
         slash.configure(ctx);
+        bubble.configure(ctx);
         ctx.get(listenerCtx).markdownUpdated(() => {
           announceIfUserEdit();
+          // The split pane follows every doc change — user edits and the
+          // surface's own replaceAll alike (it is a presentation concern,
+          // not an announce one).
+          scheduleSplitRender();
         });
         ctx.get(listenerCtx).selectionUpdated((_ctx, selection) => {
           notifySelection(selection);
@@ -308,6 +363,8 @@ export class MarkdownNoteSurface implements NoteSurface {
       .use(indentKeymapPlugin)
       .use(openLinkClickPlugin)
       .use(slash.plugins)
+      .use(bubble.plugins)
+      .use([...blockHandle.plugins])
       .create()
       .then((editor) => {
         if (!live || live.root !== root) {
@@ -317,6 +374,9 @@ export class MarkdownNoteSurface implements NoteSurface {
         }
         live.editor = editor;
         live.view = editor.action((ctx) => ctx.get(editorViewCtx));
+        // The drag grip binds THIS editor's block service (the provider
+        // is per-editor; superseded editors detached below/teardown).
+        attachBlockHandle(editor);
         if (live.pending !== null) {
           const pending = live.pending;
           live.pending = null;
@@ -378,6 +438,11 @@ async function teardown(target: LiveMarkdown): Promise<void> {
   if (live === target) {
     live = null;
   }
+  if (splitRenderTimer !== null) {
+    clearTimeout(splitRenderTimer);
+    splitRenderTimer = null;
+  }
+  detachBlockHandle();
   try {
     await target.editor?.destroy();
   } catch {

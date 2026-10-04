@@ -44,7 +44,7 @@ import { InputRule } from '@milkdown/kit/prose/inputrules';
 import { keymap } from '@milkdown/kit/prose/keymap';
 import { liftListItem, sinkListItem } from '@milkdown/kit/prose/schema-list';
 import { Plugin, PluginKey, type EditorState } from '@milkdown/kit/prose/state';
-import type { EditorView, NodeView } from '@milkdown/kit/prose/view';
+import type { EditorView, NodeView, ViewMutationRecord } from '@milkdown/kit/prose/view';
 import remarkMath from 'remark-math';
 import { imageSchema } from '@milkdown/kit/preset/commonmark';
 
@@ -247,7 +247,8 @@ export const safeImageSchema = imageSchema.extendSchema((prev) => (ctx) => {
  * The node views the surface hands ProseMirror. Every pixel is Padify's:
  * equations render through math.ts (gate, error display, dark mode via
  * the app's katex CSS), the image chip borrows the preview's
- * md-image-link vocabulary.
+ * md-image-link vocabulary, and code blocks grow a language row — the
+ * ``` fence's own info string, editable in place.
  */
 export function markdownNodeViews(): Record<
   string,
@@ -257,6 +258,7 @@ export function markdownNodeViews(): Record<
     [MATH_INLINE_NODE]: mathView('inline'),
     [MATH_BLOCK_NODE]: mathView('block'),
     image: imageView,
+    code_block: codeBlockView,
   };
 }
 
@@ -344,6 +346,183 @@ function imageView(node: ProseNode): NodeView {
       return true;
     },
     ignoreMutation: () => true,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Code blocks — the language row (the fence's info string, in place)
+// ---------------------------------------------------------------------------
+
+/** The datalist's curated languages — suggestions, never a gate. */
+const CODE_LANGUAGES = [
+  'javascript',
+  'typescript',
+  'python',
+  'html',
+  'css',
+  'json',
+  'bash',
+  'sql',
+  'java',
+  'c',
+  'cpp',
+  'csharp',
+  'go',
+  'rust',
+  'ruby',
+  'php',
+  'yaml',
+  'toml',
+  'xml',
+  'markdown',
+  'diff',
+  'plaintext',
+];
+
+let codeLanguageList: HTMLDataListElement | null = null;
+
+/**
+ * Mounts the shared <datalist> once (the input's suggestion list).
+ * Tracked by reference — a dynamically-created element never goes
+ * through a string id lookup (the markup↔JS contract's rule).
+ */
+function ensureCodeLanguageList(): HTMLDataListElement {
+  if (codeLanguageList?.isConnected) {
+    return codeLanguageList;
+  }
+  const list = document.createElement('datalist');
+  list.id = 'mdCodeLanguages';
+  for (const language of CODE_LANGUAGES) {
+    const option = document.createElement('option');
+    option.value = language;
+    list.append(option);
+  }
+  document.body.append(list);
+  codeLanguageList = list;
+  return list;
+}
+
+/**
+ * The code block's own chrome: a quiet language row above the code —
+ * the chip shows the ``` fence's info string, clicking it swaps in an
+ * input (free text, datalist suggestions), Enter/blur commits through
+ * setNodeMarkup and the fence round-trips. The <pre><code> below is
+ * the contentDOM — PM writes the code itself.
+ */
+function codeBlockView(
+  node: ProseNode,
+  view: EditorView,
+  getPos: () => number | undefined,
+): NodeView {
+  let current = node;
+
+  const dom = document.createElement('div');
+  dom.className = 'md-code-block';
+  dom.dataset.language = typeof node.attrs.language === 'string' ? node.attrs.language : '';
+
+  const row = document.createElement('div');
+  row.className = 'md-code-lang-row';
+  row.setAttribute('contenteditable', 'false');
+
+  const chip = document.createElement('button');
+  chip.type = 'button';
+  chip.className = 'md-code-lang-chip';
+
+  const pre = document.createElement('pre');
+  const code = document.createElement('code');
+  pre.append(code);
+  row.append(chip);
+  dom.append(row, pre);
+
+  const paint = (): void => {
+    const language = typeof current.attrs.language === 'string' ? current.attrs.language : '';
+    dom.dataset.language = language;
+    chip.textContent = language.trim() === '' ? 'language' : language;
+    chip.classList.toggle('md-code-lang-empty', language.trim() === '');
+    chip.title = language.trim() === '' ? 'Set the code language' : `Language: ${language}`;
+  };
+  paint();
+
+  const commit = (language: string): void => {
+    const cleaned = language.trim().toLowerCase().slice(0, 40);
+    const pos = getPos();
+    if (pos === undefined) {
+      return;
+    }
+    view.dispatch(
+      view.state.tr.setNodeMarkup(pos, undefined, {
+        ...current.attrs,
+        language: cleaned,
+      }),
+    );
+    view.focus();
+  };
+
+  chip.addEventListener('mousedown', (event) => {
+    // The click must not park the caret in the code below.
+    event.preventDefault();
+  });
+  chip.addEventListener('click', () => {
+    if (row.querySelector('.md-code-lang-input')) {
+      return;
+    }
+    const list = ensureCodeLanguageList();
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'md-code-lang-input';
+    input.setAttribute('list', 'mdCodeLanguages');
+    input.setAttribute('aria-label', 'Code language');
+    input.placeholder = 'js, python, bash…';
+    input.value = typeof current.attrs.language === 'string' ? current.attrs.language : '';
+    chip.hidden = true;
+    row.append(input);
+    input.focus();
+    input.select();
+
+    const close = (): void => {
+      input.remove();
+      chip.hidden = false;
+      paint();
+    };
+    input.addEventListener('keydown', (event) => {
+      // The input is not the editor's text — PM's keymap stands down.
+      event.stopPropagation();
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        commit(input.value);
+        close();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        close();
+      }
+    });
+    input.addEventListener('blur', () => {
+      // A click on the chip's own commit path closes first; a blur from
+      // anything else commits what was typed (the fence's honest state).
+      if (input.isConnected) {
+        commit(input.value);
+        close();
+      }
+    });
+  });
+
+  return {
+    dom,
+    contentDOM: code,
+    update(next: ProseNode) {
+      if (next.type.name !== 'code_block') {
+        return false;
+      }
+      current = next;
+      paint();
+      return true;
+    },
+    ignoreMutation: (mutation: ViewMutationRecord) => {
+      // The language row is ours (chrome + input); only the contentDOM's
+      // text belongs to PM.
+      return mutation.type === 'selection' || row.contains(mutation.target);
+    },
   };
 }
 

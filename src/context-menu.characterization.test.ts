@@ -345,11 +345,14 @@ describe('menu construction (plain note)', () => {
     expect(menu().style.top).toBe('312px'); // 700 - 386 - 2
   });
 
-  it('a plain note shows exactly the plain-vocabulary rows', async () => {
+  it('a plain note shows the classic vocabulary — the format row included', async () => {
     ensureContextMenuMounted();
     await openMenuAt();
 
-    // What a plain note can honestly do.
+    // What a plain note can honestly do. The B/I/U/S row is back: the
+    // classic note is the same contenteditable surface the rich note is,
+    // so the EditorPort answers its formats the same way. Clear
+    // formatting is a plain port command too.
     expect(visible('[data-action="undo"]')).toBe(true);
     expect(visible('[data-action="redo"]')).toBe(true);
     expect(visible('[data-action="cut"]')).toBe(true);
@@ -358,14 +361,17 @@ describe('menu construction (plain note)', () => {
     expect(visible('[data-action="delete"]')).toBe(true);
     expect(visible('[data-action="select-all"]')).toBe(true);
     expect(visible('.padify-ctx-parent')).toBe(true); // case converter
-    // The rich-only group: gone, separator included — and insert/remove link
-    // follow the rich rule too (a plain note cannot hold links).
-    expect(visible('.padify-ctx-formats')).toBe(false);
-    expect(visible('[data-action="clear-formatting"]')).toBe(false);
+    expect(visible('.padify-ctx-formats.padify-ctx-rich')).toBe(true);
+    expect(visible('.padify-ctx-fmt[data-format="bold"]')).toBe(true);
+    expect(visible('.padify-ctx-fmt[data-format="underline"]')).toBe(true);
+    expect(visible('[data-action="clear-formatting"]')).toBe(true);
+    expect(visible('.padify-ctx-sep.padify-ctx-rich')).toBe(true);
+    // The toolbar-bubble rows stay with the kinds that own the bubbles:
+    // no Docs toolbar on a plain note, no equation/link popover to open.
+    expect(visible('.padify-ctx-formats.padify-ctx-md')).toBe(false);
     expect(visible('[data-action="insert-link"]')).toBe(false);
     expect(visible('[data-action="insert-equation"]')).toBe(false);
     expect(visible('[data-action="remove-link"]')).toBe(false);
-    expect(visible('.padify-ctx-sep.padify-ctx-rich')).toBe(false);
     // Table ops follow the caret's context — none without one.
     expect(visible('[data-action="table-op"]')).toBe(false);
   });
@@ -479,7 +485,7 @@ describe('menu follows the note type', () => {
     expect(visible('[data-action="select-all"]')).toBe(true);
   });
 
-  it('switching back to the plain note shrinks the menu again', async () => {
+  it('switching back to the plain note keeps the format row, drops the bubble rows', async () => {
     ensureContextMenuMounted();
     const manager = await bootedManager();
     const plainId = manager.getActive()!.id;
@@ -489,6 +495,8 @@ describe('menu follows the note type', () => {
     await openMenuAt();
 
     expect(visible('[data-action="insert-equation"]')).toBe(false);
+    expect(visible('[data-action="insert-link"]')).toBe(false);
+    expect(visible('.padify-ctx-fmt[data-format="bold"]')).toBe(true);
     expect(visible('[data-action="select-all"]')).toBe(true);
   });
 });

@@ -5,6 +5,7 @@
     "": {
       "name": "notepad",
       "dependencies": {
+        "@floating-ui/dom": "^1.8.0",
         "@milkdown/kit": "^7.22.2",
         "docx": "^8.5.0",
         "jspdf": "^2.5.2",

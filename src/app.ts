@@ -41,14 +41,22 @@ import { initRichToolbar } from './editor/rich-toolbar';
 import {
   initMarkdownToolbar,
   openMarkdownEquationBubble,
+  openMarkdownLinkPopover,
   runMarkdownBlockStyle,
   runMarkdownToolbarAction,
 } from './editor/markdown/toolbar';
 import { initMarkdownSlash } from './editor/markdown/slash';
+import { initMarkdownBubble } from './editor/markdown/bubble';
 // The Markdown surface registers itself for the 'text' content kind at
 // import time (editor/markdown/surface.ts) — one import, and every
 // NoteSurface consumer (tabs, snapshots, share) can open markdown notes.
 import './editor/markdown/surface';
+import {
+  markdownSelectionStateNow,
+  markdownViewMode,
+  onMarkdownViewMode,
+  setMarkdownViewMode,
+} from './editor/markdown/surface';
 import { isHtmlContent, isMarkdownNote } from './editor/note-types';
 import { initThemeColors } from './editor/theme-colors';
 import { initRichShortcuts } from './editor/rich-shortcuts';
@@ -290,6 +298,17 @@ export async function initApp(): Promise<void> {
     openEquation: openMarkdownEquationBubble,
   });
 
+  // ---- markdown selection bubble (the floating format toolbar over a
+  // text selection) — same injection discipline as the slash menu: the
+  // actions are the toolbar's own commands, see
+  // editor/markdown/bubble.ts ----
+  initMarkdownBubble({
+    runToolbarAction: runMarkdownToolbarAction,
+    openLink: openMarkdownLinkPopover,
+    openEquation: openMarkdownEquationBubble,
+    selectionState: markdownSelectionStateNow,
+  });
+
   // Docs-style shortcuts for rich notes — registered BEFORE the legacy Tab
   // handler below so lists can claim Tab/Shift+Tab first.
   initRichShortcuts(tabManager);
@@ -405,6 +424,29 @@ export async function initApp(): Promise<void> {
   };
   tabManager.addActiveListener(syncMarkdownExportRow);
   syncMarkdownExportRow();
+
+  // ---- split view — the top bar's Markdown-only toggle. The icon flips
+  // the surface between the editing view and the side-by-side (editor +
+  // owned-renderer live preview); the toolbar's segmented control follows
+  // through the same surface listener, so there is exactly one source of
+  // truth for the mode (see editor/markdown/surface.ts). ----
+  const splitViewButton = notepad.splitViewButton;
+  splitViewButton.on('click', () => {
+    setMarkdownViewMode(markdownViewMode() === 'split' ? 'edit' : 'split');
+  });
+  const syncSplitViewChrome = (): void => {
+    splitViewButton.attr('aria-pressed', markdownViewMode() === 'split' ? 'true' : 'false');
+  };
+  onMarkdownViewMode(syncSplitViewChrome);
+  const syncSplitViewVisibility = (): void => {
+    if (isMarkdownNote(tabManager.getActive())) {
+      notepad.splitViewContainer.removeAttr('hidden');
+    } else {
+      notepad.splitViewContainer.attr('hidden', 'hidden');
+    }
+  };
+  tabManager.addActiveListener(syncSplitViewVisibility);
+  syncSplitViewVisibility();
 
   // Close dropdown if clicked outside
   $(document).on('click', function () {

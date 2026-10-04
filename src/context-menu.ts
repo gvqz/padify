@@ -9,8 +9,14 @@
  *   Bold · Italic · Underline · Strikethrough (one-row format group)
  *   Clear Formatting (clears formatting inside the selection, Ctrl+\\)
  *   Insert Link (hands over to the link bubble; Remove link when on one)
+ *   Insert Equation (rich + markdown notes — the bubble's own kinds)
  *   Case Converter (12 transformations, in a submenu — no more separate tab)
  *   Table operations (only while the caret sits inside a table)
+ *
+ * The format group serves EVERY html note — the classic/plain note is
+ * the same contenteditable surface the rich note is (the note type only
+ * decides the Docs toolbar's presence), so Bold and friends run through
+ * the same EditorPort commands on both.
  *
  * The editor renders rich text, so formatting runs through the classic
  * editing commands (document.execCommand bold/italic/underline/strikeThrough)
@@ -520,32 +526,39 @@ class ContextMenu {
       }
     }
 
-    // Formatting belongs to the EDITING notes: the rich rows through the
-    // port, the markdown rows through the surface's state. On a plain
-    // note both hide — the menu shrinks to what a plain note can
-    // honestly do: select-all · case converter and friends. The
-    // separator leading each group hides with it, so no doubled rule.
-    // The equation row is SHARED (both editing kinds have the bubble —
-    // each toolbar listens for the same handoff event).
-    const isRich = isRichNote(getTabManager()?.getActive());
+    // Formatting belongs to the EDITING notes — and that is EVERY html
+    // note: the classic/plain note is the same contenteditable surface
+    // the rich note is (the type only decides the DOCS toolbar's
+    // presence), so its rows run through the same EditorPort commands.
+    // Markdown notes answer through the surface's own state; the two
+    // vocabularies share the equation row's handoff event. The separator
+    // leading each group hides with it, so no doubled rule.
+    const isHtml = isHtmlContent(getTabManager()?.getActive()?.noteType);
     this.menu.querySelectorAll<HTMLElement>('.padify-ctx-rich').forEach((item) => {
-      item.hidden = !isRich;
+      item.hidden = !isHtml;
     });
     this.menu.querySelectorAll<HTMLElement>('.padify-ctx-md').forEach((item) => {
       item.hidden = !isMd;
     });
-    const editing = isRich || isMd;
+    const editing = isHtml || isMd;
+    const isRich = isRichNote(getTabManager()?.getActive());
+    // The equation row is shared by the notes whose TOOLBAR owns the
+    // bubble (rich + markdown); a standard note has no bubble to open.
     this.menu.querySelectorAll<HTMLElement>('.padify-ctx-equation').forEach((item) => {
-      item.hidden = !editing;
+      item.hidden = !(isRich || isMd);
     });
+    // Clear formatting is a plain EditorPort command — every html note
+    // can honestly run it, and markdown has its own surface pass.
     this.menu.querySelectorAll<HTMLElement>('.padify-ctx-clear').forEach((item) => {
       item.hidden = !editing;
     });
 
-    // The link and table entries follow the caret's context, the way the
-    // toolbar's table menu does — no link under the caret, no Remove link;
-    // not in a table, no table operations. On markdown the surface's own
-    // state answers; on html the port does.
+    // The link rows follow the caret's context, the way the toolbar's
+    // table menu does — no link under the caret, no Remove link; not in
+    // a table, no table operations. On markdown the surface's own state
+    // answers; on html the port does. Remove link is a port command
+    // (every html note); Insert link needs the toolbar's popover, which
+    // only the rich and markdown kinds show.
     const port = getEditorPort();
     const mdCaret = isMd ? mdState() : null;
     const inLink = isMd ? !!mdCaret?.link : !!safeQueryPort(() => port?.queryLinkHref());
@@ -553,7 +566,7 @@ class ContextMenu {
       '.padify-ctx-item[data-action="remove-link"]',
     );
     if (removeLinkItem) {
-      removeLinkItem.hidden = !(isRich || isMd) || !inLink;
+      removeLinkItem.hidden = !editing || !inLink;
     }
     const insertLinkItem = this.menu.querySelector<HTMLButtonElement>(
       '.padify-ctx-item[data-action="insert-link"]',
