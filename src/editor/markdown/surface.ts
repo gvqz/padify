@@ -55,7 +55,14 @@ import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { history } from '@milkdown/kit/plugin/history';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { getMarkdown, replaceAll } from '@milkdown/kit/utils';
-import { NodeSelection } from '@milkdown/kit/prose/state';
+import {
+  AllSelection,
+  NodeSelection,
+  TextSelection,
+  type Transaction,
+} from '@milkdown/kit/prose/state';
+import { Fragment, Slice } from '@milkdown/kit/prose/model';
+import { history as proseHistory } from '@milkdown/kit/prose/history';
 import type { Node as ProseNode } from '@milkdown/kit/prose/model';
 import type { EditorView } from '@milkdown/kit/prose/view';
 import { slash } from './slash';
@@ -129,6 +136,14 @@ interface LiveMarkdown {
 }
 
 let live: LiveMarkdown | null = null;
+
+/**
+ * A fresh, empty prosemirror-history state — the value the history plugin
+ * resets to when the surface replaces the document wholesale. Built once
+ * through the plugin factory's own init (the same module the undo/redo
+ * commands read), so a reset can never drift from what `undo` expects.
+ */
+const EMPTY_HISTORY_STATE: unknown = proseHistory().spec.state?.init({}, {} as never);
 
 /**
  * The surface's presentation modes: 'edit' (the WYSIWYG alone), 'split'
@@ -289,6 +304,16 @@ export class MarkdownNoteSurface implements NoteSurface {
     return true;
   }
 
+  focusTarget(host: HTMLElement): HTMLElement | null {
+    if (!live || live.host !== host || !live.root.isConnected || !live.view) {
+      return null;
+    }
+    // The ProseMirror root. The host itself is contenteditable=false and
+    // cannot take the caret — focusing it landed on <body>, so the first
+    // keystrokes after a switch went nowhere until the user clicked.
+    return live.view.dom;
+  }
+
   clear(host: HTMLElement): void {
     // An empty markdown note is an empty markdown EDITOR — the surface
     // stays mounted (the manager writes the model and persists itself).
@@ -338,6 +363,9 @@ export class MarkdownNoteSurface implements NoteSurface {
           // Math equations and image chips are Padify's own pixels — see
           // nodes.ts (the app's KaTeX pipeline; never an <img> fetch).
           nodeViews: markdownNodeViews(),
+          // Plain-text paste parity — see handleMarkdownPaste. A direct
+          // prop runs ahead of the clipboard plugin's handlePaste.
+          handlePaste: handleMarkdownPaste,
         }));
         slash.configure(ctx);
         bubble.configure(ctx);
@@ -407,12 +435,200 @@ export class MarkdownNoteSurface implements NoteSurface {
 
 /** Applies content to the live editor (the silent, non-announcing path). */
 function applyContent(content: string): void {
-  if (!live || !live.editor) {
+  if (!live || !live.editor || !live.view) {
     return;
   }
   live.silentDoc = null;
   live.editor.action(replaceAll(content));
-  live.silentDoc = live.view?.state.doc ?? null;
+  // The editor instance is shared across markdown notes (a switch re-applies
+  // content instead of rebuilding): its undo stack belongs to the PREVIOUS
+  // note, and an undo right after a switch would resurrect that note's
+  // content into this one — then announce it as a user edit and AUTOSAVE
+  // the corruption. A wholesale replace resets the history to empty, so
+  // undo starts from whatever happens in THIS note.
+  resetMarkdownHistory(live.view);
+  placeCaretAtDocStart(live.view);
+  live.silentDoc = live.view.state.doc ?? null;
+  // The pressed states read the caret; a wholesale replace moves it (and
+  // may not fire a selectionUpdated at all). Refresh so the toolbar shows
+  // THIS note's state, not the previous note's last one.
+  refreshMarkdownSelectionState();
+}
+
+/**
+ * Puts the caret at the doc's first text position after a wholesale
+ * replace. Left alone, ProseMirror maps the old caret through the replace
+ * and lands it at the END of the inserted content — for a table-led note,
+ * inside the LAST cell: opening the note and typing would type into the
+ * table, and the toolbar's table menu would arm with the user nowhere
+ * near it. The start is the deterministic contract (the html surface
+ * scrolls its note to the top on display — same gesture).
+ */
+function placeCaretAtDocStart(view: EditorView): void {
+  const { state } = view;
+  const target = TextSelection.near(state.doc.resolve(0), 1);
+  if (!target.eq(state.selection)) {
+    view.dispatch(state.tr.setSelection(target));
+  }
+}
+
+/**
+ * Resets the shared editor's prosemirror-history state to empty — see
+ * applyContent. The history plugin's apply checks its own meta FIRST and
+ * replaces the state wholesale when present, which is exactly the lever
+ * (a meta-only transaction: no doc change, no announce, no selection move).
+ */
+function resetMarkdownHistory(view: EditorView): void {
+  // Plugin.key is runtime-assigned (not on the public type) — the string
+  // is the stable handle the meta channel routes through.
+  const plugin = view.state.plugins.find(
+    (candidate) => (candidate as unknown as { key?: string }).key === 'history$',
+  );
+  if (!plugin) {
+    return;
+  }
+  const tr = view.state.tr;
+  tr.setMeta(plugin, { historyState: EMPTY_HISTORY_STATE });
+  view.dispatch(tr);
+}
+
+/**
+ * PLAIN-TEXT PASTE PARITY — the normal-editing contract.
+ *
+ * Milkdown's clipboard plugin parses EVERY plain-text clip as markdown, so
+ * pasting code or prose from an editor/terminal/plain-text source mangled
+ * it: `#` lines became headings, `- ` lines became lists, indentation and
+ * lines were restructured. The characters the user pasted are CONTENT, not
+ * syntax to interpret.
+ *
+ * This direct-prop handlePaste runs AHEAD of the clipboard plugin (direct
+ * props first in prosemirror-view's someProp) and answers the cases:
+ *
+ *  - a clip carrying text/html (a rich copy: a web page, another padify
+ *    markdown note — ProseMirror's copy path always writes the HTML
+ *    flavor) → unhandled, the plugin's HTML→markdown path keeps working;
+ *  - the caret inside a code block → unhandled, the native path inserts
+ *    the text literally (a code block's whitespace is content);
+ *  - an editor clip (VS Code's `vscode-editor-data` or Lexical's
+ *    `l-editor-data`, both `text/plain` + `{ mode: language }`) → OWNED
+ *    HERE as a code block carrying the clip's language. The plugin's
+ *    dedicated code-block path only recognizes the Lexical flavor, so a
+ *    VS Code clip left to it falls into the markdown parser and mangles
+ *    code into paragraphs — and even the Lexical path it does run is
+ *    geometry-broken (see insertCodeBlock: at a paragraph-end caret the
+ *    block lands after the caret and the code types into the PARAGRAPH,
+ *    leaving the block empty). When the clip's mode is 'plaintext' (or
+ *    parses to nothing), the code is CONTENT, not syntax: literal
+ *    insert, like any plain clip;
+ *  - anything else that is plain text only → inserted LITERALLY: one line
+ *    types in at the caret, multiple lines become paragraphs (the first
+ *    and last merging with the host paragraph, like an Enter between
+ *    them), all in one transaction — one undo step.
+ */
+function handleMarkdownPaste(view: EditorView, event: ClipboardEvent): boolean {
+  const clipboardData = event.clipboardData;
+  if (!clipboardData) {
+    return false;
+  }
+  if (clipboardData.getData('text/html') !== '') {
+    return false;
+  }
+  if (view.state.selection.$from.node().type.spec.code) {
+    return false;
+  }
+  const text = clipboardData.getData('text/plain');
+  if (!text) {
+    return false;
+  }
+  // VS Code and Lexical write the same clip shape: a JSON `{ mode }` under
+  // a private flavor plus the code as text/plain.
+  const editorData =
+    clipboardData.getData('vscode-editor-data') || clipboardData.getData('l-editor-data');
+  if (editorData !== '') {
+    const language = editorClipLanguage(editorData);
+    // A language-less editor clip (mode 'plaintext', shell dumps, stray
+    // copies) is plain prose/code-as-content — the literal path below;
+    // a language clip is CODE — its own block, fenced with the language.
+    if (!language) {
+      insertPlainLines(view, text);
+      return true;
+    }
+    insertCodeBlock(view, language, text);
+    return true;
+  }
+  insertPlainLines(view, text);
+  return true;
+}
+
+/** Reads an editor clip's language id ('plaintext' and garbage → null). */
+function editorClipLanguage(editorData: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(editorData);
+    const mode =
+      typeof parsed === 'object' && parsed !== null
+        ? (parsed as { mode?: unknown }).mode
+        : undefined;
+    return typeof mode === 'string' && mode !== '' && mode !== 'plaintext' ? mode : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Lands an editor clip (VS Code / Lexical) as a code block carrying its
+ * language, the pasted text as the block's content, in one transaction —
+ * one undo step.
+ *
+ * The block goes in as a FULLY CLOSED slice (openStart 0, openEnd 0):
+ * replaceSelection then splits the caret's own block around it — a
+ * mid-paragraph caret keeps its tail as a separate paragraph after the
+ * block, a paragraph-end caret gets the block as a sibling — and maps
+ * the caret to the insertion end. The alternative the clipboard plugin
+ * itself uses (replaceSelectionWith an empty block, nudge the caret
+ * "2 back", insertText) is geometry-broken: whenever the block lands
+ * AFTER the caret (the paragraph-end case) the nudged caret falls back
+ * into the paragraph — a valid text spot — so the code types into the
+ * PARAGRAPH and the block stays empty. The closed slice sidesteps the
+ * caret arithmetic entirely: the text rides in as the block's content.
+ */
+function insertCodeBlock(view: EditorView, language: string, text: string): void {
+  const { state } = view;
+  const blockType = state.schema.nodes.code_block;
+  if (!blockType) {
+    insertPlainLines(view, text);
+    return;
+  }
+  const code = text.replace(/\r\n?/g, '\n');
+  const block = blockType.create({ language }, code ? state.schema.text(code) : null);
+  const tr = state.tr
+    .replaceSelection(new Slice(Fragment.from(block), 0, 0))
+    .scrollIntoView()
+    .setMeta('paste', true)
+    .setMeta('uiEvent', 'paste');
+  view.dispatch(tr);
+}
+
+/** Inserts pasted plain text literally — one line, or paragraphs per line. */
+function insertPlainLines(view: EditorView, raw: string): void {
+  const { state } = view;
+  const lines = raw.replace(/\r\n?/g, '\n').split('\n');
+  const pasteMeta = (tr: Transaction): Transaction =>
+    tr.scrollIntoView().setMeta('paste', true).setMeta('uiEvent', 'paste');
+
+  if (lines.length === 1) {
+    view.dispatch(pasteMeta(state.tr.insertText(lines[0])));
+    return;
+  }
+
+  // One paragraph per line, the empty lines included; openStart/openEnd 1
+  // lets the first and last merge with the caret's own paragraph (the
+  // shape PM's own plain-text path would produce).
+  const paragraphType = state.schema.nodes.paragraph;
+  const paragraphs = lines.map((line) =>
+    paragraphType.create(null, line ? state.schema.text(line) : null),
+  );
+  const slice = new Slice(Fragment.from(paragraphs), 1, 1);
+  view.dispatch(pasteMeta(state.tr.replaceSelection(slice)));
 }
 
 /**
@@ -451,17 +667,34 @@ async function teardown(target: LiveMarkdown): Promise<void> {
   }
 }
 
-/** Reads the caret's mark/block state for the toolbar's pressed states. */
-function selectionStateFrom(view: EditorView): MarkdownSelectionState {
-  const { state } = view;
-  const { from, to, empty } = state.selection;
+/**
+ * Reads the caret's mark/block state for the toolbar's pressed states —
+ * from an explicit doc + selection PAIR rather than a live view.
+ *
+ * The WHY of the pair: the selection listener fires from inside the
+ * plugin-state apply, while `view.state` is still the PREVIOUS state —
+ * reading the view there answers one transaction behind (a caret moved
+ * into a table reported "not in table", and the stale read happened to
+ * pass the old tests by coincidence). The listener hands over the NEW
+ * selection, whose `$from.doc` IS the new doc — so the pair is exact.
+ */
+function selectionStateFromDoc(
+  doc: ProseNode,
+  selection: EditorView['state']['selection'],
+  storedMarks?: EditorView['state']['storedMarks'],
+): MarkdownSelectionState {
+  const { from, to, empty } = selection;
   // Select-all answers an AllSelection whose $from sits at the doc level
-  // (depth 0 — parent IS the doc). The pressed-state pass wants the
-  // block the user is acting on: the first one.
+  // (depth 0 — parent IS the doc). The pressed-state pass wants the block
+  // the user is acting on: the first one. A plain CARET at a doc-level
+  // position (pos 0 before an atom block like a table, or after one) is
+  // NOT an acting-on-block state — it answers no block at all, so it must
+  // not borrow the first block's (a doc-start caret beside a table used
+  // to read as "in table").
   const $from =
-    state.selection.$from.depth === 0 && state.doc.childCount > 0
-      ? state.doc.resolve(Math.min(1, state.doc.content.size))
-      : state.selection.$from;
+    selection instanceof AllSelection && doc.childCount > 0
+      ? doc.resolve(Math.min(1, doc.content.size))
+      : selection.$from;
 
   // Marks in effect: at the caret, the marks insertion would receive
   // (storedMarks win over the block's); across a range, every mark that
@@ -478,11 +711,11 @@ function selectionStateFrom(view: EditorView): MarkdownSelectionState {
     }
   };
   if (empty) {
-    const marks = state.storedMarks ?? $from.marks();
+    const marks = storedMarks ?? $from.marks();
     marks.forEach((mark) => collected.add(mark.type.name));
     collectLink(marks);
   } else {
-    state.doc.nodesBetween(from, to, (node) => {
+    doc.nodesBetween(from, to, (node) => {
       node.marks.forEach((mark) => collected.add(mark.type.name));
       collectLink(node.marks);
       return true;
@@ -510,8 +743,8 @@ function selectionStateFrom(view: EditorView): MarkdownSelectionState {
   // Node selections answer the atom nodes' own identity.
   let math: 'inline' | 'block' | null = null;
   let image = false;
-  if (state.selection instanceof NodeSelection) {
-    const name = state.selection.node.type.name;
+  if (selection instanceof NodeSelection) {
+    const name = selection.node.type.name;
     if (name === MATH_INLINE_NODE) {
       math = 'inline';
     } else if (name === MATH_BLOCK_NODE) {
@@ -542,13 +775,19 @@ function selectionStateFrom(view: EditorView): MarkdownSelectionState {
   };
 }
 
+/** The live-view convenience wrapper — the on-demand state readers. */
+function selectionStateFrom(view: EditorView): MarkdownSelectionState {
+  return selectionStateFromDoc(view.state.doc, view.state.selection, view.state.storedMarks);
+}
+
 /** Notifies the pressed-state listeners (called on selection changes). */
 function notifySelection(selection: EditorView['state']['selection']): void {
-  if (!live || !live.view || selectionListeners.size === 0) {
+  if (!live || selectionListeners.size === 0) {
     return;
   }
-  void selection;
-  const state = selectionStateFrom(live.view);
+  // The event's selection carries the doc it belongs to (see
+  // selectionStateFromDoc) — the view's state is one beat behind here.
+  const state = selectionStateFromDoc(selection.$from.doc, selection);
   selectionListeners.forEach((fn) => fn(state));
 }
 
