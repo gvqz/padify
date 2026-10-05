@@ -3,9 +3,8 @@ Future feature list
 Right now the app is very much in beta, and numerous new features are being improved and added. Despite this, we need to make sure that the classic plain note is well fixed, as that's the main feature. 
 
 Other improvements 
-
-	- improve note naming algorithm
-	- tab name based on note name(ex Padify - Future Feature List or future feature list - Padify)	
+	- fix tab name based on note name(don't use emdash)	
+		-if PWA, the name Padify already comes up at the front, so DONT put padify at the end 
 
 Improvements in the very far future
 	
@@ -35,11 +34,10 @@ Bug fixes:
 
 Before fixing bugs think about the underlying reason to why this bug exists in the first place, is there a bigger thing that needs to be fixed?
 
-	- When pasting text cursor doesn't move along with it 
-	- MANY "tab" bugs 
-	- icons on topbar aren't properly aligned, have different thicknesses, colors, etc 
-	- some menus don't close when clicking on other menus
-	- Visuals with opening/using the voice feature are very nice. however the animations are a bit clunky/broken
+	- pasting bugs, many including cursor
+	- tab backspacing bugs(when you use a lot of them)
+	- icons on topbar aren't properly aligned to the middle of the topbar
+	- microphone issues, animations are clunky and not smooth. sometimes the microphone is blocked on a device level(not browser level) and no voice would be detected for a while. make an error state for this issue.
 
 
 about /markdownreports
