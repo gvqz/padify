@@ -30,7 +30,7 @@ import type {
 } from './port';
 import { rgbStringToHex } from './color-picker';
 import { ensureMathId, MATH_ID_ATTR, renderMathIn } from './math';
-import { parse, serialize, collapseEmptySurface, surfaceLooksEmpty } from './model/document';
+import { parse, serialize, streamLength, collapseEmptySurface, surfaceLooksEmpty } from './model/document';
 import {
   captureOffsets,
   nodeAtPath,
@@ -88,6 +88,44 @@ const CHECKLIST_GUTTER_PX = 30;
 
 /** Typing bursts that continue the open group instead of opening one. */
 const TYPING_INPUT_TYPES = new Set(['insertText', 'insertCompositionText']);
+
+/**
+ * The stream offset of a spot inside root — the document-order sum of
+ * stream lengths up to the spot's node, plus the spot's position inside
+ * it (raw offsets count their zero-width marker characters out — the
+ * same accounting spotAtStream and streamLengthOf keep, so a model-space
+ * offset resolves 1:1 on the repainted surface even where the markup
+ * parse merged adjacent text runs). Null when the spot's node is not in
+ * root's tree.
+ */
+function streamOffsetOfSpot(root: HTMLElement, spot: DomSpot): number | null {
+  let consumed = 0;
+  const visit = (element: Node): number | null => {
+    for (const child of Array.from(element.childNodes)) {
+      if (child === spot.node) {
+        if (spot.kind === 'text') {
+          const before = (spot.node.nodeValue ?? '').slice(0, spot.raw);
+          return consumed + before.replace(/\u200B/g, '').length;
+        }
+        return consumed;
+      }
+      if (child.nodeType === Node.TEXT_NODE) {
+        consumed += streamLength(child as Text);
+      } else if (child instanceof HTMLElement) {
+        // Inline atoms (equations) hold no stream — nothing to add, and
+        // no spot can live inside one.
+        if (!child.classList.contains('padify-math')) {
+          const found = visit(child);
+          if (found !== null) {
+            return found;
+          }
+        }
+      }
+    }
+    return null;
+  };
+  return visit(root);
+}
 
 /**
  * An operation's selection request, normalized from its intent: a spot
@@ -364,18 +402,33 @@ export class ModelPort implements EditorPort {
 
   /** A model-space spot, resolved to the same position on the surface. */
   private mapSpotToSurface(spot: DomSpot): DomSpot | null {
-    const anchorNode: Node = spot.kind === 'text' ? spot.node : spot.node;
+    const anchorNode: Node = spot.node;
     const path = pathTo(this.model, anchorNode);
-    if (!path) {
+    if (path) {
+      const target = nodeAtPath(this.element, path);
+      // The node kind must survive the trip: the surface is re-parsed
+      // markup, and a path that lands on a different kind of node is a
+      // mismatch, not a mapping.
+      if (target && target.nodeType === anchorNode.nodeType) {
+        return spot.kind === 'text'
+          ? { kind: 'text', node: target as Text, raw: spot.raw }
+          : { kind: 'element', node: target as Element, childIndex: spot.childIndex };
+      }
+    }
+    // Child-index paths can break legitimately: paint() assigns markup and
+    // the HTML parser MERGES adjacent text nodes, so the fresh run an
+    // operation just appended (paste, dictation, a tab character) folds
+    // into its neighbour on the surface while the model still holds two
+    // nodes. The spot's STREAM offset survives that merge — the same
+    // accounting spotAtStream resolves, zero-width markers excluded — so
+    // resolve through it instead of dropping the operation's caret back
+    // to the pre-edit selection (the cursor-doesn't-move-with-the-paste
+    // bug).
+    const offset = streamOffsetOfSpot(this.model, spot);
+    if (offset === null) {
       return null;
     }
-    const target = nodeAtPath(this.element, path);
-    if (!target) {
-      return null;
-    }
-    return spot.kind === 'text'
-      ? { kind: 'text', node: target as Text, raw: spot.raw }
-      : { kind: 'element', node: target as Element, childIndex: spot.childIndex };
+    return spotAtStream(this.element, Math.min(offset, streamLengthOf(this.element)));
   }
 
   private reselect(selection: { anchor: number; focus: number }, max: number): void {
