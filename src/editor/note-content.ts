@@ -194,29 +194,87 @@ export function deriveTabTitle(tab: TitledNote): string {
   if (!isHtmlContent(tab.noteType)) {
     const kind = contentKindFor(tab.noteType);
     if (kind === 'text') {
-      const firstLine = tab.content
-        .split('\n')
-        .map((line) => line.trim())
-        .find((line) => line.length > 0);
-      if (firstLine) {
-        return firstLine.length > MAX_TITLE_LENGTH
-          ? `${firstLine.slice(0, MAX_TITLE_LENGTH - 1).trimEnd()}…`
-          : firstLine;
+      const title = titleFromLines(tab.content.split('\n'));
+      if (title) {
+        return title;
       }
     }
     return noteTypeLabel(tab.noteType ?? DEFAULT_NOTE_TYPE);
   }
 
-  const firstLine = htmlToText(tab.content)
-    .split('\n')
-    .map((line) => line.trim())
-    .find((line) => line.length > 0);
-
-  if (!firstLine) {
-    return 'Untitled';
+  const title = titleFromLines(htmlToText(tab.content).split('\n'));
+  if (title) {
+    return title;
   }
 
-  return firstLine.length > MAX_TITLE_LENGTH
-    ? `${firstLine.slice(0, MAX_TITLE_LENGTH - 1).trimEnd()}…`
-    : firstLine;
+  return 'Untitled';
+}
+
+/**
+ * The first line that can carry a title, cleaned for display — the note
+ * naming algorithm the tab strip and the browser tab both ride.
+ *
+ * Versus the old "first non-empty line, truncated at 42" this skips the
+ * furniture a first line so often carries, so notes name themselves the
+ * way their author thinks of them:
+ *  - markdown scaffolding comes off (`# Heading` → `Heading`, `> quote`
+ *    → `quote`, `- item` / `1. item` → `item`, `[x] task` → `task`);
+ *  - separator-only lines (`---`, `***`) are skipped, not named after;
+ *  - internal whitespace collapses to single spaces;
+ *  - a line with no letters or digits (a stray dash, a lone ellipsis)
+ *    counts as empty instead of becoming the title;
+ *  - long titles cut at a word boundary — no more names ending in half
+ *    a word before the ellipsis.
+ */
+function titleFromLines(lines: string[]): string | null {
+  for (const raw of lines) {
+    let line = raw.trim();
+    if (line === '') {
+      continue;
+    }
+
+    // Markdown furniture, repeatedly so nested shapes (`> - item`) peel.
+    for (;;) {
+      const peeled = line
+        .replace(/^#{1,6}\s+/, '')
+        .replace(/^>\s?/, '')
+        .replace(/^[-*+]\s+/, '')
+        .replace(/^\d+[.)]\s+/, '')
+        .replace(/^\[[ xX]\]\s*/, '');
+      if (peeled === line) {
+        break;
+      }
+      line = peeled.trim();
+    }
+    if (line === '') {
+      continue;
+    }
+
+    // Separator rules (---, ***, ___) and anything without a word
+    // character: a title of dashes helps nobody.
+    if (/^[-*_\s]+$/.test(line)) {
+      continue;
+    }
+    if (!/[\p{L}\p{N}]/u.test(line)) {
+      continue;
+    }
+
+    line = line.replace(/\s{2,}/g, ' ');
+    return truncateTitle(line);
+  }
+  return null;
+}
+
+/** Truncates at MAX_TITLE_LENGTH on a word boundary, ellipsis-terminated. */
+function truncateTitle(line: string): string {
+  if (line.length <= MAX_TITLE_LENGTH) {
+    return line;
+  }
+  const cut = line.slice(0, MAX_TITLE_LENGTH - 1);
+  const lastSpace = cut.lastIndexOf(' ');
+  const base =
+    lastSpace > MAX_TITLE_LENGTH * 0.5
+      ? cut.slice(0, lastSpace)
+      : cut;
+  return base.replace(/[\s,;:.\-–—!?]+$/, '') + '…';
 }

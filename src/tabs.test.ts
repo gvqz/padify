@@ -246,6 +246,51 @@ describe('deriveTabTitle', () => {
     expect(deriveTabTitle(tab())).toBe('Untitled');
     expect(deriveTabTitle(tab({ content: '<div></div>' }))).toBe('Untitled');
   });
+
+  it('strips markdown furniture from derived titles', () => {
+    expect(deriveTabTitle(tab({ content: '# Trip plan', noteType: 'markdown' }))).toBe(
+      'Trip plan',
+    );
+    expect(deriveTabTitle(tab({ content: '> a quote', noteType: 'markdown' }))).toBe('a quote');
+    expect(deriveTabTitle(tab({ content: '- pack boots', noteType: 'markdown' }))).toBe(
+      'pack boots',
+    );
+    expect(deriveTabTitle(tab({ content: '3. drive north', noteType: 'markdown' }))).toBe(
+      'drive north',
+    );
+    expect(deriveTabTitle(tab({ content: '[x] book cabin', noteType: 'markdown' }))).toBe(
+      'book cabin',
+    );
+    expect(deriveTabTitle(tab({ content: '> - nested peel', noteType: 'markdown' }))).toBe(
+      'nested peel',
+    );
+  });
+
+  it('skips separators and wordless lines when naming', () => {
+    expect(deriveTabTitle(tab({ content: '---\nReal title' }))).toBe('Real title');
+    expect(deriveTabTitle(tab({ content: '***\nReal title' }))).toBe('Real title');
+    expect(deriveTabTitle(tab({ content: '—\nReal title' }))).toBe('Real title');
+    expect(deriveTabTitle(tab({ content: '- - -\nReal title', noteType: 'markdown' }))).toBe(
+      'Real title',
+    );
+  });
+
+  it('collapses internal whitespace in derived titles', () => {
+    expect(deriveTabTitle(tab({ content: 'hello    spaced   title' }))).toBe(
+      'hello spaced title',
+    );
+  });
+
+  it('truncates long titles at a word boundary', () => {
+    const title = deriveTabTitle(
+      tab({ content: 'The quick brown fox jumps over the lazy dog and keeps running' }),
+    );
+    expect(title.length).toBeLessThanOrEqual(42);
+    expect(title.endsWith('…')).toBe(true);
+    expect(title.endsWith('… ')).toBe(false);
+    // The word before the ellipsis is whole, not cut mid-word.
+    expect(title.slice(0, -1).split(' ').pop()!.length).toBeGreaterThan(1);
+  });
 });
 
 describe('WELCOME_HTML', () => {
