@@ -18,10 +18,10 @@ interface BreakReminderState {
 
 const breakReminderConfig = {
   // Show the reminder after this much active writing time.
-  // 30 SECONDS — a temporary testing value (the task list asks for it so
-  // the flow can be exercised without a half-hour session). Restore
+  // 3 SECONDS — a temporary testing value (the task list asks for it so
+  // the flow can be exercised without a long session). Restore
   // 30 * 60 * 1000 before shipping.
-  thresholdMs: 30 * 1000,
+  thresholdMs: 3 * 1000,
 
   // Ignore gaps longer than this so idle time does not count as writing.
   idleWindowMs: 2 * 60 * 1000,
@@ -48,6 +48,12 @@ const breakReminderDefaults = {
   snoozedUntil: 0,
   dismissedUntil: 0,
 };
+
+/** The popup's copy (one definition — the show, the close-reset and the
+ *  modal markup must agree; the markup seeds the same strings). */
+const BREAK_REMINDER_TITLE = 'Time for a quick break?';
+const BREAK_REMINDER_TEXT =
+  "You've been working for a while. Stand up, stretch, or look away from the screen for a second.";
 
 let breakReminderState = loadBreakReminderState();
 let breakReminderCountdownTimer: ReturnType<typeof setInterval> | null = null;
@@ -94,8 +100,8 @@ function closeBreakReminderPopup(): void {
     $('#takeBreakAction').text('Take break');
     $('#snoozeBreakAction').show();
     $('#dismissBreakAction').show();
-    $('#breakReminderTitle').text('Time for a 2-minute break?');
-    $('#breakReminderText').text('Stand up, stretch, or look away from the screen for a minute.');
+    $('#breakReminderTitle').text(BREAK_REMINDER_TITLE);
+    $('#breakReminderText').text(BREAK_REMINDER_TEXT);
   }, 300);
 
   if (breakReminderCountdownTimer) {
@@ -128,8 +134,8 @@ function showBreakReminderPopup(): void {
   $('#takeBreakAction').text('Take break');
   $('#snoozeBreakAction').show();
   $('#dismissBreakAction').show();
-  $('#breakReminderTitle').text('Time for a 2-minute break?');
-  $('#breakReminderText').text('Stand up, stretch, or look away from the screen for a minute.');
+  $('#breakReminderTitle').text(BREAK_REMINDER_TITLE);
+  $('#breakReminderText').text(BREAK_REMINDER_TEXT);
 }
 
 function maybeShowBreakReminder(now: number = Date.now()): void {

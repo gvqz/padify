@@ -17,9 +17,17 @@ textarea,
   outline: 0px !important;
   -webkit-appearance: none;
   resize: none;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
   background: transparent;
   scrollbar-gutter: stable;
+}
+
+/* The note's DEFAULT face, parked at zero specificity: an ID-level
+   font-family here beat the font-selection classes (.serif, .monospaced,
+   .handwritten, .humanist in switches.css) forever, so the font picker
+   silently did nothing for them. :where() keeps the default while
+   letting every class rule win. */
+:where(textarea, #note) {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 }
 
 /* Scoped to the modal chrome (the keyboard-shortcuts table). Note tables

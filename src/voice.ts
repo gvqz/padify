@@ -102,6 +102,62 @@ const RESTART_DELAY_MS = 250;
 const NO_SPEECH_STRIKE_LIMIT = 2;
 
 // ---------------------------------------------------------------------------
+// Voice-bar lifecycle — the bar enters on a keyframe and must also LEAVE on
+// one. Hiding it with a bare display:none snap against a 0.24s eased
+// entrance read as a glitch, so every hide path rides .closing and waits
+// for the animation (with a timer fallback for reduced-motion, where the
+// animation is suppressed and `animationend` never fires).
+// ---------------------------------------------------------------------------
+
+/** Just past voice-bar-out's 160ms — the fallback for a swallowed
+ *  `animationend`. */
+const VOICE_BAR_EXIT_MS = 240;
+
+let voiceBarExitTimer: ReturnType<typeof setTimeout> | null = null;
+
+function voiceBarElement(): HTMLElement | null {
+  const el = voiceBar().get(0);
+  return el instanceof HTMLElement ? el : null;
+}
+
+/** Cancels a closing animation in progress — used when the bar is shown
+ *  again mid-exit (a fresh session while the exit is still playing). */
+function cancelVoiceBarExit(): void {
+  if (voiceBarExitTimer) {
+    clearTimeout(voiceBarExitTimer);
+    voiceBarExitTimer = null;
+  }
+  const el = voiceBarElement();
+  if (el) {
+    el.classList.remove('closing');
+  }
+}
+
+/** Hides the bar through its closing animation, then sets `hidden`. */
+function hideVoiceBar(): void {
+  const el = voiceBarElement();
+  if (!el || el.hasAttribute('hidden')) {
+    return;
+  }
+  cancelVoiceBarExit();
+  el.classList.add('closing');
+  const finish = (): void => {
+    if (voiceBarExitTimer) {
+      clearTimeout(voiceBarExitTimer);
+      voiceBarExitTimer = null;
+    }
+    el.classList.remove('closing');
+    voiceBar().attr('hidden', 'hidden');
+  };
+  el.addEventListener('animationend', finish, { once: true });
+  voiceBarExitTimer = setTimeout(() => {
+    voiceBarExitTimer = null;
+    el.removeEventListener('animationend', finish);
+    finish();
+  }, VOICE_BAR_EXIT_MS);
+}
+
+// ---------------------------------------------------------------------------
 // Insertion helpers — every path through the ACTIVE note's surface
 // ---------------------------------------------------------------------------
 
@@ -190,22 +246,41 @@ function voiceBar(): Q {
   return $('#voiceBar');
 }
 
+/** Re-runs the text-swap keyframes — a CSS animation restarts only via a
+ *  reflow between the class remove and add. */
+function retriggerVoiceTextSwap(): void {
+  const el = $('#voiceBarText').get(0);
+  if (el instanceof HTMLElement) {
+    el.classList.remove('voice-text-swap');
+    void el.offsetWidth;
+    el.classList.add('voice-text-swap');
+  }
+}
+
 function setBarInterim(interim: string | null): void {
   const $text = $('#voiceBarText');
-  if (interim) {
-    $text.text(interim).addClass('interim');
-  } else {
-    $text.text('Listening…').removeClass('interim');
+  const next = interim ?? 'Listening…';
+  // Identical interim frame — no repaint, and crucially no restart of the
+  // swap animation (the engine emits repeated interim payloads).
+  if ($text.text() === next) {
+    return;
   }
+  $text.toggleClass('interim', interim !== null);
+  $text.text(next);
+  retriggerVoiceTextSwap();
 }
 
 function renderListeningUI(active: boolean): void {
   $('#voiceTypeButton').toggleClass('listening', active).attr('aria-pressed', String(active));
   const bar = voiceBar();
   if (active) {
+    // A re-show while the exit animation is mid-flight must cancel that
+    // exit — otherwise it finishes and yanks the bar out from under the
+    // new session.
+    cancelVoiceBarExit();
     bar.removeAttr('hidden');
   } else {
-    bar.attr('hidden', 'hidden');
+    hideVoiceBar();
   }
   if (active) {
     setBarInterim(null);
@@ -279,11 +354,13 @@ function showMicBlockedError(): void {
     .addClass('voice-error')
     .attr('aria-pressed', 'false');
   const bar = voiceBar();
+  cancelVoiceBarExit();
   bar.removeAttr('hidden').addClass('error');
   $('#voiceBarText')
     .text(MIC_BLOCKED_MESSAGE)
     .removeClass('interim')
     .attr('title', MIC_BLOCKED_MESSAGE);
+  retriggerVoiceTextSwap();
 }
 
 /** Leaves the error state (Done, Escape, or a fresh session). */
@@ -294,7 +371,7 @@ function clearMicError(): void {
   const bar = voiceBar();
   bar.removeClass('error');
   $('#voiceBarText').removeAttr('title');
-  bar.attr('hidden', 'hidden');
+  hideVoiceBar();
 }
 
 function handleError(event: SpeechRecognitionErrorEventLike): void {
