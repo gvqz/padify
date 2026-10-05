@@ -251,11 +251,53 @@ function wireCommandButtons(): void {
 export function runMarkdownToolbarAction(action: string): boolean {
   const applied = dispatchToolbarAction(action);
   if (applied) {
+    // The gesture began on a toolbar BUTTON, and a click leaves the
+    // focus there. Without handing it back, the next keystrokes drive
+    // the ARIA toolbar (Space/Enter activate the focused button — a
+    // space in a sentence multiplied tables) instead of typing into the
+    // note. The editor is the surface being edited: every action ends
+    // with the caret back in it.
+    markdownEditorHandle()?.view.focus();
     // A toggle does not move the selection — the buttons must not wait
     // for one to learn the document changed.
     refreshMarkdownSelectionState();
   }
   return applied;
+}
+
+/**
+ * Puts the caret in the fresh table's first cell — where Docs and Notion
+ * park it after an insert. The insert command alone leaves the caret in
+ * the host paragraph, so the table sits untyped and the user's next
+ * keystrokes never reach it. The FRESH table is the one nearest the
+ * insertion point (a note may already carry others), so the pick is by
+ * distance from the post-insert selection.
+ */
+function parkCaretInFreshTable(handle: NonNullable<ReturnType<typeof markdownEditorHandle>>): void {
+  const { view } = handle;
+  const doc = view.state.doc;
+  const anchor = view.state.selection.from;
+  const tables: { pos: number; dist: number }[] = [];
+  doc.descendants((node, pos) => {
+    if (node.type.spec.tableRole !== 'table') {
+      return true;
+    }
+    tables.push({
+      pos,
+      dist:
+        anchor >= pos && anchor <= pos + node.nodeSize
+          ? 0
+          : Math.min(Math.abs(anchor - pos), Math.abs(anchor - (pos + node.nodeSize))),
+    });
+    return true;
+  });
+  if (tables.length === 0) {
+    return;
+  }
+  const fresh = tables.reduce((nearest, table) => (table.dist < nearest.dist ? table : nearest));
+  const selection = TextSelection.near(doc.resolve(fresh.pos + 1), 1);
+  view.dispatch(view.state.tr.setSelection(selection));
+  view.focus();
 }
 
 /** Dispatches a toolbar action to the live Milkdown editor. */
@@ -299,7 +341,11 @@ function dispatchToolbarAction(action: string): boolean {
     case 'hr':
       return call(insertHrCommand);
     case 'table':
-      return call(insertTableCommand, { row: 2, col: 3 });
+      if (!call(insertTableCommand, { row: 2, col: 3 })) {
+        return false;
+      }
+      parkCaretInFreshTable(handle);
+      return true;
     default:
       return false;
   }

@@ -64,6 +64,10 @@ import {
 } from './editor/note-types';
 
 export type { NoteType } from './editor/note-types';
+
+/** Frames a deferred focus ask may keep retrying an async mount (~2s). */
+const MAX_FOCUS_RETRIES = 120;
+
 export { sanitizeNoteHtml } from './editor/storage-subset';
 // Re-exported for their existing importers (snapshots, the share layers, the
 // test suites): the functions themselves live in editor/note-content.ts now,
@@ -476,6 +480,42 @@ export class TabManager {
     return this.editor.get(0) as HTMLElement | null;
   }
 
+  /**
+   * Focuses the active note's editable element. The html host IS the
+   * editable; a Markdown note mounts its own editor inside a host the
+   * manager must not focus directly (the host can't take a caret), so the
+   * surface is asked for the element that can. Without this, switching to
+   * a markdown note landed focus on <body> and the first keystrokes went
+   * nowhere until the user clicked into the note.
+   *
+   * Two fallbacks keep the promise for every surface and every moment:
+   * a surface WITHOUT focusTarget answers its host (the old behavior,
+   * exactly) — and a surface WITH one whose editor is still building
+   * (a fresh mount is async) answers null now, so the ask is retried a
+   * bounded number of frames until the root exists. The retry carries
+   * the tab id it was requested for: a switch that happens mid-retry
+   * wins, and a retry never steals focus after the user moved on.
+   */
+  private focusEditor(attempt = 0, forTabId = this.activeId): void {
+    const host = this.editorHost();
+    if (!host) {
+      return;
+    }
+    const surface = noteSurfaceFor(this.getActive());
+    if (typeof surface.focusTarget === 'function') {
+      const target = surface.focusTarget(host);
+      if (target) {
+        target.focus();
+        return;
+      }
+      if (attempt < MAX_FOCUS_RETRIES && this.activeId === forTabId) {
+        requestAnimationFrame(() => this.focusEditor(attempt + 1, forTabId));
+      }
+      return;
+    }
+    host.focus();
+  }
+
   private loadActiveIntoEditor(): void {
     const host = this.editorHost();
     if (!host) {
@@ -664,7 +704,7 @@ export class TabManager {
       if (tabId !== this.activeId) {
         this.switchTo(tabId);
       } else {
-        (this.editor.get(0) as HTMLElement).focus();
+        this.focusEditor();
       }
     });
 
@@ -708,7 +748,7 @@ export class TabManager {
     this.loadActiveIntoEditor();
 
     if (focusEditor) {
-      (this.editor.get(0) as HTMLElement).focus();
+      this.focusEditor();
     }
 
     this.notifyActiveChanged();
@@ -730,7 +770,7 @@ export class TabManager {
     this.scrollTabIntoView(tab.id);
 
     if (focusEditor) {
-      (this.editor.get(0) as HTMLElement).focus();
+      this.focusEditor();
     }
 
     this.notifyActiveChanged();
@@ -773,7 +813,7 @@ export class TabManager {
         this.persist();
         this.renderStrip();
         this.loadActiveIntoEditor();
-        (this.editor.get(0) as HTMLElement).focus();
+        this.focusEditor();
         this.notifyActiveChanged();
         showToast('Tab closed. A fresh tab is ready.');
         return;
@@ -785,7 +825,7 @@ export class TabManager {
         this.persist();
         this.renderStrip();
         this.loadActiveIntoEditor();
-        (this.editor.get(0) as HTMLElement).focus();
+        this.focusEditor();
         this.notifyActiveChanged();
       } else {
         this.persist();
@@ -849,7 +889,7 @@ export class TabManager {
       if (event.key === 'Enter') {
         event.preventDefault();
         commit(true);
-        (this.editor.get(0) as HTMLElement).focus();
+        this.focusEditor();
       } else if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();

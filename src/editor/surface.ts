@@ -99,6 +99,14 @@ export interface NoteSurface {
    * surface cannot take the insertion and the caller's fallbacks stand.
    */
   insertText?(host: HTMLElement | null, text: string): boolean;
+  /**
+   * Optional: the element that should take focus when the shell focuses
+   * the editor (a tab switch, the same-tab click, a rename commit). The
+   * html host IS the editable; surfaces that mount their own editor inside
+   * a non-editable host answer their inner editable instead. Absent (or a
+   * null answer) → the host, exactly like before this existed.
+   */
+  focusTarget?(host: HTMLElement): HTMLElement | null;
   /** Empties the surface (the clear-note flow). */
   clear(host: HTMLElement): void;
 }
