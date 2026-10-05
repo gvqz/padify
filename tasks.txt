@@ -40,3 +40,19 @@ Before fixing bugs think about the underlying reason to why this bug exists in t
 	- icons on topbar aren't properly aligned, have different thicknesses, colors, etc 
 	- some menus don't close when clicking on other menus
 	- Visuals with opening/using the voice feature are very nice. however the animations are a bit clunky/broken
+
+
+about /markdownreports
+	markdownreports\drawingpad.md: not super important, just remember that Excalidraw will be used for canvas, could also require to download PWA for this(so that nothing needs to be sent to the server and just stays on the device instead)
+
+	markdownreports\tasks.md: not super important either, will be based on apple reminders/tasks and will have a lot more features
+
+the rest of the features will be made as "tools" (a tool icon in the topbar + popup) if they are made
+
+	markdownreports\teleprompter.md: may not be added, and would likely have less features
+
+	markdownreports\text-diff.md: also unlikely to be added, would be very far in the future(compare between two of the same note type or HISTORY(like google docs)) users would have option to include formatting and other things to be ignored when comparing the texts
+
+	markdownreports\text-tools.md: likely to be added, but much differently. No sample text, and would be based on the note text and not directly affect it(only copy the extracted/). No wrap, no encode/decode. Find and replace will not be added in this, as it will be a whole seperate feature.
+
+	markdownreports\voice-notes.md: may be added as a PWA only feature(far in the future), save voice recordings as it transcribes. 
