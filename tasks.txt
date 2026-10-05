@@ -1,0 +1,43 @@
+Future feature list
+	
+Right now the app is very much in beta, and numerous new features are being improved and added. Despite this, we need to make sure that the classic plain note is well fixed, as that's the main feature. 
+
+Other improvements 
+
+	- improve note naming algorithm
+	- tab name based on note name(ex Padify - Future Feature List or future feature list - Padify)	
+	- 
+
+Improvements in the very far future
+	
+	- add drawing pad
+	- add tasks/notes (based on apple reminders/tasks)	
+	- detect dates and suggest to add them to calander 
+	- Heavily improve PWA experience
+		- save notes to users computer documents folder, use .padify format, which will be able to load all note types and drawing
+		- push notifications for timers, reminders, etc 	
+		- automatically open .padify files
+
+Note: .padify format might not actually make it to the actual app, compare benefits/disadvantages 
+
+Visual overhauls:
+			
+	- cloud sync/share
+	- settings menu
+		- have settings based on each note type(classic, markdown, RTN, etc)
+	- currently two types of "notifications exist" - ex "Select some text first, then convert its case." and "Notes copied to clipboard" and both types have problems. The second one looks bad and has a weird animation. the first type has a broken leave animation and doesn't respond well to spam clicking/other human behavior.
+		- to fix: merge the second one with the first type, and fix the problems with the first type
+	- Statistics menu + add more fun statistics, the current visual menu looks bad. Clicking on the text should rotate the stat (ex it says 1961 characters but when I click that text it switches to 340 words etc)
+	- Music menu: this also needs an archecture overhaul/work. Currently the alwaysdata server hasn't been setup so it has not been tested and very much likely doesn't work as intended, delay changing this until specifically instructed with the words "music menu"
+	- unicode menu. I don't know what to do with this right now, it's a bit broken and looks bad.
+
+
+Bug fixes:
+
+Before fixing bugs think about the underlying reason to why this bug exists in the first place, is there a bigger thing that needs to be fixed?
+
+	- When pasting text cursor doesn't move along with it 
+	- MANY "tab" bugs 
+	- icons on topbar aren't properly aligned, have different thicknesses, colors, etc 
+	- some menus don't close when clicking on other menus
+	- Visuals with opening/using the voice feature are very nice. however the animations are a bit clunky/broken
