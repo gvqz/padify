@@ -136,13 +136,24 @@ body {
   color: var(--s-fg-subtle);
 }
 
-/* Note content mirrors the editor's formatting subset */
+/* Note content mirrors the editor's formatting subset.
+
+   white-space: pre-wrap serves the RICH note's sanitizer output (its
+   text nodes may carry meaningful breaks). Markdown notes render
+   through the OWNED renderer, whose HTML is pretty-printed — under
+   pre-wrap those newlines paint as phantom blank lines — so the
+   markdown branch flips back to normal flow (share.js adds the class
+   when it renders a markdown note). */
 .share-content {
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-wrap: break-word;
   font-size: 15.5px;
   color: var(--s-fg);
+}
+
+.share-content.markdown-content {
+  white-space: normal;
 }
 
 .share-content b,
@@ -246,10 +257,15 @@ body {
 }
 
 /* Tables — the same chrome-painted borders as the editor (vercel.css);
-   the share view is read-only. */
+   the share view is read-only. The editor's ProseMirror tables lay out
+   fixed and full-width (prosemirror-tables), so the share view states
+   the same geometry or markdown shares disagree with the editor that
+   produced them. */
 .share-content table {
   border-collapse: collapse;
   margin: 0.5em 0;
+  width: 100%;
+  table-layout: fixed;
 }
 
 .share-content td,

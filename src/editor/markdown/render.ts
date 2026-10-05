@@ -326,6 +326,30 @@ function isListItemStart(line: string): boolean {
   return LIST_BULLET.test(stripped) || LIST_ORDERED.test(stripped);
 }
 
+/**
+ * The marker KIND a line opens — `bullet:<char>` (`-`, `*`, `+`) or
+ * `ordered:<delimiter>` (`.` or `)`), or null when the line opens no
+ * list. CommonMark keeps a list alive only while its markers share one
+ * kind: a bullet list followed by an ordered one (blank line between or
+ * not) is TWO lists, and merging them would swallow the ordered numbers
+ * and the task checkboxes into a `<ul>`.
+ */
+function listMarkerKind(line: string): string | null {
+  if (indentWidth(line) >= 4) {
+    return null; // deep indentation is content, not a marker
+  }
+  const stripped = line.replace(/^[ \t]+/, '');
+  const bullet = LIST_BULLET.exec(stripped);
+  if (bullet) {
+    return `bullet:${bullet[1]}`;
+  }
+  const ordered = LIST_ORDERED.exec(stripped);
+  if (ordered) {
+    return `ordered:${ordered[2]}`;
+  }
+  return null;
+}
+
 interface ListItem {
   /** The item's content lines (marker stripped, relative indentation). */
   content: string[];
@@ -349,6 +373,9 @@ function collectList(lines: string[], start: number): { markup: string; next: nu
   let loose = false;
   let pendingBlank = false;
   let index = start;
+  // This list's marker kind (from its first line) — siblings of another
+  // kind belong to the NEXT list, not this one.
+  const listKind = listMarkerKind(lines[start]!);
 
   const contentIndent = (): number => items[items.length - 1]?.contentIndent ?? 0;
 
@@ -357,13 +384,16 @@ function collectList(lines: string[], start: number): { markup: string; next: nu
 
     if (isBlank(line)) {
       // A blank ends the list unless the next content line still belongs
-      // to it (a sibling marker, or content indented past the marker).
+      // to it (a sibling marker OF THE SAME KIND, or content indented
+      // past the marker — a changed marker kind starts a new list).
       const look = index + 1;
       if (look < lines.length && !isBlank(lines[look]!)) {
         const nextLine = lines[look]!;
         const nextIsContent =
           indentWidth(nextLine) >= contentIndent() ||
-          (isListItemStart(nextLine) && indentWidth(nextLine) >= baseIndent);
+          (isListItemStart(nextLine) &&
+            indentWidth(nextLine) >= baseIndent &&
+            listMarkerKind(nextLine) === listKind);
         if (nextIsContent) {
           pendingBlank = true;
           index += 1;
@@ -379,9 +409,11 @@ function collectList(lines: string[], start: number): { markup: string; next: nu
 
     const item = matchListItem(line);
     // A sibling marker: below the current item's content column (it
-    // cannot be that item's content) and within the list's own band.
+    // cannot be that item's content) and within the list's own band —
+    // and of the same kind (a changed kind starts a new list).
     const isSibling =
       !!item &&
+      listMarkerKind(line) === listKind &&
       (items.length === 0 || indentWidth(line) < items[items.length - 1]!.contentIndent) &&
       indentWidth(line) < baseIndent + 4;
     if (isSibling) {
