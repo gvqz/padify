@@ -135,6 +135,57 @@ describe('stream → spot placements', () => {
   });
 });
 
+describe('the line under an atom block', () => {
+  // A table (or a rule) contributes zero stream when its cells are
+  // empty — its boundary and the line after it then share one offset.
+  // The spot must resolve to the LINE (the caret-holding sibling), not
+  // to the boundary before the atom, or every block gesture on that
+  // line silently no-ops. Regression: the empty paragraph a fresh table
+  // ships with was unreachable by headings/quote/code/list/align.
+
+  it('an empty line under an empty-cell table resolves into that line', () => {
+    const element = surfaceOf(
+      '<table><tbody><tr><td></td><td></td></tr><tr><td></td><td></td></tr></tbody></table><div><br></div>',
+    );
+    const line = caretSpot(element, 0);
+    expect(line.container).toBe(element.querySelectorAll('div')[0]);
+    expect(line.offset).toBe(0);
+    element.remove();
+  });
+
+  it('the caret at the start of text after an empty table lands in the text', () => {
+    const element = surfaceOf('<table><tbody><tr><td></td></tr></tbody></table><div>abc</div>');
+    const start = caretSpot(element, 0);
+    expect((start.container as Text).nodeValue).toBe('abc');
+    expect(start.offset).toBe(0);
+    element.remove();
+  });
+
+  it('the line after a rule resolves onto the line, not before the rule', () => {
+    const element = surfaceOf('<hr><div>abc</div>');
+    const start = caretSpot(element, 0);
+    expect((start.container as Text).nodeValue).toBe('abc');
+    expect(start.offset).toBe(0);
+    element.remove();
+  });
+
+  it('a caret at the end of text before a table stays on the text', () => {
+    const element = surfaceOf('<div>abc</div><table><tbody><tr><td></td></tr></tbody></table>');
+    const end = caretSpot(element, 3);
+    expect((end.container as Text).nodeValue).toBe('abc');
+    expect(end.offset).toBe(3);
+    element.remove();
+  });
+
+  it('an atom block alone still resolves to the boundary before it', () => {
+    const element = surfaceOf('<hr>');
+    const start = caretSpot(element, 0);
+    expect(start.container).toBe(element);
+    expect(start.offset).toBe(0);
+    element.remove();
+  });
+});
+
 describe('capture and place on the live selection', () => {
   it('round-trips a selection through offsets onto a rebuilt tree', () => {
     const element = surfaceOf('one <b>two</b> three');

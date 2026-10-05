@@ -80,6 +80,20 @@ function caretAt(surface: HTMLElement, at: number): void {
   }
 }
 
+/** The caret's stream offset on the surface (how much content sits
+ *  before it) — the merge-proof way to pin caret placement. */
+function caretStreamOffset(surface: HTMLElement): number {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    return -1;
+  }
+  const range = selection.getRangeAt(0);
+  const probe = document.createRange();
+  probe.selectNodeContents(surface);
+  probe.setEnd(range.startContainer, range.startOffset);
+  return probe.toString().replace(/\u200B/g, '').length;
+}
+
 /** Selects a stream range on the surface (end-safe: a target at the
  *  stream's end resolves to the last text node's tail). */
 function selectRange(surface: HTMLElement, from: number, to: number): void {
@@ -148,11 +162,31 @@ describe('the command pipeline', () => {
     caretAt(surface, 2);
     expect(port.insertText('cd')).toBe(true);
     expect(surface.innerHTML).toBe('abcd');
-    // The caret sits at the tail of the inserted run — typing continues
-    // natively there (the run is its own text node; the caret is at its end).
-    const selection = window.getSelection();
-    expect(selection?.getRangeAt(0).startContainer).toBe(surface.lastChild);
-    expect(selection?.getRangeAt(0).startOffset).toBe(2);
+    // The caret sits at the tail of the inserted run — stream offset 4,
+    // the end of 'cd'. Pinned as a stream offset (not a node identity):
+    // the surface re-parses markup, so the fresh run merges into its
+    // neighbour text node and a node-identity assert would pass for the
+    // wrong reason (this test used to pin the pre-edit offset that way —
+    // the cursor-doesn't-move-with-the-paste bug).
+    expect(caretStreamOffset(surface)).toBe(4);
+  });
+
+  it('insertText mid-run leaves the caret right after the inserted text', () => {
+    const { port, surface } = makePort('hello world');
+    caretAt(surface, 5);
+    expect(port.insertText(' brave')).toBe(true);
+    expect(port.getText()).toBe('hello brave world');
+    // 5 + 6 = 11 — the caret moved along with the insertion, exactly the
+    // pasted-text expectation from tasks.txt.
+    expect(caretStreamOffset(surface)).toBe(11);
+  });
+
+  it('insertText after a block keeps the caret in the continuation block', () => {
+    const { port, surface } = makePort('<p>first</p><p>second</p>');
+    caretAt(surface, 11); // end of 'second' — the two blocks hold 11 stream chars
+    expect(port.insertText(' tail')).toBe(true);
+    expect(surface.innerHTML).toBe('<p>first</p><p>second tail</p>');
+    expect(caretStreamOffset(surface)).toBe(16);
   });
 
   it('toggleList wraps root text and keeps the caret at the same text offset', () => {
@@ -192,6 +226,73 @@ describe('the command pipeline', () => {
     );
     expect(port.outdent()).toBe(true);
     expect(port.queryAlignment()).toBe('center');
+  });
+});
+
+describe('Tab over the bare stream — the classic plain note', () => {
+  it('a collapsed caret takes a literal tab, not a document-wide margin', () => {
+    const { port, surface } = makePort('first line\n\nsecond line');
+    caretAt(surface, 4);
+    expect(port.tabStream(false)).toBe(true);
+    expect(surface.innerHTML).toBe('firs\tt line\n\nsecond line');
+    // The stream stayed a stream — no margin block materialized over it.
+    expect(surface.querySelector('[style]')).toBeNull();
+  });
+
+  it('a spanning selection tabs every line and keeps it selected for repeats', () => {
+    const { port, surface } = makePort('alpha\nbeta\ngamma');
+    selectRange(surface, 0, 17);
+    expect(port.tabStream(false)).toBe(true);
+    expect(surface.textContent).toBe('\talpha\n\tbeta\n\tgamma');
+    const selection = window.getSelection();
+    expect(selection?.toString()).toBe('\talpha\n\tbeta\n\tgamma');
+  });
+
+  it('Shift+Tab over tabbed lines unwinds one tab per line', () => {
+    const { port, surface } = makePort('\talpha\n\tbeta');
+    selectRange(surface, 0, 12);
+    expect(port.tabStream(true)).toBe(true);
+    expect(surface.textContent).toBe('alpha\nbeta');
+  });
+
+  it('a collapsed Shift+Tab is a no-op — nothing to unwind at the caret', () => {
+    const { port, surface } = makePort('\tindented');
+    caretAt(surface, 3);
+    expect(port.tabStream(true)).toBe(false);
+    expect(surface.textContent).toBe('\tindented');
+  });
+
+  it('an element block declines the gesture (null) and takes the margin step', () => {
+    const { port, surface } = makePort('<div>block one</div><div>block two</div>');
+    caretAt(surface, 14); // inside the second block
+    // null = "not a bare stream" — the key handler falls back to the
+    // formatting commands (the toolbar's indent button rides those too).
+    expect(port.tabStream(false)).toBeNull();
+    expect(port.indent()).toBe(true);
+    expect(surface.innerHTML).toBe(
+      '<div>block one</div><div style="margin-left: 40px">block two</div>',
+    );
+  });
+
+  it('the toolbar path on a bare stream still formats the block', () => {
+    // The Tab KEY takes tabStream(); the indent BUTTON takes indent() —
+    // on a bare stream that materializes the block and steps its margin,
+    // exactly what the docs-toolbar e2e pins through the real toolbar.
+    const { port, surface } = makePort('indented paragraph');
+    caretAt(surface, 4);
+    expect(port.tabStream(false)).toBe(true);
+    expect(surface.textContent).toBe('inde\tnted paragraph');
+    expect(port.indent()).toBe(true);
+    expect(surface.innerHTML).toBe('<div style="margin-left: 40px">inde\tnted paragraph</div>');
+  });
+
+  it('the bare-stream tab is one undo step', () => {
+    const { port, surface } = makePort('plain words');
+    caretAt(surface, 5);
+    expect(port.tabStream(false)).toBe(true);
+    expect(surface.textContent).toBe('plain\t words');
+    expect(port.undo()).toBe(true);
+    expect(surface.textContent).toBe('plain words');
   });
 });
 

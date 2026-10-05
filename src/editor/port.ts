@@ -259,6 +259,18 @@ export interface EditorPort {
   /** Reverses indent() — unnests list items, un-steps block margins. */
   outdent(): boolean;
 
+  /**
+   * The Tab-KEY gesture over a bare text stream — a note that never grew
+   * element blocks, where the whole document is one model block and a
+   * block-indent Tab would margin-step everything. A literal tab at the
+   * caret, one per selected line over a spanning selection, Shift
+   * reverses. Returns null when the selection is not in a bare stream —
+   * callers fall back to indent()/outdent(); the toolbar's indent buttons
+   * never ride this (they format, they don't type). Optional so slim
+   * ports can skip it.
+   */
+  tabStream?(shift: boolean): boolean | null;
+
   /** Inserts a horizontal rule at the caret, splitting the block. */
   insertHorizontalRule(): boolean;
 

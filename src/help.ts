@@ -1,5 +1,6 @@
 import { $ } from './lib/q';
 import { closeModal, closeAllModals, openModal } from './ui/behavior/modal';
+import { registerLayer } from './ui/behavior/layers';
 
 /**
  * Brand menu + Help tour.
@@ -263,27 +264,28 @@ export function initHelp(): void {
   const menu = $('#brandMenu');
   const brandButton = $('#brandMenuButton');
 
-  function closeBrandMenu(): void {
-    menu.removeClass('show');
-    brandButton.attr('aria-expanded', 'false');
-  }
+  // The brand menu is a registered dismissable layer: the registry's
+  // capture-phase pointerdown sweep closes it when another layer opens
+  // (and closes every other layer when this one opens) — no more stacked
+  // menus from stopPropagation'ed openers outrunning document click
+  // closers.
+  const brandLayer = registerLayer({
+    elements: [menu.get(0) as HTMLElement, brandButton.get(0) as HTMLElement],
+    isOpen: () => menu.hasClass('show'),
+    setOpen: (open) => {
+      menu.toggleClass('show', open);
+      brandButton.attr('aria-expanded', String(open));
+    },
+  });
 
-  brandButton.on('click', (event) => {
-    event.stopPropagation();
-    const open = menu.toggleClass('show').hasClass('show');
-    brandButton.attr('aria-expanded', open ? 'true' : 'false');
+  brandButton.on('click', () => {
+    brandLayer.toggle();
   });
 
   // The three entries open their modals through Bootstrap's delegated
   // click.bs.modal.data-api handler on the document, so the click must keep
-  // bubbling — only close the menu (the document-level close handler re-runs
-  // this, which is harmless).
+  // bubbling — only close the menu.
   menu.on('click', 'a.brand-menu-item', () => {
-    closeBrandMenu();
-  });
-
-  $(document).on('click', closeBrandMenu);
-  $(document).on('keydown', (event) => {
-    if (event.key === 'Escape') closeBrandMenu();
+    brandLayer.close();
   });
 }

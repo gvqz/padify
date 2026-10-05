@@ -109,4 +109,34 @@ test.describe('tables', () => {
     );
     expect(listAfter).toBe('DIV'); // the table's trailing paragraph follows
   });
+
+  test('the block menu reaches the empty line under a fresh table', async ({ page }) => {
+    await page.goto('/');
+    await createRichNote(page);
+
+    const editor = page.locator('#note');
+    await editor.click();
+    await page.locator('[data-rich-menu="table"]').click();
+    await page.locator('[data-rich-grid="1,2"]').click(); // 2x3
+    await expect(editor.locator('table td')).toHaveCount(6);
+
+    // Click the line below the table — the trailing paragraph a fresh
+    // insert ships with. Its cells are empty, so that line shares the
+    // table's stream offset; spot resolution must still land in it.
+    const tableBox = await editor.locator('table').boundingBox();
+    await page.mouse.click(tableBox!.x + tableBox!.width / 2, tableBox!.y + tableBox!.height + 20);
+
+    await page.locator('[data-rich-menu="block"]').click();
+    await page.locator('[data-rich-block="pre"]').click();
+
+    // The line became a code block; the table is untouched and outside it.
+    await expect(editor.locator('pre')).toHaveCount(1);
+    await expect(editor.locator('pre table')).toHaveCount(0);
+    await expect(editor.locator('table td')).toHaveCount(6);
+
+    // Typing lands inside the code block, below the table.
+    await page.keyboard.type('let x = 1');
+    await expect(editor.locator('pre')).toHaveText('let x = 1');
+    await expect(editor.locator('table td')).toHaveCount(6);
+  });
 });

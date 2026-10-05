@@ -218,17 +218,7 @@ export class SnapshotsManager {
     const noteContent = captured.content;
     const noteType = captured.noteType;
     if (!getEditorText().trim()) {
-      Swal.fire({
-        toast: true,
-        position: 'bottom',
-        icon: 'success',
-        title: 'Note is empty. Nothing to save as snapshot.',
-        showConfirmButton: false,
-        timer: 2000,
-        customClass: {
-          popup: 'swal-toast-bottom-offset',
-        },
-      });
+      showToast('Note is empty. Nothing to save as snapshot.');
       return;
     }
 
@@ -254,17 +244,7 @@ export class SnapshotsManager {
     const request = store.add(snapshot);
 
     request.onsuccess = () => {
-      Swal.fire({
-        toast: true,
-        position: 'bottom',
-        icon: 'success',
-        title: 'Snapshot created successfully!',
-        showConfirmButton: false,
-        timer: 2000,
-        customClass: {
-          popup: 'swal-toast-bottom-offset',
-        },
-      });
+      showToast('Snapshot created successfully!', 'success');
 
       // A store that only ever grows is a slow leak: retire the oldest
       // snapshots beyond the cap so safety copies stay bounded.
@@ -422,17 +402,7 @@ export class SnapshotsManager {
         }
         updateWordCountPill(getEditorText());
 
-        Swal.fire({
-          toast: true,
-          position: 'bottom',
-          icon: 'success',
-          title: 'Snapshot restored!',
-          showConfirmButton: false,
-          timer: 2000,
-          customClass: {
-            popup: 'swal-toast-bottom-offset',
-          },
-        });
+        showToast('Snapshot restored!', 'success');
 
         // Close the modal after a short delay
         setTimeout(() => {

@@ -43,7 +43,7 @@ import { Fragment, type Node as ProseNode, type Schema } from '@milkdown/kit/pro
 import { InputRule } from '@milkdown/kit/prose/inputrules';
 import { keymap } from '@milkdown/kit/prose/keymap';
 import { liftListItem, sinkListItem } from '@milkdown/kit/prose/schema-list';
-import { Plugin, PluginKey, type EditorState } from '@milkdown/kit/prose/state';
+import { Plugin, PluginKey, TextSelection, type EditorState } from '@milkdown/kit/prose/state';
 import type { EditorView, NodeView, ViewMutationRecord } from '@milkdown/kit/prose/view';
 import remarkMath from 'remark-math';
 import { imageSchema } from '@milkdown/kit/preset/commonmark';
@@ -595,9 +595,10 @@ function ancestorNamed(state: EditorState, name: string): boolean {
 /**
  * List nesting via Tab (sink), Shift-Tab (lift); two spaces inside
  * code blocks; tables defer to the GFM preset's cell-walk keymap;
- * everywhere else Tab stays the browser's focus key. Mod-\\ clears
- * formatting — the context menu's shared row advertises the hint, and
- * the html surface's rich-shortcuts own the same gesture.
+ * plain paragraphs take a two-space tab — the browser default (focus
+ * jumps out of the note to the topbar) ejects the author mid-sentence.
+ * Mod-\\ clears formatting — the context menu's shared row advertises
+ * the hint, and the html surface's rich-shortcuts own the same gesture.
  */
 export const indentKeymapPlugin = $prose(() => {
   return keymap({
@@ -625,7 +626,13 @@ export const indentKeymapPlugin = $prose(() => {
         dispatch?.(state.tr.insertText('  '));
         return true;
       }
-      return false;
+      // Plain paragraph: keep the caret, type the two-space tab. A
+      // spanning selection stays untouched — replacing it would eat text.
+      if (!state.selection.empty) {
+        return true;
+      }
+      dispatch?.(state.tr.insertText('  '));
+      return true;
     },
     'Shift-Tab': (state, dispatch) => {
       if (ancestorNamed(state, 'table')) {
@@ -638,7 +645,22 @@ export const indentKeymapPlugin = $prose(() => {
         }
         return liftListItem(itemType)(state, dispatch);
       }
-      return false;
+      // Plain paragraph: unwind the two-space gesture when the two
+      // characters directly before the caret are it; otherwise hold the
+      // caret where it is (never the focus jump the browser would do).
+      const at = state.selection instanceof TextSelection ? state.selection.$cursor : null;
+      if (at) {
+        const before = at.parent.textBetween(
+          Math.max(0, at.parentOffset - 2),
+          at.parentOffset,
+          undefined,
+          '\ufffc',
+        );
+        if (before === '  ') {
+          dispatch?.(state.tr.delete(at.pos - 2, at.pos));
+        }
+      }
+      return true;
     },
   });
 });

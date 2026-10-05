@@ -6,7 +6,10 @@
    8. Toasts & transient popups
    -------------------------------------------------------------------------- */
 
-/* Fallback toast — inverted (black on white UI, white on black UI) */
+/* Fallback toast — inverted (black on white UI, white on black UI).
+   One toast for the whole app: the SweetAlert2 bottom-toast variant was
+   retired — every transient confirmation rides this element now, with a
+   monochrome tone glyph instead of Swal's icon set. */
 body #toast {
   background: #171717;
   color: #fafafa;
@@ -23,6 +26,22 @@ body.dark #toast {
   background: #ededed;
   color: #171717;
   border-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Tone glyphs — monochrome by design: a check for confirmations, a bare
+   exclamation for failures. Neutral toasts carry no glyph. */
+body #toast[data-tone='success']::before,
+body #toast[data-tone='error']::before {
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+body #toast[data-tone='success']::before {
+  content: '\2713';
+}
+
+body #toast[data-tone='error']::before {
+  content: '!';
 }
 
 /* Re-time the classic show/hide keyframes with a small rise */

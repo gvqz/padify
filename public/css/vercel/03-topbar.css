@@ -40,45 +40,36 @@ body.dark .navbar-default .app-heading {
   color: var(--vz-fg);
 }
 
-/* Navbar icons (dark artwork on dark navbar) — flip for the light bar */
-.navbar.navbar-fixed-top .icon-container img,
-.navbar.navbar-fixed-top .navbar-header > span > a img,
-.navbar.navbar-fixed-top #pipContainer img {
-  filter: invert(1);
+/* Navbar icons — every icon is inline SVG stroked with currentColor, so
+   theming is one color rule instead of per-artwork invert filters (the
+   old mix of img files at stroke-width 2–2.5, hardcoded #fff/#000
+   strokes and 16–20px boxes was the "icons don't match" bug). Muted at
+   rest, full ink on hover — the nav-icon-btn treatment the left row
+   already had. */
+.navbar.navbar-fixed-top .nav-icon-btn {
+  color: var(--vz-fg);
   opacity: 0.72;
-  transition: opacity var(--vz-dur) ease, filter var(--vz-dur) ease;
+  transition: opacity var(--vz-dur) ease, background-color var(--vz-dur) ease;
 }
 
-.navbar.navbar-fixed-top .icon-container a:hover img,
-.navbar.navbar-fixed-top .icon-container a:focus img,
-.navbar.navbar-fixed-top .navbar-header > span > a:hover img,
-.navbar.navbar-fixed-top #pipContainer a:hover img {
-  filter: invert(1);
+.navbar.navbar-fixed-top .nav-icon-btn:hover,
+.navbar.navbar-fixed-top .nav-icon-btn:focus {
   opacity: 1;
 }
 
-body.dark .navbar.navbar-fixed-top .icon-container img,
-body.dark .navbar.navbar-fixed-top .navbar-header > span > a img,
-body.dark .navbar.navbar-fixed-top #pipContainer img {
-  filter: none;
-  opacity: 0.72;
+.navbar.navbar-fixed-top .nav-icon-btn svg {
+  display: block;
 }
 
-body.dark .navbar.navbar-fixed-top .icon-container a:hover img,
-body.dark .navbar.navbar-fixed-top .icon-container a:focus img,
-body.dark .navbar.navbar-fixed-top .navbar-header > span > a:hover img,
-body.dark .navbar.navbar-fixed-top #pipContainer a:hover img {
-  filter: none;
-  opacity: 1;
-}
-
-/* The desktop tool row uses inline white SVGs — flip them in light mode */
-.navbar.navbar-fixed-top .navbar-nav svg {
-  filter: invert(1);
-}
-
-body.dark .navbar.navbar-fixed-top .navbar-nav svg {
-  filter: none;
+/* The Ω glyph (unicode picker) — set in type so it stays the actual
+   character; sized/weighted to sit evenly with the 18px 1.8-stroke
+   icons around it. */
+.navbar.navbar-fixed-top .unicode-glyph {
+  display: block;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 18px;
+  text-align: center;
 }
 
 /* Icon hover = a quiet square chip, not a glow */

@@ -33,6 +33,7 @@
 
 import Swal from 'sweetalert2';
 import { showToast } from './ui/toast';
+import { registerLayer } from './ui/behavior/layers';
 import { CASES } from './case-conversions';
 import { getEditorPort, type EditorCommand, type FormatCommand } from './editor/port';
 import { getTabManager } from './tabs';
@@ -64,32 +65,15 @@ import {
 // import cycle.
 
 export function copyNotesToClipboard(note: string): void {
+  // The app's one toast (see ui/toast.ts) — the SweetAlert2 bottom-toast
+  // this used to fire was a second notification system with its own
+  // position, animation and off-palette icon.
   navigator.clipboard.writeText(note).then(
     function () {
-      Swal.fire({
-        toast: true,
-        position: 'bottom',
-        icon: 'success',
-        title: 'Notes copied to clipboard!',
-        showConfirmButton: false,
-        timer: 2000,
-        customClass: {
-          popup: 'swal-toast-bottom-offset',
-        },
-      });
+      showToast('Notes copied to clipboard.', 'success');
     },
     function () {
-      Swal.fire({
-        toast: true,
-        position: 'bottom',
-        icon: 'error',
-        title: 'Fail to copy. Check permissions for clipboard.',
-        showConfirmButton: false,
-        timer: 2000,
-        customClass: {
-          popup: 'swal-toast-bottom-offset',
-        },
-      });
+      showToast('Fail to copy. Check permissions for clipboard.', 'error');
     },
   );
 }
@@ -348,10 +332,19 @@ class ContextMenu {
     this.menu.addEventListener('keydown', (event) =>
       this.handleMenuKeydown(event as KeyboardEvent),
     );
-    document.addEventListener('click', (event) => {
-      if (!this.menu.hidden && !(event.target as HTMLElement).closest('.padify-ctx')) {
-        this.close();
-      }
+    // Outside-click dismissal rides the dismissable-layer registry (see
+    // ui/behavior/layers.ts): the capture-phase pointerdown sweep closes
+    // this menu when another layer opens or a click lands elsewhere —
+    // including clicks on openers that stopPropagation, which the old
+    // private document click listener below never saw.
+    registerLayer({
+      elements: [this.menu],
+      isOpen: () => !this.menu.hidden,
+      setOpen: (open) => {
+        if (!open) {
+          this.close();
+        }
+      },
     });
     window.addEventListener('blur', () => this.close());
     window.addEventListener('resize', () => this.close());

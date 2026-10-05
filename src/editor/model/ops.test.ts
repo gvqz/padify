@@ -125,6 +125,35 @@ describe('blocks', () => {
     shiftBlockIndent(model, [0, 18], -1);
     expect(out(model)).toBe('<div>indented paragraph</div>'); // never negative
   });
+
+  it('block formats address the empty line under an empty-cell table', () => {
+    // The stored table shape ships with a trailing empty line — the caret
+    // lands there when the user clicks below the table. Every block
+    // gesture must reach that line (its spot shares the table's boundary
+    // offset when the cells are empty) — and never touch the table.
+    const table =
+      '<table><tbody><tr><td></td><td></td></tr><tr><td></td><td></td></tr></tbody></table>';
+    const model = modelOf(`${table}<div><br></div>`);
+    expect(applyBlockTag(model, [0, 0], 'pre').changed).toBe(true);
+    expect(model.querySelector('pre')).not.toBeNull();
+    expect(model.querySelector('table')).not.toBeNull();
+    expect(model.querySelector('pre')!.contains(model.querySelector('table'))).toBe(false);
+    expect(model.querySelector('table')!.contains(model.querySelector('pre'))).toBe(false);
+  });
+
+  it('the line under a table takes headings and lists too', () => {
+    const table = '<table><tbody><tr><td></td></tr></tbody></table>';
+
+    const heading = modelOf(`${table}<div><br></div>`);
+    applyBlockTag(heading, [0, 0], 'h2');
+    expect(heading.querySelector('h2')).not.toBeNull();
+    expect(heading.querySelector('table')).not.toBeNull();
+
+    const list = modelOf(`${table}<div><br></div>`);
+    toggleListKind(list, [0, 0], 'ul');
+    expect(list.querySelector('ul')).not.toBeNull();
+    expect(list.querySelector('table')).not.toBeNull();
+  });
 });
 
 describe('lists and checklists', () => {
