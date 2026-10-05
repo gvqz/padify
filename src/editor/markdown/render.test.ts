@@ -312,9 +312,13 @@ describe('renderMarkdownToHtml — lists', () => {
 
   it('a changed marker kind starts a NEW list (CommonMark — the editor agrees)', () => {
     // Bullet char change: two lists.
-    expect(renderMarkdownToHtml('* a\n+ b')).toBe('<ul>\n<li>a</li>\n</ul>\n<ul>\n<li>b</li>\n</ul>');
+    expect(renderMarkdownToHtml('* a\n+ b')).toBe(
+      '<ul>\n<li>a</li>\n</ul>\n<ul>\n<li>b</li>\n</ul>',
+    );
     // Bullet -> ordered, adjacent: two lists.
-    expect(renderMarkdownToHtml('- a\n1. b')).toBe('<ul>\n<li>a</li>\n</ul>\n<ol>\n<li>b</li>\n</ol>');
+    expect(renderMarkdownToHtml('- a\n1. b')).toBe(
+      '<ul>\n<li>a</li>\n</ul>\n<ol>\n<li>b</li>\n</ol>',
+    );
     // Ordered delimiter change: two lists (the second keeps its own
     // numbering — item "2)" starts a fresh <ol> at 2).
     expect(renderMarkdownToHtml('1. a\n2) b')).toBe(
