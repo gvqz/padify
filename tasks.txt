@@ -33,7 +33,7 @@ the rest of the features will be made as "tools" (a tool icon in the topbar + po
         markdownreports\voice-notes.md: may be added as a PWA only feature(far in the future), save voice recordings as it transcribes.
 
 
-Simple: [done except the reminder polish below]
+Simple: [all done]
         [done] remove newspaper print
         [done] remove dyslectic font
         [done] rename Optimal line length to Easy Read
@@ -62,5 +62,5 @@ Before fixing bugs think about the underlying reason to why this bug exists in t
 
         - [done] a markdown note's drag grip (the 6-dot handle) stayed visible over the next note after switching (it lives in document.body and its teardown only ran on the next markdown mount; surfaces now get a dismiss() lifecycle the shell calls whenever the painter changes, and the grip hides on every note switch)
 
-        - microphone voice-bar animations are clunky and not smooth (the opening and the adding-words animation)
-        - serif, monospaced, handwritten, and humanist fonts just show the default font not sure why
+        - [done] microphone voice-bar animations are clunky and not smooth (the opening jumped half its width when the entrance keyframes ended — the centered translate lived only in the animation, not the base rule; now also: eased entrance, fade-down exit instead of a display:none snap, compositor-only scaleY wave with desynced per-bar tempo, fade-up on each interim text change)
+        - [done] serif, monospaced, handwritten, and humanist fonts just show the default font (editor.css's #note font-family beat the selection classes on ID specificity; the default now parks in :where() at zero specificity)
