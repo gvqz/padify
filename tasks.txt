@@ -61,5 +61,5 @@ Simple:
 remove newspaper print
 remove dyslectic font 
 rename Optimal line length to Easy Read
-
+Remove Font style setting in settings
 Make Break remindersshow up after 30 seconds(for testing)
