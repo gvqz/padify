@@ -1,25 +1,22 @@
 Future feature list
-        Right now the app is very much in beta, and numerous new features are being improved and added. Despite this, we need to make sure that the classic plain note is well fixed, as that's the main feature. 
+        Right now the app is very much in beta, and numerous new features are being improved and added. Despite this, we need to make sure that the classic plain note is well fixed, as that's the main feature.
 
 Improvements in the very far future
-        
+
         - add drawing pad
-        - add tasks/notes (based on apple reminders/tasks)      
-        - detect dates and suggest to add them to calander 
+        - add tasks/notes (based on apple reminders/tasks)
+        - detect dates and suggest to add them to calander
         - Heavily improve PWA experience
                 - save notes to users computer documents folder, use .padify format, which will be able to load all note types and drawing
-                - push notifications for timers, reminders, etc         
+                - push notifications for timers, reminders, etc
                 - automatically open .padify files
 
-Note: .padify format might not actually make it to the actual app, compare benefits/disadvantages 
+        Note: .padify format might not actually make it to the actual app, compare benefits/disadvantages
 
 Visual overhauls:
-                        
         - cloud sync/share
         - settings menu
                 - have settings based on each note type(classic, markdown, RTN, etc)
-        - currently two types of "notifications exist" - ex "Select some text first, then convert its case." and "Notes copied to clipboard" and both types have problems. The second one looks bad and has a weird animation. the first type has a broken leave animation and doesn't respond well to spam clicking/other human behavior.
-                - to fix: merge the second one with the first type, and fix the problems with the first type
         - Statistics menu + add more fun statistics, the current visual menu looks bad. Clicking on the text should rotate the stat (ex it says 1961 characters but when I click that text it switches to 340 words etc)
         - Music menu: this also needs an archecture overhaul/work. Currently the alwaysdata server hasn't been setup so it has not been tested and very much likely doesn't work as intended, delay changing this until specifically instructed with the words "music menu"
         - unicode menu. I don't know what to do with this right now, it's a bit broken and looks bad.
@@ -33,29 +30,37 @@ the rest of the features will be made as "tools" (a tool icon in the topbar + po
         markdownreports\teleprompter.md: may not be added, and would likely have less features
         markdownreports\text-diff.md: also unlikely to be added, would be very far in the future(compare between two of the same note type or HISTORY(like google docs)) users would have option to include formatting and other things to be ignored when comparing the texts
         markdownreports\text-tools.md: likely to be added, but much differently. No sample text, and would be based on the note text and not directly affect it(only copy the extracted/). No wrap, no encode/decode. Find and replace will not be added in this, as it will be a whole seperate feature.
-        markdownreports\voice-notes.md: may be added as a PWA only feature(far in the future), save voice recordings as it transcribes. 
+        markdownreports\voice-notes.md: may be added as a PWA only feature(far in the future), save voice recordings as it transcribes.
 
 
-Simple: [all done]
+Simple: [done except the reminder polish below]
         [done] remove newspaper print
         [done] remove dyslectic font
         [done] rename Optimal line length to Easy Read
         [done] Remove Font style setting in settings
-        [done] Make Break remindersshow up after 30 seconds(for testing)
+        [done] Make Break reminders show up quickly for testing (threshold is one constant now)
+        Break reminder polish:
+                - [done] show up after 3 seconds (for testing)
+                - [done] Place it over the new note button at the bottom of the notes menu (in the future this is also where the mini music player goes)
+                - [done] Change the text from "Time for a 2-minute break?" to "Time for a quick break?" and "Stand up, stretch, or look away from the screen for a minute." to "You've been working for a while. Stand up, stretch, or look away from the screen for a second."
 
+        lower security on commits, only the noreply email is needed  [done]
 
-Bug fixes: [all done]
+Bug fixes: [the 6-dot grip + the classic-note cluster below are fixed in this branch]
 
 Before fixing bugs think about the underlying reason to why this bug exists in the first place, is there a bigger thing that needs to be fixed, should archecture be changed?
-(The underlying reason WAS found for the classic-note bugs below: stream offsets cannot tell "end of line A" from "start of line B" — the same boundary ambiguity broke paste placement, paste-after-styled-runs, and Tab at a line's start. Fixed once, at the caret capture, for every command.)
+(The underlying reason WAS found for the classic-note bugs: stream offsets cannot tell "end of line A" from "start of line B" — the same boundary ambiguity broke paste placement, paste-after-styled-runs, and Tab at a line's start. Fixed once, at the caret capture, for every command.)
 
         - [done] ON CLASSIC NOTE: pasting text doesn't move the cursor where it should move (pasting at a line's START went into the line above; caret now lands after the paste in every geometry)
         - [done] ON CLASSIC NOTE: pasting stuff that was styled(bold, italics, etc) earlier on the document back to the docment doesn't properly format it (paste now keeps the note's formatting subset through the sanitizer — the old handler forced EVERY paste to plain text)
-        - [done] ON CLASSIC NOTE: Tabs do NOT work 93% of the time, heavily test that with realistic paragraphs and styling (the block-start ambiguity above: Tab at a line's start indented the line ABOVE, in paragraphs, lists and headings; bare-stream spanning Tab also destroyed <br>s — fixed)
+        - [done] ON CLASSIC NOTE: Tabs do NOT work most of the time, heavily test that with realistic paragraphs and styling (the block-start ambiguity above: Tab at a line's start indented the line ABOVE, in paragraphs, lists and headings; bare-stream spanning Tab also destroyed <br>s — fixed)
         - [done] icons on topbar aren't properly aligned to the middle of the topbar (the left icon row sat 3px high — the tooltip wrapper spans broke the flex-centering the negative margins were calibrated for; every wrapper is now a full-height stage)
-        - [done] microphone issues, animations are clunky and not smooth. sometimes the microphone is blocked on a device level(not browser level) and no voice would be detected for a while. make an error state for this issue. (two consecutive no-speech cycles with no audio now enter an honest error state naming the device-level causes; pulse smoothed 1.5s strobe → 2.4s breath; fixed a dead CSS selector while there)
+        - [done] microphone blocked on a device level(not browser level) and no voice detected — error state added (two consecutive no-speech cycles with no audio now enter an honest error state naming the device-level causes; fixed a dead CSS selector while there)
 
         - [done] fix tab name based on note name(don't use emdash)     (pipe separator now)
                 -[done] if PWA, the name Padify already comes up at the front, so DONT put padify at the end (installed app gets the bare note name)
 
         - [done] a markdown note's drag grip (the 6-dot handle) stayed visible over the next note after switching (it lives in document.body and its teardown only ran on the next markdown mount; surfaces now get a dismiss() lifecycle the shell calls whenever the painter changes, and the grip hides on every note switch)
+
+        - microphone voice-bar animations are clunky and not smooth (the opening and the adding-words animation)
+        - serif, monospaced, handwritten, and humanist fonts just show the default font not sure why
