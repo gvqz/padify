@@ -38,6 +38,7 @@ import {
   surfaceLooksEmpty,
 } from './model/document';
 import {
+  boundaryToStream,
   captureOffsets,
   nodeAtPath,
   ordered,
@@ -94,6 +95,27 @@ const CHECKLIST_GUTTER_PX = 30;
 
 /** Typing bursts that continue the open group instead of opening one. */
 const TYPING_INPUT_TYPES = new Set(['insertText', 'insertCompositionText']);
+
+/**
+ * The collapsed caret's exact spot in the surface, or null when the
+ * selection is ranged, absent, or lives outside the root. This is the
+ * one reading of the caret that keeps the SIDE of a block boundary —
+ * the numeric stream offset cannot (see insertPlainText's prefer).
+ */
+function liveCollapsedSpot(root: HTMLElement): DomSpot | null {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) {
+    return null;
+  }
+  const range = selection.getRangeAt(0);
+  const { startContainer, startOffset } = range;
+  if (!root.contains(startContainer)) {
+    return null;
+  }
+  return startContainer.nodeType === Node.TEXT_NODE
+    ? { kind: 'text', node: startContainer as Text, raw: startOffset }
+    : { kind: 'element', node: startContainer as Element, childIndex: startOffset };
+}
 
 /**
  * The stream offset of a spot inside root — the document-order sum of
@@ -547,8 +569,16 @@ export class ModelPort implements EditorPort {
     if (text === '') {
       return false;
     }
+    // The live caret's exact spot, captured before the pipeline runs: a
+    // caret at a BLOCK START sits on a stream offset the resolver can only
+    // answer as "the previous run's end" (both are the same number —
+    // blocks hold no stream), and an insertion resolved from the number
+    // alone landed on the wrong side (paste at a line's start went into
+    // the line above; paste after a bold run typed into the bold).
+    const caretSpot = liveCollapsedSpot(this.element);
     return this.command((model, coverage) => {
-      const result = insertPlainText(model, coverage, text);
+      const prefer = this.preferInModel(caretSpot, model, coverage[0]);
+      const result = insertPlainText(model, coverage, text, prefer);
       if (result.changed && options?.selectInserted) {
         // The replacement spans exactly [start, start + text.length) in
         // stream offsets — re-selecting it lets the caller repeat the
@@ -558,6 +588,31 @@ export class ModelPort implements EditorPort {
       }
       return result;
     });
+  }
+
+  /**
+   * The styled-paste path: an HTML fragment goes in at the caret after a
+   * pass through the note's own sanitizer — the formatting subset (bold,
+   * italic, lists, links…) survives, external junk never enters. The
+   * browser does the splicing (execCommand), so the caret lands after
+   * the inserted content by native semantics and the boundary-side
+   * question never arises; the 'input' event that follows re-absorbs the
+   * surface into the model, whose history group the paste's own
+   * beforeinput already opened — one undo step for the whole paste.
+   */
+  insertHtml(html: string): boolean {
+    const clean = this.deps.sanitize(html).trim();
+    if (!clean) {
+      return false;
+    }
+    if (typeof document.execCommand !== 'function') {
+      return false;
+    }
+    try {
+      return document.execCommand('insertHTML', false, clean);
+    } catch {
+      return false;
+    }
   }
 
   applyFormat(command: EditorCommand): boolean {
@@ -909,17 +964,29 @@ export class ModelPort implements EditorPort {
   }
 
   indent(): boolean {
+    // The live caret's spot disambiguates a BLOCK-START caret (its offset
+    // alone answers the previous block — see insertPlainText's prefer).
+    const caretSpot = liveCollapsedSpot(this.element);
     if (this.queryListKind() !== null) {
-      return this.command((model, coverage) => nestListItem(model, coverage[0]));
+      return this.command((model, coverage) =>
+        nestListItem(model, coverage[0], this.preferInModel(caretSpot, model, coverage[0])),
+      );
     }
-    return this.command((model, coverage) => shiftBlockIndent(model, coverage, 1));
+    return this.command((model, coverage) =>
+      shiftBlockIndent(model, coverage, 1, this.preferInModel(caretSpot, model, coverage[0])),
+    );
   }
 
   outdent(): boolean {
+    const caretSpot = liveCollapsedSpot(this.element);
     if (this.queryListKind() !== null) {
-      return this.command((model, coverage) => unnestListItem(model, coverage[0]));
+      return this.command((model, coverage) =>
+        unnestListItem(model, coverage[0], this.preferInModel(caretSpot, model, coverage[0])),
+      );
     }
-    return this.command((model, coverage) => shiftBlockIndent(model, coverage, -1));
+    return this.command((model, coverage) =>
+      shiftBlockIndent(model, coverage, -1, this.preferInModel(caretSpot, model, coverage[0])),
+    );
   }
 
   /**
@@ -1089,6 +1156,53 @@ export class ModelPort implements EditorPort {
   private surfaceNodeInModel(node: Node): Node | null {
     const path = pathTo(this.element, node);
     return path ? nodeAtPath(this.model, path) : null;
+  }
+
+  /**
+   * The model-space twin of a captured surface caret spot, mapped inside
+   * a command callback (the model is fresh there); null stays null.
+   */
+  private preferInModel(
+    caretSpot: DomSpot | null,
+    model: HTMLElement,
+    offset: number,
+  ): DomSpot | null {
+    return caretSpot ? this.modelSpotFor(caretSpot, model, offset) : null;
+  }
+
+  /**
+   * The model-space twin of a captured surface caret spot — but only when
+   * the model provably agrees with it: the node must exist at the same
+   * path (parse may have merged runs the live DOM kept separate) and the
+   * spot's stream offset must equal the captured coverage. Anything else
+   * answers null and the offset resolution stands.
+   */
+  private modelSpotFor(spot: DomSpot, model: HTMLElement, offset: number): DomSpot | null {
+    const path = pathTo(this.element, spot.node);
+    if (!path) {
+      return null;
+    }
+    const target = nodeAtPath(model, path);
+    if (!target) {
+      return null;
+    }
+    if (spot.kind === 'text') {
+      if (target.nodeType !== Node.TEXT_NODE) {
+        return null;
+      }
+      const text = target as Text;
+      if (boundaryToStream(model, text, 0) !== offset) {
+        return null;
+      }
+      return { kind: 'text', node: text, raw: spot.raw };
+    }
+    if (!(target instanceof Element)) {
+      return null;
+    }
+    if (boundaryToStream(model, target, spot.childIndex) !== offset) {
+      return null;
+    }
+    return { kind: 'element', node: target, childIndex: spot.childIndex };
   }
 
   // -------------------------------------------------------------------------

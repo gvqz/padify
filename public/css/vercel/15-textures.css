@@ -30,14 +30,6 @@ body.grain-paper {
   background-color: var(--vz-bg);
 }
 
-body.newspaper-paper {
-  background-color: #f6f6f4;
-}
-
-body.dark.newspaper-paper {
-  background-color: #0a0a0a;
-}
-
 /* Recycled keeps its imagery but sits on neutral paper */
 body.recycled-paper {
   background-color: var(--vz-bg);

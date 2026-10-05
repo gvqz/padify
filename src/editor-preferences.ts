@@ -25,11 +25,6 @@ export function resetLineHeight(defaultLineHeight: number): void {
   $('#lineHeight').val(defaultLineHeight);
 }
 
-export function resetFontWeight(defaultFontWeight: string): void {
-  $('#note').css('font-weight', defaultFontWeight);
-  $('#fontWeight').val(defaultFontWeight);
-}
-
 export function resetShowWordCountPill(defaultShowWordCountPill: string): void {
   if (defaultShowWordCountPill === 'Yes') {
     $('.word-count-container').show();
@@ -45,9 +40,9 @@ export function resetWriteDirection(defaultWriteDirection: string): void {
 }
 
 export function resetTexture(defaultTexture: string): void {
-  // The retired textures (chessboard/linen/marble) stay in this cleanup so
-  // a body still carrying one of their classes from an old session lands
-  // back on a paper that exists.
+  // The retired textures (chessboard/linen/marble/newspaper) stay in this
+  // cleanup so a body still carrying one of their classes from an old
+  // session lands back on a paper that exists.
   $(document.body).removeClass(
     'dotted-paper graph-paper chessboard-paper starfield-paper grain-paper linen-paper recycled-paper newspaper-paper marble-paper',
   );
@@ -55,6 +50,9 @@ export function resetTexture(defaultTexture: string): void {
 }
 
 export function resetFont(defaultFont: string): void {
+  // 'dyslexic' is retired but stays in this cleanup so a note still
+  // carrying the class from an old session lands back on a font that
+  // exists.
   $('#note').removeClass('dyslexic monospaced serif handwritten humanist pixel typewriter crayon');
   $('#font').val(defaultFont);
 }
@@ -73,10 +71,10 @@ export interface EditorPreferencesContext {
 }
 
 /**
- * Editor appearance preferences — font family/size/weight, line height,
- * write direction, paper texture, word-count pill, optimal line length
- * and spell check. Wires the preferences-modal controls, restores the
- * stored choices on boot and handles the font-selection migration.
+ * Editor appearance preferences — font family/size, line height, write
+ * direction, paper texture, word-count pill, Easy Read and spell check.
+ * Wires the preferences-modal controls, restores the stored choices on
+ * boot and handles the font-selection migration.
  */
 export function initEditorPreferences(ctx: EditorPreferencesContext): {
   resetToDefaults: () => void;
@@ -84,21 +82,17 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
   const { notepad, setState, editorConfig, optimalLineLengthPadding } = ctx;
   const removeState = removeSetting;
 
-  // Retired textures (chessboard, linen, marble) are deliberately absent:
-  // a stored choice of one of them fails this check and migrates to normal.
-  const allowedTextures = [
-    'normal',
-    'dotted',
-    'graph',
-    'starfield',
-    'grain',
-    'recycled',
-    'newspaper',
-  ];
+  // Retired textures (chessboard, linen, marble, newspaper) are
+  // deliberately absent: a stored choice of one of them fails this check
+  // and migrates to normal.
+  const allowedTextures = ['normal', 'dotted', 'graph', 'starfield', 'grain', 'recycled'];
 
   function applyTexture(textureSelected: string): void {
+    // Retired textures stay in this cleanup so a body still carrying one
+    // of their classes from an old session lands back on a paper that
+    // exists.
     $(document.body).removeClass(
-      'dotted-paper graph-paper starfield-paper grain-paper recycled-paper newspaper-paper',
+      'dotted-paper graph-paper chessboard-paper starfield-paper grain-paper linen-paper recycled-paper newspaper-paper marble-paper',
     );
 
     if (textureSelected == 'dotted') {
@@ -111,8 +105,6 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
       $(document.body).addClass('grain-paper');
     } else if (textureSelected == 'recycled') {
       $(document.body).addClass('recycled-paper');
-    } else if (textureSelected == 'newspaper') {
-      $(document.body).addClass('newspaper-paper');
     }
   }
 
@@ -124,14 +116,6 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
     notepad.fontSize.val(userChosenFontSize);
   } else {
     resetFontSize(editorConfig.defaultFontSize);
-  }
-
-  const userChosenFontWeight = getSetting('userChosenFontWeight');
-  if (userChosenFontWeight) {
-    notepad.note.css('font-weight', userChosenFontWeight);
-    notepad.fontWeight.val(userChosenFontWeight);
-  } else {
-    resetFontWeight(editorConfig.defaultFontWeight);
   }
 
   const userChosenLineHeight = getSetting('userChosenLineHeight');
@@ -223,13 +207,6 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
     setState('userChosenLineHeight', lineHeightSelected);
   });
 
-  notepad.fontWeight.on('change', function () {
-    const fontWeightSelected = (this as HTMLSelectElement).value;
-
-    notepad.note.css('font-weight', fontWeightSelected);
-    setState('userChosenFontWeight', fontWeightSelected);
-  });
-
   notepad.writeDirection.on('change', function () {
     const writeDirectionSelected = (this as HTMLSelectElement).value;
 
@@ -282,13 +259,13 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
 
   // Check for legacy font preferences and migrate them to the new system
   function migrateLegacyFontPrefs(): void {
-    const dyslexicFont = stateGet('dyslexicFont') === 'true';
+    // 'dyslexic' is retired: a legacy dyslexic choice lands on 'default'
+    // (the font's files and menu entry are gone), so only the surviving
+    // choices are consulted here.
     const monospacedFont = stateGet('monospaced') === 'true';
     const serifFont = stateGet('serifFont') === 'true';
 
-    if (dyslexicFont) {
-      setSetting('selectedFont', 'dyslexic');
-    } else if (monospacedFont) {
+    if (monospacedFont) {
       setSetting('selectedFont', 'monospaced');
     } else if (serifFont) {
       setSetting('selectedFont', 'serif');
@@ -304,16 +281,15 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
 
   // Apply font based on selection
   function applyFont(fontType: string): void {
-    // Remove all font classes first
+    // Remove all font classes first — 'dyslexic' is retired but stays in
+    // the cleanup so a note still carrying it from an old session lands
+    // back on a font that exists.
     notepad.note.removeClass(
       'dyslexic monospaced serif handwritten humanist pixel typewriter crayon',
     );
 
     // Add the selected font class
     switch (fontType) {
-      case 'dyslexic':
-        notepad.note.addClass('dyslexic');
-        break;
       case 'monospaced':
         notepad.note.addClass('monospaced');
         break;
@@ -386,12 +362,6 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
       if (userChosenLineHeight) {
         removeState('userChosenLineHeight');
         resetLineHeight(editorConfig.defaultLineHeight);
-      }
-
-      const userChosenFontWeight = getSetting('userChosenFontWeight');
-      if (userChosenFontWeight) {
-        removeState('userChosenFontWeight');
-        resetFontWeight(editorConfig.defaultFontWeight);
       }
 
       if (getSetting('userChosenWordCountPillSelected')) {

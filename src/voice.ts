@@ -87,8 +87,19 @@ let listening = false;
 let userWantsStop = false;
 let restartTimer: ReturnType<typeof setTimeout> | null = null;
 let supported = false;
+/** Consecutive no-speech failures — two in a row with no audio in between
+ *  is the signature of a microphone blocked at the DEVICE level (muted in
+ *  the OS, a hardware privacy switch, another app holding the mic): the
+ *  permission was granted, the engine runs, and yet nothing ever arrives.
+ *  One strike is still an ordinary pause. */
+let noSpeechStrikes = 0;
+/** True while the device-block error state is showing (the bar stays up
+ *  with the explanation until the user closes it). */
+let showingMicError = false;
 
 const RESTART_DELAY_MS = 250;
+/** Consecutive no-speech events before the device-block error state. */
+const NO_SPEECH_STRIKE_LIMIT = 2;
 
 // ---------------------------------------------------------------------------
 // Insertion helpers — every path through the ACTIVE note's surface
@@ -218,8 +229,15 @@ function handleResult(event: SpeechRecognitionEventLike): void {
     }
   }
 
+  // Audio arrived — whatever the strikes counted, the mic works.
+  noSpeechStrikes = 0;
+
   setBarInterim(interim.trim() ? interim : null);
 }
+
+/** The user-facing explanation for a mic the DEVICE has silenced. */
+const MIC_BLOCKED_MESSAGE =
+  'No voice detected. Your microphone may be muted at the system level, blocked by a privacy switch, or in use by another app.';
 
 /** Error codes that should end the session with a human explanation. */
 function fatalErrorMessage(code: string): string | null {
@@ -238,6 +256,47 @@ function fatalErrorMessage(code: string): string | null {
   }
 }
 
+/** Enters the device-block error state: the session ends, the bar stays
+ *  up carrying the explanation (a toast would vanish mid-read), the mic
+ *  button keeps the error face until the user closes it. */
+function showMicBlockedError(): void {
+  showingMicError = true;
+  listening = false;
+  userWantsStop = true;
+  if (restartTimer) {
+    clearTimeout(restartTimer);
+    restartTimer = null;
+  }
+  try {
+    recognition?.abort();
+  } catch {
+    /* already gone — harmless */
+  }
+  recognition = null;
+
+  $('#voiceTypeButton')
+    .removeClass('listening')
+    .addClass('voice-error')
+    .attr('aria-pressed', 'false');
+  const bar = voiceBar();
+  bar.removeAttr('hidden').addClass('error');
+  $('#voiceBarText')
+    .text(MIC_BLOCKED_MESSAGE)
+    .removeClass('interim')
+    .attr('title', MIC_BLOCKED_MESSAGE);
+}
+
+/** Leaves the error state (Done, Escape, or a fresh session). */
+function clearMicError(): void {
+  showingMicError = false;
+  noSpeechStrikes = 0;
+  $('#voiceTypeButton').removeClass('voice-error');
+  const bar = voiceBar();
+  bar.removeClass('error');
+  $('#voiceBarText').removeAttr('title');
+  bar.attr('hidden', 'hidden');
+}
+
 function handleError(event: SpeechRecognitionErrorEventLike): void {
   const fatal = fatalErrorMessage(event.error);
   if (fatal) {
@@ -246,8 +305,18 @@ function handleError(event: SpeechRecognitionErrorEventLike): void {
     return;
   }
 
-  // 'no-speech' and 'aborted' are normal pauses/interruptions — the onend
-  // handler keeps the session alive; nothing to tell the user.
+  if (event.error === 'no-speech') {
+    // One strike is an ordinary pause. Two with no audio in between is
+    // the device-block signature — say so instead of listening into the
+    // void behind a dancing waveform.
+    noSpeechStrikes += 1;
+    if (noSpeechStrikes >= NO_SPEECH_STRIKE_LIMIT) {
+      showMicBlockedError();
+    }
+    return;
+  }
+
+  // 'aborted' is our own stop/abort — nothing to tell the user.
 }
 
 function startRecognition(): void {
@@ -266,11 +335,12 @@ function startRecognition(): void {
   next.onerror = handleError;
   next.onend = () => {
     // Browsers end recognition on silence — restart while the user still
-    // wants the session open, with a small guard against hot loops.
-    if (listening && !userWantsStop) {
+    // wants the session open, with a small guard against hot loops. The
+    // error state (device-blocked mic) does not restart.
+    if (listening && !userWantsStop && !showingMicError) {
       restartTimer = setTimeout(() => {
         restartTimer = null;
-        if (listening && !userWantsStop) {
+        if (listening && !userWantsStop && !showingMicError) {
           try {
             recognition?.start();
           } catch {
@@ -301,6 +371,11 @@ export function startVoiceTyping(): void {
     return;
   }
 
+  if (showingMicError) {
+    // A fresh click is a fresh attempt — the error state stands down.
+    clearMicError();
+  }
+
   if (!supported) {
     showToast("Voice typing isn't supported in this browser.");
     return;
@@ -324,6 +399,7 @@ export function stopVoiceTyping(): void {
 function stopListening(): void {
   userWantsStop = true;
   listening = false;
+  noSpeechStrikes = 0;
 
   if (restartTimer) {
     clearTimeout(restartTimer);
@@ -369,9 +445,13 @@ export function isListening(): boolean {
 
 /**
  * Called when the active note changes — dictation must never spill into the
- * wrong note, so an open session is closed quietly.
+ * wrong note, so an open session (or a lingering error state) is closed
+ * quietly.
  */
 export function handleTabSwitchedWhileListening(): void {
+  if (showingMicError) {
+    clearMicError();
+  }
   if (listening) {
     stopVoiceTyping();
     showToast('Voice typing stopped — you switched notes.');
@@ -398,17 +478,26 @@ export function initVoiceTyping(): void {
 
   $('#voiceBarStop').on('click', (event) => {
     event.preventDefault();
+    if (showingMicError) {
+      clearMicError();
+      return;
+    }
     stopVoiceTyping();
   });
 
-  // Escape ends dictation without stealing focus from the editor.
+  // Escape ends dictation (or closes the mic error) without stealing
+  // focus from the editor.
   document.addEventListener(
     'keydown',
     (event) => {
-      if (listening && event.key === 'Escape') {
+      if (event.key === 'Escape' && (listening || showingMicError)) {
         event.preventDefault();
         event.stopPropagation();
-        stopVoiceTyping();
+        if (showingMicError) {
+          clearMicError();
+        } else {
+          stopVoiceTyping();
+        }
       }
     },
     true,

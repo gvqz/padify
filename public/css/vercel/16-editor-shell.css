@@ -1509,8 +1509,12 @@ body.pip-host #tabRailBackdrop {
 
 /* ---- Responsive: the rail becomes an off-canvas drawer ---- */
 @media (max-width: 820px) {
+  /* The rail toggle joins the icon row as a full-height stage (the same
+     vertical contract 03-topbar.css gives every wrapper span — a plain
+     inline box here would reintroduce the 3px icon drift on mobile). */
   #tabRailToggleContainer {
-    display: inline;
+    display: flex;
+    align-items: center;
   }
 
   #tabRail {
@@ -1876,20 +1880,31 @@ body.pip-host #tabRailBackdrop {
   inset: -1px;
   border-radius: inherit;
   border: 2px solid rgba(229, 72, 77, 0.5);
-  animation: voice-pulse 1.5s ease-out infinite;
+  /* A slow breath, not a strobe: the old 1.5s ease-out ring restarted
+     hard every cycle and read as flicker. */
+  animation: voice-pulse 2.4s ease-in-out infinite;
 }
 
 @keyframes voice-pulse {
-  0% {
-    transform: scale(0.85);
-    opacity: 1;
+  0%,
+  100% {
+    transform: scale(0.92);
+    opacity: 0.7;
   }
 
-  70%,
-  100% {
-    transform: scale(1.4);
+  50% {
+    transform: scale(1.22);
     opacity: 0;
   }
+}
+
+/* The mic's device-block face: the session ended because the DEVICE
+   silenced the mic (OS mute, privacy switch, another app holds it) —
+   solid red chip, no pulse (nothing is listening). */
+.voice-nav-button.voice-error {
+  color: #e5484d;
+  opacity: 1;
+  background: rgba(229, 72, 77, 0.12);
 }
 
 .voice-bar {
@@ -1907,6 +1922,25 @@ body.pip-host #tabRailBackdrop {
   border-radius: 999px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
   animation: voice-bar-in 0.18s ease-out;
+}
+
+/* The error state: the bar carries the explanation and stays up until
+   the user closes it — a toast would vanish mid-read. The waveform
+   pauses: nothing is being heard, and dancing bars would say otherwise. */
+.voice-bar.error {
+  border-color: rgba(229, 72, 77, 0.45);
+}
+
+.voice-bar.error .voice-bar-text {
+  color: #e5484d;
+  white-space: normal;
+  max-width: min(460px, 72vw);
+}
+
+.voice-bar.error .voice-bar-wave i {
+  animation-play-state: paused;
+  height: 22%;
+  opacity: 0.45;
 }
 
 .voice-bar[hidden] {

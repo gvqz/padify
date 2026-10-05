@@ -42,14 +42,6 @@
   background: #444;
 }
 
-/* Import OpenDyslexic font */
-@font-face {
-  font-family: 'OpenDyslexic';
-  src: url('../fonts/OpenDyslexic-Regular.otf') format('opentype');
-  font-weight: normal;
-  font-style: normal;
-}
-
 @font-face {
   font-family: 'Cookie';
   src: url('../fonts/Cookie-Regular.ttf') format('opentype');
@@ -78,12 +70,8 @@
   font-style: normal;
 }
 
-/* Dyslexic font class */
-.dyslexic {
-  font-family: 'OpenDyslexic', sans-serif !important;
-  line-height: 1.6;
-  letter-spacing: -1.6px;
-}
+/* The 'dyslexic' font is retired: the OpenDyslexic face and menu entry
+   are gone, and boot strips any .dyslexic class an old session kept. */
 
 .pixel {
   font-family: 'DepartureMono', sans-serif !important;

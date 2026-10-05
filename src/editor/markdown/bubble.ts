@@ -281,6 +281,17 @@ export function initMarkdownBubble(wiring: MarkdownBubbleHandlers): void {
   ensureProvider();
 }
 
+/**
+ * Hides the bubble (the surface's stand-down call — dismiss). The
+ * provider's own hide rides the editor's plugin-view destroy; that hook
+ * only exists once an editor FINISHED building, so a switch away from a
+ * still-mounting note (or a non-destroy transition) needs the explicit
+ * call — an open bubble must not open on the next note.
+ */
+export function hideMarkdownBubble(): void {
+  provider?.hide();
+}
+
 /** Test seam: the live panel element (null before the first configure). */
 export function markdownBubblePanel(): HTMLElement | null {
   return panel;

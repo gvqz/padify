@@ -18,7 +18,10 @@ interface BreakReminderState {
 
 const breakReminderConfig = {
   // Show the reminder after this much active writing time.
-  thresholdMs: 30 * 60 * 1000,
+  // 30 SECONDS — a temporary testing value (the task list asks for it so
+  // the flow can be exercised without a half-hour session). Restore
+  // 30 * 60 * 1000 before shipping.
+  thresholdMs: 30 * 1000,
 
   // Ignore gaps longer than this so idle time does not count as writing.
   idleWindowMs: 2 * 60 * 1000,

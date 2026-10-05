@@ -163,4 +163,35 @@ test.describe('rapid note switching', () => {
     expect(cells.slice(1).every((cell) => !cell.includes('X'))).toBe(true);
     await expect(editor).toContainText('trailing line');
   });
+
+  test('the block grip never outlives its note (what one note shows stays in it)', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await newMarkdownNote(page);
+    const editor = page.locator('#note .ProseMirror');
+    await editor.click();
+    await page.keyboard.type('grip source note');
+
+    // Hover a block: the grip floats in the gutter (it lives in
+    // document.body, outside the surface wrapper).
+    await editor.locator('p').first().hover();
+    const handle = page.locator('.md-block-handle');
+    await expect(handle).toHaveAttribute('data-show', 'true');
+
+    // Switch to a rich note: the grip's owner stands down. Before the
+    // dismiss lifecycle the frozen, still-visible grip stayed over the
+    // OTHER note — the "6 dot thing goes to the other note" report.
+    await newRichNote(page);
+    await page.keyboard.type('plain body');
+    await expect(page.locator('#note')).toContainText('plain body');
+    await expect(page.locator('.md-block-handle')).toHaveCount(0);
+
+    // Slam back to the markdown note: the grip returns with ITS editor,
+    // ready for its own note again.
+    await page.locator('#tabStripTabs .tab-strip-tab').nth(1).click();
+    await expect(page.locator('#markdownToolbar')).toBeVisible();
+    await editor.locator('p').first().hover();
+    await expect(page.locator('.md-block-handle')).toHaveAttribute('data-show', 'true');
+  });
 });

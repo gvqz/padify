@@ -31,7 +31,6 @@ export const SETTING_KEYS = [
   'mode',
   'isUserPreferredTheme',
   'userChosenFontSize',
-  'userChosenFontWeight',
   'userChosenLineHeight',
   'hasUserDismissedDonationPopup',
   'userChosenWordCountPillSelected',
@@ -62,7 +61,6 @@ export interface EditorDefaults {
   defaultFontSize: number;
   defaultLineHeight: number;
   defaultFont: string;
-  defaultFontWeight: string;
   defaultShowWordCountPill: string;
   defaultWriteDirection: string;
   defaultTexture: string;
@@ -79,7 +77,6 @@ export const DEFAULT_EDITOR_CONFIG: EditorDefaults = {
   defaultFontSize: 18,
   defaultLineHeight: 26,
   defaultFont: 'default',
-  defaultFontWeight: 'normal',
   defaultShowWordCountPill: 'Yes',
   defaultWriteDirection: 'ltr',
   defaultTexture: 'normal',

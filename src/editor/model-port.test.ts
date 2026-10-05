@@ -42,6 +42,26 @@ function nativeEdit(
   surface.dispatchEvent(after);
 }
 
+/**
+ * Places the caret at raw offset 0 of the nth block's first text node —
+ * the BLOCK-START caret. A stream-offset caretAt() call cannot express
+ * this position (the offset belongs to the previous block's end too),
+ * which is exactly why the live spot has to win the tie.
+ */
+function caretAtNodeStart(surface: HTMLElement, blockIndex: number): void {
+  const block = surface.children[blockIndex] as HTMLElement | undefined;
+  const text = block?.firstChild;
+  if (!block || !text || text.nodeType !== Node.TEXT_NODE) {
+    throw new Error(`block ${blockIndex} has no leading text node`);
+  }
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.setStart(text, 0);
+  range.collapse(true);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
 /** Places the caret at a stream offset on the surface (end-safe). */
 function caretAt(surface: HTMLElement, at: number): void {
   const selection = window.getSelection();
@@ -187,6 +207,40 @@ describe('the command pipeline', () => {
     expect(port.insertText(' tail')).toBe(true);
     expect(surface.innerHTML).toBe('<p>first</p><p>second tail</p>');
     expect(caretStreamOffset(surface)).toBe(16);
+  });
+
+  it('insertText at a BLOCK START lands in that block, not the previous one', () => {
+    const { port, surface } = makePort('<p>first</p><p>second</p>');
+    // The raw DOM caret at (second's text, 0). Its stream offset (5) is
+    // the SAME number as the previous block's end — blocks hold no
+    // stream — and the offset resolver answers the A side. The live spot
+    // is the one place the boundary's side survives; without it the
+    // paste landed one line up (the cursor-where bug from tasks.txt).
+    caretAtNodeStart(surface, 1);
+    expect(port.insertText('XYZ')).toBe(true);
+    expect(surface.innerHTML).toBe('<p>first</p><p>XYZsecond</p>');
+    // The caret follows the paste: after 'XYZ' inside 'second'.
+    expect(caretStreamOffset(surface)).toBe(8);
+  });
+
+  it('indent at a BLOCK START steps that block, not the previous one', () => {
+    const { port, surface } = makePort('<p>first</p><p>second</p>');
+    caretAtNodeStart(surface, 1);
+    expect(port.indent()).toBe(true);
+    expect(surface.innerHTML).toBe('<p>first</p><p style="margin-left: 40px">second</p>');
+  });
+
+  it('nesting at an ITEM START nests that item, not the previous one', () => {
+    const { port, surface } = makePort('<ul><li>alpha</li><li>beta</li></ul>');
+    const beta = surface.querySelectorAll('li')[1]!.firstChild as Text;
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.setStart(beta, 0);
+    range.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    expect(port.indent()).toBe(true);
+    expect(surface.innerHTML).toBe('<ul><li>alpha<ul><li>beta</li></ul></li></ul>');
   });
 
   it('toggleList wraps root text and keeps the caret at the same text offset', () => {

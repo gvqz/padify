@@ -44,7 +44,12 @@ import {
 } from './storage';
 import { sanitizeNoteHtml } from './editor/storage-subset';
 import { currentThemeMode } from './editor/theme-colors';
-import { htmlNoteSurface, noteSurfaceFor, noteSurfaceForKind } from './editor/surface';
+import {
+  htmlNoteSurface,
+  noteSurfaceFor,
+  noteSurfaceForKind,
+  type NoteSurface,
+} from './editor/surface';
 import { renderMarkdownToHtml } from './editor/markdown/render';
 import {
   deriveTabTitle,
@@ -62,6 +67,7 @@ import {
   type KnownNoteType,
   type NoteType,
 } from './editor/note-types';
+import { isInstalledDisplayMode } from './install-pwa';
 
 export type { NoteType } from './editor/note-types';
 
@@ -175,6 +181,9 @@ export class TabManager {
   private dirtyIds: Set<string> = new Set();
   private persistListeners: Set<(payload: TabsSyncPayload) => void> = new Set();
   private activeListeners: Set<(tab: NoteTab) => void> = new Set();
+  /** The surface that currently paints the host — dismissed before a
+   * different kind takes the stage (the NoteSurface.dismiss contract). */
+  private paintedBy: NoteSurface | null = null;
 
   constructor(editor: Q) {
     this.editor = editor;
@@ -526,7 +535,18 @@ export class TabManager {
     // build can't edit gets the read-only card. The manager no longer
     // knows how — that is the seam a new note kind (Markdown, a board)
     // plugs into.
-    noteSurfaceFor(this.getActive()).display(host, this.getActive());
+    const incoming = noteSurfaceFor(this.getActive());
+    // The lifecycle half of that seam: when the PAINTER changes, the
+    // outgoing surface stands down first (its editor, history, and any
+    // UI it parked outside the host — a markdown note's floating grip
+    // lives in document.body and would otherwise freeze visible over
+    // the next note). Within one surface the editor is reused, so
+    // markdown→markdown keeps its fast re-apply path.
+    if (this.paintedBy && this.paintedBy !== incoming) {
+      this.paintedBy.dismiss?.(host);
+    }
+    this.paintedBy = incoming;
+    incoming.display(host, this.getActive());
   }
 
   getActiveText(): string {
@@ -570,6 +590,17 @@ export class TabManager {
     }
 
     if (isHtmlContent(noteType)) {
+      // The snapshot may switch the note's kind (a markdown note restored
+      // as html): the painter changes outside loadActiveIntoEditor, so the
+      // outgoing surface stands down here first — its editor and floating
+      // chrome must not survive into the repainted host.
+      const host = this.editorHost();
+      if (this.paintedBy && this.paintedBy !== htmlNoteSurface) {
+        if (host) {
+          this.paintedBy.dismiss?.(host);
+        }
+        this.paintedBy = htmlNoteSurface;
+      }
       const committed = noteSurfaceForKind('html').commit(this.editorHost(), content);
       if (!committed) {
         // Bare-DOM fallback (pre-boot paths): the surface painted the
@@ -670,13 +701,23 @@ export class TabManager {
     }
   }
 
-  /** The browser tab mirrors the note's name — "Note name — Padify" — so
-   *  a row of pinned tabs says which note each holds. Follows every path
-   *  the tab strip label follows (typing, rename, switch), through the
-   *  same deriveTabTitle, so the two never disagree. */
+  /** The browser tab mirrors the note's name so a row of pinned tabs
+   *  says which note each holds. Follows every path the tab strip label
+   *  follows (typing, rename, switch), through the same deriveTabTitle,
+   *  so the two never disagree. Two naming rules from the task list: the
+   *  separator is a plain pipe (an emdash reads as part of the note's
+   *  own name), and an INSTALLED app gets the bare note name — the
+   *  standalone window's chrome already says "Padify", and "Padify —
+   *  Padify" is what a suffix produced there. */
   private syncDocumentTitle(): void {
     const active = this.getActive();
-    document.title = active ? `${deriveTabTitle(active)} — Padify` : 'Padify';
+    if (!active) {
+      document.title = 'Padify';
+      return;
+    }
+    document.title = isInstalledDisplayMode()
+      ? deriveTabTitle(active)
+      : `${deriveTabTitle(active)} | Padify`;
   }
 
   private bindStripEvents(): void {

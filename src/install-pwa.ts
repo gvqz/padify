@@ -17,6 +17,18 @@ export function getPWADisplayMode(): 'twa' | 'standalone' | 'browser' {
   return 'browser';
 }
 
+/** True when the app runs as an INSTALLED app (a standalone window or
+ * TWA), not a browser tab. A guarded read: matchMedia is missing in some
+ * embeds (and in jsdom), and the consumers of this answer (the document
+ * title's suffix) must never be the thing that crashes a boot. */
+export function isInstalledDisplayMode(): boolean {
+  try {
+    return getPWADisplayMode() !== 'browser';
+  } catch {
+    return false;
+  }
+}
+
 // `beforeinstallprompt` is not part of lib.dom's WindowEventMap.
 declare global {
   interface BeforeInstallPromptEvent extends Event {

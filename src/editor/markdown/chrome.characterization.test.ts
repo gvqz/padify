@@ -331,6 +331,40 @@ describe('the block handle — the drag grip', () => {
     expect(markdownBlockHandleElement()).toBeNull();
   });
 
+  it('dismiss tears the grip and its body-level chrome down (the painter changed)', async () => {
+    const host = await bootMarkdown('# grip note');
+    // A fresh mount attaches the grip (the shared editor's first boot may
+    // have had it detached by an earlier test's teardown).
+    host.innerHTML = '<p>an html note</p>';
+    surface.display(host, { content: '# grip note again' });
+    await ready();
+    await settled();
+    const grip = markdownBlockHandleElement();
+    expect(grip).not.toBeNull();
+
+    // The shell's stand-down call when another kind takes the host: the
+    // grip (a document.body child) must leave the DOM in the same beat —
+    // a lazy teardown left it frozen visible over the NEXT note.
+    surface.dismiss?.(host);
+    await settled();
+
+    expect(markdownBlockHandleElement()).toBeNull();
+    expect(grip?.isConnected).toBe(false);
+    // The surface is fully stood down: a fresh display mounts anew.
+    surface.display(host, { content: '# back again' });
+    await ready();
+    await settled();
+    expect(markdownBlockHandleElement()).not.toBeNull();
+    detachBlockHandle();
+  });
+
+  it('dismiss hides the bubble even when no editor finished building', () => {
+    // The floating panels live in document.body; their own close paths
+    // (mousedown outside, editor destroy) do not cover a transition away
+    // from a STILL-MOUNTING note. dismiss hides them unconditionally.
+    expect(() => surface.dismiss?.(document.createElement('div'))).not.toThrow();
+  });
+
   it('the exported plugin array carries the block chain and the drop cursor', () => {
     // Import through the surface's own chain indirectly: attach is what
     // the surface calls; the plugins land via .use — pinned here by the
