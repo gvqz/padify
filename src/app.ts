@@ -470,6 +470,49 @@ export async function initApp(): Promise<void> {
     }
   });
 
+  // ---- Keyboard shortcuts search filtering & reset ------------------
+  const shortcutSearchInput = document.getElementById('shortcutSearch') as HTMLInputElement | null;
+  const shortcutNoResults = document.getElementById('shortcutNoResults');
+  const shortcutSections = document.querySelectorAll<HTMLElement>('.shortcut-section');
+
+  const filterShortcuts = (query: string): void => {
+    const q = query.trim().toLowerCase();
+    let totalVisible = 0;
+
+    shortcutSections.forEach((section) => {
+      const rows = section.querySelectorAll<HTMLElement>('.shortcut-row');
+      let sectionVisibleCount = 0;
+
+      rows.forEach((row) => {
+        const searchText = row.getAttribute('data-search') || row.textContent?.toLowerCase() || '';
+        const matches = !q || searchText.includes(q);
+        row.style.display = matches ? 'flex' : 'none';
+        if (matches) sectionVisibleCount++;
+      });
+
+      section.style.display = sectionVisibleCount > 0 ? 'block' : 'none';
+      totalVisible += sectionVisibleCount;
+    });
+
+    if (shortcutNoResults) {
+      shortcutNoResults.style.display = totalVisible === 0 ? 'flex' : 'none';
+    }
+  };
+
+  if (shortcutSearchInput) {
+    shortcutSearchInput.addEventListener('input', (e) => {
+      filterShortcuts((e.target as HTMLInputElement).value);
+    });
+  }
+
+  notepad.keyboardShortcutsModal.on('show.bs.modal', function () {
+    if (shortcutSearchInput) {
+      shortcutSearchInput.value = '';
+      filterShortcuts('');
+      setTimeout(() => shortcutSearchInput.focus(), 150);
+    }
+  });
+
   // Update statistics when modal is shown
   notepad.statisticsModal.on('show.bs.modal', function () {
     const stats = calculateNoteStatistics(getEditorText());
