@@ -71,6 +71,7 @@ describe('calculateNoteStatistics', () => {
   it('returns the all-zero shape for empty input', () => {
     expect(calculateNoteStatistics('')).toEqual({
       characters: 0,
+      charactersNoSpaces: 0,
       words: 0,
       sentences: 0,
       paragraphs: 0,
@@ -83,7 +84,26 @@ describe('calculateNoteStatistics', () => {
       readabilityScore: '0.0',
       estimatedPages: '0 pages',
       estimatedSpeakingTime: '0 min',
+      writingTime: '0 min',
+      wordsPerSentence: '0.0',
+      longestWord: 'N/A',
+      longestSentence: '0 words',
     });
+  });
+
+  it('computes the fun extras: records, no-space characters, writing time', () => {
+    const stats = calculateNoteStatistics(
+      'Padify keeps every note safe. extraordinary Persistence!',
+    );
+    expect(stats.longestWord).toBe('extraordinary');
+    expect(stats.longestSentence).toBe('5 words');
+    expect(stats.charactersNoSpaces).toBe(
+      calculateNoteStatistics('Padify keeps every note safe. extraordinary Persistence!')
+        .characters - 6,
+    );
+    expect(stats.wordsPerSentence).toBe('3.5');
+    // 7 words at a 40 wpm typing pace — one minute after rounding up.
+    expect(stats.writingTime).toBe('1 min');
   });
 
   it('computes full statistics for a known sentence pair', () => {
