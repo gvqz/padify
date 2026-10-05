@@ -356,13 +356,19 @@ export async function initApp(): Promise<void> {
         return;
       }
 
-      // Everywhere else Tab structures the BLOCK (Docs parity): the
-      // paragraph steps its margin, list items nest (the port's
-      // indent/outdent), Shift+Tab reverses. The old handler spliced a
-      // \n-joined tab-prefixed string over the selection instead — which
-      // merged every selected paragraph into one <p> littered with tab
-      // characters and soft breaks (the worst of the tab bugs), and undo
-      // could not bring the block structure back.
+      // Everywhere else the port decides, by what the caret sits in:
+      // an element block steps its margin (Docs parity), a list nests,
+      // and a bare text stream — a note that never grew element blocks,
+      // where "the block" is the whole document — takes the line-oriented
+      // literal tab, Shift+Tab reversing. The old handler spliced a
+      // \n-joined tab-prefixed string over every selection instead —
+      // which through the model pipeline merged selected paragraphs into
+      // one <p> littered with tab characters and soft breaks (the worst
+      // of the tab bugs), and undo could not bring the structure back.
+      const streamTab = port.tabStream?.(e.shiftKey);
+      if (streamTab !== null && streamTab !== undefined) {
+        return;
+      }
       if (e.shiftKey) {
         port.outdent();
       } else {
@@ -381,7 +387,10 @@ export async function initApp(): Promise<void> {
   // the capture-phase sweep has already run by the time this click
   // toggles, so the click cannot stack menus anymore.
   const downloadLayer = registerLayer({
-    elements: [notepad.downloadNotes.get(0) as HTMLElement, document.getElementById('iconDropdown')!],
+    elements: [
+      notepad.downloadNotes.get(0) as HTMLElement,
+      document.getElementById('iconDropdown')!,
+    ],
     isOpen: () => $('#iconDropdown').hasClass('show'),
     setOpen: (open) => {
       $('#iconDropdown').toggleClass('show', open);

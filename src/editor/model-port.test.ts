@@ -229,6 +229,73 @@ describe('the command pipeline', () => {
   });
 });
 
+describe('Tab over the bare stream — the classic plain note', () => {
+  it('a collapsed caret takes a literal tab, not a document-wide margin', () => {
+    const { port, surface } = makePort('first line\n\nsecond line');
+    caretAt(surface, 4);
+    expect(port.tabStream(false)).toBe(true);
+    expect(surface.innerHTML).toBe('firs\tt line\n\nsecond line');
+    // The stream stayed a stream — no margin block materialized over it.
+    expect(surface.querySelector('[style]')).toBeNull();
+  });
+
+  it('a spanning selection tabs every line and keeps it selected for repeats', () => {
+    const { port, surface } = makePort('alpha\nbeta\ngamma');
+    selectRange(surface, 0, 17);
+    expect(port.tabStream(false)).toBe(true);
+    expect(surface.textContent).toBe('\talpha\n\tbeta\n\tgamma');
+    const selection = window.getSelection();
+    expect(selection?.toString()).toBe('\talpha\n\tbeta\n\tgamma');
+  });
+
+  it('Shift+Tab over tabbed lines unwinds one tab per line', () => {
+    const { port, surface } = makePort('\talpha\n\tbeta');
+    selectRange(surface, 0, 12);
+    expect(port.tabStream(true)).toBe(true);
+    expect(surface.textContent).toBe('alpha\nbeta');
+  });
+
+  it('a collapsed Shift+Tab is a no-op — nothing to unwind at the caret', () => {
+    const { port, surface } = makePort('\tindented');
+    caretAt(surface, 3);
+    expect(port.tabStream(true)).toBe(false);
+    expect(surface.textContent).toBe('\tindented');
+  });
+
+  it('an element block declines the gesture (null) and takes the margin step', () => {
+    const { port, surface } = makePort('<div>block one</div><div>block two</div>');
+    caretAt(surface, 14); // inside the second block
+    // null = "not a bare stream" — the key handler falls back to the
+    // formatting commands (the toolbar's indent button rides those too).
+    expect(port.tabStream(false)).toBeNull();
+    expect(port.indent()).toBe(true);
+    expect(surface.innerHTML).toBe(
+      '<div>block one</div><div style="margin-left: 40px">block two</div>',
+    );
+  });
+
+  it('the toolbar path on a bare stream still formats the block', () => {
+    // The Tab KEY takes tabStream(); the indent BUTTON takes indent() —
+    // on a bare stream that materializes the block and steps its margin,
+    // exactly what the docs-toolbar e2e pins through the real toolbar.
+    const { port, surface } = makePort('indented paragraph');
+    caretAt(surface, 4);
+    expect(port.tabStream(false)).toBe(true);
+    expect(surface.textContent).toBe('inde\tnted paragraph');
+    expect(port.indent()).toBe(true);
+    expect(surface.innerHTML).toBe('<div style="margin-left: 40px">inde\tnted paragraph</div>');
+  });
+
+  it('the bare-stream tab is one undo step', () => {
+    const { port, surface } = makePort('plain words');
+    caretAt(surface, 5);
+    expect(port.tabStream(false)).toBe(true);
+    expect(surface.textContent).toBe('plain\t words');
+    expect(port.undo()).toBe(true);
+    expect(surface.textContent).toBe('plain words');
+  });
+});
+
 describe('history — one undo discipline for everything', () => {
   it('typing bursts, deletes and commands undo in the pinned dance', () => {
     const { port, surface } = makePort();

@@ -30,7 +30,13 @@ import type {
 } from './port';
 import { rgbStringToHex } from './color-picker';
 import { ensureMathId, MATH_ID_ATTR, renderMathIn } from './math';
-import { parse, serialize, streamLength, collapseEmptySurface, surfaceLooksEmpty } from './model/document';
+import {
+  parse,
+  serialize,
+  streamLength,
+  collapseEmptySurface,
+  surfaceLooksEmpty,
+} from './model/document';
 import {
   captureOffsets,
   nodeAtPath,
@@ -914,6 +920,70 @@ export class ModelPort implements EditorPort {
       return this.command((model, coverage) => unnestListItem(model, coverage[0]));
     }
     return this.command((model, coverage) => shiftBlockIndent(model, coverage, -1));
+  }
+
+  /**
+   * The Tab-KEY gesture over a bare text stream — a classic note that
+   * never grew element blocks (the loaded welcome note, fresh typing
+   * before the first Enter). Such a note is ONE model block, so the
+   * block-indent command would step the margin of the whole document
+   * from a single press; there the tab is the line-oriented gesture a
+   * plain note always had: a literal tab at the caret, one per selected
+   * line over a spanning selection, Shift reverses by stripping.
+   *
+   * Returns null when the caret is not in a bare stream — the caller
+   * falls back to indent()/outdent() (the formatting commands the
+   * toolbar rides, which must keep their block semantics). The stream
+   * is one text run, so the line splice cannot merge blocks.
+   */
+  tabStream(shift: boolean): boolean | null {
+    if (!this.inBareStream()) {
+      return null;
+    }
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return null;
+    }
+    const selected = selection.toString();
+    if (selected.indexOf('\n') !== -1) {
+      const lines = selected.split('\n');
+      const replacement = (
+        shift
+          ? lines.map((line) => (line.startsWith('\t') ? line.substring(1) : line))
+          : lines.map((line) => `\t${line}`)
+      ).join('\n');
+      return this.insertText(replacement, { selectInserted: true });
+    }
+    if (!shift) {
+      return this.insertText('\t');
+    }
+    return false; // a collapsed Shift+Tab has no indent to unwind
+  }
+
+  /** True when BOTH selection ends sit in text directly under the root,
+   *  crossing no element block on the way up (inline runs like <b> count —
+   *  they are part of the stream). A selection that reaches any block
+   *  keeps the block gesture, even when its start end is bare. */
+  private inBareStream(): boolean {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return false;
+    }
+    const range = selection.getRangeAt(0);
+    for (const end of [range.startContainer, range.endContainer]) {
+      let el: HTMLElement | null = end instanceof HTMLElement ? end : end.parentElement;
+      while (
+        el &&
+        el !== this.element &&
+        !/^(DIV|P|H1|H2|H3|BLOCKQUOTE|PRE|LI|TD|TH)$/.test(el.tagName)
+      ) {
+        el = el.parentElement;
+      }
+      if (el !== this.element) {
+        return false;
+      }
+    }
+    return true;
   }
 
   insertHorizontalRule(): boolean {
