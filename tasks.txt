@@ -1,6 +1,12 @@
 Future feature list
         Right now the app is very much in beta, and numerous new features are being improved and added. Despite this, we need to make sure that the classic plain note is well fixed, as that's the main feature.
 
+Hosting plan (frontend dual-host, backend later):
+        - The frontend will be hosted on BOTH Netlify and alwaysdata (alwaysdata can serve both static sites and app processes), with Turso staying as the database.
+        - The backend has NOT been started yet, so cloud sync features currently don't work — this is expected, not a bug.
+        - The code is already host-agnostic for this: the API base comes from VITE_API_BASE at build time ('' = same-origin /api) with a runtime override (see src/cloud/config.ts), and scripts/build-headers.mjs generates the /api proxy per-host. Each host just sets its own VITE_API_BASE pointing at the one Turso-backed API when the backend exists.
+        - docs/CLOUD_SETUP.md has the current setup notes.
+
 Improvements in the very far future
 
         - add drawing pad
