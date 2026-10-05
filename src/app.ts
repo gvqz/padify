@@ -35,6 +35,7 @@ import { initVoiceTyping, toggleVoiceTyping, handleTabSwitchedWhileListening } f
 import { initTypingEffects } from './typing-effects';
 import { initPipWindow } from './pip-window';
 import { openModal, closeAllModals } from './ui/behavior/modal';
+import { registerLayer } from './ui/behavior/layers';
 import { initSaveIndicator } from './save-indicator';
 import { initTabRailDrawer } from './tab-rail-drawer';
 import { initRichToolbar } from './editor/rich-toolbar';
@@ -328,45 +329,45 @@ export async function initApp(): Promise<void> {
       }
       e.preventDefault();
 
-      const selection = window.getSelection();
-      const tabCharacter = '\t';
+      const port = getEditorPort();
+      if (!port) {
+        return;
+      }
 
-      const selectedText = selection && selection.rangeCount > 0 ? selection.toString() : '';
-
-      if (!selection || selection.rangeCount === 0 || selectedText.indexOf('\n') === -1) {
-        // Single caret/selection (no line spans): insert a tab.
-        const port = getEditorPort();
-        if (port) {
-          port.insertText(tabCharacter);
-        } else {
-          document.execCommand('insertText', false, tabCharacter);
+      // Code blocks keep literal tabs — their whitespace is content, and
+      // a pre block is a single text run, so the \n-splice over a code
+      // selection is correct there (and stays repeatable to boot).
+      if (port.queryBlockFormat() === 'pre') {
+        const selection = window.getSelection();
+        const selectedText = selection && selection.rangeCount > 0 ? selection.toString() : '';
+        if (selectedText.indexOf('\n') !== -1) {
+          const lines = selectedText.split('\n');
+          const replacement = (
+            e.shiftKey
+              ? lines.map((line) => (line.startsWith('\t') ? line.substring(1) : line))
+              : lines.map((line) => '\t' + line)
+          ).join('\n');
+          port.insertText(replacement, { selectInserted: true });
+          return;
+        }
+        if (!e.shiftKey) {
+          port.insertText('\t');
         }
         return;
       }
 
-      // Multi-line selection: indent / outdent every line.
-      const lines = selectedText.split('\n');
-      const replacement = (
-        e.shiftKey
-          ? lines.map((line) =>
-              line.startsWith(tabCharacter) ? line.substring(tabCharacter.length) : line,
-            )
-          : lines.map((line) => tabCharacter + line)
-      ).join('\n');
-
-      // The replacement rides the editor port, like every structured
-      // edit: one command, one history group — undo removes the whole
-      // indent, and the model/serialize/paint pipeline stays canonical.
-      // (The old raw-DOM range surgery here bypassed history entirely:
-      // Ctrl+Z jumped over the indent as if it never happened.)
-      // selectInserted keeps the block selected so Tab/Shift+Tab can be
-      // applied repeatedly.
-      const port = getEditorPort();
-      if (port) {
-        port.insertText(replacement, { selectInserted: true });
-        return;
+      // Everywhere else Tab structures the BLOCK (Docs parity): the
+      // paragraph steps its margin, list items nest (the port's
+      // indent/outdent), Shift+Tab reverses. The old handler spliced a
+      // \n-joined tab-prefixed string over the selection instead — which
+      // merged every selected paragraph into one <p> littered with tab
+      // characters and soft breaks (the worst of the tab bugs), and undo
+      // could not bring the block structure back.
+      if (e.shiftKey) {
+        port.outdent();
+      } else {
+        port.indent();
       }
-      document.execCommand('insertText', false, replacement);
     }
   });
 
@@ -374,9 +375,21 @@ export async function initApp(): Promise<void> {
     copyNotesToClipboard(getEditorText());
   });
 
-  notepad.downloadNotes.click(function (e) {
-    e.stopPropagation(); // Stop click event from bubbling
-    $('#iconDropdown').toggleClass('show');
+  // The download menu is a registered dismissable layer — the registry
+  // closes every other menu when it opens (and closes it when another
+  // layer opens, or on an outside click / Escape). No stopPropagation:
+  // the capture-phase sweep has already run by the time this click
+  // toggles, so the click cannot stack menus anymore.
+  const downloadLayer = registerLayer({
+    elements: [notepad.downloadNotes.get(0) as HTMLElement, document.getElementById('iconDropdown')!],
+    isOpen: () => $('#iconDropdown').hasClass('show'),
+    setOpen: (open) => {
+      $('#iconDropdown').toggleClass('show', open);
+    },
+  });
+
+  notepad.downloadNotes.click(function () {
+    downloadLayer.toggle();
   });
 
   notepad.downloadNotesPlain.click(function () {
@@ -448,11 +461,10 @@ export async function initApp(): Promise<void> {
   tabManager.addActiveListener(syncSplitViewVisibility);
   syncSplitViewVisibility();
 
-  // Close dropdown if clicked outside
-  $(document).on('click', function () {
-    $('#iconDropdown').removeClass('show');
-    $('#brandMenu').removeClass('show');
-  });
+  // Dropdown dismissal (outside clicks, other menus, Escape) is the
+  // dismissable-layer registry's job — see ui/behavior/layers.ts. The old
+  // document-level click closer here was defeated by every opener's
+  // stopPropagation, which is how two menus ended up open at once.
 
   notepad.fullScreenButton.click(function () {
     // Fullscreen is shell chrome with one caller — it lives here. The
@@ -513,22 +525,82 @@ export async function initApp(): Promise<void> {
     }
   });
 
-  // Update statistics when modal is shown
+  // ---- statistics modal — click-to-cycle cards ------------------------------
+  // One card per stat FAMILY; clicking a card advances it to the next stat
+  // in that family (characters → words → sentences → …), the rotation the
+  // tasks list asked for ("it says 1961 characters but when I click that
+  // text it switches to 340 words"). The chosen slot per family sticks
+  // across shows so the modal reopens the way you left it.
+  type StatEntry = { label: string; value: string | number };
+  let currentStatFamilies: Record<string, StatEntry[]> = {};
+  const statIndexes: Record<string, number> = {};
+
+  const renderStatCard = (card: HTMLElement): void => {
+    const family = card.dataset.statFamily ?? '';
+    const entries = currentStatFamilies[family] ?? [];
+    if (entries.length === 0) {
+      return;
+    }
+    const entry = entries[(statIndexes[family] ?? 0) % entries.length];
+    const label = card.querySelector('[data-stat-label]');
+    const value = card.querySelector('[data-stat-value]');
+    if (label) {
+      label.textContent = entry.label;
+    }
+    if (value) {
+      value.textContent = String(entry.value);
+    }
+  };
+
   notepad.statisticsModal.on('show.bs.modal', function () {
     const stats = calculateNoteStatistics(getEditorText());
+    currentStatFamilies = {
+      count: [
+        { label: 'Characters', value: stats.characters },
+        { label: 'Characters (no spaces)', value: stats.charactersNoSpaces },
+        { label: 'Words', value: stats.words },
+        { label: 'Sentences', value: stats.sentences },
+        { label: 'Paragraphs', value: stats.paragraphs },
+      ],
+      vocabulary: [
+        { label: 'Unique words', value: stats.uniqueWords },
+        { label: 'Most common word', value: stats.mostCommonWord },
+        { label: 'Avg word length', value: stats.averageWordLength },
+        { label: 'Words per sentence', value: stats.wordsPerSentence },
+      ],
+      time: [
+        { label: 'Reading time', value: stats.readingTime },
+        { label: 'Speaking time', value: stats.estimatedSpeakingTime },
+        { label: 'Writing time', value: stats.writingTime },
+      ],
+      records: [
+        { label: 'Longest word', value: stats.longestWord },
+        { label: 'Longest sentence', value: stats.longestSentence },
+      ],
+      quality: [
+        { label: 'Readability score', value: stats.readabilityScore },
+        { label: 'Lexical density', value: stats.lexicalDensity },
+        { label: 'Estimated pages', value: stats.estimatedPages },
+      ],
+    };
 
-    $('#statWords').text(stats.words);
-    $('#statCharacters').text(stats.characters);
-    $('#statSentences').text(stats.sentences);
-    $('#statParagraphs').text(stats.paragraphs);
-    $('#statAvgWordLength').text(stats.averageWordLength);
-    $('#statReadingTime').text(stats.readingTime);
-    $('#statUniqueWords').text(stats.uniqueWords);
-    $('#statMostCommonWord').text(stats.mostCommonWord);
-    $('#statLexicalDensity').text(stats.lexicalDensityScore);
-    $('#statReadabilityScore').text(stats.readabilityScore);
-    $('#statEstimatedPages').text(stats.estimatedPages);
-    $('#statEstimatedSpeakingTime').text(stats.estimatedSpeakingTime);
+    document
+      .querySelectorAll<HTMLElement>('#statisticsBoard .stat-card[data-stat-family]')
+      .forEach(renderStatCard);
+  });
+
+  $('#statisticsBoard').on('click', '.stat-card', function () {
+    const card = this as HTMLElement;
+    const family = card.dataset.statFamily ?? '';
+    const entries = currentStatFamilies[family] ?? [];
+    if (entries.length === 0) {
+      return;
+    }
+    statIndexes[family] = ((statIndexes[family] ?? 0) + 1) % entries.length;
+    card.classList.remove('stat-flip');
+    void card.offsetWidth; // restart the value-swap animation
+    card.classList.add('stat-flip');
+    renderStatCard(card);
   });
 
   notepad.clearTabIndentation.on('click', function () {
@@ -562,8 +634,6 @@ export async function initApp(): Promise<void> {
   document.addEventListener('keydown', (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
       closeAllModals();
-      $('#iconDropdown').removeClass('show');
-      $('#brandMenu').removeClass('show');
     }
 
     if ((event.ctrlKey || event.metaKey) && event.code === 'KeyS') {
