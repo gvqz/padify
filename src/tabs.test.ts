@@ -248,9 +248,7 @@ describe('deriveTabTitle', () => {
   });
 
   it('strips markdown furniture from derived titles', () => {
-    expect(deriveTabTitle(tab({ content: '# Trip plan', noteType: 'markdown' }))).toBe(
-      'Trip plan',
-    );
+    expect(deriveTabTitle(tab({ content: '# Trip plan', noteType: 'markdown' }))).toBe('Trip plan');
     expect(deriveTabTitle(tab({ content: '> a quote', noteType: 'markdown' }))).toBe('a quote');
     expect(deriveTabTitle(tab({ content: '- pack boots', noteType: 'markdown' }))).toBe(
       'pack boots',
@@ -276,9 +274,11 @@ describe('deriveTabTitle', () => {
   });
 
   it('collapses internal whitespace in derived titles', () => {
-    expect(deriveTabTitle(tab({ content: 'hello    spaced   title' }))).toBe(
-      'hello spaced title',
-    );
+    expect(deriveTabTitle(tab({ content: 'hello    spaced   title' }))).toBe('hello spaced title');
+  });
+
+  it('collapses tabs and single stray whitespace too — no holes in the chip', () => {
+    expect(deriveTabTitle(tab({ content: 'line1\tline2' }))).toBe('line1 line2');
   });
 
   it('truncates long titles at a word boundary', () => {

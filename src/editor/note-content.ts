@@ -259,7 +259,9 @@ function titleFromLines(lines: string[]): string | null {
       continue;
     }
 
-    line = line.replace(/\s{2,}/g, ' ');
+    // Every whitespace run — tabs and stray breaks included — becomes one
+    // space: a title carrying a raw tab renders as a hole in the chip.
+    line = line.replace(/\s+/g, ' ');
     return truncateTitle(line);
   }
   return null;
@@ -272,9 +274,6 @@ function truncateTitle(line: string): string {
   }
   const cut = line.slice(0, MAX_TITLE_LENGTH - 1);
   const lastSpace = cut.lastIndexOf(' ');
-  const base =
-    lastSpace > MAX_TITLE_LENGTH * 0.5
-      ? cut.slice(0, lastSpace)
-      : cut;
+  const base = lastSpace > MAX_TITLE_LENGTH * 0.5 ? cut.slice(0, lastSpace) : cut;
   return base.replace(/[\s,;:.\-–—!?]+$/, '') + '…';
 }
