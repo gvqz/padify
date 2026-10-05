@@ -174,7 +174,9 @@ test.describe('markdown notes — the feature act', () => {
     await expect(editor.locator('ul > li')).toHaveCount(2);
   });
 
-  test('pasting markdown text renders it (images as chips, math live)', async ({ page }) => {
+  test('pasting PLAIN text keeps it literal (markdown syntax never mangles it)', async ({
+    page,
+  }) => {
     await page.goto('/');
     await newMarkdownNote(page);
 
@@ -187,10 +189,72 @@ test.describe('markdown notes — the feature act', () => {
     }, markdown);
     await page.keyboard.press('Control+V');
 
-    // Parsed as markdown: the image is a chip (never an <img>), the math live.
+    // A plain-text clip is CONTENT: the syntax rides in as typed — the
+    // image syntax is text (never a chip, never an <img>), the math
+    // syntax is text (never a live equation). Pasting code or prose from
+    // a plain-text source must not restructure it.
+    await expect(editor.locator('.md-image-chip')).toHaveCount(0);
+    await expect(editor.locator('img[src]')).toHaveCount(0);
+    await expect(editor.locator('.md-math-inline .katex')).toHaveCount(0);
+    await expect(editor).toContainText('![logo](https://example.com/logo.png)');
+    await expect(editor).toContainText('and $\\sqrt{2}$ too');
+  });
+
+  test('pasting a RICH (text/html) markdown copy still renders it', async ({ page }) => {
+    await page.goto('/');
+    await newMarkdownNote(page);
+
+    // The copy a rendered markdown source writes (Obsidian reading view,
+    // GitHub, preview panes): text/html with the real elements.
+    const editor = page.locator('#note .ProseMirror');
+    await editor.click();
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.evaluate(async () => {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob(['<img src="https://example.com/logo.png"><p>and a logo</p>'], {
+            type: 'text/html',
+          }),
+        }),
+      ]);
+    });
+    await page.keyboard.press('Control+V');
+
+    // The rich path parses: the image is a chip (never an <img>).
     await expect(editor.locator('.md-image-chip')).toHaveCount(1);
     await expect(editor.locator('img[src]')).toHaveCount(0);
-    await expect(editor.locator('.md-math-inline .katex')).toHaveCount(1);
+    await expect(editor).toContainText('and a logo');
+  });
+
+  test('pasting code from an editor clip becomes a code block with the language', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await newMarkdownNote(page);
+
+    const editor = page.locator('#note .ProseMirror');
+    await editor.click();
+    // A VS Code clip carries text/plain + the private vscode-editor-data
+    // flavor. Chromium never populated a constructed ClipboardEvent's
+    // clipboardData from the init dict, so the transfer is attached as an
+    // own property — the only shim, the dispatch itself is the real one.
+    await page.evaluate(() => {
+      const transfer = new DataTransfer();
+      transfer.setData('text/plain', 'const x = 1;\nconst y = 2;');
+      transfer.setData('vscode-editor-data', JSON.stringify({ mode: 'typescript' }));
+      const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'clipboardData', { value: transfer });
+      document.querySelector('#note .ProseMirror')?.dispatchEvent(event);
+    });
+
+    // The node view wraps the block: div.md-code-block[data-language] >
+    // (language row + pre>code).
+    const code = editor.locator('.md-code-block[data-language="typescript"] pre');
+    await expect(code).toHaveCount(1);
+    await expect(code).toContainText('const x = 1;');
+    await expect(code).toContainText('const y = 2;');
+    // The code never leaks into a paragraph.
+    expect(await editor.locator('p').allTextContents()).not.toContain('const x = 1;');
   });
 
   test('the context menu speaks markdown', async ({ page }) => {

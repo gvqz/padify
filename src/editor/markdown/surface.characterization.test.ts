@@ -29,6 +29,25 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// jsdom's Range lacks geometry — PM's scrollToSelection measures it when
+// a toolbar action hands focus back to the view (same shim the chrome
+// and features suites carry).
+if (typeof Range.prototype.getClientRects !== 'function') {
+  Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
+  Range.prototype.getBoundingClientRect = () =>
+    ({
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      width: 0,
+      height: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+}
+
 import {
   MarkdownNoteSurface,
   markdownEditorHandle,
@@ -37,6 +56,9 @@ import {
   onMarkdownViewMode,
   setMarkdownViewMode,
 } from './surface';
+import { Slice } from '@milkdown/kit/prose/model';
+import { TextSelection } from '@milkdown/kit/prose/state';
+import { undo } from '@milkdown/kit/prose/history';
 import {
   runMarkdownToolbarAction,
   initMarkdownToolbar,
@@ -348,9 +370,11 @@ describe('MarkdownNoteSurface — the insertText seam', () => {
     await settled();
     inputs.length = 0;
 
+    // The wholesale apply parks the caret at the doc's first text position
+    // (the deterministic open contract) — the insertion lands there.
     expect(surface.insertText(host, ' ☺')).toBe(true);
     await settled();
-    expect(surface.capture(host)).toContain('base ☺');
+    expect(surface.capture(host)).toContain('☺base');
     expect(inputs.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -358,6 +382,272 @@ describe('MarkdownNoteSurface — the insertText seam', () => {
     const stranger = document.createElement('div');
     expect(surface.insertText(stranger, 'x')).toBe(false);
     expect(surface.insertText(null, 'x')).toBe(false);
+  });
+
+  it('focusTarget answers the ProseMirror root (the element that can take the caret)', async () => {
+    const host = freshHost();
+    surface.display(host, { content: '# Title' });
+    await ready();
+
+    const target = surface.focusTarget?.(host) ?? null;
+    expect(target).not.toBeNull();
+    expect(target!.classList.contains('ProseMirror')).toBe(true);
+    expect(host.contains(target!)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The plain-text paste contract
+// ---------------------------------------------------------------------------
+
+describe('the plain-text paste contract', () => {
+  /**
+   * The harness drives the REAL prop chain via someProp — direct props
+   * first (the surface's plain-text handler), then the clipboard plugin.
+   * That is exactly the order a real paste meets, so the assertions pin
+   * the OBSERVABLE outcome: what landed in the document, and who took it.
+   */
+
+  /** A minimal clipboard event double — the handlers read getData only. */
+  const pasteEvent = (flavors: Record<string, string>): ClipboardEvent =>
+    ({
+      clipboardData: { getData: (type: string) => flavors[type] ?? '' },
+    }) as unknown as ClipboardEvent;
+
+  type View = NonNullable<ReturnType<typeof markdownEditorHandle>>['view'];
+
+  /** Runs the paste chain the way prosemirror-view's doPaste would. */
+  function runPaste(view: View, event: ClipboardEvent): boolean {
+    let handled = false;
+    view.someProp('handlePaste', (f) => {
+      handled = f(view, event, Slice.empty) === true;
+      return handled;
+    });
+    return handled;
+  }
+
+  /** The document's plain text, blocks separated by \n\n. */
+  function docText(view: View): string {
+    return view.state.doc.textBetween(0, view.state.doc.content.size, '\n\n');
+  }
+
+  /** Moves the caret to the very end of the doc (a text position). */
+  function caretAtEnd(view: View): void {
+    const end = view.state.doc.content.size - 1;
+    view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(end), -1)));
+  }
+
+  it('pastes plain text LITERALLY — markdown syntax survives as content', async () => {
+    const host = freshHost();
+    surface.display(host, { content: 'before' });
+    await ready();
+    const { view } = markdownEditorHandle()!;
+    caretAtEnd(view);
+
+    const handled = runPaste(
+      view,
+      pasteEvent({ 'text/plain': '# not a heading\n- not a list\n**not bold**' }),
+    );
+    expect(handled).toBe(true);
+
+    // Parsed markdown would have CONSUMED the markers (a heading, a list,
+    // bold). Literal paste keeps every character the user pasted — the
+    // doc TEXT is the truth (the serialized source additionally escapes).
+    const text = docText(view);
+    expect(text).toContain('# not a heading');
+    expect(text).toContain('- not a list');
+    expect(text).toContain('**not bold**');
+  });
+
+  it('multi-line plain text becomes paragraphs; the first merges with the caret line', async () => {
+    const host = freshHost();
+    surface.display(host, { content: 'first' });
+    await ready();
+    const { view } = markdownEditorHandle()!;
+    caretAtEnd(view);
+
+    expect(runPaste(view, pasteEvent({ 'text/plain': 'second\nthird' }))).toBe(true);
+
+    // The caret sat at the end of `first`, so the first pasted line joins
+    // it (the shape PM's own plain-text path produces); the rest are
+    // paragraphs. One transaction — one undo step.
+    expect(docText(view)).toBe('firstsecond\n\nthird');
+
+    undo(view.state, view.dispatch);
+    expect(docText(view)).toBe('first');
+  });
+
+  it('a rich (text/html) clip falls through — the clipboard plugin keeps its path', async () => {
+    const host = freshHost();
+    surface.display(host, { content: 'target' });
+    await ready();
+    const { view } = markdownEditorHandle()!;
+    caretAtEnd(view);
+
+    // Handled=true downstream is fine — the point is that the PLAIN text
+    // was never inserted literally (the plugin's HTML→markdown path owns
+    // rich clips).
+    runPaste(
+      view,
+      pasteEvent({ 'text/plain': '[x](https://example.com)', 'text/html': '<b>x</b>' }),
+    );
+    expect(docText(view)).not.toContain('[x](https://example.com)');
+  });
+
+  it('a VS Code clip with a language becomes a code block carrying that language', async () => {
+    const host = freshHost();
+    surface.display(host, { content: 'target' });
+    await ready();
+    const { view } = markdownEditorHandle()!;
+    caretAtEnd(view);
+
+    // Milkdown's clipboard plugin only honors Lexical's `l-editor-data`
+    // flavor for its code-block path — a VS Code clip left to it falls
+    // into the markdown parser and mangles code into paragraphs. The
+    // surface owns VS Code clips itself.
+    const handled = runPaste(
+      view,
+      pasteEvent({
+        'text/plain': 'const x = 1;\nconst y = 2;',
+        'vscode-editor-data': JSON.stringify({ mode: 'typescript' }),
+      }),
+    );
+    expect(handled).toBe(true);
+
+    const blocks: { name: string; language?: string; text?: string }[] = [];
+    view.state.doc.forEach((node) => {
+      blocks.push({ name: node.type.name, language: node.attrs.language, text: node.textContent });
+    });
+    const codeBlock = blocks.find((block) => block.name === 'code_block');
+    expect(codeBlock).toEqual({
+      name: 'code_block',
+      language: 'typescript',
+      text: 'const x = 1;\nconst y = 2;',
+    });
+    // Never a paragraph — the paste must not markdown-parse the code.
+    expect(
+      blocks.some((block) => block.name === 'paragraph' && block.text!.includes('const x')),
+    ).toBe(false);
+  });
+
+  it('a language-less VS Code clip (plaintext mode) inserts literally like any plain clip', async () => {
+    const host = freshHost();
+    surface.display(host, { content: 'first' });
+    await ready();
+    const { view } = markdownEditorHandle()!;
+    caretAtEnd(view);
+
+    const handled = runPaste(
+      view,
+      pasteEvent({
+        'text/plain': 'second\nthird',
+        'vscode-editor-data': JSON.stringify({ mode: 'plaintext' }),
+      }),
+    );
+    expect(handled).toBe(true);
+    expect(docText(view)).toBe('firstsecond\n\nthird');
+  });
+
+  it('a Lexical clip (l-editor-data) becomes a code block carrying that language', async () => {
+    const host = freshHost();
+    surface.display(host, { content: 'target' });
+    await ready();
+    const { view } = markdownEditorHandle()!;
+    caretAtEnd(view);
+
+    // The plugin's own l-editor-data path has the same geometry bug (the
+    // block lands empty, the code types into the paragraph) — the surface
+    // owns editor clips of both flavors itself.
+    const handled = runPaste(
+      view,
+      pasteEvent({
+        'text/plain': 'const x = 1;',
+        'l-editor-data': JSON.stringify({ mode: 'typescript' }),
+      }),
+    );
+    expect(handled).toBe(true);
+    const blocks: { name: string; text: string }[] = [];
+    view.state.doc.forEach((node) => {
+      blocks.push({ name: node.type.name, text: node.textContent });
+    });
+    expect(blocks).toContainEqual({ name: 'code_block', text: 'const x = 1;' });
+    expect(
+      blocks.some((block) => block.name === 'paragraph' && block.text.includes('const x')),
+    ).toBe(false);
+  });
+
+  it('a plain clip at a code-block caret falls through — the native path inserts it literally', async () => {
+    const host = freshHost();
+    surface.display(host, { content: '```\n(code)\n```' });
+    await ready();
+    const { view } = markdownEditorHandle()!;
+
+    // Caret inside the code block.
+    let codePos = 0;
+    view.state.doc.descendants((node, p) => {
+      if (node.type.name === 'code_block' && !codePos) {
+        codePos = p + 2;
+      }
+      return true;
+    });
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, codePos)));
+    expect(view.state.selection.$from.node().type.spec.code).toBe(true);
+
+    // Nothing claims the paste (handler skips, the plugin defers to the
+    // native path for code) — the doc answers untouched here.
+    const before = docText(view);
+    const handled = runPaste(view, pasteEvent({ 'text/plain': '# pasted' }));
+    expect(handled).toBe(false);
+    expect(docText(view)).toBe(before);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The per-note undo reset (the rapid-switching corruption guard)
+// ---------------------------------------------------------------------------
+
+describe('the per-note undo reset', () => {
+  it('undo never reaches across notes — switching resets the history', async () => {
+    const host = freshHost();
+    const inputs: number[] = [];
+    host.addEventListener('input', () => inputs.push(inputs.length));
+
+    surface.display(host, { content: 'alpha content' });
+    await ready();
+    await typeAtEnd('-edited');
+    await settled();
+
+    // Switch: the same editor instance re-applies another note's content.
+    surface.display(host, { content: 'beta content' });
+    await settled();
+    inputs.length = 0;
+
+    const { view } = markdownEditorHandle()!;
+    const before = view.state.doc.textBetween(0, view.state.doc.content.size);
+    expect(before).toBe('beta content');
+
+    // The Mod-z a user presses right after switching (the old behaviour
+    // resurrected alpha's content here — then autosaved it).
+    undo(view.state, view.dispatch);
+    expect(view.state.doc.textBetween(0, view.state.doc.content.size)).toBe('beta content');
+    // A wholesale apply (open a note) must not announce an edit either.
+    expect(inputs.length).toBe(0);
+  });
+
+  it('undo still works WITHIN the note after the reset', async () => {
+    const host = freshHost();
+    surface.display(host, { content: 'beta content' });
+    await ready();
+    await settled();
+
+    await typeAtEnd('-more');
+    await settled();
+    expect(surface.capture(host)).toContain('beta content-more');
+
+    const { view } = markdownEditorHandle()!;
+    undo(view.state, view.dispatch);
+    expect(surface.capture(host)).toContain('beta content');
+    expect(surface.capture(host)).not.toContain('-more');
   });
 });
 
