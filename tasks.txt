@@ -1,10 +1,5 @@
 Future feature list
-	
-Right now the app is very much in beta, and numerous new features are being improved and added. Despite this, we need to make sure that the classic plain note is well fixed, as that's the main feature. 
-
-Other improvements 
-	- fix tab name based on note name(don't use emdash)	
-		-if PWA, the name Padify already comes up at the front, so DONT put padify at the end 
+	Right now the app is very much in beta, and numerous new features are being improved and added. Despite this, we need to make sure that the classic plain note is well fixed, as that's the main feature. 
 
 Improvements in the very far future
 	
@@ -30,36 +25,34 @@ Visual overhauls:
 	- unicode menu. I don't know what to do with this right now, it's a bit broken and looks bad.
 
 
-Bug fixes:
-
-Before fixing bugs think about the underlying reason to why this bug exists in the first place, is there a bigger thing that needs to be fixed?
-
-	- pasting bugs, many including cursor
-	- tab backspacing bugs(when you use a lot of them)
-	- icons on topbar aren't properly aligned to the middle of the topbar
-	- microphone issues, animations are clunky and not smooth. sometimes the microphone is blocked on a device level(not browser level) and no voice would be detected for a while. make an error state for this issue.
-
-
 about /markdownreports
 	markdownreports\drawingpad.md: not super important, just remember that Excalidraw will be used for canvas, could also require to download PWA for this(so that nothing needs to be sent to the server and just stays on the device instead)
-
 	markdownreports\tasks.md: not super important either, will be based on apple reminders/tasks and will have a lot more features
 
 the rest of the features will be made as "tools" (a tool icon in the topbar + popup) if they are made
-
 	markdownreports\teleprompter.md: may not be added, and would likely have less features
-
 	markdownreports\text-diff.md: also unlikely to be added, would be very far in the future(compare between two of the same note type or HISTORY(like google docs)) users would have option to include formatting and other things to be ignored when comparing the texts
-
 	markdownreports\text-tools.md: likely to be added, but much differently. No sample text, and would be based on the note text and not directly affect it(only copy the extracted/). No wrap, no encode/decode. Find and replace will not be added in this, as it will be a whole seperate feature.
-
 	markdownreports\voice-notes.md: may be added as a PWA only feature(far in the future), save voice recordings as it transcribes. 
 
 
 Simple:
+	remove newspaper print
+	remove dyslectic font 
+	rename Optimal line length to Easy Read
+	Remove Font style setting in settings
+	Make Break remindersshow up after 30 seconds(for testing)
 
-remove newspaper print
-remove dyslectic font 
-rename Optimal line length to Easy Read
-Remove Font style setting in settings
-Make Break remindersshow up after 30 seconds(for testing)
+
+Bug fixes:
+
+Before fixing bugs think about the underlying reason to why this bug exists in the first place, is there a bigger thing that needs to be fixed, should archecture be changed?
+
+	- ON CLASSIC NOTE: pasting text doesn't move the cursor where it should move
+	- ON CLASSIC NOTE: pasting stuff that was styled(bold, italics, etc) earlier on the document back to the docment doesn't properly format it
+	- ON CLASSIC NOTE: Tabs do NOT work 93% of the time, heavily test that with realistic paragraphs and styling
+	- icons on topbar aren't properly aligned to the middle of the topbar
+	- microphone issues, animations are clunky and not smooth. sometimes the microphone is blocked on a device level(not browser level) and no voice would be detected for a while. make an error state for this issue.
+
+	- fix tab name based on note name(don't use emdash)	
+		-if PWA, the name Padify already comes up at the front, so DONT put padify at the end 
