@@ -32,6 +32,7 @@ import { initSnapshots } from './snapshots';
 import { initTimer } from './timer';
 import { mountMusicPlayer } from './features/music-player/markup';
 import { initContextMenu } from './context-menu';
+import { initBreakReminder } from './break-reminder';
 import { mountModals } from './ui/modals';
 import { assertMarkupContract } from './ui/contract';
 import { initModalBehavior } from './ui/behavior/modal';
@@ -74,6 +75,10 @@ export async function bootPadify(): Promise<void> {
   mountMusicPlayer();
   initSnapshots();
   initContextMenu();
+  // The break popup's controls live in a modal partial — they can only be
+  // bound here, after mountModals() (import-time binding found no elements
+  // and every button was dead — see break-reminder.ts).
+  initBreakReminder();
 
   // 2. The app shell (tabs, editor port, cloud, voice, shortcuts).
   await initApp();

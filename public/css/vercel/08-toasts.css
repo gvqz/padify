@@ -141,7 +141,16 @@ body.dark .close-popup:hover {
   color: var(--vz-fg);
 }
 
-/* Break reminder buttons */
+/* Break reminder — the notes-rail popup. JS docks it above the
+   "+ New note" split control (see anchorBreakPopup in break-reminder.ts),
+   so the card borrows the note-type menu's language — menu elevation,
+   md radius — and the actions run as stacked full-width menu items. */
+body .break-reminder-popup {
+  padding: 14px;
+  border-radius: var(--vz-radius-md);
+  box-shadow: var(--vz-shadow-menu);
+}
+
 body .break-reminder-button {
   background: var(--vz-bg-elevated);
   border: 1px solid var(--vz-border);
@@ -149,12 +158,15 @@ body .break-reminder-button {
   border-radius: var(--vz-radius);
   font-weight: 500;
   font-size: 12.5px;
-  padding: 6px 12px;
+  line-height: 1.4;
+  padding: 7px 10px;
+  text-align: center;
   transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease,
-    transform 100ms ease;
+    color var(--vz-dur) ease, transform 100ms ease;
 }
 
-body .break-reminder-button:hover {
+body .break-reminder-button:hover,
+body .break-reminder-button:focus-visible {
   border-color: var(--vz-border-strong);
   background: var(--vz-bg-subtle);
 }
@@ -169,7 +181,8 @@ body .break-reminder-button-primary {
   color: var(--vz-primary-fg);
 }
 
-body .break-reminder-button-primary:hover {
+body .break-reminder-button-primary:hover,
+body .break-reminder-button-primary:focus-visible {
   background: var(--vz-primary-hover);
   border-color: var(--vz-primary-hover);
 }

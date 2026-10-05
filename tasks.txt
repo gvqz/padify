@@ -25,7 +25,7 @@ Visual overhauls:
                 - have settings based on each note type(classic, markdown, RTN, etc)
         - Statistics menu + add more fun statistics, the current visual menu looks bad. Clicking on the text should rotate the stat (ex it says 1961 characters but when I click that text it switches to 340 words etc)
         - Music menu: this also needs an archecture overhaul/work. Currently the alwaysdata server hasn't been setup so it has not been tested and very much likely doesn't work as intended, delay changing this until specifically instructed with the words "music menu"
-			- mini music player ui: will go where break reminder popup shows up currently(ONCE ITS FIXED)
+			- mini music player ui: will go where break reminder popup shows up now (the popup's JS anchor — anchorBreakPopup — is the shared hook for it)
 		- unicode menu. I don't know what to do with this right now, it's a bit broken and looks bad.
 
 
@@ -44,9 +44,9 @@ Simple:
 	Before fixing bugs think about the underlying reason to why this bug exists in the first place, is there a bigger thing that needs to be fixed, should archecture be changed?
 
         Break reminder polish:
-                - [Not Done] Place it over the new note button at the bottom of the notes menu (see screenshot uploaded)
+                - [done] Place it over the new note button at the bottom of the notes menu (the popup now docks above the + New note split control, rail-width, 8px gap; buttons all work — they were bound before the modal markup existed — and it follows the mobile drawer + falls back to the viewport corner when the rail is hidden. Reskinned to the app design language; the legacy dark palette that turned the primary button blue is gone. Pinned by e2e/break-reminder.spec.ts)
 
-        - Tabs have been much improved, but issues still exist. Primarly with selecting/backspacing tabs, test and fix that. 
+        - Tabs have been much improved, but issues still exist. Primarly with selecting/backspacing tabs, test and fix that.
 
         - [done] fix tab name based on note name(don't use emdash)     (pipe separator now)
                 -[done] if PWA, the name Padify already comes up at the front, so DONT put padify at the end (installed app gets the bare note name)
@@ -56,4 +56,3 @@ Simple:
         - [done] microphone voice-bar animations are clunky and not smooth (the opening jumped half its width when the entrance keyframes ended — the centered translate lived only in the animation, not the base rule; now also: eased entrance, fade-down exit instead of a display:none snap, compositor-only scaleY wave with desynced per-bar tempo, fade-up on each interim text change)
 
 			everything besides the new red speaking animation is better, i liked the old red voice look. Everything else was good, keep everything else. Good work finding that issue! 
-
