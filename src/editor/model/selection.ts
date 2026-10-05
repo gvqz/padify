@@ -194,6 +194,13 @@ export function spotAtStream(
 
 function descend(element: Element, target: number, withinMarker: boolean): DomSpot | null {
   let consumed = 0;
+  // A zero-length child that cannot hold a caret (an empty-cell table,
+  // an hr) does not own the boundary at `consumed`: the caret's line can
+  // be a LATER sibling at the same offset — the empty paragraph under an
+  // empty table, the first line after a rule. While such children are
+  // scanned past, the boundary before the first of them is the fallback
+  // answer when no later sibling claims the spot.
+  let atomBoundary: DomSpot | null = null;
   const kids = element.childNodes;
   for (let index = 0; index < kids.length; index += 1) {
     const child = kids[index]!;
@@ -272,12 +279,20 @@ function descend(element: Element, target: number, withinMarker: boolean): DomSp
         if (holdsCaretWhenEmpty(child)) {
           return { kind: 'element', node: child, childIndex: 0 };
         }
+        // Caret-incapable element at the offset: keep scanning — a later
+        // sibling at the same offset may hold the caret's actual line.
+        atomBoundary = atomBoundary ?? { kind: 'element', node: element, childIndex: index };
+        consumed += length;
+        continue;
       }
       return { kind: 'element', node: element, childIndex: index };
     }
     consumed += length;
   }
   if (target === consumed) {
+    if (atomBoundary) {
+      return atomBoundary;
+    }
     // End of this element's content. Descend into the last child that
     // carries text — the caret belongs inside the last block's tail (the
     // end of a note that ends in a list item addresses the item's text,
