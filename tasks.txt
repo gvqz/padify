@@ -11,15 +11,12 @@ Improvements in the very far future
 		- push notifications for timers, reminders, etc 	
 		- automatically open .padify files
 
-Note: .padify format might not actually make it to the actual app, compare benefits/disadvantages 
+	Note: .padify format might not actually make it to the actual app, compare benefits/disadvantages 
 
 Visual overhauls:
-			
 	- cloud sync/share
 	- settings menu
 		- have settings based on each note type(classic, markdown, RTN, etc)
-	- currently two types of "notifications exist" - ex "Select some text first, then convert its case." and "Notes copied to clipboard" and both types have problems. The second one looks bad and has a weird animation. the first type has a broken leave animation and doesn't respond well to spam clicking/other human behavior.
-		- to fix: merge the second one with the first type, and fix the problems with the first type
 	- Statistics menu + add more fun statistics, the current visual menu looks bad. Clicking on the text should rotate the stat (ex it says 1961 characters but when I click that text it switches to 340 words etc)
 	- Music menu: this also needs an archecture overhaul/work. Currently the alwaysdata server hasn't been setup so it has not been tested and very much likely doesn't work as intended, delay changing this until specifically instructed with the words "music menu"
 	- unicode menu. I don't know what to do with this right now, it's a bit broken and looks bad.
@@ -37,22 +34,68 @@ the rest of the features will be made as "tools" (a tool icon in the topbar + po
 
 
 Simple:
-	remove newspaper print
-	remove dyslectic font 
-	rename Optimal line length to Easy Read
-	Remove Font style setting in settings
-	Make Break remindersshow up after 30 seconds(for testing)
+	Make Break remindersshow up after 3 seconds(for testing)
+		it appears to be slightly broken. Place it over the new note button at the bottom of the notes menu(btw in the future this is also where i'm going to put a mini music player).
+		Change the text from "Time for a 2-minute break?" to "Time for a quick break?" and "Stand up, stretch, or look away from the screen for a minute." to "You've been working for a while. Stand up, stretch, or look away from the screen for a second. 
 
+	lower security on commits, only the noreply email is needed
 
 Bug fixes:
 
 Before fixing bugs think about the underlying reason to why this bug exists in the first place, is there a bigger thing that needs to be fixed, should archecture be changed?
 
 	- ON CLASSIC NOTE: pasting text doesn't move the cursor where it should move
-	- ON CLASSIC NOTE: pasting stuff that was styled(bold, italics, etc) earlier on the document back to the docment doesn't properly format it
-	- ON CLASSIC NOTE: Tabs do NOT work 93% of the time, heavily test that with realistic paragraphs and styling
-	- icons on topbar aren't properly aligned to the middle of the topbar
-	- microphone issues, animations are clunky and not smooth. sometimes the microphone is blocked on a device level(not browser level) and no voice would be detected for a while. make an error state for this issue.
+	- ON CLASSIC NOTE: Tabs do NOT work 53% of the time, heavily test that with realistic paragraphs and styling
+	- microphone issues, opening animation + the adding words animation are clunky and not smooth.
 
-	- fix tab name based on note name(don't use emdash)	
-		-if PWA, the name Padify already comes up at the front, so DONT put padify at the end 
+	- serif, monospaced, handwritten, and humanist fonts just show the default font not sure why
+	this is the console log 
+
+			cdp:1 Framing 'https://app.netlify.com/' violates the following Content Security Policy directive: "default-src 'self'". The request has been blocked. Note that 'frame-src' was not explicitly set, so 'default-src' is used as a fallback.
+
+			main-Cx940pBG.js:2 [storage] backend: indexeddb
+			Running the JavaScript URL violates the following Content Security Policy directive 'script-src 'self' <URL> 'sha256-qSc/OIPrFXIhuF1c+wvvrct/9NdqfUx7Pu1j9ppQDBI=''. Either the 'unsafe-inline' keyword, a hash ('sha256-...'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.
+			Running the JavaScript URL violates the following Content Security Policy directive 'script-src 'self' <URL> 'sha256-qSc/OIPrFXIhuF1c+wvvrct/9NdqfUx7Pu1j9ppQDBI=''. Either the 'unsafe-inline' keyword, a hash ('sha256-...'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.
+			Running the JavaScript URL violates the following Content Security Policy directive 'script-src 'self' <URL> 'sha256-qSc/OIPrFXIhuF1c+wvvrct/9NdqfUx7Pu1j9ppQDBI=''. Either the 'unsafe-inline' keyword, a hash ('sha256-...'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.
+			Running the JavaScript URL violates the following Content Security Policy directive 'script-src 'self' <URL> 'sha256-qSc/OIPrFXIhuF1c+wvvrct/9NdqfUx7Pu1j9ppQDBI=''. Either the 'unsafe-inline' keyword, a hash ('sha256-...'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.
+			Running the JavaScript URL violates the following Content Security Policy directive 'script-src 'self' <URL> 'sha256-qSc/OIPrFXIhuF1c+wvvrct/9NdqfUx7Pu1j9ppQDBI=''. Either the 'unsafe-inline' keyword, a hash ('sha256-...'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.
+			/api/music/capabilities:1  Failed to load resource: the server responded with a status of 404 ()
+			sw.js:133 Fetch failed loading: GET "https://deploy-preview-11--padify.netlify.app/".
+			(anonymous) @ sw.js:133
+			Promise.then
+			(anonymous) @ sw.js:132
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
+			Fetch finished loading: GET "<URL>".
