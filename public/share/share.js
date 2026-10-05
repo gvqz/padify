@@ -100,6 +100,10 @@ function render(row) {
 
   const content = document.getElementById('shareContent');
   content.innerHTML = '';
+  // The rendered-markdown branch flips the container's white-space (the
+  // renderer's pretty-printed HTML must not meet pre-wrap — see the
+  // markdown-content rule in share.css); rich notes keep it.
+  content.classList.remove('markdown-content');
 
   if (isHtmlNote(row.note_type)) {
     // The rename transition: rows from a newer server say `content`,
@@ -126,6 +130,7 @@ function render(row) {
     // (inline <code>, task checkboxes, h4-h6).
     const body = row.content == null ? row.html : row.content;
     content.innerHTML = renderMarkdownToHtml(String(body == null ? '' : body));
+    content.classList.add('markdown-content');
     // The one read-only adaptation: this island runs no KaTeX, so the
     // equation shells show their LaTeX source — the same answer the
     // html-note path gives through mathToText.

@@ -207,12 +207,28 @@ function isListItemStart(line) {
   const stripped = line.replace(/^[ \t]+/, "");
   return LIST_BULLET.test(stripped) || LIST_ORDERED.test(stripped);
 }
+function listMarkerKind(line) {
+  if (indentWidth(line) >= 4) {
+    return null;
+  }
+  const stripped = line.replace(/^[ \t]+/, "");
+  const bullet = LIST_BULLET.exec(stripped);
+  if (bullet) {
+    return `bullet:${bullet[1]}`;
+  }
+  const ordered = LIST_ORDERED.exec(stripped);
+  if (ordered) {
+    return `ordered:${ordered[2]}`;
+  }
+  return null;
+}
 function collectList(lines, start) {
   const baseIndent = indentWidth(lines[start]);
   const items = [];
   let loose = false;
   let pendingBlank = false;
   let index = start;
+  const listKind = listMarkerKind(lines[start]);
   const contentIndent = () => {
     var _a, _b;
     return (_b = (_a = items[items.length - 1]) == null ? void 0 : _a.contentIndent) != null ? _b : 0;
@@ -223,7 +239,7 @@ function collectList(lines, start) {
       const look = index + 1;
       if (look < lines.length && !isBlank(lines[look])) {
         const nextLine = lines[look];
-        const nextIsContent = indentWidth(nextLine) >= contentIndent() || isListItemStart(nextLine) && indentWidth(nextLine) >= baseIndent;
+        const nextIsContent = indentWidth(nextLine) >= contentIndent() || isListItemStart(nextLine) && indentWidth(nextLine) >= baseIndent && listMarkerKind(nextLine) === listKind;
         if (nextIsContent) {
           pendingBlank = true;
           index += 1;
@@ -236,7 +252,7 @@ function collectList(lines, start) {
       break;
     }
     const item = matchListItem(line);
-    const isSibling = !!item && (items.length === 0 || indentWidth(line) < items[items.length - 1].contentIndent) && indentWidth(line) < baseIndent + 4;
+    const isSibling = !!item && listMarkerKind(line) === listKind && (items.length === 0 || indentWidth(line) < items[items.length - 1].contentIndent) && indentWidth(line) < baseIndent + 4;
     if (isSibling) {
       if (pendingBlank) {
         loose = true;
