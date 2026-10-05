@@ -1,9 +1,9 @@
 name: Commit author policy
 
-# Every commit must be authored and committed as the gvqz identity:
+# Every commit must be authored and committed as the JellyBean identity:
 #
-#   author    gvqz <119090177+gvqz@users.noreply.github.com>
-#   committer gvqz <119090177+gvqz@users.noreply.github.com>
+#   author    JellyBean <119090177+gvqz@users.noreply.github.com>
+#   committer JellyBean <119090177+gvqz@users.noreply.github.com>
 #
 # The policy (and how to set it locally) is documented in CONTRIBUTING.md.
 #
@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Edit these two values if the required identity ever changes.
-      REQUIRED_NAME: gvqz
+      REQUIRED_NAME: JellyBean
       REQUIRED_EMAIL: 119090177+gvqz@users.noreply.github.com
     steps:
       - name: Check out the repo
