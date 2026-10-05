@@ -54,3 +54,12 @@ the rest of the features will be made as "tools" (a tool icon in the topbar + po
 	markdownreports\text-tools.md: likely to be added, but much differently. No sample text, and would be based on the note text and not directly affect it(only copy the extracted/). No wrap, no encode/decode. Find and replace will not be added in this, as it will be a whole seperate feature.
 
 	markdownreports\voice-notes.md: may be added as a PWA only feature(far in the future), save voice recordings as it transcribes. 
+
+
+Simple:
+
+remove newspaper print
+remove dyslectic font 
+rename Optimal line length to Easy Read
+
+Make Break remindersshow up after 30 seconds(for testing)
