@@ -467,11 +467,15 @@ describe('table operations', () => {
   });
 
   it('the table-ops menu follows the caret (inTable state)', async () => {
-    await bootMarkdown('| a | b |\n| :- | :- |\n| 1 | 2 |');
+    // A paragraph leads so the boot caret (mapped to the first text
+    // position by the wholesale apply) sits OUTSIDE the table — the
+    // pressed-state pass now runs on every apply, so the menu's initial
+    // hidden state is the honest read of the caret, not a stale default.
+    await bootMarkdown('a paragraph before the table\n\n| a | b |\n| :- | :- |\n| 1 | 2 |');
     const handle = markdownEditorHandle()!;
     const { view } = handle;
     const menu = document.querySelector('.markdown-table-ops') as HTMLElement;
-    // The boot content's caret sits at the doc start (before the table): hidden.
+    // The boot caret sits in the leading paragraph: hidden.
     expect(menu.hidden).toBe(true);
 
     let cellPos = 0;
@@ -802,9 +806,13 @@ describe('voice typing dictates into markdown notes', () => {
 
   it('insertTextIntoActiveNote routes through the surface (the dictation path)', async () => {
     const host = await bootMarkdown('abc');
+    // The wholesale apply parks the caret at the doc's first text position
+    // (the deterministic open contract) — so the insertion lands at the
+    // start, exactly where the caret is. Positioning the caret moves the
+    // insertion with it (the charBeforeCaret test pins that half).
     expect(insertTextIntoActiveNote('def')).toBe(true);
     await settled(120);
-    expect(surface.capture(host)).toContain('abcdef');
+    expect(surface.capture(host)).toContain('defabc');
   });
 });
 
