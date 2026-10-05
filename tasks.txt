@@ -6,7 +6,6 @@ Other improvements
 
 	- improve note naming algorithm
 	- tab name based on note name(ex Padify - Future Feature List or future feature list - Padify)	
-	- 
 
 Improvements in the very far future
 	
