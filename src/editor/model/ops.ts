@@ -123,12 +123,20 @@ function inlineAncestor(
  * cells), lists and tables do not.
  */
 export function blockAt(model: HTMLElement, coverage: [number, number]): HTMLElement | null {
-  const spot = spotAtStream(model, coverage[0]);
+  return blockAtSpot(spotAtStream(model, coverage[0]), model);
+}
+
+/** The block a SPOT sits in — the spot (unlike the stream offset) keeps
+ *  the side of a block boundary, so a caret at a block START answers the
+ *  block the caret is in, not the one that ends at the same offset. The
+ *  walk is bounded by root: a spot at bare root text answers null (the
+ *  caller materializes the run instead), never a block above the model. */
+export function blockAtSpot(spot: DomSpot | null, root: HTMLElement): HTMLElement | null {
   if (!spot) {
     return null;
   }
   let el: HTMLElement | null = spotElement(spot);
-  while (el && el !== model) {
+  while (el && el !== root) {
     if (
       INDENTABLE_TAGS.has(el.tagName) ||
       el.tagName === 'LI' ||
@@ -616,11 +624,22 @@ export function shiftBlockIndent(
   model: HTMLElement,
   coverage: [number, number],
   delta: 1 | -1,
+  preferSpot: DomSpot | null = null,
 ): OpResult {
-  const blocks = coveredBlocks(model, coverage).filter((block) =>
-    INDENTABLE_TAGS.has(block.tagName),
-  );
-  blocks.push(...rootRunsToMaterialize(model, coverage));
+  let blocks: HTMLElement[] = [];
+  // A collapsed caret at a block start resolves from the live spot (the
+  // stream offset alone answers the previous block — both share it), so
+  // Tab/Shift+Tab at a line's beginning acts on THAT line.
+  if (preferSpot && coverage[0] === coverage[1]) {
+    const block = blockAtSpot(preferSpot, model);
+    if (block && INDENTABLE_TAGS.has(block.tagName)) {
+      blocks = [block];
+    }
+  }
+  if (blocks.length === 0) {
+    blocks = coveredBlocks(model, coverage).filter((block) => INDENTABLE_TAGS.has(block.tagName));
+    blocks.push(...rootRunsToMaterialize(model, coverage));
+  }
   if (blocks.length === 0) {
     return UNCHANGED;
   }
@@ -820,8 +839,14 @@ function liftListItems(model: HTMLElement, list: HTMLElement): OpResult {
  * previous item, created when it does not exist yet. No previous sibling —
  * no-op (the first item cannot nest).
  */
-export function nestListItem(model: HTMLElement, at: number): OpResult {
-  const spot = spotAtStream(model, at);
+export function nestListItem(
+  model: HTMLElement,
+  at: number,
+  preferSpot: DomSpot | null = null,
+): OpResult {
+  // The live spot decides which item the caret is in — at an item's
+  // start the offset alone resolves to the previous item.
+  const spot = preferSpot ?? spotAtStream(model, at);
   const item = spot ? closestByTag(spot, 'LI') : null;
   if (!item || !item.parentElement) {
     return UNCHANGED;
@@ -849,8 +874,12 @@ export function nestListItem(model: HTMLElement, at: number): OpResult {
  * the list entirely (the item becomes a paragraph, the list splits around
  * it).
  */
-export function unnestListItem(model: HTMLElement, at: number): OpResult {
-  const spot = spotAtStream(model, at);
+export function unnestListItem(
+  model: HTMLElement,
+  at: number,
+  preferSpot: DomSpot | null = null,
+): OpResult {
+  const spot = preferSpot ?? spotAtStream(model, at);
   const item = spot ? closestByTag(spot, 'LI') : null;
   if (!item || !item.parentElement) {
     return UNCHANGED;
@@ -1127,6 +1156,7 @@ export function insertPlainText(
   model: HTMLElement,
   coverage: [number, number],
   text: string,
+  prefer: DomSpot | null = null,
 ): OpResult {
   if (text === '') {
     return UNCHANGED;
@@ -1150,6 +1180,47 @@ export function insertPlainText(
     return UNCHANGED;
   }
   const node = document.createTextNode(text);
+  // A collapsed caret sitting at a BLOCK START (or right after an inline
+  // mark) shares its stream offset with the position the resolver answers
+  // — the previous run's end — and blocks hold no stream of their own, so
+  // the number alone cannot say which side of that boundary the caret is
+  // on. When the live caret pinned a spot the resolver disagrees with,
+  // the caret wins: it is the only place the boundary's side still
+  // exists. (Without this, paste at a line's start landed one line up,
+  // and a caret after an inline mark typed INSIDE the mark.) The port
+  // only hands a `prefer` over when the model provably agrees with the
+  // captured caret (same path, same stream offset), so a stale or
+  // unrepresentable spot falls through to the offset answer.
+  if (
+    prefer &&
+    prefer.kind === 'text' &&
+    prefer.raw === 0 &&
+    fresh.kind === 'text' &&
+    prefer.node !== fresh.node &&
+    prefer.node.parentNode
+  ) {
+    prefer.node.parentNode.insertBefore(node, prefer.node);
+    return {
+      changed: true,
+      intent: { spot: { kind: 'text', node: node, raw: text.length } },
+    };
+  }
+  if (
+    prefer &&
+    prefer.kind === 'element' &&
+    !(
+      fresh.kind === 'element' &&
+      fresh.node === prefer.node &&
+      fresh.childIndex === prefer.childIndex
+    )
+  ) {
+    const before = prefer.node.childNodes[prefer.childIndex] ?? null;
+    prefer.node.insertBefore(node, before);
+    return {
+      changed: true,
+      intent: { spot: { kind: 'text', node: node, raw: text.length } },
+    };
+  }
   if (fresh.kind === 'text') {
     const target = fresh.node;
     if (fresh.raw >= (target.nodeValue ?? '').length) {

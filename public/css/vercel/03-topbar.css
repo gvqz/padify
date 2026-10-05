@@ -78,6 +78,24 @@ body.dark .navbar-default .app-heading {
   border-radius: var(--vz-radius-md);
 }
 
+/* The icon row's vertical contract: every icon sits on the bar's true
+   middle, the same discipline the right row's li > a padding follows.
+   The wrapper spans (the tooltip hosts) are the flex items, so each
+   becomes a full-height stage that centers its own anchor: the anchor's
+   margin box (30px chip − 12px compensation margins = 18px) centers at
+   16px, its border box at 10..40 — the 18px glyph on the exact center.
+   Without the stages the 23px wrapper boxes centered instead and the
+   -6px margin pulled the whole row ~3px above center. */
+.icon-container > span {
+  display: flex;
+  align-items: center;
+  height: var(--navbar-h);
+}
+
+.icon-container > span[hidden] {
+  display: none;
+}
+
 .icon-container a {
   padding: 6px;
   margin: -6px;

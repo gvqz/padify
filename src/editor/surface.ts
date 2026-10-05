@@ -107,6 +107,16 @@ export interface NoteSurface {
    * null answer) → the host, exactly like before this existed.
    */
   focusTarget?(host: HTMLElement): HTMLElement | null;
+  /**
+   * Optional: stands the surface DOWN before another surface paints the
+   * host — the shell calls it exactly when the painter is about to change.
+   * The host is a shared stage: a surface that mounts its own editor inside
+   * it, or parks UI outside it (floating overlays, body-attached widgets),
+   * must release all of that here — what happens in one note must stay in
+   * that note, never bleed into the next kind's. Absent = the surface
+   * leaves nothing behind when it loses the host (the plain paint kinds).
+   */
+  dismiss?(host: HTMLElement): void;
   /** Empties the surface (the clear-note flow). */
   clear(host: HTMLElement): void;
 }

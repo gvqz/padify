@@ -62,6 +62,29 @@ const ALLOWED_TAGS = new Set([
 ]);
 
 /**
+ * Tags whose CONTENT is code or metadata, never displayable text — the
+ * walk drops the element AND its children instead of unwrapping. The
+ * paste path now feeds foreign markup through this sanitizer (styled
+ * paste — see app.ts), and unwrapping <script>/<style> would paste the
+ * program text itself into the note.
+ */
+const DROP_CONTENT_TAGS = new Set([
+  'SCRIPT',
+  'STYLE',
+  'TITLE',
+  'NOSCRIPT',
+  'TEMPLATE',
+  'IFRAME',
+  'OBJECT',
+  'EMBED',
+  'XMP',
+  'TEXTAREA',
+  'SELECT',
+  'BUTTON',
+  'INPUT',
+]);
+
+/**
  * Attributes a surviving tag may keep. Everything else is stripped — the
  * editor only ever produces these itself. `href` is gated to safe
  * schemes below; `style` is gated to the property allowlist beneath it;
@@ -207,6 +230,13 @@ export function sanitizeNoteHtml(html: string, options: SanitizeOptions = {}): s
     }
 
     const element = node as HTMLElement;
+
+    // Code/metadata elements vanish whole — their text is a program or a
+    // stylesheet, never the note's words (see DROP_CONTENT_TAGS).
+    if (DROP_CONTENT_TAGS.has(element.tagName)) {
+      return [];
+    }
+
     const children: Node[] = [];
     element.childNodes.forEach((child) => {
       children.push(...walk(child));

@@ -1509,8 +1509,12 @@ body.pip-host #tabRailBackdrop {
 
 /* ---- Responsive: the rail becomes an off-canvas drawer ---- */
 @media (max-width: 820px) {
+  /* The rail toggle joins the icon row as a full-height stage (the same
+     vertical contract 03-topbar.css gives every wrapper span — a plain
+     inline box here would reintroduce the 3px icon drift on mobile). */
   #tabRailToggleContainer {
-    display: inline;
+    display: flex;
+    align-items: center;
   }
 
   #tabRail {
@@ -1876,20 +1880,31 @@ body.pip-host #tabRailBackdrop {
   inset: -1px;
   border-radius: inherit;
   border: 2px solid rgba(229, 72, 77, 0.5);
-  animation: voice-pulse 1.5s ease-out infinite;
+  /* A slow breath, not a strobe: the old 1.5s ease-out ring restarted
+     hard every cycle and read as flicker. */
+  animation: voice-pulse 2.4s ease-in-out infinite;
 }
 
 @keyframes voice-pulse {
-  0% {
-    transform: scale(0.85);
-    opacity: 1;
+  0%,
+  100% {
+    transform: scale(0.92);
+    opacity: 0.7;
   }
 
-  70%,
-  100% {
-    transform: scale(1.4);
+  50% {
+    transform: scale(1.22);
     opacity: 0;
   }
+}
+
+/* The mic's device-block face: the session ended because the DEVICE
+   silenced the mic (OS mute, privacy switch, another app holds it) —
+   solid red chip, no pulse (nothing is listening). */
+.voice-nav-button.voice-error {
+  color: #e5484d;
+  opacity: 1;
+  background: rgba(229, 72, 77, 0.12);
 }
 
 .voice-bar {
@@ -1906,7 +1921,42 @@ body.pip-host #tabRailBackdrop {
   border: 1px solid var(--vz-border);
   border-radius: 999px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
-  animation: voice-bar-in 0.18s ease-out;
+  /* The bar centers itself with translate(-50%). That shift MUST live on
+     the base rule, not only inside the entrance keyframes: an unfilled
+     animation reverts to the base transform when it ends, and without
+     this line the bar jumped half its own width sideways the instant it
+     finished appearing — the "clunky opening". */
+  transform: translate(-50%, 0);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  animation: voice-bar-in 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Leaving: a short fade-down instead of a display:none snap. voice.ts
+   adds .closing and hides the bar on animationend (timer fallback). */
+.voice-bar.closing {
+  animation: voice-bar-out 0.16s ease-in forwards;
+}
+
+/* The error state: the bar carries the explanation and stays up until
+   the user closes it — a toast would vanish mid-read. The waveform rests:
+   nothing is being heard, and dancing bars would say otherwise. */
+.voice-bar.error {
+  border-color: rgba(229, 72, 77, 0.45);
+}
+
+.voice-bar.error .voice-bar-text {
+  color: #e5484d;
+  white-space: normal;
+  max-width: min(460px, 72vw);
+}
+
+/* Nothing is being heard — the wave rests low instead of freezing at a
+   random phase (a paused animation keeps its current keyframe value, so
+   `animation: none` + a static scale is the honest calm state). */
+.voice-bar.error .voice-bar-wave i {
+  animation: none;
+  transform: scaleY(0.3);
+  opacity: 0.45;
 }
 
 .voice-bar[hidden] {
@@ -1916,12 +1966,24 @@ body.pip-host #tabRailBackdrop {
 @keyframes voice-bar-in {
   from {
     opacity: 0;
-    transform: translate(-50%, 6px);
+    transform: translate(-50%, 8px) scale(0.97);
   }
 
   to {
     opacity: 1;
-    transform: translate(-50%, 0);
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes voice-bar-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate(-50%, 8px) scale(0.97);
   }
 }
 
@@ -1935,41 +1997,53 @@ body.pip-host #tabRailBackdrop {
 
 .voice-bar-wave i {
   width: 3px;
-  height: 30%;
+  height: 100%;
   border-radius: 2px;
   background: #e5484d;
+  transform-origin: center;
+  /* transform: scaleY, not height — scaling is compositor-only, so the
+     wave never reflows the pill and stays smooth under load. */
   animation: voice-wave 1s ease-in-out infinite;
+  will-change: transform;
 }
 
+/* Per-bar tempo with negative delays: the bars desynchronize (they never
+   all rise from rest in unison at session start) and breathe unevenly,
+   which is what a real voice does. */
 .voice-bar-wave i:nth-child(1) {
-  animation-delay: 0s;
+  animation-duration: 0.9s;
+  animation-delay: -0.1s;
 }
 
 .voice-bar-wave i:nth-child(2) {
-  animation-delay: 0.15s;
+  animation-duration: 1.15s;
+  animation-delay: -0.45s;
 }
 
 .voice-bar-wave i:nth-child(3) {
-  animation-delay: 0.3s;
+  animation-duration: 1.3s;
+  animation-delay: -0.2s;
 }
 
 .voice-bar-wave i:nth-child(4) {
-  animation-delay: 0.45s;
+  animation-duration: 1.05s;
+  animation-delay: -0.55s;
 }
 
 .voice-bar-wave i:nth-child(5) {
-  animation-delay: 0.6s;
+  animation-duration: 1.2s;
+  animation-delay: -0.3s;
 }
 
 @keyframes voice-wave {
 
   0%,
   100% {
-    height: 22%;
+    transform: scaleY(0.25);
   }
 
   50% {
-    height: 100%;
+    transform: scaleY(1);
   }
 }
 
@@ -1981,11 +2055,31 @@ body.pip-host #tabRailBackdrop {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: min(420px, 56vw);
+  transition: color 0.18s ease;
 }
 
 .voice-bar-text.interim {
   color: var(--vz-fg-muted);
   font-style: italic;
+}
+
+/* The adding-words animation: every interim update fades the line up 2px
+   instead of hard-swapping the glyphs. voice.ts re-adds the class per
+   text change (remove, reflow, add — the standard restart). */
+.voice-bar-text.voice-text-swap {
+  animation: voice-text-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes voice-text-in {
+  from {
+    opacity: 0.25;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .voice-bar-stop {
@@ -2025,8 +2119,10 @@ body.pip-host #tabRailBackdrop {
 @media (prefers-reduced-motion: reduce) {
 
   .voice-bar,
+  .voice-bar.closing,
   .voice-nav-button.listening::after,
   .voice-bar-wave i,
+  .voice-bar-text.voice-text-swap,
   .save-state-spinner {
     animation: none;
   }

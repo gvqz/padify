@@ -114,6 +114,16 @@ export interface EditorPort {
   insertText(text: string, options?: { selectInserted?: boolean }): boolean;
 
   /**
+   * Inserts an HTML fragment at the caret, replacing the selection — the
+   * styled-paste path. The fragment is sanitized into the note's own
+   * formatting subset first (external fonts, colors and scripts never
+   * enter), and the caret ends up after the inserted content. Returns
+   * false when the engine could not honor it (the caller falls back to
+   * plain-text insertion).
+   */
+  insertHtml(html: string): boolean;
+
+  /**
    * Applies/toggles a formatting command over the current selection.
    * Returns false if the engine rejected it.
    */

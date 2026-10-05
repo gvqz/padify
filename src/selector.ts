@@ -22,7 +22,6 @@ export interface NotepadUI {
   splitViewButton: Q;
   splitViewContainer: Q;
   fontSize: Q;
-  fontWeight: Q;
   installApp: Q;
   lineHeight: Q;
   writeDirection: Q;
@@ -50,7 +49,6 @@ export interface EditorConfig {
   defaultFontSize: number;
   defaultLineHeight: number;
   defaultFont: string;
-  defaultFontWeight: string;
   defaultShowWordCountPill: string;
   defaultWriteDirection: string;
   defaultTexture: string;
@@ -127,7 +125,6 @@ export function selector(): AppSelector {
       splitViewButton: selectById('splitViewButton'),
       splitViewContainer: selectById('splitViewContainer'),
       fontSize: selectById('fontSize'),
-      fontWeight: selectById('fontWeight'),
       installApp: selectById('installApp'),
       lineHeight: selectById('lineHeight'),
       writeDirection: selectById('writeDirection'),

@@ -158,6 +158,7 @@ function createFakePort(): EditorPort {
     ensureCaretInside: vi.fn(() => true),
     charBeforeCaret: vi.fn(() => ''),
     insertText: vi.fn(() => true),
+    insertHtml: vi.fn(() => false),
     applyFormat: vi.fn(() => true),
     queryFormat: vi.fn(() => false),
     applyBlockFormat: vi.fn(() => true),

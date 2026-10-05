@@ -111,7 +111,7 @@ const steps: HelpStep[] = [
     accent: 'indigo',
     icon: ICONS.sliders,
     title: 'Make it yours',
-    text: 'Dark mode, dyslexic-friendly and monospaced fonts, paper textures, and a floating window for taking notes over other apps. Padify also installs as an app for full offline use.',
+    text: 'Dark mode, monospaced and handwritten fonts, paper textures, and a floating window for taking notes over other apps. Padify also installs as an app for full offline use.',
     hints: [],
   },
 ];

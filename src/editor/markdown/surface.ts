@@ -65,9 +65,9 @@ import { Fragment, Slice } from '@milkdown/kit/prose/model';
 import { history as proseHistory } from '@milkdown/kit/prose/history';
 import type { Node as ProseNode } from '@milkdown/kit/prose/model';
 import type { EditorView } from '@milkdown/kit/prose/view';
-import { slash } from './slash';
-import { bubble } from './bubble';
-import { attachBlockHandle, blockHandle, detachBlockHandle } from './block-handle';
+import { slash, hideMarkdownSlash } from './slash';
+import { bubble, hideMarkdownBubble } from './bubble';
+import { attachBlockHandle, blockHandle, detachBlockHandle, hideBlockHandle } from './block-handle';
 
 // ProseMirror's own base styles (outline discipline, table selection,
 // gap cursor) — the katex CSS import in editor/math.ts is the precedent
@@ -314,6 +314,26 @@ export class MarkdownNoteSurface implements NoteSurface {
     return live.view.dom;
   }
 
+  /**
+   * The shell's stand-down call: another surface is about to paint the
+   * host, so everything this surface keeps alive goes NOW — the editor,
+   * its history, and every widget it parked outside the host (the block
+   * grip lives in document.body and would otherwise stay visible over
+   * the NEXT note, frozen at its last hover position). Teardown used to
+   * wait for the next markdown mount; a lazy cleanup meant an html or
+   * rich note inherited the previous note's floating chrome.
+   */
+  dismiss(host: HTMLElement): void {
+    // The floating chrome first: bubble + slash live in document.body
+    // and their own close paths (mousedown outside, editor destroy) do
+    // not cover a keyboard or still-mounting transition.
+    hideMarkdownBubble();
+    hideMarkdownSlash();
+    if (live && (live.host === host || !live.root.isConnected)) {
+      void teardown(live);
+    }
+  }
+
   clear(host: HTMLElement): void {
     // An empty markdown note is an empty markdown EDITOR — the surface
     // stays mounted (the manager writes the model and persists itself).
@@ -439,6 +459,10 @@ function applyContent(content: string): void {
     return;
   }
   live.silentDoc = null;
+  // The grip floats beside a block of the PREVIOUS note's doc; a
+  // wholesale replace moves every block, so it hides instead of
+  // opening frozen over this one.
+  hideBlockHandle();
   live.editor.action(replaceAll(content));
   // The editor instance is shared across markdown notes (a switch re-applies
   // content instead of rebuilding): its undo stack belongs to the PREVIOUS

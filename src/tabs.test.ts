@@ -124,10 +124,11 @@ describe('sanitizeNoteHtml', () => {
     expect(sanitizeNoteHtml('<b onclick="evil()">bold</b>')).toBe('<b>bold</b>');
   });
 
-  it('unwraps unknown tags to their text content (script included)', () => {
-    // Documented behaviour: unknown elements are unwrapped, not deleted —
-    // script bodies degrade to inert text, images vanish (no children).
-    expect(sanitizeNoteHtml('<script>alert(1)</script>hi')).toBe('alert(1)hi');
+  it('script drops whole; other unknown tags unwrap to their text', () => {
+    // Policy change (styled paste, 2026-10): script/style/embed elements
+    // drop WITH their content — a program is never the note's words, and
+    // the paste path now feeds foreign markup through the sanitizer.
+    expect(sanitizeNoteHtml('<script>alert(1)</script>hi')).toBe('hi');
     expect(sanitizeNoteHtml('<img src=x onerror=y>hi')).toBe('hi');
   });
 

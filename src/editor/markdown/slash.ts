@@ -300,6 +300,16 @@ export function initMarkdownSlash(wiring: MarkdownSlashHandlers): void {
   document.addEventListener('mousedown', outsideClickListener);
 }
 
+/**
+ * Hides the open menu (the surface's stand-down call — dismiss). The
+ * panel lives in document.body, and its close paths are typing-on and
+ * MOUSEDOWN-off: a keyboard tab switch (or any transition that isn't a
+ * click) would otherwise carry the open menu over the next note.
+ */
+export function hideMarkdownSlash(): void {
+  provider?.hide();
+}
+
 /** Test seam: the live panel element (null before init). */
 export function markdownSlashPanel(): HTMLElement | null {
   return panel;

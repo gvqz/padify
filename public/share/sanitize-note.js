@@ -38,6 +38,21 @@ const ALLOWED_TAGS = /* @__PURE__ */ new Set([
   "TD",
   "TH"
 ]);
+const DROP_CONTENT_TAGS = /* @__PURE__ */ new Set([
+  "SCRIPT",
+  "STYLE",
+  "TITLE",
+  "NOSCRIPT",
+  "TEMPLATE",
+  "IFRAME",
+  "OBJECT",
+  "EMBED",
+  "XMP",
+  "TEXTAREA",
+  "SELECT",
+  "BUTTON",
+  "INPUT"
+]);
 const ALLOWED_ATTRS = /* @__PURE__ */ new Map([
   ["A", /* @__PURE__ */ new Set(["href"])],
   ["SPAN", /* @__PURE__ */ new Set(["style"])],
@@ -104,6 +119,9 @@ function sanitizeNoteHtml(html, options = {}) {
       return [];
     }
     const element = node;
+    if (DROP_CONTENT_TAGS.has(element.tagName)) {
+      return [];
+    }
     const children = [];
     element.childNodes.forEach((child) => {
       children.push(...walk(child));

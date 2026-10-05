@@ -183,8 +183,12 @@ describe('sanitizeNoteHtml (characterization)', () => {
     ).toBe('<a href="https://x">t</a>');
   });
 
-  it('unwraps <script> to inert text, not executable markup', () => {
-    expect(sanitizeNoteHtml('<script>alert(1)</script>')).toBe('alert(1)');
+  it('script content vanishes whole — a program is never the note’s words', () => {
+    // Was pinned as “unwraps to inert text” — the styled-paste path now
+    // feeds foreign markup through the sanitizer, and unwrapping would
+    // paste the program text itself into the note. The element AND its
+    // content drop.
+    expect(sanitizeNoteHtml('<script>alert(1)</script>')).toBe('');
   });
 
   it('drills into unknown wrappers and rescues allowed children', () => {
@@ -197,10 +201,11 @@ describe('sanitizeNoteHtml (characterization)', () => {
     );
   });
 
-  it('iframe content is raw text per the HTML spec — it comes back escaped, inert', () => {
-    // Quirk pinned: <iframe> is a raw-text element, so the inner <b> never
-    // becomes markup. The sanitizer can only return its text, escaped.
-    expect(sanitizeNoteHtml('<iframe><b>inner</b></iframe>')).toBe('&lt;b&gt;inner&lt;/b&gt;');
+  it('iframe content drops whole (it is a raw-text element — never note words)', () => {
+    // Was pinned as “comes back escaped” — same policy change as script:
+    // embed/metadata elements drop with their content now that paste
+    // feeds foreign markup through the sanitizer.
+    expect(sanitizeNoteHtml('<iframe><b>inner</b></iframe>')).toBe('');
   });
 
   it('drops HTML comments entirely', () => {
@@ -400,9 +405,9 @@ describe('TabManager (characterization)', () => {
 
     expect(manager.getActive()!.id).toBe('t1');
     const tabs = manager.exportForSync().tabs;
-    // script TEXT survives (inert), the tag itself does not — matches the
-    // sanitizeNoteHtml characterization above.
-    expect(tabs.find((t) => t.id === 't2')!.content).toBe('bad()<i>ok</i>');
+    // script content vanishes with the tag (never note words) — matches
+    // the sanitizeNoteHtml characterization above.
+    expect(tabs.find((t) => t.id === 't2')!.content).toBe('<i>ok</i>');
     expect(tabs).toHaveLength(2);
   });
 

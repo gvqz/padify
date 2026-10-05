@@ -104,6 +104,20 @@ export function detachBlockHandle(): void {
   active = null;
 }
 
+/**
+ * Hides the grip without tearing the provider down — a wholesale content
+ * replace (a note switch inside the shared editor) moves every block, so
+ * the hover position the grip floats at belongs to the PREVIOUS note's
+ * doc. Left alone it stayed visible, frozen over the fresh note until a
+ * stray mousemove re-evaluated it; what one note showed must not open
+ * on another.
+ */
+export function hideBlockHandle(): void {
+  if (active) {
+    active.el.dataset.show = 'false';
+  }
+}
+
 /** Test seam: the live handle element (null while detached). */
 export function markdownBlockHandleElement(): HTMLElement | null {
   return active?.el ?? null;

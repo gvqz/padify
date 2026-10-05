@@ -207,11 +207,14 @@ export async function initApp(): Promise<void> {
 
   notepad.wordCount.text(characterAndWordCountText);
 
-  // Paste always lands as plain text — the editor keeps its own
-  // formatting (bold/italic/underline/strike) and nothing else.
+  // Paste keeps the note's own formatting subset: a styled clipboard
+  // (text/html — copied from this note, another note, or any web page)
+  // goes in through the port's sanitize-then-insert path, so bold/italic/
+  // lists survive and external fonts, colors and scripts never do. Clips
+  // with no usable html flavor land as plain text — the honest reading of
+  // what was copied. (Markdown notes own their paste path via
+  // ProseMirror; the html-engine handling below must not steal it.)
   notepad.note.on('paste', (e) => {
-    // Markdown notes own their paste path (ProseMirror handles it); the
-    // html-engine insertion below must not steal the event from them.
     if (!isHtmlContent(tabManager.getActive()?.noteType)) {
       return;
     }
@@ -227,6 +230,12 @@ export async function initApp(): Promise<void> {
     }
 
     const port = getEditorPort();
+    // Styled clip first: sanitize-then-insert keeps the subset's markup.
+    const html = event?.clipboardData?.getData('text/html');
+    if (port && html && html.trim() !== '' && port.insertHtml(html)) {
+      notepad.note.trigger('input');
+      return;
+    }
     if (!(port ? port.insertText(text) : document.execCommand('insertText', false, text))) {
       // Fallback: splice a text node into the current range.
       const selection = window.getSelection();
