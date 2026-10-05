@@ -664,6 +664,55 @@ describe('Tab indentation', () => {
     await settled(80);
     expect((surface.capture(host) ?? '').trimEnd()).toBe('* one\n* two');
   });
+
+  it('Tab on a plain paragraph types two spaces and never releases focus', async () => {
+    await bootMarkdown('plain paragraph');
+    const handle = markdownEditorHandle()!;
+    const { view } = handle;
+    const pos = view.state.doc.content.size - 1;
+    view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(pos), -1)));
+    view.focus();
+
+    const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    view.dom.dispatchEvent(event);
+    await settled(80);
+    // The gesture claims the key — the browser focus-move (which used to
+    // throw the author out of the note to the topbar) is suppressed…
+    expect(event.defaultPrevented).toBe(true);
+    // …the two spaces land in the paragraph…
+    expect(view.state.doc.textContent).toBe('plain paragraph  ');
+    // …and the surface keeps the focus the browser would have taken.
+    expect(view.hasFocus()).toBe(true);
+
+    const back = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    view.dom.dispatchEvent(back);
+    await settled(80);
+    expect(back.defaultPrevented).toBe(true);
+    expect(view.state.doc.textContent).toBe('plain paragraph');
+    expect(view.hasFocus()).toBe(true);
+  });
+
+  it('Tab over a spanning paragraph selection holds everything in place', async () => {
+    await bootMarkdown('select me');
+    const handle = markdownEditorHandle()!;
+    const { view } = handle;
+    const end = view.state.doc.content.size - 1;
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1, end)));
+    view.focus();
+
+    const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    view.dom.dispatchEvent(event);
+    await settled(80);
+    // Claimed, focused, and the selected text is not eaten by the gesture.
+    expect(event.defaultPrevented).toBe(true);
+    expect(view.state.doc.textContent).toBe('select me');
+    expect(view.hasFocus()).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

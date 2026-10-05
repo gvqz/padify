@@ -11,6 +11,7 @@
  * the editor, toasts) belongs to the TabManager via onCreate.
  */
 import { isNoteType, NOTE_TYPES, NOTE_TYPE_ICONS, type NoteType } from '../editor/note-types';
+import { registerLayer } from './behavior/layers';
 
 export function initNoteTypeMenu(onCreate: (type: NoteType) => void): void {
   const trigger = document.getElementById('addTabTypeMenu');
@@ -19,28 +20,24 @@ export function initNoteTypeMenu(onCreate: (type: NoteType) => void): void {
     return;
   }
 
-  const isOpen = (): boolean => !popover.hidden;
-  const setOpen = (open: boolean): void => {
-    popover.hidden = !open;
-    trigger.setAttribute('aria-expanded', String(open));
-  };
+  // The note-type menu is a registered dismissable layer: the registry's
+  // capture-phase pointerdown sweep closes it on outside clicks and when
+  // another menu opens (the old private document-click closer was
+  // defeated by other openers' stopPropagation — the stacked-menus bug).
+  const layer = registerLayer({
+    elements: [trigger, popover],
+    isOpen: () => !popover.hidden,
+    setOpen: (open) => {
+      popover.hidden = !open;
+      trigger.setAttribute('aria-expanded', String(open));
+    },
+  });
+  const isOpen = layer.isOpen;
 
-  trigger.addEventListener('click', (event) => {
-    event.stopPropagation();
-    setOpen(!isOpen());
+  trigger.addEventListener('click', () => {
+    layer.toggle();
     if (isOpen()) {
       renderTypeMenuItems(popover);
-    }
-  });
-
-  // Outside click closes (the trigger's own click already stopped here).
-  document.addEventListener('click', (event) => {
-    if (!isOpen()) {
-      return;
-    }
-    const target = event.target as Node;
-    if (!popover.contains(target) && !trigger.contains(target)) {
-      setOpen(false);
     }
   });
 
@@ -63,13 +60,13 @@ export function initNoteTypeMenu(onCreate: (type: NoteType) => void): void {
 
     if (event.key === 'Escape') {
       event.preventDefault();
-      setOpen(false);
+      layer.close();
       trigger.focus();
       return;
     }
 
     if (event.key === 'Tab') {
-      setOpen(false); // focus keeps moving on; the menu just follows suit
+      layer.close(); // focus keeps moving on; the menu just follows suit
       return;
     }
 
@@ -109,7 +106,7 @@ export function initNoteTypeMenu(onCreate: (type: NoteType) => void): void {
       return;
     }
     event.stopPropagation();
-    setOpen(false);
+    layer.close();
     onCreate(type);
   });
 }

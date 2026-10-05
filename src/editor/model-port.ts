@@ -30,7 +30,13 @@ import type {
 } from './port';
 import { rgbStringToHex } from './color-picker';
 import { ensureMathId, MATH_ID_ATTR, renderMathIn } from './math';
-import { parse, serialize, collapseEmptySurface, surfaceLooksEmpty } from './model/document';
+import {
+  parse,
+  serialize,
+  streamLength,
+  collapseEmptySurface,
+  surfaceLooksEmpty,
+} from './model/document';
 import {
   captureOffsets,
   nodeAtPath,
@@ -88,6 +94,44 @@ const CHECKLIST_GUTTER_PX = 30;
 
 /** Typing bursts that continue the open group instead of opening one. */
 const TYPING_INPUT_TYPES = new Set(['insertText', 'insertCompositionText']);
+
+/**
+ * The stream offset of a spot inside root — the document-order sum of
+ * stream lengths up to the spot's node, plus the spot's position inside
+ * it (raw offsets count their zero-width marker characters out — the
+ * same accounting spotAtStream and streamLengthOf keep, so a model-space
+ * offset resolves 1:1 on the repainted surface even where the markup
+ * parse merged adjacent text runs). Null when the spot's node is not in
+ * root's tree.
+ */
+function streamOffsetOfSpot(root: HTMLElement, spot: DomSpot): number | null {
+  let consumed = 0;
+  const visit = (element: Node): number | null => {
+    for (const child of Array.from(element.childNodes)) {
+      if (child === spot.node) {
+        if (spot.kind === 'text') {
+          const before = (spot.node.nodeValue ?? '').slice(0, spot.raw);
+          return consumed + before.replace(/\u200B/g, '').length;
+        }
+        return consumed;
+      }
+      if (child.nodeType === Node.TEXT_NODE) {
+        consumed += streamLength(child as Text);
+      } else if (child instanceof HTMLElement) {
+        // Inline atoms (equations) hold no stream — nothing to add, and
+        // no spot can live inside one.
+        if (!child.classList.contains('padify-math')) {
+          const found = visit(child);
+          if (found !== null) {
+            return found;
+          }
+        }
+      }
+    }
+    return null;
+  };
+  return visit(root);
+}
 
 /**
  * An operation's selection request, normalized from its intent: a spot
@@ -364,18 +408,33 @@ export class ModelPort implements EditorPort {
 
   /** A model-space spot, resolved to the same position on the surface. */
   private mapSpotToSurface(spot: DomSpot): DomSpot | null {
-    const anchorNode: Node = spot.kind === 'text' ? spot.node : spot.node;
+    const anchorNode: Node = spot.node;
     const path = pathTo(this.model, anchorNode);
-    if (!path) {
+    if (path) {
+      const target = nodeAtPath(this.element, path);
+      // The node kind must survive the trip: the surface is re-parsed
+      // markup, and a path that lands on a different kind of node is a
+      // mismatch, not a mapping.
+      if (target && target.nodeType === anchorNode.nodeType) {
+        return spot.kind === 'text'
+          ? { kind: 'text', node: target as Text, raw: spot.raw }
+          : { kind: 'element', node: target as Element, childIndex: spot.childIndex };
+      }
+    }
+    // Child-index paths can break legitimately: paint() assigns markup and
+    // the HTML parser MERGES adjacent text nodes, so the fresh run an
+    // operation just appended (paste, dictation, a tab character) folds
+    // into its neighbour on the surface while the model still holds two
+    // nodes. The spot's STREAM offset survives that merge — the same
+    // accounting spotAtStream resolves, zero-width markers excluded — so
+    // resolve through it instead of dropping the operation's caret back
+    // to the pre-edit selection (the cursor-doesn't-move-with-the-paste
+    // bug).
+    const offset = streamOffsetOfSpot(this.model, spot);
+    if (offset === null) {
       return null;
     }
-    const target = nodeAtPath(this.element, path);
-    if (!target) {
-      return null;
-    }
-    return spot.kind === 'text'
-      ? { kind: 'text', node: target as Text, raw: spot.raw }
-      : { kind: 'element', node: target as Element, childIndex: spot.childIndex };
+    return spotAtStream(this.element, Math.min(offset, streamLengthOf(this.element)));
   }
 
   private reselect(selection: { anchor: number; focus: number }, max: number): void {
@@ -861,6 +920,70 @@ export class ModelPort implements EditorPort {
       return this.command((model, coverage) => unnestListItem(model, coverage[0]));
     }
     return this.command((model, coverage) => shiftBlockIndent(model, coverage, -1));
+  }
+
+  /**
+   * The Tab-KEY gesture over a bare text stream — a classic note that
+   * never grew element blocks (the loaded welcome note, fresh typing
+   * before the first Enter). Such a note is ONE model block, so the
+   * block-indent command would step the margin of the whole document
+   * from a single press; there the tab is the line-oriented gesture a
+   * plain note always had: a literal tab at the caret, one per selected
+   * line over a spanning selection, Shift reverses by stripping.
+   *
+   * Returns null when the caret is not in a bare stream — the caller
+   * falls back to indent()/outdent() (the formatting commands the
+   * toolbar rides, which must keep their block semantics). The stream
+   * is one text run, so the line splice cannot merge blocks.
+   */
+  tabStream(shift: boolean): boolean | null {
+    if (!this.inBareStream()) {
+      return null;
+    }
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return null;
+    }
+    const selected = selection.toString();
+    if (selected.indexOf('\n') !== -1) {
+      const lines = selected.split('\n');
+      const replacement = (
+        shift
+          ? lines.map((line) => (line.startsWith('\t') ? line.substring(1) : line))
+          : lines.map((line) => `\t${line}`)
+      ).join('\n');
+      return this.insertText(replacement, { selectInserted: true });
+    }
+    if (!shift) {
+      return this.insertText('\t');
+    }
+    return false; // a collapsed Shift+Tab has no indent to unwind
+  }
+
+  /** True when BOTH selection ends sit in text directly under the root,
+   *  crossing no element block on the way up (inline runs like <b> count —
+   *  they are part of the stream). A selection that reaches any block
+   *  keeps the block gesture, even when its start end is bare. */
+  private inBareStream(): boolean {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return false;
+    }
+    const range = selection.getRangeAt(0);
+    for (const end of [range.startContainer, range.endContainer]) {
+      let el: HTMLElement | null = end instanceof HTMLElement ? end : end.parentElement;
+      while (
+        el &&
+        el !== this.element &&
+        !/^(DIV|P|H1|H2|H3|BLOCKQUOTE|PRE|LI|TD|TH)$/.test(el.tagName)
+      ) {
+        el = el.parentElement;
+      }
+      if (el !== this.element) {
+        return false;
+      }
+    }
+    return true;
   }
 
   insertHorizontalRule(): boolean {

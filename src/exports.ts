@@ -140,10 +140,13 @@ export function exportNotesAsDocx(textToWrite: string, fileNameToSaveAs: string)
 
 export function downloadHTML(htmlContent: string, fileNameToSaveAs: string): void {
   // `htmlContent` arrives pre-sanitised from the editor's formatting subset.
+  // The wrapper must NOT pre-wrap: the content is real block HTML, and for
+  // markdown notes the owned renderer's pretty-printed newlines would paint
+  // as phantom blank lines in the exported file.
   const html = `<html>
         <head><meta charset="utf-8"><title>Notes</title></head>
         <body>
-            <div style="white-space: pre-wrap; word-wrap: break-word; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.55; padding: 24px;">${htmlContent}</div>
+            <div style="word-wrap: break-word; overflow-wrap: break-word; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.55; padding: 24px;">${htmlContent}</div>
         </body>
     </html>`;
 

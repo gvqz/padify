@@ -307,7 +307,37 @@ describe('renderMarkdownToHtml — math', () => {
 describe('renderMarkdownToHtml — lists', () => {
   it('renders tight bullet lists', () => {
     expect(renderMarkdownToHtml('- a\n- b')).toBe('<ul>\n<li>a</li>\n<li>b</li>\n</ul>');
-    expect(renderMarkdownToHtml('* a\n+ b')).toBe('<ul>\n<li>a</li>\n<li>b</li>\n</ul>');
+    expect(renderMarkdownToHtml('* a\n* b')).toBe('<ul>\n<li>a</li>\n<li>b</li>\n</ul>');
+  });
+
+  it('a changed marker kind starts a NEW list (CommonMark — the editor agrees)', () => {
+    // Bullet char change: two lists.
+    expect(renderMarkdownToHtml('* a\n+ b')).toBe(
+      '<ul>\n<li>a</li>\n</ul>\n<ul>\n<li>b</li>\n</ul>',
+    );
+    // Bullet -> ordered, adjacent: two lists.
+    expect(renderMarkdownToHtml('- a\n1. b')).toBe(
+      '<ul>\n<li>a</li>\n</ul>\n<ol>\n<li>b</li>\n</ol>',
+    );
+    // Ordered delimiter change: two lists (the second keeps its own
+    // numbering — item "2)" starts a fresh <ol> at 2).
+    expect(renderMarkdownToHtml('1. a\n2) b')).toBe(
+      '<ol>\n<li>a</li>\n</ol>\n<ol start="2">\n<li>b</li>\n</ol>',
+    );
+  });
+
+  it('lists of different kinds stay separate across blank lines (no merged <ul>)', () => {
+    // The regression: a bullet list, a blank, an ordered list and a task
+    // list used to collapse into ONE <ul> — numbers and checkboxes lost.
+    const html = renderMarkdownToHtml(
+      '- bullet\n\n1. first\n2. second\n\n- [ ] task one\n- [x] task two',
+    );
+    // Three sibling lists, in order, none swallowing another's items.
+    expect(html).toBe(
+      '<ul>\n<li>bullet</li>\n</ul>\n<ol>\n<li>first</li>\n<li>second</li>\n</ol>' +
+        '\n<ul>\n<li><input type="checkbox" disabled> task one</li>' +
+        '\n<li><input type="checkbox" disabled checked> task two</li>\n</ul>',
+    );
   });
 
   it('renders ordered lists, keeping a non-1 start', () => {

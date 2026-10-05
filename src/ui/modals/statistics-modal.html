@@ -8,127 +8,53 @@
         <h4 class="modal-title custom-modal-title">Statistics</h4>
       </div>
       <div class="modal-body modal-container">
-        <div class="statistics-grid">
-          <div class="stat-item">
-            <div class="stat-label">Words</div>
-            <div class="stat-value" id="statWords">0</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">Characters</div>
-            <div class="stat-value" id="statCharacters">0</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">Sentences</div>
-            <div class="stat-value" id="statSentences">0</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">Paragraphs</div>
-            <div class="stat-value" id="statParagraphs">0</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">
-              Avg Word Length
-              <a
-                href="#"
-                data-toggle="tooltip"
-                title="This signifies the complexity and readability of your writing. The more the average word length, the more complex and challenging the reading experience."
-              >
-                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-              </a>
-            </div>
-            <div class="stat-value" id="statAvgWordLength">0</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">
-              Reading Time
-              <a
-                href="#"
-                data-toggle="tooltip"
-                title="The time it takes for an average adult to read the text which is 200 words per minute."
-              >
-                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-              </a>
-            </div>
-            <div class="stat-value" id="statReadingTime">0 min</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">
-              Unique Words
-              <a
-                href="#"
-                data-toggle="tooltip"
-                title="Unique words refer to the distinct words in a text, excluding duplicates. This metric helps in assessing the diversity of vocabulary used in the text."
-              >
-                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-              </a>
-            </div>
-            <div class="stat-value" id="statUniqueWords">0</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">
-              Most Common Word
-              <a
-                href="#"
-                data-toggle="tooltip"
-                title="Most common content word refers to the non-stop word that appears most frequently in the text. This helps highlight the words that carry meaning."
-              >
-                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-              </a>
-            </div>
-            <div class="stat-value" id="statMostCommonWord">N/A</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">
-              Lexical Density
-              <a
-                href="#"
-                data-toggle="tooltip"
-                title="The percentage of content words in the text. Higher lexical density usually means the writing is more information-rich."
-              >
-                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-              </a>
-            </div>
-            <div class="stat-value" id="statLexicalDensity">0%</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">
-              Readability Score
-              <a
-                href="#"
-                data-toggle="tooltip"
-                title="A Flesch Reading Ease score. Higher values mean easier text; lower values usually mean more complex text."
-              >
-                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-              </a>
-            </div>
-            <div class="stat-value" id="statReadabilityScore">0.0</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">
-              Estimated Pages
-              <a
-                href="#"
-                data-toggle="tooltip"
-                title="An approximate page count based on standard formatting and about 250 words per page."
-              >
-                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-              </a>
-            </div>
-            <div class="stat-value" id="statEstimatedPages">0 pages</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">
-              Estimated Speaking Time
-              <a
-                href="#"
-                data-toggle="tooltip"
-                title="A rough speaking-time estimate based on a normal pace of about 130 words per minute."
-              >
-                <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-              </a>
-            </div>
-            <div class="stat-value" id="statEstimatedSpeakingTime">0 min</div>
-          </div>
+        <p class="statistics-hint">Click a card to cycle through its statistics.</p>
+        <div class="statistics-board" id="statisticsBoard">
+          <button
+            type="button"
+            class="stat-card stat-card-hero"
+            data-stat-family="count"
+            title="Click to cycle: characters, words, sentences, paragraphs"
+          >
+            <span class="stat-label" data-stat-label>Characters</span>
+            <span class="stat-value" data-stat-value>0</span>
+          </button>
+          <button
+            type="button"
+            class="stat-card"
+            data-stat-family="vocabulary"
+            title="Click to cycle: unique words, most common word, average word length, words per sentence"
+          >
+            <span class="stat-label" data-stat-label>Unique words</span>
+            <span class="stat-value" data-stat-value>0</span>
+          </button>
+          <button
+            type="button"
+            class="stat-card"
+            data-stat-family="time"
+            title="Click to cycle: reading time, speaking time, writing time"
+          >
+            <span class="stat-label" data-stat-label>Reading time</span>
+            <span class="stat-value" data-stat-value>0 min</span>
+          </button>
+          <button
+            type="button"
+            class="stat-card"
+            data-stat-family="records"
+            title="Click to cycle: longest word, longest sentence"
+          >
+            <span class="stat-label" data-stat-label>Longest word</span>
+            <span class="stat-value" data-stat-value>N/A</span>
+          </button>
+          <button
+            type="button"
+            class="stat-card"
+            data-stat-family="quality"
+            title="Click to cycle: readability score, lexical density, estimated pages"
+          >
+            <span class="stat-label" data-stat-label>Readability score</span>
+            <span class="stat-value" data-stat-value>0.0</span>
+          </button>
         </div>
       </div>
       <div class="modal-footer">

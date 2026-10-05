@@ -216,6 +216,11 @@ function toastText(): string {
   return document.getElementById('toast')!.textContent ?? '';
 }
 
+/** The tone the unified toast stamped (success/error/neutral). */
+function toastTone(): string | null {
+  return document.getElementById('toast')!.dataset.tone ?? null;
+}
+
 /** True when the row (or its group) is not hidden. */
 function visible(selector: string): boolean {
   return menu().querySelector(selector)!.closest('[hidden]') === null;
@@ -808,11 +813,8 @@ describe('copyNotesToClipboard / deleteNotes', () => {
     copyNotesToClipboard('the whole note');
 
     expect(clipboardWriteText).toHaveBeenCalledWith('the whole note');
-    await vi.waitFor(() => expect(vi.mocked(Swal.fire)).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(Swal.fire).mock.calls[0]![0]).toMatchObject({
-      title: 'Notes copied to clipboard!',
-      icon: 'success',
-    });
+    await vi.waitFor(() => expect(toastText()).toBe('Notes copied to clipboard.'));
+    expect(toastTone()).toBe('success');
   });
 
   it('copyNotesToClipboard failure fires the permissions toast', async () => {
@@ -821,11 +823,10 @@ describe('copyNotesToClipboard / deleteNotes', () => {
 
     copyNotesToClipboard('the whole note');
 
-    await vi.waitFor(() => expect(vi.mocked(Swal.fire)).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(Swal.fire).mock.calls[0]![0]).toMatchObject({
-      title: 'Fail to copy. Check permissions for clipboard.',
-      icon: 'error',
-    });
+    await vi.waitFor(() =>
+      expect(toastText()).toBe('Fail to copy. Check permissions for clipboard.'),
+    );
+    expect(toastTone()).toBe('error');
   });
 
   it('deleteNotes (confirmed) clears the active tab through the TabManager', async () => {
@@ -895,12 +896,15 @@ describe('keyboard navigation', () => {
     expect(document.activeElement).toBe(note());
   });
 
-  it('a click elsewhere in the document closes the menu', async () => {
+  it('a pointer press elsewhere in the document closes the menu', async () => {
     ensureContextMenuMounted();
     await bootedManager();
     await openMenuAt();
 
-    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    // The dismissable-layer registry listens on capture-phase pointerdown
+    // (earlier than any click handler, immune to stopPropagation) — a press
+    // outside the menu is the gesture that closes it.
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
 
     expect(menu().hidden).toBe(true);
   });

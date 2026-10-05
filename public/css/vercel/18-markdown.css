@@ -20,6 +20,16 @@
   min-height: 100%;
 }
 
+/* The preview renders the OWNED renderer's HTML — real block markup, so
+   it must NOT inherit #note's white-space: pre-wrap (the rich editor's
+   content model needs it, but here the renderer's pretty-printed
+   newlines between tags would paint as phantom blank lines and blow
+   every gap wide open). The share page and the HTML export carry the
+   same correction for the same reason. */
+.markdown-surface .markdown-preview {
+  white-space: normal;
+}
+
 /* Milkdown's container + the ProseMirror editable root. The base PM
    stylesheet (imported from the kit) provides pre-wrap, the gap cursor
    and table editing chrome; the outline discipline matches #note.
@@ -164,6 +174,9 @@
 .markdown-preview code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.9em;
+  /* Bootstrap's inline-code ink (#c7254e) leaks through any rule that
+     forgets to state the color — the design system is monochrome. */
+  color: var(--vz-fg);
   background: var(--vz-bg-subtle);
   border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius);
@@ -180,8 +193,11 @@
 .markdown-surface .padify-markdown a,
 .markdown-preview a {
   /* Monochrome: links read through the underline, like every link in
-     the app — never through a new hue. */
+     the app — never through a new hue. font-weight: inherit keeps the
+     legacy global `a { font-weight: bold }` (components.css) from
+     fattening every markdown link off the underline-only design. */
   color: inherit;
+  font-weight: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -197,6 +213,32 @@
 .markdown-preview table {
   border-collapse: collapse;
   margin: 0.5em 0;
+}
+
+/* The preview's tables answer the editor's geometry: prosemirror-tables
+   ships `.ProseMirror table { width: 100%; table-layout: fixed }`, so
+   the preview states the same rule or the two views disagree on every
+   table (the editor stretched, the preview hugged its content). */
+.markdown-preview table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+/* ProseMirror's table chrome expects the host to define its default
+   column width; unstated, the var is invalid and min-width collapses. */
+.markdown-surface .ProseMirror {
+  --default-cell-min-width: 36px;
+}
+
+/* The kit's table chrome is blue (the selection wash rides a ::after
+   overlay, the column-resize handle its own blue) — the design system
+   is monochrome, so both restate on the tokens. */
+.markdown-surface .ProseMirror .selectedCell::after {
+  background-color: var(--vz-bg-hover);
+}
+
+.markdown-surface .ProseMirror .column-resize-handle {
+  background-color: var(--vz-border-strong);
 }
 
 .markdown-surface .padify-markdown td,
@@ -266,9 +308,14 @@
 
 /* The preview mounts before the editor appends itself, so DOM order
    alone would put the renderer first — place them explicitly: the
-   WYSIWYG owns the left half, the rendered output the right. */
+   WYSIWYG owns the left half, the rendered output the right. grid-row
+   is load-bearing: the auto-placement cursor starts at column 1, the
+   preview takes column 2, and the editor's explicit column 1 then sits
+   BEHIND the cursor — sparse packing pushes it to a second row, which
+   halved both panes and stacked them diagonally. */
 .markdown-surface.markdown-split-mode .milkdown {
   grid-column: 1;
+  grid-row: 1;
   min-height: 0;
   overflow-y: auto;
   border-right: 1px solid var(--vz-border);
@@ -276,6 +323,7 @@
 
 .markdown-surface.markdown-split-mode .markdown-preview {
   grid-column: 2;
+  grid-row: 1;
   min-height: 0;
   overflow-y: auto;
 }
@@ -315,20 +363,30 @@
    is painted here — a monochrome checkbox on the primary, like the
    preview's disabled inputs. Clicking the marker zone toggles (the
    surface's click plugin; the zone width matches TASK_MARKER_EM in
-   editor/markdown/nodes.ts). */
+   editor/markdown/nodes.ts).
+
+   Geometry: the preset wraps an item's content in a block <p>, so an
+   in-flow inline marker would sit on its OWN line above the text (the
+   two-stack bug). The marker hangs in the list's gutter instead —
+   absolute against the li, aligned with the sibling bullets' marker
+   column — and the item's first block gives back its top margin so the
+   box rides the text's first line. */
 
 .markdown-surface .padify-markdown li[data-item-type='task'] {
   list-style: none;
+  position: relative;
 }
 
 .markdown-surface .padify-markdown li[data-item-type='task']::before {
   content: '';
+  position: absolute;
+  left: -1.5em;
+  top: 0.45em;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 1em;
   height: 1em;
-  margin-right: 0.45em;
   border: 1.5px solid var(--vz-border-strong);
   border-radius: 3px;
   background: var(--vz-bg);
@@ -336,8 +394,15 @@
   font-size: 0.85em;
   font-weight: 650;
   line-height: 1;
-  vertical-align: -0.12em;
   cursor: pointer;
+}
+
+.markdown-surface .padify-markdown li[data-item-type='task'] > p:first-child {
+  margin-top: 0;
+}
+
+.markdown-surface .padify-markdown li[data-item-type='task'] > p:last-child {
+  margin-bottom: 0;
 }
 
 .markdown-surface .padify-markdown li[data-item-type='task'][data-checked='true']::before {

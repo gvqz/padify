@@ -625,6 +625,18 @@ export class TabManager {
     }
 
     element.find('.tab-strip-title').text(deriveTabTitle(tab));
+    if (tab.id === this.activeId) {
+      this.syncDocumentTitle();
+    }
+  }
+
+  /** The browser tab mirrors the note's name — "Note name — Padify" — so
+   *  a row of pinned tabs says which note each holds. Follows every path
+   *  the tab strip label follows (typing, rename, switch), through the
+   *  same deriveTabTitle, so the two never disagree. */
+  private syncDocumentTitle(): void {
+    const active = this.getActive();
+    document.title = active ? `${deriveTabTitle(active)} — Padify` : 'Padify';
   }
 
   private bindStripEvents(): void {
@@ -886,6 +898,7 @@ export class TabManager {
     if (!active) {
       return;
     }
+    this.syncDocumentTitle();
     if (this.onActiveChanged) {
       this.onActiveChanged(active);
     }

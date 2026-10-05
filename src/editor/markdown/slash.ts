@@ -85,7 +85,13 @@ let outsideClickListener: ((event: MouseEvent) => void) | null = null;
 
 /** Query text before the caret ("" when the menu is not applicable). */
 function queryText(view: EditorView): string {
-  const content = provider?.getContent(view);
+  // Headings answer too — Notion's "/" gesture is not paragraph-only,
+  // and the heading blocks are text blocks the menu serves just as well.
+  // (The kit's default matches paragraphs only.)
+  const content = provider?.getContent(
+    view,
+    (node) => node.type.name === 'paragraph' || node.type.name.startsWith('heading'),
+  );
   return typeof content === 'string' ? content : '';
 }
 
@@ -269,13 +275,6 @@ export function initMarkdownSlash(wiring: MarkdownSlashHandlers): void {
   });
   provider.onShow = () => {
     renderItems();
-  };
-  provider.onHide = () => {
-    if (panel) {
-      panel.textContent = '';
-    }
-    visibleItems = [];
-    activeIndex = 0;
   };
   provider.onHide = () => {
     if (panel) {

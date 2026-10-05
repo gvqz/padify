@@ -50,6 +50,7 @@ export function calculateCharactersAndWords(str: string): string {
 
 export interface NoteStatistics {
   characters: number;
+  charactersNoSpaces: number;
   words: number;
   sentences: number;
   paragraphs: number;
@@ -62,12 +63,17 @@ export interface NoteStatistics {
   readabilityScore: string;
   estimatedPages: string;
   estimatedSpeakingTime: string;
+  writingTime: string;
+  wordsPerSentence: string;
+  longestWord: string;
+  longestSentence: string;
 }
 
 export function calculateNoteStatistics(str: string): NoteStatistics {
   if (!str || str.trim() === '') {
     return {
       characters: 0,
+      charactersNoSpaces: 0,
       words: 0,
       sentences: 0,
       paragraphs: 0,
@@ -80,6 +86,10 @@ export function calculateNoteStatistics(str: string): NoteStatistics {
       readabilityScore: '0.0',
       estimatedPages: '0 pages',
       estimatedSpeakingTime: '0 min',
+      writingTime: '0 min',
+      wordsPerSentence: '0.0',
+      longestWord: 'N/A',
+      longestSentence: '0 words',
     };
   }
 
@@ -144,8 +154,39 @@ export function calculateNoteStatistics(str: string): NoteStatistics {
   const speakingTimeMinutes = Math.ceil(words / 130);
   const estimatedSpeakingTime = speakingTimeMinutes === 1 ? '1 min' : `${speakingTimeMinutes} mins`;
 
+  // The fun extras: writing time at a 40 wpm typing pace, characters
+  // without whitespace, the shape of a sentence on average, and the
+  // note's records (its longest word and longest sentence).
+  const charactersNoSpaces = str.replace(/\s/g, '').length;
+
+  const writingTimeMinutes = Math.ceil(words / 40);
+  const writingTime = writingTimeMinutes === 1 ? '1 min' : `${writingTimeMinutes} mins`;
+
+  const wordsPerSentence = sentences > 0 ? (words / sentences).toFixed(1) : '0.0';
+
+  let longestWord = 'N/A';
+  let longestWordLength = 0;
+  for (const token of str.trim().split(/\s+/)) {
+    const cleaned = token.replace(/[^\p{L}\p{N}]+$/u, '').replace(/^[^\p{L}\p{N}]+/u, '');
+    if (cleaned.length > longestWordLength) {
+      longestWordLength = cleaned.length;
+      longestWord = cleaned;
+    }
+  }
+
+  let longestSentenceWords = 0;
+  for (const chunk of str.split(/[.!?]+/)) {
+    const trimmed = chunk.trim();
+    if (trimmed === '') {
+      continue;
+    }
+    longestSentenceWords = Math.max(longestSentenceWords, countWords(trimmed));
+  }
+  const longestSentence = `${longestSentenceWords} words`;
+
   return {
     characters,
+    charactersNoSpaces,
     words,
     sentences,
     paragraphs,
@@ -161,6 +202,10 @@ export function calculateNoteStatistics(str: string): NoteStatistics {
     estimatedPages,
     estimatedSpeakingTime,
     lexicalDensityScore: `${lexicalDensityScore}%`,
+    writingTime,
+    wordsPerSentence,
+    longestWord,
+    longestSentence,
   };
 }
 

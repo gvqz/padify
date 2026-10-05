@@ -229,6 +229,8 @@ a {
 
 #toast {
   visibility: hidden;
+  opacity: 0;
+  transform: translateY(10px);
   min-width: 250px;
   margin-left: -125px;
   background-color: #cecece;
@@ -236,17 +238,24 @@ a {
   position: fixed;
   z-index: 1;
   left: 50%;
+  /* Transition-driven enter/leave: the leave actually plays (the old
+     keyframe pair baked the fade-out into .show, snapped back to full
+     opacity when it ended, and only vanished when the JS timer fired).
+     The delayed visibility step keeps the element interactable-free but
+     invisible only AFTER the fade completes. */
+  transition: opacity 0.18s ease, transform 0.18s ease,
+    visibility 0s linear 0.18s;
 }
 
 .dark #toast {
   background-color: #202630;
 }
 
-
 #toast.show {
   visibility: visible;
-  -webkit-animation: fadein 0.5s, fadeout 0.5s 1.5s;
-  animation: fadein 0.5s, fadeout 0.5s 1.5s;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0s;
 }
 
 .custom-modal-title {
