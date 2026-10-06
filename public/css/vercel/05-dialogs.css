@@ -106,7 +106,10 @@ body.dark .modal-body a:focus {
   text-decoration-color: var(--vz-fg);
 }
 
-/* Close button — a real target, not a floating glyph */
+/* Close button — a real target, not a floating glyph. The × is an
+   inline-SVG X, not a text glyph: fonts center the advance box, not the
+   ink, so a &times; rode off-center inside its hover surface on several
+   system fonts. A stroked SVG is centered by construction. */
 body .modal-header .close,
 body.dark .modal-header .close,
 body.dark .modal-header .close:hover {
@@ -124,6 +127,12 @@ body.dark .modal-header .close:hover {
   align-items: center;
   justify-content: center;
   transition: background-color 100ms ease, color 100ms ease;
+}
+
+body .modal-header .close svg {
+  display: block;
+  width: 15px;
+  height: 15px;
 }
 
 body .modal-header .close:hover,
