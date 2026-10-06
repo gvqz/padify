@@ -11,7 +11,7 @@ with the account's canonical privacy-preserving email:
 
 This is the GitHub account's canonical address
 (`Settings → Emails → Keep my email addresses private`). The display
-**name is free** — call yourself anything; the email is what links a
+**name is free** — call yourself anything(preferably gvqz or Jellybean); the email is what links a
 commit to the account. Using any other email produces commits that do not
 link to it.
 
