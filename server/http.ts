@@ -11,6 +11,34 @@ import { MAX_BODY_BYTES } from '../shared/wire';
 
 export { MAX_BODY_BYTES };
 
+/**
+ * Strips the deployment's mount prefix off an incoming pathname.
+ *
+ * Supervisors that hand out a subpath of a shared domain (alwaysdata
+ * sites, the reference deployment) proxy the FULL original path to the
+ * process: an app mounted at host/padifyapi serves /padifyapi/api/health.
+ * The router speaks plain /api/…, so the prefix comes off before routing.
+ * PATH_PREFIX is that mount point ('' = root deployment, nothing stripped).
+ */
+export function stripPathPrefix(pathname: string, prefix: string): string {
+  const mount = prefix.replace(/\/+$/, '');
+  if (!mount) {
+    return pathname;
+  }
+  if (pathname === mount) {
+    return '/';
+  }
+  if (pathname.startsWith(`${mount}/`)) {
+    return pathname.slice(mount.length);
+  }
+  return pathname;
+}
+
+/** The PATH_PREFIX value, normalized ('' = root deployment). */
+export function pathPrefixFromEnv(raw: string | undefined): string {
+  return (raw ?? '').trim().replace(/\/+$/, '');
+}
+
 export function corsHeaders(request: Request): Record<string, string> {
   const allowList = (process.env.ALLOWED_ORIGINS ?? '*')
     .split(',')

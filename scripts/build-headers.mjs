@@ -45,16 +45,20 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * VITE_API_BASE must be '' (same-origin /api) or an absolute origin —
- * scheme://host[:port], nothing after it. A path would silently produce a
- * redirect target and a fetch base that disagree about the API's shape.
+ * VITE_API_BASE must be '' (same-origin /api) or an absolute URL —
+ * scheme://host[:port], optionally followed by a path segment
+ * (https://host/padifyapi) for deployments where the API lives under a
+ * subpath of a shared domain. Queries, fragments and relative values stay
+ * malformed: they would silently produce a redirect target and a fetch
+ * base that disagree about the API's shape.
  */
-const API_BASE_PATTERN = /^https:\/\/[^/?#]+\/?$/;
+const API_BASE_PATTERN = /^https:\/\/[^/?#]+(?:\/[^/?#]+)*\/?$/;
 const API_BASE_ERROR =
-  "[build-headers] VITE_API_BASE must be '' (same-origin /api) or an absolute origin like " +
-  'https://api.example.com — no path, no query (got "{}"). It feeds the client bundle, ' +
-  'dist/share/config.js, the CSP connect-src and the Netlify /api proxy redirect, so a ' +
-  'malformed value must fail the build instead of shipping a site whose parts disagree.';
+  "[build-headers] VITE_API_BASE must be '' (same-origin /api) or an absolute URL like " +
+  'https://api.example.com or https://host/padifyapi — no query, no fragment (got "{}"). ' +
+  'It feeds the client bundle, dist/share/config.js, the CSP connect-src and the Netlify /api ' +
+  'proxy redirect, so a malformed value must fail the build instead of shipping a site whose ' +
+  'parts disagree.';
 
 /** Normalizes and validates the API origin. '' = same-origin. */
 export function normalizeApiBase(raw) {
@@ -66,12 +70,25 @@ export function normalizeApiBase(raw) {
   return value.replace(/\/+$/, '');
 }
 
-/** The connect-src entry list: the app itself, the configured API origin
- * (if any) and the music player's Spotify calls. */
+/** The connect-src entry list: the app itself, the configured API URL
+ * (if any) and the music player's Spotify calls. A path-bearing base is
+ * emitted with a trailing slash so CSP path matching treats it as a
+ * directory and admits every endpoint under it. */
 function connectSrcFor(apiBase) {
+  let cspEntry = apiBase;
+  if (apiBase) {
+    try {
+      const { pathname } = new URL(apiBase);
+      if (pathname && pathname !== '/') {
+        cspEntry = `${apiBase}/`;
+      }
+    } catch {
+      // normalizeApiBase already validated the value; unreachable.
+    }
+  }
   return [
     "'self'",
-    ...(apiBase ? [apiBase] : []),
+    ...(cspEntry ? [cspEntry] : []),
     'https://api.spotify.com',
     'wss://*.spotify.com',
   ].join(' ');
@@ -144,7 +161,8 @@ export function generateHeadersFile(distDir, options = {}) {
  * public/share/config.js; see docs/CLOUD_SETUP.md §3.
  */
 window.PADIFY_SHARE_CONFIG = {
-  // Unquoted-safe: API_BASE_PATTERN admits only scheme://host[:port].
+  // Unquoted-safe: API_BASE_PATTERN admits scheme://host[:port] and
+  // scheme://host[:port]/path only.
   apiBase: '${apiBase}'
 };
 `;

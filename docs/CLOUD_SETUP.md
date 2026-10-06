@@ -104,7 +104,14 @@ guardrails so memory cannot creep:
 
 Other environment variables:
 
-- `PORT` — defaults to `3041`.
+- `PORT` — defaults to `3041`. A supervisor-provided `PORT` wins (alwaysdata
+  sites hand their assigned port over this way, along with the internal
+  listen address in `IP`).
+- `PATH_PREFIX` — the mount point when the API is served under a subpath of
+  a shared domain (alwaysdata sites proxy the full original path to the
+  process, so an app mounted at `host/padifyapi` receives
+  `/padifyapi/api/health`; the prefix is stripped before routing). Unset or
+  `/` = root deployment, nothing stripped.
 - `TURSO_DATABASE_URL` — omit it (or use `file:`) to run with a local SQLite
   file at `server/local.db` instead of Turso (great for local dev).
 - `ALLOWED_ORIGINS` — comma-separated origins allowed to call the API from a
@@ -208,15 +215,31 @@ physically cannot disagree about the API's address:
 - **unset or empty** (default) → same-origin `/api`: route `/api/*` to the
   API from whatever serves the site (the bundled `Caddyfile` already does
   this for self-hosting; the Vite dev server proxies to `localhost:3041`).
-- **`https://api.example.com`** (an absolute origin, no path) → the app
-  and the share viewer call that origin directly (CORS), and the generated
-  `_redirects` additionally proxies `/api/*` there so curl and tests on
+- **`https://api.example.com`** (an absolute URL) → the app and the share
+  viewer call that origin directly (CORS), and the generated `_redirects`
+  additionally proxies `/api/*` there so curl and tests on
   the same host work too.
+- **`https://host.example.com/padifyapi`** (an absolute URL with a path) →
+  for hosts that can only hand out subpaths of one shared domain
+  (alwaysdata-style accounts): the front server maps the path onto the
+  API and the app calls it in place. Same-origin, so no CORS involved,
+  and the service worker carries the path in its network-only bypass so
+  live data is never served from a cache.
 
 Set it where the build runs (Netlify: Site settings → Environment
 variables), rebuild, deploy. A malformed value — a relative URL, a URL
-with a path — **fails the build** instead of shipping a site whose parts
-guessed differently.
+with a query or fragment — **fails the build** instead of shipping a site
+whose parts guessed differently.
+
+### Serving the app under a subpath (`VITE_BASE_PATH`)
+
+Hosts that partition one domain by path — alwaysdata's free accounts, for
+example, where an app lives at `functionhost.alwaysdata.net/padify` —
+build with `VITE_BASE_PATH=/padify/`. Vite rebases every emitted URL onto
+it, the service worker precaches and falls back under it, and share links
+resolve inside it; the app itself is otherwise unaware of where it is
+mounted. Leave the variable unset for a normal root deploy — both come
+from the same source, which is exactly what keeps them from drifting.
 
 That's it: the **Cloud sync** icon appears in the padify navbar, Settings
 gains a "Cloud sync" section, and users can create accounts and sync.

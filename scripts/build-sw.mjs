@@ -49,22 +49,72 @@ function walk(dir) {
 
 /**
  * Assets the entry page references directly (script src / link href /
- * img src): the app shell. Root-relative, same-origin URLs only — the
+ * img src): the app shell. Same-origin, base-relative URLs only — the
  * Spotify SDK and other cross-origin references are none of the precache's
- * business.
+ * business. With a subpath build (VITE_BASE_PATH=/padify/) Vite emits
+ * /padify/assets/…, so refs are only recognized under the configured base.
  * @returns {Set<string>} dist-relative paths
  */
-export function shellAssetPaths(distDir) {
+export function shellAssetPaths(distDir, basePath = '') {
   const html = readFileSync(join(distDir, 'index.html'), 'utf-8');
   const paths = new Set();
+  const prefix = `${basePath}/`;
   for (const m of html.matchAll(/(?:src|href)=["']([^"']+)["']/g)) {
     const url = m[1];
     // Root-relative (starts with a single /), not protocol-relative or
     // absolute, not an in-page anchor.
     if (!url.startsWith('/') || url.startsWith('//') || url.startsWith('/#')) continue;
-    paths.add(url.slice(1));
+    if (!url.startsWith(prefix)) continue;
+    paths.add(url.slice(prefix.length));
   }
   return paths;
+}
+
+/**
+ * Normalizes VITE_BASE_PATH to '' (site root) or '/segment/…' without a
+ * trailing slash, failing loudly on anything else — the worker's URLs are
+ * derived from it, so a wrong base quietly caches nothing and breaks
+ * offline instead of failing the build.
+ */
+export function normalizeBasePath(raw) {
+  const trimmed = String(raw ?? '').trim();
+  if (trimmed === '') {
+    return '';
+  }
+  // Accept both spellings ('/padify' and '/padify/') before validating —
+  // the trailing-slash form is what Vite's own base expects.
+  const value = trimmed.replace(/\/+$/, '');
+  if (value === '') {
+    return ''; // '/' (or '///') — the site root
+  }
+  if (!/^\/[A-Za-z0-9._~!$&'()*+,;=:@-]*$/.test(value)) {
+    throw new Error(
+      `[build-sw] VITE_BASE_PATH must be '/' or an absolute path like '/padify/' (got "${value}")`,
+    );
+  }
+  return value;
+}
+
+/**
+ * The pathname prefixes the fetch handler must never touch with a cache:
+ * the API's mount points. '/api/' is the root default; a path-bearing
+ * VITE_API_BASE (https://host/padifyapi) adds its path because those
+ * requests are same-origin and would otherwise fall through to the
+ * cache-first strategy.
+ */
+export function apiBypassPrefixes(apiBase = '') {
+  const prefixes = ['/api/'];
+  if (apiBase) {
+    try {
+      const { pathname } = new URL(apiBase);
+      if (pathname && pathname !== '/') {
+        prefixes.push(pathname.endsWith('/') ? pathname : `${pathname}/`);
+      }
+    } catch {
+      // build-headers validates VITE_API_BASE first; unreachable here.
+    }
+  }
+  return prefixes;
 }
 
 /**
@@ -72,12 +122,20 @@ export function shellAssetPaths(distDir) {
  * Exported so tests can exercise the generator against a fixture tree;
  * the CLI wrapper at the bottom runs it against ../dist after `vite build`.
  *
+ * @param {string} distDir
+ * @param {{ basePath?: string, apiBase?: string }} [options] — basePath is
+ *   the normalized VITE_BASE_PATH ('' = site root); apiBase is the raw
+ *   VITE_API_BASE ('' = same-origin /api).
  * @returns {{ source: string, cacheVersion: string, precacheUrls: string[], runtimeCachedFiles: string[] }}
  */
-export function generateServiceWorker(distDir) {
+export function generateServiceWorker(distDir, options = {}) {
   if (!existsSync(distDir)) {
     throw new Error(`[build-sw] ${distDir} not found. Run \`vite build\` first.`);
   }
+  const basePath = 'basePath' in options ? normalizeBasePath(options.basePath) : '';
+  const apiBase = String(options.apiBase ?? '')
+    .trim()
+    .replace(/\/+$/, '');
 
   const entries = walk(distDir)
     .map((full) => ({
@@ -92,7 +150,7 @@ export function generateServiceWorker(distDir) {
     .filter((entry) => entry.rel !== '_headers' && entry.rel !== '_redirects')
     .sort((a, b) => a.rel.localeCompare(b.rel));
 
-  const shell = shellAssetPaths(distDir);
+  const shell = shellAssetPaths(distDir, basePath);
   const isShell = (rel) => shell.has(rel);
   const isLazyChunk = (rel) => rel.startsWith('assets/') && !shell.has(rel);
 
@@ -106,9 +164,10 @@ export function generateServiceWorker(distDir) {
     (entry) => isLazyChunk(entry.rel) || (entry.size > MAX_PRECACHE_BYTES && !isShell(entry.rel)),
   );
 
-  // Cache URLs are root-relative. Directories are served with a trailing
+  // Cache URLs are base-relative. Directories are served with a trailing
   // slash by static hosts, so precache both spellings for the entry page.
-  const precacheUrls = ['/', ...precached.map((entry) => `/${entry.rel}`)];
+  const entryUrl = basePath ? `${basePath}/` : '/';
+  const precacheUrls = [entryUrl, ...precached.map((entry) => `${basePath}/${entry.rel}`)];
 
   // Hash the CONTENT of the precached files (not just URLs) so that edits
   // to public/ assets (css, images) bump the cache version even when their
@@ -124,6 +183,8 @@ export function generateServiceWorker(distDir) {
   const source = `/* Generated by scripts/build-sw.mjs — do not edit by hand. */
 const CACHE_VERSION = '${cacheVersion}';
 const CACHE_FILES = ${JSON.stringify(precacheUrls, null, 4)};
+const API_BYPASS_PREFIXES = ${JSON.stringify(apiBypassPrefixes(apiBase))};
+const INDEX_FALLBACK = '${basePath}/index.html';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -169,8 +230,10 @@ self.addEventListener('fetch', (event) => {
   // would hand back a stale note list — and a cached /api/share/:token
   // keeps a REVOKED share readable long after its owner cancelled it.
   // API calls go straight to the network; offline means offline, which
-  // the sync layer already surfaces as its own retry state.
-  if (url.pathname.startsWith('/api/')) {
+  // the sync layer already surfaces as its own retry state. Deployments
+  // that mount the API under a subpath (VITE_API_BASE=https://host/api)
+  // carry that path in API_BYPASS_PREFIXES for the same reason.
+  if (API_BYPASS_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) {
     return;
   }
 
@@ -197,7 +260,7 @@ self.addEventListener('fetch', (event) => {
         return cached;
       }
 
-      return network.then((response) => response || caches.match('/index.html'));
+      return network.then((response) => response || caches.match(INDEX_FALLBACK));
     })
   );
 });
@@ -215,12 +278,17 @@ self.addEventListener('fetch', (event) => {
 if (process.argv[1] && process.argv[1].endsWith('build-sw.mjs')) {
   const distDir = new URL('../dist', import.meta.url).pathname;
   try {
-    const { source, cacheVersion, precacheUrls, runtimeCachedFiles } =
-      generateServiceWorker(distDir);
+    const basePath = normalizeBasePath(process.env.VITE_BASE_PATH || '/');
+    const apiBase = String(process.env.VITE_API_BASE ?? '').trim();
+    const { source, cacheVersion, precacheUrls, runtimeCachedFiles } = generateServiceWorker(
+      distDir,
+      { basePath, apiBase },
+    );
     writeFileSync(join(distDir, 'sw.js'), source);
 
     console.log(`[build-sw] wrote dist/sw.js`);
     console.log(`[build-sw] cache version: ${cacheVersion}`);
+    console.log(`[build-sw] base path: ${basePath === '' ? '/ (site root)' : basePath}`);
     console.log(
       `[build-sw] precached ${precacheUrls.length} entries (app shell + small public assets)`,
     );
