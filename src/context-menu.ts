@@ -38,6 +38,7 @@ import { CASES } from './case-conversions';
 import { getEditorPort, type EditorCommand, type FormatCommand } from './editor/port';
 import { getTabManager } from './tabs';
 import { isHtmlContent, isMarkdownNote, isRichNote } from './editor/note-types';
+import { isApplePlatform, shortcutLabel } from './lib/platform';
 import {
   mdClearFormatting,
   mdCopy,
@@ -198,13 +199,14 @@ const ICONS = {
 // ---------------------------------------------------------------------------
 
 /** macOS uses ⌘/⌥ symbols and ⇧⌘Z for redo; everything else shows Ctrl. */
-const IS_APPLE = /Mac|iPhone|iPad|iPod/.test(
-  typeof navigator !== 'undefined' ? `${navigator.platform || ''} ${navigator.userAgent}` : '',
-);
+const IS_APPLE = isApplePlatform();
 const MOD = IS_APPLE ? '⌘' : 'Ctrl+';
 const REDO_HINT = IS_APPLE ? '⇧⌘Z' : 'Ctrl+Y';
 const STRIKE_HINT = IS_APPLE ? '⌘⇧X' : 'Ctrl+⇧X';
 const CLEAR_HINT = IS_APPLE ? '⌘\\' : 'Ctrl+\\';
+/** The clipboard-blocked toasts tell the user which key to press instead. */
+const COPY_BLOCKED_HINT = `Copy blocked — press ${shortcutLabel('mod+c')}.`;
+const PASTE_BLOCKED_HINT = `Clipboard blocked by the browser — press ${shortcutLabel('mod+v')} instead.`;
 
 const FORMAT_META: Record<FormatDef['id'], { hint: string }> = {
   bold: { hint: `${MOD}B` },
@@ -879,7 +881,7 @@ class ContextMenu {
       case 'copy': {
         this.close();
         void mdCopy().then((copied) => {
-          showToast(copied ? 'Copied to clipboard.' : 'Copy blocked — press Ctrl/Cmd + C.');
+          showToast(copied ? 'Copied to clipboard.' : COPY_BLOCKED_HINT);
         });
         mdFocus();
         break;
@@ -891,7 +893,7 @@ class ContextMenu {
           if (result === 'empty') {
             showToast('Clipboard is empty.');
           } else if (result === 'blocked') {
-            showToast('Clipboard blocked by the browser — press Ctrl/Cmd + V instead.');
+            showToast(PASTE_BLOCKED_HINT);
           }
         });
         break;
@@ -1171,7 +1173,7 @@ class ContextMenu {
         copied = false;
       }
     }
-    showToast(copied ? 'Copied to clipboard.' : 'Copy blocked — press Ctrl/Cmd + C.');
+    showToast(copied ? 'Copied to clipboard.' : COPY_BLOCKED_HINT);
     this.close();
     this.restoreFocus();
   }
@@ -1220,7 +1222,7 @@ class ContextMenu {
       }
       this.replaceSelection(text);
     } catch {
-      showToast('Clipboard blocked by the browser — press Ctrl/Cmd + V instead.');
+      showToast(PASTE_BLOCKED_HINT);
       this.restoreFocus();
     }
   }

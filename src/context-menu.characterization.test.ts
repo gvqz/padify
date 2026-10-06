@@ -731,7 +731,7 @@ describe('clipboard flows', () => {
 
     clickItem('[data-action="copy"]');
 
-    await vi.waitFor(() => expect(toastText()).toBe('Copy blocked — press Ctrl/Cmd + C.'));
+    await vi.waitFor(() => expect(toastText()).toBe('Copy blocked — press Ctrl + C.'));
   });
 
   it('paste reads the clipboard and inserts through the port', async () => {
@@ -759,7 +759,7 @@ describe('clipboard flows', () => {
     expect(vi.mocked(port.insertText)).not.toHaveBeenCalled();
   });
 
-  it('a blocked paste points at Ctrl/Cmd+V', async () => {
+  it('a blocked paste points at the platform paste key', async () => {
     await richNoteSetup();
     clipboardReadText.mockRejectedValueOnce(new Error('denied'));
     selectInNote(6, 11);
@@ -769,7 +769,7 @@ describe('clipboard flows', () => {
     clickItem('[data-action="paste"]');
 
     await vi.waitFor(() =>
-      expect(toastText()).toBe('Clipboard blocked by the browser — press Ctrl/Cmd + V instead.'),
+      expect(toastText()).toBe('Clipboard blocked by the browser — press Ctrl + V instead.'),
     );
   });
 
