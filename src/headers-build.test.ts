@@ -116,14 +116,40 @@ describe('API origin (VITE_API_BASE)', () => {
     expect(build.redirectsFile).toContain('/api/*  https://api.example.com/:splat  200!');
   });
 
-  it('fails the build on a malformed origin instead of shipping parts that disagree', () => {
+  it('bakes a path-bearing base into the share config, the proxy redirect and a CSP directory entry', () => {
+    // Shared-domain hosts (alwaysdata & co.) can only hand out subpaths:
+    // the API lives at https://host/padifyapi while the front proxy maps it
+    // onto the domain. The CSP entry gains a trailing slash so path matching
+    // admits every endpoint under the mount point, never just the prefix
+    // string itself.
+    writeEntry('<html><body><script>0;</script></body></html>');
+
+    const build = generateHeadersFile(fixtureDir, {
+      apiBase: 'https://functionhost.example.com/padifyapi/',
+    });
+
+    expect(build.apiBase).toBe('https://functionhost.example.com/padifyapi');
+    expect(build.csp).toContain(
+      "connect-src 'self' https://functionhost.example.com/padifyapi/ https://api.spotify.com",
+    );
+    expect(build.shareConfigFile).toContain(
+      "apiBase: 'https://functionhost.example.com/padifyapi'",
+    );
+    expect(build.redirectsFile).toContain(
+      '/api/*  https://functionhost.example.com/padifyapi/:splat  200!',
+    );
+  });
+
+  it('fails the build on a malformed value instead of shipping parts that disagree', () => {
     writeEntry('<html><body><script>0;</script></body></html>');
 
     const malformed = [
       'api.example.com', // relative
-      'https://api.example.com/v1', // has a path
+      'https://api.example.com/v1?x=1', // query
+      'https://api.example.com/#frag', // fragment
       'ftp://api.example.com', // not http(s)
       'https://', // no host
+      'https://api.example.com//v1', // empty path segment
     ];
     for (const value of malformed) {
       expect(() => generateHeadersFile(fixtureDir, { apiBase: value })).toThrow(/VITE_API_BASE/);

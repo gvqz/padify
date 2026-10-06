@@ -6,8 +6,8 @@
 export interface HeadersBuildOptions {
   /**
    * The raw VITE_API_BASE value ('' = same-origin /api). Validated by the
-   * generator: anything but '' or an absolute origin (https://host[:port],
-   * no path) fails the build.
+   * generator: anything but '' or an absolute URL (https://host[:port],
+   * optionally with a path — https://host/api) fails the build.
    */
   apiBase?: string;
 }
