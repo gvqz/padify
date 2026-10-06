@@ -582,15 +582,27 @@ export class TabManager {
 
   /**
    * Restores a snapshot into the active note — the snapshot restore path.
-   * Html snapshots commit through the surface (the port sanitizes and
-   * persists, same as setEditorHtml); every other kind is written to the
-   * model directly, switching the note to the snapshot's type, because no
-   * editing surface exists for it.
+   * The snapshot owns the note's KIND from here on: a plain, rich or
+   * markdown restore sets the type accordingly, so the chrome that reads
+   * the kind (markdown toolbar, the port's inertness, the tab badge)
+   * cannot disagree with the content that just landed. Html snapshots
+   * commit through the surface (the port sanitizes and persists, same as
+   * setEditorHtml); every other kind is written to the model directly,
+   * because no editing surface exists for it.
    */
   applySnapshotToActive(content: string, noteType?: NoteType): void {
     const active = this.getActive();
     if (!active) {
       return;
+    }
+
+    // The type moves first: loadActiveIntoEditor and the surfaces read it
+    // to pick the painter, and a stale kind means html content re-rendered
+    // as markdown source after the next reload.
+    if (noteType && noteType !== DEFAULT_NOTE_TYPE) {
+      active.noteType = noteType;
+    } else {
+      delete active.noteType;
     }
 
     if (isHtmlContent(noteType)) {
@@ -611,19 +623,18 @@ export class TabManager {
         // sanitized content; the save is ours.
         this.syncAfterExternalEdit();
       }
-      return;
+    } else {
+      active.content = content;
+      active.updatedAt = Date.now();
+      this.dirtyIds.add(active.id);
+      this.persist();
+      this.loadActiveIntoEditor();
     }
 
-    active.content = content;
-    if (noteType) {
-      active.noteType = noteType;
-    } else {
-      delete active.noteType;
-    }
-    active.updatedAt = Date.now();
-    this.dirtyIds.add(active.id);
-    this.persist();
-    this.loadActiveIntoEditor();
+    // The active TAB did not change — its type did. Chrome follows active
+    // changes (the toolbar visibility sync, the port's inertness, the word
+    // pill), so announce the switch the same way a tab change would.
+    this.notifyActiveChanged();
     this.refreshTabLabel(active.id);
   }
 
