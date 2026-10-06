@@ -9,7 +9,7 @@ Hosting plan (frontend dual-host, backend later):
 
 Improvements in the very far future
         - add drawing pad
-		- add option to add end to end encyrption to notes [low priority, make them actually work first]
+                - add option to add end to end encyrption to notes [low priority, make them actually work first]
         - add tasks/notes (based on apple reminders/tasks)
         - detect dates and suggest to add them to calander
         - Heavily improve PWA experience
@@ -25,8 +25,8 @@ Visual overhauls:
                 - have settings based on each note type(classic, markdown, RTN, etc)
         - Statistics menu + add more fun statistics, the current visual menu looks bad. Clicking on the text should rotate the stat (ex it says 1961 characters but when I click that text it switches to 340 words etc)
         - Music menu: this also needs an archecture overhaul/work. Currently the alwaysdata server hasn't been setup so it has not been tested and very much likely doesn't work as intended, delay changing this until specifically instructed with the words "music menu"
-			- mini music player ui: will go where break reminder popup shows up now (the popup's JS anchor — anchorBreakPopup — is the shared hook for it)
-		- unicode menu. I don't know what to do with this right now, it's a bit broken and looks bad.
+                        - mini music player ui: will go where break reminder popup shows up now (the popup's JS anchor — anchorBreakPopup — is the shared hook for it)
+                - unicode menu. I don't know what to do with this right now, it's a bit broken and looks bad.
 
 
 about /markdownreports
@@ -41,26 +41,26 @@ the rest of the features will be made as "tools" (a tool icon in the topbar + po
 
 
 Simple:
-	Before fixing bugs think about the underlying reason to why this bug exists in the first place, is there a bigger thing that needs to be fixed, should archecture be changed?
+        Before fixing bugs think about the underlying reason to why this bug exists in the first place, is there a bigger thing that needs to be fixed, should archecture be changed?
 
         Break reminder polish:
                 - [done] Place it over the new note button at the bottom of the notes menu (the popup now docks above the + New note split control, rail-width, 8px gap; buttons all work — they were bound before the modal markup existed — and it follows the mobile drawer + falls back to the viewport corner when the rail is hidden. Reskinned to the app design language; the legacy dark palette that turned the primary button blue is gone. Pinned by e2e/break-reminder.spec.ts)
 
-                -it's okay but not what I was looking for. remove the it should feel (and maybe even be) part of that sidebar, remove the dismiss button and move it up a bit so it doesn't overlap with the line. it looks weird on phone screens. design it a bit better.
+                - [done] it's okay but not what I was looking for. remove the it should feel (and maybe even be) part of that sidebar, remove the dismiss button and move it up a bit so it doesn't overlap with the line. it looks weird on phone screens. design it a bit better. (the popup now IS part of the sidebar: re-parented into the rail foot and docked by CSS above the New note control — same surface, hairline border, clear of the foot's top border line. Dismiss is gone, the × closes with the same cooldown; Take break + Snooze run as one compact row. It rides the mobile drawer's slide, hides with the rail in the PIP host, and the whole resize/re-anchor JS shrank to one attach call. Pinned by e2e/break-reminder.spec.ts)
 
-        - tabs are much much better, still one problem I caught(see screenshot attached)
+        - [done] tabs are much much better, still one problem I caught(see screenshot attached) (underlying reason found: the selection highlight paints TEXT runs only, so a margin-left indent can never light up — verified in a CSS lab that margin/padding/text-indent/border all fail. The classic plain note's Tab now writes TAB CHARACTERS, one per covered line, so indents select, copy and paste as text; Shift+Tab strips; Backspace at a tabbed line start unwinds first. Legacy margins on plain notes migrate to tabs on display. Rich notes keep the Docs-style margin step — their toolbar buttons format blocks. Pinned by 18 unit tests + tab-key e2e)
 
-        -[almost done] if PWA, the name Padify already comes up at the front, so DONT put padify at the end (installed app gets the bare note name)
+        - [done] if PWA, the name Padify already comes up at the front, so DONT put padify at the end (installed app gets the bare note name) (root cause: the manifest's display_override ["minimal-ui"] overrides display, so installed Edge/Chromium reports minimal-ui and the standalone-only check answered "browser". Detection now covers every installed-style display mode — standalone, minimal-ui, window-controls-overlay, fullscreen, tabbed — and the title syncs on boot. Pinned by e2e/pwa-title.spec.ts)
 
-        remove the author name requirement for pushing commits, 119090177+gvqz@users.noreply.github.com is enough
+        remove the author name requirement for pushing commits, 119090177+gvqz@users.noreply.github.com is enough [done — commit-author.yml now checks the email only; CONTRIBUTING.md matches. The display name is free]
 
 Complex:
 these are more complex features to be added, these should be planned out and potentially discussed(if really big/complex) before starting 
 
-	rebuild snapshots menu
-	problems: currently snapshots do not work consistantly or properly across all note types
-	it must be rebuilt nearly from scratch and heavily tested. should match visual aesthetic of the app
-	there's no point of having duplicate snapshots, so also prevent that from happening 
+        rebuild snapshots menu
+        problems: currently snapshots do not work consistantly or properly across all note types
+        it must be rebuilt nearly from scratch and heavily tested. should match visual aesthetic of the app
+        there's no point of having duplicate snapshots, so also prevent that from happening 
 
-	I dislike how it shows Ctrl/cmd garbage everywhere instead of just showing the one of the two based on the device you're using. Fix that across the entire repo.
+        I dislike how it shows Ctrl/cmd garbage everywhere instead of just showing the one of the two based on the device you're using. Fix that across the entire repo.
 

@@ -2,20 +2,22 @@
 
 ## Commit identity (required)
 
-Every commit pushed to this repository must be authored **and** committed as:
+Every commit pushed to this repository must be authored **and** committed
+with the account's canonical privacy-preserving email:
 
 ```
-gvqz <119090177+gvqz@users.noreply.github.com>
+119090177+gvqz@users.noreply.github.com
 ```
 
-This is the GitHub account's canonical privacy-preserving address
-(`Settings → Emails → Keep my email addresses private`). Using any other
-name or email produces commits that do not link to the account.
+This is the GitHub account's canonical address
+(`Settings → Emails → Keep my email addresses private`). The display
+**name is free** — call yourself anything; the email is what links a
+commit to the account. Using any other email produces commits that do not
+link to it.
 
 Set it locally (per repo, or drop `--local` for global):
 
 ```sh
-git config --local user.name  "gvqz"
 git config --local user.email "119090177+gvqz@users.noreply.github.com"
 ```
 
@@ -36,9 +38,9 @@ fails the build when a commit does not carry that identity:
 Two deliberate exemptions:
 
 - **GitHub web-flow commits** (merge commits and squash merges created
-  through the web UI, "Update branch" clicks). GitHub writes those with the
-  profile's display name, which may legitimately differ; their author email
-  must still be the canonical noreply address above.
+  through the web UI, "Update branch" clicks). GitHub writes those with a
+  committer email of its own; their author email must still be the
+  canonical noreply address above.
 - **Historical commits** are not retroactively audited — only commits that
   arrive in a new push or PR are checked.
 

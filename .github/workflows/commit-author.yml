@@ -1,17 +1,21 @@
 name: Commit author policy
 
-# Every commit must be authored and committed as the JellyBean identity:
+# Every commit must be authored and committed with the account's
+# canonical privacy-preserving EMAIL:
 #
-#   author    JellyBean <119090177+gvqz@users.noreply.github.com>
-#   committer JellyBean <119090177+gvqz@users.noreply.github.com>
+#   119090177+gvqz@users.noreply.github.com
+#
+# The display NAME is free — GitHub's web-flow merges legitimately carry
+# the profile's display name, and local clones may use any name they
+# like; the email is what links a commit to the account.
 #
 # The policy (and how to set it locally) is documented in CONTRIBUTING.md.
 #
 # Exemption: commits created by GitHub itself (merge commits, squash merges
 # and "Update branch" clicks performed through the web UI) have
-# committer "GitHub <noreply@github.com>". Their author name comes from the
-# profile display name at merge time, so only the author *email* is enforced
-# for those. Everything pushed from a local clone or bot must match exactly.
+# committer "GitHub <noreply@github.com>"; their author *email* is still
+# checked. Everything pushed from a local clone or bot must carry the
+# canonical email on both the author and the committer.
 
 on:
   push:
@@ -26,8 +30,7 @@ jobs:
     name: Enforce commit identity
     runs-on: ubuntu-latest
     env:
-      # Edit these two values if the required identity ever changes.
-      REQUIRED_NAME: JellyBean
+      # Edit this value if the required identity ever changes.
       REQUIRED_EMAIL: 119090177+gvqz@users.noreply.github.com
     steps:
       - name: Check out the repo
@@ -94,16 +97,12 @@ jobs:
               continue
             fi
 
-            if [ "$author_name" != "$REQUIRED_NAME" ]; then
-              echo "FAIL $sha — author name '$author_name' is not '$REQUIRED_NAME' ($subject)"
-              failed=1
-            fi
             if [ "$author_email" != "$REQUIRED_EMAIL" ]; then
               echo "FAIL $sha — author email '$author_email' is not '$REQUIRED_EMAIL' ($subject)"
               failed=1
             fi
-            if [ "$committer_name" != "$REQUIRED_NAME" ] || [ "$committer_email" != "$REQUIRED_EMAIL" ]; then
-              echo "FAIL $sha — committer '$committer_name <$committer_email>' is not '$REQUIRED_NAME <$REQUIRED_EMAIL>' ($subject)"
+            if [ "$committer_email" != "$REQUIRED_EMAIL" ]; then
+              echo "FAIL $sha — committer email '$committer_email' is not '$REQUIRED_EMAIL' ($subject)"
               failed=1
             fi
           done <<< "${{ steps.commits.outputs.shas }}"
@@ -116,11 +115,10 @@ jobs:
           if [ "$failed" -ne 0 ]; then
             echo
             echo "Commit identity policy violated ($checked commit(s) checked)."
-            echo "Fix your local identity and re-commit:"
-            echo "  git config user.name  \"$REQUIRED_NAME\""
-            echo "  git config user.email \"$REQUIRED_EMAIL\""
+            echo 'Fix your local identity and re-commit:'
+            echo "  git config user.email '$REQUIRED_EMAIL'"
             echo "See CONTRIBUTING.md ('Commit identity') for details."
             exit 1
           fi
 
-          echo "OK — all $checked checked commit(s) carry the identity '$REQUIRED_NAME <$REQUIRED_EMAIL>'."
+          echo "OK — all $checked checked commit(s) carry the email '$REQUIRED_EMAIL'."
