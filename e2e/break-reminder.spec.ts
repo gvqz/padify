@@ -65,27 +65,47 @@ test.describe('break reminder popup', () => {
     await enableReminders(page);
   });
 
-  test('docks above the New note button and matches its footprint', async ({ page }) => {
+  test('docks above the New note button and reaches over the editor', async ({ page }) => {
     await writeUntilReminderShows(page);
 
     const geometry = await page.evaluate(() => {
       const popup = document.getElementById('breakReminderPopup')!.getBoundingClientRect();
       const anchor = document.querySelector('.tab-rail-add-group')!.getBoundingClientRect();
+      const rail = document.getElementById('tabRail')!.getBoundingClientRect();
       return {
         gap: anchor.top - popup.bottom,
         leftDelta: Math.abs(popup.left - anchor.left),
-        widthDelta: Math.abs(popup.width - anchor.width),
+        widerThanRail: popup.width > rail.width,
+        reachesOverEditor: popup.right > rail.right + 40,
+        fullyOnScreen:
+          popup.top >= 0 &&
+          popup.left >= 0 &&
+          popup.right <= window.innerWidth &&
+          popup.bottom <= window.innerHeight,
         coversButton: popup.bottom > anchor.top && popup.top < anchor.bottom,
       };
     });
 
     // Docked above the foot's New note control, clear of its top border
-    // line (the 14px gap plus the foot's 10px padding), same footprint.
+    // line (the 14px gap plus the foot's 10px padding), left-aligned with
+    // it — and WIDER than the rail: the editor area beside the rail is
+    // empty while writing, and the card uses it instead of wrapping the
+    // copy into four cramped lines.
     expect(geometry.gap).toBeGreaterThanOrEqual(20);
     expect(geometry.gap).toBeLessThanOrEqual(28);
     expect(geometry.leftDelta).toBeLessThanOrEqual(1);
-    expect(geometry.widthDelta).toBeLessThanOrEqual(1);
+    expect(geometry.widerThanRail).toBe(true);
+    expect(geometry.reachesOverEditor).toBe(true);
+    expect(geometry.fullyOnScreen).toBe(true);
     expect(geometry.coversButton).toBe(false);
+
+    // Docked mode never wears the fullscreen presentation class.
+    const fullscreen = await page.evaluate(() =>
+      document
+        .getElementById('breakReminderPopup')!
+        .classList.contains('break-reminder-fullscreen'),
+    );
+    expect(fullscreen).toBe(false);
 
     // The offer copy is the pitched one, not the old 2-minute phrasing.
     await expect(page.locator('#breakReminderTitle')).toHaveText('Time for a quick break?');
@@ -165,38 +185,94 @@ test.describe('break reminder popup', () => {
     expect(state.dismissedUntil).toBeGreaterThan(Date.now());
   });
 
-  test('mobile: rides the rail — hidden with the closed drawer, docked when open', async ({
-    page,
-  }) => {
+  test('mobile: fullscreen while the drawer is closed, docked when it opens', async ({ page }) => {
     // Below the 820px breakpoint the rail is an off-canvas drawer, closed
-    // by default. The popup lives INSIDE the rail now, so it is simply
-    // off-screen with the drawer — no viewport-corner fallback to collide
-    // with the editor.
+    // by default. A docked popup would ride it out of sight — the user
+    // asked for the reminder to always be findable, so the closed drawer
+    // presents the card FULLSCREEN over the veil instead. Opening the
+    // drawer returns it to its docked rail spot.
     await page.setViewportSize({ width: 700, height: 800 });
     await writeUntilReminderShows(page);
 
-    const closed = await page.evaluate(() => {
-      const rect = document.getElementById('breakReminderPopup')!.getBoundingClientRect();
-      return { onScreen: rect.right > 0 && rect.left < window.innerWidth };
+    const fullscreen = await page.evaluate(() => {
+      const popup = document.getElementById('breakReminderPopup')!;
+      const rect = popup.getBoundingClientRect();
+      return {
+        hasClass: popup.classList.contains('break-reminder-fullscreen'),
+        inBody: popup.parentElement === document.body,
+        centered: rect.top >= 0 && rect.bottom <= window.innerHeight,
+        veilActive: document.getElementById('breakVeil')!.classList.contains('active'),
+      };
     });
-    expect(closed.onScreen).toBe(false);
+    expect(fullscreen.hasClass).toBe(true);
+    expect(fullscreen.inBody).toBe(true);
+    expect(fullscreen.centered).toBe(true);
+    expect(fullscreen.veilActive).toBe(true);
 
-    // Opening the drawer slides the rail in — the popup is a rail child
-    // and rides the transform, docking above the New note control.
+    // Opening the drawer slides the rail in — the popup re-docks above
+    // the New note control and the veil lifts.
     await page.locator('#tabRailToggle').click();
     await page.waitForTimeout(600);
 
     const docked = await page.evaluate(() => {
-      const popup = document.getElementById('breakReminderPopup')!.getBoundingClientRect();
+      const popup = document.getElementById('breakReminderPopup')!;
+      const rect = popup.getBoundingClientRect();
       const anchor = document.querySelector('.tab-rail-add-group')!.getBoundingClientRect();
       return {
-        onScreen: popup.right > 0 && popup.left >= 0,
-        dockedAbove: Math.abs(anchor.top - popup.bottom) >= 20,
-        clearOfAnchor: popup.bottom <= anchor.top,
+        hasClass: popup.classList.contains('break-reminder-fullscreen'),
+        inRail: !!document.getElementById('tabRail')!.contains(popup),
+        onScreen: rect.right > 0 && rect.left >= 0,
+        dockedAbove: Math.abs(anchor.top - rect.bottom) >= 20,
+        clearOfAnchor: rect.bottom <= anchor.top,
+        veilActive: document.getElementById('breakVeil')!.classList.contains('active'),
       };
     });
+    expect(docked.hasClass).toBe(false);
+    expect(docked.inRail).toBe(true);
     expect(docked.onScreen).toBe(true);
     expect(docked.dockedAbove).toBe(true);
     expect(docked.clearOfAnchor).toBe(true);
+    expect(docked.veilActive).toBe(false);
+  });
+
+  test('a viewport too small for the docked card falls back to fullscreen', async ({ page }) => {
+    // A 200px-tall host window (tiny PWA/floating windows) cannot contain
+    // the docked card — the reminder is re-presented fullscreen instead of
+    // being clipped away.
+    await page.setViewportSize({ width: 1280, height: 200 });
+    await writeUntilReminderShows(page);
+
+    const state = await page.evaluate(() => {
+      const popup = document.getElementById('breakReminderPopup')!;
+      const rect = popup.getBoundingClientRect();
+      return {
+        hasClass: popup.classList.contains('break-reminder-fullscreen'),
+        insideViewport:
+          rect.top >= 0 &&
+          rect.left >= 0 &&
+          rect.right <= window.innerWidth &&
+          rect.bottom <= window.innerHeight,
+        veilActive: document.getElementById('breakVeil')!.classList.contains('active'),
+        actionsVisible: !!document.getElementById('takeBreakAction')!.offsetParent,
+      };
+    });
+    expect(state.hasClass).toBe(true);
+    expect(state.insideViewport).toBe(true);
+    expect(state.veilActive).toBe(true);
+    expect(state.actionsVisible).toBe(true);
+
+    // Growing the window returns the card to its docked rail spot.
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.waitForTimeout(400);
+
+    const docked = await page.evaluate(() => {
+      const popup = document.getElementById('breakReminderPopup')!;
+      return {
+        hasClass: popup.classList.contains('break-reminder-fullscreen'),
+        inRail: !!document.getElementById('tabRail')!.contains(popup),
+      };
+    });
+    expect(docked.hasClass).toBe(false);
+    expect(docked.inRail).toBe(true);
   });
 });
