@@ -65,18 +65,16 @@ test.describe('break reminder popup', () => {
     await enableReminders(page);
   });
 
-  test('docks above the New note button and reaches over the editor', async ({ page }) => {
+  test('docks above the New note button and matches its footprint', async ({ page }) => {
     await writeUntilReminderShows(page);
 
     const geometry = await page.evaluate(() => {
       const popup = document.getElementById('breakReminderPopup')!.getBoundingClientRect();
       const anchor = document.querySelector('.tab-rail-add-group')!.getBoundingClientRect();
-      const rail = document.getElementById('tabRail')!.getBoundingClientRect();
       return {
         gap: anchor.top - popup.bottom,
         leftDelta: Math.abs(popup.left - anchor.left),
-        widerThanRail: popup.width > rail.width,
-        reachesOverEditor: popup.right > rail.right + 40,
+        widthDelta: Math.abs(popup.width - anchor.width),
         fullyOnScreen:
           popup.top >= 0 &&
           popup.left >= 0 &&
@@ -87,15 +85,12 @@ test.describe('break reminder popup', () => {
     });
 
     // Docked above the foot's New note control, clear of its top border
-    // line (the 14px gap plus the foot's 10px padding), left-aligned with
-    // it — and WIDER than the rail: the editor area beside the rail is
-    // empty while writing, and the card uses it instead of wrapping the
-    // copy into four cramped lines.
+    // line (the 14px gap plus the foot's 10px padding), SAME footprint as
+    // it — a rail-width card, not one reaching over the editor.
     expect(geometry.gap).toBeGreaterThanOrEqual(20);
     expect(geometry.gap).toBeLessThanOrEqual(28);
     expect(geometry.leftDelta).toBeLessThanOrEqual(1);
-    expect(geometry.widerThanRail).toBe(true);
-    expect(geometry.reachesOverEditor).toBe(true);
+    expect(geometry.widthDelta).toBeLessThanOrEqual(1);
     expect(geometry.fullyOnScreen).toBe(true);
     expect(geometry.coversButton).toBe(false);
 

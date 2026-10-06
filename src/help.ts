@@ -120,7 +120,7 @@ const MODAL_MARKUP = `
 <div id="helpModal" class="modal fade" role="dialog" aria-labelledby="helpModalTitle">
   <div class="modal-dialog help-dialog">
     <div class="modal-content help-content">
-      <button type="button" class="close help-close" data-dismiss="modal" aria-label="Close">&times;</button>
+      <button type="button" class="close help-close" data-dismiss="modal" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
       <div class="help-header">
         <span class="help-eyebrow" id="helpModalTitle">Padify help</span>
         <span class="help-counter" id="helpStepCounter"></span>

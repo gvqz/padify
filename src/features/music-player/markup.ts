@@ -237,7 +237,7 @@ const musicPlayerModalHtml = `
                     ${spotifyLogo(14)}
                     <span id="mpAccountChipText">Connect Spotify</span>
                 </button>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close">&times;</button>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
             </div>
 
             <div class="modal-body mp-body">
@@ -304,7 +304,7 @@ const musicPlayerModalHtml = `
                     <div class="mp-search mp-music-search">
                         ${ICONS.search}
                         <input type="search" id="mpSearchInput" class="mp-search-input" placeholder="Search songs, artists, albums…" autocomplete="off" spellcheck="false" aria-label="Search music">
-                        <button type="button" class="mp-search-clear" id="mpSearchClear" aria-label="Clear search" hidden>&times;</button>
+                        <button type="button" class="mp-search-clear" id="mpSearchClear" aria-label="Clear search" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
                     </div>
                     <div class="mp-search-notice" id="mpSearchNotice" role="status" hidden></div>
 
