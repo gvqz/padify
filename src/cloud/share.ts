@@ -62,7 +62,14 @@ function signedIn(): boolean {
 }
 
 export function shareUrlFor(token: string): string {
-  return `${window.location.origin}/share/?t=${encodeURIComponent(token)}`;
+  // Resolved against the page, not the origin: hosts that can only hand out
+  // a subpath (functionhost.alwaysdata.net/padify) need the viewer link to
+  // stay inside it. The query is cleared first so a campaign parameter on
+  // the page's URL never rides along into a copied link.
+  const url = new URL('share/', document.baseURI);
+  url.search = '';
+  url.searchParams.set('t', token);
+  return url.toString();
 }
 
 export function isShareAvailable(): boolean {
