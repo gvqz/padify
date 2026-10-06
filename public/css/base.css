@@ -99,7 +99,11 @@ input[type=radio]:focus {
 .break-veil {
   position: fixed;
   inset: 0;
-  z-index: 1040;
+  /* Under the rail layer (--z-rail 1040): the break card lives INSIDE the
+     notes rail now, and the countdown must stay readable above the dim on
+     both desktop and the mobile drawer (whose transform makes the rail a
+     stacking context — a body-level z cannot escape it). */
+  z-index: 1039;
   pointer-events: none;
   opacity: 0;
   background:

@@ -266,13 +266,11 @@
 }
 
 /* Break reminder — layout only; the vercel layer (08-toasts.css) owns the
-   look (the legacy palette here fought it: equal-or-higher-specificity
-   dark rules turned the primary button blue in dark mode). Position: JS
-   docks the popup above the notes rail's New note button; the fixed
-   bottom-left corner below is the fallback for when the rail is hidden
-   (PIP host, closed mobile drawer) — see anchorBreakPopup(). */
+   look and the docking (the markup is re-parented into .tab-rail-foot —
+   a rail section, absolute above the New note control — so there is no
+   JS geometry to keep fresh). */
 .break-reminder-popup {
-  max-width: 360px;
+  max-width: none;
 }
 
 .break-reminder-content {
@@ -297,8 +295,8 @@
 
 .break-reminder-actions {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-direction: row;
+  gap: 8px;
   margin-top: 12px;
 }
 

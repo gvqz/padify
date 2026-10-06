@@ -19,9 +19,11 @@ import {
   INDENTABLE_TAGS,
   INDENT_STEP_PX,
   MAX_INDENT_PX,
+  ZERO_WIDTH_SPACE,
   setStyleProp,
+  walkTextStream,
 } from './document';
-import { spotAtStream, spotElement, type DomSpot } from './selection';
+import { boundaryToStream, spotAtStream, spotElement, type DomSpot } from './selection';
 
 /** Where the caret/selection should land after an operation. */
 export type OpIntent = { spot: DomSpot } | { range: [number, number] } | { preserve: true };
@@ -658,6 +660,157 @@ export function shiftBlockIndent(
     changed = true;
   }
   return changed ? { changed: true, intent: { preserve: true } } : UNCHANGED;
+}
+
+// ---------------------------------------------------------------------------
+// The plain note's text indent — a literal tab character per line.
+// ---------------------------------------------------------------------------
+
+/**
+ * The first stream text node of a subtree in document order (zero-width
+ * styled-caret markers included — callers decide what precedes the tab),
+ * math shells skipped: they are inline atoms, never text positions.
+ */
+export function firstStreamTextNode(root: HTMLElement): Text | null {
+  let found: Text | null = null;
+  walkTextStream(root, (node) => {
+    found ??= node;
+  });
+  return found;
+}
+
+/**
+ * Plants one '\t' at a block's stream start. An empty block (a lone <br>
+ * placeholder) takes the tab in the break's place — a block holding text
+ * must not also hold the break, or the line doubles. True when the tab
+ * went in.
+ */
+export function insertLeadingTab(block: HTMLElement): boolean {
+  if (streamLengthOfNode(block) === 0) {
+    block.querySelector('br')?.remove();
+    block.insertBefore(document.createTextNode('\t'), block.firstChild);
+    return true;
+  }
+  const first = firstStreamTextNode(block);
+  if (!first) {
+    return false;
+  }
+  first.parentElement?.insertBefore(document.createTextNode('\t'), first);
+  return true;
+}
+
+/**
+ * Removes one leading '\t' from a block — the first VISIBLE stream
+ * character must be the tab (zero-width markers may precede it; they are
+ * plumbing, not the indent). True when a tab came out. A strip that
+ * empties the line restores the placeholder <br>, or the block paints
+ * zero-height and the line vanishes.
+ */
+export function stripLeadingTab(block: HTMLElement): boolean {
+  const first = firstStreamTextNode(block);
+  if (!first) {
+    return false;
+  }
+  const value = first.nodeValue ?? '';
+  let raw = 0;
+  while (raw < value.length && value[raw] === ZERO_WIDTH_SPACE) {
+    raw += 1;
+  }
+  if (raw >= value.length || value[raw] !== '\t') {
+    return false;
+  }
+  const kept = value.slice(0, raw) + value.slice(raw + 1);
+  if (kept === '') {
+    first.remove();
+  } else {
+    first.nodeValue = kept;
+  }
+  if (streamLengthOfNode(block) === 0 && !block.querySelector('br')) {
+    block.appendChild(document.createElement('br'));
+  }
+  return true;
+}
+
+/**
+ * The plain note's Tab gesture over a RANGED selection: the indent is
+ * TEXT — a literal tab character at each covered block's stream start —
+ * never a margin style. The reason is the selection highlight: it paints
+ * text runs only, so a margin indent never lights up and a selected
+ * range read as "not all tabs are selected". A tab character selects,
+ * copies and pastes as the text it is. The selection re-pins over the
+ * same blocks' full content (whole lines stay selected, Docs-style);
+ * lists and cells are skipped — they nest and walk natively.
+ */
+export function shiftLineTabs(
+  model: HTMLElement,
+  coverage: [number, number],
+  delta: 1 | -1,
+): OpResult {
+  const blocks = coveredBlocks(model, coverage).filter((block) =>
+    INDENTABLE_TAGS.has(block.tagName),
+  );
+  if (blocks.length === 0) {
+    return UNCHANGED;
+  }
+  let changed = false;
+  for (const block of blocks) {
+    changed = (delta === 1 ? insertLeadingTab(block) : stripLeadingTab(block)) || changed;
+  }
+  if (!changed) {
+    return UNCHANGED;
+  }
+  // Re-pin over the same blocks' content: the first block's start
+  // boundary through the last block's end boundary — tabs included on
+  // the way in, gone on the way out.
+  const last = blocks[blocks.length - 1]!;
+  const start = boundaryToStream(model, blocks[0]!, 0);
+  const end = boundaryToStream(model, last, last.childNodes.length);
+  return { changed: true, intent: { range: [start, end] } };
+}
+
+/**
+ * Shift+Tab's collapsed caret on a plain note: strips ONE leading tab
+ * from the caret's own block — resolved from the live spot, because a
+ * block-start caret shares its stream offset with the line above and the
+ * numeric coverage answers the wrong line (the same ambiguity the margin
+ * gesture resolves with preferSpot). The caret rides the text left when
+ * it sat after the stripped tab; a caret at (or inside) the tab lands on
+ * the block's start — as a SPOT intent, because the block-start offset
+ * alone resolves to the previous line's end on the repainted surface.
+ */
+export function unindentTabLine(
+  model: HTMLElement,
+  coverage: [number, number],
+  preferSpot: DomSpot | null,
+): OpResult {
+  const block = (preferSpot && blockAtSpot(preferSpot, model)) || blockAt(model, coverage);
+  if (!block || !INDENTABLE_TAGS.has(block.tagName)) {
+    return UNCHANGED;
+  }
+  const blockStart = boundaryToStream(model, block, 0);
+  if (!stripLeadingTab(block)) {
+    return UNCHANGED;
+  }
+  if (preferSpot) {
+    const within = boundaryToStream(
+      block,
+      preferSpot.node,
+      preferSpot.kind === 'text' ? preferSpot.raw : preferSpot.childIndex,
+    );
+    // Mid-line carets (past the tab) ride the text left one. Carets at
+    // the block start or on the tab land on the block's NEW start — the
+    // spot pins the B side of that boundary, which the numeric offset
+    // cannot (it reads as the line above's end after the strip).
+    if (within >= 2) {
+      const caret = blockStart + within - 1;
+      return { changed: true, intent: { range: [caret, caret] } };
+    }
+    const first = firstStreamTextNode(block);
+    if (first) {
+      return { changed: true, intent: { spot: { kind: 'text', node: first, raw: 0 } } };
+    }
+  }
+  return { changed: true, intent: { range: [blockStart, blockStart] } };
 }
 
 /**

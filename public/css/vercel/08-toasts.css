@@ -141,17 +141,28 @@ body.dark .close-popup:hover {
   color: var(--vz-fg);
 }
 
-/* Break reminder — the notes-rail popup. JS docks it above the
-   "+ New note" split control (see anchorBreakPopup in break-reminder.ts),
-   so the card borrows the note-type menu's language — menu elevation,
-   md radius — and the actions run as stacked full-width menu items. */
+/* Break reminder — a rail SECTION, not a floating card. The markup is
+   re-parented into .tab-rail-foot at init (attachBreakPopupToRail in
+   break-reminder.ts) and CSS does the docking: absolute above the foot,
+   clear of its top border line, rail surface, hairline border. It reads
+   as part of the sidebar, rides the mobile drawer's slide, and hides
+   with the rail in the PIP host — no JS geometry, no resize listeners. */
 body .break-reminder-popup {
-  padding: 14px;
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% + 14px);
+  max-width: none;
+  padding: 12px 12px 10px;
+  background: var(--vz-bg);
+  background-image: none;
+  border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius-md);
   box-shadow: var(--vz-shadow-menu);
 }
 
 body .break-reminder-button {
+  flex: 1 1 0;
   background: var(--vz-bg-elevated);
   border: 1px solid var(--vz-border);
   color: var(--vz-fg);

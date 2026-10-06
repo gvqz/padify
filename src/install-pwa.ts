@@ -2,15 +2,46 @@ import Swal from 'sweetalert2';
 import { showToast } from './ui/toast';
 import { selector } from './selector';
 
-/** How the app is currently framed: a Trusted Web Activity, an installed
- * standalone window, or a plain browser tab. Only this module asks — it
- * decides whether the install pitch makes sense at all. */
-export function getPWADisplayMode(): 'twa' | 'standalone' | 'browser' {
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+/** The display-mode queries an INSTALLED app can report. Matching
+ *  `standalone` alone is not enough: the manifest declares
+ *  `display_override: ["minimal-ui"]`, and override beats `display` —
+ *  so an installed Edge/Chromium window reports minimal-ui, the old
+ *  check answered "browser", and the document title grew a " - Padify"
+ *  tail that the installed window's own chrome doubled (the title bar
+ *  already carries the app name in front). The full set also covers
+ *  Edge's tabbed windows and window-controls-overlay builds. */
+const INSTALLED_DISPLAY_QUERIES: readonly string[] = [
+  '(display-mode: standalone)',
+  '(display-mode: minimal-ui)',
+  '(display-mode: window-controls-overlay)',
+  '(display-mode: fullscreen)',
+  '(display-mode: tabbed)',
+];
 
+function matchesInstalledDisplayMode(): boolean {
+  for (const query of INSTALLED_DISPLAY_QUERIES) {
+    try {
+      if (window.matchMedia(query).matches) {
+        return true;
+      }
+    } catch {
+      // matchMedia is missing in some embeds (and jsdom) — try the rest.
+    }
+  }
+  return false;
+}
+
+/** How the app is currently framed: a Trusted Web Activity, an installed
+ * app window (standalone or any of the installed-style modes — see
+ * INSTALLED_DISPLAY_QUERIES), or a plain browser tab. Only this module
+ * asks — it decides whether the install pitch makes sense at all. */
+export function getPWADisplayMode(): 'twa' | 'standalone' | 'browser' {
   if (document.referrer.startsWith('android-app://')) {
     return 'twa';
-  } else if ((navigator as Navigator & { standalone?: boolean }).standalone || isStandalone) {
+  }
+
+  const iOSStandalone = (navigator as Navigator & { standalone?: boolean }).standalone;
+  if (iOSStandalone || matchesInstalledDisplayMode()) {
     return 'standalone';
   }
 
@@ -146,13 +177,22 @@ export function initInstallPrompt(): void {
     selector().notepad.installApp.hide();
   }
 
-  window.matchMedia('(display-mode: standalone)').addEventListener('change', ({ matches }) => {
-    if (matches) {
-      selector().notepad.installApp.hide();
-    } else {
-      selector().notepad.installApp.show();
+  // Every installed-style mode counts — the manifest's display_override
+  // makes Edge report minimal-ui, and an installed app must not pitch
+  // itself. Each query flips independently; one listener per query.
+  for (const query of INSTALLED_DISPLAY_QUERIES) {
+    try {
+      window.matchMedia(query).addEventListener('change', ({ matches }) => {
+        if (matches) {
+          selector().notepad.installApp.hide();
+        } else {
+          selector().notepad.installApp.show();
+        }
+      });
+    } catch {
+      // No matchMedia in this embed — the boot-time check above stands.
     }
-  });
+  }
 
   let deferredPrompt: BeforeInstallPromptEvent | null;
 
