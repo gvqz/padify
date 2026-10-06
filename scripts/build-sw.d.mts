@@ -10,15 +10,25 @@
  */
 export declare const MAX_PRECACHE_BYTES: number;
 
-/** Dist-relative asset paths referenced by the entry page (the app shell). */
-export declare function shellAssetPaths(distDir: string): Set<string>;
+/** Dist-relative asset paths referenced by the entry page (the app
+ * shell), recognized under the given base path ('' = site root). */
+export declare function shellAssetPaths(distDir: string, basePath?: string): Set<string>;
+
+/** Normalizes VITE_BASE_PATH to '' (site root) or '/segment' without a
+ * trailing slash; anything that is not an absolute path throws. */
+export declare function normalizeBasePath(raw: string | undefined): string;
+
+/** The pathname prefixes the worker's fetch handler must never answer
+ * from a cache: the API's mount points, including a path-bearing
+ * VITE_API_BASE when one is configured. */
+export declare function apiBypassPrefixes(apiBase?: string): string[];
 
 export interface ServiceWorkerBuild {
   /** Full service worker source, ready to write to dist/sw.js. */
   source: string;
   /** Content-derived cache version (app-v<hash>). */
   cacheVersion: string;
-  /** Root-relative URLs that get precached at install time. */
+  /** Root- or base-relative URLs that get precached at install time. */
   precacheUrls: string[];
   /**
    * Files the fetch handler runtime-caches on first use instead of
@@ -28,4 +38,14 @@ export interface ServiceWorkerBuild {
   runtimeCachedFiles: string[];
 }
 
-export declare function generateServiceWorker(distDir: string): ServiceWorkerBuild;
+export interface ServiceWorkerBuildOptions {
+  /** Normalized VITE_BASE_PATH ('' = site root, '/padify' = subpath). */
+  basePath?: string;
+  /** Raw VITE_API_BASE ('' = same-origin /api). */
+  apiBase?: string;
+}
+
+export declare function generateServiceWorker(
+  distDir: string,
+  options?: ServiceWorkerBuildOptions,
+): ServiceWorkerBuild;

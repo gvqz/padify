@@ -164,6 +164,12 @@ function htmlIncludes(): Plugin {
 }
 
 export default defineConfig({
+  // The app is location-agnostic: every emitted URL is rebased onto this.
+  // Root deploys (Netlify, a bare domain) leave it at the default '/'; hosts
+  // that can only hand out a subpath — alwaysdata-style shared domains —
+  // build with VITE_BASE_PATH=/padify/ and everything (index.html refs,
+  // asset URLs, the manifest link) moves with it.
+  base: process.env.VITE_BASE_PATH || '/',
   plugins: [htmlIncludes(), stripDependencyEvalSinks(), forbidEvalSinks()],
   publicDir: 'public',
   build: {
