@@ -114,9 +114,23 @@ body .toast-content a:hover {
   color: var(--vz-fg);
 }
 
+/* Close buttons — a real icon button, same language as the modal header
+   close: square, the glyph flex-centered, hover surface that stays clear
+   of the card corner. The old inline glyph (padding 0 5px) produced a
+   cramped hover box that collided with the card's rounded corner. */
 body .close-popup {
-  color: var(--vz-fg-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  margin: -4px -6px 0 0;
+  padding: 0;
   border-radius: var(--vz-radius);
+  color: var(--vz-fg-muted);
+  font-size: 17px;
+  line-height: 1;
   transition: color 100ms ease, background-color 100ms ease;
 }
 
@@ -144,21 +158,80 @@ body.dark .close-popup:hover {
 /* Break reminder — a rail SECTION, not a floating card. The markup is
    re-parented into .tab-rail-foot at init (attachBreakPopupToRail in
    break-reminder.ts) and CSS does the docking: absolute above the foot,
-   clear of its top border line, rail surface, hairline border. It reads
-   as part of the sidebar, rides the mobile drawer's slide, and hides
-   with the rail in the PIP host — no JS geometry, no resize listeners. */
+   clear of its top border line, rail surface, hairline border. The card
+   is wider than the rail on purpose — the editor area next to the rail
+   is empty while writing, and a rail-width card wrapped the copy into
+   four cramped lines (the user asked for the empty space to be used).
+   When the docked card cannot be shown at all (viewport too small, or
+   the mobile drawer closed), break-reminder.ts re-presents it with the
+   .break-reminder-fullscreen class below. */
 body .break-reminder-popup {
   position: absolute;
   left: 10px;
-  right: 10px;
+  right: auto;
   bottom: calc(100% + 14px);
+  width: min(400px, calc(100vw - 24px));
   max-width: none;
-  padding: 12px 12px 10px;
+  padding: 14px 16px 12px;
   background: var(--vz-bg);
   background-image: none;
   border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius-md);
   box-shadow: var(--vz-shadow-menu);
+}
+
+/* Inside the mobile drawer the card stays within the drawer's width —
+   overhanging an off-canvas surface reads as broken. */
+@media (max-width: 820px) {
+  body .break-reminder-popup {
+    width: calc(min(320px, 86vw) - 20px);
+  }
+}
+
+/* Fullscreen fallback — fixed, centered, above the veil. The transform
+   centers the card and the keyframes carry the same translate so the
+   entrance/exit never fights the centering. */
+body .break-reminder-popup.break-reminder-fullscreen {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  width: min(400px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  z-index: 1041;
+}
+
+body .break-reminder-popup.break-reminder-fullscreen.show {
+  animation: vz-break-fullscreen-in 0.24s var(--vz-ease) forwards;
+}
+
+body .break-reminder-popup.break-reminder-fullscreen.hide {
+  animation: vz-break-fullscreen-out 0.2s ease-in forwards;
+}
+
+@keyframes vz-break-fullscreen-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes vz-break-fullscreen-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
 }
 
 body .break-reminder-button {

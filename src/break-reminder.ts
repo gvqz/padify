@@ -95,12 +95,14 @@ function closeBreakReminderPopup(): void {
   $breakPopup.addClass('hide');
   $('#breakVeil').removeClass('active');
   setTimeout(function () {
-    $breakPopup.removeClass('show hide break-active');
+    $breakPopup.removeClass('show hide break-active ' + BREAK_FULLSCREEN_CLASS);
     $('#breakReminderActions').show();
     $('#takeBreakAction').text('Take break');
     $('#snoozeBreakAction').show();
     $('#breakReminderTitle').text(BREAK_REMINDER_TITLE);
     $('#breakReminderText').text(BREAK_REMINDER_TEXT);
+    // Return the card to the rail so the next show starts docked.
+    attachBreakPopupToRail();
   }, 300);
 
   if (breakReminderCountdownTimer) {
@@ -136,6 +138,95 @@ function attachBreakPopupToRail(): void {
   }
 }
 
+/** The class that switches the card into its fullscreen presentation. */
+const BREAK_FULLSCREEN_CLASS = 'break-reminder-fullscreen';
+
+/**
+ * Moves the popup between parents. Re-inserting an element resets its CSS
+ * animations; the `quiet` variant suppresses that so a failed re-dock
+ * attempt doesn't replay the entrance.
+ */
+function moveBreakPopup(popup: HTMLElement, foot: Element, quiet = false): void {
+  if (quiet) {
+    popup.style.animation = 'none';
+    foot.insertBefore(popup, foot.firstChild);
+    void popup.offsetWidth; // flush so the animation override takes
+    popup.style.animation = '';
+  } else {
+    foot.insertBefore(popup, foot.firstChild);
+  }
+}
+
+let lastKnownViewportHeight = window.innerHeight;
+
+/**
+ * Presentation sync — the popup prefers its docked rail spot, but some
+ * hosts cannot show it there: a window too short clips the card against
+ * the viewport, and the mobile drawer keeps the rail OFF-CANVAS when
+ * closed (the popup would ride it out of sight). The user asked for the
+ * reminder to always be findable: whenever the docked card is not fully
+ * on screen, it is re-presented FULLSCREEN — re-parented to <body>,
+ * fixed, centered, above the veil. When the context improves (window
+ * grew, drawer slid open), the card returns to the rail.
+ *
+ * Runs at show time, when the entrance animation has settled, on window
+ * resizes and on the rail's drawer transition. `retryDock` gates the
+ * fullscreen→docked attempt so a resize drag doesn't replay the entrance
+ * on every pixel (only growth can make the docked spot viable).
+ */
+function syncBreakPopupPresentation(retryDock = false): void {
+  const popup = document.getElementById('breakReminderPopup');
+  const foot = document.querySelector('.tab-rail-foot');
+
+  if (!popup || !popup.classList.contains('show') || !foot) {
+    return;
+  }
+
+  const isFullscreen = popup.classList.contains(BREAK_FULLSCREEN_CLASS);
+
+  if (isFullscreen) {
+    if (!retryDock) {
+      return; // still no room — nothing to reconsider
+    }
+    // Try the docked spot again: move back into the rail and measure for
+    // real. If it fits, the re-parent restarts the entrance as a docked
+    // slide; if not, the fullscreen branch below re-parents us back.
+    popup.classList.remove(BREAK_FULLSCREEN_CLASS);
+    moveBreakPopup(popup, foot, true);
+  }
+
+  const rect = popup.getBoundingClientRect();
+  const fitsViewport =
+    rect.width > 0 &&
+    rect.top >= -1 &&
+    rect.left >= -1 &&
+    rect.right <= window.innerWidth + 1 &&
+    rect.bottom <= window.innerHeight + 1;
+
+  if (fitsViewport) {
+    if (!popup.classList.contains('break-active')) {
+      $('#breakVeil').removeClass('active');
+    }
+    return;
+  }
+
+  // Not showable docked — go fullscreen over the veil.
+  document.body.appendChild(popup);
+  popup.classList.add(BREAK_FULLSCREEN_CLASS);
+  $('#breakVeil').addClass('active');
+}
+
+function handleViewportResize(): void {
+  const grew = window.innerHeight > lastKnownViewportHeight;
+  lastKnownViewportHeight = window.innerHeight;
+
+  if (!grew && $('#breakReminderPopup').hasClass(BREAK_FULLSCREEN_CLASS)) {
+    return; // shrinking never revives the docked spot
+  }
+
+  syncBreakPopupPresentation(grew);
+}
+
 function showBreakReminderPopup(): void {
   if (!breakRemindersEnabled) {
     return;
@@ -151,6 +242,11 @@ function showBreakReminderPopup(): void {
   $('#snoozeBreakAction').show();
   $('#breakReminderTitle').text(BREAK_REMINDER_TITLE);
   $('#breakReminderText').text(BREAK_REMINDER_TEXT);
+
+  // Pick the presentation before the first paint, then re-check once the
+  // entrance animation has settled (the slide offsets the measured rect).
+  syncBreakPopupPresentation();
+  setTimeout(syncBreakPopupPresentation, 600);
 }
 
 function maybeShowBreakReminder(now: number = Date.now()): void {
@@ -210,6 +306,9 @@ function startBreakCountdown(): void {
   $('#breakReminderText').text('Relax your eyes. Unclench your jaw. Breathe.');
   $('#takeBreakAction').text('Back to writing');
   $('#snoozeBreakAction').hide();
+  // The countdown title is larger — the card grows upward and a window
+  // that comfortably fit the offer may now clip it.
+  syncBreakPopupPresentation();
 
   if (breakReminderCountdownTimer) {
     clearInterval(breakReminderCountdownTimer);
@@ -272,6 +371,15 @@ export function initBreakReminder(): void {
   // docked above the foot's New note control through resizes and the
   // mobile drawer's slide (it is absolute INSIDE the rail).
   attachBreakPopupToRail();
+
+  // Keep the presentation honest: a too-small host window or the closed
+  // mobile drawer moves the card fullscreen; growth or an opened drawer
+  // returns it to the rail. The rail's transform transition is the only
+  // signal for the drawer slide (no resize fires), hence the listener.
+  window.addEventListener('resize', handleViewportResize);
+  document.getElementById('tabRail')?.addEventListener('transitionend', function () {
+    syncBreakPopupPresentation(true);
+  });
 }
 
 // Idle time does not count as writing — reset the activity window when
