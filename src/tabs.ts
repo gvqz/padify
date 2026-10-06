@@ -705,10 +705,11 @@ export class TabManager {
    *  says which note each holds. Follows every path the tab strip label
    *  follows (typing, rename, switch), through the same deriveTabTitle,
    *  so the two never disagree. Two naming rules from the task list: the
-   *  separator is a plain pipe (an emdash reads as part of the note's
-   *  own name), and an INSTALLED app gets the bare note name — the
-   *  standalone window's chrome already says "Padify", and "Padify —
-   *  Padify" is what a suffix produced there. */
+   *  separator is a plain hyphen-minus " - " (nothing that can read as
+   *  part of the note's own name — emdash and pipe both did), and an
+   *  INSTALLED app gets the bare note name — the standalone window's
+   *  chrome already says "Padify", and "Padify - Padify" is what a
+   *  suffix produced there. */
   private syncDocumentTitle(): void {
     const active = this.getActive();
     if (!active) {
@@ -717,7 +718,7 @@ export class TabManager {
     }
     document.title = isInstalledDisplayMode()
       ? deriveTabTitle(active)
-      : `${deriveTabTitle(active)} | Padify`;
+      : `${deriveTabTitle(active)} - Padify`;
   }
 
   private bindStripEvents(): void {

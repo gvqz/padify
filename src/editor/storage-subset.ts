@@ -159,6 +159,13 @@ function sanitizeStyle(raw: string, inline: boolean): string | null {
     const value = declaration.slice(colon + 1).trim();
     const pattern = allowed.get(prop);
     if (pattern && pattern.test(value)) {
+      // "background-color: transparent" carries no information — the
+      // default — and native block merges (Chromium's Backspace) litter
+      // the merged run with it. Dropping it at the wall keeps merges
+      // from seeding the note with dead spans.
+      if (prop === 'background-color' && /^transparent$/i.test(value)) {
+        continue;
+      }
       kept.push(`${prop}: ${value}`);
     }
   }

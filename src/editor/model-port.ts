@@ -96,6 +96,10 @@ const CHECKLIST_GUTTER_PX = 30;
 /** Typing bursts that continue the open group instead of opening one. */
 const TYPING_INPUT_TYPES = new Set(['insertText', 'insertCompositionText']);
 
+/** The element blocks the caret can open — the same set blockAtCaret
+ *  walks (lists and cells included; their owners police their shape). */
+const BLOCK_TAGS = /^(DIV|P|H1|H2|H3|BLOCKQUOTE|PRE|LI|TD|TH)$/;
+
 /**
  * The collapsed caret's exact spot in the surface, or null when the
  * selection is ranged, absent, or lives outside the root. This is the
@@ -972,9 +976,18 @@ export class ModelPort implements EditorPort {
         nestListItem(model, coverage[0], this.preferInModel(caretSpot, model, coverage[0])),
       );
     }
-    return this.command((model, coverage) =>
-      shiftBlockIndent(model, coverage, 1, this.preferInModel(caretSpot, model, coverage[0])),
-    );
+    return this.command((model, coverage) => {
+      const prefer = this.preferInModel(caretSpot, model, coverage[0]);
+      const result = shiftBlockIndent(model, coverage, 1, prefer);
+      if (!result.changed) {
+        return result;
+      }
+      // Keep the caret on the block's start — a numeric restore of the
+      // boundary offset resolves to the END of the line above (the
+      // ambiguity the live spot exists to break), and the next keystroke
+      // would type into that line instead of the indented one.
+      return { changed: true, intent: prefer ? { spot: prefer } : { preserve: true } };
+    });
   }
 
   outdent(): boolean {
@@ -984,9 +997,14 @@ export class ModelPort implements EditorPort {
         unnestListItem(model, coverage[0], this.preferInModel(caretSpot, model, coverage[0])),
       );
     }
-    return this.command((model, coverage) =>
-      shiftBlockIndent(model, coverage, -1, this.preferInModel(caretSpot, model, coverage[0])),
-    );
+    return this.command((model, coverage) => {
+      const prefer = this.preferInModel(caretSpot, model, coverage[0]);
+      const result = shiftBlockIndent(model, coverage, -1, prefer);
+      if (!result.changed) {
+        return result;
+      }
+      return { changed: true, intent: prefer ? { spot: prefer } : { preserve: true } };
+    });
   }
 
   /**
@@ -1025,6 +1043,69 @@ export class ModelPort implements EditorPort {
       return this.insertText('\t');
     }
     return false; // a collapsed Shift+Tab has no indent to unwind
+  }
+
+  /**
+   * The Backspace gesture at the start of a margin-indented block. The
+   * native delete merges the block into the line above in one press —
+   * the indent AND the line boundary vanish together, and the absorb
+   * pass littered the merged run with span wrappers. Docs unwinds the
+   * indent first and merges only on the next press, so this intercepts
+   * the caret-at-indented-block-start case (live spot, not the numeric
+   * stream offset — the side of a block boundary is exactly what that
+   * offset cannot tell). Returns null when the gesture does not apply
+   * and the native delete must proceed.
+   */
+  unindentAtBlockStart(): boolean | null {
+    const spot = liveCollapsedSpot(this.element);
+    if (!spot) {
+      return null;
+    }
+
+    // The block the caret opens. Lists and table cells own their
+    // structure (Tab nests there), so their Backspace stays native.
+    let el: HTMLElement | null =
+      spot.kind === 'text' ? spot.node.parentElement : (spot.node as HTMLElement);
+    while (el && el !== this.element && !BLOCK_TAGS.test(el.tagName)) {
+      el = el.parentElement;
+    }
+    if (!el || el === this.element || /^(LI|TD|TH)$/.test(el.tagName)) {
+      return null;
+    }
+
+    // Block start: the spot's stream offset inside the block is zero.
+    // An element caret sitting ON the block at child index 0 counts too.
+    const atStart =
+      spot.kind === 'element'
+        ? spot.node === el && spot.childIndex === 0
+        : streamOffsetOfSpot(el, spot) === 0;
+    if (!atStart) {
+      return null;
+    }
+
+    const margin =
+      parseInt(
+        el.getAttribute('style')?.match(/margin-left:\s*(\d+(?:\.\d+)?)px/)?.[1] ?? '0',
+        10,
+      ) || 0;
+    if (margin <= 0) {
+      return null;
+    }
+
+    return this.command((model, coverage) => {
+      // The op must keep the caret ON THE BLOCK'S START — the boundary
+      // side the numeric coverage cannot carry. After unwinding, offset
+      // N reads as "end of the line above" on the repainted surface, so
+      // a plain preserve would strand the caret there and the next
+      // Backspace would eat that line's last character instead of
+      // merging. The model twin of the live spot pins the side.
+      const prefer = this.preferInModel(spot, model, coverage[0]);
+      const result = shiftBlockIndent(model, coverage, -1, prefer);
+      if (!result.changed) {
+        return result;
+      }
+      return { changed: true, intent: prefer ? { spot: prefer } : { preserve: true } };
+    });
   }
 
   /** True when BOTH selection ends sit in text directly under the root,
@@ -1384,9 +1465,12 @@ export class ModelPort implements EditorPort {
       this.pendingMark = null;
     }
 
-    // Delete normalization: the emptied note becomes truly empty.
+    // Delete normalization: the emptied note becomes truly empty, and
+    // surviving native merges lose their no-op wrappers.
     if (type.startsWith('delete') && !this.normalizing) {
-      this.normalizeAfterDelete();
+      if (!this.normalizeAfterDelete()) {
+        this.stripNoopMergeSpans();
+      }
       return;
     }
 
@@ -1394,6 +1478,41 @@ export class ModelPort implements EditorPort {
     // part of the Enter's own group.
     if (type === 'insertParagraph') {
       this.commandInOpenGroup((model) => uncheckEmptyItems(model));
+    }
+  }
+
+  /**
+   * Native block merges (Chromium's Backspace) wrap the incoming run in
+   * `<span style="background-color: transparent">` — the merged line
+   * carries the dead wrapper until the next command repaints (absorb
+   * alone cleans the model, not the surface). Unwrap those no-op spans
+   * in place; the unwrap touches no text, so the caret's stream offset
+   * lands exactly where the merge left it.
+   */
+  private stripNoopMergeSpans(): void {
+    const dead = Array.from(this.element.querySelectorAll('span')).filter((span) => {
+      if (span.classList.length > 0 || span.hasAttribute('data-latex')) {
+        return false;
+      }
+      const style = span.getAttribute('style');
+      if (!style) {
+        return false;
+      }
+      const props = style
+        .split(';')
+        .map((declaration) => declaration.trim())
+        .filter(Boolean);
+      return props.length === 1 && /^background-color:\s*transparent$/i.test(props[0]!);
+    });
+    if (dead.length === 0) {
+      return;
+    }
+    const selection = captureOffsets(this.element);
+    for (const span of dead) {
+      span.replaceWith(...span.childNodes);
+    }
+    if (selection) {
+      this.reselect(selection, streamLengthOf(this.element));
     }
   }
 

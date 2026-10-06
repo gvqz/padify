@@ -230,6 +230,69 @@ describe('the command pipeline', () => {
     expect(surface.innerHTML).toBe('<p>first</p><p style="margin-left: 40px">second</p>');
   });
 
+  it('Tab at a block start leaves the caret on that block start, not the line above', () => {
+    const { port, surface } = makePort('<p>first</p><p>second</p>');
+    caretAtNodeStart(surface, 1);
+    expect(port.indent()).toBe(true);
+    // The offset of second's start (5) is ALSO first's end — a numeric
+    // restore resolves that boundary to the A side and the next
+    // keystroke typed into 'first' (the selecting/backspacing-tabs bug).
+    // The spot intent pins the B side.
+    const selection = window.getSelection();
+    expect(selection?.getRangeAt(0).startContainer).toBe(
+      surface.querySelectorAll('p')[1]!.firstChild,
+    );
+    expect(selection?.getRangeAt(0).startOffset).toBe(0);
+  });
+
+  it('Backspace at an indented block start unwinds the indent, keeping the block', () => {
+    const { port, surface } = makePort('<p>first</p><p style="margin-left: 40px">second</p>');
+    caretAtNodeStart(surface, 1);
+    expect(port.unindentAtBlockStart?.()).toBe(true);
+    expect(surface.innerHTML).toBe('<p>first</p><p>second</p>');
+    // Docs parity: the block survives with the caret at its start — the
+    // native delete would have merged it into 'first' in the same press.
+    const selection = window.getSelection();
+    expect(selection?.getRangeAt(0).startContainer).toBe(
+      surface.querySelectorAll('p')[1]!.firstChild,
+    );
+    expect(selection?.getRangeAt(0).startOffset).toBe(0);
+  });
+
+  it('Backspace at a plain block start declines — the native merge proceeds', () => {
+    const { port, surface } = makePort('<p>first</p><p>second</p>');
+    caretAtNodeStart(surface, 1);
+    expect(port.unindentAtBlockStart?.()).toBeNull();
+  });
+
+  it('Backspace mid-block declines — the native delete takes the character', () => {
+    const { port, surface } = makePort('<p>first</p><p style="margin-left: 40px">second</p>');
+    caretAt(surface, 7); // 'se|cond' — inside second, past its start
+    expect(port.unindentAtBlockStart?.()).toBeNull();
+  });
+
+  it('Backspace inside a list declines — lists own their structure', () => {
+    const { port, surface } = makePort('<ul><li>alpha</li><li>beta</li></ul>');
+    caretAt(surface, 6); // 'b|eta'
+    expect(port.unindentAtBlockStart?.()).toBeNull();
+  });
+
+  it('a native block merge leaves no transparent-background wrapper behind', () => {
+    const { surface } = makePort('<p>first</p><p>second</p>');
+    caretAtNodeStart(surface, 1);
+    // Chromium's native merge: second's run moves into first wrapped in
+    // a span carrying its computed background (transparent = nothing).
+    nativeEdit(surface, 'deleteContentBackward', () => {
+      const first = surface.querySelector('p')!;
+      const span = document.createElement('span');
+      span.setAttribute('style', 'background-color: transparent');
+      span.textContent = 'second';
+      first.appendChild(span);
+      surface.querySelector('p + p')?.remove();
+    });
+    expect(surface.innerHTML).toBe('<p>firstsecond</p>');
+  });
+
   it('nesting at an ITEM START nests that item, not the previous one', () => {
     const { port, surface } = makePort('<ul><li>alpha</li><li>beta</li></ul>');
     const beta = surface.querySelectorAll('li')[1]!.firstChild as Text;
