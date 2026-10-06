@@ -14,6 +14,7 @@
  */
 
 import { escapeHtml } from '../lib/escape';
+import { shortcutLabel } from '../lib/platform';
 import {
   contentKindFor,
   DEFAULT_NOTE_TYPE,
@@ -52,8 +53,9 @@ export const WELCOME_HTML = [
   '  editor (right-click to try it).',
   '- Note types: use the arrow beside "New note" to create rich text',
   '  notes with headings, lists, quotes, code blocks and links.',
-  '- Voice typing: click the mic in the top bar (or press alt/option + v)',
-  '  and just talk.',
+  '- Voice typing: click the mic in the top bar (or press ' +
+    shortcutLabel('alt+v').toLowerCase() +
+    ') and just talk.',
   '- Optional cloud sync: click the cloud icon in the top bar to back up',
   '  your notes and pick them up on any other device.',
   '- Signed in? Share any note with a read-only link that expires on its',
@@ -76,7 +78,7 @@ export const WELCOME_HTML = [
   '',
   "CAUTION: Since the app stores your notes on your own device, it's",
   'recommended that you take a backup of your notes more often using the',
-  '"Download Notes" button or by pressing the "ctrl/command + s" keys.',
+  '"Download Notes" button or by pressing the "' + shortcutLabel('mod+s') + '" keys.',
   '',
   '<b>Delete this text and start writing your notes</b>',
 ].join('\n');

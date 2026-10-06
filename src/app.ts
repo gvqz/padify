@@ -2,6 +2,7 @@ import { $ } from './lib/q';
 import { selector } from './selector';
 import { calculateCharactersAndWords, calculateNoteStatistics } from './lib/text-stats';
 import { debounce } from './lib/debounce';
+import { shortcutLabel } from './lib/platform';
 import { copyNotesToClipboard, deleteNotes } from './context-menu';
 import {
   saveTextAsFile,
@@ -89,8 +90,8 @@ export async function initApp(): Promise<void> {
   // kicked at module evaluation in main.ts — this await is usually instant).
   await storageReady();
 
-  const darkmodeText = 'Enable dark mode [Ctrl/Cmd + M]';
-  const lightmodeText = 'Enable light mode [Ctrl/Cmd + M]';
+  const darkmodeText = `Enable dark mode [${shortcutLabel('mod+m')}]`;
+  const lightmodeText = `Enable light mode [${shortcutLabel('mod+m')}]`;
   const darkMetaColor = '#0a0a0a';
   const lightMetaColor = '#ffffff';
   const metaThemeColor = document.querySelector('meta[name=theme-color]') as HTMLElement | null;

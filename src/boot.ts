@@ -38,6 +38,7 @@ import { assertMarkupContract } from './ui/contract';
 import { initModalBehavior } from './ui/behavior/modal';
 import { initCollapseBehavior } from './ui/behavior/collapse';
 import { initTooltips } from './ui/behavior/tooltip';
+import { hydratePlatformShortcuts } from './ui/platform-hints';
 
 /** Resolves once the DOM is parsed (module scripts run before that). */
 function domReady(): Promise<void> {
@@ -65,6 +66,12 @@ export async function bootPadify(): Promise<void> {
   // Fail here — loudly, naming the missing elements — if the markup the
   // features are about to dereference is not in the document.
   assertMarkupContract();
+
+  // 0.7 Platform shortcut hints — the static partials declare modifier
+  //     intent (data-mod-key, data-shortcut-title); this pass resolves it
+  //     for THIS device before any dialog can be seen (see ui/platform-
+  //     hints.ts). Runs after mountModals() so modal partials are included.
+  hydratePlatformShortcuts();
 
   // 1. Markup + DOM-only feature wiring. The music MARKUP mounts here
   //    (from the pure-markup module, not the feature barrel); its engines
