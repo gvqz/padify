@@ -10,11 +10,12 @@
 
 import { applySchema, createDb } from './db';
 import { sweepMusicCache } from './music';
-import { MAX_BODY_BYTES, json } from './http';
+import { MAX_BODY_BYTES, json, pathPrefixFromEnv, stripPathPrefix } from './http';
 import { route } from './routes';
 import { MAX_ATTACHMENT_BYTES } from './attachments';
 
 const PORT = Number(process.env.PORT ?? 3041);
+const PATH_PREFIX = pathPrefixFromEnv(process.env.PATH_PREFIX);
 
 // PaaS supervisors (alwaysdata sites, the reference deployment) hand the
 // listen address over as env: an IPv6 on their internal network in $IP and
@@ -56,9 +57,10 @@ const server = Bun.serve({
   development: false,
   async fetch(request) {
     const { pathname } = new URL(request.url);
+    const routedPath = stripPathPrefix(pathname, PATH_PREFIX);
     inFlight++;
     try {
-      return await route(db, request, pathname);
+      return await route(db, request, routedPath);
     } catch (error) {
       console.error(`[padify-api] ${request.method} ${pathname} failed:`, error);
       return json(request, { error: 'Something went wrong on the server. Try again.' }, 500);

@@ -104,7 +104,14 @@ guardrails so memory cannot creep:
 
 Other environment variables:
 
-- `PORT` — defaults to `3041`.
+- `PORT` — defaults to `3041`. A supervisor-provided `PORT` wins (alwaysdata
+  sites hand their assigned port over this way, along with the internal
+  listen address in `IP`).
+- `PATH_PREFIX` — the mount point when the API is served under a subpath of
+  a shared domain (alwaysdata sites proxy the full original path to the
+  process, so an app mounted at `host/padifyapi` receives
+  `/padifyapi/api/health`; the prefix is stripped before routing). Unset or
+  `/` = root deployment, nothing stripped.
 - `TURSO_DATABASE_URL` — omit it (or use `file:`) to run with a local SQLite
   file at `server/local.db` instead of Turso (great for local dev).
 - `ALLOWED_ORIGINS` — comma-separated origins allowed to call the API from a
