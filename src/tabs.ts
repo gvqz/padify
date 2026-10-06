@@ -219,6 +219,10 @@ export class TabManager {
     this.renderStrip();
     this.loadActiveIntoEditor();
     this.bindStripEvents();
+    // The title mirrors the active note from the FIRST paint — a restored
+    // session (or an installed app booting straight into a note) must not
+    // sit on the static "Padify" until the first switch or keystroke.
+    this.syncDocumentTitle();
   }
 
   // ---- model ---------------------------------------------------------------

@@ -79,17 +79,30 @@ test.describe('break reminder popup', () => {
       };
     });
 
-    // Docked above the split control with the 8px gap, same footprint.
-    expect(geometry.gap).toBeGreaterThanOrEqual(6);
-    expect(geometry.gap).toBeLessThanOrEqual(12);
+    // Docked above the foot's New note control, clear of its top border
+    // line (the 14px gap plus the foot's 10px padding), same footprint.
+    expect(geometry.gap).toBeGreaterThanOrEqual(20);
+    expect(geometry.gap).toBeLessThanOrEqual(28);
     expect(geometry.leftDelta).toBeLessThanOrEqual(1);
     expect(geometry.widthDelta).toBeLessThanOrEqual(1);
     expect(geometry.coversButton).toBe(false);
 
     // The offer copy is the pitched one, not the old 2-minute phrasing.
     await expect(page.locator('#breakReminderTitle')).toHaveText('Time for a quick break?');
-    await expect(page.locator('#dismissBreakAction')).toBeVisible();
+    await expect(page.locator('#dismissBreakAction')).toHaveCount(0); // removed — the × closes
     await expect(page.locator('#snoozeBreakAction')).toBeVisible();
+
+    // The popup is a rail SECTION: it lives inside the rail, over the
+    // same surface, not a floating card hovering over the list.
+    const parented = await page.evaluate(() => {
+      const popup = document.getElementById('breakReminderPopup');
+      const rail = document.getElementById('tabRail');
+      const railBg = rail ? getComputedStyle(rail).backgroundColor : '';
+      const popupBg = popup ? getComputedStyle(popup).backgroundColor : '';
+      return { inRail: !!popup && !!rail && rail.contains(popup), railBg, popupBg };
+    });
+    expect(parented.inRail).toBe(true);
+    expect(parented.popupBg).toBe(parented.railBg);
   });
 
   test('Take break starts the countdown; Back to writing ends it', async ({ page }) => {
@@ -135,24 +148,6 @@ test.describe('break reminder popup', () => {
     expect(parked).toBeGreaterThan(Date.now());
   });
 
-  test('Dismiss closes the popup and resets the session', async ({ page }) => {
-    await writeUntilReminderShows(page);
-
-    await page.locator('#dismissBreakAction').click();
-
-    await expect(page.locator('#breakReminderPopup')).toHaveClass(
-      /^toast-popup break-reminder-popup$/,
-      {
-        timeout: 3_000,
-      },
-    );
-    const state = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem('breakReminderState') || '{}'),
-    );
-    expect(state.dismissedUntil).toBeGreaterThan(Date.now());
-    expect(state.accumulatedMs).toBe(0);
-  });
-
   test('the close button dismisses with a cooldown', async ({ page }) => {
     await writeUntilReminderShows(page);
 
@@ -170,29 +165,24 @@ test.describe('break reminder popup', () => {
     expect(state.dismissedUntil).toBeGreaterThan(Date.now());
   });
 
-  test('mobile: falls back to the viewport corner, docks when the drawer opens', async ({
+  test('mobile: rides the rail — hidden with the closed drawer, docked when open', async ({
     page,
   }) => {
     // Below the 820px breakpoint the rail is an off-canvas drawer, closed
-    // by default — the popup must fall back to the viewport corner.
+    // by default. The popup lives INSIDE the rail now, so it is simply
+    // off-screen with the drawer — no viewport-corner fallback to collide
+    // with the editor.
     await page.setViewportSize({ width: 700, height: 800 });
     await writeUntilReminderShows(page);
 
-    const fallback = await page.evaluate(() => {
-      const popup = document.getElementById('breakReminderPopup')!;
-      const rect = popup.getBoundingClientRect();
-      return {
-        left: popup.style.left,
-        bottom: popup.style.bottom,
-        onScreen: rect.left >= 0 && rect.right <= window.innerWidth,
-      };
+    const closed = await page.evaluate(() => {
+      const rect = document.getElementById('breakReminderPopup')!.getBoundingClientRect();
+      return { onScreen: rect.right > 0 && rect.left < window.innerWidth };
     });
-    expect(fallback.left).toBe('20px');
-    expect(fallback.bottom).toBe('20px');
-    expect(fallback.onScreen).toBe(true);
+    expect(closed.onScreen).toBe(false);
 
-    // Opening the drawer slides the rail in — the popup follows it and
-    // docks above the New note button once the slide transition ends.
+    // Opening the drawer slides the rail in — the popup is a rail child
+    // and rides the transform, docking above the New note control.
     await page.locator('#tabRailToggle').click();
     await page.waitForTimeout(600);
 
@@ -200,11 +190,13 @@ test.describe('break reminder popup', () => {
       const popup = document.getElementById('breakReminderPopup')!.getBoundingClientRect();
       const anchor = document.querySelector('.tab-rail-add-group')!.getBoundingClientRect();
       return {
-        left: document.getElementById('breakReminderPopup')!.style.left,
-        dockedAbove: Math.abs(anchor.top - popup.bottom) <= 10 && popup.left >= 0,
+        onScreen: popup.right > 0 && popup.left >= 0,
+        dockedAbove: Math.abs(anchor.top - popup.bottom) >= 20,
+        clearOfAnchor: popup.bottom <= anchor.top,
       };
     });
-    expect(docked.left).not.toBe('20px');
+    expect(docked.onScreen).toBe(true);
     expect(docked.dockedAbove).toBe(true);
+    expect(docked.clearOfAnchor).toBe(true);
   });
 });

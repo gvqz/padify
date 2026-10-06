@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { sanitizeNoteHtml } from './storage-subset';
 import { ModelPort } from './model-port';
+import { migrateMarginIndentsToTabs } from './plain-indent';
 
 /**
  * The engine pipeline, end to end, in jsdom: commands through the port,
@@ -115,13 +116,15 @@ function caretStreamOffset(surface: HTMLElement): number {
 }
 
 /** Selects a stream range on the surface (end-safe: a target at the
- *  stream's end resolves to the last text node's tail). */
+ *  stream's end resolves to the last text node's tail; each target
+ *  resolves ONCE — the first node that reaches past it — so a range
+ *  starting at 0 across many blocks cannot re-match later nodes). */
 function selectRange(surface: HTMLElement, from: number, to: number): void {
   const selection = window.getSelection();
   const range = document.createRange();
   const walker = document.createTreeWalker(surface, NodeFilter.SHOW_TEXT);
+  const resolved = new Map<number, { node: Text; raw: number }>();
   let consumed = 0;
-  const found: { node: Text; raw: number }[] = [];
   let last: { node: Text; raw: number } | null = null;
   let node: Node | null;
   while ((node = walker.nextNode())) {
@@ -130,19 +133,18 @@ function selectRange(surface: HTMLElement, from: number, to: number): void {
     }
     const visible = (node.nodeValue ?? '').replace(/\u200B/g, '');
     for (const target of [from, to]) {
-      if (consumed + visible.length > target) {
-        found.push({ node: node as Text, raw: target - consumed });
+      if (!resolved.has(target) && consumed + visible.length > target) {
+        resolved.set(target, { node: node as Text, raw: target - consumed });
       }
     }
     consumed += visible.length;
     last = { node: node as Text, raw: visible.length };
   }
-  while (found.length < 2 && last) {
-    found.push(last);
-  }
-  if (found.length >= 2) {
-    range.setStart(found[0]!.node, found[0]!.raw);
-    range.setEnd(found[1]!.node, found[1]!.raw);
+  const start = resolved.get(from) ?? last;
+  const end = resolved.get(to) ?? last;
+  if (start && end) {
+    range.setStart(start.node, start.raw);
+    range.setEnd(end.node, end.raw);
     selection?.removeAllRanges();
     selection?.addRange(range);
   }
@@ -410,6 +412,146 @@ describe('Tab over the bare stream — the classic plain note', () => {
     expect(surface.textContent).toBe('plain\t words');
     expect(port.undo()).toBe(true);
     expect(surface.textContent).toBe('plain words');
+  });
+});
+
+describe('tabPlainText — the plain note tab is TEXT, never a margin', () => {
+  it('a collapsed caret in a block inserts a literal tab at the caret', () => {
+    const { port, surface } = makePort('<div>alpha</div><div>beta</div>');
+    caretAt(surface, 7); // 'be|ta' — beta spans stream 5..9
+    expect(port.tabPlainText(false)).toBe(true);
+    expect(surface.innerHTML).toBe('<div>alpha</div><div>be\tta</div>');
+    // The indent is text — no style attribute, nothing for the selection
+    // highlight to skip.
+    expect(surface.querySelector('[style]')).toBeNull();
+  });
+
+  it('a spanning selection tabs every covered block and keeps the lines selected', () => {
+    const { port, surface } = makePort('<div>alpha</div><div>beta</div><div>gamma</div>');
+    selectRange(surface, 1, 7); // from inside 'alpha' through 'be|ta'
+    expect(port.tabPlainText(false)).toBe(true);
+    expect(surface.innerHTML).toBe('<div>\talpha</div><div>\tbeta</div><div>gamma</div>');
+    // Whole covered lines stay selected — the re-pinned range runs from
+    // the first covered block's start (tab included) to its end. (jsdom's
+    // Range.toString does not interleave \n at block boundaries the way a
+    // browser's Selection.toString does — the tabs are the assertion.)
+    const selection = window.getSelection();
+    expect(selection?.toString()).toBe('\talpha\tbeta');
+  });
+
+  it('blocks never merge — the tab-per-block op is not the old \\n splice', () => {
+    const { port, surface } = makePort('<div>alpha</div><div>beta</div>');
+    selectRange(surface, 0, 9);
+    expect(port.tabPlainText(false)).toBe(true);
+    expect(surface.querySelectorAll('div').length).toBe(2);
+  });
+
+  it('Shift+Tab over tabbed blocks strips one tab per block', () => {
+    const { port, surface } = makePort('<div>\talpha</div><div>\tbeta</div>');
+    selectRange(surface, 0, 12);
+    expect(port.tabPlainText(true)).toBe(true);
+    expect(surface.innerHTML).toBe('<div>alpha</div><div>beta</div>');
+  });
+
+  it('a stripped-empty block regains its placeholder br', () => {
+    const { port, surface } = makePort('<div>alpha</div><div>\t</div>');
+    selectRange(surface, 0, 6);
+    expect(port.tabPlainText(true)).toBe(true);
+    expect(surface.innerHTML).toBe('<div>alpha</div><div><br></div>');
+  });
+
+  it('a collapsed Shift+Tab at a tabbed line start unwinds that line', () => {
+    const { port, surface } = makePort('<div>alpha</div><div>\tbeta</div>');
+    caretAtNodeStart(surface, 1);
+    expect(port.tabPlainText(true)).toBe(true);
+    expect(surface.innerHTML).toBe('<div>alpha</div><div>beta</div>');
+    // The caret stayed on the unwound line's start.
+    const selection = window.getSelection();
+    expect(selection?.getRangeAt(0).startContainer).toBe(
+      surface.querySelectorAll('div')[1]!.firstChild,
+    );
+    expect(selection?.getRangeAt(0).startOffset).toBe(0);
+  });
+
+  it('a collapsed Shift+Tab with no leading tab declines (null) — margins stay reachable', () => {
+    const { port, surface } = makePort('<div style="margin-left: 40px">legacy</div>');
+    caretAt(surface, 3);
+    expect(port.tabPlainText(true)).toBeNull();
+    // The caller's fallback steps the legacy margin down.
+    expect(port.outdent()).toBe(true);
+    expect(surface.innerHTML).toBe('<div>legacy</div>');
+  });
+
+  it('Backspace at a tabbed block start unwinds the tab; the merge waits', () => {
+    const { port, surface } = makePort('<div>alpha</div><div>\tbeta</div>');
+    caretAtNodeStart(surface, 1);
+    expect(port.unindentTabAtBlockStart?.()).toBe(true);
+    expect(surface.innerHTML).toBe('<div>alpha</div><div>beta</div>');
+    // The block survived — the native delete would have merged it into
+    // 'alpha' in the same press.
+    expect(surface.querySelectorAll('div').length).toBe(2);
+  });
+
+  it('Backspace mid-block or without a tab declines (null)', () => {
+    const { port, surface } = makePort('<div>alpha</div><div>\tbeta</div>');
+    caretAt(surface, 8); // 'be|ta' — past the block start
+    expect(port.unindentTabAtBlockStart?.()).toBeNull();
+    caretAtNodeStart(surface, 0); // no tab on this line
+    expect(port.unindentTabAtBlockStart?.()).toBeNull();
+  });
+
+  it('inside a list the gesture declines — lists nest natively', () => {
+    const { port, surface } = makePort('<ul><li>alpha</li><li>beta</li></ul>');
+    caretAt(surface, 6); // 'b|eta'
+    expect(port.tabPlainText(false)).toBeNull();
+    expect(port.tabPlainText(true)).toBeNull();
+  });
+
+  it('the tab text op is one undo step', () => {
+    const { port, surface } = makePort('<div>alpha</div><div>beta</div>');
+    selectRange(surface, 0, 10);
+    expect(port.tabPlainText(false)).toBe(true);
+    expect(surface.querySelectorAll('div')[0]!.firstChild!.textContent).toBe('\talpha');
+    expect(port.undo()).toBe(true);
+    expect(surface.innerHTML).toBe('<div>alpha</div><div>beta</div>');
+  });
+});
+
+describe('plain-indent migration — legacy margins become tabs on display', () => {
+  it('rewrites margin steps into the equivalent leading tabs', () => {
+    const { surface } = makePort();
+    surface.innerHTML = migrateMarginIndentsToTabs(
+      '<div>alpha</div><div style="margin-left: 40px">beta</div>' +
+        '<div style="margin-left: 120px">gamma</div>',
+    );
+    expect(surface.innerHTML).toBe('<div>alpha</div><div>\tbeta</div><div>\t\t\tgamma</div>');
+  });
+
+  it('keeps other block declarations while dropping the margin', () => {
+    const migrated = migrateMarginIndentsToTabs(
+      '<div style="text-align: center; margin-left: 40px">centered</div>',
+    );
+    expect(migrated).toBe('<div style="text-align: center">\tcentered</div>');
+  });
+
+  it('empty margin blocks take the tab in place of the placeholder br', () => {
+    const migrated = migrateMarginIndentsToTabs('<div style="margin-left: 80px"><br></div>');
+    expect(migrated).toBe('<div>\t\t</div>');
+  });
+
+  it('notes without margins round-trip byte-exact', () => {
+    const html = '<div>alpha</div><div>beta</div>';
+    expect(migrateMarginIndentsToTabs(html)).toBe(html);
+  });
+
+  it('a nested margin pair migrates into the innermost text start', () => {
+    const migrated = migrateMarginIndentsToTabs(
+      '<div style="margin-left: 40px"><div style="margin-left: 80px">deep</div></div>',
+    );
+    // Both wrappers' tabs collapse onto the innermost text start (each
+    // block's stream start IS there), and no margin survives to fight
+    // the tab gesture: 40px + 80px = three tab steps.
+    expect(migrated).toBe('<div><div>\t\t\tdeep</div></div>');
   });
 });
 

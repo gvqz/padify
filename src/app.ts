@@ -58,7 +58,7 @@ import {
   onMarkdownViewMode,
   setMarkdownViewMode,
 } from './editor/markdown/surface';
-import { isHtmlContent, isMarkdownNote } from './editor/note-types';
+import { isHtmlContent, isMarkdownNote, isRichNote } from './editor/note-types';
 import { initThemeColors } from './editor/theme-colors';
 import { initRichShortcuts } from './editor/rich-shortcuts';
 import { initNoteTypeMenu } from './ui/note-type-menu';
@@ -337,6 +337,12 @@ export async function initApp(): Promise<void> {
       if (!isHtmlContent(tabManager.getActive()?.noteType)) {
         return;
       }
+      // Plain notes carry the indent as text: a leading tab unwinds
+      // first (Docs/VS Code parity), the merge waits for the next press.
+      if (!isRichNote(tabManager.getActive()) && getEditorPort()?.unindentTabAtBlockStart?.()) {
+        e.preventDefault();
+        return;
+      }
       if (getEditorPort()?.unindentAtBlockStart?.()) {
         e.preventDefault();
       }
@@ -389,9 +395,27 @@ export async function initApp(): Promise<void> {
       // which through the model pipeline merged selected paragraphs into
       // one <p> littered with tab characters and soft breaks (the worst
       // of the tab bugs), and undo could not bring the structure back.
-      const streamTab = port.tabStream?.(e.shiftKey);
-      if (streamTab !== null && streamTab !== undefined) {
-        return;
+      //
+      // PLAIN notes take the text gesture at every level (tabPlainText):
+      // the indent is a literal tab character, one per covered line —
+      // because the selection highlight paints text runs only, a margin
+      // indent never lights up and a selected range read as "not all
+      // tabs are selected". A tab character selects, copies and pastes
+      // as the text it is. Rich notes keep the Docs-style margin step:
+      // their toolbar indent/outdent buttons format blocks, and the two
+      // gestures must not disagree.
+      if (!isRichNote(tabManager.getActive())) {
+        const plainTab = port.tabPlainText?.(e.shiftKey);
+        if (plainTab !== null && plainTab !== undefined) {
+          return;
+        }
+        // null — lists and cells own the key, or there was nothing to
+        // strip: the margin fallback below keeps those paths alive.
+      } else {
+        const streamTab = port.tabStream?.(e.shiftKey);
+        if (streamTab !== null && streamTab !== undefined) {
+          return;
+        }
       }
       if (e.shiftKey) {
         port.outdent();

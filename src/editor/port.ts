@@ -282,6 +282,19 @@ export interface EditorPort {
   tabStream?(shift: boolean): boolean | null;
 
   /**
+   * The Tab-KEY gesture on a PLAIN note: the indent is TEXT — a literal
+   * tab character at the caret, one per covered line over a spanning
+   * selection, Shift+Tab stripping — never a margin style. The selection
+   * highlight paints text runs only, so a margin indent never lights up
+   * and a selected range read as "not all tabs are selected"; a tab
+   * character selects, copies and pastes as the text it is. Returns null
+   * when the gesture is not ours (lists nest, cells walk, nothing to
+   * strip) — callers fall back to indent()/outdent(). Optional so slim
+   * ports can skip it.
+   */
+  tabPlainText?(shift: boolean): boolean | null;
+
+  /**
    * The Backspace gesture at the start of a margin-indented block — Docs
    * unwinds the indent FIRST and only merges with the previous block on
    * the next press. Returns true when the indent was unwound (the caller
@@ -292,6 +305,15 @@ export interface EditorPort {
    * Optional so slim ports can skip it.
    */
   unindentAtBlockStart?(): boolean | null;
+
+  /**
+   * The Backspace gesture at the start of a TAB-indented block — the
+   * plain note's Backspace twin of unindentAtBlockStart: the first press
+   * strips the leading tab, the merge waits for the next. Returns null
+   * when it does not apply (no leading tab, caret not at the block's
+   * first position). Optional so slim ports can skip it.
+   */
+  unindentTabAtBlockStart?(): boolean | null;
 
   /** Inserts a horizontal rule at the caret, splitting the block. */
   insertHorizontalRule(): boolean;

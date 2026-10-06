@@ -42,8 +42,11 @@ const breakReminderConfig = {
   storageKey: 'breakReminderState',
 };
 
-/** Gap between the popup's bottom edge and the New note button's top edge. */
-const ANCHOR_GAP_PX = 8;
+/** The popup's copy (one definition — the show, the close-reset and the
+ *  modal markup must agree; the markup seeds the same strings). */
+const BREAK_REMINDER_TITLE = 'Time for a quick break?';
+const BREAK_REMINDER_TEXT =
+  "You've been writing for a while. Stand up, stretch, or look away from the screen for a second.";
 
 const breakReminderDefaults = {
   accumulatedMs: 0,
@@ -51,12 +54,6 @@ const breakReminderDefaults = {
   snoozedUntil: 0,
   dismissedUntil: 0,
 };
-
-/** The popup's copy (one definition — the show, the close-reset and the
- *  modal markup must agree; the markup seeds the same strings). */
-const BREAK_REMINDER_TITLE = 'Time for a quick break?';
-const BREAK_REMINDER_TEXT =
-  "You've been working for a while. Stand up, stretch, or look away from the screen for a second.";
 
 let breakReminderState = loadBreakReminderState();
 let breakReminderCountdownTimer: ReturnType<typeof setInterval> | null = null;
@@ -102,7 +99,6 @@ function closeBreakReminderPopup(): void {
     $('#breakReminderActions').show();
     $('#takeBreakAction').text('Take break');
     $('#snoozeBreakAction').show();
-    $('#dismissBreakAction').show();
     $('#breakReminderTitle').text(BREAK_REMINDER_TITLE);
     $('#breakReminderText').text(BREAK_REMINDER_TEXT);
   }, 300);
@@ -124,54 +120,20 @@ function shouldBlockBreakReminder(now: number): boolean {
 }
 
 /**
- * Docks the popup above the "+ New note" split control in the notes rail —
- * its long-term home (the mini music player will share this anchor). The
- * popup stays body-level so it is never clipped by the rail, and keeps a
- * viewport-corner fallback for when the rail is hidden: the PIP host
- * removes it and the mobile drawer slides it off-screen.
+ * The popup lives IN the notes rail — a rail section, not a floating
+ * card. CSS positions it above the foot's New note control (absolute
+ * within .tab-rail-foot), so it follows the mobile drawer's slide, hides
+ * with the rail in the PIP host, and never needs JS re-anchoring on
+ * resize. The user asked for it to feel — and be — part of that sidebar.
+ * Runs from initBreakReminder, which boot.ts calls AFTER mountModals()
+ * has mounted the modal partials the markup rides in on.
  */
-function anchorBreakPopup(): void {
+function attachBreakPopupToRail(): void {
   const popup = document.getElementById('breakReminderPopup');
-
-  if (!popup) {
-    return;
+  const foot = document.querySelector('.tab-rail-foot');
+  if (popup && foot && popup.parentElement !== foot) {
+    foot.insertBefore(popup, foot.firstChild);
   }
-
-  const anchor = document.querySelector('.tab-rail-add-group');
-  const rect = anchor?.getBoundingClientRect();
-  const railVisible =
-    !!rect &&
-    rect.width > 0 &&
-    rect.height > 0 &&
-    rect.left >= 0 &&
-    rect.top < window.innerHeight &&
-    rect.bottom > 0;
-
-  if (!railVisible) {
-    popup.style.left = '20px';
-    popup.style.bottom = '20px';
-    popup.style.width = '';
-    popup.style.maxWidth = '';
-    return;
-  }
-
-  popup.style.left = `${Math.round(rect.left)}px`;
-  popup.style.bottom = `${Math.round(window.innerHeight - rect.top + ANCHOR_GAP_PX)}px`;
-  popup.style.width = `${Math.round(rect.width)}px`;
-  popup.style.maxWidth = 'none';
-}
-
-/** The drawer's slide transition runs after the resize event — re-anchor
- *  once it settles, so the popup follows the rail in and out of view. */
-const DRAWER_SLIDE_MS = 300;
-
-function reAnchorWhileShown(): void {
-  if (!$('#breakReminderPopup').hasClass('show')) {
-    return;
-  }
-
-  anchorBreakPopup();
-  window.setTimeout(anchorBreakPopup, DRAWER_SLIDE_MS);
 }
 
 function showBreakReminderPopup(): void {
@@ -184,11 +146,9 @@ function showBreakReminderPopup(): void {
   }
   const $breakPopup = $('#breakReminderPopup');
   $breakPopup.removeClass('hide break-active').addClass('show');
-  anchorBreakPopup();
   $('#breakReminderActions').show();
   $('#takeBreakAction').text('Take break');
   $('#snoozeBreakAction').show();
-  $('#dismissBreakAction').show();
   $('#breakReminderTitle').text(BREAK_REMINDER_TITLE);
   $('#breakReminderText').text(BREAK_REMINDER_TEXT);
 }
@@ -250,7 +210,6 @@ function startBreakCountdown(): void {
   $('#breakReminderText').text('Relax your eyes. Unclench your jaw. Breathe.');
   $('#takeBreakAction').text('Back to writing');
   $('#snoozeBreakAction').hide();
-  $('#dismissBreakAction').hide();
 
   if (breakReminderCountdownTimer) {
     clearInterval(breakReminderCountdownTimer);
@@ -309,21 +268,10 @@ export function initBreakReminder(): void {
     closeBreakReminderPopup();
   });
 
-  $('#dismissBreakAction').on('click', function () {
-    breakReminderState.dismissedUntil = Date.now() + breakReminderConfig.dismissCooldownMs;
-    resetBreakReminderSession();
-    persistBreakReminderState();
-    closeBreakReminderPopup();
-  });
-
-  // Keep the dock above the New note button while the popup is visible —
-  // the rail can change geometry under it (window resize, drawer slide).
-  window.addEventListener('resize', reAnchorWhileShown);
-  document.addEventListener('transitionend', (event) => {
-    if ((event.target as Element | null)?.id === 'tabRail' && event.propertyName === 'transform') {
-      reAnchorWhileShown();
-    }
-  });
+  // The popup is a rail section now — attach it once; CSS keeps it
+  // docked above the foot's New note control through resizes and the
+  // mobile drawer's slide (it is absolute INSIDE the rail).
+  attachBreakPopupToRail();
 }
 
 // Idle time does not count as writing — reset the activity window when

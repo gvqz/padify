@@ -68,10 +68,13 @@ import {
   setBlockStyleProp,
   setInlineStyle,
   shiftBlockIndent,
+  shiftLineTabs,
   splitScriptChain,
   toggleListKind,
   toggleMark,
   uncheckEmptyItems,
+  firstStreamTextNode,
+  unindentTabLine,
   unnestListItem,
   unwrapLinkAt,
   wrapLink,
@@ -1043,6 +1046,90 @@ export class ModelPort implements EditorPort {
       return this.insertText('\t');
     }
     return false; // a collapsed Shift+Tab has no indent to unwind
+  }
+
+  /**
+   * The Tab-KEY gesture on a PLAIN note: the indent is TEXT — a literal
+   * tab character per line — never a margin style. The selection
+   * highlight paints text runs only, so a margin indent never lights up
+   * and a selected range read as "not all tabs are selected"; a tab
+   * character selects, copies and pastes as the text it is. Bare streams
+   * keep the line-splice (the whole document is one run there); blocks
+   * take the per-block op. Returns null when the gesture is not ours —
+   * lists nest and cells walk through the caller's indent()/outdent()
+   * fallback, and a Shift+Tab with no leading tab anywhere leaves the
+   * legacy margin indents reachable.
+   */
+  tabPlainText(shift: boolean): boolean | null {
+    if (this.queryListKind() !== null || this.cellAtCaret()) {
+      return null;
+    }
+    if (this.inBareStream()) {
+      return this.tabStream(shift);
+    }
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return null;
+    }
+    if (selection.isCollapsed) {
+      if (!shift) {
+        return this.insertText('\t');
+      }
+      const caretSpot = liveCollapsedSpot(this.element);
+      const stripped = this.command((model, coverage) =>
+        unindentTabLine(model, coverage, this.preferInModel(caretSpot, model, coverage[0])),
+      );
+      // Nothing to strip → null: the caller's outdent() fallback keeps
+      // the legacy margin indents reachable from the same gesture.
+      return stripped ? true : null;
+    }
+    const shifted = this.command((model, coverage) =>
+      shiftLineTabs(model, coverage, shift ? -1 : 1),
+    );
+    return shifted ? true : null;
+  }
+
+  /**
+   * The Backspace gesture at the start of a TAB-indented block (plain
+   * notes carry the indent as text — see tabPlainText). Docs/VS Code
+   * parity with the margin gesture: the first press unwinds one indent
+   * level, the merge waits for the next. Returns null when the gesture
+   * does not apply and the native delete must proceed — a ranged
+   * selection, a caret that is not at its block's first position, no
+   * leading tab on the line, or a caret inside a list/table cell.
+   */
+  unindentTabAtBlockStart(): boolean | null {
+    const spot = liveCollapsedSpot(this.element);
+    if (!spot) {
+      return null;
+    }
+
+    let el: HTMLElement | null =
+      spot.kind === 'text' ? spot.node.parentElement : (spot.node as HTMLElement);
+    while (el && el !== this.element && !BLOCK_TAGS.test(el.tagName)) {
+      el = el.parentElement;
+    }
+    if (!el || el === this.element || /^(LI|TD|TH)$/.test(el.tagName)) {
+      return null;
+    }
+
+    const atStart =
+      spot.kind === 'element'
+        ? spot.node === el && spot.childIndex === 0
+        : streamOffsetOfSpot(el, spot) === 0;
+    if (!atStart) {
+      return null;
+    }
+
+    const first = firstStreamTextNode(el);
+    if (!first || !/^\u200B*\t/.test(first.nodeValue ?? '')) {
+      return null;
+    }
+
+    return this.command((model, coverage) => {
+      const prefer = this.preferInModel(spot, model, coverage[0]);
+      return unindentTabLine(model, coverage, prefer);
+    });
   }
 
   /**

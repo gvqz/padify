@@ -35,6 +35,7 @@
 
 import { renderMathIn } from './math';
 import { getEditorPort } from './port';
+import { migrateMarginIndentsToTabs } from './plain-indent';
 import { sanitizeNoteHtml } from './storage-subset';
 import { noteRenderedForTheme } from './theme-colors';
 import { contentKindFor, DEFAULT_NOTE_TYPE, noteTypeLabel, type ContentKind } from './note-types';
@@ -143,17 +144,27 @@ export class HtmlNoteSurface implements NoteSurface {
     // display-only card parked here before.
     host.setAttribute('contenteditable', 'true');
 
+    // Plain notes carry their indent as TEXT now (the Tab key writes tab
+    // characters — a margin never paints inside the selection highlight).
+    // The one-time rewrite of the legacy margin steps happens on display:
+    // it changes nothing for rich notes (the Docs-style block property is
+    // their model) and is a no-op once a note has migrated.
+    let content = note ? note.content : '';
+    if (note && (note.noteType ?? DEFAULT_NOTE_TYPE) === DEFAULT_NOTE_TYPE) {
+      content = migrateMarginIndentsToTabs(content);
+    }
+
     const port = getEditorPort();
     if (port) {
       // The port's display-only entry: sanitized, math rendered, empty
       // state collapsed — and nothing persists, because opening a note
       // must not write on its own.
-      port.renderHtml(note ? note.content : '');
+      port.renderHtml(content);
     } else {
       // Bare fallback (tests, pre-boot): the same paint, by hand. The
       // empty-state normalization is a port capability — without a port
       // it is skipped, exactly like the pre-split code did.
-      host.innerHTML = note ? note.content : '';
+      host.innerHTML = content;
       renderMathIn(host);
     }
     host.scrollTop = 0;
