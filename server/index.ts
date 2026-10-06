@@ -16,6 +16,12 @@ import { MAX_ATTACHMENT_BYTES } from './attachments';
 
 const PORT = Number(process.env.PORT ?? 3041);
 
+// PaaS supervisors (alwaysdata sites, the reference deployment) hand the
+// listen address over as env: an IPv6 on their internal network in $IP and
+// the site's assigned port in $PORT. Local runs get the previous behavior —
+// every interface, the default port.
+const HOSTNAME = process.env.IP ?? '0.0.0.0';
+
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
@@ -38,6 +44,7 @@ let drained: (() => void) | null = null;
 
 const server = Bun.serve({
   port: PORT,
+  hostname: HOSTNAME,
   // Memory guardrails for small always-on hosts: cap request bodies at the
   // runtime level (the default allows 128 MB to be buffered before any
   // handler runs) and keep Bun's development error pages (with stack traces)
@@ -101,4 +108,4 @@ const shutdown = (signal: string): void => {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-console.log(`[padify-api] listening on http://localhost:${PORT}`);
+console.log(`[padify-api] listening on http://${HOSTNAME}:${PORT}`);
