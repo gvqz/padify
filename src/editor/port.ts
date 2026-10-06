@@ -281,6 +281,18 @@ export interface EditorPort {
    */
   tabStream?(shift: boolean): boolean | null;
 
+  /**
+   * The Backspace gesture at the start of a margin-indented block — Docs
+   * unwinds the indent FIRST and only merges with the previous block on
+   * the next press. Returns true when the indent was unwound (the caller
+   * must preventDefault the native delete), null/false when the gesture
+   * does not apply — a ranged selection, a caret that is not at its
+   * block's first position, a block that carries no stepped margin, or a
+   * caret inside a list/table cell (those manage their own structure).
+   * Optional so slim ports can skip it.
+   */
+  unindentAtBlockStart?(): boolean | null;
+
   /** Inserts a horizontal rule at the caret, splitting the block. */
   insertHorizontalRule(): boolean;
 

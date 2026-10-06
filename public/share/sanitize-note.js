@@ -98,6 +98,9 @@ function sanitizeStyle(raw, inline) {
     const value = declaration.slice(colon + 1).trim();
     const pattern = allowed.get(prop);
     if (pattern && pattern.test(value)) {
+      if (prop === "background-color" && /^transparent$/i.test(value)) {
+        continue;
+      }
       kept.push(`${prop}: ${value}`);
     }
   }

@@ -328,6 +328,21 @@ export async function initApp(): Promise<void> {
   initNoteTypeMenu((type) => tabManager.addTab(true, type));
 
   notepad.note.keydown(function (e) {
+    // Docs parity for the Backspace gesture: at the start of a
+    // margin-indented block the first press unwinds the indent and the
+    // merge waits for the next one. The native delete did both at once —
+    // and its absorb pass littered the merged line with span wrappers.
+    if (e.key === 'Backspace' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Markdown notes own their Backspace (the surface's keymap).
+      if (!isHtmlContent(tabManager.getActive()?.noteType)) {
+        return;
+      }
+      if (getEditorPort()?.unindentAtBlockStart?.()) {
+        e.preventDefault();
+      }
+      return;
+    }
+
     if (e.key === 'Tab') {
       // Markdown notes own their Tab handling (the surface's indent
       // keymap: lists sink/lift, code blocks take two spaces, tables

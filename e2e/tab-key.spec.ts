@@ -62,6 +62,30 @@ test.describe('the Tab key', () => {
     await expect(indented).toHaveText('second block');
     // The first block kept its position — only the caret block moved.
     await expect(editor).toContainText('first block');
+
+    // Docs parity on Backspace (the selecting/backspacing-tabs task): the
+    // first press at the indented block's start unwinds the indent ONLY —
+    // the native delete merged the block into the line above in one press
+    // and littered the merge with span wrappers. The caret also stays on
+    // the (formerly indented) block: a numeric restore of the boundary
+    // offset resolved to the previous line's end, and the second press
+    // ate ITS last character.
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Backspace');
+    await expect(editor.locator('div[style*="margin-left"]')).toHaveCount(0);
+    // 'first block' stayed root text; 'second block' keeps its own block.
+    await expect(editor.locator('div')).toHaveText(['second block']);
+    await expect(editor.locator('span[style*="background-color"]')).toHaveCount(0);
+
+    // The next press merges — the line above loses nothing.
+    await page.keyboard.press('Backspace');
+    await expect(editor.locator('div')).toHaveCount(0);
+    await expect(editor).toHaveText('first blocksecond block');
+
+    // ... and a third press deletes the character BEFORE the seam — the
+    // 'k' of 'first block' (the caret survived the unindent + merge).
+    await page.keyboard.press('Backspace');
+    await expect(editor).toHaveText('first blocsecond block');
   });
 
   test('list items nest and lift with Tab / Shift+Tab', async ({ page }) => {
