@@ -6,12 +6,9 @@ Future feature list
 Complex:
 these are more complex features to be added, these should be planned out and potentially discussed(if really big/complex) before starting 
 
-        rebuild snapshots menu
-        problems: currently snapshots do not work consistantly or properly across all note types
-        it must be rebuilt nearly from scratch and heavily tested. should match visual aesthetic of the app
-        there's no point of having duplicate snapshots, so also prevent that from happening 
+        - [done] rebuild snapshots menu (the menu is rebuilt on the app's modal recipe — pref header, take button beside the search, bordered rows with type chips, all vercel-layer tokens so dark mode comes free; the legacy snapshots.css is pruned to a pointer. The cross-type breakage's underlying reason was found and fixed: restores never moved the note's TYPE with its content and never announced the switch, so the markdown toolbar and the port stayed stale, and a plain snapshot restored into a markdown note rendered as source text after reload. Snapshots now record the note they came from and decline identical recaptures with a toast; search matches the note's text, never its markup; dates render at display time from the timestamp. Pinned by 27 unit tests and 17 e2e cases in e2e/snapshots.spec.ts, both type-switch directions and the reload round trip included)
 
-        I dislike how it shows Ctrl/cmd garbage everywhere instead of just showing the one of the two based on the device you're using. Fix that across the entire repo.
+        - [done] I dislike how it shows Ctrl/cmd garbage everywhere instead of just showing the one of the two based on the device you're using. Fix that across the entire repo. (lib/platform.ts is the one answer — platform + UA detection with a test override seam — and every runtime surface asks it: the shortcuts reference's kbd pairs, the brand menu hint, the toolbar tooltips, the clipboard-blocked toasts, the welcome note's two hint lines. Static markup can't call a function, so partials declare intent with data-mod-key / data-alt-key / data-shortcut-title and a boot pass resolves it right after the modals mount, before any dialog can be seen. Static docs keep the dual spelling on purpose — prose can't know the reader's keyboard, UI can. Pinned on both sides of the split by unit tests and an emulated-Mac e2e in e2e/platform-shortcuts.spec.ts)
 
 Visual overhauls:
         - cloud sync/share

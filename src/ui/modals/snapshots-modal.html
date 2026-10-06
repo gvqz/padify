@@ -1,9 +1,17 @@
-<!-- Snapshots Modal -->
-<div id="snapshotsModal" class="modal fade" role="dialog">
+<!-- Snapshots Modal — safety copies of notes; see src/snapshots.ts -->
+<div id="snapshotsModal" class="modal fade" role="dialog" aria-labelledby="snapshotsTitle">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header">
-        <button type="button" class="close" data-dismiss="modal">
+        <div class="pref-header-copy">
+          <span class="pref-eyebrow">Padify</span>
+          <h4 class="modal-title custom-modal-title" id="snapshotsTitle">Snapshots</h4>
+          <p class="pref-subtitle">
+            Safety copies of your notes, taken by hand or before risky changes — restore any
+            version.
+          </p>
+        </div>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close snapshots">
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -16,27 +24,17 @@
             <path d="M6 6l12 12M18 6L6 18" />
           </svg>
         </button>
-        <h4 class="modal-title">
-          Snapshots
-          <a
-            href="#"
-            data-toggle="tooltip"
-            data-placement="right"
-            title="Snapshots are manually saved versions of your notes that you can restore later."
-          >
-            <img src="/img/tooltip.svg" alt="Tooltip Icon" />
-          </a>
-        </h4>
       </div>
       <div class="modal-body">
-        <div class="snapshots-actions search-container">
-          <button id="createSnapshotBtn" class="btn btn-primary">
+        <div class="snapshots-toolbar">
+          <button id="createSnapshotBtn" class="btn btn-primary snapshots-take-btn">
             <svg
               width="16"
               height="16"
               viewBox="0 0 24 24"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
             >
               <path
                 d="M12 5V19M5 12H19"
@@ -45,39 +43,71 @@
                 stroke-linecap="round"
               />
             </svg>
-            Take Snapshot [ctrl/command + u]
+            Take snapshot
+            <span class="snapshots-kbd-hint"><kbd data-mod-key>Ctrl</kbd><kbd>U</kbd></span>
           </button>
-          <div class="search-snapshots">
+          <div class="shortcut-search-wrap snapshots-search-wrap">
+            <svg
+              class="shortcut-search-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="m21 21-4.35-4.35"></path>
+            </svg>
             <input
               type="text"
               id="searchSnapshots"
-              class="form-control"
+              class="shortcut-search-input"
               placeholder="Search snapshots..."
+              aria-label="Search snapshots"
             />
           </div>
         </div>
         <div class="snapshots-list-container">
           <div id="noSnapshots" class="no-snapshots">
             <svg
-              width="64"
-              height="64"
+              width="48"
+              height="48"
               viewBox="0 0 24 24"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
             >
-              <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-              <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
-              <g id="SVGRepo_iconCarrier">
-                <path
-                  d="M4 12H20M12 4V20"
-                  stroke="#6b6b6b"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                ></path>
-              </g>
+              <path
+                d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <path
+                d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <path
+                d="M7 3v4a1 1 0 0 0 1 1h7"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
             </svg>
-            <p>No snapshots yet.</p>
+            <p id="noSnapshotsEmpty">No snapshots yet.</p>
+            <p class="no-snapshots-hint" id="noSnapshotsHint">
+              Take one with the button above, or
+              <span class="snapshots-kbd-inline"><kbd data-mod-key>Ctrl</kbd> + <kbd>U</kbd></span
+              >.
+            </p>
+            <p id="noSnapshotsMiss" hidden>No matching snapshots.</p>
           </div>
           <ul id="snapshotsList" class="snapshots-list">
             <!-- Snapshots will be populated here -->
@@ -94,6 +124,7 @@
               viewBox="0 0 24 24"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
             >
               <path
                 d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94208 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20"

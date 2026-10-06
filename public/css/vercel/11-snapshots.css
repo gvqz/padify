@@ -1,144 +1,327 @@
-/* vercel design system — part 11/17: Snapshots — list with dividers, ghost icon buttons
+/* vercel design system — part 11/17: Snapshots — the rebuilt menu.
    Split from the former vercel.css (cascade order preserved —
    index.html loads these files in numeric order, last in the
-   stylesheet chain, exactly where the monolith sat). */
+   stylesheet chain, exactly where the monolith sat).
+
+   Rebuilt with the menu (see tasks.txt, "Complex"): the dialog follows
+   the pref-header recipe (eyebrow + title + subtitle), rows show their
+   note type and render-time dates, the toolbar pairs the take button
+   with the search field, and every color comes from the token aliases —
+   dark mode needs no rules of its own here. */
 /* --------------------------------------------------------------------------
-   11. Snapshots — list with dividers, ghost icon buttons
+   11. Snapshots — the rebuilt menu
    -------------------------------------------------------------------------- */
 
-body #snapshotsModal .modal-header {
-  background: transparent;
+#snapshotsModal .modal-dialog {
+  max-width: 720px;
 }
 
-body #snapshotsModal .modal-footer {
-  background: transparent;
+/* Header — the pref recipe: eyebrow + title + subtitle, close at the edge */
+#snapshotsModal .modal-header {
+  padding: 20px 24px 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-body .snapshots-list-container {
+#snapshotsModal .custom-modal-title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* Body — scroll the list, keep the toolbar pinned */
+#snapshotsModal .modal-body {
+  padding: 6px 20px 18px;
+  max-height: calc(100vh - 190px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Footer — count at the left, actions at the right */
+#snapshotsModal .modal-footer {
+  padding: 14px 24px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* bootstrap 3's footer clearfix would sit inside the flex row */
+#snapshotsModal .modal-footer:before,
+#snapshotsModal .modal-footer:after {
+  content: '';
+  display: none;
+}
+
+/* Toolbar — take button + search side by side */
+.snapshots-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0 14px;
+}
+
+.snapshots-take-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 500;
+  padding: 7px 12px;
+  border-radius: var(--vz-radius);
+  flex: 0 0 auto;
+}
+
+/* Keycap pair riding inside the take button — same keycap recipe as the
+   shortcuts reference, scoped here because that one is modal-scoped. */
+.snapshots-kbd-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 4px;
+  opacity: 0.75;
+}
+
+.snapshots-kbd-hint kbd,
+.snapshots-kbd-inline kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--vz-fg);
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border-strong);
+  border-radius: 4px;
+  box-shadow: 0 1.5px 0 var(--vz-border-strong);
+  line-height: 1;
+}
+
+.snapshots-search-wrap {
+  margin-bottom: 0;
+  flex: 1 1 200px;
+  max-width: 340px;
+  margin-left: auto;
+}
+
+/* 34px to meet the take button; the shortcuts modal keeps its taller 38px */
+#snapshotsModal .shortcut-search-input {
+  height: 34px;
+}
+
+/* The list card — one bordered surface, rows divided by hairlines */
+.snapshots-list-container {
   border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius-md);
   background: var(--vz-bg-elevated);
+  min-height: 180px;
+  overflow: hidden;
 }
 
-body #searchSnapshots {
-  background: var(--vz-bg-elevated);
-  border: 1px solid var(--vz-border);
-  border-radius: var(--vz-radius);
-  color: var(--vz-fg);
-  height: 34px;
-  font-size: 13px;
-  box-shadow: none;
+.snapshots-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: none;
 }
 
-body #searchSnapshots:focus {
-  border-color: var(--vz-border-strong);
-  box-shadow: none;
-  outline: none;
-}
-
-body #searchSnapshots::placeholder {
-  color: var(--vz-fg-subtle);
-}
-
-body.dark #searchSnapshots {
-  background: var(--vz-bg-subtle);
-  border-color: var(--vz-border);
-  color: var(--vz-fg);
-}
-
-body.dark #searchSnapshots::placeholder {
-  color: var(--vz-fg-subtle);
-}
-
-body .snapshot-item {
+.snapshot-item {
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
   border-bottom: 1px solid var(--vz-border);
-  transition: background-color 100ms ease;
+  transition: background-color var(--vz-dur) ease;
 }
 
-body .snapshot-item:last-child {
+.snapshot-item:last-child {
   border-bottom: none;
 }
 
-body .snapshot-item:hover {
+.snapshot-item:hover {
   background: var(--vz-bg-subtle);
 }
 
-body .snapshot-title {
+.snapshot-info {
+  max-width: 100%;
+  flex: 1;
+  min-width: 0;
+}
+
+.snapshot-title {
+  margin: 0 0 3px 0;
   color: var(--vz-fg);
   font-weight: 600;
   font-size: 13.5px;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow-x: auto;
 }
 
-body .snapshot-preview {
+.snapshot-preview {
+  margin: 0;
   color: var(--vz-fg-muted);
   font-size: 12.5px;
+  line-height: 1.45;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow-x: auto;
 }
 
-body .snapshot-meta {
+.snapshot-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+/* Type badge — chips like the pref NEW badge; shown only for non-default
+   types (restoring those switches the note's type — worth the flag). */
+.snapshot-type-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.snapshot-date {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   color: var(--vz-fg-subtle);
   font-size: 11.5px;
 }
 
-body .snapshots-stats {
-  color: var(--vz-fg-muted);
-  font-size: 12.5px;
-}
-
-body #snapshotsCount {
-  color: var(--vz-fg);
-  font-weight: 600;
-}
-
-body .no-snapshots {
-  color: var(--vz-fg-muted);
-}
-
-body .no-snapshots svg path {
-  stroke: var(--vz-border-strong);
-}
-
-body .no-snapshots p {
-  color: var(--vz-fg-muted);
-  font-size: 13.5px;
+.snapshot-date svg {
+  flex: 0 0 auto;
 }
 
 /* Ghost icon buttons — mono; delete reads as danger */
-body .snapshot-btn {
+.snapshot-actions {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.snapshot-btn {
+  background: none;
+  border: none;
+  padding: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--vz-fg-muted);
   border-radius: var(--vz-radius);
-  transition: background-color 100ms ease, color 100ms ease;
+  transition: background-color var(--vz-dur) ease, color var(--vz-dur) ease;
 }
 
-body .snapshot-btn:hover {
+.snapshot-btn:hover {
   background: var(--vz-bg-chip);
   color: var(--vz-fg);
 }
 
-body .snapshot-btn.restore,
-body .snapshot-btn.copy {
-  color: var(--vz-fg-muted);
-}
-
-body .snapshot-btn.restore:hover {
-  background: var(--vz-bg-chip);
-  color: var(--vz-fg);
-}
-
-body .snapshot-btn.copy:hover {
-  background: var(--vz-bg-chip);
-  color: var(--vz-fg);
-}
-
-body .snapshot-btn.delete {
+.snapshot-btn.delete {
   color: var(--vz-danger);
 }
 
-body .snapshot-btn.delete:hover {
+.snapshot-btn.delete:hover {
   background: var(--vz-danger-soft);
   color: var(--vz-danger);
 }
 
-body.dark .snapshot-btn.delete {
-  color: var(--vz-danger);
+/* Empty state */
+.no-snapshots {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 44px 20px;
+  text-align: center;
+  color: var(--vz-fg-muted);
 }
 
+.no-snapshots svg {
+  color: var(--vz-border-strong);
+  margin-bottom: 10px;
+}
+
+.no-snapshots p {
+  margin: 0;
+  color: var(--vz-fg-muted);
+  font-size: 13.5px;
+}
+
+.no-snapshots-hint {
+  color: var(--vz-fg-subtle);
+  font-size: 12.5px;
+}
+
+.snapshots-kbd-inline kbd {
+  min-width: 18px;
+  height: 18px;
+  font-size: 9.5px;
+  vertical-align: baseline;
+}
+
+/* Footer stats + actions */
+.snapshots-stats {
+  color: var(--vz-fg-muted);
+  font-size: 12.5px;
+}
+
+#snapshotsCount {
+  color: var(--vz-fg);
+  font-weight: 600;
+}
+
+.delete-all-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#deleteAllSnapshotsBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Responsive — stack the row's actions under the copy on phones */
+@media (max-width: 767px) {
+  .snapshots-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .snapshots-search-wrap {
+    max-width: 100%;
+    margin-left: 0;
+  }
+
+  .snapshot-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .snapshot-actions {
+    align-self: flex-end;
+    margin-top: 8px;
+  }
+}

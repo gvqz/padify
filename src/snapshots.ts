@@ -1,27 +1,55 @@
-// Snapshots Manager
+/**
+ * Snapshots — safety copies of notes, one store, deduplicated per note.
+ *
+ * The rebuild (see tasks.txt, "Complex") fixed four things the old menu
+ * got wrong across note types:
+ *
+ *  • DUPLICATES — every Ctrl+U and every safety capture (tab close,
+ *    delete) appended a row even when nothing changed. A snapshot now
+ *    records the note it came from, and an identical (content + type)
+ *    capture against that note's LATEST snapshot is declined instead of
+ *    stored — no point keeping two copies of the same bytes.
+ *  • EMPTINESS — the old check read the plain-text projection, so an
+ *    image-only rich note (text projection empty, content an <img>)
+ *    could not be snapshotted at all. Emptiness is now judged per
+ *    content kind (see snapshotHasContent).
+ *  • SEARCH — matched the raw stored string, so searching "div" hit
+ *    every html snapshot's markup. Search now runs over what the row
+ *    shows (title, preview, type label) plus the raw source of the
+ *    text kinds, whose bytes ARE their text.
+ *  • DATES — were formatted once at capture and frozen; a locale change
+ *    left old rows in the old language. Rows format at render time from
+ *    the timestamp (every record, legacy included, has one). The stored
+ *    formattedDate field is still WRITTEN so an older build reading a
+ *    newer store keeps a date — it is never read here.
+ */
 import { $ } from './lib/q';
 import { openModal, closeModal } from './ui/behavior/modal';
 import Swal from 'sweetalert2';
-import {
-  getActiveNoteContent,
-  getEditorText,
-  getTabManager,
-  htmlToText,
-  setEditorHtml,
-} from './tabs';
+import { getActiveNoteContent, getEditorText, getTabManager, htmlToText } from './tabs';
 import { isHtmlContent, noteTypeLabel, type NoteType } from './editor/note-types';
 import { showToast } from './ui/toast';
 import { updateWordCountPill } from './word-count-pill';
 
 interface Snapshot {
   id?: number;
+  /** The source note's tab id — scopes duplicate detection. Absent on
+   *  records written before the rebuild; those never match a note. */
+  noteId?: string;
   title: string;
   content: string;
   /** The note's type at capture time; absent = html (the classic note). */
   noteType?: string;
   preview: string;
   timestamp: number;
+  /** Legacy: written for older builds that still read it. Never read. */
   formattedDate: string;
+}
+
+/** The shape compared for duplicate detection. */
+interface SnapshotState {
+  content: string;
+  noteType?: string;
 }
 
 /**
@@ -76,10 +104,124 @@ export function pruneSnapshots(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Pure helpers — the decision layer, exported so tests pin it without the
+// manager's DOM wiring.
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a note's content is worth a snapshot, judged by its kind.
+ * Html notes read their TEXT PROJECTION — the storage subset holds
+ * words and formatting only (images are rendered as chips, never stored
+ * as <img> — see editor/markdown/nodes.ts), so an html note without
+ * words is empty, full stop. Text/json/opaque kinds are their raw bytes.
+ */
+export function snapshotHasContent(content: string, noteType?: string): boolean {
+  if (isHtmlContent(noteType)) {
+    return htmlToText(content).trim() !== '';
+  }
+  return content.trim() !== '';
+}
+
+/** Two captures are the same snapshot when bytes and note type match. */
+export function isSameSnapshotState(a: SnapshotState, b: SnapshotState): boolean {
+  return a.content === b.content && a.noteType === b.noteType;
+}
+
+/**
+ * The newest snapshot that came from the given note. Input order does
+ * not matter — the newest timestamp with a matching id wins. Legacy
+ * records (no noteId) match only an unattributed query, which in
+ * practice never happens — every note has a tab id.
+ */
+export function findLatestForNote(
+  snapshots: Snapshot[],
+  noteId: string | undefined,
+): Snapshot | undefined {
+  let latest: Snapshot | undefined;
+  for (const snapshot of snapshots) {
+    if (snapshot.noteId !== noteId) {
+      continue;
+    }
+    if (!latest || snapshot.timestamp > latest.timestamp) {
+      latest = snapshot;
+    }
+  }
+  return latest;
+}
+
+/**
+ * What a row is searched by: the copy it shows, plus the FULL text of
+ * the note — for html kinds its text projection (searching raw markup
+ * would answer every query about tags, not about the note), for text
+ * kinds their raw source, whose bytes ARE their text. Computed once per
+ * load and cached on the row, so each keystroke filters strings.
+ */
+export function snapshotSearchText(snapshot: Snapshot): string {
+  const label = snapshot.noteType ? snapshotTypeBadgeLabel(snapshot.noteType) : '';
+  const text = isHtmlContent(snapshot.noteType) ? htmlToText(snapshot.content) : snapshot.content;
+  return `${snapshot.title}\n${snapshot.preview}\n${label}\n${text}`.toLowerCase();
+}
+
+/**
+ * The short chip a row shows — 'Markdown', 'Rich Text' — matching the
+ * shortcuts reference's badges. Unknown future types fall back to the
+ * registry's full label; the chip matters when restoring switches the
+ * note's type.
+ */
+export function snapshotTypeBadgeLabel(noteType: string): string {
+  if (noteType === 'markdown') {
+    return 'Markdown';
+  }
+  if (noteType === 'rich') {
+    return 'Rich Text';
+  }
+  return noteTypeLabel(noteType as NoteType);
+}
+
+/** Render-time date — the row always speaks the user's current locale. */
+export function formatSnapshotTimestamp(timestamp: number): string {
+  return new Date(timestamp).toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/** First meaningful line (html) or the type's label, capped at 50 chars. */
+export function deriveSnapshotTitle(content: string, noteType?: string): string {
+  const firstLine = isHtmlContent(noteType)
+    ? htmlToText(content)
+        .split('\n')
+        .find((line) => line.trim() !== '')
+    : noteType
+      ? noteTypeLabel(noteType as NoteType)
+      : undefined;
+  const title = firstLine || 'Untitled Snapshot';
+  return title.length > 50 ? `${title.substring(0, 47)}...` : title;
+}
+
+/** 100 characters of what the row should show of the note. */
+export function deriveSnapshotPreview(content: string, noteType?: string): string {
+  const preview = (
+    isHtmlContent(noteType) ? htmlToText(content).replace(/\s+\n/g, '\n') : content
+  ).trim();
+  if (preview.length > 100) {
+    return `${preview.substring(0, 97)}...`;
+  }
+  return preview || 'No content';
+}
+
 export class SnapshotsManager {
   dbName: string;
   storeName: string;
   db: IDBDatabase | null;
+
+  /** The last read, with each row's search text precomputed — keystrokes
+   *  filter this array instead of re-reading IndexedDB. */
+  private cache: { snapshot: Snapshot; searchText: string }[] = [];
 
   /**
    * Resolves once the IndexedDB open completes (or rejects if it errors).
@@ -120,7 +262,7 @@ export class SnapshotsManager {
     request.onsuccess = (event) => {
       this.db = (event.target as IDBRequest).result;
       this.updateSnapshotsCount();
-      this.loadSnapshots();
+      void this.loadSnapshots();
       this.resolveReady();
     };
 
@@ -144,12 +286,12 @@ export class SnapshotsManager {
     // Open snapshots modal
     document.getElementById('snapshotsButton')?.addEventListener('click', () => {
       openModal($('#snapshotsModal').get(0));
-      this.loadSnapshots();
+      void this.loadSnapshots();
     });
 
     // Create snapshot button
     document.getElementById('createSnapshotBtn')?.addEventListener('click', () => {
-      this.createSnapshot();
+      void this.createSnapshot();
     });
 
     // Delete all snapshots button
@@ -171,25 +313,21 @@ export class SnapshotsManager {
       });
     });
 
-    // Search snapshots
+    // Search snapshots — filters the cached rows; no store read per keystroke.
     document.getElementById('searchSnapshots')?.addEventListener('input', (e) => {
-      this.searchSnapshots((e.target as HTMLInputElement).value);
+      this.renderRows((e.target as HTMLInputElement).value);
     });
 
-    // Keyboard shortcut: Ctrl/Cmd + U to create snapshot
+    // Keyboard shortcut: the platform's primary modifier + U
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyU') {
         e.preventDefault();
-        this.createSnapshot();
+        void this.createSnapshot();
       }
     });
   }
 
-  // Create a new snapshot.
-  // Async because the IDB connection may not be open yet — callers that
-  // invoke this from a user action (Ctrl+Shift+Delete safety snapshot, the
-  // Create Snapshot button) get a Promise they can await; the wait is
-  // typically 0 ms after the first paint.
+  // Create a new snapshot — or decline politely when it adds nothing.
   async createSnapshot(title?: string): Promise<void> {
     if (!this.db) {
       // Wait for the IDB open to finish instead of silently dropping the
@@ -217,22 +355,33 @@ export class SnapshotsManager {
     }
     const noteContent = captured.content;
     const noteType = captured.noteType;
-    if (!getEditorText().trim()) {
+    if (!snapshotHasContent(noteContent, noteType)) {
       showToast('Note is empty. Nothing to save as snapshot.');
       return;
     }
 
+    // The same bytes as this note's newest snapshot add nothing — decline.
+    const noteId = getTabManager()?.getActive()?.id;
+    const existing = await this.readAllSnapshots();
+    const latest = findLatestForNote(existing, noteId);
+    if (latest && isSameSnapshotState(latest, { content: noteContent, noteType })) {
+      showToast('No changes since the last snapshot.');
+      return;
+    }
+
     // Generate a title from the first line of the note if not provided
-    const noteTitle = title || this.generateSnapshotTitle(noteContent, noteType);
+    const noteTitle = title || deriveSnapshotTitle(noteContent, noteType);
 
     const timestamp = Date.now();
     const snapshot: Snapshot = {
+      ...(noteId ? { noteId } : {}),
       title: noteTitle,
       content: noteContent,
       ...(noteType ? { noteType } : {}),
-      preview: this.generatePreview(noteContent, noteType),
+      preview: deriveSnapshotPreview(noteContent, noteType),
       timestamp: timestamp,
-      formattedDate: this.formatDate(timestamp),
+      // Written for older builds' sake; this module renders from timestamp.
+      formattedDate: formatSnapshotTimestamp(timestamp),
     };
 
     const transaction = this.db.transaction([this.storeName], 'readwrite');
@@ -244,14 +393,14 @@ export class SnapshotsManager {
     const request = store.add(snapshot);
 
     request.onsuccess = () => {
-      showToast('Snapshot created successfully!', 'success');
+      showToast('Snapshot created!', 'success');
 
       // A store that only ever grows is a slow leak: retire the oldest
       // snapshots beyond the cap so safety copies stay bounded.
       pruneSnapshots(database, this.storeName)
         .then((pruned) => {
           if (pruned > 0) {
-            this.loadSnapshots();
+            void this.loadSnapshots();
             this.updateSnapshotsCount();
           }
         })
@@ -259,60 +408,76 @@ export class SnapshotsManager {
           console.warn('[snapshots] prune failed — the cap will retry on the next snapshot', error);
         });
 
-      this.loadSnapshots();
+      void this.loadSnapshots();
       this.updateSnapshotsCount();
     };
 
     request.onerror = (event) => {
       console.error('Error creating snapshot', event);
-      this.showToast('Error creating snapshot');
+      showToast('Error creating snapshot');
     };
   }
 
-  // Load all snapshots
-  loadSnapshots(searchTerm: string = ''): void {
-    if (!this.db) return;
+  /** Every snapshot, newest first (the read order the UI wants). */
+  private readAllSnapshots(): Promise<Snapshot[]> {
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        resolve([]);
+        return;
+      }
+      const request = this.db
+        .transaction([this.storeName], 'readonly')
+        .objectStore(this.storeName)
+        .getAll();
+      request.onsuccess = () => {
+        const rows = (request.result as Snapshot[]).slice();
+        // getAll returns key order (insertion); the UI wants time order.
+        rows.sort((a, b) => b.timestamp - a.timestamp);
+        resolve(rows);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
 
-    const transaction = this.db.transaction([this.storeName], 'readonly');
-    const store = transaction.objectStore(this.storeName);
-    const request = store.index('timestamp').openCursor(null, 'prev');
+  // Load all snapshots into the list, filtered by the search term. One
+  // store read per load; keystrokes re-filter the cached rows.
+  async loadSnapshots(searchTerm: string = ''): Promise<void> {
+    const snapshots = await this.readAllSnapshots();
+    this.cache = snapshots.map((snapshot) => ({
+      snapshot,
+      searchText: snapshotSearchText(snapshot),
+    }));
+    this.renderRows(searchTerm);
+  }
+
+  // Render the cached rows through the current search term.
+  private renderRows(searchTerm: string = ''): void {
     const snapshotsList = document.getElementById('snapshotsList');
     const noSnapshots = document.getElementById('noSnapshots');
+    if (!snapshotsList || !noSnapshots) {
+      return;
+    }
 
-    if (!snapshotsList) return;
+    const term = searchTerm.trim().toLowerCase();
+    const rows: Snapshot[] = term
+      ? this.cache.filter((row) => row.searchText.includes(term)).map((row) => row.snapshot)
+      : this.cache.map((row) => row.snapshot);
 
     snapshotsList.innerHTML = '';
-    let hasSnapshots = false;
-    const searchLower = searchTerm.toLowerCase();
+    for (const snapshot of rows) {
+      snapshotsList.appendChild(this.createSnapshotElement(snapshot));
+    }
 
-    request.onsuccess = (event) => {
-      const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
-
-      if (cursor) {
-        const snapshot = cursor.value as Snapshot;
-
-        // Filter by search term if provided
-        if (
-          !searchTerm ||
-          snapshot.title.toLowerCase().includes(searchLower) ||
-          snapshot.content.toLowerCase().includes(searchLower)
-        ) {
-          hasSnapshots = true;
-          const snapshotElement = this.createSnapshotElement(snapshot);
-          snapshotsList.appendChild(snapshotElement);
-        }
-
-        cursor.continue();
-      } else {
-        // No more snapshots
-        snapshotsList.style.display = hasSnapshots ? 'block' : 'none';
-        noSnapshots!.style.display = hasSnapshots ? 'none' : 'flex';
-      }
-    };
-
-    request.onerror = (event) => {
-      console.error('Error loading snapshots', event);
-    };
+    // The empty state has two faces: nothing stored yet, or nothing that
+    // matched the search. They share the icon; the copy must not lie.
+    const hasAny = this.cache.length > 0;
+    const hasRows = rows.length > 0;
+    snapshotsList.style.display = hasRows ? 'block' : 'none';
+    noSnapshots.style.display = hasRows ? 'none' : 'flex';
+    const showMiss = hasAny && !hasRows;
+    document.getElementById('noSnapshotsEmpty')?.toggleAttribute('hidden', showMiss);
+    document.getElementById('noSnapshotsHint')?.toggleAttribute('hidden', showMiss);
+    document.getElementById('noSnapshotsMiss')?.toggleAttribute('hidden', !showMiss);
   }
 
   // Create a snapshot element for the UI
@@ -320,16 +485,25 @@ export class SnapshotsManager {
     const li = document.createElement('li');
     li.className = 'snapshot-item';
 
+    // The type badge — shown for non-default types only, matching the tab
+    // rail's convention: a badge matters when restoring would SWITCH the
+    // note's type, which plain notes never do.
+    const badge =
+      snapshot.noteType && snapshot.noteType !== 'standard'
+        ? `<span class="snapshot-type-badge">${this.escapeHtml(snapshotTypeBadgeLabel(snapshot.noteType))}</span>`
+        : '';
+
     li.innerHTML = `
             <div class="snapshot-info">
                 <h4 class="snapshot-title" title="${this.escapeHtml(snapshot.title)}">${this.escapeHtml(snapshot.title)}</h4>
                 <p class="snapshot-preview" title="${this.escapeHtml(snapshot.preview)}">${this.escapeHtml(snapshot.preview)}</p>
                 <div class="snapshot-meta">
+                ${badge}
                 <span class="snapshot-date">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                     <path d="M8 7V3M16 7V3M7 11H17M5 21H19C20.1046 21 21 20.1046 21 19V7C21 5.89543 20.1046 5 19 5H5C3.89543 5 3 5.89543 3 7V19C3 20.1046 3.89543 21 5 21Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                    ${snapshot.formattedDate}
+                    ${this.escapeHtml(formatSnapshotTimestamp(snapshot.timestamp))}
                 </span>
                 </div>
             </div>
@@ -391,15 +565,15 @@ export class SnapshotsManager {
           return;
         }
 
-        // Restore the content. Html snapshots ride the editor path (old
-        // snapshots hold plain text — the editor renders it faithfully,
-        // newlines and all); every other kind is written to the model
-        // through the manager, because no editor surface exists for it.
-        if (snapshot.noteType && !isHtmlContent(snapshot.noteType as NoteType)) {
-          getTabManager()?.applySnapshotToActive(snapshot.content, snapshot.noteType as NoteType);
-        } else {
-          setEditorHtml(snapshot.content);
-        }
+        // Restore the content through the ONE restore path: it moves the
+        // note's type with the content and re-announces the active note so
+        // the chrome (toolbar, editor port, tab badge) follows the
+        // restored kind. Old snapshots hold plain text on the html path —
+        // the editor renders it faithfully, newlines and all.
+        getTabManager()?.applySnapshotToActive(
+          snapshot.content,
+          snapshot.noteType as NoteType | undefined,
+        );
         updateWordCountPill(getEditorText());
 
         showToast('Snapshot restored!', 'success');
@@ -413,7 +587,7 @@ export class SnapshotsManager {
 
     request.onerror = (event) => {
       console.error('Error restoring snapshot', event);
-      this.showToast('Error restoring snapshot');
+      showToast('Error restoring snapshot');
     };
   }
 
@@ -451,7 +625,7 @@ export class SnapshotsManager {
 
     request.onerror = (event) => {
       console.error('Error copying snapshot', event);
-      this.showToast('Error copying snapshot');
+      showToast('Error copying snapshot');
     };
   }
 
@@ -486,13 +660,13 @@ export class SnapshotsManager {
         const request = store.delete(snapshotId!);
 
         request.onsuccess = () => {
-          this.loadSnapshots();
+          void this.loadSnapshots();
           this.updateSnapshotsCount();
         };
 
         request.onerror = (event) => {
           console.error('Error deleting snapshot', event);
-          this.showToast('Error deleting snapshot');
+          showToast('Error deleting snapshot');
         };
       }
     });
@@ -507,19 +681,19 @@ export class SnapshotsManager {
     const request = store.clear();
 
     request.onsuccess = () => {
-      this.loadSnapshots();
+      void this.loadSnapshots();
       this.updateSnapshotsCount();
     };
 
     request.onerror = (event) => {
       console.error('Error deleting all snapshots', event);
-      this.showToast('Error deleting snapshots');
+      showToast('Error deleting snapshots');
     };
   }
 
   // Search snapshots by title or content
   searchSnapshots(searchTerm: string): void {
-    this.loadSnapshots(searchTerm);
+    this.renderRows(searchTerm);
   }
 
   // Update the snapshots count in the UI
@@ -544,61 +718,6 @@ export class SnapshotsManager {
         deleteAllBtn.disabled = countRequest.result === 0;
       }
     };
-  }
-
-  // Generate a title from note content
-  generateSnapshotTitle(content: string, noteType?: string): string {
-    // Html content derives the title from its plain text. Raw formats
-    // title from their type — never from a guessed reading of the content
-    // (the first line of an unknown format could be anything).
-    const firstLine = isHtmlContent(noteType)
-      ? htmlToText(content)
-          .split('\n')
-          .find((line) => line.trim() !== '')
-      : noteType
-        ? noteTypeLabel(noteType as NoteType)
-        : undefined;
-    let title = firstLine || 'Untitled Snapshot';
-
-    // Limit title length
-    if (title.length > 50) {
-      title = title.substring(0, 47) + '...';
-    }
-
-    return title;
-  }
-
-  // Generate a preview of the note content
-  generatePreview(content: string, noteType?: string): string {
-    // Html content previews as its rendered text; raw formats preview as
-    // their raw bytes — an honest window into what the snapshot holds.
-    let preview = (
-      isHtmlContent(noteType) ? htmlToText(content).replace(/\s+\n/g, '\n') : content
-    ).trim();
-
-    // Get first 100 characters
-    if (preview.length > 100) {
-      preview = preview.substring(0, 97) + '...';
-    }
-
-    return preview || 'No content';
-  }
-
-  // Format timestamp to readable date
-  formatDate(timestamp: number): string {
-    const date = new Date(timestamp);
-    return date.toLocaleString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }
-
-  // Show toast message
-  showToast(message: string): void {
-    showToast(message);
   }
 
   // Helper to escape HTML
