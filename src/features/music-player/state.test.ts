@@ -6,7 +6,7 @@ import {
   loadPlayerState,
   savePlayerState,
 } from './state';
-import type { SpotifyTrack } from './spotify/api';
+import type { SpotifyTrack } from './types';
 
 function track(id: string, name = id): SpotifyTrack {
   return {

@@ -90,7 +90,7 @@ const steps: HelpStep[] = [
     accent: 'teal',
     icon: ICONS.music,
     title: 'Set the atmosphere',
-    text: 'The music player searches and plays millions of songs free — no account, no ads — or connects to your Spotify for your playlists and Liked Songs, while a 12-sound ambience mixer blends rain, fireside, crickets and more, and typewriter sounds make every keypress feel wonderful.',
+    text: 'The music player searches and plays millions of songs free — no account, no ads — while a 12-sound ambience mixer blends rain, fireside, crickets and more, and typewriter sounds make every keypress feel wonderful.',
     hints: [],
   },
   {

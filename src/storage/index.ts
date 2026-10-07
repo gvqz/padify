@@ -132,11 +132,6 @@ const LEGACY_KV_KEYS: readonly string[] = [
   // cloud
   'padifyCloudConfig',
   'padifySession',
-  // spotify
-  'padify-spotify-auth',
-  'padify-spotify-pkce',
-  'padify-spotify-client-id',
-  'padify-spotify-return',
 ];
 
 /**

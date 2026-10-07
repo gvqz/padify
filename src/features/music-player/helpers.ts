@@ -4,7 +4,7 @@
  * and the markup builders share.
  */
 
-import type { SpotifyTrack } from './spotify/api';
+import type { SpotifyTrack } from './types';
 import { escapeHtml } from '../../lib/escape';
 
 // The one implementation lives in lib/escape.ts; re-exported here so the

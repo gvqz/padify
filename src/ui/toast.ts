@@ -45,7 +45,7 @@ export function showToast(message: string, tone: ToastTone = 'neutral'): void {
   void toast.offsetWidth; // reflow — the enter transition restarts below
   toast.dataset.tone = tone;
   // Use textContent — never innerHTML — to avoid XSS from externally-sourced
-  // error strings (Spotify API responses, server error bodies, etc.).
+  // error strings (music service responses, server error bodies, etc.).
   toast.textContent = message;
   toast.className = 'show';
 

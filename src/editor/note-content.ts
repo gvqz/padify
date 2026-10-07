@@ -74,7 +74,7 @@ export const WELCOME_HTML = [
   '- Full-screen mode for a distraction-free writing experience.',
   '- Floating window (in supported browsers) to effectively take notes across other apps.',
   '- Download notes as plain text, PDF, HTML, and DOCX file.',
-  '- Play music while you write — free song search with no account, or connect your Spotify — and mix 12 ambience sounds to help you focus.',
+  '- Play music while you write — free song search with no account — and mix 12 ambience sounds to help you focus.',
   '',
   "CAUTION: Since the app stores your notes on your own device, it's",
   'recommended that you take a backup of your notes more often using the',

@@ -26,16 +26,14 @@
  *
  * Every directive below is derived from what the app actually does, not
  * from a template:
- *  • script-src 'self' — the Vite bundle; https://sdk.scdn.co — the Spotify
- *    Web Playback SDK (src/features/music-player/spotify/sdk.ts).
+ *  • script-src 'self' — the Vite bundle.
  *  • style-src 'unsafe-inline' — features style the DOM through inline
  *    style attributes (color pickers, typing effects, art positioning);
  *    CSS cannot execute script, so this stays open.
  *  • img-src / media-src 'https:' — album art and resolved stream URLs are
- *    Spotify/CDN hosts chosen at runtime, not at build time.
+ *    CDN hosts chosen at runtime, not at build time.
  *  • connect-src — the client fetches its own API (same-origin /api by
- *    default, or the VITE_API_BASE origin, see src/cloud/config.ts) and
- *    the Spotify Web API + SDK websockets.
+ *    default, or the VITE_API_BASE origin, see src/cloud/config.ts).
  *
  * Self-hosted deployments behind a reverse proxy should mirror these
  * headers from dist/_headers; scripts/ and dist/ carry the source of truth.
@@ -86,12 +84,7 @@ function connectSrcFor(apiBase) {
       // normalizeApiBase already validated the value; unreachable.
     }
   }
-  return [
-    "'self'",
-    ...(cspEntry ? [cspEntry] : []),
-    'https://api.spotify.com',
-    'wss://*.spotify.com',
-  ].join(' ');
+  return ["'self'", ...(cspEntry ? [cspEntry] : [])].join(' ');
 }
 
 const INLINE_SCRIPT_PATTERN = /<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/gi;
@@ -124,7 +117,7 @@ export function generateHeadersFile(distDir, options = {}) {
     scriptHashes.push(`'sha256-${createHash('sha256').update(match[1], 'utf8').digest('base64')}'`);
   }
 
-  const scriptSrc = ["'self'", 'https://sdk.scdn.co', ...scriptHashes].join(' ');
+  const scriptSrc = ["'self'", ...scriptHashes].join(' ');
   const csp = [
     "default-src 'self'",
     `script-src ${scriptSrc}`,

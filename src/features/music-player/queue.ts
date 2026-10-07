@@ -156,8 +156,6 @@ export function endedAction(
 
 /**
  * The queue tab's badge count: rows after the current one (never negative).
- * The SDK branch of the old count lives in the controller — it reads
- * Spotify's own queue window.
  */
 export function freeQueueRemaining(queueLength: number, currentIndex: number): number {
   return Math.max(0, queueLength - Math.max(0, currentIndex) - 1);

@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { albumCard, artistCard, playlistCard, queueRow, rowMenuItems, trackRow } from './rows';
-import type {
-  SpotifyAlbum,
-  SpotifyPlaylist,
-  SpotifySimpleArtist,
-  SpotifyTrack,
-} from './spotify/api';
+import { queueRow, rowMenuItems, trackRow } from './rows';
+import type { SpotifyTrack } from './types';
 
 const images = (urls: string[]) => urls.map((url) => ({ url, height: 640, width: 640 }));
 
@@ -87,109 +82,17 @@ describe('queueRow', () => {
   });
 });
 
-describe('cards', () => {
-  const playlist: SpotifyPlaylist = {
-    id: 'p1',
-    uri: 'spotify:playlist:p1',
-    name: 'Late <Night>',
-    images: images(['cover']),
-    tracks: { total: 42 },
-  };
-
-  it('playlist cards carry id, uri, track count, and escaped names', () => {
-    const html = playlistCard(playlist);
-    expect(html).toContain('data-playlist-id="p1"');
-    expect(html).toContain('data-playlist-uri="spotify:playlist:p1"');
-    expect(html).toContain('42 songs');
-    expect(html).toContain('Late &lt;Night&gt;');
-    expect(html).not.toContain('Late <Night>');
-  });
-
-  const album: SpotifyAlbum = {
-    id: 'a1',
-    uri: 'spotify:album:a1',
-    name: 'Album',
-    artists: [
-      { name: 'A', uri: 'u' },
-      { name: 'B', uri: 'u' },
-    ],
-    images: [],
-  };
-
-  it('album cards list the artists and fall back to the icon without art', () => {
-    const html = albumCard(album);
-    expect(html).toContain('data-album-id="a1"');
-    expect(html).toContain('A, B');
-    expect(html).not.toContain('<img');
-  });
-
-  const artist: SpotifySimpleArtist = {
-    id: 'ar1',
-    uri: 'spotify:artist:ar1',
-    name: 'DJ "Quote"',
-    images: images(['face']),
-  };
-
-  it('artist cards escape the name in the attribute and the label', () => {
-    const html = artistCard(artist);
-    expect(html).toContain('data-artist-id="ar1"');
-    expect(html).toContain('DJ &quot;Quote&quot;');
-    expect(html).toContain('src="face"');
-    expect(html).toContain('>Artist</span>');
-  });
-});
-
 describe('rowMenuItems (the row action menu)', () => {
-  it('anonymous with no playlist yet offers queue + start-your-playlist', () => {
-    const markup = rowMenuItems({
-      connected: false,
-      localPlaylistName: null,
-      spotifyPlaylists: [],
-    });
+  it('with no playlist yet offers queue + start-your-playlist', () => {
+    const markup = rowMenuItems({ localPlaylistName: null });
     expect(markup).toContain('data-action="queue"');
     expect(markup).toContain('Start your playlist');
     expect(markup).not.toContain('mp-row-menu-divider');
-    expect(markup).not.toContain('data-action="spotify-playlist"');
   });
 
-  it('anonymous with a playlist names it, escaped', () => {
-    const markup = rowMenuItems({
-      connected: false,
-      localPlaylistName: 'My <Mix> & Things',
-      spotifyPlaylists: [],
-    });
+  it('with a playlist names it, escaped', () => {
+    const markup = rowMenuItems({ localPlaylistName: 'My <Mix> & Things' });
     expect(markup).toContain('Add to My &lt;Mix&gt; &amp; Things');
     expect(markup).not.toContain('<Mix>');
-  });
-
-  it('connected users get their playlists behind a divider, capped', () => {
-    const playlists: SpotifyPlaylist[] = Array.from({ length: 12 }, (_, i) => ({
-      id: `pl-${i}`,
-      uri: `spotify:playlist:pl-${i}`,
-      name: `Playlist ${i}`,
-      images: [],
-      tracks: { total: 1 },
-    }));
-    const markup = rowMenuItems({
-      connected: true,
-      localPlaylistName: null,
-      spotifyPlaylists: playlists,
-      maxPlaylists: 8,
-    });
-    expect(markup).toContain('mp-row-menu-divider');
-    expect(markup).toContain('data-playlist-id="pl-0"');
-    expect(markup).toContain('data-playlist-id="pl-7"');
-    expect(markup).not.toContain('data-playlist-id="pl-8"');
-    expect(markup).not.toContain('local-playlist');
-  });
-
-  it('connected with no playlists gets only the queue action', () => {
-    const markup = rowMenuItems({
-      connected: true,
-      localPlaylistName: null,
-      spotifyPlaylists: [],
-    });
-    expect(markup).toContain('data-action="queue"');
-    expect(markup).not.toContain('mp-row-menu-divider');
   });
 });

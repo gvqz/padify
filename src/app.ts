@@ -772,8 +772,8 @@ export async function initApp(): Promise<void> {
 /**
  * Music + ambience lazy seam.
  *
- * The player engines (features/music-player — player, Spotify SDK,
- * free-song resolver — plus the white-noise mixer) used to ride the main
+ * The player engines (features/music-player — player and the free-song
+ * resolver — plus the white-noise mixer) used to ride the main
  * bundle so every visitor downloaded ~5k lines most never play. They now
  * live in a lazy chunk: the modal markup mounts at boot (markup.ts is
  * pure markup), and the engines load on the first attempt to open the

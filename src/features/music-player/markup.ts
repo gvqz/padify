@@ -95,9 +95,6 @@ const pauseIconSvg = (size: number): string =>
 export const eqMarkup = (cls: string): string =>
   `<span class="mp-eq ${cls}" aria-hidden="true"><span></span><span></span><span></span><span></span></span>`;
 
-const spotifyLogo = (size: number): string =>
-  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.52 17.28c-.24.36-.66.48-1.02.24-2.82-1.74-6.36-2.1-10.56-1.14-.42.12-.78-.18-.9-.54-.12-.42.18-.78.54-.9 4.56-1.02 8.52-.6 11.64 1.32.42.18.48.66.3 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.24-1.98-8.16-2.58-11.94-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.8 15 10.44 18.72 12.72c.361.181.54.78.24 1.26zm.12-3.36C15.24 8.4 8.82 8.16 5.1 9.34c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381C8.76 5.86 15.9 6.14 20.64 8.82c.54.3.72 1.021.42 1.56-.299.421-1.02.599-1.559.3z"/></svg>`;
-
 // ---------------------------------------------------------------------------
 // Ambient sound definitions (12 sounds — keys/names/defaults must match
 // src/white-noise-player.ts exactly).
@@ -233,10 +230,6 @@ const musicPlayerModalHtml = `
                     ${ICONS.note}
                     <span>Music</span>
                 </h4>
-                <button type="button" class="mp-status-chip" id="mpAccountChip" title="Spotify" aria-label="Spotify connection status">
-                    ${spotifyLogo(14)}
-                    <span id="mpAccountChipText">Connect Spotify</span>
-                </button>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
             </div>
 
@@ -250,7 +243,7 @@ const musicPlayerModalHtml = `
                         </div>
                         <div class="mp-pb-meta">
                             <div class="mp-pb-title" id="mpPbTitle">Nothing playing</div>
-                            <div class="mp-pb-sub" id="mpPbSub">Search a song or connect Spotify</div>
+                            <div class="mp-pb-sub" id="mpPbSub">Search a song to play</div>
                         </div>
                         <span class="mp-pb-source" id="mpPbSource" hidden></span>
                     </div>
@@ -276,14 +269,6 @@ const musicPlayerModalHtml = `
                                 <span id="mpVolIconMute" style="display:none;">${ICONS.volMute}</span>
                             </button>
                             <input type="range" class="mp-range mp-volume-slider" id="mpVolume" min="0" max="100" step="1" value="70" aria-label="Volume">
-                        </div>
-                        <div class="mp-device" id="mpDeviceWrap" hidden>
-                            <button type="button" class="mp-device-pill" id="mpDevicePill" aria-haspopup="true" aria-expanded="false">
-                                ${ICONS.device}
-                                <span class="mp-device-name" id="mpDeviceName">This browser</span>
-                                ${ICONS.chevron}
-                            </button>
-                            <div class="mp-device-menu" id="mpDeviceMenu" hidden></div>
                         </div>
                     </div>
                 </div>
@@ -314,10 +299,6 @@ const musicPlayerModalHtml = `
                                 <h3>${ICONS.spark} Free music, no account</h3>
                                 <p>Search millions of songs and play them free — no login, no ads. Favorites, your queue and one local playlist live on this device.</p>
                             </div>
-                            <button type="button" class="mp-btn mp-btn-primary mp-hero-connect" id="mpHeroConnect">
-                                ${spotifyLogo(16)}
-                                <span>Connect Spotify</span>
-                            </button>
                         </div>
                         <section class="sp-section" id="mpFavoritesSection">
                             <header class="sp-section-head">
@@ -343,103 +324,6 @@ const musicPlayerModalHtml = `
                                 <p>Use the + button on any song to start your playlist. You get one — it stays on this device.</p>
                             </div>
                         </section>
-                    </div>
-
-                    <div class="sp-connect" id="spConnect" hidden>
-                        <div class="sp-connect-card">
-                            <button type="button" class="sp-connect-back" id="spConnectBack">${ICONS.back}<span>Continue without an account</span></button>
-                            <div class="sp-connect-logo">${spotifyLogo(44)}</div>
-                            <h3 class="sp-connect-title">Connect Spotify</h3>
-                            <p class="sp-connect-copy">Your Liked Songs, playlists and search across 100M+ tracks — plus likes, queues and playlist adds straight to your Spotify account. Premium streams natively in the app.</p>
-                            <button type="button" class="mp-btn mp-btn-primary sp-connect-btn" id="spConnectBtn">
-                                ${spotifyLogo(18)}
-                                <span>Connect Spotify</span>
-                            </button>
-                            <div class="sp-setup">
-                                <p class="sp-setup-title">${ICONS.spark} One-time setup — your own Spotify app</p>
-                                <ol class="sp-setup-steps">
-                                    <li>Open <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">developer.spotify.com/dashboard</a> and choose <strong>Create app</strong>.</li>
-                                    <li>Add <code class="sp-redirect-uri" id="spRedirectUri">https://padify.netlify.app/</code><button type="button" class="sp-copy-btn" id="spCopyRedirect" title="Copy redirect URI">${ICONS.copy}</button> as the app's <strong>Redirect URI</strong>.</li>
-                                    <li>Copy the app's <strong>Client ID</strong> and save it below.</li>
-                                </ol>
-                                <div class="sp-setup-input-row">
-                                    <input type="text" id="spClientIdInput" placeholder="Paste your Spotify Client ID" autocomplete="off" spellcheck="false" aria-label="Spotify Client ID">
-                                    <button type="button" class="mp-btn" id="spClientIdSave">Save</button>
-                                </div>
-                            </div>
-                            <p class="sp-premium-note">${ICONS.info}<span>Spotify <strong>Premium unlocks native streaming</strong>, device handoff and the full player. Free accounts still play everything through Padify's free streams.</span></p>
-                            <p class="sp-error" id="spConnectError" hidden></p>
-                        </div>
-                    </div>
-
-                    <div class="sp-app" id="spApp" hidden>
-                        <div class="sp-profile">
-                            <img class="sp-avatar" id="spAvatar" alt="" />
-                            <div class="sp-profile-meta">
-                                <span class="sp-name" id="spName"></span>
-                                <span class="sp-product" id="spProduct"></span>
-                            </div>
-                            <div class="sp-profile-actions">
-                                <button type="button" class="sp-icon-btn" id="spRefresh" title="Refresh library" aria-label="Refresh library">${ICONS.refresh}</button>
-                                <button type="button" class="sp-icon-btn" id="spDisconnect" title="Disconnect Spotify" aria-label="Disconnect Spotify">${ICONS.power}</button>
-                            </div>
-                        </div>
-                        <div class="sp-skeleton" id="spSkeleton" hidden>
-                            <div class="sp-skeleton-row"></div><div class="sp-skeleton-row"></div><div class="sp-skeleton-row"></div><div class="sp-skeleton-row"></div>
-                        </div>
-                        <div class="sp-library" id="spLibrary" hidden>
-                            <section class="sp-section" id="spLikedSection">
-                                <header class="sp-section-head">
-                                    <h4>${ICONS.heart} Liked Songs</h4>
-                                    <button type="button" class="sp-more-btn" id="spLikedMore" hidden>Load more</button>
-                                </header>
-                                <div class="sp-tracks" id="spLikedList" role="list" aria-label="Liked songs"></div>
-                                <div class="sp-empty" id="spLikedEmpty" hidden><p>No liked songs yet — heart a track in Spotify and it shows up here.</p></div>
-                            </section>
-                            <section class="sp-section" id="spTopSection">
-                                <header class="sp-section-head"><h4>${ICONS.spark} Top Tracks</h4></header>
-                                <div class="sp-tracks" id="spTopList" role="list" aria-label="Top tracks"></div>
-                            </section>
-                            <section class="sp-section" id="spPlaylistsSection">
-                                <header class="sp-section-head"><h4>${ICONS.playlist} Your Playlists</h4></header>
-                                <div class="sp-card-row" id="spPlaylistsRow"></div>
-                                <div class="sp-empty" id="spPlaylistsEmpty" hidden><p>No playlists yet.</p></div>
-                            </section>
-                            <p class="sp-premium-note sp-free-note" id="spFreeNote" hidden>${ICONS.info}<span>Free account — everything still plays through Padify's ad-free streams. Premium adds native Spotify playback and device handoff.</span></p>
-                        </div>
-                        <div class="sp-results" id="spResults" hidden>
-                            <button type="button" class="sp-back" id="spResultsBack">${ICONS.back}<span>Back to library</span></button>
-                            <section class="sp-section" id="spSearchTracksSection" hidden>
-                                <header class="sp-section-head"><h4>Tracks</h4></header>
-                                <div class="sp-tracks" id="spSearchTracks" role="list" aria-label="Track results"></div>
-                            </section>
-                            <section class="sp-section" id="spSearchPlaylistsSection" hidden>
-                                <header class="sp-section-head"><h4>Playlists</h4></header>
-                                <div class="sp-card-row" id="spSearchPlaylists"></div>
-                            </section>
-                            <section class="sp-section" id="spSearchAlbumsSection" hidden>
-                                <header class="sp-section-head"><h4>Albums</h4></header>
-                                <div class="sp-card-row" id="spSearchAlbums"></div>
-                            </section>
-                            <section class="sp-section" id="spSearchArtistsSection" hidden>
-                                <header class="sp-section-head"><h4>Artists</h4></header>
-                                <div class="sp-card-row sp-card-row-artists" id="spSearchArtists"></div>
-                            </section>
-                            <div class="sp-empty" id="spSearchEmpty" hidden><p>Nothing found — try a different search.</p></div>
-                        </div>
-                        <div class="sp-detail" id="spDetail" hidden>
-                            <button type="button" class="sp-back" id="spDetailBack">${ICONS.back}<span id="spDetailBackLabel">Back</span></button>
-                            <div class="sp-detail-header">
-                                <img class="sp-detail-art" id="spDetailArt" alt="" />
-                                <div class="sp-detail-copy">
-                                    <span class="sp-detail-type" id="spDetailType"></span>
-                                    <h3 class="sp-detail-name" id="spDetailName"></h3>
-                                    <p class="sp-detail-meta" id="spDetailMeta"></p>
-                                    <button type="button" class="mp-btn mp-btn-primary sp-detail-play" id="spDetailPlay">${ICONS.play}<span>Play</span></button>
-                                </div>
-                            </div>
-                            <div class="sp-tracks" id="spDetailTracks" role="list" aria-label="Tracks"></div>
-                        </div>
                     </div>
 
                     <div class="mp-results" id="mpResults" hidden>
