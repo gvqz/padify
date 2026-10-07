@@ -54,6 +54,48 @@ interface TursoArg {
   value?: string;
 }
 
+/**
+ * A cell as the Hrana-over-HTTP pipeline actually delivers it: a typed
+ * object, with numbers serialised as strings ("42"), never the bare JSON
+ * scalar a naive reading of the API examples suggests. Plain scalars are
+ * still accepted defensively so local mocks keep working.
+ */
+interface HranaCell {
+  type: 'null' | 'integer' | 'float' | 'text' | 'blob';
+  value?: string;
+  base64?: string;
+}
+
+/** Hrana cell → plain SqlValue (integer/float become real numbers). */
+function fromTursoCell(cell: unknown): SqlValue {
+  if (cell === null || cell === undefined) {
+    return null;
+  }
+  if (typeof cell === 'object' && 'type' in (cell as Record<string, unknown>)) {
+    const typed = cell as HranaCell;
+    if (typed.type === 'null') {
+      return null;
+    }
+    if (typed.type === 'text') {
+      return typeof typed.value === 'string' ? typed.value : String(typed.value ?? '');
+    }
+    if (typed.type === 'integer' || typed.type === 'float') {
+      const parsed = Number(typed.value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    if (typed.type === 'blob') {
+      // No table stores BLOBs (attachments are base64 TEXT — see schema);
+      // keep the bytes lossless in text form rather than lying with null.
+      return typed.base64 ?? null;
+    }
+    return null;
+  }
+  if (typeof cell === 'string' || typeof cell === 'number') {
+    return cell;
+  }
+  return null;
+}
+
 function toTursoArg(value: SqlValue): TursoArg {
   if (value === null) {
     return { type: 'null' };
@@ -138,7 +180,7 @@ class TursoHttpDb implements Db {
       tables.push(query.rows.map(row => {
         const rowObject: Row = {};
         names.forEach((name, index) => {
-          rowObject[name] = row[index] ?? null;
+          rowObject[name] = fromTursoCell(row[index]);
         });
         return rowObject;
       }));
