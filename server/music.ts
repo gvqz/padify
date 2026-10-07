@@ -2,27 +2,38 @@
  * Padify API — free music endpoints (no account needed).
  *
  * The music player's server side: clients get full-song playback with no
- * Spotify login at all. Two pieces:
+ * Spotify login at all. Three pieces:
  *
- *   1. Metadata search — a Client-Credentials proxy for Spotify's public
- *      /v1/search (tracks only). The client never sees app credentials.
+ *   1. Metadata search — Spotify's public /v1/search (tracks only) through
+ *      a Client-Credentials proxy when the app credentials below are set.
+ *      The client never sees them. When they are NOT set, search falls back
+ *      to YouTube itself: yt-dlp's flat playlist search, mapped into the
+ *      same catalog shape, so the player works with zero configuration.
  *
  *   2. Stream resolution — given a track's title/artist/duration, run
  *      yt-dlp against YouTube search, pick the candidate whose duration is
- *      closest to the Spotify duration, and return the direct `bestaudio`
- *      stream URL. Only the ~10 KB text URL crosses the wire — the audio
- *      flows client → googlevideo.com, never through this server, so the
- *      10 GB/month AlwaysData bandwidth budget is essentially untouched.
+ *      closest to the catalog duration, and return the direct `bestaudio`
+ *      stream URL. Tracks that arrived from the fallback search carry an
+ *      11-character YouTube video id, and resolve directly by that id —
+ *      no second search needed (Spotify ids are 22 chars, so the two
+ *      never collide).
  *
- * Resolutions are cached (SQLite + memory) keyed by Spotify track id with a
+ *   3. The same yt-dlp guards apply to both paths: only the ~10 KB text
+ *      URL crosses the wire — the audio flows client → googlevideo.com,
+ *      never through this server, so the 10 GB/month AlwaysData bandwidth
+ *      budget is essentially untouched.
+ *
+ * Resolutions are cached (SQLite + memory) keyed by track id with a
  * TTL well inside googlevideo URL lifetimes, so repeat plays are one cheap
  * SELECT. In-flight requests for the same track dedupe into one yt-dlp run,
  * and at most a couple of yt-dlp processes run at once to protect the
- * 128 MB RAM budget of small always-on hosts.
+ * 128 MB RAM budget of small always-on hosts (a bestaudio resolution
+ * peaks around ~55 MB; a flat search is ~2 MB).
  *
  * Environment:
- *   SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET  — app credentials for the
- *       catalog search (a Spotify app you own; no user login involved).
+ *   SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET  — optional. App credentials
+ *       for the catalog search (a Spotify app you own; no user login
+ *       involved). When set they take precedence over the YouTube fallback.
  *   SPOTIFY_MARKET  — optional market code for search (e.g. "US").
  *   YTDLP_PATH      — override the yt-dlp binary location.
  *   MUSIC_RESOLVE_CONCURRENCY — simultaneous yt-dlp processes (default 2).
@@ -36,8 +47,11 @@ const RESOLVE_TTL_MS = 3 * 60 * 60 * 1000;
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const SPOTIFY_SEARCH_URL = 'https://api.spotify.com/v1/search';
 const YTDLP_TIMEOUT_MS = 30_000;
+const YTDLP_SEARCH_TIMEOUT_MS = 20_000;
 const YTDLP_CANDIDATES = 3;
 const MEMORY_CACHE_MAX = 200;
+/** YouTube video ids are exactly 11 chars of [A-Za-z0-9_-]; Spotify's are 22. */
+const YT_ID = /^[A-Za-z0-9_-]{11}$/;
 
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID ?? '';
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET ?? '';
@@ -54,8 +68,13 @@ const RESOLVE_CONCURRENCY = Math.max(
 
 let appToken: { value: string; expiresAt: number } | null = null;
 
-export function searchConfigured(): boolean {
+/** True when the Spotify catalog backend has its app credentials. */
+function spotifyCatalogConfigured(): boolean {
   return Boolean(SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET);
+}
+
+export function searchConfigured(): boolean {
+  return spotifyCatalogConfigured() || resolveConfigured();
 }
 
 async function getAppToken(): Promise<string> {
@@ -94,8 +113,14 @@ interface SearchTrack {
   id: string;
   uri: string;
   name: string;
-  artists: { name: string }[];
-  album: { name: string | null; images: { url: string }[] };
+  artists: { name: string; uri: string }[];
+  album: {
+    id: string;
+    uri: string;
+    name: string | null;
+    images: { url: string }[];
+    artists?: { name: string; uri: string }[];
+  };
   duration_ms: number;
   explicit: boolean;
   preview_url: string | null;
@@ -103,6 +128,10 @@ interface SearchTrack {
 }
 
 export async function musicSearch(q: string, limit: number): Promise<SearchTrack[]> {
+  return spotifyCatalogConfigured() ? spotifySearch(q, limit) : youtubeSearch(q, limit);
+}
+
+async function spotifySearch(q: string, limit: number): Promise<SearchTrack[]> {
   const token = await getAppToken();
   const params = new URLSearchParams({
     q,
@@ -139,6 +168,187 @@ function isRenderableTrack(value: unknown): value is SearchTrack {
 }
 
 // ---------------------------------------------------------------------------
+// Search fallback: yt-dlp's flat YouTube search, catalog-shaped
+// ---------------------------------------------------------------------------
+
+/** The slice of a flat-search entry the mapping reads (everything is best-effort). */
+interface YtSearchEntry {
+  id?: unknown;
+  title?: unknown;
+  duration?: unknown;
+  channel?: unknown;
+  uploader?: unknown;
+  channel_id?: unknown;
+  channel_url?: unknown;
+  live_status?: unknown;
+  thumbnails?: unknown;
+}
+
+/**
+ * Test seam for the flat-search runner, mirroring setYtDlpRunnerForTests
+ * below: the vitest suite swaps the process out for a fake that returns
+ * raw entries, so the mapping (title cleanup, artist split, artwork,
+ * duration filters) runs under Node where Bun.spawn does not exist.
+ */
+let ytSearchRunnerForTests: ((q: string, limit: number) => Promise<unknown[]>) | null = null;
+
+/** Test hook — see the seam doc above. */
+export function setYtSearchRunnerForTests(
+  runner: ((q: string, limit: number) => Promise<unknown[]>) | null,
+): void {
+  ytSearchRunnerForTests = runner;
+}
+
+/** Runs yt-dlp's fast flat search (no format extraction, ~2 MB of RAM). */
+function runYtSearch(q: string, limit: number): Promise<unknown[]> {
+  if (ytSearchRunnerForTests) {
+    return ytSearchRunnerForTests(q, limit);
+  }
+  return new Promise<unknown[]>((resolve, reject) => {
+    const proc = Bun.spawn(
+      [
+        YTDLP_PATH,
+        '--no-warnings',
+        '--flat-playlist',
+        '--dump-single-json',
+        `ytsearch${limit}:${q}`,
+      ],
+      {
+        stdout: 'pipe',
+        stderr: 'pipe',
+        stdin: 'ignore',
+      },
+    );
+
+    let settled = false;
+    const done = (err: Error | null, out: string): void => {
+      if (settled) return;
+      settled = true;
+      if (err) {
+        reject(err);
+        return;
+      }
+      try {
+        const data = JSON.parse(out) as { entries?: unknown };
+        resolve(Array.isArray(data.entries) ? data.entries : []);
+      } catch {
+        reject(new Error('yt-dlp search returned unusable JSON.'));
+      }
+    };
+
+    const timer = setTimeout(() => {
+      proc.kill();
+      done(new Error('yt-dlp search timed out.'), '');
+    }, YTDLP_SEARCH_TIMEOUT_MS);
+
+    Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
+      .then(([out, , code]) => {
+        clearTimeout(timer);
+        done(code === 0 ? null : new Error(`yt-dlp search exited with code ${code}.`), out);
+      })
+      .catch((error: unknown) => {
+        clearTimeout(timer);
+        done(error instanceof Error ? error : new Error('yt-dlp search failed.'), '');
+      });
+  });
+}
+
+/** Parenthesized/bracketed suffixes that carry no song information. */
+const TITLE_NOISE =
+  /official|audio|video|lyrics?|visualizer|hd|hq|4k|mv|remaster|mono|stereo|full\s+song|single|explicit|clean|edit|version|album|radio/i;
+
+/** Drops trailing "(Official Audio)"-style suffixes, repeatedly. */
+function cleanTrackTitle(raw: string): string {
+  let title = raw.trim();
+  for (;;) {
+    const match = title.match(/\s+[([{]([^()[\]{}]*)[)}\]]\s*$/);
+    if (!match || !TITLE_NOISE.test(match[1] ?? '')) break;
+    title = title.slice(0, match.index ?? 0).trim();
+  }
+  return title || raw.trim();
+}
+
+/** "Daft Punk - Topic" (auto-generated music channels) → "Daft Punk". */
+function cleanChannelName(entry: YtSearchEntry): string {
+  const raw = typeof entry.channel === 'string' && entry.channel.trim()
+    ? entry.channel
+    : typeof entry.uploader === 'string'
+      ? entry.uploader
+      : '';
+  return raw.replace(/\s*-\s*Topic$/i, '').trim();
+}
+
+/** "Artist - Song" titles split into their two halves; anything else stays whole. */
+function splitTitle(title: string, channel: string): { name: string; artist: string } {
+  const dash = title.indexOf(' - ');
+  if (dash > 0 && dash <= 80) {
+    const artist = title.slice(0, dash).trim();
+    const name = title.slice(dash + 3).trim();
+    if (artist && name) return { name, artist };
+  }
+  return { name: title, artist: channel || 'YouTube' };
+}
+
+/** The largest thumbnail yt-dlp reported, or the always-available one. */
+function entryThumbnail(entry: YtSearchEntry, id: string): { url: string }[] {
+  if (Array.isArray(entry.thumbnails)) {
+    const best = [...entry.thumbnails]
+      .filter((t): t is { url: string } => Boolean(t) && typeof (t as { url?: unknown }).url === 'string')
+      .map((t) => ({ url: (t as { url: string }).url }))
+      .pop();
+    if (best) return [best];
+  }
+  return [{ url: `https://i.ytimg.com/vi/${id}/mqdefault.jpg` }];
+}
+
+/** Maps flat-search entries into the catalog shape the player renders. */
+function youtubeTrackFrom(entry: YtSearchEntry): SearchTrack | null {
+  const id = typeof entry.id === 'string' ? entry.id : '';
+  if (!YT_ID.test(id)) return null; // not a video we can resolve later
+  if (entry.live_status === 'is_live') return null; // no length to align against
+  const durationSec =
+    typeof entry.duration === 'number' && entry.duration > 0 ? Math.round(entry.duration) : null;
+  if (durationSec === null) return null; // live/unknown length — skip, not a song row
+
+  const rawTitle = typeof entry.title === 'string' && entry.title.trim() ? entry.title.trim() : '';
+  if (!rawTitle) return null;
+  const channel = cleanChannelName(entry);
+  const { name, artist } = splitTitle(cleanTrackTitle(rawTitle), channel);
+  const artistUri =
+    typeof entry.channel_url === 'string' && entry.channel_url ? entry.channel_url : '';
+  const channelId = typeof entry.channel_id === 'string' ? entry.channel_id : '';
+
+  return {
+    id,
+    uri: `youtube:video:${id}`,
+    name,
+    artists: [{ name: artist, uri: artistUri }],
+    album: {
+      id: channelId,
+      uri: artistUri,
+      name: 'YouTube',
+      images: entryThumbnail(entry, id),
+      artists: [{ name: artist, uri: artistUri }],
+    },
+    duration_ms: durationSec * 1000,
+    explicit: false,
+    preview_url: null,
+    is_playable: true,
+  };
+}
+
+async function youtubeSearch(q: string, limit: number): Promise<SearchTrack[]> {
+  const entries = await runYtSearch(q, Math.min(30, Math.max(1, limit)));
+  const tracks: SearchTrack[] = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue;
+    const track = youtubeTrackFrom(entry as YtSearchEntry);
+    if (track) tracks.push(track);
+  }
+  return tracks;
+}
+
+// ---------------------------------------------------------------------------
 // yt-dlp: availability probe + guarded execution
 // ---------------------------------------------------------------------------
 
@@ -146,7 +356,9 @@ let ytDlpAvailable: boolean | null = null;
 
 export function resolveConfigured(): boolean {
   if (ytDlpAvailable === null) {
-    ytDlpAvailable = Boolean(Bun.which(YTDLP_PATH));
+    // typeof guard: the vitest suite imports this module under Node, where
+    // the Bun global (and Bun.which) does not exist — production always runs Bun.
+    ytDlpAvailable = typeof Bun !== 'undefined' && Boolean(Bun.which(YTDLP_PATH));
   }
   return ytDlpAvailable;
 }
@@ -197,6 +409,7 @@ export function setYtDlpRunnerForTests(
 export function resetMusicResolverForTests(): void {
   memoryCache.clear();
   inFlight.clear();
+  ytSearchRunnerForTests = null;
 }
 
 /** Runs yt-dlp over YouTube search and returns the parsed candidates. */
@@ -403,8 +616,7 @@ export async function resolveTrackStream(
 
     const targetSec =
       input.durationMs && input.durationMs > 0 ? Math.round(input.durationMs / 1000) : null;
-    const query = buildSearchQuery(input.title, input.artist);
-    const candidates = await runYtDlp(query);
+    const candidates = await runYtDlp(buildResolveQuery(input));
     const chosen = pickCandidate(candidates, targetSec);
     if (!chosen) {
       throw new Error('No playable audio found.');
@@ -431,6 +643,18 @@ export async function resolveTrackStream(
   } finally {
     inFlight.delete(input.key);
   }
+}
+
+/**
+ * What the resolver asks yt-dlp for: tracks whose id is a YouTube video id
+ * (they arrived from the fallback search) resolve directly by that id —
+ * Spotify's 22-character ids fall back to the title/artist search.
+ */
+function buildResolveQuery(input: { key: string; title: string; artist: string }): string {
+  if (YT_ID.test(input.key)) {
+    return `https://www.youtube.com/watch?v=${input.key}`;
+  }
+  return buildSearchQuery(input.title, input.artist);
 }
 
 function buildSearchQuery(title: string, artist: string): string {
@@ -466,9 +690,11 @@ export async function handleMusicSearch(request: Request): Promise<Response> {
     return json(request, { error: 'Missing search query.' }, 400);
   }
   if (!searchConfigured()) {
-    return json(request, {
-      error: 'Free search is not configured on this server (SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET missing).'
-    }, 503);
+    return json(
+      request,
+      { error: 'Free search is not configured on this server (no Spotify credentials, no yt-dlp).' },
+      503,
+    );
   }
   try {
     const tracks = await musicSearch(q, limit);

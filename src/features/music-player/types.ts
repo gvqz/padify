@@ -1,10 +1,12 @@
 /**
  * Track metadata for the free (no-login) music path.
  *
- * The Padify API's /api/music/search proxies Spotify's public catalog and
- * returns track metadata in Spotify's own shape, so the free player renders
- * one row component for the data it gets. These types describe exactly the
- * fields the player uses — nothing here talks to Spotify from the browser.
+ * The Padify API's /api/music/search returns track metadata in Spotify's own
+ * shape — from Spotify's public catalog when the server has app credentials,
+ * or from YouTube results mapped into the same shape when it doesn't — so
+ * the free player renders one row component for the data it gets. These
+ * types describe exactly the fields the player uses; nothing here talks to
+ * Spotify (or YouTube) from the browser.
  */
 
 export interface SpotifyImage {

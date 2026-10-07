@@ -20,7 +20,8 @@
     "../src/server-handlers.test.ts",
     "../src/server-attachments.test.ts",
     "../src/server-db.test.ts",
-    "../src/server-music-resolve.test.ts"
+    "../src/server-music-resolve.test.ts",
+    "../src/server-music-search.test.ts"
   ],
   "exclude": ["local.db"]
 }

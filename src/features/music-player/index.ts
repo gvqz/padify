@@ -1,7 +1,7 @@
 /**
  * Padify music player — v3.
  *
- * Free search (zero login) — search Spotify's catalog through the Padify
+ * Free search (zero login) — search a music catalog through the Padify
  * API (metadata only), then play full tracks in a plain HTML5 <audio>
  * element using stream URLs the API resolves with yt-dlp. Users keep
  * local favorites, a local queue and exactly one local playlist, all

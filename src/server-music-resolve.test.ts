@@ -36,6 +36,8 @@ const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
 // swaps the process runner for a fake, so the pipeline now runs under the
 // same gate as everything else; the fake reproduces the old script's fake
 // yt-dlp binary exactly (counter, search-only guard, candidate sets).
+// Track ids from the YouTube search fallback (11 chars) resolve directly by
+// their watch URL instead — covered by the direct-id test below.
 
 let dbFile: string;
 let db: DatabaseSyncLike;
@@ -187,5 +189,30 @@ describe('resolveTrackStream', () => {
     const noDuration = await resolveTrackStream(sqliteDb(), input({ durationMs: null }));
 
     expect(noDuration.videoId).toBe('abc123');
+  });
+
+  it('resolves an 11-character YouTube id directly by its watch URL', async () => {
+    let seenQuery = '';
+    setYtDlpRunnerForTests((query) => {
+      seenQuery = query;
+      return Promise.resolve([
+        { videoId: 'dwDns8x3Jb4', durationSec: 430, url: 'https://stream.example/direct' },
+      ]);
+    });
+
+    const result = await resolveTrackStream(
+      sqliteDb(),
+      input({
+        key: 'dwDns8x3Jb4',
+        title: 'Around the World',
+        artist: 'Daft Punk',
+        durationMs: 430_000,
+      }),
+    );
+
+    expect(seenQuery).toBe('https://www.youtube.com/watch?v=dwDns8x3Jb4');
+    expect(result.videoId).toBe('dwDns8x3Jb4');
+    expect(result.url).toBe('https://stream.example/direct');
+    expect(result.cached).toBe(false);
   });
 });
