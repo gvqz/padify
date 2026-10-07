@@ -1,16 +1,9 @@
 Future feature list
         Right now the app is very much in beta, and numerous new features are being improved and added. Despite this, we need to make sure that the classic plain note is well fixed, as that's the main feature.
-
         Before fixing bugs think about the underlying reason to why this bug exists in the first place, is there a bigger thing that needs to be fixed, should archecture be changed?
 
-Complex:
-these are more complex features to be added, these should be planned out and potentially discussed(if really big/complex) before starting 
-
-        - [done] rebuild snapshots menu (the menu is rebuilt on the app's modal recipe — pref header, take button beside the search, bordered rows with type chips, all vercel-layer tokens so dark mode comes free; the legacy snapshots.css is pruned to a pointer. The cross-type breakage's underlying reason was found and fixed: restores never moved the note's TYPE with its content and never announced the switch, so the markdown toolbar and the port stayed stale, and a plain snapshot restored into a markdown note rendered as source text after reload. Snapshots now record the note they came from and decline identical recaptures with a toast; search matches the note's text, never its markup; dates render at display time from the timestamp. Pinned by 27 unit tests and 17 e2e cases in e2e/snapshots.spec.ts, both type-switch directions and the reload round trip included)
-
-        - [done] I dislike how it shows Ctrl/cmd garbage everywhere instead of just showing the one of the two based on the device you're using. Fix that across the entire repo. (lib/platform.ts is the one answer — platform + UA detection with a test override seam — and every runtime surface asks it: the shortcuts reference's kbd pairs, the brand menu hint, the toolbar tooltips, the clipboard-blocked toasts, the welcome note's two hint lines. Static markup can't call a function, so partials declare intent with data-mod-key / data-alt-key / data-shortcut-title and a boot pass resolves it right after the modals mount, before any dialog can be seen. Static docs keep the dual spelling on purpose — prose can't know the reader's keyboard, UI can. Pinned on both sides of the split by unit tests and an emulated-Mac e2e in e2e/platform-shortcuts.spec.ts)
-
 Visual overhauls:
+        - snapshots menu
         - cloud sync/share
         - settings menu
                 - have settings based on each note type(classic, markdown, RTN, etc)
@@ -21,13 +14,7 @@ Visual overhauls:
 
 
 Others:
-
-
-Hosting plan (frontend dual-host, backend later):
-        - The frontend will be hosted on BOTH Netlify and alwaysdata (alwaysdata can serve both static sites and app processes), with Turso staying as the database.
-        - The backend has NOT been started yet, so cloud sync features currently don't work — this is expected, not a bug.
-        - The code is already host-agnostic for this: the API base comes from VITE_API_BASE at build time ('' = same-origin /api) with a runtime override (see src/cloud/config.ts), and scripts/build-headers.mjs generates the /api proxy per-host. Each host just sets its own VITE_API_BASE pointing at the one Turso-backed API when the backend exists.
-        - docs/CLOUD_SETUP.md has the current setup notes.
+I don't believe spotify app is currently linked(for searchingstill free)
 
 Improvements in the very far future
         - add drawing pad
