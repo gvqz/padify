@@ -1,7 +1,7 @@
 /* ==========================================================================
-   Padify music player v3 ("mp") — one player, two ways to listen:
+   Padify music player v3 ("mp") — free music, no account:
 
-     Free search (no login, HTML5 audio) · Spotify (Web API + SDK) · Ambience
+     Free search (HTML5 audio + yt-dlp streams) · Ambience
 
    Styling follows the app-wide Vercel design system (vercel.css): the
    --mp-* tokens below are local aliases of the --vz-* tokens, so this file
@@ -64,40 +64,6 @@ body.dark .mp-mini {
   color: var(--mp-muted);
 }
 
-#musicPlayerModal .mp-status-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 28px;
-  margin-left: auto;
-  margin-right: 6px;
-  padding: 0 11px;
-  border: 1px solid var(--mp-border);
-  border-radius: 999px;
-  background: var(--mp-card);
-  color: var(--mp-muted);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-  transition: color var(--vz-dur) var(--vz-ease),
-    border-color var(--vz-dur) var(--vz-ease);
-}
-
-#musicPlayerModal .mp-status-chip:hover {
-  color: var(--mp-text);
-  border-color: var(--mp-border-strong);
-}
-
-#musicPlayerModal .mp-status-chip.is-connected {
-  color: var(--mp-text);
-  border-color: var(--vz-success);
-}
-
-#musicPlayerModal .mp-status-chip.is-connected svg {
-  color: var(--vz-success);
-}
-
 #musicPlayerModal .mp-footer {
   display: flex;
   align-items: center;
@@ -114,8 +80,7 @@ body.dark .mp-mini {
 
 /* ---- buttons ---------------------------------------------------------- */
 
-#musicPlayerModal .mp-btn,
-.sp-detail .mp-btn {
+#musicPlayerModal .mp-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -135,29 +100,23 @@ body.dark .mp-mini {
 }
 
 #musicPlayerModal .mp-btn:hover,
-#musicPlayerModal .mp-btn:focus,
-.sp-detail .mp-btn:hover {
+#musicPlayerModal .mp-btn:focus {
   border-color: var(--mp-border-strong);
   background: var(--mp-well);
 }
 
-#musicPlayerModal .mp-btn:active,
-.sp-detail .mp-btn:active {
+#musicPlayerModal .mp-btn:active {
   transform: scale(0.98);
 }
 
-#musicPlayerModal .mp-btn-primary,
-.sp-detail .mp-btn-primary,
-.sp-connect .mp-btn-primary {
+#musicPlayerModal .mp-btn-primary {
   background: var(--mp-accent);
   border-color: var(--mp-accent);
   color: var(--mp-accent-contrast);
 }
 
 #musicPlayerModal .mp-btn-primary:hover,
-#musicPlayerModal .mp-btn-primary:focus,
-.sp-detail .mp-btn-primary:hover,
-.sp-connect .mp-btn-primary:hover {
+#musicPlayerModal .mp-btn-primary:focus {
   background: var(--mp-accent-strong);
   border-color: var(--mp-accent-strong);
   color: var(--mp-accent-contrast);
@@ -419,101 +378,6 @@ body.dark #musicPlayerModal .mp-pb-eq span {
   width: 88px;
 }
 
-/* device pill + dropdown */
-#musicPlayerModal .mp-device {
-  position: relative;
-}
-
-#musicPlayerModal .mp-device-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 28px;
-  padding: 0 11px;
-  border: 1px solid var(--mp-border);
-  border-radius: 999px;
-  background: var(--mp-card);
-  color: var(--mp-muted);
-  font-size: 11.5px;
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-  transition: color var(--vz-dur) var(--vz-ease), border-color var(--vz-dur) var(--vz-ease);
-}
-
-#musicPlayerModal .mp-device-pill:hover {
-  color: var(--mp-text);
-  border-color: var(--mp-border-strong);
-}
-
-#musicPlayerModal .mp-device-name {
-  max-width: 18ch;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-#musicPlayerModal .mp-device-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 40;
-  width: 240px;
-  padding: 6px;
-  background: var(--mp-card);
-  border: 1px solid var(--mp-border);
-  border-radius: var(--vz-radius-md);
-  box-shadow: var(--vz-shadow-menu);
-  animation: vz-menu-in 140ms var(--vz-ease) both;
-}
-
-#musicPlayerModal .mp-device-item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 8px 10px;
-  border: none;
-  border-radius: var(--vz-radius);
-  background: transparent;
-  color: var(--mp-text);
-  font-family: inherit;
-  font-size: 12.5px;
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--vz-dur) var(--vz-ease);
-}
-
-#musicPlayerModal .mp-device-item:hover {
-  background: var(--mp-well);
-}
-
-#musicPlayerModal .mp-device-item span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-#musicPlayerModal .mp-device-item .mp-device-live {
-  margin-left: auto;
-  flex: none;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: var(--vz-success);
-  color: #fff;
-  font-size: 9.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-#musicPlayerModal .mp-device-loading {
-  padding: 10px;
-  font-size: 12px;
-  color: var(--mp-muted);
-}
-
 /* --------------------------------------------------------------------------
    Segmented tabs
    -------------------------------------------------------------------------- */
@@ -706,15 +570,6 @@ body.dark #musicPlayerModal .mp-tab.is-active {
   color: var(--mp-muted);
 }
 
-#musicPlayerModal .mp-hero-connect {
-  flex: none;
-  height: 36px;
-}
-
-#musicPlayerModal .mp-hero-connect svg {
-  color: #1db954;
-}
-
 #musicPlayerModal .mp-hero.is-degraded .mp-hero-copy p {
   color: var(--mp-muted);
 }
@@ -726,31 +581,8 @@ body.dark #musicPlayerModal .mp-tab.is-active {
   font-weight: 600;
 }
 
-/* "Continue without an account" back link on the connect card */
-#musicPlayerModal .sp-connect-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 0 12px;
-  padding: 5px 10px 5px 6px;
-  border: 1px solid var(--mp-border);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--mp-muted);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: color var(--vz-dur) var(--vz-ease), border-color var(--vz-dur) var(--vz-ease);
-}
-
-#musicPlayerModal .sp-connect-back:hover {
-  color: var(--mp-text);
-  border-color: var(--mp-border-strong);
-}
-
 /* --------------------------------------------------------------------------
-   Track rows (one component for every list — free or connected)
+   Track rows (one component for every list)
    -------------------------------------------------------------------------- */
 
 #musicPlayerModal .mp-empty {
@@ -1255,298 +1087,6 @@ body.dark #musicPlayerModal .mp-tab.is-active {
     transform: rotate(360deg);
   }
 }
-
-/* --------------------------------------------------------------------------
-   Spotify: connect screen
-   -------------------------------------------------------------------------- */
-
-#musicPlayerModal .sp-connect {
-  display: flex;
-  justify-content: center;
-  padding: 10px 0 4px;
-}
-
-#musicPlayerModal .sp-connect-card {
-  width: 100%;
-  max-width: 460px;
-  padding: 26px 26px 20px;
-  border: 1px solid var(--mp-border);
-  border-radius: var(--vz-radius-lg);
-  background: var(--mp-card);
-  text-align: center;
-}
-
-#musicPlayerModal .sp-connect-logo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 14px;
-  border-radius: 50%;
-  border: 1px solid var(--mp-border);
-  background: var(--mp-well);
-  color: #1db954;
-}
-
-#musicPlayerModal .sp-connect-title {
-  margin: 0 0 8px;
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-#musicPlayerModal .sp-connect-copy {
-  margin: 0 0 16px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--mp-muted);
-}
-
-#musicPlayerModal .sp-connect-btn {
-  width: 100%;
-  height: 40px;
-  font-size: 13.5px;
-  font-weight: 600;
-}
-
-#musicPlayerModal .sp-connect-btn svg {
-  color: #1db954;
-}
-
-#musicPlayerModal .sp-setup {
-  margin-top: 18px;
-  padding: 14px 16px;
-  border: 1px dashed var(--mp-border-strong);
-  border-radius: var(--vz-radius-md);
-  background: var(--mp-well);
-  text-align: left;
-}
-
-#musicPlayerModal .sp-setup-title {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 0 0 10px;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--mp-text);
-}
-
-#musicPlayerModal .sp-setup-title svg {
-  color: var(--mp-muted);
-}
-
-#musicPlayerModal .sp-setup-steps {
-  margin: 0 0 12px;
-  padding-left: 20px;
-  font-size: 12.5px;
-  line-height: 1.7;
-  color: var(--mp-muted);
-}
-
-#musicPlayerModal .sp-setup-steps a {
-  color: var(--mp-text);
-  text-decoration: underline;
-}
-
-#musicPlayerModal .sp-setup-steps code {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  padding: 2px 7px;
-  border: 1px solid var(--mp-border);
-  border-radius: var(--vz-radius);
-  background: var(--mp-card);
-  color: var(--mp-text);
-  font-size: 11.5px;
-  font-weight: 600;
-  word-break: break-all;
-}
-
-#musicPlayerModal .sp-copy-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 22px;
-  height: 22px;
-  border: 1px solid var(--mp-border);
-  border-radius: var(--vz-radius);
-  background: var(--mp-card);
-  color: var(--mp-muted);
-  cursor: pointer;
-  vertical-align: middle;
-  transition: color var(--vz-dur) var(--vz-ease), border-color var(--vz-dur) var(--vz-ease);
-}
-
-#musicPlayerModal .sp-copy-btn:hover {
-  color: var(--mp-text);
-  border-color: var(--mp-border-strong);
-}
-
-#musicPlayerModal .sp-setup-input-row {
-  display: flex;
-  gap: 8px;
-}
-
-#musicPlayerModal .sp-setup-input-row input {
-  flex: 1;
-  min-width: 0;
-  height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--mp-border);
-  border-radius: var(--vz-radius);
-  background: var(--mp-card);
-  color: var(--mp-text);
-  font-family: inherit;
-  font-size: 12.5px;
-}
-
-#musicPlayerModal .sp-setup-input-row input::placeholder {
-  color: var(--mp-muted);
-}
-
-#musicPlayerModal .sp-setup-input-row input:focus {
-  outline: none;
-  border-color: var(--mp-border-strong);
-  box-shadow: 0 0 0 3px var(--mp-accent-ring);
-}
-
-#musicPlayerModal .sp-setup-input-row input.is-invalid {
-  border-color: var(--vz-danger);
-}
-
-#musicPlayerModal .sp-premium-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 14px 0 0;
-  padding: 10px 12px;
-  border: 1px solid var(--mp-border);
-  border-radius: var(--vz-radius);
-  background: var(--mp-well);
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--mp-muted);
-  text-align: left;
-}
-
-#musicPlayerModal .sp-premium-note svg {
-  flex: none;
-  margin-top: 2px;
-}
-
-#musicPlayerModal .sp-premium-note strong {
-  color: var(--mp-text);
-}
-
-#musicPlayerModal .sp-error {
-  margin: 12px 0 0;
-  padding: 9px 12px;
-  border: 1px solid var(--vz-danger);
-  border-radius: var(--vz-radius);
-  background: var(--vz-danger-soft);
-  color: var(--vz-danger);
-  font-size: 12.5px;
-  text-align: left;
-}
-
-/* --------------------------------------------------------------------------
-   Spotify: connected app
-   -------------------------------------------------------------------------- */
-
-#musicPlayerModal .sp-profile {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 10px 12px;
-  margin-bottom: 12px;
-  border: 1px solid var(--mp-border);
-  border-radius: var(--vz-radius-md);
-  background: var(--mp-card);
-}
-
-#musicPlayerModal .sp-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid var(--mp-border);
-}
-
-#musicPlayerModal .sp-avatar[hidden] {
-  display: none;
-}
-
-#musicPlayerModal .sp-profile-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-#musicPlayerModal .sp-name {
-  font-size: 13.5px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-#musicPlayerModal .sp-product {
-  align-self: flex-start;
-  padding: 1.5px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--mp-border);
-  color: var(--mp-muted);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-#musicPlayerModal .sp-product.is-premium {
-  border-color: #1db954;
-  color: #1db954;
-}
-
-#musicPlayerModal .sp-profile-actions {
-  display: flex;
-  gap: 6px;
-  margin-left: auto;
-}
-
-#musicPlayerModal .sp-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--mp-border);
-  border-radius: var(--vz-radius);
-  background: transparent;
-  color: var(--mp-muted);
-  cursor: pointer;
-  transition: color var(--vz-dur) var(--vz-ease), border-color var(--vz-dur) var(--vz-ease),
-    background var(--vz-dur) var(--vz-ease);
-}
-
-#musicPlayerModal .sp-icon-btn:hover {
-  color: var(--mp-text);
-  border-color: var(--mp-border-strong);
-}
-
-#musicPlayerModal .sp-icon-btn#spDisconnect:hover {
-  color: var(--vz-danger);
-  border-color: var(--vz-danger);
-}
-
-#musicPlayerModal .sp-search {
-  margin-bottom: 12px;
-}
-
 /* skeletons */
 #musicPlayerModal .sp-skeleton-row {
   height: 44px;
@@ -1574,11 +1114,6 @@ body.dark #musicPlayerModal .mp-tab.is-active {
 }
 
 /* library sections */
-#musicPlayerModal .sp-library,
-#musicPlayerModal .sp-results,
-#musicPlayerModal .sp-detail {
-  animation: vz-menu-in 160ms var(--vz-ease) both;
-}
 
 #musicPlayerModal .sp-section {
   margin-bottom: 18px;
@@ -1884,78 +1419,7 @@ body.dark #musicPlayerModal .mp-tab.is-active {
   display: none;
 }
 
-/* card rows (playlists / albums / artists) */
-#musicPlayerModal .sp-card-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
-  gap: 10px;
-}
-
-#musicPlayerModal .sp-card {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 8px;
-  border: 1px solid var(--mp-border);
-  border-radius: var(--vz-radius-md);
-  background: var(--mp-card);
-  text-align: left;
-  font-family: inherit;
-  cursor: pointer;
-  transition: border-color var(--vz-dur) var(--vz-ease), transform var(--vz-dur) var(--vz-ease),
-    background var(--vz-dur) var(--vz-ease);
-}
-
-#musicPlayerModal .sp-card:hover {
-  border-color: var(--mp-border-strong);
-  transform: translateY(-1px);
-  background: var(--mp-well);
-}
-
-#musicPlayerModal .sp-card-art {
-  aspect-ratio: 1;
-  width: 100%;
-  border-radius: var(--vz-radius);
-  overflow: hidden;
-  border: 1px solid var(--mp-border);
-  background: var(--mp-well);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--mp-muted);
-}
-
-#musicPlayerModal .sp-card-art img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-#musicPlayerModal .sp-card-art-round,
-#musicPlayerModal .sp-card-art-round img {
-  border-radius: 50%;
-}
-
-#musicPlayerModal .sp-card-name {
-  font-size: 12.5px;
-  font-weight: 600;
-  line-height: 1.35;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-#musicPlayerModal .sp-card-meta {
-  font-size: 11px;
-  color: var(--mp-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* back buttons + detail */
+/* back buttons */
 #musicPlayerModal .sp-back {
   display: inline-flex;
   align-items: center;
@@ -1976,66 +1440,6 @@ body.dark #musicPlayerModal .mp-tab.is-active {
 #musicPlayerModal .sp-back:hover {
   color: var(--mp-text);
   border-color: var(--mp-border-strong);
-}
-
-#musicPlayerModal .sp-detail-header {
-  display: flex;
-  gap: 16px;
-  align-items: flex-end;
-  padding: 4px 4px 16px;
-}
-
-#musicPlayerModal .sp-detail-art {
-  width: 104px;
-  height: 104px;
-  border-radius: var(--vz-radius-md);
-  border: 1px solid var(--mp-border);
-  object-fit: cover;
-  background: var(--mp-well);
-  flex: none;
-}
-
-#musicPlayerModal .sp-detail-art[hidden] {
-  display: none;
-}
-
-#musicPlayerModal .sp-detail-copy {
-  min-width: 0;
-}
-
-#musicPlayerModal .sp-detail-type {
-  display: block;
-  font-size: 10.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--mp-muted);
-  margin-bottom: 3px;
-}
-
-#musicPlayerModal .sp-detail-name {
-  margin: 0 0 5px;
-  font-size: 19px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  line-height: 1.2;
-}
-
-#musicPlayerModal .sp-detail-meta {
-  margin: 0 0 12px;
-  font-size: 12.5px;
-  color: var(--mp-muted);
-}
-
-#musicPlayerModal .sp-detail-play {
-  height: 36px;
-  padding: 0 18px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-#musicPlayerModal .sp-free-note {
-  margin: 4px 0 0;
 }
 
 /* --------------------------------------------------------------------------
@@ -2257,16 +1661,6 @@ body.dark #musicPlayerModal .mp-tab.is-active {
     padding: 10px 14px;
   }
 
-  #musicPlayerModal .mp-status-chip {
-    max-width: 130px;
-  }
-
-  #musicPlayerModal .mp-status-chip span {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   #musicPlayerModal .mp-tabs {
     display: flex;
     width: 100%;
@@ -2313,29 +1707,6 @@ body.dark #musicPlayerModal .mp-tab.is-active {
     padding: 12px 14px;
   }
 
-  #musicPlayerModal .mp-hero-connect {
-    width: 100%;
-  }
-
-  #musicPlayerModal .sp-card-row {
-    grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
-  }
-
-  #musicPlayerModal .sp-detail-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-
-  #musicPlayerModal .sp-detail-art {
-    width: 128px;
-    height: 128px;
-  }
-
-  #musicPlayerModal .sp-setup-input-row {
-    flex-direction: column;
-  }
-
   .mp-mini {
     left: 10px;
     right: 10px;
@@ -2371,15 +1742,13 @@ body.dark #musicPlayerModal .mp-tab.is-active {
   #musicPlayerModal .sound-button,
   #musicPlayerModal .mp-ctl,
   #musicPlayerModal .mp-play,
-  #musicPlayerModal .sp-card,
   #musicPlayerModal .sp-row-main,
   .mp-mini,
   #musicPlayerModal .ambient-noise-preset-trigger svg {
     transition: none;
   }
 
-  #musicPlayerModal .sound-button:hover,
-  #musicPlayerModal .sp-card:hover {
+  #musicPlayerModal .sound-button:hover {
     transform: none;
   }
 }

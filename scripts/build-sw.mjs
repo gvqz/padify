@@ -49,8 +49,8 @@ function walk(dir) {
 
 /**
  * Assets the entry page references directly (script src / link href /
- * img src): the app shell. Same-origin, base-relative URLs only — the
- * Spotify SDK and other cross-origin references are none of the precache's
+ * img src): the app shell. Same-origin, base-relative URLs only —
+ * cross-origin references are none of the precache's
  * business. With a subpath build (VITE_BASE_PATH=/padify/) Vite emits
  * /padify/assets/…, so refs are only recognized under the configured base.
  * @returns {Set<string>} dist-relative paths

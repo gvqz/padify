@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LocalMusicLibrary, snapshotTrack } from './library';
-import type { SpotifyTrack } from '../spotify/api';
+import type { SpotifyTrack } from '../types';
 
 function track(id: string, name = id, artist = 'Artist'): SpotifyTrack {
   return {

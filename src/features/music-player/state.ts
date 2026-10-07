@@ -8,7 +8,7 @@
  */
 
 import { stateGet, stateSet } from '../../storage';
-import type { SpotifyTrack } from './spotify/api';
+import type { SpotifyTrack } from './types';
 
 // ---------------------------------------------------------------------------
 // Shape

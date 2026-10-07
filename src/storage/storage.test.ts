@@ -442,14 +442,14 @@ describe('kv reconciliation (writes lost between the stores)', () => {
   });
 
   it('non-mirrored writes flush immediately — no coalescing window to lose', async () => {
-    stateSet('padify-spotify-auth', 'session-json', { localStorage: false });
+    stateSet('padify-kv-nonmirrored-fixture', 'session-json', { localStorage: false });
     // The immediate flush is async but already drained the pending batch;
     // a few macrotask ticks let the transaction commit.
     await new Promise((resolve) => setTimeout(resolve, 20));
     await dieWithFlushInFlight();
 
     await storageReady();
-    expect(stateGet('padify-spotify-auth')).toBe('session-json');
+    expect(stateGet('padify-kv-nonmirrored-fixture')).toBe('session-json');
   });
 
   it('pre-versioning rows keep working: IndexedDB stays the incumbent', async () => {

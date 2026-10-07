@@ -1,8 +1,8 @@
 /**
  * Padify API — free music endpoints (no account needed).
  *
- * The "free path" of the music player: clients that are NOT connected to a
- * personal Spotify account still get full-song playback. Two pieces:
+ * The music player's server side: clients get full-song playback with no
+ * Spotify login at all. Two pieces:
  *
  *   1. Metadata search — a Client-Credentials proxy for Spotify's public
  *      /v1/search (tracks only). The client never sees app credentials.
@@ -22,7 +22,7 @@
  *
  * Environment:
  *   SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET  — app credentials for the
- *       catalog search (same Spotify app the user connects with works).
+ *       catalog search (a Spotify app you own; no user login involved).
  *   SPOTIFY_MARKET  — optional market code for search (e.g. "US").
  *   YTDLP_PATH      — override the yt-dlp binary location.
  *   MUSIC_RESOLVE_CONCURRENCY — simultaneous yt-dlp processes (default 2).

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FreeEngine, type FreeEngineEvent, type FreeEngineHost } from './free-engine';
-import type { SpotifyTrack } from './spotify/api';
+import type { SpotifyTrack } from './types';
 
 /**
  * Characterization of the free engine — the resolve/retry/fallback

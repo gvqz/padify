@@ -12,7 +12,7 @@
  */
 
 import { stateGet, stateSet } from '../../../storage';
-import type { SpotifyTrack } from '../spotify/api';
+import type { SpotifyTrack } from '../types';
 
 const LIBRARY_KEY = 'padify-music-library';
 const DEFAULT_PLAYLIST_NAME = 'My Playlist';

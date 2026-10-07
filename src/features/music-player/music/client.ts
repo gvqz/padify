@@ -8,12 +8,12 @@
  *   /api/music/resolve      → a direct audio stream URL for a track
  *
  * Everything here works without a Spotify login. Search results are shaped
- * exactly like `SpotifyTrack` so the player renders one row component for
- * both the free and the connected path.
+ * exactly like `SpotifyTrack` (see ../types.ts) so the player renders one
+ * row component for the catalog data the API returns.
  */
 
 import { getCloudConfig } from '../../../cloud/config';
-import type { SpotifyTrack } from '../spotify/api';
+import type { SpotifyTrack } from '../types';
 
 export interface MusicCapabilities {
   search: boolean;

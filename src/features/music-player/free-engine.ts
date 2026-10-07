@@ -1,5 +1,5 @@
 import { FreeMusicError, resolveTrackStream } from './music/client';
-import type { SpotifyTrack } from './spotify/api';
+import type { SpotifyTrack } from './types';
 import { trackArtistNames } from './helpers';
 
 /**

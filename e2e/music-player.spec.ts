@@ -39,17 +39,14 @@ test.describe('music player', () => {
     await openPlayer(page);
 
     await expect(page.locator('#mpPbTitle')).toHaveText('Nothing playing');
-    await expect(page.locator('#mpPbSub')).toHaveText('Search a song or connect Spotify');
+    await expect(page.locator('#mpPbSub')).toHaveText('Search a song to play');
   });
 
-  test('the anonymous home renders favorites and the local playlist, signed out', async ({
-    page,
-  }) => {
+  test('the home renders favorites and the local playlist', async ({ page }) => {
     await page.goto('/');
     await openPlayer(page);
 
     await expect(page.locator('#mpFreeHome')).toBeVisible();
-    await expect(page.locator('#mpAccountChipText')).toHaveText('Connect Spotify');
     await expect(page.locator('#mpFavoritesEmpty')).toBeVisible();
     await expect(page.locator('#mpPlaylistName')).toHaveText('My Playlist');
     // A fresh profile has no playlist yet — rename/clear stay hidden.
@@ -92,7 +89,7 @@ test.describe('music player', () => {
     await expect(page.locator('#mpTabQueue')).toHaveAttribute('aria-selected', 'true');
   });
 
-  test('the debug probe reports a resting, signed-out player', async ({ page }) => {
+  test('the debug probe reports a resting player', async ({ page }) => {
     await page.goto('/');
     // The player engines are a lazy chunk — the probe exists once the
     // player has been opened (see initMusicSubsystem in src/app.ts).
@@ -107,6 +104,5 @@ test.describe('music player', () => {
       shuffle: false,
       repeat: 'off',
     });
-    expect(snapshot.spotify).toMatchObject({ connected: false, product: null, mode: null });
   });
 });

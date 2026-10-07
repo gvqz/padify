@@ -153,7 +153,7 @@ describe('layering rules', () => {
   const rel = (f: string) => f.slice(process.cwd().length + 1);
 
   it('features/music-player is imported only by the composition roots', () => {
-    // The music feature (music-player + music/ + spotify/) is the biggest
+    // The music feature (music-player + music/) is the biggest
     // module in the app; its public surface is initMusicPlayer/mountMusic-
     // Player and its only legitimate consumers are the shell (app.ts —
     // which loads the engines as a lazy chunk on first open — and boot.ts,
