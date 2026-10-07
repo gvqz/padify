@@ -34,7 +34,7 @@ describe('loadPlayerState', () => {
       volume: 0.7,
       shuffle: false,
       repeat: 'off',
-      view: 'music',
+      view: 'search',
       freeQueue: [],
       freeIndex: -1,
     });
@@ -88,12 +88,20 @@ describe('loadPlayerState', () => {
       expect(load({ shuffle: 'false' }).shuffle).toBe(true);
     });
 
-    it('accepts exactly the three repeat modes and the three views', () => {
+    it('accepts exactly the three repeat modes and the five views', () => {
       expect(load({ repeat: 'one' }).repeat).toBe('one');
       expect(load({ repeat: 'ALL' }).repeat).toBe('off');
       expect(load({ repeat: 'loop' }).repeat).toBe('off');
       expect(load({ view: 'ambience' }).view).toBe('ambience');
-      expect(load({ view: 'settings' }).view).toBe('music');
+      expect(load({ view: 'favorites' }).view).toBe('favorites');
+      expect(load({ view: 'playlist' }).view).toBe('playlist');
+      expect(load({ view: 'settings' }).view).toBe('search');
+    });
+
+    it('maps the pre-revamp tab views onto the new sidebar destinations', () => {
+      expect(load({ view: 'music' }).view).toBe('search');
+      expect(load({ view: 'queue' }).view).toBe('queue');
+      expect(load({ view: 'ambience' }).view).toBe('ambience');
     });
 
     it('keeps only entries that still look like tracks', () => {

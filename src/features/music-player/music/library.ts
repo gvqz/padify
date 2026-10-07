@@ -56,6 +56,8 @@ export function snapshotTrack(track: SpotifyTrack): SpotifyTrack {
     preview_url: track.preview_url ?? null,
     explicit: Boolean(track.explicit),
     is_playable: track.is_playable !== false,
+    // Bundled ambience sounds keep their local stream through persistence.
+    ...(track.local_url ? { local_url: track.local_url } : {}),
   };
 }
 

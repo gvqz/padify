@@ -1,6 +1,7 @@
 import { FreeMusicError, resolveTrackStream } from './music/client';
 import type { SpotifyTrack } from './types';
 import { trackArtistNames } from './helpers';
+import { isAmbientTrack } from './ambient';
 
 /**
  * The free engine — the `<audio>` element and the resolve/retry/fallback
@@ -104,13 +105,27 @@ export class FreeEngine {
 
   // ---- transport ----
 
-  /** Starts the resolve flow for a track (the free source's play path). */
+  /** Starts the play flow for a track (the free source's play path). */
   async playTrack(track: SpotifyTrack): Promise<void> {
     this.retriedCurrentTrack = false;
     this.engineMode = 'resolve';
     const token = ++this.resolveToken;
 
     this.host.notify({ kind: 'resolving', track });
+
+    // Bundled ambience: play the local file directly and loop it — a
+    // 15-second ceiling-fan clip must not "end" and go quiet. Looping also
+    // keeps 'ended' (and thus auto-advance) from firing, by design.
+    if (isAmbientTrack(track)) {
+      const audio = this.ensureAudio();
+      this.host.notify({ kind: 'stream', track });
+      audio.loop = true;
+      audio.src = track.local_url ?? '';
+      await audio.play().catch(() => {
+        this.host.notify({ kind: 'autoplay-blocked' });
+      });
+      return;
+    }
 
     if (!(await this.host.canResolve())) {
       this.tryPreviewFallback(track, 'Free playback is not available on this deployment.');
@@ -120,7 +135,7 @@ export class FreeEngine {
     try {
       const stream = await resolveTrackStream(this.resolveInput(track));
       if (token !== this.resolveToken) return; // a newer track took over
-      const audio = this.ensureAudio();
+      const audio = this.linearAudio();
       this.host.notify({ kind: 'stream', track });
       audio.src = stream.url;
       await audio.play().catch(() => {
@@ -209,6 +224,13 @@ export class FreeEngine {
     return audio;
   }
 
+  /** The element as a normal (non-looping) track wants it. */
+  private linearAudio(): HTMLAudioElement {
+    const audio = this.ensureAudio();
+    audio.loop = false; // a previous ambience track may have left it on
+    return audio;
+  }
+
   private resolveInput(track: SpotifyTrack): {
     trackId: string;
     title: string;
@@ -224,6 +246,12 @@ export class FreeEngine {
   }
 
   private handleResolveFailure(track: SpotifyTrack, token: number, err: unknown): void {
+    // Bundled ambience never resolves through the API — a local file that
+    // fails to play is simply unavailable (missing/corrupt file).
+    if (isAmbientTrack(track)) {
+      this.host.notify({ kind: 'unavailable', message: 'This ambience sound could not play.' });
+      return;
+    }
     if (this.retriedCurrentTrack) {
       this.tryPreviewFallback(track, this.describeError(err));
       return;
@@ -234,7 +262,7 @@ export class FreeEngine {
     resolveTrackStream(this.resolveInput(track), true)
       .then((stream) => {
         if (token !== this.resolveToken) return;
-        const audio = this.ensureAudio();
+        const audio = this.linearAudio();
         this.host.notify({ kind: 'stream', track });
         audio.src = stream.url;
         void audio.play().catch(() => undefined);
@@ -250,7 +278,7 @@ export class FreeEngine {
     if (track.preview_url) {
       this.engineMode = 'preview';
       this.host.notify({ kind: 'preview', track, message });
-      const audio = this.ensureAudio();
+      const audio = this.linearAudio();
       audio.src = track.preview_url;
       void audio.play().catch(() => undefined);
       return;

@@ -770,20 +770,19 @@ export async function initApp(): Promise<void> {
 }
 
 /**
- * Music + ambience lazy seam.
+ * Music lazy seam.
  *
- * The player engines (features/music-player — player and the free-song
- * resolver — plus the white-noise mixer) used to ride the main
- * bundle so every visitor downloaded ~5k lines most never play. They now
- * live in a lazy chunk: the modal markup mounts at boot (markup.ts is
- * pure markup), and the engines load on the first attempt to open the
- * player.
+ * The player engine (features/music-player — player, queue, the free-song
+ * resolver and the ambience tracks) used to ride the main bundle so every
+ * visitor downloaded ~5k lines most never play. It now lives in a lazy
+ * chunk: the modal markup mounts at boot (markup.ts is pure markup), and
+ * the engine loads on the first attempt to open the player.
  *
  * The navbar click is intercepted in the CAPTURE phase — ahead of the
  * delegated modal opener in ui/behavior/modal.ts — so the modal opens
  * only after the engine wired its handlers. Opening it first would drop
- * any click that lands during the load window (tabs, play, search: all
- * bound by the engine's init). After the engines are in, the interception
+ * any click that lands during the load window (nav, play, search: all
+ * bound by the engine's init). After the engine is in, the interception
  * stands down and the normal delegated open flow takes over.
  */
 function initMusicSubsystem(): void {
@@ -795,10 +794,6 @@ function initMusicSubsystem(): void {
 
   const loadEngines = (): Promise<void> => {
     engines ??= (async () => {
-      // Ambience first: the player reads getWhiteNoisePlayer() while
-      // constructing (navbar icon state), so the mixer must exist by then.
-      const { initWhiteNoisePlayer } = await import('./white-noise-player');
-      await initWhiteNoisePlayer();
       const { initMusicPlayer } = await import('./features/music-player');
       initMusicPlayer();
     })();

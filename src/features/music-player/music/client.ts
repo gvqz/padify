@@ -41,10 +41,17 @@ export class FreeMusicError extends Error {
 }
 
 const CAPABILITIES_TTL_MS = 5 * 60 * 1000;
+const REQUEST_TIMEOUT_MS = 12_000; // generous: a cold-booting host takes seconds
+const RETRY_DELAY_MS = 700;
 let cachedCapabilities: { value: MusicCapabilities; at: number } | null = null;
 
 function api(path: string): string {
   return `${getCloudConfig().apiBase}${path}`;
+}
+
+/** fetch + timeout, so a wedged request can't hang a check forever. */
+async function fetchWithTimeout(url: string): Promise<Response> {
+  return fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
 }
 
 async function readError(response: Response): Promise<string> {
@@ -57,45 +64,87 @@ async function readError(response: Response): Promise<string> {
   return `The music service responded ${response.status}.`;
 }
 
-/** Cheap probe the player shows once per session (5 min client cache). */
+async function fetchCapabilitiesOnce(): Promise<MusicCapabilities> {
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(api('/api/music/capabilities'));
+  } catch {
+    // Network failure / timeout — often the host cold-booting. Worth one
+    // immediate retry before reporting the API as offline.
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    try {
+      response = await fetchWithTimeout(api('/api/music/capabilities'));
+    } catch {
+      return { search: false, resolve: false };
+    }
+  }
+  if (!response.ok) return { search: false, resolve: false };
+  try {
+    const data = (await response.json()) as { search?: boolean; resolve?: boolean };
+    return {
+      search: Boolean(data.search),
+      resolve: Boolean(data.resolve),
+    };
+  } catch {
+    return { search: false, resolve: false };
+  }
+}
+
+/**
+ * Cheap probe the player shows once per session (5 min client cache).
+ * Only *successful* answers are cached — a timed-out probe (the host was
+ * cold-booting) must not poison the session for the next five minutes,
+ * which is exactly how "music sometimes doesn't show up" felt.
+ */
 export async function fetchMusicCapabilities(): Promise<MusicCapabilities> {
   if (cachedCapabilities && Date.now() - cachedCapabilities.at < CAPABILITIES_TTL_MS) {
     return cachedCapabilities.value;
   }
-  let value: MusicCapabilities = { search: false, resolve: false };
-  try {
-    const response = await fetch(api('/api/music/capabilities'));
-    if (response.ok) {
-      const data = (await response.json()) as { search?: boolean; resolve?: boolean };
-      value = {
-        search: Boolean(data.search),
-        resolve: Boolean(data.resolve),
-      };
-    }
-  } catch {
-    /* offline / static-only deploy — defaults stand */
+  const value = await fetchCapabilitiesOnce();
+  const trustworthy = value.search || value.resolve;
+  if (trustworthy) {
+    cachedCapabilities = { value, at: Date.now() };
+  } else {
+    cachedCapabilities = null; // never cache an offline/unconfigured answer
   }
-  cachedCapabilities = { value, at: Date.now() };
   return value;
 }
 
-/**
- * Free catalog search. Throws FreeMusicError with a human-readable message
- * (including "not configured" guidance when the server lacks credentials).
- */
-export async function freeSearchTracks(q: string, limit = 24): Promise<SpotifyTrack[]> {
+/** Test hook — clears the capability cache between cases. */
+export function resetMusicClientForTests(): void {
+  cachedCapabilities = null;
+}
+
+async function searchOnce(q: string, limit: number): Promise<SpotifyTrack[]> {
   const params = new URLSearchParams({ q, limit: String(Math.min(30, Math.max(1, limit))) });
   let response: Response;
   try {
-    response = await fetch(api(`/api/music/search?${params.toString()}`));
+    response = await fetchWithTimeout(api(`/api/music/search?${params.toString()}`));
   } catch {
-    throw new FreeMusicError('Could not reach the music service — check your connection.');
+    throw new FreeMusicError('Could not reach the music service — check your connection.', true);
   }
   if (!response.ok) {
     throw new FreeMusicError(await readError(response), response.status === 503);
   }
   const data = (await response.json()) as { tracks?: SpotifyTrack[] };
   return (data.tracks ?? []).filter((track) => track && typeof track.uri === 'string');
+}
+
+/**
+ * Free catalog search. Transient failures (a cold-booting host, a blip)
+ * get one automatic retry before the user sees an error; a 503 "not
+ * configured on this server" is permanent and surfaces immediately.
+ */
+export async function freeSearchTracks(q: string, limit = 24): Promise<SpotifyTrack[]> {
+  try {
+    return await searchOnce(q, limit);
+  } catch (err) {
+    if (err instanceof FreeMusicError && !err.unavailable) {
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+      return searchOnce(q, limit);
+    }
+    throw err;
+  }
 }
 
 const pendingResolves = new Map<string, Promise<ResolvedStream>>();

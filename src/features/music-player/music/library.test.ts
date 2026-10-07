@@ -49,6 +49,23 @@ describe('snapshotTrack', () => {
     expect(snap.name).toBe('t1');
     expect(snap.artists[0].name).toBe('Artist');
   });
+
+  it('keeps the bundled local_url (ambience) through persistence', () => {
+    const rain: SpotifyTrack = {
+      ...track('ambient:rain', 'Rain'),
+      uri: 'padify:ambient:rain',
+      local_url: 'sounds/rain.mp3',
+    };
+    const snap = snapshotTrack(rain);
+    expect(snap.local_url).toBe('sounds/rain.mp3');
+    expect(snap.id).toBe('ambient:rain');
+  });
+
+  it('omits local_url entirely for catalog tracks', () => {
+    const snap = snapshotTrack(track('t1'));
+    expect(snap.local_url).toBeUndefined();
+    expect(JSON.parse(JSON.stringify(snap))).not.toHaveProperty('local_url');
+  });
 });
 
 describe('LocalMusicLibrary favorites', () => {

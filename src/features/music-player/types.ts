@@ -42,4 +42,10 @@ export interface SpotifyTrack {
   /** Catalog flags that ride along in persisted snapshots. */
   is_local?: boolean;
   is_playable?: boolean;
+  /**
+   * A bundled audio file this track plays from directly (the ambience
+   * sounds). Present → the engine skips stream resolution entirely; the
+   * URL is app-relative and served with the app itself.
+   */
+  local_url?: string;
 }
