@@ -4,12 +4,14 @@
  * Talks to the Padify API's public music endpoints (server/music.ts):
  *
  *   /api/music/capabilities → what this deployment supports
- *   /api/music/search       → Spotify catalog metadata (Client Credentials)
+ *   /api/music/search       → catalog metadata (Spotify's catalog when the
+ *                              API has app credentials, YouTube results
+ *                              mapped into the same shape otherwise)
  *   /api/music/resolve      → a direct audio stream URL for a track
  *
  * Everything here works without a Spotify login. Search results are shaped
  * exactly like `SpotifyTrack` (see ../types.ts) so the player renders one
- * row component for the catalog data the API returns.
+ * row component for whichever backend the API used.
  */
 
 import { getCloudConfig } from '../../../cloud/config';

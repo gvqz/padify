@@ -161,24 +161,31 @@ the database — panel restarts no longer cut a sync push mid-flight.
 
 The music player runs through two extra public endpoints on this
 API (`GET /api/music/search` and `GET /api/music/resolve` — see
-`server/music.ts`). Both are optional: without them the player simply
-says the music API is offline.
+`server/music.ts`). Search has two backends, in order of preference:
 
-- `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` — your Spotify app's
-  credentials. The server exchanges
-  them for a Client-Credentials token to search Spotify's public catalog
-  (no user login involved). Set them and `GET /api/music/capabilities`
-  flips `search` to `true`.
-- `SPOTIFY_MARKET` — optional market code (e.g. `US`) for catalog search.
-- `yt-dlp` — install it on the host (`pip install yt-dlp` or a distro
-  package) and `GET /api/music/capabilities` flips `resolve` to `true`. The
-  server runs it with `--print` + `-f bestaudio` so only the ~10 KB text
-  stream URL crosses the wire — audio flows browser → googlevideo.com
-  directly, never through the API, keeping AlwaysData's 10 GB/month budget
-  essentially untouched.
-- `YTDLP_PATH` — override the yt-dlp binary location.
+- `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` — optional. Your Spotify
+  app's credentials; the server exchanges them for a Client-Credentials
+  token to search Spotify's public catalog (no user login involved),
+  which gives the cleanest metadata: proper artist names, release dates,
+  square artwork. Set them and `GET /api/music/capabilities` reports
+  `search` via the catalog.
+- `yt-dlp` — install it on the host (`pip install --user yt-dlp` or a
+  distro package) and `GET /api/music/capabilities` flips `resolve` to
+  `true` — and `search` too: without Spotify credentials the API falls
+  back to YouTube search (`yt-dlp --flat-playlist`), mapping each result
+  into the same catalog shape, so the player works with zero extra
+  configuration. Tracks from the fallback carry an 11-character YouTube
+  id, which the resolver turns into the exact video (no second search).
+- `YTDLP_PATH` — override the yt-dlp binary location (needed when it
+  lives outside the server process's `PATH`, e.g. `~/.local/bin`).
 - `MUSIC_RESOLVE_CONCURRENCY` — simultaneous yt-dlp processes (default 2,
-  capped at 4) to protect the 128 MB RAM budget.
+  capped at 4). A bestaudio resolution peaks around ~55 MB RSS while a
+  flat search is ~2 MB; keep it at 1 on hosts with a ~128 MB budget.
+
+Either way, the server resolves direct stream URLs with `--print` +
+`-f bestaudio` so only the ~10 KB text URL crosses the wire — audio flows
+browser → googlevideo.com directly, never through the API, keeping
+AlwaysData's 10 GB/month budget essentially untouched.
 
 Resolved stream URLs are cached in the `music_resolutions` table (TTL 3 h,
 swept at boot), so repeat plays are one cheap SELECT and repeat requests for
