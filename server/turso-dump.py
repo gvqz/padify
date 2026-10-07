@@ -45,17 +45,50 @@ def pipeline(endpoint: str, token: str, statements: list) -> list:
     return out
 
 
+def cell_value(value):
+    """Hrana cell → plain Python value (str/int/float/None); plain cells pass through."""
+    if isinstance(value, dict):
+        kind = value.get("type")
+        if kind in ("integer", "float", "text"):
+            return value.get("value")
+        if kind == "blob":
+            return value.get("base64")
+        return None
+    return value
+
+
 def literal(value) -> str:
-    """Render one JSON cell as a SQL literal (SQLite quoting rules)."""
+    """Render one pipeline cell as a SQL literal (SQLite quoting rules).
+
+    The /v2/pipeline API delivers Hrana cells: {"type": ..., "value": ...}
+    with numbers serialised as strings. Plain JSON scalars (what a local
+    mock emits) are still accepted.
+    """
+    if isinstance(value, dict):
+        kind = value.get("type")
+        if kind == "null":
+            return "NULL"
+        if kind == "integer" or kind == "float":
+            # value arrives as a string ("42"); print it verbatim so the
+            # dump keeps SQLite's own textual rendering of the number.
+            raw = value.get("value")
+            if raw is None:
+                return "NULL"
+            return str(raw)
+        if kind == "blob":
+            if "base64" in value:
+                return "X'" + base64.b64decode(value["base64"]).hex() + "'"
+            return "NULL"
+        if kind == "text":
+            value = value.get("value")
+        else:
+            value = None
     if value is None:
         return "NULL"
     if isinstance(value, bool):
         return "1" if value else "0"
     if isinstance(value, (int, float)):
         return str(value)
-    if isinstance(value, dict) and "base64" in value:
-        # {"type":"blob","base64":"…"} — the only wrapped shape the API emits.
-        return "X'" + base64.b64decode(value["base64"]).hex() + "'"
     return "'" + str(value).replace("'", "''") + "'"
 
 
@@ -84,8 +117,8 @@ def main() -> int:
     print("PRAGMA foreign_keys=OFF;")
     print("BEGIN TRANSACTION;")
     for row in schema["rows"]:
-        name, create_sql = row[0], row[1]
-        print(create_sql + ";")
+        name, create_sql = cell_value(row[0]), cell_value(row[1])
+        print(str(create_sql) + ";")
         if not str(create_sql).lower().startswith("create table"):
             continue
         quoted = '"' + str(name).replace('"', '""') + '"'

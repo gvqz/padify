@@ -71,4 +71,57 @@ describe('the Turso backend talks to a clock', () => {
     const db = await tursoDb();
     await expect(db.all('select 1')).rejects.toThrow(/Turso is unreachable/);
   });
+
+  it('unwraps Hrana cells the way the live pipeline delivers them', async () => {
+    // The real /v2/pipeline answers with typed cell objects — integers and
+    // floats arrive as strings, NULL as {"type":"null"} — not the bare JSON
+    // scalars a naive reading of the examples suggests. A regression here
+    // turns every row into {"type":...} objects and quietly breaks every
+    // integer comparison in the sync layer.
+    const results = [
+      {
+        type: 'ok',
+        response: {
+          result: {
+            cols: [
+              { name: 'id' },
+              { name: 'seq' },
+              { name: 'name' },
+              { name: 'ratio' },
+              { name: 'tombstone' },
+            ],
+            rows: [
+              [
+                { type: 'text', value: 'note-1' },
+                { type: 'integer', value: '42' },
+                { type: 'null' },
+                { type: 'float', value: '1.5' },
+                { type: 'integer', value: '0' },
+              ],
+            ],
+          },
+        },
+      },
+    ];
+    const fetchMock = vi.fn(async () => {
+      return new Response(JSON.stringify({ results }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const db = await tursoDb();
+    const rows = await db.all('select id, seq, name, ratio, tombstone from notes');
+
+    expect(rows).toEqual([
+      {
+        id: 'note-1',
+        seq: 42,
+        name: null,
+        ratio: 1.5,
+        tombstone: 0,
+      },
+    ]);
+    // Numbers must be real numbers — '42' (string) would sort wrongly against
+    // every seq cursor the sync layer compares against.
+    expect(typeof rows[0]!.seq).toBe('number');
+  });
 });
