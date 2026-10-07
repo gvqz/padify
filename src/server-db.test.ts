@@ -88,7 +88,7 @@ describe('the Turso backend talks to a clock', () => {
               { name: 'seq' },
               { name: 'name' },
               { name: 'ratio' },
-              { name: 'tombstone' }
+              { name: 'tombstone' },
             ],
             rows: [
               [
@@ -96,12 +96,12 @@ describe('the Turso backend talks to a clock', () => {
                 { type: 'integer', value: '42' },
                 { type: 'null' },
                 { type: 'float', value: '1.5' },
-                { type: 'integer', value: '0' }
-              ]
-            ]
-          }
-        }
-      }
+                { type: 'integer', value: '0' },
+              ],
+            ],
+          },
+        },
+      },
     ];
     const fetchMock = vi.fn(async () => {
       return new Response(JSON.stringify({ results }), { status: 200 });
@@ -117,8 +117,8 @@ describe('the Turso backend talks to a clock', () => {
         seq: 42,
         name: null,
         ratio: 1.5,
-        tombstone: 0
-      }
+        tombstone: 0,
+      },
     ]);
     // Numbers must be real numbers — '42' (string) would sort wrongly against
     // every seq cursor the sync layer compares against.
