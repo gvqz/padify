@@ -7,12 +7,13 @@
 # Usage:
 #   server/backup.sh [output-dir]        # default: ./backups next to this script
 #
-# Environment (same variables the API reads):
-#   TURSO_DATABASE_URL    libsql://… or https://… → dumps through the turso
-#                         CLI (needs TURSO_DATABASE_NAME and TURSO_AUTH_TOKEN);
-#                         file:… or unset → plain sqlite3 dump of that file
-#   TURSO_DATABASE_NAME   (Turso only) the database's NAME, as `turso db list`
-#                         shows it — the URL alone is not enough for the CLI
+# Environment (same variables the API reads — the script loads the
+# server's own .env first, so scheduled environments that start with a
+# clean slate still see them):
+#   TURSO_DATABASE_URL    libsql://… or https://… → dumps through the
+#                         stdlib pipeline client in turso-dump.py (needs
+#                         TURSO_AUTH_TOKEN); file:… or unset → plain
+#                         sqlite3 dump of that file
 #   TURSO_AUTH_TOKEN      (Turso only) a token with read access
 #
 # Retention: dumps older than BACKUP_KEEP_DAYS (default 14) are deleted.
@@ -22,6 +23,15 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
+
+# Scheduled environments (cron, panel tasks) do not inherit the API's env;
+# load the server's own .env so TURSO_* reaches the dump paths below.
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
 
 OUT_DIR="${1:-backups}"
 KEEP_DAYS="${BACKUP_KEEP_DAYS:-14}"
@@ -33,13 +43,15 @@ URL="${TURSO_DATABASE_URL:-}"
 OUT_FILE="$OUT_DIR/padify-db-$STAMP.sql.gz"
 
 dump_turso() {
-  : "${TURSO_DATABASE_NAME:?TURSO_DATABASE_NAME is required to dump a Turso database (see turso db list)}"
+  : "${TURSO_DATABASE_URL:?TURSO_DATABASE_URL is required to dump a Turso database}"
   : "${TURSO_AUTH_TOKEN:?TURSO_AUTH_TOKEN is required to dump a Turso database}"
-  command -v turso >/dev/null 2>&1 || {
-    echo "backup.sh: the turso CLI is not installed — curl -sSfL https://get.tur.so/install.sh | bash" >&2
+  command -v python3 >/dev/null 2>&1 || {
+    echo "backup.sh: python3 is required to dump a Turso database" >&2
     exit 1
   }
-  turso db shell "$TURSO_DATABASE_NAME" --token "$TURSO_AUTH_TOKEN" .dump
+  # The turso CLI's shell needs an interactive platform login; the stdlib
+  # dumper speaks the same HTTP pipeline as server/db.ts with just the token.
+  python3 "$(dirname "$0")/turso-dump.py"
 }
 
 dump_local() {
