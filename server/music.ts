@@ -407,6 +407,8 @@ const JUNK_TITLE =
 /** Song rows shorter/longer than this are clips or dumps, not tracks. */
 const MIN_SONG_SEC = 40;
 const MAX_SONG_SEC = 1200;
+/** The fallback's generous ceiling — genre searches genuinely want long mixes. */
+const MAX_MIX_SEC = 4 * 60 * 60;
 
 /** Lowercased alphanumerics only — the dedupe spelling of artist + name. */
 function dedupeKey(artist: string, name: string): string {
@@ -430,38 +432,13 @@ interface RankedEntry {
 }
 
 /**
- * The catalog pass: filter junk, dedupe (one row per song, the best video
- * for it), then surface the official "- Topic" uploads at the top while
- * keeping YouTube's relevance order within each group.
+ * The dedupe + ranking half of the catalog pass: one row per song (the
+ * best video for it — official "- Topic" upload first, then views, then
+ * the plainer title), Topic uploads surfaced, relevance order kept.
  */
-function buildCatalog(entries: unknown[], limit: number): SearchTrack[] {
-  const ranked: RankedEntry[] = [];
-  for (const entry of entries) {
-    if (!entry || typeof entry !== 'object') continue;
-    const raw = entry as YtSearchEntry;
-    if (
-      typeof raw.duration === 'number' &&
-      (raw.duration < MIN_SONG_SEC || raw.duration > MAX_SONG_SEC)
-    ) {
-      continue; // shorts/clip dumps — not song rows
-    }
-    if (JUNK_TITLE.test(typeof raw.title === 'string' ? raw.title : '')) continue;
-    const track = youtubeTrackFrom(raw);
-    if (!track) continue;
-    const artist = track.artists[0]?.name ?? '';
-    ranked.push({
-      entry: raw,
-      track,
-      key: dedupeKey(artist, track.name),
-      topic: isTopicChannel(raw),
-      views: entryViewCount(raw),
-      index: ranked.length,
-    });
-  }
-
-  // One row per song: keep the group's best video (official Topic upload
-  // first, then the most-viewed, then the plainer title) at the position of
-  // its first appearance.
+function dedupeAndRank(ranked: RankedEntry[], limit: number): SearchTrack[] {
+  // One row per song: keep the group's best video at the position of its
+  // first appearance.
   const bestByKey = new Map<string, RankedEntry>();
   for (const item of ranked) {
     const incumbent = bestByKey.get(item.key);
@@ -482,6 +459,44 @@ function buildCatalog(entries: unknown[], limit: number): SearchTrack[] {
     .sort((a, b) => (b.topic ? 1 : 0) - (a.topic ? 1 : 0) || a.index - b.index)
     .slice(0, limit)
     .map((item) => item.track);
+}
+
+/**
+ * The catalog pass: filter junk, dedupe, rank. When the junk filter would
+ * leave nothing — a genre query like "lofi hip hop" where every result IS
+ * a mix — fall back to the unfiltered (but still sane-length, deduped)
+ * entries: those mixes are exactly what the searcher wanted.
+ */
+function buildCatalog(entries: unknown[], limit: number): SearchTrack[] {
+  const clean: RankedEntry[] = [];
+  const everything: RankedEntry[] = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue;
+    const raw = entry as YtSearchEntry;
+    const duration = typeof raw.duration === 'number' ? raw.duration : 0;
+    if (duration < MIN_SONG_SEC || duration > MAX_MIX_SEC) {
+      continue; // shorts and day-long dumps — not playable rows
+    }
+    const track = youtubeTrackFrom(raw);
+    if (!track) continue;
+    const item: RankedEntry = {
+      entry: raw,
+      track,
+      key: dedupeKey(track.artists[0]?.name ?? '', track.name),
+      topic: isTopicChannel(raw),
+      views: entryViewCount(raw),
+      index: everything.length,
+    };
+    everything.push(item);
+    // Song-length rows only; longer mixes ride along for the fallback.
+    if (duration <= MAX_SONG_SEC && !JUNK_TITLE.test(typeof raw.title === 'string' ? raw.title : '')) {
+      clean.push(item);
+    }
+  }
+
+  const songs = dedupeAndRank(clean, limit);
+  if (songs.length > 0) return songs;
+  return dedupeAndRank(everything, limit);
 }
 
 async function youtubeSearch(q: string, limit: number): Promise<SearchTrack[]> {

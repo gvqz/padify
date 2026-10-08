@@ -319,4 +319,45 @@ describe('musicSearch — catalog quality pass (filter, dedupe, rank)', () => {
     await expect(musicSearch('down', 24)).rejects.toThrow('down hard');
     expect(calls).toBe(2);
   });
+
+  it('falls back to the raw mixes when the junk filter would leave nothing', async () => {
+    // A genre query: every result is a mix — those ARE what the searcher
+    // wanted, so "Nothing found" would be the wrong answer.
+    installFakeSearch([
+      entry({
+        id: 'mix11111111',
+        title: 'cozy lofi beats to study / relax to',
+        duration: 3882,
+      }),
+      entry({
+        id: 'mix22222222',
+        title: '1 A.M Study Session 📚 [lofi hip hop]',
+        duration: 3674,
+      }),
+      entry({ id: 'dump1111111', title: '8 hours of lofi to sleep', duration: 28_828 }),
+    ]);
+
+    const tracks = await musicSearch('lofi hip hop', 24);
+
+    expect(tracks.map((t) => t.id)).toEqual(['mix11111111', 'mix22222222']);
+  });
+
+  it('day-long dumps never appear, even in the fallback', async () => {
+    installFakeSearch([entry({ id: 'dump22222222', title: 'Chill Lofi 24/7', duration: 86_660 })]);
+
+    const tracks = await musicSearch('lofi', 24);
+
+    expect(tracks).toEqual([]);
+  });
+
+  it('the fallback never overrides a clean song result', async () => {
+    installFakeSearch([
+      entry({ id: 'song1111111', title: 'Daft Punk - One More Time' }),
+      entry({ id: 'mix33333333', title: 'study mix 2024', duration: 3600 }),
+    ]);
+
+    const tracks = await musicSearch('one more time', 24);
+
+    expect(tracks.map((t) => t.id)).toEqual(['song1111111']);
+  });
 });
