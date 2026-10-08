@@ -68,7 +68,7 @@ export const WELCOME_HTML = [
   '- Writing sessions with a pick-a-duration timer.',
   '- View Note Statistics.',
   '- Snapshots.',
-  '- Ability to mimic typewriter sound when typing.',
+  '- Fun typing explosion effects — confetti, fireworks, shooting stars and more.',
   '- Optional break reminders after long writing sessions.',
   '- Keyboard shortcuts for common actions.',
   '- Full-screen mode for a distraction-free writing experience.',

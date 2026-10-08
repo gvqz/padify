@@ -277,42 +277,6 @@
             </div>
             <div class="pref-row">
               <div class="pref-row-copy">
-                <span class="pref-row-title">Tab indentation</span>
-                <span class="pref-row-hint">Always on — the Tab key indents your text.</span>
-              </div>
-              <div class="pref-row-control">
-                <span class="pref-always-on">Always on</span>
-              </div>
-            </div>
-            <div class="pref-action-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Clear formatting</span>
-                <span class="pref-row-hint"
-                  >Strips every tab from your notes in one go. You can undo with
-                  <span data-mod-key>Ctrl</span>&nbsp;+&nbsp;Z.</span
-                >
-              </div>
-              <button type="button" class="pref-action-btn" id="clearTabIndentation">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"
-                  />
-                  <path d="M22 21H7" />
-                  <path d="m5 11 9 9" />
-                </svg>
-                Remove all tabs
-              </button>
-            </div>
-            <div class="pref-row">
-              <div class="pref-row-copy">
                 <span class="pref-row-title">
                   Break reminders
                   <span class="pref-new-badge">NEW</span>
@@ -434,44 +398,10 @@
             </span>
             <div>
               <h5 class="pref-section-title">Effects</h5>
-              <p class="pref-section-hint">Sound and sparkle while you type.</p>
+              <p class="pref-section-hint">Sparkle and pop while you type.</p>
             </div>
           </header>
           <div class="pref-card">
-            <div class="pref-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Typewriter sound</span>
-                <span class="pref-row-hint">Mimics an Hermes Precisa 305 on each keystroke.</span>
-              </div>
-              <div class="pref-row-control">
-                <div class="checkbox checbox-switch">
-                  <label>
-                    <input type="checkbox" name="typewriterSound" id="typewriterSound" />
-                    <span></span>
-                  </label>
-                </div>
-              </div>
-            </div>
-            <div class="pref-row pref-volume-row typewriter-switch-volume">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Typewriter volume</span>
-                <span class="pref-row-hint">Play a short sample by dragging the slider.</span>
-              </div>
-              <div class="pref-row-control">
-                <div class="volume-control" id="typewriterVolumeControl">
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value="4"
-                    class="volume-slider"
-                    id="typewriterVolume"
-                    aria-label="Typewriter volume"
-                  />
-                </div>
-                <span id="typewriterVolumeValue" title="Typewriter volume"></span>
-              </div>
-            </div>
             <div class="pref-row">
               <div class="pref-row-copy">
                 <span class="pref-row-title">Typing explosion effect</span>
@@ -486,6 +416,25 @@
                     <span></span>
                   </label>
                 </div>
+              </div>
+            </div>
+            <div class="pref-row">
+              <div class="pref-row-copy">
+                <span class="pref-row-title">Explosion style</span>
+                <span class="pref-row-hint"
+                  >Confetti, fireworks, shooting stars — or let Padify surprise you.</span
+                >
+              </div>
+              <div class="pref-row-control">
+                <select name="explodingEffectStyle" id="explodingEffectStyle" class="form-control">
+                  <option value="classic">Classic burst</option>
+                  <option value="confetti">Confetti pop</option>
+                  <option value="fireworks">Fireworks</option>
+                  <option value="shooting">Shooting stars</option>
+                  <option value="neon">Neon sparks</option>
+                  <option value="emoji">Emoji burst</option>
+                  <option value="surprise">Surprise me</option>
+                </select>
               </div>
             </div>
           </div>

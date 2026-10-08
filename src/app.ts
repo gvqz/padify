@@ -64,7 +64,7 @@ import { initThemeColors } from './editor/theme-colors';
 import { initRichShortcuts } from './editor/rich-shortcuts';
 import { initNoteTypeMenu } from './ui/note-type-menu';
 import { initThemeController } from './theme-controller';
-import { initEditorPreferences, clearTabIndentation } from './editor-preferences';
+import { initEditorPreferences } from './editor-preferences';
 import { setBreakRemindersEnabled, trackWritingActivity } from './break-reminder';
 import { registerServiceWorker, initInstallPrompt } from './install-pwa';
 import { requestPersistentStorage, checkQuotaOnce } from './storage/persistence';
@@ -166,7 +166,7 @@ export async function initApp(): Promise<void> {
   });
   const characterAndWordCountText = calculateCharactersAndWords(tabManager.getActiveText());
 
-  // Typewriter sounds + exploding keys (see typing-effects.ts).
+  // Typing explosion effects (see typing-effects.ts).
   const typingEffects = initTypingEffects(notepad, editorConfig);
 
   // Handle editor auto-scroll for long notes
@@ -659,10 +659,6 @@ export async function initApp(): Promise<void> {
     void card.offsetWidth; // restart the value-swap animation
     card.classList.add('stat-flip');
     renderStatCard(card);
-  });
-
-  notepad.clearTabIndentation.on('click', function () {
-    clearTabIndentation(notepad);
   });
 
   notepad.breakReminders.on('change', function () {

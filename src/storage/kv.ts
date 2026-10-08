@@ -2,7 +2,7 @@
  * Padify storage — settings key/value store.
  *
  * Replaces direct localStorage access for every small setting (theme, fonts,
- * typewriter volume, sessions, …). Semantics are identical to the
+ * writing sessions, …). Semantics are identical to the
  * localStorage API on purpose:
  *
  *   stateGet(key)     → string | null, synchronous
