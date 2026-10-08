@@ -15,7 +15,8 @@ import type { SpotifyTrack } from './types';
 // ---------------------------------------------------------------------------
 
 export type RepeatMode = 'off' | 'all' | 'one';
-export type ViewId = 'music' | 'queue' | 'ambience';
+/** The sidebar destinations. Legacy 'music' (the old tab layout) → 'search'. */
+export type ViewId = 'search' | 'favorites' | 'playlist' | 'ambience' | 'queue';
 
 export interface MusicPlayerState {
   volume: number;
@@ -33,13 +34,19 @@ export interface MusicPlayerState {
 
 export const STORAGE_KEY = 'padify-music-state';
 export const REPEAT_MODES: RepeatMode[] = ['off', 'all', 'one'];
-const VIEW_IDS: ViewId[] = ['music', 'queue', 'ambience'];
+const VIEW_IDS: ViewId[] = ['search', 'favorites', 'playlist', 'ambience', 'queue'];
+/** The pre-revamp tab ids, mapped forward so a reload lands somewhere sane. */
+const LEGACY_VIEWS: Record<string, ViewId> = {
+  music: 'search',
+  queue: 'queue',
+  ambience: 'ambience',
+};
 
 export const DEFAULT_STATE: Omit<MusicPlayerState, 'freeQueue'> & { freeQueue: never[] } = {
   volume: 0.7,
   shuffle: false,
   repeat: 'off',
-  view: 'music',
+  view: 'search',
   freeQueue: [],
   freeIndex: -1,
 };
@@ -61,6 +68,14 @@ export const FREE_QUEUE_CAP = 200;
 // ---------------------------------------------------------------------------
 // Load / save
 // ---------------------------------------------------------------------------
+
+/** Reads a persisted view id, mapping legacy tab ids forward. */
+function sanitizeView(value: unknown): ViewId {
+  if (typeof value !== 'string') return DEFAULT_STATE.view;
+  const legacy = LEGACY_VIEWS[value];
+  const candidate = (legacy ?? value) as ViewId;
+  return VIEW_IDS.includes(candidate) ? candidate : DEFAULT_STATE.view;
+}
 
 /**
  * Reads and sanitizes the persisted state. Every field falls back to its
@@ -90,7 +105,7 @@ export function loadPlayerState(get: (key: string) => string | null = stateGet):
       repeat: REPEAT_MODES.includes(parsed.repeat as RepeatMode)
         ? (parsed.repeat as RepeatMode)
         : DEFAULT_STATE.repeat,
-      view: VIEW_IDS.includes(parsed.view as ViewId) ? (parsed.view as ViewId) : DEFAULT_STATE.view,
+      view: sanitizeView(parsed.view),
       freeQueue,
       freeIndex:
         typeof parsed.freeIndex === 'number'

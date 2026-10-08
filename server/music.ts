@@ -182,6 +182,7 @@ interface YtSearchEntry {
   channel_url?: unknown;
   live_status?: unknown;
   thumbnails?: unknown;
+  view_count?: unknown;
 }
 
 /**
@@ -253,17 +254,52 @@ function runYtSearch(q: string, limit: number): Promise<unknown[]> {
   });
 }
 
+/** One retry after a beat — YouTube's soft rate limits are transient. */
+const SEARCH_RETRY_DELAY_MS = 900;
+
+async function runYtSearchWithRetry(q: string, limit: number): Promise<unknown[]> {
+  try {
+    return await runYtSearch(q, limit);
+  } catch (first) {
+    await new Promise((resolve) => setTimeout(resolve, SEARCH_RETRY_DELAY_MS));
+    try {
+      return await runYtSearch(q, limit);
+    } catch {
+      throw first; // surface the original failure
+    }
+  }
+}
+
 /** Parenthesized/bracketed suffixes that carry no song information. */
 const TITLE_NOISE =
-  /official|audio|video|lyrics?|visualizer|hd|hq|4k|mv|remaster|mono|stereo|full\s+song|single|explicit|clean|edit|version|album|radio/i;
+  /official|audio|video|lyrics?|lyrical|visualizer|visualiser|hd|hq|4k|1080p|720p|mv|remaster|mono|stereo|full\s+song|single|explicit|clean|edit|version|album|radio|audio\s+only/i;
+
+/** Bare, unbracketed trailers: "Song Official Music Video", "Song HD 1080p". */
+const TITLE_TAIL_NOISE =
+  /\s+((official\s+)?(music\s+)?(video|audio|visuali[sz]er|lyrics?))\s*$/i;
+const TITLE_TAIL_QUALITY = /\s+((hd|hq|4k|1080p|720p)(\s+remastered)?)\s*$/i;
 
 /** Drops trailing "(Official Audio)"-style suffixes, repeatedly. */
 function cleanTrackTitle(raw: string): string {
   let title = raw.trim();
+  // Leading bracket noise first: "[Official Video] Song".
+  for (;;) {
+    const lead = title.match(/^\s*[([{]([^()[\]{}]*)[)}\]]\s+/);
+    if (!lead || !TITLE_NOISE.test(lead[1] ?? '')) break;
+    title = title.slice((lead.index ?? 0) + lead[0].length).trim();
+  }
+  // Then trailing "(Official Audio)" suffixes.
   for (;;) {
     const match = title.match(/\s+[([{]([^()[\]{}]*)[)}\]]\s*$/);
     if (!match || !TITLE_NOISE.test(match[1] ?? '')) break;
     title = title.slice(0, match.index ?? 0).trim();
+  }
+  // Then bare trailers: "Song Official Music Video", "Song HD 1080p" —
+  // repeatedly, so "HD 1080p" loses both tokens.
+  for (;;) {
+    const next = title.replace(TITLE_TAIL_NOISE, '').replace(TITLE_TAIL_QUALITY, '').trim();
+    if (next === title) break;
+    title = next;
   }
   return title || raw.trim();
 }
@@ -278,13 +314,18 @@ function cleanChannelName(entry: YtSearchEntry): string {
   return raw.replace(/\s*-\s*Topic$/i, '').trim();
 }
 
-/** "Artist - Song" titles split into their two halves; anything else stays whole. */
+/** "Artist - Song" titles (also en/em dashes, "Artist | Song") split into
+ *  their two halves; anything else stays whole. */
+const TITLE_SEPARATORS = [' - ', ' – ', ' — ', ' | '];
+
 function splitTitle(title: string, channel: string): { name: string; artist: string } {
-  const dash = title.indexOf(' - ');
-  if (dash > 0 && dash <= 80) {
-    const artist = title.slice(0, dash).trim();
-    const name = title.slice(dash + 3).trim();
-    if (artist && name) return { name, artist };
+  for (const separator of TITLE_SEPARATORS) {
+    const dash = title.indexOf(separator);
+    if (dash > 0 && dash <= 80) {
+      const artist = title.slice(0, dash).trim();
+      const name = title.slice(dash + separator.length).trim();
+      if (artist && name) return { name, artist };
+    }
   }
   return { name: title, artist: channel || 'YouTube' };
 }
@@ -299,6 +340,22 @@ function entryThumbnail(entry: YtSearchEntry, id: string): { url: string }[] {
     if (best) return [best];
   }
   return [{ url: `https://i.ytimg.com/vi/${id}/mqdefault.jpg` }];
+}
+
+/** True when the flat entry came from an auto-generated "X - Topic" channel. */
+function isTopicChannel(entry: YtSearchEntry): boolean {
+  const raw =
+    typeof entry.channel === 'string' && entry.channel.trim()
+      ? entry.channel
+      : typeof entry.uploader === 'string'
+        ? entry.uploader
+        : '';
+  return /\s-\s*Topic$/i.test(raw);
+}
+
+/** The entry's view count, when yt-dlp reported one (ranking only). */
+function entryViewCount(entry: YtSearchEntry): number {
+  return typeof entry.view_count === 'number' && entry.view_count > 0 ? entry.view_count : 0;
 }
 
 /** Maps flat-search entries into the catalog shape the player renders. */
@@ -337,15 +394,102 @@ function youtubeTrackFrom(entry: YtSearchEntry): SearchTrack | null {
   };
 }
 
-async function youtubeSearch(q: string, limit: number): Promise<SearchTrack[]> {
-  const entries = await runYtSearch(q, Math.min(30, Math.max(1, limit)));
-  const tracks: SearchTrack[] = [];
+// ---- catalog quality: junk filter, dedupe, ranking -------------------------
+
+/**
+ * Titles that mark a video as NOT the song itself: hour-long dumps, loops,
+ * compilations, reactions, karaoke/instrumental stand-ins, nightcore edits.
+ * Deliberately keeps remixes and live performances — those are real tracks.
+ */
+const JUNK_TITLE =
+  /\b\d{1,2}\s*(hour|hr|hours|hrs)\b|\bhour\s+long\b|\bextended\b|\bloop(s|ed)?\b|\bcompilation\b|\bfull\s+album\b|\bcomplete\s+album\b|\bnon[-\s]?stop\b|\breaction\b|\breacts?\b|\bkaraoke\b|\binstrumental\b|\btutorial\b|\bhow\s+to\s+play\b|\bblack\s+screen\b|\bnightcore\b|\bsped\s+up\b|\bspeed\s+up\b|\bslowed\b|\b8d\b|\basmr\b|\bmashup\b|\bmedley\b|\bbest\s+of\s+(the\s+)?(19|20)\d\d\b|\bgreatest\s+hits\b|\btop\s+\d+\b|\b24\/7\b|\bplaylist\b|\bsong\s+of\s+the\s+day\b|\bsong\s+des\s+tages\b|\bin\s+reverse\b|\breversed\b/i;
+
+/** Song rows shorter/longer than this are clips or dumps, not tracks. */
+const MIN_SONG_SEC = 40;
+const MAX_SONG_SEC = 1200;
+
+/** Lowercased alphanumerics only — the dedupe spelling of artist + name. */
+function dedupeKey(artist: string, name: string): string {
+  const norm = (value: string): string =>
+    value
+      .toLowerCase()
+      .replace(/\(.*?\)/g, ' ')
+      .replace(/\[.*?\]/g, ' ')
+      .replace(/(^|\s)the\s/g, ' ')
+      .replace(/[^a-z0-9]+/g, '');
+  return `${norm(artist)}|${norm(name)}`;
+}
+
+interface RankedEntry {
+  entry: YtSearchEntry;
+  track: SearchTrack;
+  key: string;
+  topic: boolean;
+  views: number;
+  index: number; // YouTube's own relevance position
+}
+
+/**
+ * The catalog pass: filter junk, dedupe (one row per song, the best video
+ * for it), then surface the official "- Topic" uploads at the top while
+ * keeping YouTube's relevance order within each group.
+ */
+function buildCatalog(entries: unknown[], limit: number): SearchTrack[] {
+  const ranked: RankedEntry[] = [];
   for (const entry of entries) {
     if (!entry || typeof entry !== 'object') continue;
-    const track = youtubeTrackFrom(entry as YtSearchEntry);
-    if (track) tracks.push(track);
+    const raw = entry as YtSearchEntry;
+    if (
+      typeof raw.duration === 'number' &&
+      (raw.duration < MIN_SONG_SEC || raw.duration > MAX_SONG_SEC)
+    ) {
+      continue; // shorts/clip dumps — not song rows
+    }
+    if (JUNK_TITLE.test(typeof raw.title === 'string' ? raw.title : '')) continue;
+    const track = youtubeTrackFrom(raw);
+    if (!track) continue;
+    const artist = track.artists[0]?.name ?? '';
+    ranked.push({
+      entry: raw,
+      track,
+      key: dedupeKey(artist, track.name),
+      topic: isTopicChannel(raw),
+      views: entryViewCount(raw),
+      index: ranked.length,
+    });
   }
-  return tracks;
+
+  // One row per song: keep the group's best video (official Topic upload
+  // first, then the most-viewed, then the plainer title) at the position of
+  // its first appearance.
+  const bestByKey = new Map<string, RankedEntry>();
+  for (const item of ranked) {
+    const incumbent = bestByKey.get(item.key);
+    const beats =
+      !incumbent ||
+      (item.topic && !incumbent.topic) ||
+      (item.topic === incumbent.topic &&
+        (item.views > incumbent.views ||
+          (item.views === incumbent.views &&
+            item.track.name.length < incumbent.track.name.length)));
+    if (beats) {
+      const withPos = { ...item, index: incumbent ? incumbent.index : item.index };
+      bestByKey.set(item.key, withPos);
+    }
+  }
+
+  return [...bestByKey.values()]
+    .sort((a, b) => (b.topic ? 1 : 0) - (a.topic ? 1 : 0) || a.index - b.index)
+    .slice(0, limit)
+    .map((item) => item.track);
+}
+
+async function youtubeSearch(q: string, limit: number): Promise<SearchTrack[]> {
+  // Over-fetch on purpose: filtering + dedupe trim the raw list back down,
+  // so the user still sees `limit` clean rows instead of a thin, junky page.
+  const fetch = Math.min(40, limit + 12);
+  const entries = await runYtSearchWithRetry(q, fetch);
+  return buildCatalog(entries, limit);
 }
 
 // ---------------------------------------------------------------------------

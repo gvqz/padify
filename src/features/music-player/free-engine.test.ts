@@ -28,6 +28,7 @@ class FakeAudio {
   paused = true;
   currentTime = 0;
   duration = NaN;
+  loop = false;
   playCalls = 0;
   pauseCalls = 0;
   loadCalls = 0;
@@ -400,6 +401,49 @@ describe('FreeEngine', () => {
       expect(engine.positionMs).toBe(5000);
       expect(engine.audioDurationMs).toBe(200_000);
       expect(engine.hasSource).toBe(true);
+    });
+  });
+
+  describe('bundled ambience tracks (local_url)', () => {
+    const rain = (): SpotifyTrack =>
+      track({
+        id: 'ambient:rain',
+        uri: 'padify:ambient:rain',
+        name: 'Rain',
+        preview_url: null,
+        local_url: 'sounds/rain.mp3',
+      });
+
+    it('plays the bundled file directly, looping, without resolving', async () => {
+      await engine.playTrack(rain());
+
+      expect(resolveMock).not.toHaveBeenCalled();
+      expect(host.canResolve).not.toHaveBeenCalled();
+      expect(kinds(host)).toEqual(['resolving', 'stream']);
+      const audio = element();
+      expect(audio.src).toBe('sounds/rain.mp3');
+      expect(audio.loop).toBe(true);
+      expect(audio.playCalls).toBe(1);
+    });
+
+    it('an ambience error is unavailable, never a resolve retry', async () => {
+      host.activeTrack = rain();
+      await engine.playTrack(rain());
+      host.events.length = 0;
+
+      element().dispatch('error');
+
+      expect(kinds(host)).toEqual(['unavailable']);
+      expect(resolveMock).not.toHaveBeenCalled();
+    });
+
+    it('a normal track after ambience clears the loop flag', async () => {
+      await engine.playTrack(rain());
+      resolveMock.mockResolvedValue(stream('https://cdn.example/full.mp3'));
+      await engine.playTrack(track({ id: 't-2' }));
+
+      expect(element().src).toBe('https://cdn.example/full.mp3');
+      expect(element().loop).toBe(false);
     });
   });
 });

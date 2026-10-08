@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { queueRow, rowMenuItems, trackRow } from './rows';
 import type { SpotifyTrack } from './types';
+import { ambientTracks } from './ambient';
 
 const images = (urls: string[]) => urls.map((url) => ({ url, height: 640, width: 640 }));
 
@@ -64,11 +65,20 @@ describe('trackRow', () => {
     expect(html).toContain('1:01');
   });
 
-  it('gives every row a heart, a menu button, and an equalizer', () => {
+  it('gives every row a heart, a direct enqueue button, the ⋯ menu and an equalizer', () => {
     const html = trackRow(track(), 'q');
     expect(html).toContain('data-like');
+    expect(html).toContain('data-queue-add');
     expect(html).toContain('data-menu');
     expect(html).toMatch(/sp-row-eq/);
+  });
+
+  it('renders ambience tracks with their per-sound icon instead of artwork', () => {
+    const [rain] = ambientTracks();
+    const html = trackRow(rain, 'ambience');
+    expect(html).not.toContain('<img');
+    expect(html).toContain('<svg');
+    expect(html).toContain('data-track-id="ambient:rain"');
   });
 });
 
@@ -79,6 +89,8 @@ describe('queueRow', () => {
     expect(html).not.toContain('data-queue-id');
     expect(html).toContain('data-remove');
     expect(html).not.toContain('data-menu');
+    // The direct enqueue affordance stays out of the queue itself.
+    expect(html).not.toContain('data-queue-add');
   });
 });
 
