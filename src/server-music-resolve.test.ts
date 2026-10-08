@@ -215,4 +215,22 @@ describe('resolveTrackStream', () => {
     expect(result.url).toBe('https://stream.example/direct');
     expect(result.cached).toBe(false);
   });
+
+  it('the protocol ladder retries the other address family before giving up', async () => {
+    // The OS-preferred family gets bot-blocked; the forced-IPv4 retry
+    // answers. The seam stands in for every attempt, succeeding on #2.
+    let calls = 0;
+    setYtDlpRunnerForTests((_query: string) => {
+      calls += 1;
+      if (calls === 1) return Promise.reject(new Error('Sign in to confirm you are not a bot'));
+      return Promise.resolve([
+        { videoId: 'abc123', durationSec: 200, url: 'https://stream.example/v4-retry' },
+      ]);
+    });
+
+    const result = await resolveTrackStream(sqliteDb(), input({ key: 'ladderTrackId' }));
+
+    expect(result.url).toBe('https://stream.example/v4-retry');
+    expect(calls).toBe(2);
+  });
 });

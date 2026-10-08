@@ -571,8 +571,11 @@ export function resetMusicResolverForTests(): void {
   ytSearchRunnerForTests = null;
 }
 
-/** Runs yt-dlp over YouTube search and returns the parsed candidates. */
-function runYtDlp(query: string): Promise<Candidate[]> {
+/**
+ * Runs yt-dlp over YouTube search and returns the parsed candidates —
+ * one attempt, with an optional arg prefix (the protocol-forced retries).
+ */
+function runYtDlpOnce(query: string, extraArgs: string[], timeoutMs: number): Promise<Candidate[]> {
   if (ytDlpRunnerForTests) {
     return ytDlpRunnerForTests(query);
   }
@@ -582,6 +585,7 @@ function runYtDlp(query: string): Promise<Candidate[]> {
         const proc = Bun.spawn(
           [
             YTDLP_PATH,
+            ...extraArgs,
             '--no-warnings',
             '--skip-download',
             '--quiet',
@@ -602,7 +606,7 @@ function runYtDlp(query: string): Promise<Candidate[]> {
         const timer = setTimeout(() => {
           proc.kill();
           reject(new Error('yt-dlp timed out.'));
-        }, YTDLP_TIMEOUT_MS);
+        }, timeoutMs);
 
         const done = (err: Error | null, out: string): void => {
           clearTimeout(timer);
@@ -641,6 +645,32 @@ function runYtDlp(query: string): Promise<Candidate[]> {
           .catch((error: unknown) => done(error as Error, ''));
       }),
   );
+}
+
+/** Fallback-attempt timeouts: the first try gets the full window. */
+const YTDLP_FALLBACK_TIMEOUT_MS = 15_000;
+
+/**
+ * The resolver's protocol ladder: the OS-preferred family first, then the
+ * other one. Shared-host egress reputations differ per address family (a
+ * boot may egress via a bot-flagged IPv6 /64 while its IPv4 NAT is clean,
+ * or the reverse), so a failure on one family is worth one try on the
+ * other before giving the client the bad news.
+ */
+async function runYtDlp(query: string): Promise<Candidate[]> {
+  try {
+    return await runYtDlpOnce(query, [], YTDLP_TIMEOUT_MS);
+  } catch (first) {
+    try {
+      return await runYtDlpOnce(query, ['-4'], YTDLP_FALLBACK_TIMEOUT_MS);
+    } catch {
+      try {
+        return await runYtDlpOnce(query, ['-6'], YTDLP_FALLBACK_TIMEOUT_MS);
+      } catch {
+        throw first;
+      }
+    }
+  }
 }
 
 /** Pick the candidate whose duration best matches the Spotify duration. */
