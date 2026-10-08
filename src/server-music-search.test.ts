@@ -1,8 +1,11 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   musicSearch,
   resetMusicResolverForTests,
+  setResolveConfiguredForTests,
+  setSpotifyCatalogConfiguredForTests,
+  setSpotifySearchRunnerForTests,
   setYtSearchRunnerForTests,
 } from '../server/music';
 
@@ -359,5 +362,86 @@ describe('musicSearch — catalog quality pass (filter, dedupe, rank)', () => {
     const tracks = await musicSearch('one more time', 24);
 
     expect(tracks.map((t) => t.id)).toEqual(['song1111111']);
+  });
+});
+
+describe('musicSearch — Spotify configured, catalog failure falls back', () => {
+  /** A catalog-shaped track as spotifySearch returns them. */
+  function spotifyTrack(id = '3ee2d5J8bXyZ7kOo9pTmNn'): Record<string, unknown> {
+    return {
+      id,
+      uri: `spotify:track:${id}`,
+      name: 'Around the World',
+      artists: [{ name: 'Daft Punk', uri: 'spotify:artist:4tZwfgrHOc3mvqYlEYSvVi' }],
+      album: {
+        id: 'alb000000000000000000',
+        uri: 'spotify:album:alb000000000000000000',
+        name: 'Homework',
+        images: [{ url: 'https://i.scdn.co/image/large.jpg' }],
+      },
+      duration_ms: 245_000,
+      explicit: false,
+      preview_url: null,
+    };
+  }
+
+  /** Installs a throwing Spotify runner — the 403 Premium-required shape. */
+  function installBrokenSpotify(message = 'Spotify search responded 403') {
+    setSpotifyCatalogConfiguredForTests(true);
+    setSpotifySearchRunnerForTests(() => Promise.reject(new Error(message)));
+  }
+
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('serves YouTube rows when the catalog rejects us, and says why in the log', async () => {
+    installBrokenSpotify('Spotify search responded 403');
+    setResolveConfiguredForTests(true);
+    installFakeSearch([entry()]);
+
+    const tracks = await musicSearch('daft punk around the world', 20);
+
+    expect(tracks.map((t) => t.id)).toEqual(['dwDns8x3Jb4']);
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Spotify search responded 403'),
+    );
+  });
+
+  it('rethrows the catalog error when no yt-dlp fallback exists', async () => {
+    installBrokenSpotify('Spotify search responded 403');
+    setResolveConfiguredForTests(false);
+
+    await expect(musicSearch('daft punk around the world', 20)).rejects.toThrow(
+      'Spotify search responded 403',
+    );
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  it('never touches YouTube when the catalog answers', async () => {
+    setSpotifyCatalogConfiguredForTests(true);
+    setSpotifySearchRunnerForTests(() => Promise.resolve([spotifyTrack() as never]));
+    const fake = installFakeSearch([]);
+
+    const tracks = await musicSearch('daft punk around the world', 20);
+
+    expect(tracks.map((t) => t.id)).toEqual(['3ee2d5J8bXyZ7kOo9pTmNn']);
+    expect(fake.query()).toBe(''); // the yt-dlp runner never ran
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the YouTube error when both backends fail', async () => {
+    installBrokenSpotify('Spotify token endpoint responded 503');
+    setResolveConfiguredForTests(true);
+    setYtSearchRunnerForTests(() => Promise.reject(new Error('yt-dlp exit 1')));
+
+    await expect(musicSearch('daft punk around the world', 20)).rejects.toThrow('yt-dlp exit 1');
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Spotify token endpoint responded 503'),
+    );
   });
 });

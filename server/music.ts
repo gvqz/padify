@@ -70,6 +70,9 @@ let appToken: { value: string; expiresAt: number } | null = null;
 
 /** True when the Spotify catalog backend has its app credentials. */
 function spotifyCatalogConfigured(): boolean {
+  if (spotifyCatalogConfiguredForTests !== null) {
+    return spotifyCatalogConfiguredForTests;
+  }
   return Boolean(SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET);
 }
 
@@ -128,7 +131,56 @@ interface SearchTrack {
 }
 
 export async function musicSearch(q: string, limit: number): Promise<SearchTrack[]> {
-  return spotifyCatalogConfigured() ? spotifySearch(q, limit) : youtubeSearch(q, limit);
+  if (!spotifyCatalogConfigured()) {
+    return youtubeSearch(q, limit);
+  }
+  try {
+    return await spotifySearchForRunner(q, limit);
+  } catch (err) {
+    // The catalog backend refused us — most often Spotify's 403 "Active
+    // premium subscription required for the owner of the app", but a
+    // token-endpoint outage lands here too. The player would rather have
+    // YouTube-shaped rows than a 502: degrade the same way an
+    // unconfigured catalog does, when the fallback exists to serve it.
+    if (!resolveConfigured()) {
+      throw err;
+    }
+    const reason = err instanceof Error ? err.message : String(err);
+    console.warn(`[padify-api] Spotify search failed (${reason}) — falling back to YouTube`);
+    return youtubeSearch(q, limit);
+  }
+}
+
+/** Dispatches through the test seam when installed (mirrors runYtSearch). */
+function spotifySearchForRunner(q: string, limit: number): Promise<SearchTrack[]> {
+  if (spotifySearchRunnerForTests) {
+    return spotifySearchRunnerForTests(q, limit);
+  }
+  return spotifySearch(q, limit);
+}
+
+let spotifySearchRunnerForTests:
+  | ((q: string, limit: number) => Promise<SearchTrack[]>)
+  | null = null;
+
+/** Test hook — swaps the token+search HTTP path for a fake. */
+export function setSpotifySearchRunnerForTests(
+  runner: ((q: string, limit: number) => Promise<SearchTrack[]>) | null,
+): void {
+  spotifySearchRunnerForTests = runner;
+}
+
+let spotifyCatalogConfiguredForTests: boolean | null = null;
+let resolveConfiguredForTests: boolean | null = null;
+
+/** Test hook — forces the Spotify-configured answer (env consts are frozen). */
+export function setSpotifyCatalogConfiguredForTests(value: boolean | null): void {
+  spotifyCatalogConfiguredForTests = value;
+}
+
+/** Test hook — forces the yt-dlp-configured answer (Bun.which is absent under Node). */
+export function setResolveConfiguredForTests(value: boolean | null): void {
+  resolveConfiguredForTests = value;
 }
 
 async function spotifySearch(q: string, limit: number): Promise<SearchTrack[]> {
@@ -514,6 +566,9 @@ async function youtubeSearch(q: string, limit: number): Promise<SearchTrack[]> {
 let ytDlpAvailable: boolean | null = null;
 
 export function resolveConfigured(): boolean {
+  if (resolveConfiguredForTests !== null) {
+    return resolveConfiguredForTests;
+  }
   if (ytDlpAvailable === null) {
     // typeof guard: the vitest suite imports this module under Node, where
     // the Bun global (and Bun.which) does not exist — production always runs Bun.
@@ -569,6 +624,9 @@ export function resetMusicResolverForTests(): void {
   memoryCache.clear();
   inFlight.clear();
   ytSearchRunnerForTests = null;
+  spotifySearchRunnerForTests = null;
+  spotifyCatalogConfiguredForTests = null;
+  resolveConfiguredForTests = null;
 }
 
 /**
