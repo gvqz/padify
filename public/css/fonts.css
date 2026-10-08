@@ -167,6 +167,160 @@
   }
 }
 
+/* Confetti pop — rectangles flutter out, spin, and fall */
+.keyburst-confetti {
+  position: absolute;
+  border-radius: 1px;
+  background: var(--burst-color, #ff6b6b);
+  opacity: 1;
+  transform: translate(0, 0) rotate(0deg);
+  animation: keyburst-confetti 900ms cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes keyburst-confetti {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--burst-x, 0), var(--burst-y, 20px))
+      rotate(var(--burst-rotate, 360deg));
+  }
+}
+
+/* Fireworks — a core flash, then sparks fly out and drop back down */
+.keyburst-flash {
+  position: absolute;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 0 18px 6px var(--burst-color, #ffd166);
+  transform: translate(-50%, -50%) scale(0.3);
+  animation: keyburst-flash 420ms ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes keyburst-flash {
+  0% {
+    opacity: 0.95;
+    transform: translate(-50%, -50%) scale(0.3);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.6);
+  }
+}
+
+.keyburst-firework {
+  position: absolute;
+  border-radius: 999px;
+  background: var(--burst-color, #ff6b6b);
+  box-shadow: 0 0 6px var(--burst-color, #ff6b6b);
+  opacity: 1;
+  transform: translate(0, 0) scale(1);
+  animation: keyburst-firework 800ms ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes keyburst-firework {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  70% {
+    opacity: 0.9;
+    transform: translate(var(--burst-x, 0), var(--burst-y, -20px)) scale(0.9);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--burst-x, 0), calc(var(--burst-y, -20px) + 22px)) scale(0.4);
+  }
+}
+
+/* Shooting stars — glowing glyphs fan upward */
+.keyburst-star {
+  position: absolute;
+  color: var(--burst-color, #ffd166);
+  text-shadow: 0 0 6px var(--burst-color, #ffd166);
+  line-height: 1;
+  opacity: 1;
+  transform: translate(0, 0) rotate(0deg) scale(0.8);
+  animation: keyburst-star 700ms ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes keyburst-star {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--burst-x, 0), var(--burst-y, -40px))
+      rotate(var(--burst-rotate, 90deg)) scale(1.15);
+  }
+}
+
+/* Neon sparks — glowing squares pulse out and blink off */
+.keyburst-neon {
+  position: absolute;
+  border-radius: 2px;
+  background: var(--burst-color, #00f5d4);
+  box-shadow:
+    0 0 8px 1px var(--burst-color, #00f5d4),
+    0 0 18px 4px var(--burst-color, #00f5d4);
+  opacity: 1;
+  transform: translate(0, 0) rotate(45deg) scale(0.7);
+  animation: keyburst-neon 550ms ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes keyburst-neon {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(45deg) scale(0.7);
+  }
+  45% {
+    opacity: 1;
+    transform:
+      translate(calc(var(--burst-x, 0) * 0.6), calc(var(--burst-y, 0) * 0.6))
+      rotate(45deg) scale(1.35);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--burst-x, 0), var(--burst-y, -16px)) rotate(45deg) scale(0);
+  }
+}
+
+/* Emoji burst — little glyphs pop up and spin away */
+.keyburst-emoji {
+  position: absolute;
+  line-height: 1;
+  opacity: 1;
+  transform: translate(0, 0) rotate(0deg) scale(0.6);
+  animation: keyburst-emoji 850ms ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes keyburst-emoji {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(0.6);
+  }
+  30% {
+    opacity: 1;
+    transform:
+      translate(calc(var(--burst-x, 0) * 0.4), calc(var(--burst-y, -30px) * 0.6))
+      rotate(var(--burst-rotate, 30deg)) scale(1.25);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--burst-x, 0), var(--burst-y, -36px))
+      rotate(calc(var(--burst-rotate, 30deg) * 2)) scale(0.9);
+  }
+}
+
 .chime-container {
   display: flex;
   align-items: center;

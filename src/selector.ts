@@ -30,7 +30,6 @@ export interface NotepadUI {
   preferencesModal: Q;
   resetPreferences: Q;
   showWordCountPill: Q;
-  clearTabIndentation: Q;
   wordCount: Q;
   installAppButtonContainer: Q;
   wordCountContainer: Q;
@@ -55,10 +54,9 @@ export interface EditorConfig {
   defaultOptimalLineLength: boolean;
   defaultOptimalLineLengthPadding: string;
   defaultSpellCheck: boolean;
-  defaultTypewriterSound: boolean;
-  defaultTypewriterVolume: number;
   defaultBreakReminders: boolean;
   defaultExplodingEffect: boolean;
+  defaultExplodingEffectStyle: string;
 }
 
 export interface AppSelector {
@@ -133,7 +131,6 @@ export function selector(): AppSelector {
       preferencesModal: selectById('preferencesModal'),
       resetPreferences: selectById('resetPreferences'),
       showWordCountPill: selectById('showWordCountPill'),
-      clearTabIndentation: selectById('clearTabIndentation'),
       wordCount: selectById('wordCount'),
       installAppButtonContainer: selectByClassName('install-app-btn-container'),
       wordCountContainer: selectByClassName('word-count-container'),

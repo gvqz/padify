@@ -9,6 +9,14 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  # Where the API lives for this build: the alwaysdata-hosted padify API
+  # (docs/CLOUD_SETUP.md §3). The value feeds the client bundle, the share
+  # viewer config, the CSP connect-src and the generated /api proxy
+  # redirect, so every part agrees on the API's address. The alwaysdata
+  # static deploy builds the same source with its own shell environment —
+  # netlify.toml is read by Netlify builds only — so the two deployments
+  # cannot drift apart through this file.
+  VITE_API_BASE = "https://functionhost.alwaysdata.net/padifyapi"
 
 # HTTP headers are generated at build time: `npm run build` writes
 # dist/_headers (scripts/build-headers.mjs) with the security baseline —
@@ -17,7 +25,7 @@
 # picks the file up from the publish directory automatically.
 #
 # The /api proxy redirect is generated too — scripts/build-headers.mjs
-# writes dist/_redirects from VITE_API_BASE (set it in Site settings →
+# writes dist/_redirects from VITE_API_BASE (set here or in Site settings →
 # Environment variables; see docs/CLOUD_SETUP.md §3). With the variable
 # unset the site is purely same-origin: /api must be routed by whatever
 # serves it, and nothing here stands in the way.

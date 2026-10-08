@@ -109,11 +109,9 @@ const LEGACY_KV_KEYS: readonly string[] = [
   'userChosenTexture',
   'userChosenOptimalLineLengthSelected',
   'userChosenSpellCheck',
-  'userChosenTabIndentation',
-  'userChosenTypewriterSound',
-  'userChosenTypewriterVolume',
   'userChosenBreakReminders',
   'userChosenExplodingEffect',
+  'userChosenExplodingEffectStyle',
   'hasUserDismissedDonationPopup',
   'breakReminderState',
   // tabs
