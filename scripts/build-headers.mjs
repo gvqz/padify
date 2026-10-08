@@ -166,8 +166,10 @@ window.PADIFY_SHARE_CONFIG = {
 # under this site's origin (forced, so it wins over any static /api asset).
 # Same-origin is a convenience here: the app itself and the share viewer
 # call the origin directly (CORS), so this keeps /api/* reachable for other
-# clients (curl, tests) on the same host.
-/api/*  ${apiBase}/:splat  200!
+# clients (curl, tests) on the same host. The API serves every route under
+# /api/… (PATH_PREFIX already accounts for the mount point), so the splat
+# is re-anchored: /api/health → ${apiBase}/api/health.
+/api/*  ${apiBase}/api/:splat  200!
 `
     : null;
 
