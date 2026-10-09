@@ -37,6 +37,7 @@ import { mountModals } from './ui/modals';
 import { assertMarkupContract } from './ui/contract';
 import { initModalBehavior } from './ui/behavior/modal';
 import { initCollapseBehavior } from './ui/behavior/collapse';
+import { initSettingsNav } from './ui/settings-nav';
 import { initTooltips } from './ui/behavior/tooltip';
 import { hydratePlatformShortcuts } from './ui/platform-hints';
 
@@ -86,6 +87,10 @@ export async function bootPadify(): Promise<void> {
   // bound here, after mountModals() (import-time binding found no elements
   // and every button was dead — see break-reminder.ts).
   initBreakReminder();
+
+  // The settings modal's two-pane navigation + search — DOM-only wiring
+  // over the preferences partial (see ui/settings-nav.ts).
+  initSettingsNav();
 
   // 2. The app shell (tabs, editor port, cloud, voice, shortcuts).
   await initApp();

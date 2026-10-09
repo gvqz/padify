@@ -1,21 +1,34 @@
-/* vercel design system — part 13/17: Settings — Vercel-style preferences
+/* vercel design system — part 13/17: Settings — the two-pane settings workspace
    Split from the former vercel.css (cascade order preserved —
    index.html loads these files in numeric order, last in the
    stylesheet chain, exactly where the monolith sat). */
 /* --------------------------------------------------------------------------
-   13. Settings — Vercel-style preferences
+   13. Settings — the two-pane settings workspace
+   Left: a section nav (tablist). Right: the active section's pane. A
+   search box flattens the panes while a query is live. Markup contract
+   and control ids live in src/ui/modals/preferences-modal.html; the
+   behavior in src/ui/settings-nav.ts.
    -------------------------------------------------------------------------- */
 
 #preferencesModal .modal-dialog {
-  width: min(560px, calc(100vw - 24px));
+  width: min(880px, calc(100vw - 32px));
+}
+
+/* The content clips to the viewport: header and footer stay put, the
+   layout between them flexes and each column scrolls on its own. */
+#preferencesModal .modal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 72px);
 }
 
 #preferencesModal .modal-header {
-  padding: 20px 24px 14px;
+  padding: 18px 22px 14px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
+  flex: 0 0 auto;
 }
 
 #preferencesModal .modal-header .close {
@@ -23,18 +36,20 @@
 }
 
 #preferencesModal .modal-body {
-  padding: 6px 20px 18px;
-  max-height: calc(100vh - 190px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  padding: 0;
+  min-height: 0;
+  overflow: hidden;
+  flex: 1 1 auto;
+  display: flex;
 }
 
 #preferencesModal .modal-footer {
-  padding: 14px 24px 20px;
+  padding: 13px 22px 17px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex: 0 0 auto;
 }
 
 /* Header */
@@ -66,17 +81,205 @@
   line-height: 1.5;
 }
 
-/* Sections */
-.pref-section {
-  margin: 10px 0;
+.pref-header-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
 }
 
+/* Search */
+.pref-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pref-search > svg {
+  position: absolute;
+  left: 10px;
+  width: 14px;
+  height: 14px;
+  color: var(--vz-fg-muted);
+  pointer-events: none;
+}
+
+#prefSearch {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 34px;
+  width: 210px;
+  padding: 0 30px 0 32px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  background-color: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+  font-size: 12.5px;
+  font-weight: 500;
+  box-shadow: none;
+  cursor: text;
+  transition: border-color var(--vz-dur) ease, box-shadow var(--vz-dur) ease;
+}
+
+#prefSearch::placeholder {
+  color: var(--vz-fg-muted);
+}
+
+#prefSearch:hover {
+  border-color: var(--vz-border-strong);
+}
+
+#prefSearch:focus {
+  border-color: var(--vz-border-strong);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
+  outline: none;
+}
+
+#prefSearch:focus-visible {
+  outline: none;
+}
+
+body.dark #prefSearch {
+  background-color: var(--vz-bg-subtle);
+  border-color: var(--vz-border);
+  color: var(--vz-fg);
+  box-shadow: none;
+}
+
+body.dark #prefSearch:focus {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+}
+
+#prefSearch::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  background: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23888888' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 4l8 8M12 4l-8 8'/%3E%3C/svg%3E")
+    center no-repeat;
+  background-size: 12px;
+}
+
+/* Two-pane layout */
+.pref-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
+}
+
+/* Author-vs-UA discipline (the chime-picker lesson): the hidden attribute
+   must always win over the pane/nav display rules below, whatever classes
+   the settings nav toggles. */
+.pref-pane[hidden],
+.pref-nav[hidden],
+.pref-search-empty[hidden] {
+  display: none !important;
+}
+
+/* Section nav (left column) */
+.pref-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 10px;
+  border-right: 1px solid var(--vz-border);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.pref-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 11px;
+  border: none;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  position: relative;
+  box-shadow: none;
+  transition: background-color var(--vz-dur) ease, color var(--vz-dur) ease;
+}
+
+.pref-nav-item svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.pref-nav-item:hover {
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg);
+}
+
+.pref-nav-item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--vz-border-strong);
+}
+
+.pref-nav-item.is-active {
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg);
+  font-weight: 600;
+}
+
+.pref-nav-item.is-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--vz-primary);
+}
+
+/* Panes (right column) */
+.pref-panes {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 20px 20px;
+}
+
+.pref-pane {
+  display: none;
+}
+
+.pref-pane.is-active {
+  display: block;
+}
+
+/* Search mode: every matching pane stacks, the active selection steps
+   aside (the .is-match rule wins the cascade tie by coming later). */
+.pref-layout.is-searching .pref-pane.is-active {
+  display: none;
+}
+
+.pref-layout.is-searching .pref-pane.is-match {
+  display: block;
+}
+
+.pref-row.is-filtered {
+  display: none;
+}
+
+/* Sections (pane headers) */
 .pref-section-head {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 2px 6px;
-  margin: 14px 2px 8px;
+  margin: 4px 2px 10px;
 }
 
 .pref-section-icon {
@@ -323,133 +526,7 @@ body.dark #preferencesModal select.form-control option {
   color: var(--vz-fg);
 }
 
-/* Volume slider */
-#preferencesModal .pref-volume-row .pref-row-control {
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  min-width: 190px;
-}
-
-#preferencesModal .volume-control {
-  width: 100%;
-}
-
-#preferencesModal .volume-slider {
-  width: 100%;
-  height: 22px;
-  appearance: none;
-  -webkit-appearance: none;
-  background: transparent;
-  cursor: pointer;
-}
-
-#preferencesModal .volume-slider::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 999px;
-  background: var(--vz-bg-chip);
-  box-shadow: none;
-}
-
-#preferencesModal .volume-slider::-webkit-slider-thumb {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  margin-top: -6px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 1px solid var(--vz-border-strong);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  transition: box-shadow var(--vz-dur) ease, border-color var(--vz-dur) ease;
-}
-
-#preferencesModal .volume-slider::-webkit-slider-thumb:hover {
-  border-color: var(--vz-fg);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
-}
-
-#preferencesModal .volume-slider::-moz-range-track {
-  height: 4px;
-  border-radius: 999px;
-  background: var(--vz-bg-chip);
-  box-shadow: none;
-}
-
-#preferencesModal .volume-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 1px solid var(--vz-border-strong);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-}
-
-body.dark #preferencesModal .volume-slider::-webkit-slider-runnable-track,
-body.dark #preferencesModal .volume-slider::-moz-range-track {
-  background: var(--vz-bg-chip);
-}
-
-body.dark #preferencesModal .volume-slider::-webkit-slider-thumb,
-body.dark #preferencesModal .volume-slider::-moz-range-thumb {
-  background: #ededed;
-  border-color: var(--vz-border-strong);
-}
-
-#typewriterVolumeValue {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--vz-fg-muted);
-  min-width: 34px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-/* "Always on" pill — mono status */
-.pref-always-on {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--vz-fg-muted);
-  background: var(--vz-bg-subtle);
-  border: 1px solid var(--vz-border);
-  border-radius: 999px;
-  padding: 4px 12px;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.pref-always-on::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--vz-fg-muted);
-  box-shadow: none;
-}
-
-body.dark .pref-always-on {
-  color: var(--vz-fg-muted);
-  background: var(--vz-bg-chip);
-  border-color: var(--vz-border);
-}
-
-body.dark .pref-always-on::before {
-  background: var(--vz-fg-muted);
-}
-
-/* Action row (Clear formatting) — danger-secondary */
-.pref-action-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 13px 16px;
-  border-top: 1px solid var(--vz-border);
-}
-
+/* Action row (Cloud sync "Manage") — danger-secondary */
 .pref-action-btn {
   display: inline-flex;
   align-items: center;
@@ -501,6 +578,38 @@ body.dark .pref-action-btn:focus {
   border-color: var(--vz-danger);
   color: var(--vz-danger);
   box-shadow: none;
+}
+
+/* Search empty state */
+.pref-search-empty {
+  padding: 56px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.pref-search-empty > svg {
+  width: 28px;
+  height: 28px;
+  color: var(--vz-fg-subtle);
+  margin-bottom: 4px;
+}
+
+.pref-search-empty-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--vz-fg);
+}
+
+.pref-search-empty-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--vz-fg-muted);
+  line-height: 1.5;
+  max-width: 320px;
 }
 
 /* Footer */
@@ -567,20 +676,75 @@ body.dark .pref-done-btn:hover {
   color: var(--vz-primary-fg);
 }
 
-/* Settings mobile layout */
-@media (max-width: 540px) {
+/* Settings mobile layout — the nav becomes a horizontal chip bar */
+@media (max-width: 719px) {
+  #preferencesModal .modal-dialog {
+    width: calc(100vw - 24px);
+  }
+
+  #preferencesModal .modal-content {
+    max-height: calc(100vh - 48px);
+  }
+
   #preferencesModal .modal-header {
-    padding: 16px 18px 12px;
+    flex-wrap: wrap;
+    padding: 14px 16px 12px;
+    gap: 10px;
+  }
+
+  .pref-header-tools {
+    width: 100%;
+  }
+
+  .pref-search {
+    flex: 1 1 auto;
+  }
+
+  #prefSearch {
+    width: 100%;
   }
 
   #preferencesModal .modal-body {
-    padding: 4px 12px 14px;
-    max-height: calc(100vh - 170px);
+    flex-direction: column;
   }
 
-  #preferencesModal .modal-footer {
-    padding: 12px 18px 16px;
-    flex-wrap: wrap;
+  .pref-layout {
+    grid-template-columns: none;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .pref-nav {
+    flex-direction: row;
+    gap: 6px;
+    padding: 9px 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--vz-border);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .pref-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .pref-nav-item {
+    flex: 0 0 auto;
+    width: auto;
+    padding: 7px 11px;
+  }
+
+  .pref-nav-item.is-active::before {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: -1px;
+    width: auto;
+    height: 2px;
+  }
+
+  .pref-panes {
+    padding: 12px 14px 16px;
   }
 
   .pref-row {
@@ -613,27 +777,12 @@ body.dark .pref-done-btn:hover {
     display: none;
   }
 
-  #preferencesModal .pref-volume-row .pref-row-control {
-    align-items: stretch;
-    min-width: 0;
-  }
-
-  #preferencesModal .pref-volume-row .volume-control {
-    width: 100%;
-  }
-
-  .pref-action-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .pref-action-btn {
-    justify-content: center;
+  #preferencesModal .modal-footer {
+    padding: 11px 16px 14px;
+    flex-wrap: wrap;
   }
 
   .pref-section-head {
     padding: 2px 4px;
   }
 }
-
