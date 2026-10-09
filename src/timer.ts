@@ -62,10 +62,12 @@ interface ChimeDef {
 }
 
 const CHIMES: ChimeDef[] = [
-  { id: 'attention', name: 'Attention', file: 'sounds/chimes/attention.mp3' },
-  { id: 'success', name: 'Success', file: 'sounds/chimes/success.mp3' },
-  { id: 'melody', name: 'Melody', file: 'sounds/chimes/melody.mp3' },
-  { id: 'melancholy', name: 'Melancholy', file: 'sounds/chimes/melancholy.mp3' },
+  { id: 'bells', name: 'Bells', file: 'sounds/chimes/bells.mp3' },
+  { id: 'positive', name: 'Positive', file: 'sounds/chimes/positive.mp3' },
+  { id: 'correct', name: 'Correct', file: 'sounds/chimes/correct.mp3' },
+  { id: 'reward', name: 'Reward', file: 'sounds/chimes/reward.mp3' },
+  { id: 'subtle', name: 'Subtle', file: 'sounds/chimes/subtle.mp3' },
+  { id: 'plink', name: 'Plink', file: 'sounds/chimes/plink.mp3' },
 ];
 
 const CHIME_STORAGE_KEY = 'timerChimeSound';

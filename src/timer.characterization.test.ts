@@ -172,7 +172,7 @@ describe('boot (characterization)', () => {
   it('seeds the custom minutes input and the chime checkbox from storage', () => {
     stateSet('lastCustomTimerMinutes', '42');
     stateSet('timerChime', 'true');
-    stateSet('timerChimeSound', 'melody');
+    stateSet('timerChimeSound', 'reward');
 
     ensureTimerMounted();
 
@@ -183,15 +183,15 @@ describe('boot (characterization)', () => {
     expect($('#chimePicker').prop('hidden')).toBe(false);
     expect(
       document
-        .querySelector('.chime-option[data-chime="melody"]')!
+        .querySelector('.chime-option[data-chime="reward"]')!
         .classList.contains('is-selected'),
     ).toBe(true);
     expect(
-      document.querySelector('.chime-option[data-chime="attention"]')!.getAttribute('aria-checked'),
+      document.querySelector('.chime-option[data-chime="plink"]')!.getAttribute('aria-checked'),
     ).toBe('false');
   });
 
-  it('mounts the six presets and four chimes with stable ids', () => {
+  it('mounts the six presets and six chimes with stable ids', () => {
     ensureTimerMounted();
 
     const minutes = Array.from(document.querySelectorAll('.timer-preset')).map(
@@ -202,7 +202,7 @@ describe('boot (characterization)', () => {
     const chimes = Array.from(document.querySelectorAll('.chime-option')).map(
       (option) => (option as HTMLElement).dataset.chime,
     );
-    expect(chimes).toEqual(['attention', 'success', 'melody', 'melancholy']);
+    expect(chimes).toEqual(['bells', 'positive', 'correct', 'reward', 'subtle', 'plink']);
     // (The default-selection paint — first chime selected when nothing is
     // stored — is covered by the expiry test's default-chime pin; this test
     // runs after the modal has already been painted by the seeded-boot one.)
@@ -234,23 +234,23 @@ describe('chime settings (characterization)', () => {
   it('picking a chime persists its id, moves the selection and previews it', () => {
     ensureTimerMounted();
 
-    click('.chime-option[data-chime="success"]');
+    click('.chime-option[data-chime="correct"]');
 
-    expect(stateGet('timerChimeSound')).toBe('success');
+    expect(stateGet('timerChimeSound')).toBe('correct');
     expect(
       document
-        .querySelector('.chime-option[data-chime="success"]')!
+        .querySelector('.chime-option[data-chime="correct"]')!
         .classList.contains('is-selected'),
     ).toBe(true);
     // The preview: an Audio element is created for that chime's file and
     // played, and the option paints its playing state.
     expect(timerConfig.alarmSound).not.toBeNull();
-    expect(timerConfig.alarmSound!.src).toContain('sounds/chimes/success.mp3');
+    expect(timerConfig.alarmSound!.src).toContain('sounds/chimes/correct.mp3');
     expect(timerConfig.alarmSound!.loop).toBe(false);
     expect(playSpy).toHaveBeenCalledTimes(1);
     expect(
       document
-        .querySelector('.chime-option[data-chime="success"]')!
+        .querySelector('.chime-option[data-chime="correct"]')!
         .classList.contains('is-playing'),
     ).toBe(true);
   });
@@ -259,14 +259,14 @@ describe('chime settings (characterization)', () => {
     ensureTimerMounted();
     playSpy.mockRejectedValueOnce(new Error('autoplay blocked'));
 
-    click('.chime-option[data-chime="melancholy"]');
+    click('.chime-option[data-chime="plink"]');
 
     // The .catch handler runs on a microtask, after this synchronous return.
     return Promise.resolve().then(() => {
-      expect(stateGet('timerChimeSound')).toBe('melancholy');
+      expect(stateGet('timerChimeSound')).toBe('plink');
       expect(
         document
-          .querySelector('.chime-option[data-chime="melancholy"]')!
+          .querySelector('.chime-option[data-chime="plink"]')!
           .classList.contains('is-playing'),
       ).toBe(false);
     });
@@ -275,19 +275,19 @@ describe('chime settings (characterization)', () => {
   it('switching chimes pauses the previous preview', () => {
     ensureTimerMounted();
 
-    click('.chime-option[data-chime="success"]');
-    click('.chime-option[data-chime="melody"]');
+    click('.chime-option[data-chime="correct"]');
+    click('.chime-option[data-chime="positive"]');
 
     expect(pauseSpy).toHaveBeenCalledTimes(1);
     // Only the newest option paints as playing.
     expect(
       document
-        .querySelector('.chime-option[data-chime="success"]')!
+        .querySelector('.chime-option[data-chime="correct"]')!
         .classList.contains('is-playing'),
     ).toBe(false);
     expect(
       document
-        .querySelector('.chime-option[data-chime="melody"]')!
+        .querySelector('.chime-option[data-chime="positive"]')!
         .classList.contains('is-playing'),
     ).toBe(true);
   });
@@ -349,14 +349,14 @@ describe('startTimer / updateTimer (characterization)', () => {
     vi.useFakeTimers();
     ensureTimerMounted();
     stateSet('timerChime', 'true');
-    stateSet('timerChimeSound', 'melody');
+    stateSet('timerChimeSound', 'reward');
 
     startTimer(1);
     vi.advanceTimersByTime(60_000);
 
     // The persisted chime — not always the first one — is what rings.
     expect(playSpy).toHaveBeenCalledTimes(1);
-    expect(timerConfig.alarmSound!.src).toContain('sounds/chimes/melody.mp3');
+    expect(timerConfig.alarmSound!.src).toContain('sounds/chimes/reward.mp3');
     // Full reset: no interval, no deadline, zeros on the pill.
     expect(timerConfig.isRunning).toBe(false);
     expect(timerConfig.timer).toBeNull();
@@ -387,7 +387,7 @@ describe('startTimer / updateTimer (characterization)', () => {
     startTimer(1);
     vi.advanceTimersByTime(60_000);
 
-    expect(timerConfig.alarmSound!.src).toContain('sounds/chimes/attention.mp3');
+    expect(timerConfig.alarmSound!.src).toContain('sounds/chimes/bells.mp3');
   });
 
   it('returning to the tab refreshes the display from the deadline, not the ticks', () => {
