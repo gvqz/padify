@@ -35,8 +35,13 @@ export function initCloudUI(): void {
   const $button = $('#cloudNavContainer');
   const $dot = $('#cloudStatusDot');
   const $settingsSection = $('#cloudSettingsSection');
+  const $settingsNav = $('#cloudSettingsNav');
   $button.removeAttr('hidden');
   $settingsSection.removeAttr('hidden');
+  // The rebuilt settings modal gives the section a nav tab too — reveal it
+  // with the pane (see ui/settings-nav.ts; the tablist skips both while
+  // hidden).
+  $settingsNav.removeAttr('hidden');
 
   // ---- status rendering -----------------------------------------------------
 
