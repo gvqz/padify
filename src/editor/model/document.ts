@@ -105,6 +105,31 @@ export function surfaceLooksEmpty(element: HTMLElement): boolean {
   return (element.textContent ?? '').replace(/\u200B/g, '').trim() === '';
 }
 
+/**
+ * True when the empty state should paint the placeholder. This is the
+ * JS-side mirror #note's placeholder CSS reads through [data-empty] —
+ * and it has to be JS because CSS cannot see text nodes: the pre-fix
+ * selector `#note:has(> br:only-child)` counts ELEMENT children only, so
+ * a legacy note holding "text + br" (older builds stored their soft
+ * breaks as brs) still matched it and painted the placeholder over the
+ * user's typed words.
+ *
+ * The rule is text-aware emptiness: nothing to read (zero-width runs are
+ * plumbing), no media, no armed formatting run — and no structured blocks
+ * either, because an armed empty list or a lone block skeleton
+ * (`<div><br></div>`) is deliberate structure, not an empty note, and the
+ * placeholder painting a line above it reads as a glitch.
+ */
+export function surfaceIsEmptyForPlaceholder(element: HTMLElement): boolean {
+  if (!surfaceLooksEmpty(element)) {
+    return false;
+  }
+  if (hasStyledCaretRun(element)) {
+    return false;
+  }
+  return !Array.from(element.children).some((child) => child.tagName !== 'BR');
+}
+
 // ---------------------------------------------------------------------------
 // Block vocabulary — the block-level tags the engine's operations address.
 // ---------------------------------------------------------------------------

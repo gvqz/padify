@@ -892,3 +892,96 @@ describe('IME composition — composed input joins the history', () => {
     expect(port.getText()).toBe('');
   });
 });
+
+describe('the placeholder mirror — [data-empty] tracks text, not element shape', () => {
+  /** MutationObserver callbacks land as microtasks — flush them out. */
+  const flushObservers = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it('THE GLITCH: a stored "text + br" surface (legacy soft breaks) keeps the placeholder off', async () => {
+    // Older builds stored their line breaks as brs next to text. CSS
+    // cannot see text nodes — :has(> br:only-child) matched this shape and
+    // painted the placeholder over the user's typed words.
+    const { surface } = makePort('fffffffffffff<br>second line');
+    expect(surface.innerHTML).toBe('fffffffffffff<br>second line');
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(false);
+  });
+
+  it('an empty surface carries it, a bare stored br collapses and still carries it', async () => {
+    const { surface } = makePort();
+    expect(surface.hasAttribute('data-empty')).toBe(true);
+
+    const other = makePort('<br>');
+    expect(other.surface.innerHTML).toBe(''); // the load path collapses it
+    await flushObservers();
+    expect(other.surface.hasAttribute('data-empty')).toBe(true);
+  });
+
+  it('native typing drops it; deleting everything brings it back', async () => {
+    const { port, surface } = makePort();
+    caretAt(surface, 0);
+
+    nativeEdit(
+      surface,
+      'insertText',
+      () => {
+        surface.textContent = 'words';
+      },
+      'words',
+    );
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(false);
+
+    caretAt(surface, 0);
+    nativeEdit(surface, 'deleteContentBackward', () => {
+      surface.innerHTML = '';
+    });
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(true);
+    expect(port.getText()).toBe('');
+  });
+
+  it('an armed empty list keeps it off (deliberate structure, not an empty note)', async () => {
+    const { surface } = makePort();
+    surface.innerHTML = '<ul><li><br></li></ul>';
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(false);
+  });
+
+  it('a styled caret run keeps it off (the armed-format empty state)', async () => {
+    const { surface } = makePort();
+    surface.innerHTML = '<span style="color: red">\u200b</span>';
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(false);
+  });
+
+  it('media keeps it off (an hr alone is content)', async () => {
+    const { surface } = makePort('<hr>');
+    expect(surface.innerHTML).toBe('<hr>');
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(false);
+  });
+
+  it('whitespace-only reads empty (the app\u2019s own empty rule for text)', async () => {
+    const { surface } = makePort('   ');
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(true);
+  });
+
+  it('parks with the engine and resyncs on unpark', async () => {
+    const { port, surface } = makePort('words');
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(false);
+
+    // A Markdown note takes the host: the mirror must stop answering.
+    port.setInert(true);
+    surface.innerHTML = '<div class="markdown-surface"><p><br></p></div>';
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(false);
+
+    // Coming home: the mirror reads the host as it stands.
+    surface.innerHTML = '';
+    port.setInert(false);
+    expect(surface.hasAttribute('data-empty')).toBe(true);
+  });
+});

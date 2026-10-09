@@ -35,6 +35,7 @@ import {
   serialize,
   streamLength,
   collapseEmptySurface,
+  surfaceIsEmptyForPlaceholder,
   surfaceLooksEmpty,
 } from './model/document';
 import {
@@ -233,6 +234,26 @@ export class ModelPort implements EditorPort {
   /** Parks/unparks the engine while another note-kind surface owns the host. */
   setInert(inert: boolean): void {
     this.inert = inert;
+    // The placeholder mirror follows the park: a parked engine stops
+    // mirroring (the Markdown surface owns the host and carries its own
+    // placeholder rules), and coming home re-syncs from the host as it
+    // stands — the repaint that follows re-fires the observer anyway.
+    this.syncPlaceholderState();
+  }
+
+  /**
+   * Mirrors the surface's text-aware emptiness onto [data-empty], the
+   * attribute #note's placeholder CSS reads. Called from the constructor's
+   * MutationObserver (every content mutation, microtask-timed) and from
+   * setInert (park/unpark). See surfaceIsEmptyForPlaceholder for the rule
+   * and editor-shell.css for the consumer.
+   */
+  private syncPlaceholderState(): void {
+    if (this.inert) {
+      this.element.removeAttribute('data-empty');
+      return;
+    }
+    this.element.toggleAttribute('data-empty', surfaceIsEmptyForPlaceholder(this.element));
   }
 
   constructor(element: HTMLElement, deps: ModelPortDeps) {
@@ -278,6 +299,24 @@ export class ModelPort implements EditorPort {
     element.addEventListener('compositionend', () => {
       this.composing = false;
     });
+
+    // The placeholder mirror. #note's placeholder CSS keys off
+    // [data-empty], which this observer keeps true to the surface's
+    // TEXT — the one thing CSS cannot read. The pre-fix selector
+    // (:has(> br:only-child)) counted element children only, so a
+    // surface holding "text + br" (legacy notes' stored soft breaks)
+    // lit the placeholder over the user's typed words. Every mutation
+    // path — native typing, IME composition, paste, programmatic
+    // paints — lands here once, as a microtask BEFORE the next paint,
+    // so the placeholder never lags a frame behind the content. Only
+    // childList/characterData are observed: the mirror's own attribute
+    // write cannot re-trigger it.
+    new MutationObserver(() => this.syncPlaceholderState()).observe(element, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    this.syncPlaceholderState();
   }
 
   // -------------------------------------------------------------------------
