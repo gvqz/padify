@@ -166,15 +166,23 @@ body.dark .chime-label {
 }
 
 /* --------------------------------------------------------------------------
-   Chime picker — four selectable sound cards under the chime toggle
+   Chime picker — six selectable sound cards under the chime toggle
    -------------------------------------------------------------------------- */
 
 body .chime-picker {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-top: 10px;
   animation: vz-menu-in 180ms var(--vz-ease) both;
+}
+
+/* The hidden attribute must beat the grid above: an author `display`
+   outranks the UA's [hidden] { display: none }, which left the picker
+   permanently visible regardless of the chime toggle. The picker only
+   appears when "Chime when the session ends" is checked. */
+body .chime-picker[hidden] {
+  display: none;
 }
 
 @media (max-width: 560px) {
