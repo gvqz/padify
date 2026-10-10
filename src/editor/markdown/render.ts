@@ -100,8 +100,17 @@ const TASK_MARKER = /^\[([ xX])\](?:[ \t]+|$)/;
  * Parses the given lines as a sequence of blocks. Recursion is how
  * blockquotes and list items nest: both strip their markers and hand the
  * remaining lines straight back to this function.
+ *
+ * `depth` guards that recursion: deeply indented outlines (Workflowy or
+ * Obsidian exports, machine-generated TOCs) used to hit superlinear cost
+ * — depth × remaining-lines × per-level slicing ≈ O(N³), measured at
+ * 7 s of main-thread block for a 900-deep document. Past the cap the
+ * nested markers degrade to plain paragraph text (content preserved,
+ * structure flattened) instead of freezing the page.
  */
-function renderBlocks(lines: string[]): string[] {
+const MAX_NESTING_DEPTH = 50;
+
+function renderBlocks(lines: string[], depth = 0): string[] {
   const out: string[] = [];
   let paragraph: string[] = [];
   let index = 0;
@@ -177,7 +186,7 @@ function renderBlocks(lines: string[]): string[] {
     // bare text line extend the quote's open paragraph.
     if (BLOCKQUOTE_MARKER.test(line)) {
       flushParagraph();
-      const { markup, next } = collectBlockquote(lines, index);
+      const { markup, next } = collectBlockquote(lines, index, depth);
       out.push(markup);
       index = next;
       continue;
@@ -196,10 +205,11 @@ function renderBlocks(lines: string[]): string[] {
 
     // Lists — a marker line starts one whether or not a paragraph is open
     // (CommonMark lets lists interrupt paragraphs; the text simply ends
-    // the moment the marker appears).
-    if (isListItemStart(line)) {
+    // the moment the marker appears). At the depth cap the marker degrades
+    // to paragraph text — see MAX_NESTING_DEPTH.
+    if (isListItemStart(line) && depth < MAX_NESTING_DEPTH) {
       flushParagraph();
-      const { markup, next } = collectList(lines, index);
+      const { markup, next } = collectList(lines, index, depth);
       out.push(markup);
       index = next;
       continue;
@@ -282,7 +292,11 @@ function collectFence(
 }
 
 /** Consumes a blockquote (markers + lazy continuation); recurses inside. */
-function collectBlockquote(lines: string[], start: number): { markup: string; next: number } {
+function collectBlockquote(
+  lines: string[],
+  start: number,
+  depth: number,
+): { markup: string; next: number } {
   const inner: string[] = [];
   let index = start;
 
@@ -311,7 +325,10 @@ function collectBlockquote(lines: string[], start: number): { markup: string; ne
     break;
   }
 
-  return { markup: `<blockquote>${renderBlocks(inner).join('\n')}</blockquote>`, next: index };
+  return {
+    markup: `<blockquote>${renderBlocks(inner, depth + 1).join('\n')}</blockquote>`,
+    next: index,
+  };
 }
 
 /** True when the line opens a list item (any indent, either marker form). */
@@ -367,7 +384,11 @@ interface ListItem {
  * renderBlocks call inside renderList is what turns them into nested
  * lists, paragraphs and everything else an item can hold.
  */
-function collectList(lines: string[], start: number): { markup: string; next: number } {
+function collectList(
+  lines: string[],
+  start: number,
+  depth: number,
+): { markup: string; next: number } {
   const baseIndent = indentWidth(lines[start]!);
   const items: ListItem[] = [];
   let loose = false;
@@ -381,6 +402,12 @@ function collectList(lines: string[], start: number): { markup: string; next: nu
 
   while (index < lines.length) {
     const line = lines[index]!;
+    // The indent is this loop's hottest value (the blank check, the
+    // sibling check and the content check all read it) — compute it once
+    // per line. On pathological documents (deep indent ladders) the
+    // repeated regex scans were the difference between interactive time
+    // and a multi-second freeze.
+    const lineIndent = indentWidth(line);
 
     if (isBlank(line)) {
       // A blank ends the list unless the next content line still belongs
@@ -403,19 +430,21 @@ function collectList(lines: string[], start: number): { markup: string; next: nu
       break;
     }
 
-    if (indentWidth(line) < baseIndent && isListItemStart(line)) {
+    if (lineIndent < baseIndent && isListItemStart(line)) {
       break; // a shallower marker belongs to an enclosing list
     }
 
-    const item = matchListItem(line);
+    // A sibling lives inside the list's indent band — a line deeper than
+    // the band is content, never a sibling, and the marker match below
+    // (a regex run plus a line copy) is pure waste for it. Gate it.
+    const item = lineIndent < baseIndent + 4 ? matchListItem(line) : null;
     // A sibling marker: below the current item's content column (it
     // cannot be that item's content) and within the list's own band —
     // and of the same kind (a changed kind starts a new list).
     const isSibling =
       !!item &&
       listMarkerKind(line) === listKind &&
-      (items.length === 0 || indentWidth(line) < items[items.length - 1]!.contentIndent) &&
-      indentWidth(line) < baseIndent + 4;
+      (items.length === 0 || lineIndent < items[items.length - 1]!.contentIndent);
     if (isSibling) {
       // A blank line before a sibling is what makes the list loose.
       if (pendingBlank) {
@@ -430,10 +459,7 @@ function collectList(lines: string[], start: number): { markup: string; next: nu
     // Anything else is content of the current item: indented at least
     // past its marker, or a lazy paragraph continuation of it.
     const current = items[items.length - 1];
-    if (
-      current &&
-      (indentWidth(line) >= contentIndent() || (!pendingBlank && !isListItemStart(line)))
-    ) {
+    if (current && (lineIndent >= contentIndent() || (!pendingBlank && !isListItemStart(line)))) {
       if (pendingBlank) {
         loose = true;
         pendingBlank = false;
@@ -445,7 +471,7 @@ function collectList(lines: string[], start: number): { markup: string; next: nu
     break;
   }
 
-  return { markup: renderList(items, loose), next: index };
+  return { markup: renderList(items, loose, depth), next: index };
 }
 
 /** Matches a single item line into its shell shape (or null). */
@@ -502,7 +528,7 @@ function stripColumns(line: string, columns: number): string {
 }
 
 /** Renders the collected items as `<ul>`/`<ol>` markup. */
-function renderList(items: ListItem[], loose: boolean): string {
+function renderList(items: ListItem[], loose: boolean, depth: number): string {
   if (items.length === 0) {
     return '';
   }
@@ -512,7 +538,7 @@ function renderList(items: ListItem[], loose: boolean): string {
 
   const rendered = items
     .map((item) => {
-      let blocks = renderBlocks(item.content);
+      let blocks = renderBlocks(item.content, depth + 1);
       // Tight lists unwrap the item's first paragraph (CommonMark), even
       // when further blocks follow it; loose lists keep every wrapper.
       if (!loose && blocks.length > 0 && blocks[0]!.startsWith('<p>')) {

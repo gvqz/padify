@@ -26,11 +26,15 @@ describe('math shell storage', () => {
     expect(stored).toBe('<p>see <span class="padify-math" data-latex="E=mc^2"></span></p>');
   });
 
-  it('unwraps a math span with missing or oversized latex', () => {
+  it('unwraps a math span with missing latex; over-cap latex degrades to its source text', () => {
+    // Missing source: a forged or hand-damaged shell unwraps to content.
     expect(sanitizeNoteHtml('<span class="padify-math">x</span>')).toBe('x');
+    // Over-cap source: the equation rendered live, so deleting it at the
+    // next save was silent data loss — it degrades to the LaTeX text now
+    // (the reader-without-KaTeX path), never a vanish.
     expect(
       sanitizeNoteHtml(`<span class="padify-math" data-latex="${'x'.repeat(2001)}">y</span>`),
-    ).toBe('y');
+    ).toBe('x'.repeat(2001));
   });
 
   it('strips a plain span carrying a forged padify-math plus junk class', () => {

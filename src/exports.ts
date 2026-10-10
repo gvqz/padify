@@ -114,19 +114,22 @@ export function exportNotesAsPDF(textToWrite: string, fileNameToSaveAs: string):
 export function exportNotesAsDocx(textToWrite: string, fileNameToSaveAs: string): void {
   // The docx bundle is heavy, so it is only fetched on demand.
   void import('docx').then(({ Document, Paragraph, TextRun, Packer }) => {
+    // OOXML renders literal newlines inside <w:t> as nothing — the whole
+    // multi-line note used to land as one paragraph on one line. One
+    // Paragraph per line (blank lines become empty paragraphs, exactly
+    // how Word represents a blank line) keeps the note's structure.
+    const paragraphs = textToWrite.split('\n').map(
+      (line) =>
+        new Paragraph({
+          children: line === '' ? [] : [new TextRun({ text: line })],
+        }),
+    );
+
     const doc = new Document({
       sections: [
         {
           properties: {},
-          children: [
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: textToWrite,
-                }),
-              ],
-            }),
-          ],
+          children: paragraphs,
         },
       ],
     });

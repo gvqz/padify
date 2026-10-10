@@ -55,7 +55,8 @@ var BLOCKQUOTE_MARKER = /^[ \t]{0,3}>[ \t]?/;
 var LIST_BULLET = /^([-*+])([ \t]+|$)/;
 var LIST_ORDERED = /^(\d{1,9})([.)])([ \t]+|$)/;
 var TASK_MARKER = /^\[([ xX])\](?:[ \t]+|$)/;
-function renderBlocks(lines) {
+var MAX_NESTING_DEPTH = 50;
+function renderBlocks(lines, depth = 0) {
   var _a;
   const out = [];
   let paragraph = [];
@@ -113,7 +114,7 @@ function renderBlocks(lines) {
     }
     if (BLOCKQUOTE_MARKER.test(line)) {
       flushParagraph();
-      const { markup, next } = collectBlockquote(lines, index);
+      const { markup, next } = collectBlockquote(lines, index, depth);
       out.push(markup);
       index = next;
       continue;
@@ -126,9 +127,9 @@ function renderBlocks(lines) {
         continue;
       }
     }
-    if (isListItemStart(line)) {
+    if (isListItemStart(line) && depth < MAX_NESTING_DEPTH) {
       flushParagraph();
-      const { markup, next } = collectList(lines, index);
+      const { markup, next } = collectList(lines, index, depth);
       out.push(markup);
       index = next;
       continue;
@@ -181,7 +182,7 @@ function collectFence(lines, start, fenceRun) {
   const lang = /^[A-Za-z0-9_-]+$/.test(info) ? ` class="language-${info}"` : "";
   return { markup: `<pre><code${lang}>${escapeHtml(body.join("\n"))}</code></pre>`, next: index };
 }
-function collectBlockquote(lines, start) {
+function collectBlockquote(lines, start, depth) {
   const inner = [];
   let index = start;
   while (index < lines.length) {
@@ -198,7 +199,7 @@ function collectBlockquote(lines, start) {
     }
     break;
   }
-  return { markup: `<blockquote>${renderBlocks(inner).join("\n")}</blockquote>`, next: index };
+  return { markup: `<blockquote>${renderBlocks(inner, depth + 1).join("\n")}</blockquote>`, next: index };
 }
 function isListItemStart(line) {
   if (indentWidth(line) >= 4) {
@@ -222,7 +223,7 @@ function listMarkerKind(line) {
   }
   return null;
 }
-function collectList(lines, start) {
+function collectList(lines, start, depth) {
   const baseIndent = indentWidth(lines[start]);
   const items = [];
   let loose = false;
@@ -235,6 +236,7 @@ function collectList(lines, start) {
   };
   while (index < lines.length) {
     const line = lines[index];
+    const lineIndent = indentWidth(line);
     if (isBlank(line)) {
       const look = index + 1;
       if (look < lines.length && !isBlank(lines[look])) {
@@ -248,11 +250,11 @@ function collectList(lines, start) {
       }
       break;
     }
-    if (indentWidth(line) < baseIndent && isListItemStart(line)) {
+    if (lineIndent < baseIndent && isListItemStart(line)) {
       break;
     }
-    const item = matchListItem(line);
-    const isSibling = !!item && listMarkerKind(line) === listKind && (items.length === 0 || indentWidth(line) < items[items.length - 1].contentIndent) && indentWidth(line) < baseIndent + 4;
+    const item = lineIndent < baseIndent + 4 ? matchListItem(line) : null;
+    const isSibling = !!item && listMarkerKind(line) === listKind && (items.length === 0 || lineIndent < items[items.length - 1].contentIndent);
     if (isSibling) {
       if (pendingBlank) {
         loose = true;
@@ -263,7 +265,7 @@ function collectList(lines, start) {
       continue;
     }
     const current = items[items.length - 1];
-    if (current && (indentWidth(line) >= contentIndent() || !pendingBlank && !isListItemStart(line))) {
+    if (current && (lineIndent >= contentIndent() || !pendingBlank && !isListItemStart(line))) {
       if (pendingBlank) {
         loose = true;
         pendingBlank = false;
@@ -274,7 +276,7 @@ function collectList(lines, start) {
     }
     break;
   }
-  return { markup: renderList(items, loose), next: index };
+  return { markup: renderList(items, loose, depth), next: index };
 }
 function matchListItem(line) {
   const indent = indentWidth(line);
@@ -319,7 +321,7 @@ function stripColumns(line, columns) {
   }
   return line.slice(cut);
 }
-function renderList(items, loose) {
+function renderList(items, loose, depth) {
   if (items.length === 0) {
     return "";
   }
@@ -327,7 +329,7 @@ function renderList(items, loose) {
   const tag = ordered ? "ol" : "ul";
   const start = ordered && items[0].number !== 1 ? ` start="${items[0].number}"` : "";
   const rendered = items.map((item) => {
-    let blocks = renderBlocks(item.content);
+    let blocks = renderBlocks(item.content, depth + 1);
     if (!loose && blocks.length > 0 && blocks[0].startsWith("<p>")) {
       blocks = [blocks[0].replace(/^<p>([\s\S]*)<\/p>$/, "$1"), ...blocks.slice(1)];
     }

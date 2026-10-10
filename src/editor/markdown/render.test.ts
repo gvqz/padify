@@ -515,3 +515,40 @@ describe('renderMarkdownToHtml — security invariants', () => {
     );
   });
 });
+
+describe('renderMarkdownToHtml — pathological nesting', () => {
+  it('caps nesting depth: a 900-deep outline renders fast, content preserved', () => {
+    // The shape that used to cost ~O(N^3): depth 900 measured 7 s of
+    // main-thread block (the word-count pill pays this render on every
+    // typing pause). Past the cap the deeper markers degrade to paragraph
+    // text — every word must survive, structure flattens.
+    const lines: string[] = [];
+    for (let depth = 0; depth < 900; depth += 1) {
+      lines.push(`${'  '.repeat(depth)}- level ${depth}`);
+    }
+    const source = lines.join('\n');
+
+    const started = Date.now();
+    const html = renderMarkdownToHtml(source);
+    const elapsed = Date.now() - started;
+
+    // The content is all there (escaped text of the deepest items).
+    expect(html).toContain('level 899');
+    expect(html).toContain('level 0');
+    // And it rendered in interactive time, not seconds.
+    expect(elapsed).toBeLessThan(500);
+    // The cap means far fewer than 900 nested <ul>s.
+    const ulCount = (html.match(/<ul>/g) ?? []).length;
+    expect(ulCount).toBeLessThan(60);
+  });
+
+  it('reasonable nesting (a dozen levels) still renders as real lists', () => {
+    const lines: string[] = [];
+    for (let depth = 0; depth < 12; depth += 1) {
+      lines.push(`${'  '.repeat(depth)}- item ${depth}`);
+    }
+    const html = renderMarkdownToHtml(lines.join('\n'));
+    const ulCount = (html.match(/<ul>/g) ?? []).length;
+    expect(ulCount).toBe(12); // every level nests honestly
+  });
+});
