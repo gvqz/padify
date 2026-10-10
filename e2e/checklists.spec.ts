@@ -91,6 +91,14 @@ test.describe('checklists', () => {
     // The numbered cluster answers too.
     await page.keyboard.press('Control+Shift+Digit8');
     await expect(editor.locator('ol > li')).toHaveCount(1);
+
+    // Numbered/bulleted -> checklist converts IN PLACE (issue #61): the
+    // items keep their words and gain unchecked boxes — no stray empty
+    // checklist appended at the note's end, no caret teleport.
+    await page.keyboard.press('Control+Shift+Digit9');
+    await expect(editor.locator('ul[data-rich-checklist] > li')).toHaveCount(1);
+    await expect(editor.locator('ul[data-rich-checklist] > li')).toHaveText('step one');
+    await expect(page.locator('#note > ul, #note > ol')).toHaveCount(1);
   });
 
   test('strike inside a checked item toggles the real strike (no CSS ghost)', async ({ page }) => {

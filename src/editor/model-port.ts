@@ -214,6 +214,15 @@ export class ModelPort implements EditorPort {
   private composing = false;
 
   /**
+   * The stream offset the current composition began at, recorded only
+   * while a pending mark is armed — the composition's own input events
+   * are invisible to handleInput (composing is set), so the arm wraps
+   * the composed phrase here at compositionend instead of leaking to the
+   * next plain keystroke.
+   */
+  private compositionMarkStart: number | null = null;
+
+  /**
    * True while a typing burst's group is open: the first beforeinput of a
    * burst opens the group (snapshotting the pre-burst state); the rest
    * continue it. Closed by any other input type, any command, any undo.
@@ -242,6 +251,13 @@ export class ModelPort implements EditorPort {
     // only be stale by the time events flow again.
     this.typingGroupOpen = false;
     this.pendingMark = null;
+    // Same for a composition left open when the host changed hands: a
+    // late compositionend while inert returns early (the listener's
+    // guard), and a latched 'composing' would silence onBeforeInput/
+    // handleInput after the unpark — native typing with no history
+    // groups and no delete normalization until the next IME round trip.
+    this.composing = false;
+    this.compositionMarkStart = null;
     // The placeholder mirror follows the park: a parked engine stops
     // mirroring (the Markdown surface owns the host and carries its own
     // placeholder rules), and coming home re-syncs from the host as it
@@ -291,6 +307,16 @@ export class ModelPort implements EditorPort {
     element.addEventListener('compositionstart', () => {
       if (this.inert) return;
       this.composing = true;
+      // Where the composition begins — the pending mark (when one is
+      // armed) must wrap the phrase the IME is about to produce, so its
+      // start is recorded before any composed text lands.
+      this.compositionMarkStart = null;
+      if (this.pendingMark !== null) {
+        const selection = captureOffsets(this.element);
+        if (selection) {
+          this.compositionMarkStart = Math.min(selection.anchor, selection.focus);
+        }
+      }
       // Snapshot BEFORE the first composition text lands, joining the
       // open typing burst or opening one: the whole composed phrase is
       // one undo step, and the state to restore on undo is the
@@ -305,7 +331,9 @@ export class ModelPort implements EditorPort {
       }
     });
     element.addEventListener('compositionend', () => {
+      if (this.inert) return;
       this.composing = false;
+      this.applyPendingMarkToComposition();
     });
 
     // The placeholder mirror. #note's placeholder CSS keys off
@@ -609,14 +637,25 @@ export class ModelPort implements EditorPort {
     if (!selection || selection.rangeCount === 0) {
       return '';
     }
-    const anchor = selection.getRangeAt(0).startContainer;
-    const offset = selection.getRangeAt(0).startOffset;
+    const range = selection.getRangeAt(0);
+    const anchor = range.startContainer;
+    const offset = range.startOffset;
     if (anchor.nodeType === Node.TEXT_NODE) {
       return (anchor.nodeValue ?? '').slice(0, offset).slice(-1);
     }
-    const element = anchor as Element;
-    const before = element.textContent ?? '';
-    return offset > 0 ? before.slice(-1) : before;
+    // An element boundary: the character immediately before the caret is
+    // the last character of the note's text before it — not the containing
+    // element's whole textContent (a caret at (block, 0) used to answer
+    // the ENTIRE block, and dictation then read it as "something precedes
+    // this word" and skipped its capitalisation).
+    const probe = document.createRange();
+    probe.selectNodeContents(this.element);
+    try {
+      probe.setEnd(anchor, offset);
+    } catch {
+      return '';
+    }
+    return probe.toString().slice(-1);
   }
 
   // -------------------------------------------------------------------------
@@ -1360,6 +1399,16 @@ export class ModelPort implements EditorPort {
     }
     const rows = Array.from(at.table.querySelectorAll('tr'));
     const targetCol = context.colIndex + step;
+    // At the table's edge, focus STOPS (the caller already suppressed the
+    // native Tab): clamping first and comparing after used to wrap the last
+    // cell of the last row back to its own row's FIRST cell (and
+    // Shift+Tab symmetrically) — the caret teleported instead of stopping.
+    if (context.rowIndex === rows.length - 1 && targetCol >= context.cols) {
+      return false; // forward off the last row
+    }
+    if (context.rowIndex === 0 && targetCol < 0) {
+      return false; // backward off the first row
+    }
     const clampedRow = Math.min(
       Math.max(context.rowIndex + Math.floor(targetCol / context.cols), 0),
       rows.length - 1,
@@ -1438,7 +1487,7 @@ export class ModelPort implements EditorPort {
         return null;
       }
       const text = target as Text;
-      if (boundaryToStream(model, text, 0) !== offset) {
+      if (boundaryToStream(model, text, spot.raw) !== offset) {
         return null;
       }
       return { kind: 'text', node: text, raw: spot.raw };
@@ -1701,6 +1750,45 @@ export class ModelPort implements EditorPort {
     // part of the Enter's own group.
     if (type === 'insertParagraph') {
       this.commandInOpenGroup((model) => uncheckEmptyItems(model));
+    }
+  }
+
+  /**
+   * The pending mark's composition twin: an armed mark must wrap the
+   * phrase the IME just composed, not leak past it to the next plain
+   * keystroke. The composition's input events all arrive with
+   * `composing` set (handleInput skips them), so without this pass the
+   * composed text stayed plain while the FIRST keystroke after it came
+   * out alone in the armed format — half a sentence bold, the other half
+   * not. Runs inside the composition's own history group (compositionstart
+   * opened it), so one undo removes phrase + wrap together.
+   */
+  private applyPendingMarkToComposition(): void {
+    const start = this.compositionMarkStart;
+    this.compositionMarkStart = null;
+    if (this.pendingMark === null || start === null) {
+      return;
+    }
+    const selection = captureOffsets(this.element);
+    if (!selection) {
+      return;
+    }
+    const end = Math.max(selection.anchor, selection.focus);
+    if (end <= start) {
+      return; // a cancelled composition — the arm stays for the next insertion
+    }
+    const mark = this.pendingMark;
+    this.pendingMark = null;
+    const tag =
+      mark === 'super' ? 'sup' : mark === 'sub' ? 'sub' : FORMAT_MARKS[mark as FormatCommand];
+    const wrapped = this.commandInOpenGroup((model) => toggleMark(model, [start, end], tag));
+    if (wrapped) {
+      // Collapse the caret to the wrapped run's end — the keep-selected
+      // restore would otherwise REPLACE the phrase with the next keystroke.
+      const now = captureOffsets(this.element);
+      if (now) {
+        this.reselect({ anchor: now.focus, focus: now.focus }, streamLengthOf(this.element));
+      }
     }
   }
 

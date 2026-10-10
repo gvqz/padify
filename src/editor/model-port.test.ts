@@ -1285,3 +1285,137 @@ describe("Enter's block escapes (the double-Enter exit)", () => {
     void port;
   });
 });
+
+describe('audit regressions — caret placement and structure splices', () => {
+  /** Caret at a RAW offset inside the nth block's first text node. */
+  function caretAtRaw(surface: HTMLElement, blockIndex: number, raw: number): void {
+    const block = surface.children[blockIndex] as HTMLElement | undefined;
+    const text = block?.firstChild;
+    if (!block || !text || text.nodeType !== Node.TEXT_NODE) {
+      throw new Error(`block ${blockIndex} has no leading text node`);
+    }
+    caretAtNodeText(text as Text, raw);
+  }
+
+  /** Caret at a raw offset inside a specific text node. */
+  function caretAtNodeText(text: Text, raw: number): void {
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.setStart(text, raw);
+    range.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+
+  it('a collapsed Shift+Tab mid-line rides the text left one (not to the line above)', () => {
+    const { port, surface } = makePort('<div>alpha</div><div>\tbeta</div>');
+    caretAtRaw(surface, 1, 3); // after "\tbe"
+    expect(port.tabPlainText(true)).toBe(true);
+    expect(surface.innerHTML).toBe('<div>alpha</div><div>beta</div>');
+    expect(caretStreamOffset(surface)).toBe(7); // after "be"
+  });
+
+  it('a collapsed Shift+Tab at a tabbed line END rides the text left one', () => {
+    const { port, surface } = makePort('<div>alpha</div><div>\tbeta</div>');
+    caretAtRaw(surface, 1, 5); // end of "\tbeta"
+    expect(port.tabPlainText(true)).toBe(true);
+    expect(surface.innerHTML).toBe('<div>alpha</div><div>beta</div>');
+    expect(caretStreamOffset(surface)).toBe(9); // end of "beta"
+  });
+
+  it('inserts an hr at the caret in bare root text (fresh note, no Enter yet)', () => {
+    const { port, surface } = makePort('hello world');
+    const text = Array.from(surface.childNodes).find((n) => n.nodeType === Node.TEXT_NODE) as Text;
+    caretAtNodeText(text, 5); // between 'hello' and ' world'
+    expect(() => port.insertHorizontalRule()).not.toThrow();
+    expect(surface.innerHTML).toContain('<hr>');
+    expect(surface.innerHTML.indexOf('hello')).toBeLessThan(surface.innerHTML.indexOf('<hr>'));
+  });
+
+  it('insertTable mid-paragraph splits the block and lands the caret in the first cell', () => {
+    const { port, surface } = makePort('<p>alpha beta</p>');
+    caretAtRaw(surface, 0, 6); // between 'alpha' and ' beta'
+    expect(port.insertTable(2, 2)).toBe(true);
+    // No text orphaned at the root and no stray empty paragraph: both
+    // halves stay real paragraphs (the parser would otherwise tear the
+    // open <p> at <table> and strand the tail text at the root).
+    expect(Array.from(surface.childNodes).some((n) => n.nodeType === Node.TEXT_NODE)).toBe(false);
+    const paragraphs = surface.querySelectorAll('p');
+    expect(paragraphs.length).toBe(2);
+    expect(paragraphs[0]!.textContent).toBe('alpha ');
+    expect(paragraphs[1]!.textContent).toBe('beta');
+    const firstCell = surface.querySelector('td');
+    const selection = window.getSelection();
+    expect(
+      !!selection && !!firstCell && firstCell.contains(selection.getRangeAt(0).startContainer),
+    ).toBe(true);
+  });
+
+  it('an armed mark wraps the IME-composed phrase (no leak to the next keystroke)', () => {
+    const { port, surface } = makePort('');
+    caretAt(surface, 0);
+    expect(port.applyFormat('bold')).toBe(true); // arm bold
+    surface.dispatchEvent(new Event('compositionstart', { bubbles: true }));
+    nativeEdit(
+      surface,
+      'insertCompositionText',
+      () => {
+        surface.textContent = 'こんにちは';
+        caretAtNodeText(surface.firstChild as Text, 5);
+      },
+      'こんにちは',
+    );
+    surface.dispatchEvent(new Event('compositionend', { bubbles: true }));
+    // A later plain keystroke after the composition.
+    nativeEdit(
+      surface,
+      'insertText',
+      () => {
+        const run = surface.querySelector('b')?.firstChild;
+        const text = (run ?? surface.firstChild) as Text;
+        text.appendData('x');
+        caretAtNodeText(text, text.length);
+      },
+      'x',
+    );
+    expect(surface.innerHTML).toBe('<b>こんにちはx</b>');
+  });
+
+  it('a cancelled composition keeps the armed mark for the next plain insertion', () => {
+    const { port, surface } = makePort('');
+    caretAt(surface, 0);
+    expect(port.applyFormat('bold')).toBe(true);
+    surface.dispatchEvent(new Event('compositionstart', { bubbles: true }));
+    surface.dispatchEvent(new Event('compositionend', { bubbles: true })); // cancelled
+    nativeEdit(
+      surface,
+      'insertText',
+      () => {
+        surface.textContent = 'x';
+        caretAtNodeText(surface.firstChild as Text, 1);
+      },
+      'x',
+    );
+    expect(surface.innerHTML).toBe('<b>x</b>');
+  });
+
+  it('the composed wrap is one undo step with the phrase', () => {
+    const { port, surface } = makePort('');
+    caretAt(surface, 0);
+    expect(port.applyFormat('bold')).toBe(true);
+    surface.dispatchEvent(new Event('compositionstart', { bubbles: true }));
+    nativeEdit(
+      surface,
+      'insertCompositionText',
+      () => {
+        surface.textContent = 'こんにちは';
+        caretAtNodeText(surface.firstChild as Text, 5);
+      },
+      'こんにちは',
+    );
+    surface.dispatchEvent(new Event('compositionend', { bubbles: true }));
+    expect(surface.innerHTML).toBe('<b>こんにちは</b>');
+    expect(port.undo()).toBe(true);
+    expect(surface.innerHTML).toBe('');
+  });
+});

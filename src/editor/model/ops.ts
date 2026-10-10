@@ -156,13 +156,46 @@ export function blockAtSpot(spot: DomSpot | null, root: HTMLElement): HTMLElemen
  * The blocks a multi-block coverage touches: the start block, the end
  * block, and every block sibling between them when they share a parent.
  */
+/** The block a RANGED coverage starts in. A caret sitting exactly on a
+ *  block boundary joins the PREVIOUS block's run (the typing convention,
+ *  correct for carets); a SELECTION starting there must cover the
+ *  FOLLOWING block — triple-click line 2, Home+Shift+End, a drag from a
+ *  line start all used to pull the block above into the operation. The
+ *  one-character probe resolves the boundary forward; a probe that stays
+ *  inside the same block changes nothing. */
+function blockAtCoverageStart(model: HTMLElement, coverage: [number, number]): HTMLElement | null {
+  const direct = blockAt(model, [coverage[0], coverage[0]]);
+  if (coverage[1] <= coverage[0]) {
+    return direct; // collapsed — the caret convention stands
+  }
+  const probe = Math.min(coverage[0] + 1, coverage[1]);
+  const forward = blockAt(model, [probe, probe]);
+  if (!direct) {
+    // Bare root text at the boundary: the selection starts in whatever
+    // block follows it, not in a materialized run of the text before it.
+    return forward;
+  }
+  if (
+    forward &&
+    forward !== direct &&
+    direct.compareDocumentPosition(forward) & Node.DOCUMENT_POSITION_FOLLOWING
+  ) {
+    return forward;
+  }
+  return direct;
+}
+
 export function coveredBlocks(model: HTMLElement, coverage: [number, number]): HTMLElement[] {
-  let start = blockAt(model, [coverage[0], coverage[0]]);
+  let start = blockAtCoverageStart(model, coverage);
   // Bare root text at the coverage start: materialize its root-level run
   // into a real block first, so a coverage reaching from typed root text
   // into following blocks addresses ALL of them (line semantics — the
   // whole covered range becomes list items, not just its first line).
   if (!start) {
+    // Only when the forward probe also found no block: a root-level run
+    // genuinely starts the range. (blockAtCoverageStart already returned
+    // any following block at the boundary — materializing here too would
+    // claim the text BEFORE a selection that starts at a block's start.)
     const materialized = materializeRootRun(model, coverage);
     if (materialized) {
       start = materialized;
@@ -303,7 +336,7 @@ export function toggleMark(
     return UNCHANGED;
   }
   splitAtEdges(model, coverage);
-  const texts = coveredTextNodes(model, coverage).filter((t) => (t.nodeValue ?? '') !== '');
+  const texts = coveredTextNodes(model, coverage).filter((t) => streamLengthOfNode(t) > 0);
   if (texts.length === 0) {
     return UNCHANGED;
   }
@@ -349,7 +382,7 @@ export function removeInlineFormatting(model: HTMLElement, coverage: [number, nu
     return UNCHANGED;
   }
   splitAtEdges(model, coverage);
-  const texts = coveredTextNodes(model, coverage).filter((t) => (t.nodeValue ?? '') !== '');
+  const texts = coveredTextNodes(model, coverage).filter((t) => streamLengthOfNode(t) > 0);
   if (texts.length === 0) {
     return UNCHANGED;
   }
@@ -402,7 +435,7 @@ export function setInlineStyle(
     return UNCHANGED;
   }
   splitAtEdges(model, coverage);
-  const texts = coveredTextNodes(model, coverage).filter((t) => (t.nodeValue ?? '') !== '');
+  const texts = coveredTextNodes(model, coverage).filter((t) => streamLengthOfNode(t) > 0);
   if (texts.length === 0) {
     return UNCHANGED;
   }
@@ -912,15 +945,24 @@ export function unindentTabLine(
     return UNCHANGED;
   }
   const blockStart = boundaryToStream(model, block, 0);
-  if (!stripLeadingTab(block)) {
-    return UNCHANGED;
-  }
+  // The caret's pre-strip stream position inside the block — measured
+  // BEFORE the tab comes out, while the spot's node/raw offsets still
+  // address the tree they were captured on (a stale raw past the stripped
+  // node's new length gets clamped by the resolver, which would subtract
+  // the removed tab twice below).
+  let withinBeforeStrip = -1;
   if (preferSpot) {
-    const within = boundaryToStream(
+    withinBeforeStrip = boundaryToStream(
       block,
       preferSpot.node,
       preferSpot.kind === 'text' ? preferSpot.raw : preferSpot.childIndex,
     );
+  }
+  if (!stripLeadingTab(block)) {
+    return UNCHANGED;
+  }
+  if (preferSpot) {
+    const within = withinBeforeStrip;
     // Mid-line carets (past the tab) ride the text left one. Carets at
     // the block start or on the tab land on the block's NEW start — the
     // spot pins the B side of that boundary, which the numeric offset
@@ -1030,6 +1072,34 @@ export function toggleListKind(
     current.replaceWith(replacement);
     return { changed: true, intent: { preserve: true } };
   }
+  if (current && kind === 'checklist' && (currentKind === 'ul' || currentKind === 'ol')) {
+    // Bullet/numbered -> checklist, IN PLACE: the same items gain the
+    // checklist attribute (unchecked). Without this branch the WRAP path
+    // below filtered the LIs out, found nothing, and the bare-caret
+    // fallback appended a stray EMPTY checklist at the note's end while
+    // the caret jumped into it (issue #61). The same fallback used to
+    // fire from inside table cells.
+    current.setAttribute(CHECKLIST_ATTR, 'true');
+    if (current.tagName === 'OL') {
+      const unordered = document.createElement('ul');
+      for (const attr of Array.from(current.attributes)) {
+        if (attr.name !== 'start') {
+          unordered.setAttribute(attr.name, attr.value);
+        }
+      }
+      while (current.firstChild) {
+        unordered.append(current.firstChild);
+      }
+      current.replaceWith(unordered);
+      current.setAttribute(CHECKLIST_ATTR, 'true');
+    }
+    current.querySelectorAll('li').forEach((li) => {
+      if (!li.hasAttribute(CHECKED_ATTR)) {
+        li.setAttribute(CHECKED_ATTR, 'false');
+      }
+    });
+    return { changed: true, intent: { preserve: true } };
+  }
 
   // WRAP: the covered blocks become one list's items.
   let blocks = coveredBlocks(model, coverage).filter(
@@ -1046,9 +1116,13 @@ export function toggleListKind(
     list.setAttribute(CHECKLIST_ATTR, 'true');
   }
   if (blocks.length === 0) {
-    // Nothing to wrap — a bare caret on an empty note (or a textless
-    // context): the list is born with ONE empty item, caret inside it.
-    // An intentional empty block, never a normalization away.
+    // Nothing to wrap — a bare caret on a GENUINELY EMPTY note only: the
+    // fallback used to fire for any filtered-out context (a caret in a
+    // list item or a table cell) and append a stray empty list at the
+    // note's END with the caret teleported into it.
+    if (model.childNodes.length > 0 || (coverage[0] ?? 0) > 0) {
+      return { changed: false };
+    }
     const item = document.createElement('li');
     if (kind === 'checklist') {
       item.setAttribute(CHECKED_ATTR, 'false');
@@ -1276,7 +1350,7 @@ export function wrapLink(model: HTMLElement, coverage: [number, number], href: s
     return UNCHANGED;
   }
   splitAtEdges(model, coverage);
-  const texts = coveredTextNodes(model, coverage).filter((t) => (t.nodeValue ?? '') !== '');
+  const texts = coveredTextNodes(model, coverage).filter((t) => streamLengthOfNode(t) > 0);
   if (texts.length === 0) {
     return UNCHANGED;
   }
@@ -1526,7 +1600,11 @@ export function insertPlainText(
 /** After splitAtEdges, a covered text node lies fully inside the coverage
  *  unless it is a zero-length marker run — those survive. */
 function coverageTouchesFully(node: Text): boolean {
-  return (node.nodeValue ?? '') !== '';
+  // Stream-visible: a marker-only run (a \u200B guard, an abandoned
+  // styled caret) has raw nodeValue but zero visible characters — the
+  // comment contract says those SURVIVE a plain-text splice, and an
+  // emptied styled span should not persist.
+  return streamLengthOfNode(node) > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1545,29 +1623,17 @@ export function plantRule(model: HTMLElement, at: number): OpResult {
   if (!spot) {
     return UNCHANGED;
   }
-  const block = spotBlock(spot);
-  const holder = block ?? model;
+  const block = spotBlock(spot, model);
   const rule = document.createElement('hr');
-  if (spot.kind === 'text' && block) {
-    // Split the block at the caret: rule between the halves.
-    const text = spot.node;
-    if (spot.raw >= (text.nodeValue ?? '').length) {
-      holder.insertBefore(rule, block.nextSibling);
-    } else if (spot.raw === 0) {
-      holder.insertBefore(rule, block);
-    } else {
-      const tail = splitBlockAt(block, spot);
-      holder.insertBefore(rule, tail);
-    }
-  } else {
-    holder.insertBefore(rule, block ? block.nextSibling : null);
-  }
-  // A following paragraph when nothing comes after the rule.
+  spliceBlockContent(model, spot, block, rule);
+  // A following paragraph when nothing comes after the rule — hosted by
+  // whatever element the rule landed in (a cell keeps it inside the cell;
+  // the block-split and root cases keep it at the rule's own level).
   const nextBlock = rule.nextElementSibling;
   if (!nextBlock) {
     const paragraph = document.createElement('div');
     paragraph.append(document.createElement('br'));
-    const host = (block && block.parentElement) || model;
+    const host = (rule.parentNode as HTMLElement | null) ?? model;
     host.insertBefore(paragraph, rule.nextSibling);
   }
   const after = rule.nextElementSibling;
@@ -1620,8 +1686,10 @@ function splitBlockAt(block: HTMLElement, spot: DomSpot): HTMLElement {
 /**
  * Inserts a rows×cols table at the caret, insertHTML semantics: the caret
  * escapes a list first, then the table (plus its trailing paragraph)
- * splices in at the caret inside the target block. The caret lands in the
- * first cell.
+ * splices in at the caret — splitting the paragraph-shaped block so the
+ * table never nests inside one (the HTML parser would tear the paragraph
+ * open and orphan the caret's tail text). The caret lands in the first
+ * cell.
  */
 export function plantTable(model: HTMLElement, at: number, rows: number, cols: number): OpResult {
   const safeRows = Math.min(Math.max(Math.floor(rows), 1), 20);
@@ -1645,25 +1713,8 @@ export function plantTable(model: HTMLElement, at: number, rows: number, cols: n
   const fragment = document.createDocumentFragment();
   fragment.append(table, paragraph);
 
-  if (spot.kind === 'text') {
-    const text = spot.node;
-    const parent = (text.parentElement ?? model) as HTMLElement;
-    if (spot.raw >= (text.nodeValue ?? '').length) {
-      parent.insertBefore(fragment, text.nextSibling);
-    } else if (spot.raw === 0) {
-      parent.insertBefore(fragment, text);
-    } else {
-      const tail = text.splitText(spot.raw);
-      parent.insertBefore(fragment, tail);
-    }
-  } else {
-    const parent = spot.node;
-    if (spot.childIndex >= parent.childNodes.length) {
-      parent.append(fragment);
-    } else {
-      parent.insertBefore(fragment, parent.childNodes[spot.childIndex]!);
-    }
-  }
+  spliceBlockContent(model, spot, spotBlock(spot, model), fragment);
+
   const firstCell = table.querySelector('td');
   return {
     changed: true,
@@ -1810,10 +1861,14 @@ export function tableContextAt(
   };
 }
 
-/** The block element a spot lives in, or null (root-level content). */
-function spotBlock(spot: DomSpot): HTMLElement | null {
+/** The block element a spot lives in, or null (root-level content). The
+ *  walk is bounded by the root: the model holder itself is a DIV in
+ *  BLOCK_SIBLING_TAGS, and answering it as "the block" would splice
+ *  siblings into a detached tree (a NotFoundError) — bare root text
+ *  answers null and the caller splices at the caret itself. */
+function spotBlock(spot: DomSpot, root: HTMLElement): HTMLElement | null {
   let el: HTMLElement | null = spotElement(spot);
-  while (el) {
+  while (el && el !== root) {
     if (
       BLOCK_SIBLING_TAGS.has(el.tagName) ||
       el.tagName === 'LI' ||
@@ -1825,6 +1880,62 @@ function spotBlock(spot: DomSpot): HTMLElement | null {
     el = el.parentElement;
   }
   return null;
+}
+
+/**
+ * Splices block-level content (an hr, a table fragment) at a caret spot
+ * without ever nesting it inside a paragraph-shaped block: DIV/P/H1-3/
+ * BLOCKQUOTE/PRE split at the caret (the content lands between the halves),
+ * cells and list items take it at the caret (block content nests legally
+ * there), and bare root text splices at the caret itself. `into` is the
+ * element that owns the caret's text run when it is not a block.
+ */
+function spliceBlockContent(
+  model: HTMLElement,
+  spot: DomSpot,
+  block: HTMLElement | null,
+  content: Node,
+): void {
+  const splittable = block !== null && BLOCK_FORMAT_TAGS.has(block.tagName);
+  if (spot.kind === 'text') {
+    const text = spot.node;
+    if (splittable && block) {
+      if (spot.raw >= (text.nodeValue ?? '').length) {
+        block.parentElement?.insertBefore(content, block.nextSibling);
+      } else if (spot.raw === 0) {
+        block.parentElement?.insertBefore(content, block);
+      } else {
+        const tail = splitBlockAt(block, spot);
+        block.parentElement?.insertBefore(content, tail);
+      }
+      return;
+    }
+    // Bare root text, a cell, or a list item: splice at the caret's own
+    // position inside the caret's container.
+    const parent = text.parentNode;
+    if (!parent) {
+      model.append(content);
+      return;
+    }
+    if (spot.raw >= (text.nodeValue ?? '').length) {
+      parent.insertBefore(content, text.nextSibling);
+    } else if (spot.raw === 0) {
+      parent.insertBefore(content, text);
+    } else {
+      const tail = text.splitText(spot.raw);
+      parent.insertBefore(content, tail);
+    }
+    return;
+  }
+  if (splittable && block) {
+    // An element caret on a paragraph-shaped block: the content takes
+    // the block's own position — after it (the tail-side convention the
+    // text path keeps at the block's end).
+    block.parentElement?.insertBefore(content, block.nextSibling);
+    return;
+  }
+  const parent = spot.node === model ? model : spot.node;
+  parent.insertBefore(content, spot.node.childNodes[spot.childIndex] ?? null);
 }
 
 /**
