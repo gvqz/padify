@@ -1,5 +1,5 @@
 <div id="preferencesModal" class="modal fade" role="dialog" aria-labelledby="preferencesTitle">
-  <div class="modal-dialog">
+  <div class="modal-dialog pref-dialog">
     <div class="modal-content">
       <div class="modal-header">
         <div class="pref-header-copy">
@@ -7,24 +7,56 @@
           <h4 class="modal-title custom-modal-title" id="preferencesTitle">Settings</h4>
           <p class="pref-subtitle">Everything applies instantly and is saved on this device.</p>
         </div>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close settings">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M6 6l12 12M18 6L6 18" />
-          </svg>
-        </button>
+        <div class="pref-header-tools">
+          <div class="pref-search">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+            <input
+              id="prefSearch"
+              type="search"
+              placeholder="Search settings…"
+              aria-label="Search settings"
+              aria-controls="prefPanes"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close settings">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </div>
       </div>
       <div class="modal-body">
-        <section class="pref-section" aria-label="Appearance">
-          <header class="pref-section-head">
-            <span class="pref-section-icon" aria-hidden="true">
+        <div class="pref-layout" id="prefLayout">
+          <nav class="pref-nav" id="prefNav" role="tablist" aria-label="Settings sections">
+            <button
+              type="button"
+              class="pref-nav-item"
+              role="tab"
+              id="prefNavAppearance"
+              aria-controls="prefPaneAppearance"
+              aria-selected="true"
+            >
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -32,99 +64,22 @@
                 stroke-width="1.8"
                 stroke-linecap="round"
                 stroke-linejoin="round"
+                aria-hidden="true"
               >
                 <path d="M12 3l1.7 4.5L18.2 9.2l-4.5 1.7L12 15.4l-1.7-4.5L5.8 9.2l4.5-1.7L12 3z" />
                 <path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z" />
               </svg>
-            </span>
-            <div>
-              <h5 class="pref-section-title">Appearance</h5>
-              <p class="pref-section-hint">The overall look of your writing space.</p>
-            </div>
-          </header>
-          <div class="pref-card">
-            <div class="pref-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Theme</span>
-                <span class="pref-row-hint">Follow your device, or lock in a look.</span>
-              </div>
-              <div class="pref-row-control">
-                <div class="pref-theme-seg" role="radiogroup" aria-label="Theme">
-                  <input type="radio" id="device-theme" value="device" name="themes" />
-                  <label for="device-theme">
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      aria-hidden="true"
-                    >
-                      <rect x="2" y="3" width="20" height="13" rx="2" />
-                      <path d="M8 21h8" />
-                      <path d="M12 16v5" />
-                    </svg>
-                    Device
-                  </label>
-                  <input type="radio" id="light-theme" value="light" name="themes" checked />
-                  <label for="light-theme">
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      aria-hidden="true"
-                    >
-                      <circle cx="12" cy="12" r="4" />
-                      <path
-                        d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
-                      />
-                    </svg>
-                    Light
-                  </label>
-                  <input type="radio" id="dark-theme" value="dark" name="themes" />
-                  <label for="dark-theme">
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                    </svg>
-                    Dark
-                  </label>
-                </div>
-              </div>
-            </div>
-            <div class="pref-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Texture</span>
-                <span class="pref-row-hint">A subtle backdrop pattern behind the page.</span>
-              </div>
-              <div class="pref-row-control">
-                <select name="texture" id="texture" class="form-control">
-                  <option value="normal">Normal Paper</option>
-                  <option value="dotted">Dotted Paper</option>
-                  <option value="graph">Graph Paper</option>
-                  <option value="starfield">Starfield</option>
-                  <option value="grain">Grainy Paper</option>
-                  <option value="recycled">Recycled Paper</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="pref-section" aria-label="Text">
-          <header class="pref-section-head">
-            <span class="pref-section-icon" aria-hidden="true">
+              <span class="pref-nav-label">Appearance</span>
+            </button>
+            <button
+              type="button"
+              class="pref-nav-item"
+              role="tab"
+              id="prefNavText"
+              aria-controls="prefPaneText"
+              aria-selected="false"
+              tabindex="-1"
+            >
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -132,106 +87,23 @@
                 stroke-width="1.8"
                 stroke-linecap="round"
                 stroke-linejoin="round"
+                aria-hidden="true"
               >
                 <polyline points="4 7 4 4 20 4 20 7" />
                 <line x1="9" y1="20" x2="15" y2="20" />
                 <line x1="12" y1="4" x2="12" y2="20" />
               </svg>
-            </span>
-            <div>
-              <h5 class="pref-section-title">Text</h5>
-              <p class="pref-section-hint">Typeface, size and rhythm of your notes.</p>
-            </div>
-          </header>
-          <div class="pref-card">
-            <div class="pref-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Font</span>
-                <span class="pref-row-hint">The typeface your notes are written in.</span>
-              </div>
-              <div class="pref-row-control">
-                <select name="font" id="font" class="form-control">
-                  <option value="default">Default (System Font)</option>
-                  <option value="serif">Serif</option>
-                  <option value="monospaced">Monospaced</option>
-                  <option value="handwritten">Handwritten</option>
-                  <option value="humanist">Humanist</option>
-                  <option value="pixel">Pixel</option>
-                  <option value="typewriter">Typewriter</option>
-                  <option value="crayon">Crayon</option>
-                </select>
-              </div>
-            </div>
-            <div class="pref-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Font size</span>
-                <span class="pref-row-hint">Measured in points, from 10 to 30.</span>
-              </div>
-              <div class="pref-row-control">
-                <select name="fontSize" id="fontSize" class="form-control">
-                  <option value="10">10</option>
-                  <option value="12">12</option>
-                  <option value="14">14</option>
-                  <option value="16">16</option>
-                  <option value="18">18</option>
-                  <option value="20">20</option>
-                  <option value="22">22</option>
-                  <option value="24">24</option>
-                  <option value="26">26</option>
-                  <option value="28">28</option>
-                  <option value="30">30</option>
-                </select>
-              </div>
-            </div>
-            <div class="pref-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Line height</span>
-                <span class="pref-row-hint">Vertical space between lines — 18 to 40.</span>
-              </div>
-              <div class="pref-row-control">
-                <select name="lineHeight" id="lineHeight" class="form-control">
-                  <option value="18">18</option>
-                  <option value="20">20</option>
-                  <option value="22">22</option>
-                  <option value="24">24</option>
-                  <option value="26">26</option>
-                  <option value="28">28</option>
-                  <option value="30">30</option>
-                  <option value="32">32</option>
-                  <option value="34">34</option>
-                  <option value="36">36</option>
-                  <option value="38">38</option>
-                  <option value="40">40</option>
-                </select>
-              </div>
-            </div>
-            <div class="pref-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Easy Read</span>
-                <span class="pref-row-hint"
-                  >Keeps lines around 66 characters for comfortable reading.</span
-                >
-              </div>
-              <div class="pref-row-control">
-                <div class="checkbox checbox-switch">
-                  <label>
-                    <input
-                      type="checkbox"
-                      name="optimalLineLength"
-                      id="optimalLineLength"
-                      checked="checked"
-                    />
-                    <span></span>
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="pref-section" aria-label="Writing">
-          <header class="pref-section-head">
-            <span class="pref-section-icon" aria-hidden="true">
+              <span class="pref-nav-label">Text</span>
+            </button>
+            <button
+              type="button"
+              class="pref-nav-item"
+              role="tab"
+              id="prefNavWriting"
+              aria-controls="prefPaneWriting"
+              aria-selected="false"
+              tabindex="-1"
+            >
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -239,104 +111,21 @@
                 stroke-width="1.8"
                 stroke-linecap="round"
                 stroke-linejoin="round"
+                aria-hidden="true"
               >
                 <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
               </svg>
-            </span>
-            <div>
-              <h5 class="pref-section-title">Writing</h5>
-              <p class="pref-section-hint">How the editor behaves while you type.</p>
-            </div>
-          </header>
-          <div class="pref-card">
-            <div class="pref-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Writing direction</span>
-                <span class="pref-row-hint">Left to right, or right to left.</span>
-              </div>
-              <div class="pref-row-control">
-                <select name="writeDirection" id="writeDirection" class="form-control">
-                  <option value="ltr">Left to right</option>
-                  <option value="rtl">Right to left</option>
-                </select>
-              </div>
-            </div>
-            <div class="pref-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Spellcheck</span>
-                <span class="pref-row-hint">Uses your system's spell-checker.</span>
-              </div>
-              <div class="pref-row-control">
-                <div class="checkbox checbox-switch">
-                  <label>
-                    <input type="checkbox" name="spellCheck" id="spellCheck" />
-                    <span></span>
-                  </label>
-                </div>
-              </div>
-            </div>
-            <div class="pref-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Tab indentation</span>
-                <span class="pref-row-hint">Always on — the Tab key indents your text.</span>
-              </div>
-              <div class="pref-row-control">
-                <span class="pref-always-on">Always on</span>
-              </div>
-            </div>
-            <div class="pref-action-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Clear formatting</span>
-                <span class="pref-row-hint"
-                  >Strips every tab from your notes in one go. You can undo with
-                  <span data-mod-key>Ctrl</span>&nbsp;+&nbsp;Z.</span
-                >
-              </div>
-              <button type="button" class="pref-action-btn" id="clearTabIndentation">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"
-                  />
-                  <path d="M22 21H7" />
-                  <path d="m5 11 9 9" />
-                </svg>
-                Remove all tabs
-              </button>
-            </div>
-            <div class="pref-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">
-                  Break reminders
-                  <span class="pref-new-badge">NEW</span>
-                </span>
-                <span class="pref-row-hint"
-                  >Gently suggests a 2-minute break after long, active sessions. Tracked locally
-                  only.</span
-                >
-              </div>
-              <div class="pref-row-control">
-                <div class="checkbox checbox-switch">
-                  <label>
-                    <input type="checkbox" name="breakReminders" id="breakReminders" />
-                    <span></span>
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="pref-section" aria-label="Cloud sync" id="cloudSettingsSection" hidden>
-          <header class="pref-section-head">
-            <span class="pref-section-icon" aria-hidden="true">
+              <span class="pref-nav-label">Writing</span>
+            </button>
+            <button
+              type="button"
+              class="pref-nav-item"
+              role="tab"
+              id="prefNavInterface"
+              aria-controls="prefPaneInterface"
+              aria-selected="false"
+              tabindex="-1"
+            >
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -344,6 +133,56 @@
                 stroke-width="1.8"
                 stroke-linecap="round"
                 stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <rect width="18" height="18" x="3" y="3" rx="2" />
+                <path d="M3 9h18" />
+                <path d="M9 21V9" />
+              </svg>
+              <span class="pref-nav-label">Interface</span>
+            </button>
+            <button
+              type="button"
+              class="pref-nav-item"
+              role="tab"
+              id="prefNavEffects"
+              aria-controls="prefPaneEffects"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path
+                  d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.5 6.5L22 12l-6.5 2.5L13 21l-2.5-6.5L4 12l6.5-2.5L13 3z"
+                />
+              </svg>
+              <span class="pref-nav-label">Effects</span>
+            </button>
+            <button
+              type="button"
+              class="pref-nav-item"
+              role="tab"
+              id="cloudSettingsNav"
+              aria-controls="cloudSettingsSection"
+              aria-selected="false"
+              tabindex="-1"
+              hidden
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
               >
                 <path
                   d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"
@@ -351,76 +190,476 @@
                 <path d="M12 12v6" />
                 <path d="m9.5 15.5 2.5-2.5 2.5 2.5" />
               </svg>
-            </span>
-            <div>
-              <h5 class="pref-section-title">Cloud sync</h5>
-              <p class="pref-section-hint">Your notes, safe in the cloud and on every device.</p>
-            </div>
-          </header>
-          <div class="pref-card">
-            <div class="pref-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Backup &amp; sync</span>
-                <span class="pref-row-hint" id="cloudSettingsSummary"
-                  >Sign in to back up your notes and pick them up on any device.</span
-                >
-              </div>
-              <div class="pref-row-control">
-                <button type="button" class="pref-action-btn" id="cloudSettingsManage">
-                  Manage
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="pref-section" aria-label="Interface">
-          <header class="pref-section-head">
-            <span class="pref-section-icon" aria-hidden="true">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <rect width="18" height="18" x="3" y="3" rx="2" />
-                <path d="M3 9h18" />
-                <path d="M9 21V9" />
-              </svg>
-            </span>
-            <div>
-              <h5 class="pref-section-title">Interface</h5>
-              <p class="pref-section-hint">What you see around the editor.</p>
-            </div>
-          </header>
-          <div class="pref-card">
-            <div class="pref-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Character &amp; word count</span>
-                <span class="pref-row-hint">The counter pill in the bottom corner.</span>
-              </div>
-              <div class="pref-row-control">
-                <div class="checkbox checbox-switch">
-                  <label>
-                    <input
-                      type="checkbox"
-                      name="showWordCountPill"
-                      id="showWordCountPill"
-                      checked="checked"
+              <span class="pref-nav-label">Cloud sync</span>
+            </button>
+          </nav>
+          <div class="pref-panes" id="prefPanes">
+            <section
+              class="pref-pane"
+              role="tabpanel"
+              id="prefPaneAppearance"
+              aria-labelledby="prefNavAppearance"
+            >
+              <header class="pref-section-head">
+                <span class="pref-section-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M12 3l1.7 4.5L18.2 9.2l-4.5 1.7L12 15.4l-1.7-4.5L5.8 9.2l4.5-1.7L12 3z"
                     />
-                    <span></span>
-                  </label>
+                    <path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z" />
+                  </svg>
+                </span>
+                <div>
+                  <h5 class="pref-section-title">Appearance</h5>
+                  <p class="pref-section-hint">The overall look of your writing space.</p>
+                </div>
+              </header>
+              <div class="pref-card">
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Theme</span>
+                    <span class="pref-row-hint">Follow your device, or lock in a look.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <div class="pref-theme-seg" role="radiogroup" aria-label="Theme">
+                      <input type="radio" id="device-theme" value="device" name="themes" />
+                      <label for="device-theme">
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.8"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <rect x="2" y="3" width="20" height="13" rx="2" />
+                          <path d="M8 21h8" />
+                          <path d="M12 16v5" />
+                        </svg>
+                        Device
+                      </label>
+                      <input type="radio" id="light-theme" value="light" name="themes" checked />
+                      <label for="light-theme">
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.8"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <circle cx="12" cy="12" r="4" />
+                          <path
+                            d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
+                          />
+                        </svg>
+                        Light
+                      </label>
+                      <input type="radio" id="dark-theme" value="dark" name="themes" />
+                      <label for="dark-theme">
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.8"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                        </svg>
+                        Dark
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Texture</span>
+                    <span class="pref-row-hint">A subtle backdrop pattern behind the page.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <select name="texture" id="texture" class="form-control">
+                      <option value="normal">Normal Paper</option>
+                      <option value="dotted">Dotted Paper</option>
+                      <option value="graph">Graph Paper</option>
+                      <option value="starfield">Starfield</option>
+                      <option value="grain">Grainy Paper</option>
+                      <option value="recycled">Recycled Paper</option>
+                    </select>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
+            </section>
 
-        <section class="pref-section" aria-label="Effects">
-          <header class="pref-section-head">
-            <span class="pref-section-icon" aria-hidden="true">
+            <section
+              class="pref-pane"
+              role="tabpanel"
+              id="prefPaneText"
+              aria-labelledby="prefNavText"
+            >
+              <header class="pref-section-head">
+                <span class="pref-section-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <polyline points="4 7 4 4 20 4 20 7" />
+                    <line x1="9" y1="20" x2="15" y2="20" />
+                    <line x1="12" y1="4" x2="12" y2="20" />
+                  </svg>
+                </span>
+                <div>
+                  <h5 class="pref-section-title">Text</h5>
+                  <p class="pref-section-hint">Typeface, size and rhythm of your notes.</p>
+                </div>
+              </header>
+              <div class="pref-card">
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Font</span>
+                    <span class="pref-row-hint">The typeface your notes are written in.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <select name="font" id="font" class="form-control">
+                      <option value="default">Default (System Font)</option>
+                      <option value="serif">Serif</option>
+                      <option value="monospaced">Monospaced</option>
+                      <option value="handwritten">Handwritten</option>
+                      <option value="humanist">Humanist</option>
+                      <option value="pixel">Pixel</option>
+                      <option value="typewriter">Typewriter</option>
+                      <option value="crayon">Crayon</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Font size</span>
+                    <span class="pref-row-hint">Measured in points, from 10 to 30.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <select name="fontSize" id="fontSize" class="form-control">
+                      <option value="10">10</option>
+                      <option value="12">12</option>
+                      <option value="14">14</option>
+                      <option value="16">16</option>
+                      <option value="18">18</option>
+                      <option value="20">20</option>
+                      <option value="22">22</option>
+                      <option value="24">24</option>
+                      <option value="26">26</option>
+                      <option value="28">28</option>
+                      <option value="30">30</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Line height</span>
+                    <span class="pref-row-hint">Vertical space between lines — 18 to 40.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <select name="lineHeight" id="lineHeight" class="form-control">
+                      <option value="18">18</option>
+                      <option value="20">20</option>
+                      <option value="22">22</option>
+                      <option value="24">24</option>
+                      <option value="26">26</option>
+                      <option value="28">28</option>
+                      <option value="30">30</option>
+                      <option value="32">32</option>
+                      <option value="34">34</option>
+                      <option value="36">36</option>
+                      <option value="38">38</option>
+                      <option value="40">40</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Easy Read</span>
+                    <span class="pref-row-hint"
+                      >Keeps lines around 66 characters for comfortable reading.</span
+                    >
+                  </div>
+                  <div class="pref-row-control">
+                    <div class="checkbox checbox-switch">
+                      <label>
+                        <input
+                          type="checkbox"
+                          name="optimalLineLength"
+                          id="optimalLineLength"
+                          checked="checked"
+                        />
+                        <span></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="pref-pane"
+              role="tabpanel"
+              id="prefPaneWriting"
+              aria-labelledby="prefNavWriting"
+            >
+              <header class="pref-section-head">
+                <span class="pref-section-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  </svg>
+                </span>
+                <div>
+                  <h5 class="pref-section-title">Writing</h5>
+                  <p class="pref-section-hint">How the editor behaves while you type.</p>
+                </div>
+              </header>
+              <div class="pref-card">
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Writing direction</span>
+                    <span class="pref-row-hint">Left to right, or right to left.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <select name="writeDirection" id="writeDirection" class="form-control">
+                      <option value="ltr">Left to right</option>
+                      <option value="rtl">Right to left</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Spellcheck</span>
+                    <span class="pref-row-hint">Uses your system's spell-checker.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <div class="checkbox checbox-switch">
+                      <label>
+                        <input type="checkbox" name="spellCheck" id="spellCheck" />
+                        <span></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">
+                      Break reminders
+                      <span class="pref-new-badge">NEW</span>
+                    </span>
+                    <span class="pref-row-hint"
+                      >Gently suggests a 2-minute break after long, active sessions. Tracked locally
+                      only.</span
+                    >
+                  </div>
+                  <div class="pref-row-control">
+                    <div class="checkbox checbox-switch">
+                      <label>
+                        <input type="checkbox" name="breakReminders" id="breakReminders" />
+                        <span></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="pref-pane"
+              role="tabpanel"
+              id="prefPaneInterface"
+              aria-labelledby="prefNavInterface"
+            >
+              <header class="pref-section-head">
+                <span class="pref-section-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect width="18" height="18" x="3" y="3" rx="2" />
+                    <path d="M3 9h18" />
+                    <path d="M9 21V9" />
+                  </svg>
+                </span>
+                <div>
+                  <h5 class="pref-section-title">Interface</h5>
+                  <p class="pref-section-hint">What you see around the editor.</p>
+                </div>
+              </header>
+              <div class="pref-card">
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Character &amp; word count</span>
+                    <span class="pref-row-hint">The counter pill in the bottom corner.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <div class="checkbox checbox-switch">
+                      <label>
+                        <input
+                          type="checkbox"
+                          name="showWordCountPill"
+                          id="showWordCountPill"
+                          checked="checked"
+                        />
+                        <span></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="pref-pane"
+              role="tabpanel"
+              id="prefPaneEffects"
+              aria-labelledby="prefNavEffects"
+            >
+              <header class="pref-section-head">
+                <span class="pref-section-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.5 6.5L22 12l-6.5 2.5L13 21l-2.5-6.5L4 12l6.5-2.5L13 3z"
+                    />
+                  </svg>
+                </span>
+                <div>
+                  <h5 class="pref-section-title">Effects</h5>
+                  <p class="pref-section-hint">Sparkle and pop while you type.</p>
+                </div>
+              </header>
+              <div class="pref-card">
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Typing explosion effect</span>
+                    <span class="pref-row-hint"
+                      >A playful burst on each keystroke (Power Mode-style).</span
+                    >
+                  </div>
+                  <div class="pref-row-control">
+                    <div class="checkbox checbox-switch">
+                      <label>
+                        <input type="checkbox" name="explodingEffect" id="explodingEffect" />
+                        <span></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Explosion style</span>
+                    <span class="pref-row-hint"
+                      >Confetti, fireworks, shooting stars — or let Padify surprise you.</span
+                    >
+                  </div>
+                  <div class="pref-row-control">
+                    <select
+                      name="explodingEffectStyle"
+                      id="explodingEffectStyle"
+                      class="form-control"
+                    >
+                      <option value="classic">Classic burst</option>
+                      <option value="confetti">Confetti pop</option>
+                      <option value="fireworks">Fireworks</option>
+                      <option value="shooting">Shooting stars</option>
+                      <option value="neon">Neon sparks</option>
+                      <option value="emoji">Emoji burst</option>
+                      <option value="surprise">Surprise me</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="pref-pane"
+              role="tabpanel"
+              id="cloudSettingsSection"
+              aria-labelledby="cloudSettingsNav"
+              hidden
+            >
+              <header class="pref-section-head">
+                <span class="pref-section-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"
+                    />
+                    <path d="M12 12v6" />
+                    <path d="m9.5 15.5 2.5-2.5 2.5 2.5" />
+                  </svg>
+                </span>
+                <div>
+                  <h5 class="pref-section-title">Cloud sync</h5>
+                  <p class="pref-section-hint">
+                    Your notes, safe in the cloud and on every device.
+                  </p>
+                </div>
+              </header>
+              <div class="pref-card">
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Backup &amp; sync</span>
+                    <span class="pref-row-hint" id="cloudSettingsSummary"
+                      >Sign in to back up your notes and pick them up on any device.</span
+                    >
+                  </div>
+                  <div class="pref-row-control">
+                    <button type="button" class="pref-action-btn" id="cloudSettingsManage">
+                      Manage
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <div class="pref-search-empty" id="prefSearchEmpty" hidden>
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -428,68 +667,19 @@
                 stroke-width="1.8"
                 stroke-linecap="round"
                 stroke-linejoin="round"
+                aria-hidden="true"
               >
-                <path d="M12 2l1.7 4.5L18.2 9.2l-4.5 1.7L12 15.4l-1.7-4.5L5.8 9.2l4.5-1.7L12 3z" />
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
               </svg>
-            </span>
-            <div>
-              <h5 class="pref-section-title">Effects</h5>
-              <p class="pref-section-hint">Sound and sparkle while you type.</p>
-            </div>
-          </header>
-          <div class="pref-card">
-            <div class="pref-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Typewriter sound</span>
-                <span class="pref-row-hint">Mimics an Hermes Precisa 305 on each keystroke.</span>
-              </div>
-              <div class="pref-row-control">
-                <div class="checkbox checbox-switch">
-                  <label>
-                    <input type="checkbox" name="typewriterSound" id="typewriterSound" />
-                    <span></span>
-                  </label>
-                </div>
-              </div>
-            </div>
-            <div class="pref-row pref-volume-row typewriter-switch-volume">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Typewriter volume</span>
-                <span class="pref-row-hint">Play a short sample by dragging the slider.</span>
-              </div>
-              <div class="pref-row-control">
-                <div class="volume-control" id="typewriterVolumeControl">
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value="4"
-                    class="volume-slider"
-                    id="typewriterVolume"
-                    aria-label="Typewriter volume"
-                  />
-                </div>
-                <span id="typewriterVolumeValue" title="Typewriter volume"></span>
-              </div>
-            </div>
-            <div class="pref-row">
-              <div class="pref-row-copy">
-                <span class="pref-row-title">Typing explosion effect</span>
-                <span class="pref-row-hint"
-                  >A playful burst on each keystroke (Power Mode-style).</span
-                >
-              </div>
-              <div class="pref-row-control">
-                <div class="checkbox checbox-switch">
-                  <label>
-                    <input type="checkbox" name="explodingEffect" id="explodingEffect" />
-                    <span></span>
-                  </label>
-                </div>
-              </div>
+              <p class="pref-search-empty-title">No settings found</p>
+              <p class="pref-search-empty-hint">
+                Nothing matches “<span id="prefSearchEmptyQuery"></span>”. Try a different word, or
+                clear the search.
+              </p>
             </div>
           </div>
-        </section>
+        </div>
       </div>
       <div class="modal-footer">
         <a href="javascript:void(0);" id="resetPreferences" title="Reset to default preferences">

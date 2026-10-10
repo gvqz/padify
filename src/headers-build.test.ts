@@ -100,7 +100,7 @@ describe('API origin (VITE_API_BASE)', () => {
     expect(build.apiBase).toBe('https://api.example.com');
     expect(build.csp).toContain("connect-src 'self' https://api.example.com");
     expect(build.shareConfigFile).toContain("apiBase: 'https://api.example.com'");
-    expect(build.redirectsFile).toContain('/api/*  https://api.example.com/:splat  200!');
+    expect(build.redirectsFile).toContain('/api/*  https://api.example.com/api/:splat  200!');
   });
 
   it('normalizes a trailing slash away so fetch base and redirect target agree', () => {
@@ -109,7 +109,7 @@ describe('API origin (VITE_API_BASE)', () => {
     const build = generateHeadersFile(fixtureDir, { apiBase: 'https://api.example.com/' });
 
     expect(build.apiBase).toBe('https://api.example.com');
-    expect(build.redirectsFile).toContain('/api/*  https://api.example.com/:splat  200!');
+    expect(build.redirectsFile).toContain('/api/*  https://api.example.com/api/:splat  200!');
   });
 
   it('bakes a path-bearing base into the share config, the proxy redirect and a CSP directory entry', () => {
@@ -130,7 +130,7 @@ describe('API origin (VITE_API_BASE)', () => {
       "apiBase: 'https://functionhost.example.com/padifyapi'",
     );
     expect(build.redirectsFile).toContain(
-      '/api/*  https://functionhost.example.com/padifyapi/:splat  200!',
+      '/api/*  https://functionhost.example.com/padifyapi/api/:splat  200!',
     );
   });
 

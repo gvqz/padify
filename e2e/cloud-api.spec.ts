@@ -153,6 +153,13 @@ test.describe('cloud round trip (real API)', () => {
     await page.locator('#cloudAuthSubmit').click();
 
     await expect(page.locator('#cloudAuthError')).toBeVisible();
-    await expect(page.locator('#cloudAuthError')).toHaveText('Wrong email or password.');
+    // The server answers the duplicate signup with the exact signin 401
+    // (anti-enumeration — same status, same words on the wire; the server
+    // suite pins that). The CLIENT knows which form it was, so the copy
+    // can say what actually happened instead of telling a first-time
+    // user their never-set password is wrong.
+    await expect(page.locator('#cloudAuthError')).toHaveText(
+      'An account with this email already exists — sign in instead.',
+    );
   });
 });

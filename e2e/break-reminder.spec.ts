@@ -35,8 +35,15 @@ async function resetReminderSession(page: Page): Promise<void> {
   });
 }
 
+/** Lowers the threshold through the dev-only hook (production keeps the
+ *  real 30-minute value; tests must not depend on a shipped test value). */
+async function shrinkThresholdForTest(page: Page): Promise<void> {
+  await page.evaluate(() => window.__padifyBreakReminder?.setThreshold(2000));
+}
+
 /** Writes long enough to cross the threshold, then waits for the popup. */
 async function writeUntilReminderShows(page: Page): Promise<void> {
+  await shrinkThresholdForTest(page);
   await resetReminderSession(page);
   const editor = page.locator('#note');
   await editor.click();

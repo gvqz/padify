@@ -54,6 +54,7 @@ import { initMarkdownBubble } from './editor/markdown/bubble';
 // NoteSurface consumer (tabs, snapshots, share) can open markdown notes.
 import './editor/markdown/surface';
 import {
+  focusMarkdownPane,
   markdownSelectionStateNow,
   markdownViewMode,
   onMarkdownViewMode,
@@ -64,7 +65,7 @@ import { initThemeColors } from './editor/theme-colors';
 import { initRichShortcuts } from './editor/rich-shortcuts';
 import { initNoteTypeMenu } from './ui/note-type-menu';
 import { initThemeController } from './theme-controller';
-import { initEditorPreferences, clearTabIndentation } from './editor-preferences';
+import { initEditorPreferences } from './editor-preferences';
 import { setBreakRemindersEnabled, trackWritingActivity } from './break-reminder';
 import { registerServiceWorker, initInstallPrompt } from './install-pwa';
 import { requestPersistentStorage, checkQuotaOnce } from './storage/persistence';
@@ -107,6 +108,13 @@ export async function initApp(): Promise<void> {
     darkMetaColor,
     metaThemeColor,
   };
+
+  // Theme (light / dark / follow device) — see theme-controller.ts.
+  // Applied BEFORE the first note render: the html surface's ink transform
+  // reads the body class, and notes used to render under the pre-paint
+  // guess before the controller had its say — a device-theme user on a
+  // dark OS got light ink, and any edit persisted it that way.
+  const themeController = initThemeController(themeConfig);
 
   const unicodePicker = initUnicodePicker(notepad);
 
@@ -166,7 +174,7 @@ export async function initApp(): Promise<void> {
   });
   const characterAndWordCountText = calculateCharactersAndWords(tabManager.getActiveText());
 
-  // Typewriter sounds + exploding keys (see typing-effects.ts).
+  // Typing explosion effects (see typing-effects.ts).
   const typingEffects = initTypingEffects(notepad, editorConfig);
 
   // Handle editor auto-scroll for long notes
@@ -251,9 +259,6 @@ export async function initApp(): Promise<void> {
       }
     }
   });
-
-  // Theme (light / dark / follow device) — see theme-controller.ts.
-  const themeController = initThemeController(themeConfig);
 
   // Editor appearance preferences (font, texture, pill, …).
   const editorPreferences = initEditorPreferences({
@@ -497,13 +502,15 @@ export async function initApp(): Promise<void> {
   syncMarkdownExportRow();
 
   // ---- split view — the top bar's Markdown-only toggle. The icon flips
-  // the surface between the editing view and the side-by-side (editor +
-  // owned-renderer live preview); the toolbar's segmented control follows
-  // through the same surface listener, so there is exactly one source of
-  // truth for the mode (see editor/markdown/surface.ts). ----
+  // the surface between the last working mode and the side-by-side
+  // (source + owned-renderer live preview); the toolbar's segmented
+  // control follows through the same surface listener, so there is
+  // exactly one source of truth for the mode (see
+  // editor/markdown/surface.ts). ----
   const splitViewButton = notepad.splitViewButton;
   splitViewButton.on('click', () => {
     setMarkdownViewMode(markdownViewMode() === 'split' ? 'edit' : 'split');
+    focusMarkdownPane();
   });
   const syncSplitViewChrome = (): void => {
     splitViewButton.attr('aria-pressed', markdownViewMode() === 'split' ? 'true' : 'false');
@@ -661,10 +668,6 @@ export async function initApp(): Promise<void> {
     renderStatCard(card);
   });
 
-  notepad.clearTabIndentation.on('click', function () {
-    clearTabIndentation(notepad);
-  });
-
   notepad.breakReminders.on('change', function () {
     const isEnabled = $(this).is(':checked');
     setState('userChosenBreakReminders', isEnabled ? 'Yes' : 'No');
@@ -770,20 +773,19 @@ export async function initApp(): Promise<void> {
 }
 
 /**
- * Music + ambience lazy seam.
+ * Music lazy seam.
  *
- * The player engines (features/music-player — player and the free-song
- * resolver — plus the white-noise mixer) used to ride the main
- * bundle so every visitor downloaded ~5k lines most never play. They now
- * live in a lazy chunk: the modal markup mounts at boot (markup.ts is
- * pure markup), and the engines load on the first attempt to open the
- * player.
+ * The player engine (features/music-player — player, queue, the free-song
+ * resolver and the ambience tracks) used to ride the main bundle so every
+ * visitor downloaded ~5k lines most never play. It now lives in a lazy
+ * chunk: the modal markup mounts at boot (markup.ts is pure markup), and
+ * the engine loads on the first attempt to open the player.
  *
  * The navbar click is intercepted in the CAPTURE phase — ahead of the
  * delegated modal opener in ui/behavior/modal.ts — so the modal opens
  * only after the engine wired its handlers. Opening it first would drop
- * any click that lands during the load window (tabs, play, search: all
- * bound by the engine's init). After the engines are in, the interception
+ * any click that lands during the load window (nav, play, search: all
+ * bound by the engine's init). After the engine is in, the interception
  * stands down and the normal delegated open flow takes over.
  */
 function initMusicSubsystem(): void {
@@ -795,10 +797,6 @@ function initMusicSubsystem(): void {
 
   const loadEngines = (): Promise<void> => {
     engines ??= (async () => {
-      // Ambience first: the player reads getWhiteNoisePlayer() while
-      // constructing (navbar icon state), so the mixer must exist by then.
-      const { initWhiteNoisePlayer } = await import('./white-noise-player');
-      await initWhiteNoisePlayer();
       const { initMusicPlayer } = await import('./features/music-player');
       initMusicPlayer();
     })();

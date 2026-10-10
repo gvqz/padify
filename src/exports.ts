@@ -68,6 +68,13 @@ export function saveTextAsFile(
   // The 0 ms timeout lets Safari flush the navigation before the URL is
   // taken back; modern browsers honour the click synchronously.
   setTimeout(() => URL.revokeObjectURL(url), 0);
+
+  // The Firefox path (no webkitURL) appends the anchor to the body — take
+  // it back out, or every text export leaks a hidden 'Download File' link
+  // into the DOM for the session.
+  if (webkitURL == null) {
+    downloadLink.remove();
+  }
 }
 
 export function exportNotesAsPDF(textToWrite: string, fileNameToSaveAs: string): void {

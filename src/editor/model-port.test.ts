@@ -892,3 +892,530 @@ describe('IME composition — composed input joins the history', () => {
     expect(port.getText()).toBe('');
   });
 });
+
+describe('the placeholder mirror — [data-empty] tracks text, not element shape', () => {
+  /** MutationObserver callbacks land as microtasks — flush them out. */
+  const flushObservers = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it('THE GLITCH: a stored "text + br" surface (legacy soft breaks) keeps the placeholder off', async () => {
+    // Older builds stored their line breaks as brs next to text. CSS
+    // cannot see text nodes — :has(> br:only-child) matched this shape and
+    // painted the placeholder over the user's typed words.
+    const { surface } = makePort('fffffffffffff<br>second line');
+    expect(surface.innerHTML).toBe('fffffffffffff<br>second line');
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(false);
+  });
+
+  it('an empty surface carries it, a bare stored br collapses and still carries it', async () => {
+    const { surface } = makePort();
+    expect(surface.hasAttribute('data-empty')).toBe(true);
+
+    const other = makePort('<br>');
+    expect(other.surface.innerHTML).toBe(''); // the load path collapses it
+    await flushObservers();
+    expect(other.surface.hasAttribute('data-empty')).toBe(true);
+  });
+
+  it('native typing drops it; deleting everything brings it back', async () => {
+    const { port, surface } = makePort();
+    caretAt(surface, 0);
+
+    nativeEdit(
+      surface,
+      'insertText',
+      () => {
+        surface.textContent = 'words';
+      },
+      'words',
+    );
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(false);
+
+    caretAt(surface, 0);
+    nativeEdit(surface, 'deleteContentBackward', () => {
+      surface.innerHTML = '';
+    });
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(true);
+    expect(port.getText()).toBe('');
+  });
+
+  it('an armed empty list keeps it off (deliberate structure, not an empty note)', async () => {
+    const { surface } = makePort();
+    surface.innerHTML = '<ul><li><br></li></ul>';
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(false);
+  });
+
+  it('a styled caret run keeps it off (the armed-format empty state)', async () => {
+    const { surface } = makePort();
+    surface.innerHTML = '<span style="color: red">\u200b</span>';
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(false);
+  });
+
+  it('media keeps it off (an hr alone is content)', async () => {
+    const { surface } = makePort('<hr>');
+    expect(surface.innerHTML).toBe('<hr>');
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(false);
+  });
+
+  it('whitespace-only reads empty (the app\u2019s own empty rule for text)', async () => {
+    const { surface } = makePort('   ');
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(true);
+  });
+
+  it('parks with the engine and resyncs on unpark', async () => {
+    const { port, surface } = makePort('words');
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(false);
+
+    // A Markdown note takes the host: the mirror must stop answering.
+    port.setInert(true);
+    surface.innerHTML = '<div class="markdown-surface"><p><br></p></div>';
+    await flushObservers();
+    expect(surface.hasAttribute('data-empty')).toBe(false);
+
+    // Coming home: the mirror reads the host as it stands.
+    surface.innerHTML = '';
+    port.setInert(false);
+    expect(surface.hasAttribute('data-empty')).toBe(true);
+  });
+});
+
+/** Enter, the way the browser sends it — with the default action only
+ *  applied when nothing intercepted the beforeinput. */
+function nativeEnter(surface: HTMLElement, apply: () => void): boolean {
+  const before = new Event('beforeinput', { bubbles: true, cancelable: true });
+  Object.defineProperty(before, 'inputType', { value: 'insertParagraph' });
+  surface.dispatchEvent(before);
+  const handled = before.defaultPrevented;
+  if (!handled) {
+    apply();
+    const after = new Event('input', { bubbles: true });
+    Object.defineProperty(after, 'inputType', { value: 'insertParagraph' });
+    surface.dispatchEvent(after);
+  }
+  return handled;
+}
+
+/** Places the collapsed caret at raw offset 0 of a list item's text. */
+function caretAtListItemStart(surface: HTMLElement, itemIndex: number): void {
+  const item = surface.querySelectorAll('li')[itemIndex];
+  const text = item?.firstChild;
+  if (!item || !text || text.nodeType !== Node.TEXT_NODE) {
+    throw new Error(`list item ${itemIndex} has no leading text node`);
+  }
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.setStart(text, 0);
+  range.collapse(true);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+/** Places the collapsed caret on a block's childIndex (an element caret). */
+function caretAtBlockChild(surface: HTMLElement, blockIndex: number, childIndex: number): void {
+  const block = surface.children[blockIndex] as HTMLElement | undefined;
+  if (!block) {
+    throw new Error(`no block ${blockIndex}`);
+  }
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.setStart(block, childIndex);
+  range.collapse(true);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+/** The closest block tag around the caret, or null at bare root text. */
+function caretBlockTag(surface: HTMLElement): string | null {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    return null;
+  }
+  let el =
+    selection.getRangeAt(0).startContainer instanceof HTMLElement
+      ? (selection.getRangeAt(0).startContainer as HTMLElement)
+      : selection.getRangeAt(0).startContainer.parentElement;
+  while (el && el !== surface) {
+    if (/^(DIV|P|H1|H2|H3|BLOCKQUOTE|PRE|LI|TD|TH)$/.test(el.tagName)) {
+      return el.tagName;
+    }
+    el = el.parentElement;
+  }
+  return null;
+}
+
+describe('history — the burst flag survives every history walk', () => {
+  it('typing after an undo opens a NEW group (type, undo, type, undo)', () => {
+    const { port, surface } = makePort();
+    port.renderHtml('');
+    caretAt(surface, 0);
+    nativeEdit(surface, 'insertText', () => {
+      surface.append('first burst');
+    });
+    expect(port.canUndo()).toBe(true);
+    expect(port.undo()).toBe(true);
+    expect(port.getHtml()).toBe('');
+    // The regression: the burst flag stayed armed after the undo, so this
+    // burst "continued" a popped group — nothing it typed was undoable.
+    nativeEdit(surface, 'insertText', () => {
+      surface.append('second burst');
+    });
+    expect(port.canUndo()).toBe(true);
+    expect(port.undo()).toBe(true);
+    expect(port.getHtml()).toBe('');
+  });
+
+  it('typing after a document switch opens a NEW group', () => {
+    const { port, surface } = makePort();
+    port.renderHtml('');
+    caretAt(surface, 0);
+    nativeEdit(surface, 'insertText', () => {
+      surface.append('note a');
+    });
+    // Switching notes renders a fresh document into the host.
+    port.renderHtml('');
+    nativeEdit(surface, 'insertText', () => {
+      surface.append('note b');
+    });
+    expect(port.canUndo()).toBe(true);
+    expect(port.undo()).toBe(true);
+    expect(port.getHtml()).toBe('');
+  });
+
+  it('a parked engine carries no open burst home', () => {
+    const { port, surface } = makePort();
+    port.renderHtml('');
+    caretAt(surface, 0);
+    nativeEdit(surface, 'insertText', () => {
+      surface.append('before the park');
+    });
+    port.setInert(true);
+    port.setInert(false);
+    nativeEdit(surface, 'insertText', () => {
+      surface.append('after the park');
+    });
+    expect(port.canUndo()).toBe(true);
+    expect(port.undo()).toBe(true);
+    expect(port.getHtml()).toBe('before the park');
+  });
+});
+
+describe('Backspace at the start of the first list item leaves the list', () => {
+  it('a single top-level item becomes a plain paragraph', () => {
+    const { port, surface } = makePort('<ul><li>solo item</li></ul>');
+    caretAtListItemStart(surface, 0);
+    expect(port.unindentAtBlockStart()).toBe(true);
+    expect(port.getHtml()).toBe('<div>solo item</div>');
+  });
+
+  it('the first of several items lifts out, the list keeps the rest', () => {
+    const { port, surface } = makePort('<ul><li>head item</li><li>tail item</li></ul>');
+    caretAtListItemStart(surface, 0);
+    expect(port.unindentAtBlockStart()).toBe(true);
+    expect(port.getHtml()).toBe('<div>head item</div><ul><li>tail item</li></ul>');
+  });
+
+  it('an item with content above keeps the native merge (null)', () => {
+    const { port, surface } = makePort('<ul><li>item one</li><li>item two</li></ul>');
+    caretAtListItemStart(surface, 1);
+    expect(port.unindentAtBlockStart()).toBeNull();
+  });
+
+  it('an item after a nested sublist keeps the native merge (null)', () => {
+    const { port, surface } = makePort(
+      '<ul><li>outer<ul><li>sub</li></ul></li><li>after the sublist</li></ul>',
+    );
+    // querySelectorAll('li') is flat: [outer, sub, after the sublist]
+    caretAtListItemStart(surface, 2);
+    expect(port.unindentAtBlockStart()).toBeNull();
+  });
+
+  it('a nested first item lifts one level', () => {
+    const { port, surface } = makePort('<ul><li>outer<ul><li>inner</li></ul></li></ul>');
+    caretAtListItemStart(surface, 1);
+    expect(port.unindentAtBlockStart()).toBe(true);
+    expect(port.getHtml()).toBe('<ul><li>outer</li><li>inner</li></ul>');
+  });
+
+  it('a checklist first item exits the same way (checkbox gone)', () => {
+    const { port, surface } = makePort(
+      '<ul data-rich-checklist="true"><li data-checked="false">task one</li><li data-checked="true">task two</li></ul>',
+    );
+    caretAtListItemStart(surface, 0);
+    expect(port.unindentAtBlockStart()).toBe(true);
+    expect(port.getHtml()).toBe(
+      '<div>task one</div><ul data-rich-checklist="true"><li data-checked="true">task two</li></ul>',
+    );
+  });
+
+  it('the caret mid-item does not lift (null — native delete runs)', () => {
+    const { port, surface } = makePort('<ul><li>item text</li></ul>');
+    const text = surface.querySelector('li')!.firstChild as Text;
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.setStart(text, 5);
+    range.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    expect(port.unindentAtBlockStart()).toBeNull();
+  });
+});
+
+describe("Enter's block escapes (the double-Enter exit)", () => {
+  it('the style buttons work on an EMPTY note (the block materializes empty)', () => {
+    const { port, surface } = makePort('');
+    caretAt(surface, 0);
+    // Heading 1 on a fresh note: the block appears, the typing lands in it.
+    expect(port.applyBlockFormat('h1')).toBe(true);
+    expect(port.getHtml()).toBe('<h1><br></h1>');
+    nativeEdit(surface, 'insertText', () => {
+      const h1 = surface.querySelector('h1')!;
+      h1.innerHTML = 'typed title'; // Chromium replaces the br skeleton
+    });
+    expect(port.getHtml()).toBe('<h1>typed title</h1>');
+    // Same for a quote and a code block on a fresh note.
+    const quote = makePort('');
+    caretAt(quote.surface, 0);
+    expect(quote.port.applyBlockFormat('blockquote')).toBe(true);
+    expect(quote.port.getHtml()).toBe('<blockquote><br></blockquote>');
+    const code = makePort('');
+    caretAt(code.surface, 0);
+    expect(code.port.applyBlockFormat('pre')).toBe(true);
+    expect(code.port.getHtml()).toBe('<pre><br></pre>');
+  });
+
+  it('Enter on an EMPTY quote line leaves the quote', () => {
+    const { port, surface } = makePort('<blockquote>quoted words</blockquote>');
+    caretAt(surface, 12); // end of the quote text
+    // First Enter: native continues the quote with an empty line.
+    const first = nativeEnter(surface, () => {
+      surface.innerHTML = '<blockquote>quoted words</blockquote><blockquote><br></blockquote>';
+      caretAtBlockChild(surface, 1, 0);
+    });
+    expect(first).toBe(false);
+    expect(port.getHtml()).toBe(
+      '<blockquote>quoted words</blockquote><blockquote><br></blockquote>',
+    );
+    // Second Enter on the empty line: the quote converts to a paragraph.
+    const second = nativeEnter(surface, () => {
+      throw new Error('the native Enter must not run when the escape handled it');
+    });
+    expect(second).toBe(true);
+    expect(port.getHtml()).toBe('<blockquote>quoted words</blockquote><p><br></p>');
+  });
+
+  it('Enter at the end of quote TEXT keeps the native continuation', () => {
+    const { surface } = makePort('<blockquote>quoted words</blockquote>');
+    caretAt(surface, 12);
+    const handled = nativeEnter(surface, () => {
+      surface.innerHTML = '<blockquote>quoted words</blockquote><blockquote><br></blockquote>';
+      caretAtBlockChild(surface, 1, 0);
+    });
+    expect(handled).toBe(false);
+  });
+
+  it('Enter on the code block\u2019s trailing empty line leaves the code', () => {
+    const { port, surface } = makePort('<pre>code line</pre>');
+    caretAt(surface, 9); // end of the code text
+    // First Enter: native appends the line break inside the pre.
+    const first = nativeEnter(surface, () => {
+      surface.innerHTML = '<pre>code line<br></pre>';
+      caretAtBlockChild(surface, 0, 2); // Chromium leaves the caret after the br
+    });
+    expect(first).toBe(false);
+    expect(port.getHtml()).toBe('<pre>code line<br></pre>');
+    // Second Enter on the empty last line: the code keeps its text, the
+    // trailing break splits off into a plain paragraph that takes the caret.
+    const second = nativeEnter(surface, () => {
+      throw new Error('the native Enter must not run when the escape handled it');
+    });
+    expect(second).toBe(true);
+    expect(port.getHtml()).toBe('<pre>code line</pre><p><br></p>');
+    expect(caretBlockTag(surface)).toBe('P');
+    expect(caretStreamOffset(surface)).toBe(9);
+  });
+
+  it('Enter at the end of code TEXT (before the trailing break) stays native', () => {
+    const { port, surface } = makePort('<pre>code line<br></pre>');
+    caretAt(surface, 9); // a text caret at the end of "code line"
+    const handled = nativeEnter(surface, () => {
+      surface.innerHTML = '<pre>code line<br><br></pre>';
+      caretAtBlockChild(surface, 0, 3);
+    });
+    expect(handled).toBe(false);
+    expect(port.getHtml()).toBe('<pre>code line<br><br></pre>');
+  });
+
+  it('Enter mid-code (a blank line BETWEEN code lines) stays native', () => {
+    const { surface } = makePort('<pre>one<br><br>two</pre>');
+    // A text caret at the start of "two" — inside the code, not on its tail.
+    caretAt(surface, 3);
+    const handled = nativeEnter(surface, () => {
+      surface.innerHTML = '<pre>one<br><br><br>two</pre>';
+    });
+    expect(handled).toBe(false);
+  });
+
+  it('an entirely blank code block becomes a paragraph outright', () => {
+    // Built through the command pipeline (the toolbar's Code block click):
+    // renderHtml would collapse the blank pre away as an empty surface.
+    const { port, surface } = makePort('');
+    caretAt(surface, 0);
+    expect(port.applyBlockFormat('pre')).toBe(true);
+    caretAtBlockChild(surface, 0, 0);
+    const handled = nativeEnter(surface, () => {
+      throw new Error('the native Enter must not run when the escape handled it');
+    });
+    expect(handled).toBe(true);
+    expect(port.getHtml()).toBe('<p><br></p>');
+  });
+
+  it('paragraphs, headings and cells keep the native Enter', () => {
+    const { port, surface } = makePort('<h1>Title</h1><p>body words</p>');
+    caretAt(surface, 5);
+    expect(nativeEnter(surface, () => undefined)).toBe(false);
+    caretAt(surface, 5);
+    expect(nativeEnter(surface, () => undefined)).toBe(false);
+    void port;
+  });
+});
+
+describe('audit regressions — caret placement and structure splices', () => {
+  /** Caret at a RAW offset inside the nth block's first text node. */
+  function caretAtRaw(surface: HTMLElement, blockIndex: number, raw: number): void {
+    const block = surface.children[blockIndex] as HTMLElement | undefined;
+    const text = block?.firstChild;
+    if (!block || !text || text.nodeType !== Node.TEXT_NODE) {
+      throw new Error(`block ${blockIndex} has no leading text node`);
+    }
+    caretAtNodeText(text as Text, raw);
+  }
+
+  /** Caret at a raw offset inside a specific text node. */
+  function caretAtNodeText(text: Text, raw: number): void {
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.setStart(text, raw);
+    range.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+
+  it('a collapsed Shift+Tab mid-line rides the text left one (not to the line above)', () => {
+    const { port, surface } = makePort('<div>alpha</div><div>\tbeta</div>');
+    caretAtRaw(surface, 1, 3); // after "\tbe"
+    expect(port.tabPlainText(true)).toBe(true);
+    expect(surface.innerHTML).toBe('<div>alpha</div><div>beta</div>');
+    expect(caretStreamOffset(surface)).toBe(7); // after "be"
+  });
+
+  it('a collapsed Shift+Tab at a tabbed line END rides the text left one', () => {
+    const { port, surface } = makePort('<div>alpha</div><div>\tbeta</div>');
+    caretAtRaw(surface, 1, 5); // end of "\tbeta"
+    expect(port.tabPlainText(true)).toBe(true);
+    expect(surface.innerHTML).toBe('<div>alpha</div><div>beta</div>');
+    expect(caretStreamOffset(surface)).toBe(9); // end of "beta"
+  });
+
+  it('inserts an hr at the caret in bare root text (fresh note, no Enter yet)', () => {
+    const { port, surface } = makePort('hello world');
+    const text = Array.from(surface.childNodes).find((n) => n.nodeType === Node.TEXT_NODE) as Text;
+    caretAtNodeText(text, 5); // between 'hello' and ' world'
+    expect(() => port.insertHorizontalRule()).not.toThrow();
+    expect(surface.innerHTML).toContain('<hr>');
+    expect(surface.innerHTML.indexOf('hello')).toBeLessThan(surface.innerHTML.indexOf('<hr>'));
+  });
+
+  it('insertTable mid-paragraph splits the block and lands the caret in the first cell', () => {
+    const { port, surface } = makePort('<p>alpha beta</p>');
+    caretAtRaw(surface, 0, 6); // between 'alpha' and ' beta'
+    expect(port.insertTable(2, 2)).toBe(true);
+    // No text orphaned at the root and no stray empty paragraph: both
+    // halves stay real paragraphs (the parser would otherwise tear the
+    // open <p> at <table> and strand the tail text at the root).
+    expect(Array.from(surface.childNodes).some((n) => n.nodeType === Node.TEXT_NODE)).toBe(false);
+    const paragraphs = surface.querySelectorAll('p');
+    expect(paragraphs.length).toBe(2);
+    expect(paragraphs[0]!.textContent).toBe('alpha ');
+    expect(paragraphs[1]!.textContent).toBe('beta');
+    const firstCell = surface.querySelector('td');
+    const selection = window.getSelection();
+    expect(
+      !!selection && !!firstCell && firstCell.contains(selection.getRangeAt(0).startContainer),
+    ).toBe(true);
+  });
+
+  it('an armed mark wraps the IME-composed phrase (no leak to the next keystroke)', () => {
+    const { port, surface } = makePort('');
+    caretAt(surface, 0);
+    expect(port.applyFormat('bold')).toBe(true); // arm bold
+    surface.dispatchEvent(new Event('compositionstart', { bubbles: true }));
+    nativeEdit(
+      surface,
+      'insertCompositionText',
+      () => {
+        surface.textContent = 'こんにちは';
+        caretAtNodeText(surface.firstChild as Text, 5);
+      },
+      'こんにちは',
+    );
+    surface.dispatchEvent(new Event('compositionend', { bubbles: true }));
+    // A later plain keystroke after the composition.
+    nativeEdit(
+      surface,
+      'insertText',
+      () => {
+        const run = surface.querySelector('b')?.firstChild;
+        const text = (run ?? surface.firstChild) as Text;
+        text.appendData('x');
+        caretAtNodeText(text, text.length);
+      },
+      'x',
+    );
+    expect(surface.innerHTML).toBe('<b>こんにちはx</b>');
+  });
+
+  it('a cancelled composition keeps the armed mark for the next plain insertion', () => {
+    const { port, surface } = makePort('');
+    caretAt(surface, 0);
+    expect(port.applyFormat('bold')).toBe(true);
+    surface.dispatchEvent(new Event('compositionstart', { bubbles: true }));
+    surface.dispatchEvent(new Event('compositionend', { bubbles: true })); // cancelled
+    nativeEdit(
+      surface,
+      'insertText',
+      () => {
+        surface.textContent = 'x';
+        caretAtNodeText(surface.firstChild as Text, 1);
+      },
+      'x',
+    );
+    expect(surface.innerHTML).toBe('<b>x</b>');
+  });
+
+  it('the composed wrap is one undo step with the phrase', () => {
+    const { port, surface } = makePort('');
+    caretAt(surface, 0);
+    expect(port.applyFormat('bold')).toBe(true);
+    surface.dispatchEvent(new Event('compositionstart', { bubbles: true }));
+    nativeEdit(
+      surface,
+      'insertCompositionText',
+      () => {
+        surface.textContent = 'こんにちは';
+        caretAtNodeText(surface.firstChild as Text, 5);
+      },
+      'こんにちは',
+    );
+    surface.dispatchEvent(new Event('compositionend', { bubbles: true }));
+    expect(surface.innerHTML).toBe('<b>こんにちは</b>');
+    expect(port.undo()).toBe(true);
+    expect(surface.innerHTML).toBe('');
+  });
+});

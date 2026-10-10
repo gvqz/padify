@@ -70,6 +70,9 @@ let appToken: { value: string; expiresAt: number } | null = null;
 
 /** True when the Spotify catalog backend has its app credentials. */
 function spotifyCatalogConfigured(): boolean {
+  if (spotifyCatalogConfiguredForTests !== null) {
+    return spotifyCatalogConfiguredForTests;
+  }
   return Boolean(SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET);
 }
 
@@ -128,7 +131,56 @@ interface SearchTrack {
 }
 
 export async function musicSearch(q: string, limit: number): Promise<SearchTrack[]> {
-  return spotifyCatalogConfigured() ? spotifySearch(q, limit) : youtubeSearch(q, limit);
+  if (!spotifyCatalogConfigured()) {
+    return youtubeSearch(q, limit);
+  }
+  try {
+    return await spotifySearchForRunner(q, limit);
+  } catch (err) {
+    // The catalog backend refused us — most often Spotify's 403 "Active
+    // premium subscription required for the owner of the app", but a
+    // token-endpoint outage lands here too. The player would rather have
+    // YouTube-shaped rows than a 502: degrade the same way an
+    // unconfigured catalog does, when the fallback exists to serve it.
+    if (!resolveConfigured()) {
+      throw err;
+    }
+    const reason = err instanceof Error ? err.message : String(err);
+    console.warn(`[padify-api] Spotify search failed (${reason}) — falling back to YouTube`);
+    return youtubeSearch(q, limit);
+  }
+}
+
+/** Dispatches through the test seam when installed (mirrors runYtSearch). */
+function spotifySearchForRunner(q: string, limit: number): Promise<SearchTrack[]> {
+  if (spotifySearchRunnerForTests) {
+    return spotifySearchRunnerForTests(q, limit);
+  }
+  return spotifySearch(q, limit);
+}
+
+let spotifySearchRunnerForTests:
+  | ((q: string, limit: number) => Promise<SearchTrack[]>)
+  | null = null;
+
+/** Test hook — swaps the token+search HTTP path for a fake. */
+export function setSpotifySearchRunnerForTests(
+  runner: ((q: string, limit: number) => Promise<SearchTrack[]>) | null,
+): void {
+  spotifySearchRunnerForTests = runner;
+}
+
+let spotifyCatalogConfiguredForTests: boolean | null = null;
+let resolveConfiguredForTests: boolean | null = null;
+
+/** Test hook — forces the Spotify-configured answer (env consts are frozen). */
+export function setSpotifyCatalogConfiguredForTests(value: boolean | null): void {
+  spotifyCatalogConfiguredForTests = value;
+}
+
+/** Test hook — forces the yt-dlp-configured answer (Bun.which is absent under Node). */
+export function setResolveConfiguredForTests(value: boolean | null): void {
+  resolveConfiguredForTests = value;
 }
 
 async function spotifySearch(q: string, limit: number): Promise<SearchTrack[]> {
@@ -182,6 +234,7 @@ interface YtSearchEntry {
   channel_url?: unknown;
   live_status?: unknown;
   thumbnails?: unknown;
+  view_count?: unknown;
 }
 
 /**
@@ -253,17 +306,52 @@ function runYtSearch(q: string, limit: number): Promise<unknown[]> {
   });
 }
 
+/** One retry after a beat — YouTube's soft rate limits are transient. */
+const SEARCH_RETRY_DELAY_MS = 900;
+
+async function runYtSearchWithRetry(q: string, limit: number): Promise<unknown[]> {
+  try {
+    return await runYtSearch(q, limit);
+  } catch (first) {
+    await new Promise((resolve) => setTimeout(resolve, SEARCH_RETRY_DELAY_MS));
+    try {
+      return await runYtSearch(q, limit);
+    } catch {
+      throw first; // surface the original failure
+    }
+  }
+}
+
 /** Parenthesized/bracketed suffixes that carry no song information. */
 const TITLE_NOISE =
-  /official|audio|video|lyrics?|visualizer|hd|hq|4k|mv|remaster|mono|stereo|full\s+song|single|explicit|clean|edit|version|album|radio/i;
+  /official|audio|video|lyrics?|lyrical|visualizer|visualiser|hd|hq|4k|1080p|720p|mv|remaster|mono|stereo|full\s+song|single|explicit|clean|edit|version|album|radio|audio\s+only/i;
+
+/** Bare, unbracketed trailers: "Song Official Music Video", "Song HD 1080p". */
+const TITLE_TAIL_NOISE =
+  /\s+((official\s+)?(music\s+)?(video|audio|visuali[sz]er|lyrics?))\s*$/i;
+const TITLE_TAIL_QUALITY = /\s+((hd|hq|4k|1080p|720p)(\s+remastered)?)\s*$/i;
 
 /** Drops trailing "(Official Audio)"-style suffixes, repeatedly. */
 function cleanTrackTitle(raw: string): string {
   let title = raw.trim();
+  // Leading bracket noise first: "[Official Video] Song".
+  for (;;) {
+    const lead = title.match(/^\s*[([{]([^()[\]{}]*)[)}\]]\s+/);
+    if (!lead || !TITLE_NOISE.test(lead[1] ?? '')) break;
+    title = title.slice((lead.index ?? 0) + lead[0].length).trim();
+  }
+  // Then trailing "(Official Audio)" suffixes.
   for (;;) {
     const match = title.match(/\s+[([{]([^()[\]{}]*)[)}\]]\s*$/);
     if (!match || !TITLE_NOISE.test(match[1] ?? '')) break;
     title = title.slice(0, match.index ?? 0).trim();
+  }
+  // Then bare trailers: "Song Official Music Video", "Song HD 1080p" —
+  // repeatedly, so "HD 1080p" loses both tokens.
+  for (;;) {
+    const next = title.replace(TITLE_TAIL_NOISE, '').replace(TITLE_TAIL_QUALITY, '').trim();
+    if (next === title) break;
+    title = next;
   }
   return title || raw.trim();
 }
@@ -278,13 +366,18 @@ function cleanChannelName(entry: YtSearchEntry): string {
   return raw.replace(/\s*-\s*Topic$/i, '').trim();
 }
 
-/** "Artist - Song" titles split into their two halves; anything else stays whole. */
+/** "Artist - Song" titles (also en/em dashes, "Artist | Song") split into
+ *  their two halves; anything else stays whole. */
+const TITLE_SEPARATORS = [' - ', ' – ', ' — ', ' | '];
+
 function splitTitle(title: string, channel: string): { name: string; artist: string } {
-  const dash = title.indexOf(' - ');
-  if (dash > 0 && dash <= 80) {
-    const artist = title.slice(0, dash).trim();
-    const name = title.slice(dash + 3).trim();
-    if (artist && name) return { name, artist };
+  for (const separator of TITLE_SEPARATORS) {
+    const dash = title.indexOf(separator);
+    if (dash > 0 && dash <= 80) {
+      const artist = title.slice(0, dash).trim();
+      const name = title.slice(dash + separator.length).trim();
+      if (artist && name) return { name, artist };
+    }
   }
   return { name: title, artist: channel || 'YouTube' };
 }
@@ -299,6 +392,22 @@ function entryThumbnail(entry: YtSearchEntry, id: string): { url: string }[] {
     if (best) return [best];
   }
   return [{ url: `https://i.ytimg.com/vi/${id}/mqdefault.jpg` }];
+}
+
+/** True when the flat entry came from an auto-generated "X - Topic" channel. */
+function isTopicChannel(entry: YtSearchEntry): boolean {
+  const raw =
+    typeof entry.channel === 'string' && entry.channel.trim()
+      ? entry.channel
+      : typeof entry.uploader === 'string'
+        ? entry.uploader
+        : '';
+  return /\s-\s*Topic$/i.test(raw);
+}
+
+/** The entry's view count, when yt-dlp reported one (ranking only). */
+function entryViewCount(entry: YtSearchEntry): number {
+  return typeof entry.view_count === 'number' && entry.view_count > 0 ? entry.view_count : 0;
 }
 
 /** Maps flat-search entries into the catalog shape the player renders. */
@@ -337,15 +446,117 @@ function youtubeTrackFrom(entry: YtSearchEntry): SearchTrack | null {
   };
 }
 
-async function youtubeSearch(q: string, limit: number): Promise<SearchTrack[]> {
-  const entries = await runYtSearch(q, Math.min(30, Math.max(1, limit)));
-  const tracks: SearchTrack[] = [];
+// ---- catalog quality: junk filter, dedupe, ranking -------------------------
+
+/**
+ * Titles that mark a video as NOT the song itself: hour-long dumps, loops,
+ * compilations, reactions, karaoke/instrumental stand-ins, nightcore edits.
+ * Deliberately keeps remixes and live performances — those are real tracks.
+ */
+const JUNK_TITLE =
+  /\b\d{1,2}\s*(hour|hr|hours|hrs)\b|\bhour\s+long\b|\bextended\b|\bloop(s|ed)?\b|\bcompilation\b|\bfull\s+album\b|\bcomplete\s+album\b|\bnon[-\s]?stop\b|\breaction\b|\breacts?\b|\bkaraoke\b|\binstrumental\b|\btutorial\b|\bhow\s+to\s+play\b|\bblack\s+screen\b|\bnightcore\b|\bsped\s+up\b|\bspeed\s+up\b|\bslowed\b|\b8d\b|\basmr\b|\bmashup\b|\bmedley\b|\bbest\s+of\s+(the\s+)?(19|20)\d\d\b|\bgreatest\s+hits\b|\btop\s+\d+\b|\b24\/7\b|\bplaylist\b|\bsong\s+of\s+the\s+day\b|\bsong\s+des\s+tages\b|\bin\s+reverse\b|\breversed\b/i;
+
+/** Song rows shorter/longer than this are clips or dumps, not tracks. */
+const MIN_SONG_SEC = 40;
+const MAX_SONG_SEC = 1200;
+/** The fallback's generous ceiling — genre searches genuinely want long mixes. */
+const MAX_MIX_SEC = 4 * 60 * 60;
+
+/** Lowercased alphanumerics only — the dedupe spelling of artist + name. */
+function dedupeKey(artist: string, name: string): string {
+  const norm = (value: string): string =>
+    value
+      .toLowerCase()
+      .replace(/\(.*?\)/g, ' ')
+      .replace(/\[.*?\]/g, ' ')
+      .replace(/(^|\s)the\s/g, ' ')
+      .replace(/[^a-z0-9]+/g, '');
+  return `${norm(artist)}|${norm(name)}`;
+}
+
+interface RankedEntry {
+  entry: YtSearchEntry;
+  track: SearchTrack;
+  key: string;
+  topic: boolean;
+  views: number;
+  index: number; // YouTube's own relevance position
+}
+
+/**
+ * The dedupe + ranking half of the catalog pass: one row per song (the
+ * best video for it — official "- Topic" upload first, then views, then
+ * the plainer title), Topic uploads surfaced, relevance order kept.
+ */
+function dedupeAndRank(ranked: RankedEntry[], limit: number): SearchTrack[] {
+  // One row per song: keep the group's best video at the position of its
+  // first appearance.
+  const bestByKey = new Map<string, RankedEntry>();
+  for (const item of ranked) {
+    const incumbent = bestByKey.get(item.key);
+    const beats =
+      !incumbent ||
+      (item.topic && !incumbent.topic) ||
+      (item.topic === incumbent.topic &&
+        (item.views > incumbent.views ||
+          (item.views === incumbent.views &&
+            item.track.name.length < incumbent.track.name.length)));
+    if (beats) {
+      const withPos = { ...item, index: incumbent ? incumbent.index : item.index };
+      bestByKey.set(item.key, withPos);
+    }
+  }
+
+  return [...bestByKey.values()]
+    .sort((a, b) => (b.topic ? 1 : 0) - (a.topic ? 1 : 0) || a.index - b.index)
+    .slice(0, limit)
+    .map((item) => item.track);
+}
+
+/**
+ * The catalog pass: filter junk, dedupe, rank. When the junk filter would
+ * leave nothing — a genre query like "lofi hip hop" where every result IS
+ * a mix — fall back to the unfiltered (but still sane-length, deduped)
+ * entries: those mixes are exactly what the searcher wanted.
+ */
+function buildCatalog(entries: unknown[], limit: number): SearchTrack[] {
+  const clean: RankedEntry[] = [];
+  const everything: RankedEntry[] = [];
   for (const entry of entries) {
     if (!entry || typeof entry !== 'object') continue;
-    const track = youtubeTrackFrom(entry as YtSearchEntry);
-    if (track) tracks.push(track);
+    const raw = entry as YtSearchEntry;
+    const duration = typeof raw.duration === 'number' ? raw.duration : 0;
+    if (duration < MIN_SONG_SEC || duration > MAX_MIX_SEC) {
+      continue; // shorts and day-long dumps — not playable rows
+    }
+    const track = youtubeTrackFrom(raw);
+    if (!track) continue;
+    const item: RankedEntry = {
+      entry: raw,
+      track,
+      key: dedupeKey(track.artists[0]?.name ?? '', track.name),
+      topic: isTopicChannel(raw),
+      views: entryViewCount(raw),
+      index: everything.length,
+    };
+    everything.push(item);
+    // Song-length rows only; longer mixes ride along for the fallback.
+    if (duration <= MAX_SONG_SEC && !JUNK_TITLE.test(typeof raw.title === 'string' ? raw.title : '')) {
+      clean.push(item);
+    }
   }
-  return tracks;
+
+  const songs = dedupeAndRank(clean, limit);
+  if (songs.length > 0) return songs;
+  return dedupeAndRank(everything, limit);
+}
+
+async function youtubeSearch(q: string, limit: number): Promise<SearchTrack[]> {
+  // Over-fetch on purpose: filtering + dedupe trim the raw list back down,
+  // so the user still sees `limit` clean rows instead of a thin, junky page.
+  const fetch = Math.min(40, limit + 12);
+  const entries = await runYtSearchWithRetry(q, fetch);
+  return buildCatalog(entries, limit);
 }
 
 // ---------------------------------------------------------------------------
@@ -355,6 +566,9 @@ async function youtubeSearch(q: string, limit: number): Promise<SearchTrack[]> {
 let ytDlpAvailable: boolean | null = null;
 
 export function resolveConfigured(): boolean {
+  if (resolveConfiguredForTests !== null) {
+    return resolveConfiguredForTests;
+  }
   if (ytDlpAvailable === null) {
     // typeof guard: the vitest suite imports this module under Node, where
     // the Bun global (and Bun.which) does not exist — production always runs Bun.
@@ -410,10 +624,16 @@ export function resetMusicResolverForTests(): void {
   memoryCache.clear();
   inFlight.clear();
   ytSearchRunnerForTests = null;
+  spotifySearchRunnerForTests = null;
+  spotifyCatalogConfiguredForTests = null;
+  resolveConfiguredForTests = null;
 }
 
-/** Runs yt-dlp over YouTube search and returns the parsed candidates. */
-function runYtDlp(query: string): Promise<Candidate[]> {
+/**
+ * Runs yt-dlp over YouTube search and returns the parsed candidates —
+ * one attempt, with an optional arg prefix (the protocol-forced retries).
+ */
+function runYtDlpOnce(query: string, extraArgs: string[], timeoutMs: number): Promise<Candidate[]> {
   if (ytDlpRunnerForTests) {
     return ytDlpRunnerForTests(query);
   }
@@ -423,6 +643,7 @@ function runYtDlp(query: string): Promise<Candidate[]> {
         const proc = Bun.spawn(
           [
             YTDLP_PATH,
+            ...extraArgs,
             '--no-warnings',
             '--skip-download',
             '--quiet',
@@ -443,7 +664,7 @@ function runYtDlp(query: string): Promise<Candidate[]> {
         const timer = setTimeout(() => {
           proc.kill();
           reject(new Error('yt-dlp timed out.'));
-        }, YTDLP_TIMEOUT_MS);
+        }, timeoutMs);
 
         const done = (err: Error | null, out: string): void => {
           clearTimeout(timer);
@@ -482,6 +703,32 @@ function runYtDlp(query: string): Promise<Candidate[]> {
           .catch((error: unknown) => done(error as Error, ''));
       }),
   );
+}
+
+/** Fallback-attempt timeouts: the first try gets the full window. */
+const YTDLP_FALLBACK_TIMEOUT_MS = 15_000;
+
+/**
+ * The resolver's protocol ladder: the OS-preferred family first, then the
+ * other one. Shared-host egress reputations differ per address family (a
+ * boot may egress via a bot-flagged IPv6 /64 while its IPv4 NAT is clean,
+ * or the reverse), so a failure on one family is worth one try on the
+ * other before giving the client the bad news.
+ */
+async function runYtDlp(query: string): Promise<Candidate[]> {
+  try {
+    return await runYtDlpOnce(query, [], YTDLP_TIMEOUT_MS);
+  } catch (first) {
+    try {
+      return await runYtDlpOnce(query, ['-4'], YTDLP_FALLBACK_TIMEOUT_MS);
+    } catch {
+      try {
+        return await runYtDlpOnce(query, ['-6'], YTDLP_FALLBACK_TIMEOUT_MS);
+      } catch {
+        throw first;
+      }
+    }
+  }
 }
 
 /** Pick the candidate whose duration best matches the Spotify duration. */

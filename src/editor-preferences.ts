@@ -1,11 +1,5 @@
 import { $ } from './lib/q';
-import { closeModal } from './ui/behavior/modal';
-import Swal from 'sweetalert2';
 import type { EditorConfig, NotepadUI, StateKey } from './selector';
-import { showToast } from './ui/toast';
-import { updateWordCountPill } from './word-count-pill';
-import { getEditorText, getTabManager } from './tabs';
-import { isHtmlContent } from './editor/note-types';
 import { stateGet } from './storage';
 import { getSetting, removeSetting, setSetting } from './state/settings';
 
@@ -395,80 +389,9 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
 
       if (getSetting('userChosenSpellCheck')) {
         removeState('userChosenSpellCheck');
-        notepad.note.attr('spellcheck', false as unknown as string);
+        notepad.note.attr('spellcheck', String(editorConfig.defaultSpellCheck));
         notepad.spellCheck.prop('checked', editorConfig.defaultSpellCheck);
-      }
-
-      // Tab indentation is always enabled now — drop any legacy state.
-      if (getSetting('userChosenTabIndentation')) {
-        removeState('userChosenTabIndentation');
       }
     },
   };
-}
-
-/**
- * "Clear tab indentation" action from the preferences modal — strips
- * tab characters from every text node in the editor.
- */
-export function clearTabIndentation(notepad: NotepadUI): void {
-  // Markdown notes own their tabs: inside a code fence a tab IS content,
-  // and the text-node walk below would strip it out of the ProseMirror
-  // document. The cleaner is an html-surface tool.
-  if (!isHtmlContent(getTabManager()?.getActive()?.noteType)) {
-    showToast('Tab cleaning applies to plain and rich notes.');
-    return;
-  }
-  const noteText = getEditorText();
-  const tabCount = (noteText.match(/\t/g) || []).length;
-
-  if (tabCount === 0) {
-    showToast('No tab indentation found in your notes.');
-    return;
-  }
-
-  Swal.fire({
-    title: 'Remove all tabs?',
-    text: `This will remove ${tabCount} tab${tabCount === 1 ? '' : 's'} of indentation from your notes.`,
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonText: 'Remove tabs',
-  }).then((result) => {
-    if (!result.isConfirmed) {
-      return;
-    }
-
-    const applyEdit = () => {
-      // Strip tab characters from every text node in
-      // the editor (formatting tags are untouched).
-      const editor = notepad.note.get(0) as HTMLElement;
-      let removed = 0;
-
-      const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
-      const textNodes: Text[] = [];
-      while (walker.nextNode()) {
-        textNodes.push(walker.currentNode as Text);
-      }
-
-      textNodes.forEach((node) => {
-        if (node.nodeValue && node.nodeValue.indexOf('\t') !== -1) {
-          removed += (node.nodeValue.match(/\t/g) || []).length;
-          node.nodeValue = node.nodeValue.replace(/\t/g, '');
-        }
-      });
-
-      editor.dispatchEvent(new Event('input', { bubbles: true }));
-      updateWordCountPill(getEditorText());
-      showToast(`Removed ${removed} tab${removed === 1 ? '' : 's'} from your notes.`);
-    };
-
-    // Bootstrap modals hold focus while fading out — wait
-    // for the dialog to be gone before touching the DOM.
-    if ($('#preferencesModal').hasClass('in')) {
-      $('#preferencesModal').one('hidden.bs.modal', applyEdit);
-      closeModal($('#preferencesModal').get(0));
-    } else {
-      applyEdit();
-    }
-  });
 }

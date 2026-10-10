@@ -18,10 +18,7 @@ interface BreakReminderState {
 
 const breakReminderConfig = {
   // Show the reminder after this much active writing time.
-  // 3 SECONDS — a temporary testing value (the task list asks for it so
-  // the flow can be exercised without a long session). Restore
-  // 30 * 60 * 1000 before shipping.
-  thresholdMs: 3 * 1000,
+  thresholdMs: 30 * 60 * 1000,
 
   // Ignore gaps longer than this so idle time does not count as writing.
   idleWindowMs: 2 * 60 * 1000,
@@ -58,6 +55,22 @@ const breakReminderDefaults = {
 let breakReminderState = loadBreakReminderState();
 let breakReminderCountdownTimer: ReturnType<typeof setInterval> | null = null;
 let breakRemindersEnabled = false;
+
+/** Dev/test seam — the e2e suite lowers the threshold so the flow can be
+ *  exercised inside seconds instead of half an hour. Dev builds only. */
+function setBreakThresholdForTests(ms: number): void {
+  breakReminderConfig.thresholdMs = ms;
+}
+
+interface BreakReminderTestWindow {
+  __padifyBreakReminder?: { setThreshold: typeof setBreakThresholdForTests };
+}
+
+if (import.meta.env.DEV) {
+  (window as unknown as BreakReminderTestWindow).__padifyBreakReminder = {
+    setThreshold: setBreakThresholdForTests,
+  };
+}
 
 function loadBreakReminderState(): BreakReminderState {
   const rawState = stateGet(breakReminderConfig.storageKey);

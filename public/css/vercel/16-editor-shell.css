@@ -53,9 +53,16 @@
   outline: none;
 }
 
-/* Placeholder mirror of textarea::placeholder for the contenteditable div */
+/* Placeholder mirror of textarea::placeholder for the contenteditable div.
+   [data-empty] is the engine's live mirror (model-port.ts's observer,
+   rule in model/document.ts surfaceIsEmptyForPlaceholder): it sees the
+   surface's TEXT, which CSS cannot — the old :has(> br:only-child)
+   selector counted ELEMENT children only, so a legacy stored note
+   holding "text + br" (older builds' soft breaks) still matched it and
+   painted the placeholder over the user's typed words. :empty stays
+   for the pre-engine moment and the no-JS fallback. */
 #note:empty::before,
-#note:has(> br:only-child)::before {
+#note[data-empty]::before {
   content: attr(data-placeholder);
   color: var(--vz-fg-subtle);
   pointer-events: none;
@@ -63,7 +70,7 @@
 }
 
 body.dark #note:empty::before,
-body.dark #note:has(> br:only-child)::before {
+body.dark #note[data-empty]::before {
   color: var(--vz-fg-subtle);
 }
 

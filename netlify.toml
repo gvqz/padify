@@ -9,15 +9,27 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  # VITE_API_BASE stays unset on purpose: the app talks to the API through
+  # the same-origin /api proxy below (the architecture docs/CLOUD_SETUP.md
+  # describes for Netlify — "proxies /api/* to the API, so everything is
+  # same-origin"), so no CORS is involved and the CSP's connect-src stays
+  # 'self'. The alwaysdata static deploy builds the same source with its
+  # own VITE_API_BASE (same host as its API — same origin by domain), so
+  # the two deployments cannot drift through this file.
+
+# The API proxy. Kept here instead of the build-generated dist/_redirects
+# because the generated file only exists when VITE_API_BASE is set (which
+# would make the client call the API cross-origin instead of through this
+# proxy). The target re-anchors the splat under the API's /api prefix:
+# /api/health → https://…/padifyapi/api/health.
+[[redirects]]
+  from = "/api/*"
+  to = "https://functionhost.alwaysdata.net/padifyapi/api/:splat"
+  status = 200
+  force = true
 
 # HTTP headers are generated at build time: `npm run build` writes
 # dist/_headers (scripts/build-headers.mjs) with the security baseline —
 # nosniff, referrer policy, HSTS, frame protection and a content security
 # policy whose script-src pins the build's inline scripts by hash. Netlify
 # picks the file up from the publish directory automatically.
-#
-# The /api proxy redirect is generated too — scripts/build-headers.mjs
-# writes dist/_redirects from VITE_API_BASE (set it in Site settings →
-# Environment variables; see docs/CLOUD_SETUP.md §3). With the variable
-# unset the site is purely same-origin: /api must be routed by whatever
-# serves it, and nothing here stands in the way.

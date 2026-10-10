@@ -29,6 +29,29 @@ test.describe('theme ink', () => {
     await page.goto('/');
   });
 
+  test('device theme follows a dark OS from the very first paint (issue #47)', async ({ page }) => {
+    // 'mode' = device (the default) + a dark OS scheme. Regression: the
+    // pre-paint script treated stored 'device' as light, the first note
+    // render inked dark-stamped colors for a light body, and any edit
+    // persisted the wrong ink.
+    await page.addInitScript(() => {
+      localStorage.setItem('mode', 'device');
+    });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.goto('/');
+
+    // The pre-paint script itself must paint dark — no light flash that
+    // the controller would have to correct after the notes rendered.
+    await expect(page.locator('body')).toHaveClass(/dark/, { timeout: 1_000 });
+
+    // The controller agrees (radios + meta), and a reload keeps it dark.
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#0a0a0a', {
+      timeout: 3_000,
+    });
+    await page.reload();
+    await expect(page.locator('body')).toHaveClass(/dark/);
+  });
+
   test('picked ink flips with the theme, both ways', async ({ page }) => {
     await newRichNote(page);
     const editor = page.locator('#note');

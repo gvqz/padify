@@ -320,6 +320,49 @@ export async function applySchema(db: Db): Promise<void> {
   await migrateColumns(db);
   await migrateRenames(db);
   await migrateSyncCounters(db);
+  await migrateSeqBackfill(db);
+}
+
+/**
+ * One-time backfill for pre-v2 rows: seq = 0 means "never written by a
+ * seq-stamping build", and the v2 pull re-delivers those rows on EVERY
+ * cycle (the cursor's reduce can never advance past 0) — a pre-v2 account
+ * re-downloads and re-merges its whole corpus every 30 seconds forever.
+ * Stamps each user's seq-0 rows from above their highest stamped seq,
+ * then parks the user's counter at the new maximum (reserved numbers may
+ * only advance).
+ */
+async function migrateSeqBackfill(db: Db): Promise<void> {
+  const users = await db.all('select distinct user_id from notes where seq = 0');
+  for (const userRow of users) {
+    const userId = String(userRow.user_id);
+    const maxRows = await db.all(
+      'select coalesce(max(seq), 0) as base from notes where user_id = ?',
+      [userId]
+    );
+    const counterRows = await db.all(
+      'select value from sync_counters where user_id = ?',
+      [userId]
+    );
+    const maxRow = maxRows[0];
+    const counterRow = counterRows[0];
+    let seq = Math.max(Number(maxRow?.base) || 0, Number(counterRow?.value) || 0);
+    const zeroRows = await db.all(
+      'select id from notes where user_id = ? and seq = 0 order by created_at asc',
+      [userId]
+    );
+    for (const zeroRow of zeroRows) {
+      seq += 1;
+      await db.run('update notes set seq = ? where id = ?', [seq, String(zeroRow.id)]);
+    }
+    if (zeroRows.length > 0) {
+      await db.run(
+        `insert into sync_counters (user_id, value) values (?, ?)
+         on conflict(user_id) do update set value = excluded.value`,
+        [userId, seq]
+      );
+    }
+  }
 }
 
 /**

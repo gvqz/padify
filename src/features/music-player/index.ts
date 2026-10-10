@@ -1,5 +1,5 @@
 /**
- * Padify music player — v3.
+ * Padify music player — v4.
  *
  * Free search (zero login) — search a music catalog through the Padify
  * API (metadata only), then play full tracks in a plain HTML5 <audio>
@@ -7,12 +7,13 @@
  * local favorites, a local queue and exactly one local playlist, all
  * on-device.
  *
- *   • Ambience — the soundscape mixer (src/white-noise-player.ts) rides
- *     along in its own tab, unchanged.
+ *   • Ambience is tracks now (./ambient.ts): the twelve bundled loops play
+ *     through the same queue/engine/mini player as songs — no mixer tab.
  *
- * The radio/generative engine is gone; the modal markup is injected at
- * module evaluation (same pattern as timer.ts) and the app is constructed
- * by initMusicPlayer() AFTER storage hydration (app.ts).
+ * The layout: a sidebar switches destinations (search / favorites /
+ * playlist / ambience / queue), the content pane lists the rows, and the
+ * player bar rides the bottom of the modal. The controller owns the queue
+ * math and reacts to engine events; markup lives in markup.ts.
  *
  * Persistence (storage layer → IndexedDB + localStorage mirror):
  *   padify-music-state   volume / shuffle / repeat / view / free queue
@@ -20,7 +21,6 @@
  */
 
 import { $ } from '../../lib/q';
-import { getWhiteNoisePlayer } from '../../white-noise-player';
 import { openModal, closeModal } from '../../ui/behavior/modal';
 import Swal from 'sweetalert2';
 import type { SweetAlertResult } from 'sweetalert2';
@@ -37,6 +37,7 @@ import type { SpotifyTrack } from './types';
 import { ICONS } from './markup';
 import { byId, formatMs, trackArtistNames, pickImage } from './helpers';
 import { queueRow, rowMenuItems, trackRow } from './rows';
+import { ambientTracks, AMBIENCE_QUEUE_ID } from './ambient';
 import {
   REPEAT_MODES,
   loadPlayerState,
@@ -69,6 +70,8 @@ const PREVIEW_LABEL = '30s preview';
 const FREE_LABEL = 'Free';
 const FREE_SEARCH_LIMIT = 24;
 
+const VIEW_IDS: ViewId[] = ['search', 'favorites', 'playlist', 'ambience', 'queue'];
+
 // ---------------------------------------------------------------------------
 // The application controller
 // ---------------------------------------------------------------------------
@@ -81,8 +84,9 @@ class MusicPlayerApp {
   private seekDebounce: ReturnType<typeof setTimeout> | null = null;
   private progressTimer: ReturnType<typeof setInterval> | null = null;
   private lastVolumeBeforeMute: number | null = null;
-  private navbarIconObserver: MutationObserver | null = null;
-  private navbarIconWatchedEl: Element | null = null;
+  /** The volume actually driving the engine — tracks mutes too, unlike
+   *  state.volume (which remembers the user's chosen level). */
+  private appliedVolume = 1;
 
   // ---- free engine (no login): <audio> + resolved stream URLs ----
   /** Lazy closures over the app — nothing runs before the first play. */
@@ -102,6 +106,8 @@ class MusicPlayerApp {
   private capsChecked = false;
 
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Monotonic search token — stale responses must never clobber fresh ones. */
+  private searchSeq = 0;
 
   // ---- rendered lists (queueId → tracks) ----
   private queues = new Map<string, SpotifyTrack[]>();
@@ -126,26 +132,22 @@ class MusicPlayerApp {
   private readonly volIconLow: HTMLElement;
   private readonly volIconMute: HTMLElement;
 
-  private readonly tabMusic: HTMLButtonElement;
-  private readonly tabQueue: HTMLButtonElement;
-  private readonly tabAmbience: HTMLButtonElement;
-  private readonly musicView: HTMLElement;
-  private readonly queueView: HTMLElement;
-  private readonly ambienceView: HTMLElement;
-  private readonly queueCount: HTMLElement;
-  private readonly queueList: HTMLElement;
-  private readonly queueEmpty: HTMLElement;
-  private readonly queueHint: HTMLElement;
-  private readonly queueClear: HTMLButtonElement;
+  private readonly navItems: HTMLButtonElement[];
+  private readonly views: Record<ViewId, HTMLElement>;
+  private readonly playlistNavName: HTMLElement;
 
   private readonly searchInput: HTMLInputElement;
   private readonly searchNotice: HTMLElement;
+  private readonly searchIdle: HTMLElement;
+  private readonly resultsView: HTMLElement;
+  private readonly resultsList: HTMLElement;
+  private readonly resultsEmpty: HTMLElement;
+  private readonly resultsCount: HTMLElement;
 
-  private readonly freeHome: HTMLElement;
-  private readonly hero: HTMLElement;
   private readonly favoritesList: HTMLElement;
   private readonly favoritesEmpty: HTMLElement;
   private readonly favCount: HTMLElement;
+
   private readonly localPlaylistList: HTMLElement;
   private readonly localPlaylistEmpty: HTMLElement;
   private readonly playlistName: HTMLElement;
@@ -153,9 +155,12 @@ class MusicPlayerApp {
   private readonly playlistRename: HTMLButtonElement;
   private readonly playlistClear: HTMLButtonElement;
 
-  private readonly resultsView: HTMLElement;
-  private readonly resultsList: HTMLElement;
-  private readonly resultsEmpty: HTMLElement;
+  private readonly ambienceList: HTMLElement;
+
+  private readonly queueCount: HTMLElement;
+  private readonly queueList: HTMLElement;
+  private readonly queueEmpty: HTMLElement;
+  private readonly queueClear: HTMLButtonElement;
 
   private readonly rowMenu: HTMLElement;
 
@@ -187,26 +192,28 @@ class MusicPlayerApp {
     this.volIconLow = byId('mpVolIconLow');
     this.volIconMute = byId('mpVolIconMute');
 
-    this.tabMusic = byId('mpTabMusic');
-    this.tabQueue = byId('mpTabQueue');
-    this.tabAmbience = byId('mpTabAmbience');
-    this.musicView = byId('mpMusicView');
-    this.queueView = byId('mpQueueView');
-    this.ambienceView = byId('mpAmbienceView');
-    this.queueCount = byId('mpQueueCount');
-    this.queueList = byId('mpQueueList');
-    this.queueEmpty = byId('mpQueueEmpty');
-    this.queueHint = byId('mpQueueHint');
-    this.queueClear = byId('mpQueueClear');
+    this.navItems = Array.from(this.root.querySelectorAll<HTMLButtonElement>('.mp-nav-item'));
+    this.views = {
+      search: byId('mpView-search'),
+      favorites: byId('mpView-favorites'),
+      playlist: byId('mpView-playlist'),
+      ambience: byId('mpView-ambience'),
+      queue: byId('mpView-queue'),
+    };
+    this.playlistNavName = byId('mpPlaylistNavName');
 
     this.searchInput = byId('mpSearchInput');
     this.searchNotice = byId('mpSearchNotice');
+    this.searchIdle = byId('mpSearchIdle');
+    this.resultsView = byId('mpResults');
+    this.resultsList = byId('mpResultsList');
+    this.resultsEmpty = byId('mpResultsEmpty');
+    this.resultsCount = byId('mpResultsCount');
 
-    this.freeHome = byId('mpFreeHome');
-    this.hero = byId('mpHero');
     this.favoritesList = byId('mpFavoritesList');
     this.favoritesEmpty = byId('mpFavoritesEmpty');
     this.favCount = byId('mpFavCount');
+
     this.localPlaylistList = byId('mpLocalPlaylistList');
     this.localPlaylistEmpty = byId('mpLocalPlaylistEmpty');
     this.playlistName = byId('mpPlaylistName');
@@ -214,9 +221,12 @@ class MusicPlayerApp {
     this.playlistRename = byId('mpPlaylistRename');
     this.playlistClear = byId('mpPlaylistClear');
 
-    this.resultsView = byId('mpResults');
-    this.resultsList = byId('mpResultsList');
-    this.resultsEmpty = byId('mpResultsEmpty');
+    this.ambienceList = byId('mpAmbienceList');
+
+    this.queueCount = byId('mpQueueCount');
+    this.queueList = byId('mpQueueList');
+    this.queueEmpty = byId('mpQueueEmpty');
+    this.queueClear = byId('mpQueueClear');
 
     this.rowMenu = byId('mpRowMenu');
 
@@ -227,6 +237,7 @@ class MusicPlayerApp {
     this.miniPlay = byId('mpMiniPlay');
 
     // Restore persisted UI state.
+    this.appliedVolume = this.state.volume > 0 ? this.state.volume : 1;
     this.volumeInput.value = String(Math.round(this.state.volume * 100));
     this.shuffleBtn.classList.toggle('is-on', this.state.shuffle);
     this.shuffleBtn.setAttribute('aria-pressed', String(this.state.shuffle));
@@ -235,17 +246,14 @@ class MusicPlayerApp {
 
     this.bindEvents();
     this.setupMediaSession();
-    this.watchNavbarIcon();
-    this.switchView(this.state.view || 'music');
+    this.switchView(this.state.view || 'search');
 
     // Initial slider fills.
     this.setRangeFill(this.seek);
     this.setRangeFill(this.volumeInput);
-    this.root.querySelectorAll<HTMLInputElement>('.volume-slider').forEach((slider) => {
-      this.setRangeFill(slider);
-    });
 
-    this.renderFreeHome();
+    this.renderLibrary();
+    this.renderAmbience();
     this.restoreFreeQueue();
     this.bootstrap();
   }
@@ -416,7 +424,7 @@ class MusicPlayerApp {
     void this.playFreeAt(prevIdx);
   }
 
-  /** Appends a track to the free queue (the "+ button"). */
+  /** Appends a track to the free queue (the "+" button). */
   private enqueueFree(track: SpotifyTrack): void {
     const result = enqueueTrack(
       this.state.freeQueue,
@@ -591,6 +599,9 @@ class MusicPlayerApp {
   private setVolume(value: number, fromUser: boolean): void {
     const vol = Math.max(0, Math.min(1, value));
     this.engine.setVolume(vol);
+    // The APPLIED volume drives the icon and the mute toggle; state.volume
+    // keeps the user's chosen level so a mute does not forget it.
+    this.appliedVolume = vol;
     if (fromUser) {
       this.state.volume = vol;
       this.persist();
@@ -602,7 +613,10 @@ class MusicPlayerApp {
   }
 
   private toggleMute(): void {
-    const current = this.state.volume;
+    // Decide on the APPLIED volume: state.volume keeps the pre-mute level,
+    // so the old check always re-muted (a no-op) and only dragging the
+    // slider could bring sound back.
+    const current = this.appliedVolume;
     if (current > 0) {
       this.lastVolumeBeforeMute = current;
       this.setVolume(0, false);
@@ -614,7 +628,7 @@ class MusicPlayerApp {
   }
 
   private updateVolumeIcon(): void {
-    const vol = this.state.volume;
+    const vol = this.appliedVolume;
     this.volIconHigh.style.display = vol >= 0.5 ? 'inline' : 'none';
     this.volIconLow.style.display = vol > 0 && vol < 0.5 ? 'inline' : 'none';
     this.volIconMute.style.display = vol <= 0 ? 'inline' : 'none';
@@ -697,10 +711,7 @@ class MusicPlayerApp {
     this.caps = await fetchMusicCapabilities();
     this.capsChecked = true;
     if (!this.caps.search) {
-      this.showSearchNotice('Free search needs the Padify music API — it looks offline here.');
-    }
-    if (!this.caps.resolve) {
-      this.hero.classList.add('is-degraded');
+      this.showSearchNotice('Search needs the Padify music API — it looks offline here.');
     }
   }
 
@@ -722,10 +733,10 @@ class MusicPlayerApp {
   }
 
   // ========================================================================
-  // Free home (favorites + the one local playlist)
+  // Library views (favorites + the one local playlist)
   // ========================================================================
 
-  private renderFreeHome(): void {
+  private renderLibrary(): void {
     const favorites = this.library.favorites;
     const playlist = this.library.playlist;
 
@@ -737,6 +748,7 @@ class MusicPlayerApp {
     if (playlist) {
       this.queues.set('local-playlist', playlist.tracks);
       this.playlistName.textContent = playlist.name;
+      this.playlistNavName.textContent = playlist.name;
       this.localPlaylistList.innerHTML = playlist.tracks
         .map((track) => trackRow(track, 'local-playlist'))
         .join('');
@@ -748,6 +760,7 @@ class MusicPlayerApp {
     } else {
       this.queues.delete('local-playlist');
       this.playlistName.textContent = 'My Playlist';
+      this.playlistNavName.textContent = 'Playlist';
       this.localPlaylistList.innerHTML = '';
       this.localPlaylistEmpty.hidden = false;
       this.playlistCount.textContent = '';
@@ -758,6 +771,17 @@ class MusicPlayerApp {
     this.refreshRowHearts(this.localPlaylistList);
     this.updateRowStates();
     this.updateQueueCount();
+  }
+
+  /** The ambience list — the same twelve tracks every session. */
+  private renderAmbience(): void {
+    const tracks = ambientTracks();
+    this.queues.set(AMBIENCE_QUEUE_ID, tracks);
+    this.ambienceList.innerHTML = tracks
+      .map((track) => trackRow(track, AMBIENCE_QUEUE_ID))
+      .join('');
+    this.refreshRowHearts(this.ambienceList);
+    this.updateRowStates();
   }
 
   private async renameLocalPlaylist(): Promise<void> {
@@ -774,7 +798,7 @@ class MusicPlayerApp {
     })) as SweetAlertResult<string>;
     if (result.isConfirmed && typeof result.value === 'string') {
       this.library.renamePlaylist(result.value);
-      this.renderFreeHome();
+      this.renderLibrary();
     }
   }
 
@@ -814,7 +838,11 @@ class MusicPlayerApp {
 
   /** Fills the heart buttons in a freshly rendered list — local favorites. */
   private refreshRowHearts(container: HTMLElement): void {
-    container.querySelectorAll<HTMLElement>('.sp-row[data-like]').forEach((row) => {
+    // Rows, not '[data-like]' rows: the attribute rides the inner
+    // .sp-row-like button (rows.ts), so the old selector matched nothing
+    // and every heart rendered unfilled — in the Favorites view a click on
+    // a wrongly-empty heart REMOVED the favorite.
+    container.querySelectorAll<HTMLElement>('.sp-row').forEach((row) => {
       this.setRowHeart(row, this.library.isFavorite(row.dataset.trackId ?? ''));
     });
   }
@@ -833,7 +861,7 @@ class MusicPlayerApp {
 
     const nowFav = this.library.toggleFavorite(track);
     this.setRowHeart(row, nowFav);
-    this.renderFreeHome();
+    this.renderLibrary();
   }
 
   private trackFromRow(row: HTMLElement): SpotifyTrack | null {
@@ -848,7 +876,7 @@ class MusicPlayerApp {
     );
   }
 
-  // ---- the row action menu (+ queue, + playlist) -----------------------------
+  // ---- the row action menu (playlist, and friends) -----------------------------
 
   private openRowMenu(row: HTMLElement, button: HTMLElement): void {
     const track = this.trackFromRow(row);
@@ -893,50 +921,62 @@ class MusicPlayerApp {
       else if (result === 'full') showToast('Your playlist is full (300 songs).');
       else if (result === 'created') showToast('Playlist started — rename it any time.');
       else showToast('Added to your playlist.');
-      this.renderFreeHome();
+      this.renderLibrary();
       return;
     }
   }
 
   // ========================================================================
-  // Search (one box, the free catalog through the Padify API)
+  // Search (the free catalog through the Padify API)
   // ========================================================================
+
+  private showSearchIdle(): void {
+    this.searchIdle.hidden = false;
+    this.resultsView.hidden = true;
+  }
+
+  private showSearchResults(): void {
+    this.searchIdle.hidden = true;
+    this.resultsView.hidden = false;
+  }
 
   private async runSearch(query: string): Promise<void> {
     const trimmed = query.trim();
+    const seq = ++this.searchSeq;
     if (trimmed.length < 2) {
-      this.clearResults();
+      this.showSearchIdle();
       this.clearSearchNotice();
       return;
     }
 
     if (!this.capsChecked) await this.checkCapabilities();
+    if (seq !== this.searchSeq) return; // a newer keystroke won
     if (!this.caps.search) {
-      this.showSearchNotice('Free search needs the Padify music API — it looks offline here.');
+      this.showSearchNotice('Search needs the Padify music API — it looks offline here.');
       return;
     }
     this.clearSearchNotice();
 
-    this.showMusicSubView('results-anon');
+    this.showSearchResults();
     this.resultsList.innerHTML =
       '<div class="sp-skeleton-row"></div><div class="sp-skeleton-row"></div><div class="sp-skeleton-row"></div>';
     this.resultsEmpty.hidden = true;
 
     try {
       const tracks = await freeSearchTracks(trimmed, FREE_SEARCH_LIMIT);
+      if (seq !== this.searchSeq) return; // stale response — drop it
       this.renderTrackRows(this.resultsList, tracks, 'free-search');
+      this.resultsCount.textContent = tracks.length > 0 ? `${tracks.length} songs` : '';
       this.resultsEmpty.hidden = tracks.length > 0;
     } catch (err) {
+      if (seq !== this.searchSeq) return; // stale failure — drop it too
       this.resultsList.innerHTML = '';
-      this.resultsEmpty.hidden = false;
+      this.resultsCount.textContent = '';
+      this.resultsEmpty.hidden = true;
       this.showSearchNotice(
         err instanceof FreeMusicError ? err.message : 'Search failed — try again.',
       );
     }
-  }
-
-  private clearResults(): void {
-    this.showMusicSubView('home');
   }
 
   // ========================================================================
@@ -951,10 +991,9 @@ class MusicPlayerApp {
 
   private updateQueueView(): void {
     this.updateQueueCount();
-    if (this.queueView.hidden) return;
+    if (this.views.queue.hidden) return;
 
     const queue = this.state.freeQueue;
-    this.queueHint.textContent = queue.length > 0 ? 'Up next on this device' : 'Nothing queued';
     this.queueClear.hidden = queue.length === 0;
     this.queueList.innerHTML = queue.map((track, index) => queueRow(track, index)).join('');
     this.queueEmpty.hidden = queue.length > 0;
@@ -995,31 +1034,26 @@ class MusicPlayerApp {
   }
 
   // ========================================================================
-  // Views / tabs
+  // Views (the sidebar)
   // ========================================================================
 
   private switchView(view: ViewId): void {
     this.state.view = view;
     this.persist();
-    this.musicView.hidden = view !== 'music';
-    this.queueView.hidden = view !== 'queue';
-    this.ambienceView.hidden = view !== 'ambience';
-    this.tabMusic.classList.toggle('is-active', view === 'music');
-    this.tabQueue.classList.toggle('is-active', view === 'queue');
-    this.tabAmbience.classList.toggle('is-active', view === 'ambience');
-    this.tabMusic.setAttribute('aria-selected', String(view === 'music'));
-    this.tabQueue.setAttribute('aria-selected', String(view === 'queue'));
-    this.tabAmbience.setAttribute('aria-selected', String(view === 'ambience'));
-    this.tabMusic.tabIndex = view === 'music' ? 0 : -1;
-    this.tabQueue.tabIndex = view === 'queue' ? 0 : -1;
-    this.tabAmbience.tabIndex = view === 'ambience' ? 0 : -1;
+    for (const id of VIEW_IDS) {
+      const active = id === view;
+      this.views[id].hidden = !active;
+    }
+    for (const item of this.navItems) {
+      const active = (item.dataset.view as ViewId) === view;
+      item.classList.toggle('is-active', active);
+      item.setAttribute('aria-selected', String(active));
+      item.tabIndex = active ? 0 : -1;
+    }
     if (view === 'queue') this.updateQueueView();
-  }
-
-  /** Sub-navigation inside the Music tab (home ↔ anonymous results). */
-  private showMusicSubView(sub: 'home' | 'results-anon'): void {
-    this.freeHome.hidden = sub !== 'home';
-    this.resultsView.hidden = sub !== 'results-anon';
+    if (view === 'search' && this.root.classList.contains('in')) {
+      this.searchInput.focus();
+    }
   }
 
   // ========================================================================
@@ -1114,34 +1148,11 @@ class MusicPlayerApp {
   private syncNavbarIcon(): void {
     const iconEl = document.querySelector('.ambient-noise-icon');
     if (!iconEl) return;
-    this.ensureNavbarIconObserver(iconEl);
-    const ambient = getWhiteNoisePlayer();
-    const ambientOn = ambient ? ambient.isAnySoundPlaying() : false;
-    const playerOn = this.isPlaying();
-    const should = playerOn || ambientOn;
+    const should = this.isPlaying();
     const has = iconEl.classList.contains('is-playing');
     if (has !== should) {
       iconEl.classList.toggle('is-playing', should);
     }
-  }
-
-  private ensureNavbarIconObserver(iconEl: Element): void {
-    if (typeof MutationObserver === 'undefined') return;
-    if (this.navbarIconWatchedEl === iconEl) return;
-    if (this.navbarIconObserver) {
-      this.navbarIconObserver.disconnect();
-    }
-    this.navbarIconWatchedEl = iconEl;
-    this.navbarIconObserver = new MutationObserver(() => this.syncNavbarIcon());
-    this.navbarIconObserver.observe(iconEl, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-  }
-
-  private watchNavbarIcon(): void {
-    const iconEl = document.querySelector('.ambient-noise-icon');
-    if (iconEl) this.ensureNavbarIconObserver(iconEl);
   }
 
   // ---- Range fill helper --------------------------------------------------------
@@ -1159,10 +1170,10 @@ class MusicPlayerApp {
   // ========================================================================
 
   private bindEvents(): void {
-    // Tabs.
-    this.tabMusic.addEventListener('click', () => this.switchView('music'));
-    this.tabQueue.addEventListener('click', () => this.switchView('queue'));
-    this.tabAmbience.addEventListener('click', () => this.switchView('ambience'));
+    // Sidebar navigation.
+    for (const item of this.navItems) {
+      item.addEventListener('click', () => this.switchView(item.dataset.view as ViewId));
+    }
 
     // Transport.
     this.playBtn.addEventListener('click', () => this.togglePlay());
@@ -1184,15 +1195,7 @@ class MusicPlayerApp {
     this.seek.addEventListener('input', () => this.previewSeek());
     this.seek.addEventListener('change', () => this.commitSeek());
 
-    // Ambient volume sliders: keep the gradient fill in sync (cosmetic).
-    this.root.addEventListener('input', (event) => {
-      const target = event.target as HTMLElement;
-      if (target instanceof HTMLInputElement && target.classList.contains('volume-slider')) {
-        this.setRangeFill(target);
-      }
-    });
-
-    // ---- anonymous home ----
+    // ---- local library views ----
     this.playlistRename.addEventListener('click', () => {
       void this.renameLocalPlaylist();
     });
@@ -1200,7 +1203,7 @@ class MusicPlayerApp {
       if (!this.library.playlist) return;
       this.library.playlist.tracks = [];
       this.library.persist();
-      this.renderFreeHome();
+      this.renderLibrary();
       showToast('Playlist emptied.');
     });
 
@@ -1220,14 +1223,8 @@ class MusicPlayerApp {
       this.searchInput.value = '';
       byId('mpSearchClear').hidden = true;
       this.clearSearchNotice();
-      this.clearResults();
+      this.showSearchIdle();
       this.searchInput.focus();
-    });
-    byId('mpResultsBack').addEventListener('click', () => {
-      this.searchInput.value = '';
-      byId('mpSearchClear').hidden = true;
-      this.clearSearchNotice();
-      this.showMusicSubView('home');
     });
 
     // ---- track rows (delegated across every list) ----
@@ -1249,13 +1246,18 @@ class MusicPlayerApp {
       const row = target.closest('.sp-row') as HTMLElement | null;
 
       if (row) {
-        if (target.closest('[data-remove]') && !target.closest('[data-readonly]')) {
+        if (target.closest('[data-remove]')) {
           this.removeFromQueue(Number(row.dataset.queueIndex));
           return;
         }
         if (target.closest('[data-menu]')) {
           const button = target.closest('[data-menu]') as HTMLElement;
           this.openRowMenu(row, button);
+          return;
+        }
+        if (target.closest('[data-queue-add]')) {
+          const track = this.trackFromRow(row);
+          if (track) this.enqueueFree(track);
           return;
         }
         if (target.closest('[data-like]')) {
@@ -1315,6 +1317,7 @@ class MusicPlayerApp {
         this.updateMini();
         this.syncNavbarIcon();
         this.updateQueueView();
+        if (this.state.view === 'search') this.searchInput.focus();
       })
       .on('hidden.bs.modal', () => {
         this.updateMini();

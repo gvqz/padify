@@ -286,7 +286,10 @@ export class SnapshotsManager {
     // Open snapshots modal
     document.getElementById('snapshotsButton')?.addEventListener('click', () => {
       openModal($('#snapshotsModal').get(0));
-      void this.loadSnapshots();
+      // Honor the search field's leftover text — reopening used to show the
+      // unfiltered list under a stale query.
+      const query = (document.getElementById('searchSnapshots') as HTMLInputElement | null)?.value;
+      void this.loadSnapshots(query ?? '');
     });
 
     // Create snapshot button
@@ -327,8 +330,51 @@ export class SnapshotsManager {
     });
   }
 
-  // Create a new snapshot — or decline politely when it adds nothing.
+  // Create a new snapshot of the ACTIVE note — or decline politely when
+  // it adds nothing.
   async createSnapshot(title?: string): Promise<void> {
+    // Capture from the note itself, not the editor DOM: a non-html note's
+    // editor shows a placeholder card — its real content lives in the model.
+    const captured = getActiveNoteContent();
+    if (!captured) {
+      return;
+    }
+    await this.createSnapshotFromCapture(
+      captured.content,
+      captured.noteType,
+      getTabManager()?.getActive()?.id,
+      title,
+      { emptyToast: true, duplicateToast: true },
+    );
+  }
+
+  /**
+   * Safety snapshot of a note that is NOT (or no longer) the active one —
+   * the close-tab path. Content comes from the tab's model (the note is
+   * not mounted in the editor), and declines stay silent: the caller
+   * promised "a snapshot is saved before it closes", which an identical
+   * existing snapshot already satisfies.
+   */
+  async createSnapshotFromNote(
+    content: string,
+    noteType: NoteType | undefined,
+    noteId: string,
+    title: string,
+  ): Promise<void> {
+    await this.createSnapshotFromCapture(content, noteType, noteId, title, {
+      emptyToast: false,
+      duplicateToast: false,
+    });
+  }
+
+  // The one writer — every path funnels here.
+  private async createSnapshotFromCapture(
+    noteContent: string,
+    noteType: NoteType | undefined,
+    noteId: string | undefined,
+    title: string | undefined,
+    options: { emptyToast: boolean; duplicateToast: boolean },
+  ): Promise<void> {
     if (!this.db) {
       // Wait for the IDB open to finish instead of silently dropping the
       // snapshot. Previously the safety snapshot in utils.deleteNotes was
@@ -347,25 +393,20 @@ export class SnapshotsManager {
       return;
     }
 
-    // Capture from the note itself, not the editor DOM: a non-html note's
-    // editor shows a placeholder card — its real content lives in the model.
-    const captured = getActiveNoteContent();
-    if (!captured) {
-      return;
-    }
-    const noteContent = captured.content;
-    const noteType = captured.noteType;
     if (!snapshotHasContent(noteContent, noteType)) {
-      showToast('Note is empty. Nothing to save as snapshot.');
+      if (options.emptyToast) {
+        showToast('Note is empty. Nothing to save as snapshot.');
+      }
       return;
     }
 
     // The same bytes as this note's newest snapshot add nothing — decline.
-    const noteId = getTabManager()?.getActive()?.id;
     const existing = await this.readAllSnapshots();
     const latest = findLatestForNote(existing, noteId);
     if (latest && isSameSnapshotState(latest, { content: noteContent, noteType })) {
-      showToast('No changes since the last snapshot.');
+      if (options.duplicateToast) {
+        showToast('No changes since the last snapshot.');
+      }
       return;
     }
 

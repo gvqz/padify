@@ -35,6 +35,7 @@ import {
   serialize,
   streamLength,
   collapseEmptySurface,
+  surfaceIsEmptyForPlaceholder,
   surfaceLooksEmpty,
 } from './model/document';
 import {
@@ -51,8 +52,10 @@ import {
 } from './model/selection';
 import {
   applyBlockTag,
+  blockIsTextuallyBlank,
   clearInlineStyle,
   clearStyledCaretRun,
+  exitPreBlock,
   flipChecklistItem,
   insertPlainText,
   nestListItem,
@@ -211,6 +214,15 @@ export class ModelPort implements EditorPort {
   private composing = false;
 
   /**
+   * The stream offset the current composition began at, recorded only
+   * while a pending mark is armed — the composition's own input events
+   * are invisible to handleInput (composing is set), so the arm wraps
+   * the composed phrase here at compositionend instead of leaking to the
+   * next plain keystroke.
+   */
+  private compositionMarkStart: number | null = null;
+
+  /**
    * True while a typing burst's group is open: the first beforeinput of a
    * burst opens the group (snapshotting the pre-burst state); the rest
    * continue it. Closed by any other input type, any command, any undo.
@@ -233,6 +245,39 @@ export class ModelPort implements EditorPort {
   /** Parks/unparks the engine while another note-kind surface owns the host. */
   setInert(inert: boolean): void {
     this.inert = inert;
+    // A parked engine carries no live burst state home: the host changes
+    // owners (another note kind's surface) while it is away, so the flag
+    // that claims "a beforeinput already opened this burst's group" can
+    // only be stale by the time events flow again.
+    this.typingGroupOpen = false;
+    this.pendingMark = null;
+    // Same for a composition left open when the host changed hands: a
+    // late compositionend while inert returns early (the listener's
+    // guard), and a latched 'composing' would silence onBeforeInput/
+    // handleInput after the unpark — native typing with no history
+    // groups and no delete normalization until the next IME round trip.
+    this.composing = false;
+    this.compositionMarkStart = null;
+    // The placeholder mirror follows the park: a parked engine stops
+    // mirroring (the Markdown surface owns the host and carries its own
+    // placeholder rules), and coming home re-syncs from the host as it
+    // stands — the repaint that follows re-fires the observer anyway.
+    this.syncPlaceholderState();
+  }
+
+  /**
+   * Mirrors the surface's text-aware emptiness onto [data-empty], the
+   * attribute #note's placeholder CSS reads. Called from the constructor's
+   * MutationObserver (every content mutation, microtask-timed) and from
+   * setInert (park/unpark). See surfaceIsEmptyForPlaceholder for the rule
+   * and editor-shell.css for the consumer.
+   */
+  private syncPlaceholderState(): void {
+    if (this.inert) {
+      this.element.removeAttribute('data-empty');
+      return;
+    }
+    this.element.toggleAttribute('data-empty', surfaceIsEmptyForPlaceholder(this.element));
   }
 
   constructor(element: HTMLElement, deps: ModelPortDeps) {
@@ -262,6 +307,16 @@ export class ModelPort implements EditorPort {
     element.addEventListener('compositionstart', () => {
       if (this.inert) return;
       this.composing = true;
+      // Where the composition begins — the pending mark (when one is
+      // armed) must wrap the phrase the IME is about to produce, so its
+      // start is recorded before any composed text lands.
+      this.compositionMarkStart = null;
+      if (this.pendingMark !== null) {
+        const selection = captureOffsets(this.element);
+        if (selection) {
+          this.compositionMarkStart = Math.min(selection.anchor, selection.focus);
+        }
+      }
       // Snapshot BEFORE the first composition text lands, joining the
       // open typing burst or opening one: the whole composed phrase is
       // one undo step, and the state to restore on undo is the
@@ -276,8 +331,28 @@ export class ModelPort implements EditorPort {
       }
     });
     element.addEventListener('compositionend', () => {
+      if (this.inert) return;
       this.composing = false;
+      this.applyPendingMarkToComposition();
     });
+
+    // The placeholder mirror. #note's placeholder CSS keys off
+    // [data-empty], which this observer keeps true to the surface's
+    // TEXT — the one thing CSS cannot read. The pre-fix selector
+    // (:has(> br:only-child)) counted element children only, so a
+    // surface holding "text + br" (legacy notes' stored soft breaks)
+    // lit the placeholder over the user's typed words. Every mutation
+    // path — native typing, IME composition, paste, programmatic
+    // paints — lands here once, as a microtask BEFORE the next paint,
+    // so the placeholder never lags a frame behind the content. Only
+    // childList/characterData are observed: the mirror's own attribute
+    // write cannot re-trigger it.
+    new MutationObserver(() => this.syncPlaceholderState()).observe(element, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    this.syncPlaceholderState();
   }
 
   // -------------------------------------------------------------------------
@@ -506,6 +581,10 @@ export class ModelPort implements EditorPort {
     // path always applied, now in the engine that paints it.
     collapseEmptySurface(this.element);
     this.pendingMark = null;
+    // A replaced document is a fresh history (reset above) — a burst flag
+    // left armed by the previous note would make every keystroke on this
+    // one a continuation of a group that no longer exists.
+    this.typingGroupOpen = false;
   }
 
   getText(): string {
@@ -558,14 +637,25 @@ export class ModelPort implements EditorPort {
     if (!selection || selection.rangeCount === 0) {
       return '';
     }
-    const anchor = selection.getRangeAt(0).startContainer;
-    const offset = selection.getRangeAt(0).startOffset;
+    const range = selection.getRangeAt(0);
+    const anchor = range.startContainer;
+    const offset = range.startOffset;
     if (anchor.nodeType === Node.TEXT_NODE) {
       return (anchor.nodeValue ?? '').slice(0, offset).slice(-1);
     }
-    const element = anchor as Element;
-    const before = element.textContent ?? '';
-    return offset > 0 ? before.slice(-1) : before;
+    // An element boundary: the character immediately before the caret is
+    // the last character of the note's text before it — not the containing
+    // element's whole textContent (a caret at (block, 0) used to answer
+    // the ENTIRE block, and dictation then read it as "something precedes
+    // this word" and skipped its capitalisation).
+    const probe = document.createRange();
+    probe.selectNodeContents(this.element);
+    try {
+      probe.setEnd(anchor, offset);
+    } catch {
+      return '';
+    }
+    return probe.toString().slice(-1);
   }
 
   // -------------------------------------------------------------------------
@@ -781,6 +871,12 @@ export class ModelPort implements EditorPort {
   }
 
   undo(): boolean {
+    // Undoing closes the typing burst: the popped group is gone, so the
+    // next keystroke must open a NEW one. The flag otherwise stays armed
+    // and every later keystroke on the note silently bypasses the history
+    // (type → undo → type → undo did nothing — the second burst continued
+    // a group that no longer existed).
+    this.typingGroupOpen = false;
     this.absorb();
     const current = serialize(this.model);
     const restore = this.history.undo(current);
@@ -800,6 +896,9 @@ export class ModelPort implements EditorPort {
   }
 
   redo(): boolean {
+    // Same discipline as undo: a redo is a history walk, not a burst
+    // continuation — new typing afterwards opens its own group.
+    this.typingGroupOpen = false;
     this.absorb();
     const current = serialize(this.model);
     const restore = this.history.redo(current);
@@ -1156,7 +1255,7 @@ export class ModelPort implements EditorPort {
     while (el && el !== this.element && !BLOCK_TAGS.test(el.tagName)) {
       el = el.parentElement;
     }
-    if (!el || el === this.element || /^(LI|TD|TH)$/.test(el.tagName)) {
+    if (!el || el === this.element) {
       return null;
     }
 
@@ -1167,6 +1266,25 @@ export class ModelPort implements EditorPort {
         ? spot.node === el && spot.childIndex === 0
         : streamOffsetOfSpot(el, spot) === 0;
     if (!atStart) {
+      return null;
+    }
+
+    // Backspace at the start of the FIRST item of its list (no content
+    // above in the same list) leaves the list, Docs/Notion style: a nested
+    // item lifts one level, a top-level item becomes a plain paragraph and
+    // the list closes around the gap when it emptied. Native Chromium
+    // NO-OPS here — the first press did nothing at all, the user was stuck
+    // in the list. Items with anything above (an item, or the previous
+    // item's sublist) keep the native merge.
+    if (el.tagName === 'LI') {
+      if (el.previousElementSibling) {
+        return null; // the native merge into the content above is right
+      }
+      return this.command((model, coverage) =>
+        unnestListItem(model, coverage[0], this.preferInModel(spot, model, coverage[0])),
+      );
+    }
+    if (/^(TD|TH)$/.test(el.tagName)) {
       return null;
     }
 
@@ -1281,6 +1399,16 @@ export class ModelPort implements EditorPort {
     }
     const rows = Array.from(at.table.querySelectorAll('tr'));
     const targetCol = context.colIndex + step;
+    // At the table's edge, focus STOPS (the caller already suppressed the
+    // native Tab): clamping first and comparing after used to wrap the last
+    // cell of the last row back to its own row's FIRST cell (and
+    // Shift+Tab symmetrically) — the caret teleported instead of stopping.
+    if (context.rowIndex === rows.length - 1 && targetCol >= context.cols) {
+      return false; // forward off the last row
+    }
+    if (context.rowIndex === 0 && targetCol < 0) {
+      return false; // backward off the first row
+    }
     const clampedRow = Math.min(
       Math.max(context.rowIndex + Math.floor(targetCol / context.cols), 0),
       rows.length - 1,
@@ -1359,7 +1487,7 @@ export class ModelPort implements EditorPort {
         return null;
       }
       const text = target as Text;
-      if (boundaryToStream(model, text, 0) !== offset) {
+      if (boundaryToStream(model, text, spot.raw) !== offset) {
         return null;
       }
       return { kind: 'text', node: text, raw: spot.raw };
@@ -1487,6 +1615,15 @@ export class ModelPort implements EditorPort {
     if (type === '') {
       return;
     }
+    // Enter's block escapes (Docs parity): the key on an empty quote line
+    // or a code block's trailing empty line leaves the style instead of
+    // continuing it — the same double-Enter exit the lists already have.
+    // Without this the user cannot leave a quote or a code block with the
+    // keyboard at all (Chromium happily quotes/monospaces forever).
+    if (type === 'insertParagraph' && this.enterEscapesBlock()) {
+      event.preventDefault();
+      return;
+    }
     if (TYPING_INPUT_TYPES.has(type)) {
       if (this.typingGroupOpen) {
         return; // continuation of the open burst
@@ -1499,6 +1636,54 @@ export class ModelPort implements EditorPort {
     this.typingGroupOpen = false;
     this.absorb();
     this.history.openGroup(serialize(this.model));
+  }
+
+  /**
+   * Enter's block escapes (called from onBeforeInput for insertParagraph).
+   *
+   * An EMPTY quote line converts to a plain paragraph — Enter at the end
+   * of a quote, then Enter again on the empty line it produced, leaves
+   * the quote. A code block's trailing EMPTY line splits off into a plain
+   * paragraph after the code — Enter at the end of the code, Enter again,
+   * leaves the block. Both mirror the double-Enter list exit the surface
+   * already has; Enter anywhere else keeps its native behavior.
+   *
+   * Returns true when the Enter was handled and must not reach the
+   * browser.
+   */
+  private enterEscapesBlock(): boolean {
+    const spot = liveCollapsedSpot(this.element);
+    if (!spot) {
+      return false;
+    }
+    let el: HTMLElement | null =
+      spot.kind === 'text' ? spot.node.parentElement : (spot.node as HTMLElement);
+    while (el && el !== this.element && !BLOCK_TAGS.test(el.tagName)) {
+      el = el.parentElement;
+    }
+    if (!el || el === this.element || /^(LI|TD|TH)$/.test(el.tagName)) {
+      return false;
+    }
+
+    if (el.tagName === 'BLOCKQUOTE') {
+      if (!blockIsTextuallyBlank(el)) {
+        return false;
+      }
+      // The empty quote line becomes a plain paragraph in place; the
+      // caret stays where the quote's line had it.
+      return this.command((model, coverage) => applyBlockTag(model, coverage, 'p'));
+    }
+
+    if (el.tagName === 'PRE') {
+      // exitPreBlock decides from the caret's model twin whether it sits
+      // on the trailing blank line (element spots ON the pre included);
+      // anything else answers UNCHANGED and the native Enter proceeds.
+      return this.command((model, coverage) =>
+        exitPreBlock(model, this.preferInModel(spot, model, coverage[0])),
+      );
+    }
+
+    return false;
   }
 
   /**
@@ -1565,6 +1750,45 @@ export class ModelPort implements EditorPort {
     // part of the Enter's own group.
     if (type === 'insertParagraph') {
       this.commandInOpenGroup((model) => uncheckEmptyItems(model));
+    }
+  }
+
+  /**
+   * The pending mark's composition twin: an armed mark must wrap the
+   * phrase the IME just composed, not leak past it to the next plain
+   * keystroke. The composition's input events all arrive with
+   * `composing` set (handleInput skips them), so without this pass the
+   * composed text stayed plain while the FIRST keystroke after it came
+   * out alone in the armed format — half a sentence bold, the other half
+   * not. Runs inside the composition's own history group (compositionstart
+   * opened it), so one undo removes phrase + wrap together.
+   */
+  private applyPendingMarkToComposition(): void {
+    const start = this.compositionMarkStart;
+    this.compositionMarkStart = null;
+    if (this.pendingMark === null || start === null) {
+      return;
+    }
+    const selection = captureOffsets(this.element);
+    if (!selection) {
+      return;
+    }
+    const end = Math.max(selection.anchor, selection.focus);
+    if (end <= start) {
+      return; // a cancelled composition — the arm stays for the next insertion
+    }
+    const mark = this.pendingMark;
+    this.pendingMark = null;
+    const tag =
+      mark === 'super' ? 'sup' : mark === 'sub' ? 'sub' : FORMAT_MARKS[mark as FormatCommand];
+    const wrapped = this.commandInOpenGroup((model) => toggleMark(model, [start, end], tag));
+    if (wrapped) {
+      // Collapse the caret to the wrapped run's end — the keep-selected
+      // restore would otherwise REPLACE the phrase with the next keystroke.
+      const now = captureOffsets(this.element);
+      if (now) {
+        this.reselect({ anchor: now.focus, focus: now.focus }, streamLengthOf(this.element));
+      }
     }
   }
 

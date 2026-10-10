@@ -578,6 +578,10 @@ export class TabManager {
     this.persist();
     this.refreshTabLabel(active.id);
     this.editor.trigger('focus');
+    // The pill (and anything else riding the active-note change) refreshes
+    // here too — clear used to leave the old counts up until the next
+    // keystroke.
+    this.notifyActiveChanged();
   }
 
   /**
@@ -850,9 +854,17 @@ export class TabManager {
     const closeNow = async (): Promise<void> => {
       // Keep a safety snapshot behind the user's back, like delete-notes does.
       // Await so the snapshot actually lands before the tab is removed.
+      // The snapshot must capture THE CLOSING TAB — createSnapshot() reads
+      // the ACTIVE note, so closing a background tab stored the wrong
+      // note (or none, when the active note declined as empty/duplicate).
       if (text.trim() && window.snapshotsManager) {
         try {
-          await window.snapshotsManager.createSnapshot(`Before closing "${deriveTabTitle(tab)}"`);
+          await window.snapshotsManager.createSnapshotFromNote(
+            tab.content,
+            tab.noteType,
+            tab.id,
+            `Before closing "${deriveTabTitle(tab)}"`,
+          );
         } catch {
           /* snapshots unavailable — the close still proceeds */
         }

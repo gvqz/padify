@@ -46,6 +46,11 @@ export function initSaveIndicator(notepad: NotepadUI, tabManager: TabManager): v
     // the write's own resolution drives the warning below.
     if (storageSaveHealth().state !== 'failing') {
       $saveState.removeClass('saving save-error').find('.save-state-text').text('Saved');
+      // A still-pending fade belongs to the PREVIOUS "Saved" — back-to-back
+      // persists must not fade the chip early relative to the newest one.
+      if (saveFadeTimer) {
+        clearTimeout(saveFadeTimer);
+      }
       saveFadeTimer = setTimeout(function () {
         saveFadeTimer = null;
         $saveState.addClass('fade');

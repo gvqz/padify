@@ -40,6 +40,21 @@ body.dark .ucp-modal .modal-content {
   opacity: 1;
 }
 
+/* Bootstrap 3's modal-header/footer clearfix (::before/::after as
+   display:table items) becomes two extra zero-width FLEX children in our
+   flex rows — space-between splits the free room into three gaps, pulling
+   the title and the close button toward the center. Every modal frame in
+   this app is flex; the float clearfix is never wanted, so retire the
+   pseudo-elements globally (same guard the snapshots footer and the
+   unicode-picker footer already carried). */
+body .modal-header:before,
+body .modal-header:after,
+body .modal-footer:before,
+body .modal-footer:after {
+  content: none;
+  display: none;
+}
+
 /* Header / footer — quiet dividers */
 body .modal-header,
 body #snapshotsModal .modal-header {
@@ -192,6 +207,14 @@ body .about-notice {
   font-size: 12px;
 }
 
+/* The legacy pale-blue card (navbar.css .about-notice) has no dark
+   counterpart — inside the near-black modal it drops text contrast to
+   about 2.2:1. Retire the tint + warm shadow in dark mode. */
+body.dark .about-notice {
+  background: var(--vz-bg-subtle);
+  box-shadow: none;
+}
+
 body .about-modal-logo {
   border-radius: var(--vz-radius-md);
 }
@@ -244,3 +267,9 @@ body.dark .sticky-notice a {
   color: var(--vz-primary-fg);
 }
 
+/* The legacy .dark .sticky-notice keeps a 17px glow + bold — the vercel
+   skin's quiet pill look instead. */
+body.dark .sticky-notice {
+  box-shadow: var(--vz-shadow-pill, none);
+  font-weight: 500;
+}

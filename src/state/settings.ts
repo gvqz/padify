@@ -42,11 +42,9 @@ export const SETTING_KEYS = [
   'dyslexicFont',
   'serifFont',
   'userChosenSpellCheck',
-  'userChosenTabIndentation',
-  'userChosenTypewriterSound',
-  'userChosenTypewriterVolume',
   'userChosenBreakReminders',
   'userChosenExplodingEffect',
+  'userChosenExplodingEffectStyle',
   'selectedFont',
 ] as const;
 
@@ -67,10 +65,9 @@ export interface EditorDefaults {
   defaultOptimalLineLength: boolean;
   defaultOptimalLineLengthPadding: string;
   defaultSpellCheck: boolean;
-  defaultTypewriterSound: boolean;
-  defaultTypewriterVolume: number;
   defaultBreakReminders: boolean;
   defaultExplodingEffect: boolean;
+  defaultExplodingEffectStyle: string;
 }
 
 export const DEFAULT_EDITOR_CONFIG: EditorDefaults = {
@@ -83,10 +80,9 @@ export const DEFAULT_EDITOR_CONFIG: EditorDefaults = {
   defaultOptimalLineLength: false,
   defaultOptimalLineLengthPadding: '15px 24px 80px',
   defaultSpellCheck: true,
-  defaultTypewriterSound: false,
-  defaultTypewriterVolume: 25,
   defaultBreakReminders: false,
   defaultExplodingEffect: false,
+  defaultExplodingEffectStyle: 'classic',
 };
 
 export function isSettingKey(key: string): key is SettingKey {

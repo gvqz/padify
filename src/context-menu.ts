@@ -56,6 +56,7 @@ import {
   mdTableOp,
   mdUndo,
   markdownMenuTarget,
+  markdownViewMode,
 } from './editor/markdown/menu-actions';
 
 // --- Note-level actions -----------------------------------------------
@@ -569,7 +570,12 @@ class ContextMenu {
     if (insertLinkItem) {
       insertLinkItem.hidden = !(isRich || isMd) || inLink;
     }
-    const inTable = isMd ? !!mdCaret?.inTable : !!safeQueryPort(() => port?.queryTableContext());
+    // Table ops only run in the WYSIWYG (runMarkdownTableAction declines
+    // while the source pane is live) — in source/split the rows would render
+    // for any pipe-led line and silently do nothing.
+    const inTable = isMd
+      ? !!mdCaret?.inTable && markdownViewMode() === 'edit'
+      : !!safeQueryPort(() => port?.queryTableContext());
     this.menu.querySelectorAll<HTMLElement>('.padify-ctx-table').forEach((item) => {
       item.hidden = !inTable;
     });

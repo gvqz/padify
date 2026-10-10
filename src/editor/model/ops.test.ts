@@ -328,3 +328,43 @@ describe('insertPlainText', () => {
     expect(out(model)).toBe('goodbye world');
   });
 });
+
+describe('the ranged-selection boundary round (issues #61, #62)', () => {
+  it('a heading applied from a line-2 start never formats line 1', () => {
+    const model = modelOf('<div>AAA</div><div>BBB</div><div>CCC</div>');
+    expect(applyBlockTag(model, [3, 9], 'h1').changed).toBe(true);
+    expect(out(model)).toBe('<div>AAA</div><h1>BBB</h1><h1>CCC</h1>');
+  });
+
+  it('a triple-click of line 2 turns line 2 only into a list', () => {
+    const model = modelOf('<div>AAA</div><div>BBB</div>');
+    expect(toggleListKind(model, [3, 6], 'ul').changed).toBe(true);
+    expect(out(model)).toBe('<div>AAA</div><ul><li>BBB</li></ul>');
+  });
+
+  it('a selection from a root-text boundary covers the FOLLOWING block only', () => {
+    const model = modelOf('intro text<div>line</div>');
+    expect(applyBlockTag(model, [10, 14], 'h1').changed).toBe(true);
+    expect(out(model)).toBe('intro text<h1>line</h1>');
+  });
+
+  it('a selection rooted INSIDE root text still materializes its whole run', () => {
+    const model = modelOf('intro text<div>line</div>');
+    expect(applyBlockTag(model, [2, 14], 'h1').changed).toBe(true);
+    expect(out(model)).toBe('<h1>intro text</h1><h1>line</h1>');
+  });
+
+  it('the checklist button converts a bullet list IN PLACE (issue #61)', () => {
+    const model = modelOf('<ul><li>alpha</li><li>beta</li></ul><div>tail</div>');
+    expect(toggleListKind(model, [2, 2], 'checklist').changed).toBe(true);
+    expect(out(model)).toBe(
+      '<ul data-rich-checklist="true"><li data-checked="false">alpha</li><li data-checked="false">beta</li></ul><div>tail</div>',
+    );
+  });
+
+  it('the checklist button inside a table cell is a clean no-op (no stray list at the end)', () => {
+    const model = modelOf('<table><tbody><tr><td>cell</td></tr></tbody></table>');
+    expect(toggleListKind(model, [1, 1], 'checklist').changed).toBe(false);
+    expect(out(model)).toBe('<table><tbody><tr><td>cell</td></tr></tbody></table>');
+  });
+});

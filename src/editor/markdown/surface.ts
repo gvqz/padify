@@ -5,13 +5,15 @@
  * Milkdown v7 ships no default styling, so every pixel it shows is ours).
  *
  * WHAT THE USER SEES. The note's SOURCE (markdown text, stored byte-exact
- * like every 'text' note) is edited in a what-you-get-is-what-you-mean
- * view: headings look like headings, lists behave like lists, tables are
- * editable. A Split toggle parks the owned renderer's live output beside
- * the editor (both panes on screen, the preview a beat behind the
- * typing); a Preview toggle swaps to that output full-width (the same
- * pipeline share links and HTML export use, so "preview" always means
- * "the truth").
+ * like every 'text' note) edits in the user's choice of two panes: the
+ * VISUAL mode (the what-you-get-is-what-you-mean view: headings look
+ * like headings, lists behave like lists, tables are editable) or the
+ * SOURCE mode (the raw markdown, typed as plain text with GitHub-style
+ * keyboard behavior — lists continue, Tab indents, Ctrl+B wraps). The
+ * Split mode pairs the SOURCE pane with the owned renderer's live
+ * output (both on screen, the preview a beat behind the typing); the
+ * Preview mode swaps to that output full-width (the same pipeline share
+ * links and HTML export use, so "preview" always means "the truth").
  *
  * HOW IT OWNS THE HOST. The surface mounts a wrapper inside the #note
  * host and sets the host itself contenteditable=false — the wrapper's
@@ -68,6 +70,13 @@ import type { EditorView } from '@milkdown/kit/prose/view';
 import { slash, hideMarkdownSlash } from './slash';
 import { bubble, hideMarkdownBubble } from './bubble';
 import { attachBlockHandle, blockHandle, detachBlockHandle, hideBlockHandle } from './block-handle';
+import {
+  applyEdit,
+  continueListOnEnter,
+  indentLines,
+  sourceSelectionState,
+  toggleWrap,
+} from './source-edit';
 
 // ProseMirror's own base styles (outline discipline, table selection,
 // gap cursor) — the katex CSS import in editor/math.ts is the precedent
@@ -78,7 +87,9 @@ import '@milkdown/kit/prose/gapcursor/style/gapcursor.css';
 
 import { htmlToText } from '../note-content';
 import { renderMathIn } from '../math';
+import { isApplePlatform } from '../../lib/platform';
 import { registerNoteSurface, type NoteSurface, type SurfaceNote } from '../surface';
+import type { MarkdownSelectionState } from './selection-state';
 import { renderMarkdownToHtml } from './render';
 import {
   MATH_BLOCK_NODE,
@@ -87,34 +98,13 @@ import {
   markdownMath,
   markdownNodeViews,
   openLinkClickPlugin,
+  padifyParagraphSchema,
   safeImageSchema,
   taskTogglePlugin,
 } from './nodes';
 
 /** What the toolbar's pressed-state pass wants to know about the caret. */
-export interface MarkdownSelectionState {
-  bold: boolean;
-  italic: boolean;
-  strikethrough: boolean;
-  code: boolean;
-  link: boolean;
-  /** The href at the caret/selection (the link chip's Open/Copy/Edit). */
-  linkHref: string | null;
-  /** Heading level when the caret's block IS a heading; null otherwise. */
-  heading: number | null;
-  blockquote: boolean;
-  bulletList: boolean;
-  orderedList: boolean;
-  /** The caret sits in a GFM task item (checkbox column). */
-  task: boolean;
-  codeBlock: boolean;
-  /** The selection IS an equation node (the bubble's edit mode). */
-  math: 'inline' | 'block' | null;
-  /** The selection IS an image chip. */
-  image: boolean;
-  /** The caret sits inside a table (the table-ops menu). */
-  inTable: boolean;
-}
+export type { MarkdownSelectionState } from './selection-state';
 
 /** One mounted Milkdown instance + everything its surface needs. */
 interface LiveMarkdown {
@@ -131,6 +121,8 @@ interface LiveMarkdown {
    * swallowed (opening a note is not editing it).
    */
   silentDoc: ProseNode | null;
+  /** The source pane (the raw-markdown textarea), when a pane owns the edit. */
+  source: HTMLTextAreaElement | null;
   /** The preview pane (owned-renderer output), rendered on demand. */
   preview: HTMLElement;
 }
@@ -146,13 +138,31 @@ let live: LiveMarkdown | null = null;
 const EMPTY_HISTORY_STATE: unknown = proseHistory().spec.state?.init({}, {} as never);
 
 /**
- * The surface's presentation modes: 'edit' (the WYSIWYG alone), 'split'
- * (WYSIWYG left, the owned renderer's live output right), 'preview'
- * (the renderer alone). Split is a WORKING mode — it survives note
- * switches; preview is a reading gesture — every display resets it.
+ * The surface's presentation modes: 'edit' (the WYSIWYG alone), 'source'
+ * (the raw markdown alone), 'split' (the source left, the owned
+ * renderer's live output right), 'preview' (the renderer alone). The
+ * working modes (edit/source/split) survive note switches; preview is a
+ * reading gesture — every display resets it to the last working mode.
  */
-export type MarkdownViewMode = 'edit' | 'split' | 'preview';
+export type MarkdownViewMode = 'edit' | 'source' | 'split' | 'preview';
 let viewMode: MarkdownViewMode = 'edit';
+/** The mode preview resets back to (the last working one). */
+let lastWorkingMode: MarkdownViewMode = 'edit';
+
+/** True when the raw-textarea pane owns the editing (source or split). */
+function usesSourcePane(mode: MarkdownViewMode): boolean {
+  return mode === 'source' || mode === 'split';
+}
+
+/** True while the source textarea is the live editing pane. */
+export function markdownSourceActive(): boolean {
+  return !!live && live.root.isConnected && usesSourcePane(viewMode) && !!live.source;
+}
+
+/** The live source textarea (the toolbar/context-menu seam); null when absent. */
+export function markdownSourceTextarea(): HTMLTextAreaElement | null {
+  return live && live.root.isConnected && usesSourcePane(viewMode) ? live.source : null;
+}
 
 const selectionListeners = new Set<(state: MarkdownSelectionState) => void>();
 const viewModeListeners = new Set<(mode: MarkdownViewMode) => void>();
@@ -170,6 +180,27 @@ export function markdownEditorHandle(): { editor: Editor; view: EditorView } | n
   return { editor: live.editor, view: live.view };
 }
 
+/**
+ * Puts the caret in the pane that owns the edit — the toolbar's view
+ * buttons and the top bar's split icon call this right after a flip (a
+ * click parks focus on the button; without handing it back, the next
+ * Space would activate the ARIA toolbar instead of typing).
+ */
+export function focusMarkdownPane(): void {
+  const target = live && live.root.isConnected ? focusTargetForMode() : null;
+  target?.focus();
+}
+
+function focusTargetForMode(): HTMLElement | null {
+  if (!live) {
+    return null;
+  }
+  if (usesSourcePane(viewMode)) {
+    return live.source;
+  }
+  return live.view?.dom ?? null;
+}
+
 /** Registers for caret-driven pressed-state updates; returns unlisten. */
 export function onMarkdownSelection(fn: (state: MarkdownSelectionState) => void): () => void {
   selectionListeners.add(fn);
@@ -183,21 +214,66 @@ export function onMarkdownViewMode(fn: (mode: MarkdownViewMode) => void): () => 
 }
 
 /**
- * Flips the view mode (edit / split / preview). Split and preview
- * re-render the pane from the LIVE markdown — the same owned-renderer
- * pass, so all three views agree by construction.
+ * Flips the view mode (edit / source / split / preview). Crossing into
+ * or out of the source pane syncs its content (the WYSIWYG is the
+ * source of truth leaving, the textarea entering — every view of the
+ * note agrees by construction). Split and preview re-render the pane
+ * from the LIVE markdown — the same owned-renderer pass.
  */
 export function setMarkdownViewMode(mode: MarkdownViewMode): void {
+  const previous = viewMode;
   viewMode = mode;
+  if (mode !== 'preview') {
+    lastWorkingMode = mode;
+  }
   if (live && live.root.isConnected) {
-    live.root.classList.toggle('markdown-preview-mode', mode === 'preview');
+    if (usesSourcePane(mode) && !usesSourcePane(previous)) {
+      pullEditorIntoSource();
+    }
+    if (!usesSourcePane(mode) && usesSourcePane(previous)) {
+      pushSourceIntoEditor();
+    }
+    live.root.classList.toggle('markdown-source-mode', mode === 'source');
     live.root.classList.toggle('markdown-split-mode', mode === 'split');
-    live.preview.hidden = mode === 'edit';
+    live.root.classList.toggle('markdown-preview-mode', mode === 'preview');
+    live.preview.hidden = mode !== 'split' && mode !== 'preview';
     if (mode !== 'edit') {
+      // The WYSIWYG-only chrome stands down while another pane owns the
+      // surface (the bubble/slash live in document.body; the grip floats
+      // over blocks that are no longer visible).
+      hideMarkdownBubble();
+      hideMarkdownSlash();
+      hideBlockHandle();
       renderLivePreview();
     }
   }
   viewModeListeners.forEach((fn) => fn(mode));
+}
+
+/** Copies the WYSIWYG's markdown into a fresh source pane (entering source/split). */
+function pullEditorIntoSource(): void {
+  if (!live) {
+    return;
+  }
+  const content = live.editor ? live.editor.action(getMarkdown()) : (live.pending ?? '');
+  rebuildSourcePane(content);
+  scheduleSplitRender();
+}
+
+/**
+ * Hands the source pane's markdown back to the WYSIWYG (leaving
+ * source/split). A wholesale replace — only when the text actually
+ * changed — with the history reset it implies (the doc changed through
+ * a path the history cannot merge; undo never crosses it).
+ */
+function pushSourceIntoEditor(): void {
+  if (!live || !live.source || !live.editor) {
+    return;
+  }
+  const text = live.source.value;
+  if (text !== live.editor.action(getMarkdown())) {
+    applyContent(text);
+  }
 }
 
 /** The current view mode (the toolbar's segmented control reads it). */
@@ -205,23 +281,40 @@ export function markdownViewMode(): MarkdownViewMode {
   return viewMode;
 }
 
-/** Renders the preview pane from the live editor's markdown. */
+/** The markdown the note currently holds — the pane that owns the edit answers. */
+function liveMarkdown(): string {
+  if (live && live.root.isConnected && usesSourcePane(viewMode) && live.source) {
+    return live.source.value;
+  }
+  if (live?.editor) {
+    return live.editor.action(getMarkdown());
+  }
+  return live?.pending ?? '';
+}
+
+/** Renders the preview pane from the live markdown. */
 function renderLivePreview(): void {
-  if (!live || !live.editor) {
+  if (!live) {
     return;
   }
-  const source = live.editor.action(getMarkdown());
+  const source = liveMarkdown();
   live.preview.innerHTML = renderMarkdownToHtml(source);
   renderMathIn(live.preview);
+  if (viewMode === 'split' && live.source) {
+    syncSplitScroll(live.source, live.preview);
+  }
 }
 
 /** The split pane's re-render debounce — typing stays smooth, the pane settles a beat behind. */
 const SPLIT_RENDER_DEBOUNCE_MS = 250;
 let splitRenderTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Schedules the split pane's re-render (the markdownUpdated hook). */
+/** Schedules the rendered pane's re-render (the markdownUpdated hook).
+ *  Covers BOTH read panes: split while editing, and preview — the context
+ *  menu and dictation stay live in preview mode, and their edits used to
+ *  land invisibly under a frozen preview. */
 function scheduleSplitRender(): void {
-  if (viewMode !== 'split') {
+  if (viewMode !== 'split' && viewMode !== 'preview') {
     return;
   }
   if (splitRenderTimer !== null) {
@@ -229,7 +322,7 @@ function scheduleSplitRender(): void {
   }
   splitRenderTimer = setTimeout(() => {
     splitRenderTimer = null;
-    if (viewMode === 'split') {
+    if (viewMode === 'split' || viewMode === 'preview') {
       renderLivePreview();
     }
   }, SPLIT_RENDER_DEBOUNCE_MS);
@@ -256,16 +349,21 @@ export class MarkdownNoteSurface implements NoteSurface {
       this.mount(host, content);
     }
     // Preview is a reading gesture, not a per-note setting — every
-    // display resets it. Split is a working mode: it survives note
-    // switches, and a fresh mount re-applies it (the wrapper starts
-    // in the editing layout).
-    setMarkdownViewMode(viewMode === 'preview' ? 'edit' : viewMode);
+    // display resets it to the last working mode. The working modes
+    // (edit/source/split) survive note switches, and a fresh mount
+    // re-applies the current one (the wrapper starts unstyled).
+    setMarkdownViewMode(viewMode === 'preview' ? lastWorkingMode : viewMode);
     host.scrollTop = 0;
   }
 
   capture(host: HTMLElement | null): string | null {
     if (!live || live.host !== host || !live.root.isConnected) {
       return null;
+    }
+    // The pane that owns the edit answers — the textarea while the
+    // source/split view is live, the WYSIWYG otherwise.
+    if (live.source && usesSourcePane(viewMode)) {
+      return live.source.value;
     }
     if (live.editor) {
       return live.editor.action(getMarkdown());
@@ -293,7 +391,17 @@ export class MarkdownNoteSurface implements NoteSurface {
   }
 
   insertText(host: HTMLElement | null, text: string): boolean {
-    if (!live || live.host !== host || !live.view) {
+    if (!live || live.host !== host || !live.root.isConnected) {
+      return false;
+    }
+    if (live.source && usesSourcePane(viewMode)) {
+      // The textarea's own edit path: native undo, input announce.
+      const ta = live.source;
+      applyEdit(ta, ta.selectionStart, ta.selectionEnd, text, ta.selectionStart + text.length);
+      scheduleSplitRender();
+      return true;
+    }
+    if (!live.view) {
       return false;
     }
     const { state } = live.view;
@@ -305,13 +413,17 @@ export class MarkdownNoteSurface implements NoteSurface {
   }
 
   focusTarget(host: HTMLElement): HTMLElement | null {
-    if (!live || live.host !== host || !live.root.isConnected || !live.view) {
+    if (!live || live.host !== host || !live.root.isConnected) {
       return null;
     }
-    // The ProseMirror root. The host itself is contenteditable=false and
-    // cannot take the caret — focusing it landed on <body>, so the first
+    // The pane that owns the edit: the textarea in source/split, the
+    // ProseMirror root otherwise. The host itself is contenteditable=false
+    // and cannot take the caret — focusing it landed on <body>, so the first
     // keystrokes after a switch went nowhere until the user clicked.
-    return live.view.dom;
+    if (live.source && usesSourcePane(viewMode)) {
+      return live.source;
+    }
+    return live.view ? live.view.dom : null;
   }
 
   /**
@@ -354,13 +466,40 @@ export class MarkdownNoteSurface implements NoteSurface {
 
     const root = document.createElement('div');
     root.className = 'markdown-surface';
+    const source = buildSourcePane(host, content);
     const preview = document.createElement('div');
     preview.className = 'markdown-preview';
     preview.hidden = true;
-    root.append(preview);
+    root.append(source, preview);
     host.append(root);
 
-    live = { host, root, editor: null, view: null, pending: content, silentDoc: null, preview };
+    live = {
+      host,
+      root,
+      editor: null,
+      view: null,
+      pending: content,
+      silentDoc: null,
+      source,
+      preview,
+    };
+
+    // Ctrl/Cmd+K opens the link popover — the shortcuts reference and the
+    // bubble button both advertise it, but the document-level binding used
+    // to win and pop the keyboard-shortcuts modal instead. Claimed here on
+    // the surface root so BOTH panes (WYSIWYG and source textarea) get it.
+    root.addEventListener('keydown', (event) => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.code === 'KeyK'
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        document.dispatchEvent(new CustomEvent('padify:open-link'));
+      }
+    });
 
     void Editor.make()
       .config((ctx) => {
@@ -370,7 +509,9 @@ export class MarkdownNoteSurface implements NoteSurface {
           ...prev,
           attributes: {
             class: 'padify-markdown',
-            spellcheck: 'true',
+            // The host's own spellcheck state (the Settings > Text
+            // toggle writes it there); ON by default when unset.
+            spellcheck: host.getAttribute('spellcheck') === 'false' ? 'false' : 'true',
             role: 'textbox',
             'aria-multiline': 'true',
             translate: 'no',
@@ -405,6 +546,7 @@ export class MarkdownNoteSurface implements NoteSurface {
       .use(clipboard)
       .use(markdownMath)
       .use(safeImageSchema)
+      .use(padifyParagraphSchema)
       .use(listener)
       .use(history)
       .use(taskTogglePlugin)
@@ -445,12 +587,138 @@ export class MarkdownNoteSurface implements NoteSurface {
     if (!live) {
       return;
     }
+    if (usesSourcePane(viewMode)) {
+      // The source pane is rebuilt wholesale: a fresh textarea carries a
+      // fresh NATIVE undo stack, so undo can never resurrect the previous
+      // note's words (the same doctrine the WYSIWYG's history reset holds).
+      if (!live.source) {
+        live.source = buildSourcePane(live.host, content);
+        live.root.prepend(live.source);
+      } else {
+        rebuildSourcePane(content);
+      }
+    }
     if (!live.editor) {
       live.pending = content;
       return;
     }
     applyContent(content);
   }
+}
+
+/**
+ * Builds the source pane (the raw-markdown textarea) wired for the
+ * source/split modes. The textarea inherits #note's spellcheck state —
+ * the Settings > Text toggle reaches it live, the one thing the
+ * WYSIWYG root cannot do (it pins its own attribute at mount).
+ */
+function buildSourcePane(host: HTMLElement, content: string): HTMLTextAreaElement {
+  const source = document.createElement('textarea');
+  source.className = 'markdown-source';
+  source.value = content;
+  source.setAttribute('aria-label', 'Markdown source');
+  source.placeholder =
+    host.dataset.placeholder ??
+    'Type your notes here and when you come back all your notes will be right here...';
+  wireSourcePane(source);
+  return source;
+}
+
+/**
+ * Replaces the source pane with a fresh one carrying the content — the
+ * reliable way to reset the textarea's native undo stack between notes.
+ */
+function rebuildSourcePane(content: string): void {
+  if (!live) {
+    return;
+  }
+  const fresh = buildSourcePane(live.host, content);
+  if (live.source && live.source.parentElement === live.root) {
+    live.source.replaceWith(fresh);
+  } else {
+    live.root.prepend(fresh);
+  }
+  live.source = fresh;
+}
+
+/** The source pane's keyboard grammar (GitHub's source editor). */
+function wireSourcePane(source: HTMLTextAreaElement): void {
+  // Every keystroke that can move the caret or change the selection
+  // refreshes the toolbar's pressed states (the selectionUpdated parity).
+  const notify = (): void => {
+    if (markdownSourceTextarea() === source) {
+      selectionListeners.forEach((fn) => fn(sourceSelectionState(source)));
+    }
+  };
+  for (const type of ['keyup', 'mouseup', 'click', 'focus', 'input'] as const) {
+    source.addEventListener(type, () => {
+      notify();
+      if (type === 'input') {
+        scheduleSplitRender();
+      }
+    });
+  }
+
+  source.addEventListener('keydown', (event) => {
+    // Ctrl/Cmd shortcuts — the WYSIWYG's own bindings, source-edition.
+    if (event[isApplePlatform() ? 'metaKey' : 'ctrlKey'] && !event.altKey) {
+      const key = event.key.toLowerCase();
+      if (key === 'b') {
+        event.preventDefault();
+        toggleWrap(source, '**');
+        notify();
+        return;
+      }
+      if (key === 'i') {
+        event.preventDefault();
+        toggleWrap(source, '*');
+        notify();
+        return;
+      }
+      if (key === 'e') {
+        event.preventDefault();
+        toggleWrap(source, '`');
+        notify();
+        return;
+      }
+      if (key === 'x' && event.shiftKey) {
+        event.preventDefault();
+        toggleWrap(source, '~~');
+        notify();
+        return;
+      }
+      return; // Ctrl+Z/Y and friends stay native.
+    }
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      indentLines(source, event.shiftKey ? -1 : 1);
+      notify();
+      return;
+    }
+    if (event.key === 'Enter' && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
+      if (continueListOnEnter(source)) {
+        event.preventDefault();
+        notify();
+      }
+    }
+  });
+
+  // The split preview follows the pane's scroll, proportionally.
+  source.addEventListener('scroll', () => {
+    if (viewMode === 'split' && live?.preview) {
+      syncSplitScroll(source, live.preview);
+    }
+  });
+}
+
+/** One-way proportional scroll sync: the source pane leads, the preview follows. */
+function syncSplitScroll(source: HTMLTextAreaElement, preview: HTMLElement): void {
+  const sourceRange = source.scrollHeight - source.clientHeight;
+  if (sourceRange <= 0) {
+    return;
+  }
+  const previewRange = preview.scrollHeight - preview.clientHeight;
+  preview.scrollTop = (source.scrollTop / sourceRange) * Math.max(0, previewRange);
 }
 
 /** Applies content to the live editor (the silent, non-announcing path). */
@@ -820,6 +1088,10 @@ function notifySelection(selection: EditorView['state']['selection']): void {
  * markdown layer (and tests) ask synchronously instead of subscribing.
  */
 export function markdownSelectionStateNow(): MarkdownSelectionState | null {
+  const source = markdownSourceTextarea();
+  if (source) {
+    return sourceSelectionState(source);
+  }
   const handle = markdownEditorHandle();
   if (!handle) {
     return null;
@@ -834,6 +1106,12 @@ export function markdownSelectionStateNow(): MarkdownSelectionState | null {
  * buttons a beat behind the document.
  */
 export function refreshMarkdownSelectionState(): void {
+  const source = markdownSourceTextarea();
+  if (source) {
+    const state = sourceSelectionState(source);
+    selectionListeners.forEach((fn) => fn(state));
+    return;
+  }
   const handle = markdownEditorHandle();
   if (!handle) {
     return;
@@ -845,10 +1123,18 @@ export function refreshMarkdownSelectionState(): void {
 /**
  * The single character before the caret ('' at the note's start) — the
  * dictation pass's smart spacing/capitalisation input. Answers from the
- * live markdown document so voice typing behaves exactly as it does on
- * the html surface.
+ * live pane (the textarea in source/split, the markdown document in
+ * edit) so voice typing behaves exactly as it does on the html surface.
  */
 export function markdownCharBeforeCaret(): string {
+  const source = markdownSourceTextarea();
+  if (source) {
+    const { selectionStart, selectionEnd } = source;
+    if (selectionStart !== selectionEnd || selectionStart === 0) {
+      return '';
+    }
+    return source.value[selectionStart - 1] ?? '';
+  }
   const handle = markdownEditorHandle();
   if (!handle) {
     return '';

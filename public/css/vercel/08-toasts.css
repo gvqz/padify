@@ -11,6 +11,10 @@
    retired — every transient confirmation rides this element now, with a
    monochrome tone glyph instead of Swal's icon set. */
 body #toast {
+  /* The toast must top every overlay (the legacy rule left it at z-index 1,
+     invisible behind modals — "Snapshot created!" fired from inside the
+     snapshots modal rendered behind the backdrop). */
+  z-index: var(--z-toast);
   background: #171717;
   color: #fafafa;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -306,6 +310,8 @@ body .swal2-html-container {
   line-height: 1.55;
 }
 
+body .swal2-styled.swal2-confirm,
+body .swal2-styled.swal2-cancel,
 body .swal2-styled {
   border-radius: var(--vz-radius) !important;
   font-weight: 500;

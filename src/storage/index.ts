@@ -109,11 +109,9 @@ const LEGACY_KV_KEYS: readonly string[] = [
   'userChosenTexture',
   'userChosenOptimalLineLengthSelected',
   'userChosenSpellCheck',
-  'userChosenTabIndentation',
-  'userChosenTypewriterSound',
-  'userChosenTypewriterVolume',
   'userChosenBreakReminders',
   'userChosenExplodingEffect',
+  'userChosenExplodingEffectStyle',
   'hasUserDismissedDonationPopup',
   'breakReminderState',
   // tabs
@@ -126,9 +124,9 @@ const LEGACY_KV_KEYS: readonly string[] = [
   'timerChime',
   'timerChimeSound',
   'lastCustomTimerMinutes',
-  // music + ambience
+  // music (ambience now rides the player as regular tracks)
   'padify-music-state',
-  'ambient-noise-presets',
+  'padify-music-library',
   // cloud
   'padifyCloudConfig',
   'padifySession',
