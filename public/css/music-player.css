@@ -451,6 +451,10 @@ body.dark .mp-mini {
   gap: 2px;
   border-radius: var(--vz-radius-md);
   transition: background 0.12s var(--vz-ease);
+  /* The row's ⋯ menu (position:absolute, top: calc(100% - 6px)) needs the
+     ROW as its containing block — without this it resolves to .mp-body
+     and opens 300px below, pinned to the modal's bottom edge. */
+  position: relative;
 }
 
 #musicPlayerModal .sp-row:hover,
@@ -1116,7 +1120,9 @@ body.dark .mp-mini {
 .mp-mini {
   position: fixed;
   right: 18px;
-  bottom: 18px;
+  /* Clear the .bottom-line pills (word count, timer — absolute, right
+     1.4em / bottom 1.2em): 56px clears the tallest pill stack. */
+  bottom: 56px;
   z-index: 1900;
   display: flex;
   align-items: center;

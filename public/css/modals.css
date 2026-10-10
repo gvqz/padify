@@ -60,7 +60,9 @@ body.dark .stat-value {
 
 #keyboardShortcutsModal .modal-body {
   padding: 8px 20px 20px;
-  max-height: calc(100vh - 190px);
+  /* 190px underestimated the real header+footer chrome — the dialog poked
+     ~9px below an 800px viewport. 220px keeps the whole frame on screen. */
+  max-height: calc(100vh - 220px);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
