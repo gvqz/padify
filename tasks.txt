@@ -3,13 +3,13 @@ Future feature list
         Before fixing bugs think about the underlying reason to why this bug exists in the first place, is there a bigger thing that needs to be fixed, should archecture be changed?
 
 Visual overhauls:
-        - snapshots menu
+        - snapshots menu + structural overhual
         - cloud sync/share
         - settings menu
                 - have settings based on each note type(classic, markdown, RTN, etc)
         - Statistics menu + add more fun statistics, the current visual menu looks bad. Clicking on the text should rotate the stat (ex it says 1961 characters but when I click that text it switches to 340 words etc)
-        - Music menu: this also needs an archecture overhaul/work. Currently the alwaysdata server hasn't been setup so it has not been tested and very much likely doesn't work as intended, delay changing this until specifically instructed with the words "music menu"
-                        - mini music player ui: will go where break reminder popup shows up now (the popup's JS anchor — anchorBreakPopup — is the shared hook for it)
+                        - another new mini music player ui: will go where break reminder popup shows up now (the popup's JS anchor — anchorBreakPopup — is the shared hook for it)
+                                users should be able to choose between current one(right) and the sidebar one(which is not made yet)
                 - unicode menu. I don't know what to do with this right now, it's a bit broken and looks bad.
 
 
