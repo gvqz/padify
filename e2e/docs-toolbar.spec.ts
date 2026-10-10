@@ -28,6 +28,10 @@ async function createRichNote(page: Page): Promise<void> {
   await expect(page.locator('#richToolbar')).toBeVisible();
 }
 
+async function noteHtml(page: import('@playwright/test').Page): Promise<string> {
+  return page.evaluate(() => document.querySelector('#note')!.innerHTML);
+}
+
 test.describe('docs toolbar', () => {
   test('size, color, alignment, divider and superscript survive a reload', async ({ page }) => {
     await page.goto('/');
@@ -102,6 +106,40 @@ test.describe('docs toolbar', () => {
     await expect(reloaded.locator('hr')).toHaveCount(1);
     await expect(reloaded.locator('sup')).toHaveText('4');
     await expect(page.locator('#richToolbar')).toBeVisible();
+  });
+
+  test('a heading applied to a multi-line selection never formats the line above (issue #62)', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await createRichNote(page);
+
+    const editor = page.locator('#note');
+    await editor.click();
+    await page.keyboard.type('line one');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('line two');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('line three');
+
+    // Select from the very START of line two through the end of line
+    // three, then apply a heading: lines two and three turn; line one
+    // must stay a plain paragraph.
+    await page.keyboard.press('ArrowUp'); // from line three's end to line two
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Shift+ArrowDown');
+    await page.keyboard.press('Shift+ArrowDown');
+    await page.keyboard.press('Shift+End');
+    await page.locator('[data-rich-menu="block"]').click();
+    await page.locator('[data-rich-block="h1"]').click();
+
+    const headings = editor.locator('h1');
+    await expect(headings).toHaveCount(2);
+    await expect(headings.first()).toHaveText('line two');
+    await expect(headings.nth(1)).toHaveText('line three');
+    // Line one stays a plain paragraph — the FIRST child, unselected and
+    // untouched.
+    await expect(await noteHtml(page)).toMatch(/^line one(<div>line one<\/div>)?/);
   });
 
   test('undo and redo buttons step the native history', async ({ page }) => {
