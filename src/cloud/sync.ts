@@ -202,11 +202,18 @@ function storeSession(next: StoredSession | null): void {
   }
 }
 
-function authErrorMessage(message: string): string {
+function authErrorMessage(message: string, mode: 'sign-in' | 'sign-up' = 'sign-in'): string {
   if (/failed to fetch|networkerror|load failed/i.test(message)) {
     return 'Could not reach the sync server. Check your connection and try again.';
   }
   if (/already exists/i.test(message)) {
+    return 'An account with this email already exists — sign in instead.';
+  }
+  if (mode === 'sign-up' && /wrong email or password/i.test(message)) {
+    // The server deliberately answers a duplicate-email signup with the
+    // sign-in 401 (anti-enumeration): on a SIGN-UP form that same body
+    // means the email is taken — the old copy told the user their
+    // (never-set) password was wrong.
     return 'An account with this email already exists — sign in instead.';
   }
   if (/at least 6/i.test(message)) {
@@ -351,7 +358,7 @@ export async function signIn(email: string, password: string): Promise<AuthResul
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, message: authErrorMessage(message) };
+    return { ok: false, message: authErrorMessage(message, 'sign-in') };
   }
 }
 
@@ -373,7 +380,7 @@ export async function signUp(email: string, password: string): Promise<AuthResul
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, message: authErrorMessage(message) };
+    return { ok: false, message: authErrorMessage(message, 'sign-up') };
   }
 }
 
@@ -505,21 +512,8 @@ async function runSyncOnce(): Promise<void> {
     // the moment the note is trimmed under the cap), the rest of the queue
     // flows on without them, and the failure stops being silent: the
     // status carries the reason until the note shrinks or goes.
-    const shippable: NoteRow[] = [];
-    const stuckNames: string[] = [];
-    for (const row of rows) {
-      if (rowUnsyncable(row)) {
-        stuckNames.push(row.name ?? 'A note');
-      } else {
-        shippable.push(row);
-      }
-    }
-    syncWarning =
-      stuckNames.length === 0
-        ? null
-        : stuckNames.length === 1
-          ? `“${stuckNames[0]}” is over the 2 MB sync limit — it stays on this device until it is shortened.`
-          : `${stuckNames.length} notes are over the 2 MB sync limit — they stay on this device until they are shortened.`;
+    const { shippable, stuckNames } = partitionRowsForPush(rows);
+    syncWarning = sizeWarningFor(stuckNames);
 
     try {
       for (const batch of batchRowsForPush(shippable)) {
@@ -548,6 +542,12 @@ async function runSyncOnce(): Promise<void> {
 
   if (merge.changed) {
     manager.applyExternalMerge(merge.tabs);
+  }
+  // NOW the cursor may advance: the pulled rows are merged and the
+  // persist has been issued. A throw above leaves the cursor where it
+  // was, so the next cycle re-pulls instead of skipping.
+  if (pull.v2 && typeof pull.cursor === 'number') {
+    storeCursor(userId, pull.cursor);
   }
 
   if (merge.conflicts.length > 0) {
@@ -609,7 +609,19 @@ async function runSyncOnce(): Promise<void> {
   manager.confirmTombstones(confirmIds);
 
   if (diffRows.length > 0) {
-    await api('/api/notes', { method: 'PUT', body: { v: 2, rows: diffRows } });
+    // The same gate as step 1: oversized rows never leave the device
+    // (they would 400 the whole body — one big note used to wedge EVERY
+    // first sync and every re-push cycle), and the rest ship in
+    // body-capped batches.
+    const { shippable: shippableDiff, stuckNames: stuckDiffNames } = partitionRowsForPush(diffRows);
+    const diffWarning = sizeWarningFor(stuckDiffNames);
+    if (diffWarning) {
+      // Fold into step 1's copy when both found stuck rows.
+      syncWarning = syncWarning ? `${syncWarning} ${diffWarning}` : diffWarning;
+    }
+    for (const batch of batchRowsForPush(shippableDiff)) {
+      await api('/api/notes', { method: 'PUT', body: { v: 2, rows: batch } });
+    }
   }
 }
 
@@ -650,7 +662,12 @@ async function pullNotes(userId: string): Promise<PullResult> {
 
   if (data.v === 2) {
     const nextCursor = typeof data.cursor === 'number' && data.cursor > 0 ? data.cursor : cursor;
-    storeCursor(userId, nextCursor);
+    // The caller stores the cursor ONLY after the merge it feeds has
+    // been applied: persisting it here (a synchronous localStorage
+    // write) used to outrun the merged tabs' async IndexedDB write, so a
+    // crash or a merge exception in between skipped the pulled rows
+    // forever — the device kept a stale copy that later overwrote the
+    // server's newer words.
     return {
       v2: true,
       rows: (data.rows ?? []).map((row) => ({ ...row, deleted: !!row.deleted })),
@@ -944,6 +961,37 @@ function rowBytes(row: NoteRow): number {
  * rowUnsyncable filters them out upstream — so every batch that leaves
  * here is one the server will take.
  */
+/** Partitions rows for any push: oversized rows stay on the device
+ *  (named for the warning), the rest batch by body cap and row count.
+ *  Both push paths — the pending queue (step 1) and the diff corpus
+ *  (step 3) — must go through the same gate. */
+export function partitionRowsForPush(rows: NoteRow[]): {
+  shippable: NoteRow[];
+  stuckNames: string[];
+} {
+  const shippable: NoteRow[] = [];
+  const stuckNames: string[] = [];
+  for (const entry of rows) {
+    if (rowUnsyncable(entry)) {
+      stuckNames.push(entry.name ?? 'A note');
+    } else {
+      shippable.push(entry);
+    }
+  }
+  return { shippable, stuckNames };
+}
+
+/** The user-facing size warning for stuck rows (null when none). */
+export function sizeWarningFor(stuckNames: string[]): string | null {
+  if (stuckNames.length === 0) {
+    return null;
+  }
+  const one = `“${stuckNames[0]}” is over the 2 MB sync limit — it stays on this device until it is shortened.`;
+  return stuckNames.length === 1
+    ? one
+    : `${stuckNames.length} notes are over the 2 MB sync limit — they stay on this device until they are shortened.`;
+}
+
 export function batchRowsForPush(rows: NoteRow[]): NoteRow[][] {
   const batches: NoteRow[][] = [];
   let current: NoteRow[] = [];

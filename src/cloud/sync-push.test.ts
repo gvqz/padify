@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { batchRowsForPush, rowUnsyncable, type NoteRow } from './sync';
+import {
+  batchRowsForPush,
+  partitionRowsForPush,
+  rowUnsyncable,
+  sizeWarningFor,
+  type NoteRow,
+} from './sync';
 import { MAX_ROWS_PER_PUSH } from '../../shared/wire';
 
 // The push queue must drain even when one note can never leave: the server
@@ -138,5 +144,42 @@ describe('rowUnsyncable', () => {
     expect(batches.map((batch) => batch.map((entry) => entry.id))).toEqual([['giant'], ['small']]);
     expect(rowUnsyncable(batches[0][0])).toBe(true);
     expect(rowUnsyncable(batches[1][0])).toBe(false);
+  });
+});
+
+describe('partitionRowsForPush + sizeWarningFor (the step-3 gate)', () => {
+  it('routes an oversized diff row out of the body and names it', () => {
+    const { shippable, stuckNames } = partitionRowsForPush([
+      row('a', 100),
+      row('giant', 3_000_000),
+    ]);
+    expect(shippable.map((entry) => entry.id)).toEqual(['a']);
+    expect(stuckNames).toEqual(['A note']);
+    expect(sizeWarningFor(stuckNames)).toContain('2 MB sync limit');
+  });
+
+  it('one oversized note never wedges the rest of a first-sync corpus (issue #67)', () => {
+    // The pre-fix step 3 built ONE raw body from the whole diff: a single
+    // oversized note 400-rejected every cycle — every first sync and every
+    // drift re-push, forever. The gate keeps the queue flowing.
+    const corpus = [
+      row('note-1', 100),
+      row('giant', 3_000_000),
+      ...Array.from({ length: 600 }, (_, i) => row(`bulk-${i}`, 50)),
+    ];
+    const { shippable, stuckNames } = partitionRowsForPush(corpus);
+    expect(stuckNames).toHaveLength(1);
+    expect(shippable).toHaveLength(601);
+    const batches = batchRowsForPush(shippable);
+    for (const batch of batches) {
+      expect(batch.length).toBeLessThanOrEqual(MAX_ROWS_PER_PUSH);
+      expect(batch.some((entry) => entry.id === 'giant')).toBe(false);
+    }
+  });
+
+  it('sizeWarningFor pluralizes and stays null when nothing is stuck', () => {
+    expect(sizeWarningFor([])).toBeNull();
+    expect(sizeWarningFor(['Groceries'])).toContain('“Groceries”');
+    expect(sizeWarningFor(['Groceries', 'Ideas'])).toMatch(/^2 notes are over/);
   });
 });
