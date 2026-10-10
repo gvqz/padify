@@ -102,7 +102,10 @@
       (function () {
         var stored = localStorage.getItem('mode');
         var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        var dark = stored ? stored === 'dark' : prefersDark;
+        // 'device' (and any unknown value) must follow the OS scheme —
+        // treating it as light painted a dark-OS user light, and the first
+        // note render then transformed dark ink to light (issue #47).
+        var dark = stored === 'dark' || (stored !== 'light' && prefersDark);
         if (dark) {
           document.body.classList.add('dark');
           var n = document.querySelector('.navbar');

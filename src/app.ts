@@ -109,6 +109,13 @@ export async function initApp(): Promise<void> {
     metaThemeColor,
   };
 
+  // Theme (light / dark / follow device) — see theme-controller.ts.
+  // Applied BEFORE the first note render: the html surface's ink transform
+  // reads the body class, and notes used to render under the pre-paint
+  // guess before the controller had its say — a device-theme user on a
+  // dark OS got light ink, and any edit persisted it that way.
+  const themeController = initThemeController(themeConfig);
+
   const unicodePicker = initUnicodePicker(notepad);
 
   // Note tabs — multiple notes inside the one editor, shown as a rail
@@ -252,9 +259,6 @@ export async function initApp(): Promise<void> {
       }
     }
   });
-
-  // Theme (light / dark / follow device) — see theme-controller.ts.
-  const themeController = initThemeController(themeConfig);
 
   // Editor appearance preferences (font, texture, pill, …).
   const editorPreferences = initEditorPreferences({

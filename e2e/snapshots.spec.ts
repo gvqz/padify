@@ -80,6 +80,38 @@ test.describe('the rebuilt menu', () => {
     await expect(snapshotRows(page)).toHaveCount(1);
   });
 
+  test('closing a background tab snapshots THE CLOSING note, not the active one', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    // Two notes with distinct content: "alpha" stays active, "beta" is
+    // closed in the background. Regression: createSnapshot() read the
+    // ACTIVE note — the safety snapshot stored alpha's content under
+    // beta's name (or declined silently when alpha was empty).
+    await page.locator('#note').click();
+    await page.keyboard.type('alpha content');
+    await page.waitForTimeout(600);
+    await page.locator('#addTab').click();
+    await page.locator('#note').click();
+    await page.keyboard.type('beta background content');
+    await page.waitForTimeout(600);
+
+    // Switch back to the first tab so beta is a BACKGROUND tab, then close
+    // beta through its tab-strip × (the middle-click path shares closeNow).
+    await page.locator('#tabStripTabs .tab-strip-tab').first().click();
+    await expect(page.locator('#note')).toContainText('alpha content');
+    await page.locator('#tabStripTabs .tab-strip-tab').nth(1).locator('.tab-strip-close').click();
+    await page.locator('.swal2-confirm').click();
+    await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(1);
+
+    // The safety snapshot must hold BETA's words.
+    await openSnapshots(page);
+    await expect(snapshotRows(page)).toHaveCount(1);
+    const row = snapshotRows(page).first();
+    await expect(row.locator('.snapshot-title')).toContainText('beta');
+    await expect(row.locator('.snapshot-preview')).toContainText('beta background');
+  });
+
   test('an unchanged note is declined — no duplicate rows', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
