@@ -389,7 +389,7 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
 
       if (getSetting('userChosenSpellCheck')) {
         removeState('userChosenSpellCheck');
-        notepad.note.attr('spellcheck', false as unknown as string);
+        notepad.note.attr('spellcheck', String(editorConfig.defaultSpellCheck));
         notepad.spellCheck.prop('checked', editorConfig.defaultSpellCheck);
       }
     },

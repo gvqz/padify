@@ -578,6 +578,10 @@ export class TabManager {
     this.persist();
     this.refreshTabLabel(active.id);
     this.editor.trigger('focus');
+    // The pill (and anything else riding the active-note change) refreshes
+    // here too — clear used to leave the old counts up until the next
+    // keystroke.
+    this.notifyActiveChanged();
   }
 
   /**
