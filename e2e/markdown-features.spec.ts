@@ -307,10 +307,13 @@ test.describe('markdown notes — the Crepe playground parity act', () => {
 
     const surface = page.locator('#note .markdown-surface');
     const preview = page.locator('#note .markdown-preview');
+    const source = page.locator('#note .markdown-source');
     await expect(surface).toHaveClass(/markdown-split-mode/);
+    // The split edits the SOURCE: the textarea owns the left half, the
+    // owned renderer's output the right.
+    await expect(source).toBeVisible();
+    await expect(source).toHaveValue(/# Split me/);
     await expect(preview).toBeVisible();
-    await expect(page.locator('#note .ProseMirror')).toBeVisible();
-    // The owned renderer's output, beside the editor.
     await expect(preview.locator('h1')).toHaveText('Split me');
     await expect(preview.locator('b')).toHaveText('bold');
     // The chrome agrees: the icon reads pressed, the segmented control too.
@@ -336,9 +339,11 @@ test.describe('markdown notes — the Crepe playground parity act', () => {
     const preview = page.locator('#note .markdown-preview');
     await expect(preview.locator('h1')).toHaveText('Draft');
 
-    // Back into the editor (the split button took the focus), caret at
-    // the heading's end — then type.
-    await editor.locator('h1').click();
+    // The split's editing pane is the SOURCE textarea — click ON the
+    // heading's line (a bare click parks the caret past the trailing
+    // newline), caret to the line's end, then type.
+    const source = page.locator('#note .markdown-source');
+    await source.click({ position: { x: 100, y: 30 } });
     await page.keyboard.press('End');
     await page.keyboard.type(' updated');
     // The debounce chain (listener 200ms + pane 250ms) settles.

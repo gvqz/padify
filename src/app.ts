@@ -54,6 +54,7 @@ import { initMarkdownBubble } from './editor/markdown/bubble';
 // NoteSurface consumer (tabs, snapshots, share) can open markdown notes.
 import './editor/markdown/surface';
 import {
+  focusMarkdownPane,
   markdownSelectionStateNow,
   markdownViewMode,
   onMarkdownViewMode,
@@ -497,13 +498,15 @@ export async function initApp(): Promise<void> {
   syncMarkdownExportRow();
 
   // ---- split view — the top bar's Markdown-only toggle. The icon flips
-  // the surface between the editing view and the side-by-side (editor +
-  // owned-renderer live preview); the toolbar's segmented control follows
-  // through the same surface listener, so there is exactly one source of
-  // truth for the mode (see editor/markdown/surface.ts). ----
+  // the surface between the last working mode and the side-by-side
+  // (source + owned-renderer live preview); the toolbar's segmented
+  // control follows through the same surface listener, so there is
+  // exactly one source of truth for the mode (see
+  // editor/markdown/surface.ts). ----
   const splitViewButton = notepad.splitViewButton;
   splitViewButton.on('click', () => {
     setMarkdownViewMode(markdownViewMode() === 'split' ? 'edit' : 'split');
+    focusMarkdownPane();
   });
   const syncSplitViewChrome = (): void => {
     splitViewButton.attr('aria-pressed', markdownViewMode() === 'split' ? 'true' : 'false');

@@ -1672,7 +1672,7 @@
             class="rich-btn markdown-view-btn"
             data-md-view="edit"
             aria-pressed="true"
-            title="Edit"
+            title="Visual editing"
           >
             <svg
               width="15"
@@ -1687,14 +1687,38 @@
             >
               <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
             </svg>
-            <span class="sr-only">Edit</span>
+            <span class="markdown-view-label">Visual</span>
+            <span class="sr-only">editing</span>
+          </button>
+          <button
+            type="button"
+            class="rich-btn markdown-view-btn"
+            data-md-view="source"
+            aria-pressed="false"
+            title="Markdown source"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m8 6-6 6 6 6" />
+              <path d="m16 6 6 6-6 6" />
+            </svg>
+            <span class="markdown-view-label">Source</span>
           </button>
           <button
             type="button"
             class="rich-btn markdown-view-btn"
             data-md-view="split"
             aria-pressed="false"
-            title="Split view (edit and preview side by side)"
+            title="Split view (source and preview side by side)"
           >
             <svg
               width="15"
@@ -1710,7 +1734,8 @@
               <rect x="3" y="4" width="18" height="16" rx="2" />
               <path d="M12 4v16" />
             </svg>
-            <span class="sr-only">Split view</span>
+            <span class="markdown-view-label">Split</span>
+            <span class="sr-only">view</span>
           </button>
           <button
             type="button"
@@ -1733,7 +1758,7 @@
               <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
               <circle cx="12" cy="12" r="3" />
             </svg>
-            <span class="sr-only">Preview</span>
+            <span class="markdown-view-label">Preview</span>
           </button>
         </div>
         <div

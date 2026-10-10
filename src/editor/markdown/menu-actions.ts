@@ -20,19 +20,34 @@ import type { EditorState } from '@milkdown/kit/prose/state';
 
 import { getTabManager, insertTextIntoActiveNote } from '../../tabs';
 import { isMarkdownNote } from '../note-types';
-import { markdownEditorHandle, markdownSelectionStateNow } from './surface';
+import {
+  focusMarkdownPane,
+  markdownEditorHandle,
+  markdownSelectionStateNow,
+  markdownSourceActive,
+  markdownSourceTextarea,
+} from './surface';
 import { linkRangeAround, runMarkdownTableAction, runMarkdownToolbarAction } from './toolbar';
+import { applyEdit, removeLink as removeSourceLink } from './source-edit';
 
 type Handle = NonNullable<ReturnType<typeof markdownEditorHandle>>;
 
-/** True when the menu should speak Markdown (an editable markdown note is active). */
+/** True when the menu should speak Markdown (an editable markdown pane is active). */
 export function markdownMenuTarget(): boolean {
   const active = getTabManager()?.getActive();
-  return !!active && isMarkdownNote(active) && markdownEditorHandle() !== null;
+  return (
+    !!active &&
+    isMarkdownNote(active) &&
+    (markdownEditorHandle() !== null || markdownSourceActive())
+  );
 }
 
 function handle(): Handle | null {
   return markdownEditorHandle();
+}
+
+function source(): HTMLTextAreaElement | null {
+  return markdownSourceTextarea();
 }
 
 function execCommand(command: string): boolean {
@@ -46,11 +61,19 @@ function execCommand(command: string): boolean {
 // ---- focus + reads ---------------------------------------------------------
 
 export function mdFocus(): void {
+  if (source()) {
+    source()?.focus();
+    return;
+  }
   handle()?.view.focus();
 }
 
 /** The selection's text (markdown source, '\n' between blocks). */
 export function mdSelectionText(): string {
+  const ta = source();
+  if (ta) {
+    return ta.value.slice(ta.selectionStart, ta.selectionEnd);
+  }
   const live = handle();
   if (!live) {
     return '';
@@ -130,6 +153,14 @@ export async function mdPaste(): Promise<'pasted' | 'empty' | 'blocked'> {
 // ---- mutations --------------------------------------------------------------
 
 export function mdDeleteSelection(): boolean {
+  const ta = source();
+  if (ta) {
+    if (ta.selectionStart === ta.selectionEnd) {
+      return false;
+    }
+    applyEdit(ta, ta.selectionStart, ta.selectionEnd, '', ta.selectionStart);
+    return true;
+  }
   const live = handle();
   if (!live) {
     return false;
@@ -144,6 +175,11 @@ export function mdDeleteSelection(): boolean {
 
 /** Replaces the selection with plain text (the case converter's path). */
 export function mdReplaceSelection(text: string): boolean {
+  const ta = source();
+  if (ta) {
+    applyEdit(ta, ta.selectionStart, ta.selectionEnd, text, ta.selectionStart + text.length);
+    return true;
+  }
   const live = handle();
   if (!live) {
     return false;
@@ -159,6 +195,12 @@ export function mdReplaceSelection(text: string): boolean {
 }
 
 export function mdSelectAll(): boolean {
+  const ta = source();
+  if (ta) {
+    ta.focus();
+    ta.select();
+    return true;
+  }
   const live = handle();
   if (!live) {
     return false;
@@ -170,6 +212,15 @@ export function mdSelectAll(): boolean {
 }
 
 export function mdUndo(): boolean {
+  const ta = source();
+  if (ta) {
+    focusMarkdownPane();
+    try {
+      return document.execCommand('undo');
+    } catch {
+      return false;
+    }
+  }
   const live = handle();
   if (!live) {
     return false;
@@ -178,6 +229,15 @@ export function mdUndo(): boolean {
 }
 
 export function mdRedo(): boolean {
+  const ta = source();
+  if (ta) {
+    focusMarkdownPane();
+    try {
+      return document.execCommand('redo');
+    } catch {
+      return false;
+    }
+  }
   const live = handle();
   if (!live) {
     return false;
@@ -205,6 +265,10 @@ export function mdClearFormatting(): boolean {
 }
 
 export function mdRemoveLink(): boolean {
+  const ta = source();
+  if (ta) {
+    return removeSourceLink(ta);
+  }
   const live = handle();
   if (!live) {
     return false;
