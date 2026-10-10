@@ -617,11 +617,19 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
 
     if (!keepOpen) {
       close();
-    } else if (state.category === CATEGORY_RECENT) {
-      applyFilters();
-      setGridHeight();
-      renderWindow();
-      renderStatus();
+    } else {
+      // The insertion focused the note under the modal — bring focus
+      // back or the advertised keep-open flow is unusable: arrows move
+      // the note's caret, Enter inserts newlines into the note, and the
+      // F/C shortcuts are dead. Search input first: it is where the
+      // user's hands already are.
+      if (state.category === CATEGORY_RECENT) {
+        applyFilters();
+        setGridHeight();
+        renderWindow();
+        renderStatus();
+      }
+      searchInput.focus();
     }
   }
 
@@ -962,12 +970,44 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
 
   function ensureReady(): Promise<void> {
     if (ready) return Promise.resolve();
-    return loadData().then((loaded) => {
-      data = loaded;
-      ready = true;
-      renderCategories();
-      renderAll();
+    return loadData()
+      .then((loaded) => {
+        data = loaded;
+        ready = true;
+        renderCategories();
+        renderAll();
+      })
+      .catch((error) => {
+        // A failed lazy-chunk load (offline edge, corrupted storage)
+        // used to leave the skeleton shimmer + "Loading characters…"
+        // forever with an unhandled rejection. Show the failure and a
+        // way out — the retry re-runs the load (ready never flipped).
+        console.warn('[unicode] character data failed to load', error);
+        renderLoadErrorState();
+      });
+  }
+
+  /** The dataset-failure surface (see ensureReady's catch). */
+  function renderLoadErrorState(): void {
+    removeEmptyState();
+    gridInnerEl.innerHTML = '';
+    gridInnerEl.style.height = '';
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML =
+      `<div class="ucp-empty">` +
+      `<div class="ucp-empty-title">Characters didn’t load</div>` +
+      `<div class="ucp-empty-hint">The character list could not be read — the connection may have dropped.</div>` +
+      `<button type="button" class="ucp-retry">Try again</button>` +
+      `</div>`;
+    const element = wrapper.firstElementChild as HTMLElement;
+    gridEl.appendChild(element);
+    const retry = element.querySelector('.ucp-retry');
+    retry?.addEventListener('click', () => {
+      element.remove();
+      renderSkeleton();
+      void ensureReady();
     });
+    gridEl.removeAttribute('aria-activedescendant');
   }
 
   bindEvents();

@@ -256,25 +256,51 @@ export class FreeEngine {
       this.tryPreviewFallback(track, this.describeError(err));
       return;
     }
-    // One retry with a fresh (cache-busting) resolution before giving up.
+    // One retry with a fresh (cache-busting) resolution before giving
+    // up — but only when the server can resolve at all. Without the gate
+    // (the one playTrack already applies), a no-resolve deployment
+    // burned a doomed request + a "Retrying…" subtitle on every
+    // expired stream.
     this.retriedCurrentTrack = true;
     this.host.notify({ kind: 'retrying' });
-    resolveTrackStream(this.resolveInput(track), true)
-      .then((stream) => {
-        if (token !== this.resolveToken) return;
-        const audio = this.linearAudio();
-        this.host.notify({ kind: 'stream', track });
-        audio.src = stream.url;
-        void audio.play().catch(() => undefined);
+    this.host
+      .canResolve()
+      .then((can) => {
+        if (!can || token !== this.resolveToken) {
+          if (token === this.resolveToken) {
+            this.tryPreviewFallback(track, this.describeError(err));
+          }
+          return;
+        }
+        resolveTrackStream(this.resolveInput(track), true)
+          .then((stream) => {
+            if (token !== this.resolveToken) return;
+            const audio = this.linearAudio();
+            this.host.notify({ kind: 'stream', track });
+            audio.src = stream.url;
+            void audio.play().catch(() => undefined);
+          })
+          .catch((retryErr: unknown) => {
+            if (token !== this.resolveToken) return;
+            this.tryPreviewFallback(track, this.describeError(retryErr));
+          });
       })
-      .catch((retryErr: unknown) => {
-        if (token !== this.resolveToken) return;
-        this.tryPreviewFallback(track, this.describeError(retryErr));
+      .catch(() => {
+        if (token === this.resolveToken) {
+          this.tryPreviewFallback(track, this.describeError(err));
+        }
       });
   }
 
   /** Last resort: the public 30-second preview, when one exists. */
   private tryPreviewFallback(track: SpotifyTrack, message: string): void {
+    // A preview that itself fails lands back here via handleAudioError —
+    // without the mode guard the same failing src was reassigned in a
+    // loop, firing an error → fallback → toast cycle forever.
+    if (this.engineMode === 'preview') {
+      this.host.notify({ kind: 'unavailable', message: 'That preview could not play.' });
+      return;
+    }
     if (track.preview_url) {
       this.engineMode = 'preview';
       this.host.notify({ kind: 'preview', track, message });

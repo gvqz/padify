@@ -112,7 +112,10 @@ describe('calculateNoteStatistics', () => {
     expect(stats.words).toBe(10);
     expect(stats.sentences).toBe(2);
     expect(stats.paragraphs).toBe(1);
-    expect(stats.averageWordLength).toBe('4.10');
+    // The TRUE mean word length: the ten words are 3,3,3,2,3,3,3,3,3,4
+    // letters long — 30/10. (The old formula divided ALL characters,
+    // spaces included, by words and reported 4.10.)
+    expect(stats.averageWordLength).toBe('3.00');
     expect(stats.uniqueWords).toBe(8); // the ×3 collapses; 8 distinct tokens
     expect(stats.readingTime).toBe('1 min');
     expect(stats.estimatedSpeakingTime).toBe('1 min');
@@ -135,5 +138,27 @@ describe('STOP_WORDS', () => {
     expect(STOP_WORDS.has('the')).toBe(true);
     expect(STOP_WORDS.has('and')).toBe(true);
     expect(STOP_WORDS.size).toBeGreaterThan(50);
+  });
+});
+
+describe('CJK and CRLF accounting', () => {
+  it('counts Han characters as words (the spaceless-note fix)', () => {
+    // A spaceless Chinese sentence used to count as ONE word.
+    expect(countWords('你好世界')).toBe(4);
+    // Mixed content: 2 Latin words + 4 Han characters.
+    expect(countWords('hello 你好世界 world')).toBe(6);
+    // Pure Latin keeps the whitespace split.
+    expect(countWords('one two three')).toBe(3);
+  });
+
+  it('CRLF paragraphs split on \\r\\n\\r\\n breaks', () => {
+    const stats = calculateNoteStatistics('first paragraph.\r\n\r\nsecond paragraph.');
+    expect(stats.paragraphs).toBe(2);
+  });
+
+  it('CJK notes report real unique words (not N/A)', () => {
+    const stats = calculateNoteStatistics('你好 你好 世界');
+    expect(stats.uniqueWords).toBeGreaterThan(0);
+    expect(stats.mostCommonWord).not.toBe('N/A');
   });
 });

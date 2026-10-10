@@ -20,6 +20,10 @@ import type { SpotifyTrack } from '../types';
 export interface MusicCapabilities {
   search: boolean;
   resolve: boolean;
+  /** The server's own reason when a capability is off ("no Spotify
+   * credentials, no yt-dlp") — surfaced to the user instead of the
+   * generic "looks offline" copy that hid the real cause. */
+  reason?: string;
 }
 
 export interface ResolvedStream {
@@ -80,10 +84,15 @@ async function fetchCapabilitiesOnce(): Promise<MusicCapabilities> {
   }
   if (!response.ok) return { search: false, resolve: false };
   try {
-    const data = (await response.json()) as { search?: boolean; resolve?: boolean };
+    const data = (await response.json()) as {
+      search?: boolean;
+      resolve?: boolean;
+      reason?: string;
+    };
     return {
       search: Boolean(data.search),
       resolve: Boolean(data.resolve),
+      reason: typeof data.reason === 'string' ? data.reason : undefined,
     };
   } catch {
     return { search: false, resolve: false };
@@ -179,7 +188,9 @@ export function resolveTrackStream(
 
     let response: Response;
     try {
-      response = await fetch(api(`/api/music/resolve?${params.toString()}`));
+      // Same timeout as every other call — a wedged resolve used to pin
+      // the bar on "Finding a stream…" forever with no way out.
+      response = await fetchWithTimeout(api(`/api/music/resolve?${params.toString()}`));
     } catch {
       throw new FreeMusicError('Could not reach the music service — check your connection.');
     }

@@ -15,7 +15,7 @@ import { formatMs, trackArtistNames, pickImage, escapeHtml } from './helpers';
 /** Row art: catalog artwork, an ambience icon, or the note fallback. */
 function rowArt(track: SpotifyTrack): string {
   const art = pickImage(track.album?.images, 2) ?? pickImage(track.album?.images, 0);
-  if (art) return `<img src="${art}" alt="" loading="lazy">`;
+  if (art) return `<img src="${escapeHtml(art)}" alt="" loading="lazy">`;
   const ambient = ambientIconFor(track);
   if (ambient) return ambient;
   return ICONS.note;
@@ -27,8 +27,13 @@ const explicitBadge = (track: SpotifyTrack): string => (track.explicit ? ' · E'
 export function trackRow(track: SpotifyTrack, queueId: string): string {
   const artists = escapeHtml(trackArtistNames(track));
   const name = escapeHtml(track.name);
+  // id/uri/queueId land in ATTRIBUTES — escaped like the visible text.
+  // The queue round-trips through user-tamperable storage, so a crafted
+  // id or uri used to inject straight into the row DOM.
+  const trackId = escapeHtml(track.id);
+  const trackUri = escapeHtml(track.uri ?? '');
   return `
-        <div class="sp-row" role="listitem" data-queue-id="${queueId}" data-track-id="${track.id}" data-track-uri="${track.uri}">
+        <div class="sp-row" role="listitem" data-queue-id="${escapeHtml(queueId)}" data-track-id="${trackId}" data-track-uri="${trackUri}">
             <button type="button" class="sp-row-main" aria-label="Play ${name} by ${artists}">
                 <span class="sp-row-art">${rowArt(track)}</span>
                 <span class="sp-row-copy">
@@ -49,7 +54,7 @@ export function queueRow(track: SpotifyTrack, index: number): string {
   const artists = escapeHtml(trackArtistNames(track));
   const name = escapeHtml(track.name);
   return `
-        <div class="sp-row" role="listitem" data-queue-index="${index}" data-track-id="${track.id}" data-track-uri="${track.uri}">
+        <div class="sp-row" role="listitem" data-queue-index="${index}" data-track-id="${escapeHtml(track.id)}" data-track-uri="${escapeHtml(track.uri ?? '')}">
             <button type="button" class="sp-row-main" aria-label="Play ${name} by ${artists}">
                 <span class="sp-row-art">${rowArt(track)}</span>
                 <span class="sp-row-copy">

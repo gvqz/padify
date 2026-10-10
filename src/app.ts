@@ -619,6 +619,17 @@ export async function initApp(): Promise<void> {
 
   notepad.statisticsModal.on('show.bs.modal', function () {
     const stats = calculateNoteStatistics(getEditorText());
+    // An empty note gets an honest empty state instead of a board of
+    // zeros and N/A cards under a "click a card" hint.
+    const statHint = document.querySelector<HTMLElement>('[data-stat-hint]');
+    const statBoard = document.getElementById('statisticsBoard');
+    if (statHint && statBoard) {
+      const empty = stats.words === 0 && stats.characters === 0;
+      statHint.textContent = empty
+        ? 'This note is empty — type something and the numbers will follow.'
+        : 'Click a card to cycle through its statistics.';
+      statBoard.classList.toggle('is-empty', empty);
+    }
     currentStatFamilies = {
       count: [
         { label: 'Characters', value: stats.characters },

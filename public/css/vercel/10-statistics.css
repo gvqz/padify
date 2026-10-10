@@ -79,10 +79,21 @@ body .stat-card .stat-value {
   color: var(--vz-fg);
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
+  /* An unbreakable value (the records family shows the note's longest
+     word — a 200-char URL with no hyphens) must wrap inside its card
+     instead of painting past the rounded corner. */
+  overflow-wrap: anywhere;
 }
 
 body .stat-card-hero .stat-value {
   font-size: 40px;
+}
+
+/* The empty-note state: the hint carries the message; the zeros-and-N/A
+   board stands down instead of pretending to describe an empty note. */
+body .statistics-board.is-empty {
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 /* The value swap on click — a quick rise-and-settle, so the change reads
