@@ -241,6 +241,74 @@ describe('continueListOnEnter', () => {
     mount('## heading', 4);
     expect(continueListOnEnter(ta)).toBe(false);
   });
+
+  // ---- the markdown sweep round (issues #53-#60) ----
+  it('Enter with a selection on a list line REPLACES the selection', () => {
+    mount('- hello world', 8, 13); // 'world' selected
+    expect(continueListOnEnter(ta)).toBe(true);
+    expect(ta.value).toBe('- hello \n- ');
+    expect(ta.selectionStart).toBe(ta.value.length);
+  });
+
+  it('Enter with the content of an item selected deletes it and continues', () => {
+    mount('- one\n- two', 8, 11); // 'two' selected
+    expect(continueListOnEnter(ta)).toBe(true);
+    expect(ta.value).toBe('- one\n- \n- ');
+  });
+});
+
+describe('toggleLinePrefix — checked tasks (issue #55)', () => {
+  it('a checked task line disarms the list without resetting to unchecked', () => {
+    mount('- [x] done', 10);
+    toggleLinePrefix(ta, '- [ ] ');
+    expect(ta.value).toBe('done');
+  });
+
+  it('a mixed selection disarms every task, keeping checked words', () => {
+    mount('- [ ] a\n- [x] b', 0, 15);
+    toggleLinePrefix(ta, '- [ ] ');
+    expect(ta.value).toBe('a\nb');
+  });
+
+  it('a plain bullet still gains the task prefix', () => {
+    mount('- plain', 5);
+    toggleLinePrefix(ta, '- [ ] ');
+    expect(ta.value).toBe('- [ ] plain');
+  });
+});
+
+describe('applyLink — a selection inside an existing link (issue #53)', () => {
+  it('retargets in place, keeping the WHOLE label', () => {
+    mount('see [click here](old) now', 10, 14); // 'here' selected
+    applyLink(ta, 'https://new.example');
+    expect(ta.value).toBe('see [click here](https://new.example) now');
+  });
+
+  it('a selection outside any link still wraps it', () => {
+    mount('plain words', 6, 11);
+    applyLink(ta, 'https://x.example');
+    expect(ta.value).toBe('plain [words](https://x.example)');
+  });
+
+  it('an explicit label overrides (the popover chip path)', () => {
+    mount('see [click here](old) now', 10, 14);
+    applyLink(ta, 'https://new.example', 'renamed');
+    expect(ta.value).toBe('see [renamed](https://new.example) now');
+  });
+});
+
+describe('clearFormatting — fenced code (issue #60)', () => {
+  it('leaves prefixes inside a fenced block alone', () => {
+    mount('```\n- item\n```', 9);
+    clearFormatting(ta);
+    expect(ta.value).toContain('- item');
+  });
+
+  it('clears prefixes outside fences as before', () => {
+    mount('- item', 3);
+    clearFormatting(ta);
+    expect(ta.value).toBe('item');
+  });
 });
 
 describe('wrapCodeBlock', () => {

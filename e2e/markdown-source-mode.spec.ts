@@ -52,6 +52,45 @@ test.describe('markdown source mode', () => {
     await expect(page.locator('#markdownToolbar [data-md-action="bold"]')).toBeDisabled();
   });
 
+  test('Ctrl+K opens the link popover, not the shortcuts modal (issue #59)', async ({ page }) => {
+    await page.goto('/');
+    await newMarkdownNote(page);
+    const editor = page.locator('#note .ProseMirror');
+    await editor.click();
+    await page.keyboard.type('docs link');
+
+    // Visual mode: the link popover, never the shortcuts modal.
+    await page.keyboard.press('Control+k');
+    await expect(page.locator('#markdownLinkPopover')).toBeVisible();
+    await expect(page.locator('#keyboardShortcutsModal')).not.toHaveClass(/in/);
+    await page.keyboard.press('Escape');
+
+    // Source mode: the same shortcut, same popover.
+    await page.locator('[data-md-view="source"]').click();
+    const source = page.locator('#note .markdown-source');
+    await source.click();
+    await page.keyboard.press('Control+k');
+    await expect(page.locator('#markdownLinkPopover')).toBeVisible();
+    await expect(page.locator('#keyboardShortcutsModal')).not.toHaveClass(/in/);
+  });
+
+  test('the toolbar Undo button works in source mode (issue #56)', async ({ page }) => {
+    await page.goto('/');
+    await newMarkdownNote(page);
+    await page.locator('[data-md-view="source"]').click();
+    const source = page.locator('#note .markdown-source');
+    await source.click();
+    // One insertText = one native undo transaction (per-key typing would
+    // need one undo per character).
+    await page.keyboard.insertText('undo me');
+
+    // The button click moves focus to the toolbar — undo must still run
+    // (it used to be a silent no-op: a text control's stack is only
+    // reachable while the control is focused).
+    await page.locator('#markdownToolbar [data-md-action="undo"]').click();
+    await expect(source).toHaveValue('');
+  });
+
   test('raw markdown typed in source renders after a mode round trip', async ({ page }) => {
     await page.goto('/');
     await newMarkdownNote(page);

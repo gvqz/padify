@@ -200,10 +200,15 @@ function stripPrefix(line: string): string {
     .replace(HEADING_PREFIX, '$1');
 }
 
+/** The task toggle's prefix — matched against any checked state below. */
+const TASK_TOGGLE_PREFIX = '- [ ] ';
+
 /**
  * Toggles a fixed line prefix ('> ' for quotes, '- [ ] ' for tasks): every
  * selected line carries it → strip; otherwise strip other prefixes first,
- * then add. An empty prefix (null) strips whatever is there.
+ * then add. An empty prefix (null) strips whatever is there. The task
+ * prefix counts '- [x] done' as CARRYING it — the off ramp must disarm the
+ * list without resetting checked items to unchecked.
  */
 export function toggleLinePrefix(ta: HTMLTextAreaElement, prefix: string | null): void {
   const range = selectedLines(ta);
@@ -214,13 +219,19 @@ export function toggleLinePrefix(ta: HTMLTextAreaElement, prefix: string | null)
     return;
   }
 
-  const every = range.text
-    .split('\n')
-    .every((line) => line.trimStart().startsWith(prefix.trim()) || line.trim() === '');
+  const isTaskToggle = prefix === TASK_TOGGLE_PREFIX;
+  const carries = (line: string): boolean =>
+    isTaskToggle
+      ? BULLET_PREFIX.test(line) // any of '- [ ] ' / '- [x] ' / '- [X] '
+      : line.trimStart().startsWith(prefix.trim());
+  const every = range.text.split('\n').every((line) => carries(line) || line.trim() === '');
   if (every && range.text.trim() !== '') {
-    // All prefix lines — the toggle's off ramp.
+    // All prefix lines — the toggle's off ramp. Tasks strip through
+    // stripPrefix so '- [x] ' loses the WHOLE marker, not nothing.
     const off = (line: string): string =>
-      line.replace(new RegExp(`^(\\s*)${escapeRegExp(prefix)}`), '$1');
+      isTaskToggle
+        ? stripPrefix(line)
+        : line.replace(new RegExp(`^(\\s*)${escapeRegExp(prefix)}`), '$1');
     commitLineEdit(ta, range, off);
     return;
   }
@@ -416,8 +427,10 @@ export function continueListOnEnter(ta: HTMLTextAreaElement): boolean {
     return true;
   }
   const insertion = `\n${marker.lead}${marker.marker}`;
-  const at = ta.selectionEnd;
-  applyEdit(ta, at, at, insertion, at + insertion.length);
+  // The selection is REPLACED by the continuation (native Enter's own
+  // contract — the old empty-range insert left the selected words behind).
+  const at = ta.selectionStart;
+  applyEdit(ta, at, ta.selectionEnd, insertion, at + insertion.length);
   return true;
 }
 
@@ -559,16 +572,35 @@ export function linkAroundCaret(ta: HTMLTextAreaElement): SourceLink | null {
   return null;
 }
 
+/** True when the current selection sits INSIDE the span (a partial edit of
+ *  it, not a wrap of text outside it). */
+function selectionWithin(ta: HTMLTextAreaElement, start: number, end: number): boolean {
+  return (
+    ta.selectionStart >= start && ta.selectionEnd <= end && ta.selectionStart !== ta.selectionEnd
+  );
+}
+
 /** Applies a link: wraps the selection, or rewrites the link under the caret. */
 export function applyLink(ta: HTMLTextAreaElement, href: string, label?: string): void {
   const existing = linkAroundCaret(ta);
-  const target =
-    label ??
-    (ta.selectionStart !== ta.selectionEnd
+  const selectionText =
+    ta.selectionStart !== ta.selectionEnd
       ? ta.value.slice(ta.selectionStart, ta.selectionEnd)
-      : null);
-  if (existing && !target) {
-    // Retarget in place.
+      : null;
+  const target = label ?? selectionText;
+  // An explicit label (the popover chip's Edit path) always renames; a
+  // selection INSIDE the link is just where the user landed, not a
+  // re-label — the label stays whole.
+  if (
+    existing &&
+    label === undefined &&
+    (!target || (selectionText !== null && selectionWithin(ta, existing.start, existing.end)))
+  ) {
+    // Retarget in place — the label stays WHOLE. A selection inside the
+    // link is how the user landed here, not a re-label request: rebuilding
+    // from the selected fragment used to silently delete the rest of the
+    // label ("see [click here](url)" with 'here' selected became
+    // "see [here](url)" — 'click ' was gone).
     const next = `[${existing.text}](${href})`;
     applyEdit(ta, existing.start, existing.end, next, existing.start, existing.start + next.length);
     return;
@@ -596,7 +628,14 @@ export function removeLink(ta: HTMLTextAreaElement): boolean {
 
 /** Strips the inline markers around the selection + prefixes on its lines. */
 export function clearFormatting(ta: HTMLTextAreaElement): void {
-  toggleLinePrefix(ta, null);
+  // Inside a fenced code block, prefixes and markers are CONTENT — the
+  // visual mode's clear never touches code blocks, and neither does this.
+  // (Only the whole selection inside the fence skips; a fence boundary in
+  // the selection is the user's own formatting to clear.)
+  const state = sourceSelectionState(ta);
+  if (!state.codeBlock) {
+    toggleLinePrefix(ta, null);
+  }
   for (const marker of ['**', '~~', '*', '`']) {
     // Unwrap when the markers hug the selection (or it carries them).
     const value = ta.value;

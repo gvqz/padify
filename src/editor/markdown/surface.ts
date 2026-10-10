@@ -309,9 +309,12 @@ function renderLivePreview(): void {
 const SPLIT_RENDER_DEBOUNCE_MS = 250;
 let splitRenderTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Schedules the split pane's re-render (the markdownUpdated hook). */
+/** Schedules the rendered pane's re-render (the markdownUpdated hook).
+ *  Covers BOTH read panes: split while editing, and preview — the context
+ *  menu and dictation stay live in preview mode, and their edits used to
+ *  land invisibly under a frozen preview. */
 function scheduleSplitRender(): void {
-  if (viewMode !== 'split') {
+  if (viewMode !== 'split' && viewMode !== 'preview') {
     return;
   }
   if (splitRenderTimer !== null) {
@@ -319,7 +322,7 @@ function scheduleSplitRender(): void {
   }
   splitRenderTimer = setTimeout(() => {
     splitRenderTimer = null;
-    if (viewMode === 'split') {
+    if (viewMode === 'split' || viewMode === 'preview') {
       renderLivePreview();
     }
   }, SPLIT_RENDER_DEBOUNCE_MS);
@@ -480,6 +483,23 @@ export class MarkdownNoteSurface implements NoteSurface {
       source,
       preview,
     };
+
+    // Ctrl/Cmd+K opens the link popover — the shortcuts reference and the
+    // bubble button both advertise it, but the document-level binding used
+    // to win and pop the keyboard-shortcuts modal instead. Claimed here on
+    // the surface root so BOTH panes (WYSIWYG and source textarea) get it.
+    root.addEventListener('keydown', (event) => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.code === 'KeyK'
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        document.dispatchEvent(new CustomEvent('padify:open-link'));
+      }
+    });
 
     void Editor.make()
       .config((ctx) => {
