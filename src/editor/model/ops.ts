@@ -572,6 +572,18 @@ export function applyBlockTag(
     }
   }
   if (blocks.length === 0) {
+    // An EMPTY note still takes the style (Docs): with nothing to wrap,
+    // the block materializes empty at the caret and what the user types
+    // next lands inside it. Without this the style buttons on a fresh
+    // note were silent no-ops. The br is the canonical empty-block
+    // skeleton — Chromium only inserts typed text INTO an empty block
+    // that carries one (without it the text lands at the root instead).
+    if (model.childNodes.length === 0 && coverage[0] === 0) {
+      const fresh = document.createElement(tag);
+      fresh.append(document.createElement('br'));
+      model.append(fresh);
+      return { changed: true, intent: { spot: { kind: 'element', node: fresh, childIndex: 0 } } };
+    }
     return UNCHANGED;
   }
   for (const block of blocks) {
@@ -585,6 +597,118 @@ export function applyBlockTag(
     block.replaceWith(replacement);
   }
   return { changed: true, intent: { preserve: true } };
+}
+
+/**
+ * A node that carries no visible code/quote line: a line break, or a run
+ * (text or element) whose text is nothing but zero-width marker
+ * characters. Whitespace IS code — a spaces-only line is content, so it
+ * does not count as blank here.
+ */
+function isBlankLineNode(node: Node): boolean {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return (node.nodeValue ?? '').replace(/\u200B/g, '') === '';
+  }
+  if (node.nodeType === Node.ELEMENT_NODE) {
+    const el = node as HTMLElement;
+    if (el.tagName === 'BR') {
+      return true;
+    }
+    if (el.querySelector('img, .padify-math, hr, table')) {
+      return false;
+    }
+    return (el.textContent ?? '').replace(/\u200B/g, '') === '';
+  }
+  return false;
+}
+
+/** A block whose every child is blank — no line of real text, no atoms. */
+export function blockIsTextuallyBlank(block: HTMLElement): boolean {
+  for (const child of Array.from(block.childNodes)) {
+    if (!isBlankLineNode(child)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Enter on a code block's trailing blank line leaves the block: the
+ * trailing blank region goes away and a plain paragraph takes the caret,
+ * planted after the code. An entirely blank code block converts to a
+ * plain paragraph outright. `prefer` is the model twin of the caret spot;
+ * it must sit IN the trailing blank region (on or after its first node)
+ * — a caret at the end of the code's text keeps its native new line.
+ */
+export function exitPreBlock(model: HTMLElement, prefer: DomSpot | null): OpResult {
+  void model;
+  let el = prefer ? spotElement(prefer) : null;
+  while (el && el.tagName !== 'PRE') {
+    el = el.parentElement;
+  }
+  if (!el) {
+    return UNCHANGED;
+  }
+  const pre = el;
+
+  const children = Array.from(pre.childNodes);
+  // The trailing blank region: the run of blank nodes at the block's end.
+  let regionStart = children.length;
+  for (let i = children.length - 1; i >= 0; i--) {
+    if (isBlankLineNode(children[i]!)) {
+      regionStart = i;
+    } else {
+      break;
+    }
+  }
+  const entirelyBlank = regionStart === 0;
+
+  // A caret at the code's end but BEFORE the blank region keeps the
+  // native line break — only a caret ON the blank line exits.
+  if (!entirelyBlank) {
+    if (regionStart === children.length) {
+      return UNCHANGED; // no trailing blank line at all
+    }
+    if (regionIndexOfSpot(prefer!, pre, children) < regionStart) {
+      return UNCHANGED; // the caret is before the region
+    }
+  }
+
+  if (entirelyBlank) {
+    // An entirely blank code block becomes a plain paragraph in place.
+    const p = document.createElement('p');
+    p.append(document.createElement('br'));
+    pre.replaceWith(p);
+    return { changed: true, intent: { spot: { kind: 'element', node: p, childIndex: 0 } } };
+  }
+
+  // Strip the trailing blank region (the Enter the user just used to reach
+  // an empty line), then land the caret in a fresh paragraph after the code.
+  for (let i = children.length - 1; i >= regionStart; i--) {
+    children[i]!.remove();
+  }
+  const p = document.createElement('p');
+  const br = document.createElement('br');
+  p.append(br);
+  pre.after(p);
+  return { changed: true, intent: { spot: { kind: 'element', node: p, childIndex: 0 } } };
+}
+
+/**
+ * The index of the pre's direct child that carries the spot — how far
+ * into the block the caret sits. An element caret on the pre itself
+ * counts by its own child index; any deeper spot climbs to its direct
+ * child ancestor.
+ */
+function regionIndexOfSpot(prefer: DomSpot, pre: HTMLElement, children: Node[]): number {
+  if (prefer.kind === 'element' && prefer.node === pre) {
+    return prefer.childIndex;
+  }
+  let n: Node | null = prefer.node;
+  while (n && n.parentNode && n.parentNode !== pre) {
+    n = n.parentNode;
+  }
+  return n ? children.indexOf(n) : -1;
 }
 
 /**
@@ -1064,7 +1188,11 @@ function liftOneListItem(model: HTMLElement, list: HTMLElement, item: HTMLElemen
   while (item.firstChild) {
     div.append(item.firstChild);
   }
-  const anchor = list.nextSibling;
+  // At the item's own position: the FIRST item leaves its text above the
+  // remaining list (Docs: Backspace at the list's head keeps the line where
+  // it was — after-the-list would jump the text below its own siblings);
+  // any other item lands after the list (the Shift+Tab outdent placement).
+  const anchor = list.firstElementChild === item ? list : list.nextSibling;
   list.parentNode?.insertBefore(div, anchor);
   item.remove();
   if (list.children.length === 0) {
