@@ -117,6 +117,16 @@ export function migrateNoteRecord(record: NoteRecord): NoteRecord {
   const stamped = typeof record.v === 'number' && Number.isInteger(record.v) && record.v > 0;
   const version = stamped ? (record.v as number) : 1;
 
+  // A row from a NEWER build passes through untouched. Restamping it
+  // (the old unconditional `{ ...migrated, v: NOTE_RECORD_VERSION }`)
+  // would rewrite a future shape as the current version — a downgrade
+  // that makes the next upgrade misread the row forever. Unknown-shape
+  // fields already ride along harmlessly (the loaders only read known
+  // keys), so the honest move is to leave the stamp alone.
+  if (version > NOTE_RECORD_VERSION) {
+    return record;
+  }
+
   let migrated = record;
   if (version < 2) {
     // v1 → v2: the rename transition. The body may sit under the legacy
@@ -150,6 +160,38 @@ const MIRROR_MIN_INTERVAL_MS = 10_000;
 
 /** Boot snapshot cache so loadNotes() can stay synchronous-shaped. */
 let bootSnapshot: NotesSnapshot | null = null;
+
+/**
+ * Note ids deleted by ANOTHER tab of this browser (learned from the
+ * compatibility mirror's `storage` events — a tab's own writes never fire
+ * them). Without this, a stale tab that still holds a deleted note live
+ * would upsert the row back over the tombstone on its next save: the note
+ * resurrects locally AND rides the next cloud push to every device. The
+ * diff refuses to write live rows for these ids; the model catches up on
+ * the next re-hydrate (reload) like every other cross-tab change.
+ */
+const externallyDeletedIds = new Set<string>();
+
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('storage', (event) => {
+    if (event.key !== LEGACY_TOMBSTONES_KEY || !event.newValue) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(event.newValue);
+      if (!Array.isArray(parsed)) {
+        return;
+      }
+      for (const entry of parsed) {
+        if (entry && typeof entry.id === 'string') {
+          externallyDeletedIds.add(entry.id);
+        }
+      }
+    } catch {
+      /* the other tab wrote a partial blob — ignore it */
+    }
+  });
+}
 
 /**
  * The latest snapshot handed to saveNotes — the throttled trailing mirror
@@ -211,6 +253,14 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
           (record as { colorTheme?: unknown }).colorTheme === 'light' ||
           (record as { colorTheme?: unknown }).colorTheme === 'dark'
             ? (record as { colorTheme: 'light' | 'dark' }).colorTheme
+            : undefined,
+        // Round-trip the sync sequence so conflict arbitration keeps its
+        // seq anchor across reloads instead of degrading to client clocks
+        // for the whole session (see NoteTab.syncSeq).
+        syncSeq:
+          typeof (record as { syncSeq?: unknown }).syncSeq === 'number' &&
+          (record as { syncSeq: number }).syncSeq > 0
+            ? (record as { syncSeq: number }).syncSeq
             : undefined,
       };
     });
@@ -289,6 +339,10 @@ function loadLegacySnapshot(): NotesSnapshot {
             colorTheme:
               entry.colorTheme === 'light' || entry.colorTheme === 'dark'
                 ? entry.colorTheme
+                : undefined,
+            syncSeq:
+              typeof entry.syncSeq === 'number' && entry.syncSeq > 0
+                ? entry.syncSeq
                 : undefined,
           });
         }
@@ -412,6 +466,13 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
 
   snapshot.tabs.forEach((tab, index) => {
     seen.add(tab.id);
+    // Another tab of this browser deleted this note after we hydrated:
+    // never upsert a live row back over its tombstone (see
+    // externallyDeletedIds). The id stays "seen" so the trailing
+    // delete-sweep below doesn't drop the tombstone either.
+    if (externallyDeletedIds.has(tab.id)) {
+      return;
+    }
     const previous = lastWritten.get(tab.id);
     const signature = {
       name: tab.name,
@@ -472,15 +533,31 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
 
 /** Fallback-mode save: the exact pre-migration whole-blob writes. */
 function persistLegacyBlobs(snapshot: NotesSnapshot): void {
+  // In fallback mode (Safari private windows, hardened browsers) these
+  // writes ARE the save — a swallowed quota failure would leave the save
+  // indicator saying "Saved" while every keystroke after the failure is
+  // lost on reload. Route failures through the same health machinery the
+  // IndexedDB path uses, so the indicator warns and the persist() re-ask
+  // has a chance to run. Only a clean sweep of BOTH writes counts as
+  // recovered — a successful tombstone write must not mask a failed tabs
+  // write (reportSaveRecovered flips the indicator back to healthy).
+  let failure: unknown = null;
   try {
     localStorage.setItem(LEGACY_TABS_KEY, JSON.stringify(snapshot.tabs));
-  } catch {
-    /* quota exceeded — nothing else to do in fallback mode */
+  } catch (error) {
+    failure = error;
   }
   try {
     localStorage.setItem(LEGACY_TOMBSTONES_KEY, JSON.stringify(snapshot.tombstones));
-  } catch {
-    /* quota exceeded */
+  } catch (error) {
+    if (failure === null) {
+      failure = error;
+    }
+  }
+  if (failure !== null) {
+    reportSaveFailure(failure);
+  } else {
+    reportSaveRecovered();
   }
 }
 
@@ -527,10 +604,26 @@ function writeLegacyNotesMirror(snapshot: NotesSnapshot): void {
     mirrorDirty = false;
   } catch {
     // Quota exceeded — the mirror is best-effort; IndexedDB stays
-    // authoritative. Retry on the next immediate write.
+    // authoritative. Retry on the next immediate write. Say it once,
+    // though: the mirror's documented job is the durable backup (and
+    // fresh data for SW-cached old builds) — a set of notes bigger than
+    // the localStorage quota means that backup silently stopped being
+    // true, which deserves one console trace, not a keystroke-spam of
+    // them.
+    if (!warnedMirrorQuota) {
+      warnedMirrorQuota = true;
+      console.warn(
+        '[storage] the localStorage compatibility mirror no longer fits the quota — ' +
+          'IndexedDB remains authoritative, but the legacy backup is stale until notes shrink. ' +
+          'Consider exporting or deleting old notes.',
+      );
+    }
     lastMirrorWriteAt = Date.now();
   }
 }
+
+/** One-shot guard for the mirror quota warning. */
+let warnedMirrorQuota = false;
 
 /** Pagehide hook: writes a pending throttled mirror immediately. */
 export function flushNotesMirror(): void {
@@ -569,6 +662,8 @@ export function resetNotesForTests(): void {
   currentSnapshotForMirror = null;
   lastMirrorWriteAt = 0;
   mirrorDirty = false;
+  externallyDeletedIds.clear();
+  warnedMirrorQuota = false;
   if (mirrorTimer !== null) {
     clearTimeout(mirrorTimer);
     mirrorTimer = null;
