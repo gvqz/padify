@@ -6,10 +6,9 @@
  * or a background cloud merge all re-evaluate visibility in one place.
  *
  * Every mutation goes through the EditorPort (see editor/port.ts), exactly
- * like the context menu: execCommand keeps the native undo stack intact and
- * fires input events, which drive autosave and the save indicator. When the
- * document-model editor arrives it implements the same port methods and
- * this toolbar keeps working unchanged.
+ * like the context menu: the model engine keeps its own history and every
+ * command repaints + announces an input event, which drives autosave and
+ * the save indicator.
  *
  * The pressed states (bold/heading/list/link) follow the caret through
  * selectionchange + input, the way word processors do.

@@ -52,8 +52,10 @@ import {
 } from './model/selection';
 import {
   applyBlockTag,
+  blockIsTextuallyBlank,
   clearInlineStyle,
   clearStyledCaretRun,
+  exitPreBlock,
   flipChecklistItem,
   insertPlainText,
   nestListItem,
@@ -234,6 +236,12 @@ export class ModelPort implements EditorPort {
   /** Parks/unparks the engine while another note-kind surface owns the host. */
   setInert(inert: boolean): void {
     this.inert = inert;
+    // A parked engine carries no live burst state home: the host changes
+    // owners (another note kind's surface) while it is away, so the flag
+    // that claims "a beforeinput already opened this burst's group" can
+    // only be stale by the time events flow again.
+    this.typingGroupOpen = false;
+    this.pendingMark = null;
     // The placeholder mirror follows the park: a parked engine stops
     // mirroring (the Markdown surface owns the host and carries its own
     // placeholder rules), and coming home re-syncs from the host as it
@@ -545,6 +553,10 @@ export class ModelPort implements EditorPort {
     // path always applied, now in the engine that paints it.
     collapseEmptySurface(this.element);
     this.pendingMark = null;
+    // A replaced document is a fresh history (reset above) — a burst flag
+    // left armed by the previous note would make every keystroke on this
+    // one a continuation of a group that no longer exists.
+    this.typingGroupOpen = false;
   }
 
   getText(): string {
@@ -820,6 +832,12 @@ export class ModelPort implements EditorPort {
   }
 
   undo(): boolean {
+    // Undoing closes the typing burst: the popped group is gone, so the
+    // next keystroke must open a NEW one. The flag otherwise stays armed
+    // and every later keystroke on the note silently bypasses the history
+    // (type → undo → type → undo did nothing — the second burst continued
+    // a group that no longer existed).
+    this.typingGroupOpen = false;
     this.absorb();
     const current = serialize(this.model);
     const restore = this.history.undo(current);
@@ -839,6 +857,9 @@ export class ModelPort implements EditorPort {
   }
 
   redo(): boolean {
+    // Same discipline as undo: a redo is a history walk, not a burst
+    // continuation — new typing afterwards opens its own group.
+    this.typingGroupOpen = false;
     this.absorb();
     const current = serialize(this.model);
     const restore = this.history.redo(current);
@@ -1195,7 +1216,7 @@ export class ModelPort implements EditorPort {
     while (el && el !== this.element && !BLOCK_TAGS.test(el.tagName)) {
       el = el.parentElement;
     }
-    if (!el || el === this.element || /^(LI|TD|TH)$/.test(el.tagName)) {
+    if (!el || el === this.element) {
       return null;
     }
 
@@ -1206,6 +1227,25 @@ export class ModelPort implements EditorPort {
         ? spot.node === el && spot.childIndex === 0
         : streamOffsetOfSpot(el, spot) === 0;
     if (!atStart) {
+      return null;
+    }
+
+    // Backspace at the start of the FIRST item of its list (no content
+    // above in the same list) leaves the list, Docs/Notion style: a nested
+    // item lifts one level, a top-level item becomes a plain paragraph and
+    // the list closes around the gap when it emptied. Native Chromium
+    // NO-OPS here — the first press did nothing at all, the user was stuck
+    // in the list. Items with anything above (an item, or the previous
+    // item's sublist) keep the native merge.
+    if (el.tagName === 'LI') {
+      if (el.previousElementSibling) {
+        return null; // the native merge into the content above is right
+      }
+      return this.command((model, coverage) =>
+        unnestListItem(model, coverage[0], this.preferInModel(spot, model, coverage[0])),
+      );
+    }
+    if (/^(TD|TH)$/.test(el.tagName)) {
       return null;
     }
 
@@ -1526,6 +1566,15 @@ export class ModelPort implements EditorPort {
     if (type === '') {
       return;
     }
+    // Enter's block escapes (Docs parity): the key on an empty quote line
+    // or a code block's trailing empty line leaves the style instead of
+    // continuing it — the same double-Enter exit the lists already have.
+    // Without this the user cannot leave a quote or a code block with the
+    // keyboard at all (Chromium happily quotes/monospaces forever).
+    if (type === 'insertParagraph' && this.enterEscapesBlock()) {
+      event.preventDefault();
+      return;
+    }
     if (TYPING_INPUT_TYPES.has(type)) {
       if (this.typingGroupOpen) {
         return; // continuation of the open burst
@@ -1538,6 +1587,54 @@ export class ModelPort implements EditorPort {
     this.typingGroupOpen = false;
     this.absorb();
     this.history.openGroup(serialize(this.model));
+  }
+
+  /**
+   * Enter's block escapes (called from onBeforeInput for insertParagraph).
+   *
+   * An EMPTY quote line converts to a plain paragraph — Enter at the end
+   * of a quote, then Enter again on the empty line it produced, leaves
+   * the quote. A code block's trailing EMPTY line splits off into a plain
+   * paragraph after the code — Enter at the end of the code, Enter again,
+   * leaves the block. Both mirror the double-Enter list exit the surface
+   * already has; Enter anywhere else keeps its native behavior.
+   *
+   * Returns true when the Enter was handled and must not reach the
+   * browser.
+   */
+  private enterEscapesBlock(): boolean {
+    const spot = liveCollapsedSpot(this.element);
+    if (!spot) {
+      return false;
+    }
+    let el: HTMLElement | null =
+      spot.kind === 'text' ? spot.node.parentElement : (spot.node as HTMLElement);
+    while (el && el !== this.element && !BLOCK_TAGS.test(el.tagName)) {
+      el = el.parentElement;
+    }
+    if (!el || el === this.element || /^(LI|TD|TH)$/.test(el.tagName)) {
+      return false;
+    }
+
+    if (el.tagName === 'BLOCKQUOTE') {
+      if (!blockIsTextuallyBlank(el)) {
+        return false;
+      }
+      // The empty quote line becomes a plain paragraph in place; the
+      // caret stays where the quote's line had it.
+      return this.command((model, coverage) => applyBlockTag(model, coverage, 'p'));
+    }
+
+    if (el.tagName === 'PRE') {
+      // exitPreBlock decides from the caret's model twin whether it sits
+      // on the trailing blank line (element spots ON the pre included);
+      // anything else answers UNCHANGED and the native Enter proceeds.
+      return this.command((model, coverage) =>
+        exitPreBlock(model, this.preferInModel(spot, model, coverage[0])),
+      );
+    }
+
+    return false;
   }
 
   /**
