@@ -286,7 +286,10 @@ export class SnapshotsManager {
     // Open snapshots modal
     document.getElementById('snapshotsButton')?.addEventListener('click', () => {
       openModal($('#snapshotsModal').get(0));
-      void this.loadSnapshots();
+      // Honor the search field's leftover text — reopening used to show the
+      // unfiltered list under a stale query.
+      const query = (document.getElementById('searchSnapshots') as HTMLInputElement | null)?.value;
+      void this.loadSnapshots(query ?? '');
     });
 
     // Create snapshot button

@@ -84,6 +84,9 @@ class MusicPlayerApp {
   private seekDebounce: ReturnType<typeof setTimeout> | null = null;
   private progressTimer: ReturnType<typeof setInterval> | null = null;
   private lastVolumeBeforeMute: number | null = null;
+  /** The volume actually driving the engine — tracks mutes too, unlike
+   *  state.volume (which remembers the user's chosen level). */
+  private appliedVolume = 1;
 
   // ---- free engine (no login): <audio> + resolved stream URLs ----
   /** Lazy closures over the app — nothing runs before the first play. */
@@ -234,6 +237,7 @@ class MusicPlayerApp {
     this.miniPlay = byId('mpMiniPlay');
 
     // Restore persisted UI state.
+    this.appliedVolume = this.state.volume > 0 ? this.state.volume : 1;
     this.volumeInput.value = String(Math.round(this.state.volume * 100));
     this.shuffleBtn.classList.toggle('is-on', this.state.shuffle);
     this.shuffleBtn.setAttribute('aria-pressed', String(this.state.shuffle));
@@ -595,6 +599,9 @@ class MusicPlayerApp {
   private setVolume(value: number, fromUser: boolean): void {
     const vol = Math.max(0, Math.min(1, value));
     this.engine.setVolume(vol);
+    // The APPLIED volume drives the icon and the mute toggle; state.volume
+    // keeps the user's chosen level so a mute does not forget it.
+    this.appliedVolume = vol;
     if (fromUser) {
       this.state.volume = vol;
       this.persist();
@@ -606,7 +613,10 @@ class MusicPlayerApp {
   }
 
   private toggleMute(): void {
-    const current = this.state.volume;
+    // Decide on the APPLIED volume: state.volume keeps the pre-mute level,
+    // so the old check always re-muted (a no-op) and only dragging the
+    // slider could bring sound back.
+    const current = this.appliedVolume;
     if (current > 0) {
       this.lastVolumeBeforeMute = current;
       this.setVolume(0, false);
@@ -618,7 +628,7 @@ class MusicPlayerApp {
   }
 
   private updateVolumeIcon(): void {
-    const vol = this.state.volume;
+    const vol = this.appliedVolume;
     this.volIconHigh.style.display = vol >= 0.5 ? 'inline' : 'none';
     this.volIconLow.style.display = vol > 0 && vol < 0.5 ? 'inline' : 'none';
     this.volIconMute.style.display = vol <= 0 ? 'inline' : 'none';
@@ -828,7 +838,11 @@ class MusicPlayerApp {
 
   /** Fills the heart buttons in a freshly rendered list — local favorites. */
   private refreshRowHearts(container: HTMLElement): void {
-    container.querySelectorAll<HTMLElement>('.sp-row[data-like]').forEach((row) => {
+    // Rows, not '[data-like]' rows: the attribute rides the inner
+    // .sp-row-like button (rows.ts), so the old selector matched nothing
+    // and every heart rendered unfilled — in the Favorites view a click on
+    // a wrongly-empty heart REMOVED the favorite.
+    container.querySelectorAll<HTMLElement>('.sp-row').forEach((row) => {
       this.setRowHeart(row, this.library.isFavorite(row.dataset.trackId ?? ''));
     });
   }

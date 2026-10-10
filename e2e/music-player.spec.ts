@@ -42,6 +42,37 @@ test.describe('music player', () => {
     await expect(page.locator('#mpPbSub')).toHaveText('Search a song to play');
   });
 
+  test('favoriting an ambience track fills its heart everywhere it renders', async ({ page }) => {
+    await page.goto('/');
+    await openPlayer(page);
+
+    // Ambience rows render without any network — the heart contract can be
+    // pinned here: click fills, the re-render KEEPS it filled (the old
+    // refreshRowHearts selector matched nothing, so every list re-rendered
+    // with empty hearts — in Favorites a click on the wrongly-empty heart
+    // removed the favorite).
+    await page.locator('#mpNavAmbience').click();
+    const row = page.locator('#mpAmbienceList .sp-row').first();
+    await expect(row).toBeVisible();
+    const heart = row.locator('[data-like]');
+    await expect(heart).toHaveAttribute('aria-pressed', 'false');
+
+    await heart.click();
+    await expect(heart).toHaveAttribute('aria-pressed', 'true');
+    await expect(heart).toHaveClass(/is-fav/);
+
+    // The favorites view renders from the library — the persisted state
+    // must show as a filled heart there too.
+    await page.locator('#mpNavFavorites').click();
+    const favRow = page.locator('#mpFavoritesList .sp-row').first();
+    await expect(favRow).toBeVisible();
+    await expect(favRow.locator('[data-like]')).toHaveAttribute('aria-pressed', 'true');
+
+    // Clicking the (now filled) heart in Favorites removes it again.
+    await favRow.locator('[data-like]').click();
+    await expect(page.locator('#mpFavoritesEmpty')).toBeVisible();
+  });
+
   test('the sidebar switches search → favorites → ambience → queue and back', async ({ page }) => {
     await page.goto('/');
     await openPlayer(page);
