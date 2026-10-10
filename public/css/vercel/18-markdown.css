@@ -277,26 +277,83 @@
   padding: 2px 0;
 }
 
+/* ---- The source pane ----
+   The raw-markdown textarea — the SOURCE mode's editing surface and the
+   left half of the SPLIT. Hidden until one of those modes owns it (the
+   mount builds it up front so the flip needs no DOM work). Typography
+   mirrors the code vocabulary the WYSIWYG's own code blocks use (the
+   mono stack, one size step below the note body), the padding mirrors
+   the .milkdown container's (24px left gutter parity with the block
+   handle), and the resize/outline discipline matches #note's (no chrome
+   of its own — the host's focus treatment carries it). It inherits
+   #note's spellcheck state, so the Settings > Text toggle reaches it
+   live. */
+
+.markdown-surface .markdown-source {
+  display: none;
+  width: 100%;
+  min-height: 100%;
+  padding: 14px 24px 40vh;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--vz-fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14.5px;
+  line-height: 1.7;
+  tab-size: 2;
+  cursor: text;
+}
+
+/* The empty pane's placeholder carries the app's own copy. */
+.markdown-surface .markdown-source::placeholder {
+  color: var(--vz-fg-muted);
+  opacity: 0.7;
+}
+
 /* ---- Preview mode ----
    The preview pane is the owned renderer's output — the exact markup a
-   share link or the HTML export ships. Same vocabulary as above; the
-   editor root stands down. */
+   share link or the HTML export ships. Same vocabulary as above; every
+   editing pane stands down. */
 
 .markdown-surface .markdown-preview {
   min-height: 100%;
   cursor: default;
 }
 
-.markdown-surface.markdown-preview-mode .milkdown {
+.markdown-surface.markdown-preview-mode .milkdown,
+.markdown-surface.markdown-preview-mode .markdown-source {
   display: none;
 }
 
+/* The [hidden] attribute is the pane-visibility contract — guard it the
+   way the chime-picker lesson taught (an author display rule anywhere
+   beats the UA's hidden). */
+.markdown-surface .markdown-preview[hidden] {
+  display: none;
+}
+
+.markdown-surface.markdown-source-mode .milkdown,
+.markdown-surface.markdown-source-mode .markdown-preview {
+  display: none;
+}
+
+/* ---- Source mode ----
+   The raw markdown alone, full width. The WYSIWYG stays mounted (hidden)
+   so a flip back is instant — the surface keeps it in sync (see
+   surface.ts: pushSourceIntoEditor). */
+
+.markdown-surface.markdown-source-mode .markdown-source {
+  display: block;
+}
+
 /* ---- Split mode ----
-   The working split: the WYSIWYG left, the owned renderer's live output
+   The working split: the SOURCE left, the owned renderer's live output
    right — the same preview vocabulary, refreshed a beat behind the
    typing. The surface fills the host's height exactly (the host is the
    flex-bounded scroll container) and each pane scrolls its own content;
-   the divider is the editor pane's right border on the border token. */
+   the divider is the source pane's right border on the border token. */
 
 .markdown-surface.markdown-split-mode {
   display: grid;
@@ -306,19 +363,25 @@
   overflow: hidden;
 }
 
-/* The preview mounts before the editor appends itself, so DOM order
-   alone would put the renderer first — place them explicitly: the
-   WYSIWYG owns the left half, the rendered output the right. grid-row
-   is load-bearing: the auto-placement cursor starts at column 1, the
-   preview takes column 2, and the editor's explicit column 1 then sits
-   BEHIND the cursor — sparse packing pushes it to a second row, which
-   halved both panes and stacked them diagonally. */
-.markdown-surface.markdown-split-mode .milkdown {
+/* The split edits the SOURCE — the WYSIWYG (still mounted, still synced)
+   stands down entirely while the textarea owns the left half and the
+   rendered output the right. grid-row is load-bearing: the
+   auto-placement cursor starts at column 1, the preview takes column 2,
+   and the source pane's explicit column 1 then sits BEHIND the cursor —
+   sparse packing pushes it to a second row, which halved both panes and
+   stacked them diagonally. */
+.markdown-surface.markdown-split-mode .markdown-source {
+  display: block;
   grid-column: 1;
   grid-row: 1;
   min-height: 0;
   overflow-y: auto;
+  padding-bottom: 24px;
   border-right: 1px solid var(--vz-border);
+}
+
+.markdown-surface.markdown-split-mode .milkdown {
+  display: none;
 }
 
 .markdown-surface.markdown-split-mode .markdown-preview {
@@ -326,9 +389,10 @@
   grid-row: 1;
   min-height: 0;
   overflow-y: auto;
+  padding: 14px 24px;
 }
 
-/* Narrow screens stack the panes — the editor keeps the top, the
+/* Narrow screens stack the panes — the source keeps the top, the
    preview follows beneath it. */
 @media (max-width: 720px) {
   .markdown-surface.markdown-split-mode {
@@ -336,7 +400,7 @@
     grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   }
 
-  .markdown-surface.markdown-split-mode .milkdown {
+  .markdown-surface.markdown-split-mode .markdown-source {
     grid-column: 1;
     grid-row: 1;
     border-right: none;
@@ -350,12 +414,26 @@
 }
 
 /* ---- The view toggle ----
-   The segmented Edit/Split/Preview control rides the shared rich-btn
-   styles; the active third reads pressed exactly like Bold does when the
-   caret sits in bold text. */
+   The segmented Visual/Source/Split/Preview control rides the shared
+   rich-btn styles; the active mode reads pressed exactly like Bold does
+   when the caret sits in bold text. The labels are part of the control
+   (an icon-only control hid the split from its own users) — they fold
+   away on narrow screens where the titles carry the meaning. */
 
 .markdown-toolbar .markdown-view-toggle {
   margin-left: auto;
+}
+
+.markdown-view-btn .markdown-view-label {
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1;
+}
+
+@media (max-width: 720px) {
+  .markdown-view-btn .markdown-view-label {
+    display: none;
+  }
 }
 
 /* ---- Task lists (the GFM preset's editing face) ----

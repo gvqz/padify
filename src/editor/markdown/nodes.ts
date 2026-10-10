@@ -46,7 +46,7 @@ import { liftListItem, sinkListItem } from '@milkdown/kit/prose/schema-list';
 import { Plugin, PluginKey, TextSelection, type EditorState } from '@milkdown/kit/prose/state';
 import type { EditorView, NodeView, ViewMutationRecord } from '@milkdown/kit/prose/view';
 import remarkMath from 'remark-math';
-import { imageSchema } from '@milkdown/kit/preset/commonmark';
+import { imageSchema, paragraphSchema } from '@milkdown/kit/preset/commonmark';
 
 import { MATH_CLASS, renderMathIn } from '../math';
 
@@ -234,6 +234,37 @@ export const safeImageSchema = imageSchema.extendSchema((prev) => (ctx) => {
           alt: typeof node.alt === 'string' ? node.alt : '',
           title: typeof node.title === 'string' ? node.title : '',
         });
+      },
+    },
+  } as NodeSchema;
+});
+
+/**
+ * The paragraph serializer without Milkdown's empty-line placeholder.
+ *
+ * WHY: the preset round-trips an EMPTY paragraph (Enter Enter) as a raw
+ * `<br />` HTML node in the markdown source — valid markdown that its
+ * own parser understands, but the app's OWNED renderer (preview, share
+ * links, export) escapes raw HTML BY SECURITY DESIGN, so every paragraph
+ * break typed in the WYSIWYG leaked a literal `<br />` into every
+ * non-WYSIWYG surface. Blank lines ARE the markdown paragraph break:
+ * the empty paragraph serializes away, and the note's stored source
+ * stays what its author meant to write.
+ */
+export const padifyParagraphSchema = paragraphSchema.extendSchema((prev) => (ctx) => {
+  const base = prev(ctx);
+  const baseRunner = base.toMarkdown?.runner;
+  return {
+    ...base,
+    toMarkdown: {
+      ...base.toMarkdown,
+      runner: (state: SerializerState, node: ProseNode) => {
+        if (!node.content || node.content.size === 0) {
+          // An empty paragraph contributes nothing — the blank line the
+          // serializer writes between blocks carries the break.
+          return;
+        }
+        baseRunner?.(state, node);
       },
     },
   } as NodeSchema;

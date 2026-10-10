@@ -26,10 +26,14 @@
  *    inside a table (the rich toolbar's table menu vocabulary);
  *  • the task-list button — the Docs grammar over GFM checkboxes
  *    (wrap in tasks, swap a plain list into tasks, lift back out);
- *  • the Edit/Split/Preview segmented control — the surface's view
- *    toggle (see surface.ts: split parks the owned renderer's live
- *    output beside the editor, preview is that output full-width —
- *    the same truth share links and HTML export show).
+ *  • the Visual/Source/Split/Preview segmented control — the surface's
+ *    view toggle (see surface.ts: source is the raw-markdown pane,
+ *    split pairs it with the owned renderer's live output, preview is
+ *    that output full-width — the same truth share links and HTML
+ *    export show). Every formatting button speaks BOTH grammars: the
+ *    Milkdown commands in the visual mode, the source-edit primitives
+ *    (wrap/prefix/insert — see source-edit.ts) in source and split, so
+ *    the toolbar never stands down while a pane can take the caret.
  *
  * Visibility follows the active note like the rich toolbar's: hidden
  * unless the active note IS a Markdown note (addActiveListener + the
@@ -42,7 +46,9 @@ import { isMarkdownNote } from '../note-types';
 import { mountMathPalette } from '../math-palette';
 import { renderMathPreview } from '../math';
 import {
+  focusMarkdownPane,
   markdownEditorHandle,
+  markdownSourceTextarea,
   markdownViewMode,
   onMarkdownSelection,
   onMarkdownViewMode,
@@ -52,6 +58,21 @@ import {
   type MarkdownViewMode,
 } from './surface';
 import { MD_MATH_CLICK_EVENT } from './nodes';
+import {
+  applyEdit,
+  applyLink as applySourceLink,
+  clearFormatting as clearSourceFormatting,
+  insertBlock,
+  linkAroundCaret,
+  removeLink as removeSourceLink,
+  setHeadingLevel,
+  tableTemplate,
+  toggleLinePrefix,
+  toggleOrderedList,
+  toggleWrap,
+  wrapCodeBlock,
+  type SourceLink,
+} from './source-edit';
 import { callCommand } from '@milkdown/kit/utils';
 import { NodeSelection, TextSelection, type EditorState } from '@milkdown/kit/prose/state';
 import type { Transaction } from '@milkdown/kit/prose/state';
@@ -131,6 +152,9 @@ let parked: { from: number; to: number } | null = null;
 
 /** The link range for chip mode (the mark's own extent, not the caret). */
 let chipRange: { from: number; to: number } | null = null;
+
+/** The source pane's parked link (source/split mode's chip target). */
+let sourceLink: SourceLink | null = null;
 
 /** The equation bubble's insertion kind (segmented control state). */
 let mathKind: 'inline' | 'block' = 'inline';
@@ -255,9 +279,8 @@ export function runMarkdownToolbarAction(action: string): boolean {
     // focus there. Without handing it back, the next keystrokes drive
     // the ARIA toolbar (Space/Enter activate the focused button — a
     // space in a sentence multiplied tables) instead of typing into the
-    // note. The editor is the surface being edited: every action ends
-    // with the caret back in it.
-    markdownEditorHandle()?.view.focus();
+    // note. The pane that owns the edit takes the caret back.
+    focusMarkdownPane();
     // A toggle does not move the selection — the buttons must not wait
     // for one to learn the document changed.
     refreshMarkdownSelectionState();
@@ -300,8 +323,12 @@ function parkCaretInFreshTable(handle: NonNullable<ReturnType<typeof markdownEdi
   view.focus();
 }
 
-/** Dispatches a toolbar action to the live Milkdown editor. */
+/** Dispatches a toolbar action to the live editing pane. */
 function dispatchToolbarAction(action: string): boolean {
+  const source = markdownSourceTextarea();
+  if (source) {
+    return dispatchSourceAction(source, action);
+  }
   const handle = markdownEditorHandle();
   if (!handle) {
     return false;
@@ -345,6 +372,61 @@ function dispatchToolbarAction(action: string): boolean {
         return false;
       }
       parkCaretInFreshTable(handle);
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
+ * The source pane's action dispatch — the same toolbar vocabulary as
+ * markdown syntax edits (the primitives in source-edit.ts). Undo and
+ * redo ride the textarea's own native stacks.
+ */
+function dispatchSourceAction(source: HTMLTextAreaElement, action: string): boolean {
+  switch (action) {
+    case 'undo':
+    case 'redo':
+      try {
+        return document.execCommand(action);
+      } catch {
+        return false;
+      }
+    case 'bold':
+      toggleWrap(source, '**');
+      return true;
+    case 'italic':
+      toggleWrap(source, '*');
+      return true;
+    case 'strikethrough':
+      toggleWrap(source, '~~');
+      return true;
+    case 'code':
+      toggleWrap(source, '`');
+      return true;
+    case 'quote':
+      toggleLinePrefix(source, '> ');
+      return true;
+    case 'bullet':
+      toggleLinePrefix(source, '- ');
+      return true;
+    case 'ordered':
+      toggleOrderedList(source);
+      return true;
+    case 'task':
+      toggleLinePrefix(source, '- [ ] ');
+      return true;
+    case 'clear':
+      clearSourceFormatting(source);
+      return true;
+    case 'codeblock':
+      wrapCodeBlock(source);
+      return true;
+    case 'hr':
+      insertBlock(source, '---');
+      return true;
+    case 'table':
+      insertBlock(source, tableTemplate(), [2, 10]);
       return true;
     default:
       return false;
@@ -470,6 +552,21 @@ function clearMarkdownFormatting(
 
 /** Applies a block style from the dropdown (p / h1..h6). */
 export function runMarkdownBlockStyle(block: string): boolean {
+  const source = markdownSourceTextarea();
+  if (source) {
+    if (block === 'p') {
+      setHeadingLevel(source, null);
+    } else {
+      const level = Number(block.slice(1));
+      if (!(Number.isInteger(level) && level >= 1 && level <= 6)) {
+        return false;
+      }
+      setHeadingLevel(source, level);
+    }
+    focusMarkdownPane();
+    refreshMarkdownSelectionState();
+    return true;
+  }
   const handle = markdownEditorHandle();
   if (!handle) {
     return false;
@@ -489,8 +586,12 @@ export function runMarkdownBlockStyle(block: string): boolean {
   return applied;
 }
 
-/** Runs a table structure operation at the caret's cell. */
+/** Runs a table structure operation at the caret's cell (the visual
+ *  mode's grammar — the raw source has no cell cursor to operate on). */
 export function runMarkdownTableAction(op: string): boolean {
+  if (markdownSourceTextarea()) {
+    return false;
+  }
   const handle = markdownEditorHandle();
   if (!handle) {
     return false;
@@ -689,6 +790,9 @@ function wireLinkPopover(): void {
 
 /** The href the chip acts on (parked range or chip range). */
 function chipHref(): string | null {
+  if (sourceLink) {
+    return sourceLink.href;
+  }
   const handle = markdownEditorHandle();
   if (!handle) {
     return null;
@@ -769,8 +873,16 @@ export function linkRangeAround(state: EditorState): { from: number; to: number 
 
 /** Chip first when the caret sits on a link; edit mode otherwise. */
 export function openMarkdownLinkPopover(): void {
+  if (!elements?.popover || !elements.input) {
+    return;
+  }
+  const source = markdownSourceTextarea();
+  if (source) {
+    openSourceLinkPopover(source);
+    return;
+  }
   const handle = markdownEditorHandle();
-  if (!elements?.popover || !elements.input || !handle) {
+  if (!handle) {
     return;
   }
   closeBlockMenu();
@@ -799,6 +911,38 @@ export function openMarkdownLinkPopover(): void {
   elements.popover.hidden = false;
 }
 
+/**
+ * The source pane's popover: chip mode when the caret sits inside a
+ * [text](href) span (Open/Copy/Edit on that link), edit mode otherwise
+ * (the selection is the link text-to-be).
+ */
+function openSourceLinkPopover(source: HTMLTextAreaElement): void {
+  if (!elements?.popover || !elements.input) {
+    return;
+  }
+  closeBlockMenu();
+  closeTableMenu();
+  closeMathPopover();
+
+  const link = linkAroundCaret(source);
+  sourceLink = link;
+  if (link) {
+    showLinkMode('chip');
+    if (elements.linkHrefLabel) {
+      elements.linkHrefLabel.textContent = link.href;
+    }
+  } else {
+    showLinkMode('edit');
+    if (elements.remove) {
+      elements.remove.hidden = source.selectionStart === source.selectionEnd;
+    }
+    elements.input.value = '';
+    elements.input.focus();
+    elements.input.select();
+  }
+  elements.popover.hidden = false;
+}
+
 /** Swaps the popover's chip/edit rows. */
 function showLinkMode(mode: 'chip' | 'edit'): void {
   if (!elements?.linkChipRow || !elements.linkEditRow) {
@@ -811,6 +955,7 @@ function showLinkMode(mode: 'chip' | 'edit'): void {
 function closeLinkPopover(): void {
   parked = null;
   chipRange = null;
+  sourceLink = null;
   if (elements?.popover) {
     elements.popover.hidden = true;
   }
@@ -829,6 +974,11 @@ function completeHref(raw: string): string {
 }
 
 function applyLink(): void {
+  const source = markdownSourceTextarea();
+  if (source) {
+    applySourceLinkPopover(source);
+    return;
+  }
   const handle = markdownEditorHandle();
   if (!elements?.input || !handle || !parked) {
     closeLinkPopover();
@@ -890,7 +1040,40 @@ function applyLink(): void {
   focusEditor(view);
 }
 
+/**
+ * The source pane's Apply: the sanitized href wraps the selection as
+ * [text](href), retargets the parked link in place, or plants fresh
+ * link text at the caret — the same three shapes the visual mode has.
+ */
+function applySourceLinkPopover(source: HTMLTextAreaElement): void {
+  if (!elements?.input) {
+    closeLinkPopover();
+    return;
+  }
+  if (elements.input.value.trim() === '') {
+    closeLinkPopover();
+    source.focus();
+    return;
+  }
+  const href = completeHref(elements.input.value);
+  if (sanitizeHref(href) === null) {
+    showToast('Links must start with http://, https:// or mailto:');
+    elements.input.focus();
+    return;
+  }
+  applySourceLink(source, href);
+  closeLinkPopover();
+  source.focus();
+}
+
 function removeLink(): void {
+  const source = markdownSourceTextarea();
+  if (source) {
+    removeSourceLink(source);
+    closeLinkPopover();
+    source.focus();
+    return;
+  }
   const handle = markdownEditorHandle();
   if (!elements?.popover || !handle) {
     closeLinkPopover();
@@ -1006,6 +1189,7 @@ function closeMathPopover(): void {
 
 /** Opens the equation bubble — fresh (insert) or over a selected node (apply). */
 export function openMarkdownEquationBubble(options?: { kind?: 'inline' | 'block' }): void {
+  const source = markdownSourceTextarea();
   const handle = markdownEditorHandle();
   if (!elements?.mathPopover || !elements.mathInput || !elements.mathPreview) {
     return;
@@ -1015,8 +1199,9 @@ export function openMarkdownEquationBubble(options?: { kind?: 'inline' | 'block'
   closeLinkPopover();
   mountMathPaletteOnce();
 
-  // A node-selected equation is the edit target — its kind leads.
-  const selection = handle?.view.state.selection;
+  // A node-selected equation is the edit target — its kind leads. (The
+  // source pane has no node selection: a fresh insert every time.)
+  const selection = source ? null : handle?.view.state.selection;
   const node =
     selection instanceof NodeSelection &&
     (selection.node.type.name === 'math_inline' || selection.node.type.name === 'math_block')
@@ -1042,6 +1227,11 @@ export function openMarkdownEquationBubble(options?: { kind?: 'inline' | 'block'
 }
 
 function applyMath(): void {
+  const source = markdownSourceTextarea();
+  if (source) {
+    applySourceMath(source);
+    return;
+  }
   const handle = markdownEditorHandle();
   if (!elements?.mathInput || !handle) {
     closeMathPopover();
@@ -1074,6 +1264,29 @@ function applyMath(): void {
     return;
   }
   view.dispatch(state.tr.replaceSelectionWith(type.create(null, state.schema.text(latex))));
+}
+
+/**
+ * The source pane's equation insert: inline wraps the selection as
+ * $…$ (the caret between the dollars when nothing is selected), block
+ * writes a fenced $$…$$ on its own lines.
+ */
+function applySourceMath(source: HTMLTextAreaElement): void {
+  const latex = elements?.mathInput?.value.trim() ?? '';
+  closeMathPopover();
+  source.focus();
+  if (latex === '') {
+    return;
+  }
+  if (mathKind === 'block') {
+    insertBlock(source, `$$\n${latex}\n$$`);
+    return;
+  }
+  const from = source.selectionStart;
+  const to = source.selectionEnd;
+  const selected = source.value.slice(from, to);
+  const inserted = `$${selected}$`;
+  applyEdit(source, from, to, inserted, from + 1, from + 1 + selected.length);
 }
 
 // ---------------------------------------------------------------------------
@@ -1141,10 +1354,11 @@ function syncPressedStates(state: MarkdownSelectionState): void {
     elements.menuLabel.textContent = BLOCK_LABELS[blockKey] ?? 'Normal text';
   }
 
-  // The table-ops menu exists only inside a table.
+  // The table-ops menu exists only inside a table — and only in the
+  // visual mode (the raw source has no cell cursor).
   if (elements.tableMenuHost) {
-    elements.tableMenuHost.hidden = !state.inTable;
-    if (!state.inTable) {
+    elements.tableMenuHost.hidden = !state.inTable || markdownViewMode() !== 'edit';
+    if (!state.inTable || markdownViewMode() !== 'edit') {
       closeTableMenu();
     }
   }
@@ -1158,8 +1372,17 @@ function wireViewToggle(): void {
     button.addEventListener('click', () => {
       const requested = button.dataset.mdView;
       const mode: MarkdownViewMode =
-        requested === 'preview' ? 'preview' : requested === 'split' ? 'split' : 'edit';
+        requested === 'preview'
+          ? 'preview'
+          : requested === 'split'
+            ? 'split'
+            : requested === 'source'
+              ? 'source'
+              : 'edit';
       setMarkdownViewMode(mode);
+      // A click parks focus on the button — hand it to the pane that now
+      // owns the edit (preview keeps it nowhere: a reading gesture).
+      focusMarkdownPane();
     });
   }
 }
@@ -1174,14 +1397,27 @@ function syncViewToggle(): void {
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
   }
   // Formatting an invisible document is a no-op at best — park the
-  // command chrome while the preview owns the surface. Split keeps
-  // the editor live, so its buttons stay enabled.
+  // command chrome while the preview owns the surface. Source and split
+  // keep a live editing pane (the textarea), so their buttons stay up.
   const editing = mode !== 'preview';
   for (const button of elements.buttons) {
     (button as HTMLButtonElement).disabled = !editing;
   }
+  // The table-ops menu rides the WYSIWYG's caret-in-table state; the raw
+  // source has no cell cursor to operate on (the insert-table button
+  // itself keeps working — it writes the template). Hiding on non-edit
+  // modes is ours; showing is the pressed-state pass's call (inTable).
+  if (elements.tableMenuHost && mode !== 'edit') {
+    elements.tableMenuHost.hidden = true;
+    closeTableMenu();
+  }
   if (elements.tableMenuButton) {
-    (elements.tableMenuButton as HTMLButtonElement).disabled = !editing;
+    (elements.tableMenuButton as HTMLButtonElement).disabled = mode !== 'edit';
+  }
+  if (mode === 'edit') {
+    // Back under the WYSIWYG's grammar: recompute the menu's visibility
+    // from the live selection (the caret's own inTable truth).
+    refreshMarkdownSelectionState();
   }
   if (!editing) {
     closeBlockMenu();

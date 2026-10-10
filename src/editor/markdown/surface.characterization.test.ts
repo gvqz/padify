@@ -59,6 +59,7 @@ import {
 import { Slice } from '@milkdown/kit/prose/model';
 import { TextSelection } from '@milkdown/kit/prose/state';
 import { undo } from '@milkdown/kit/prose/history';
+import { getMarkdown } from '@milkdown/kit/utils';
 import {
   runMarkdownToolbarAction,
   initMarkdownToolbar,
@@ -714,7 +715,7 @@ describe('the view toggle — split is the working mode', () => {
     expect(preview.hidden).toBe(true);
   });
 
-  it('split re-renders the pane after an edit — a beat behind the typing', async () => {
+  it('split re-renders the pane after a SOURCE edit — a beat behind the typing', async () => {
     const host = freshHost();
     surface.display(host, { content: '# First' });
     await ready();
@@ -724,12 +725,13 @@ describe('the view toggle — split is the working mode', () => {
     const preview = host.querySelector('.markdown-preview') as HTMLElement;
     expect(preview.querySelector('h1')?.textContent).toBe('First');
 
-    // A user edit at the doc's end: the debounce (250ms) + the listener's
-    // own settle (200ms) must both run before the pane updates.
-    const handle = markdownEditorHandle()!;
-    handle.view.dispatch(
-      handle.view.state.tr.insertText(' and live', handle.view.state.doc.content.size - 1),
-    );
+    // A user edit in the source pane (the split's editing pane): value +
+    // the input event (jsdom has no execCommand — the applyEdit fallback
+    // fires the same signal). The 250ms debounce must run before the
+    // pane updates.
+    const source = host.querySelector('.markdown-source') as HTMLTextAreaElement;
+    source.value = '# First and live';
+    source.dispatchEvent(new Event('input', { bubbles: true }));
     await settled(700);
     expect(preview.querySelector('h1')?.textContent).toBe('First and live');
 
@@ -753,12 +755,15 @@ describe('the view toggle — split is the working mode', () => {
     expect(preview.hidden).toBe(false);
     expect(preview.querySelector('h1')?.textContent).toBe('Note two');
 
-    // Preview, by contrast, is a reading gesture — display resets it.
+    // Preview, by contrast, is a reading gesture — display resets it to
+    // the LAST WORKING mode (split, the mode preview interrupted).
     setMarkdownViewMode('preview');
     surface.display(host, { content: '# Note three' });
     await settled(300);
-    expect(markdownViewMode()).toBe('edit');
-    expect((host.querySelector('.markdown-preview') as HTMLElement | null)?.hidden).toBe(true);
+    expect(markdownViewMode()).toBe('split');
+    const previewThree = host.querySelector('.markdown-preview') as HTMLElement;
+    expect(previewThree.hidden).toBe(false);
+    expect(previewThree.querySelector('h1')?.textContent).toBe('Note three');
   });
 
   it('a fresh mount re-applies split (the wrapper starts in the editing layout)', async () => {
@@ -805,6 +810,183 @@ describe('the view toggle — split is the working mode', () => {
     unlisten();
     setMarkdownViewMode('split');
     expect(seen).toEqual(['split', 'preview', 'edit']);
+
+    setMarkdownViewMode('edit');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The source mode — the raw-markdown textarea pane
+// ---------------------------------------------------------------------------
+
+describe('the source mode — raw markdown typing', () => {
+  it('entering source carries the WYSIWYG markdown into the textarea; capture answers it', async () => {
+    const host = freshHost();
+    surface.display(host, { content: '# Heading\n\nA **bold** word.' });
+    await ready();
+    await settled();
+
+    setMarkdownViewMode('source');
+    const root = host.querySelector('.markdown-surface') as HTMLElement;
+    expect(root.classList.contains('markdown-source-mode')).toBe(true);
+    const source = host.querySelector('.markdown-source') as HTMLTextAreaElement;
+    // The pane carries the WYSIWYG's own serialization — the trailing
+    // newline is what capture() has always answered for the stored note.
+    const carried = '# Heading\n\nA **bold** word.\n';
+    expect(source.value).toBe(carried);
+    // The WYSIWYG stands down (display:none owns the pane, the editor
+    // stays mounted for the flip back).
+    expect(markdownEditorHandle()).not.toBeNull();
+    // The pane that owns the edit answers the capture contract.
+    expect(surface.capture(host)).toBe(carried);
+  });
+
+  it('typing in the source pane announces the host input event (the autosave signal)', async () => {
+    const host = freshHost();
+    surface.display(host, { content: 'seed' });
+    await ready();
+    await settled();
+
+    setMarkdownViewMode('source');
+    const heard: Event[] = [];
+    host.addEventListener('input', (event) => heard.push(event));
+
+    const source = host.querySelector('.markdown-source') as HTMLTextAreaElement;
+    // The execCommand path is jsdom-absent: the applyEdit fallback fires
+    // the SAME bubbling input the browser path would.
+    source.setSelectionRange(4, 4);
+    source.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(heard).toHaveLength(1);
+    expect(surface.capture(host)).toBe('seed\n');
+  });
+
+  it('returning to edit pushes the edited source into the WYSIWYG', async () => {
+    const host = freshHost();
+    surface.display(host, { content: '# Old' });
+    await ready();
+    await settled();
+
+    setMarkdownViewMode('source');
+    const source = host.querySelector('.markdown-source') as HTMLTextAreaElement;
+    source.value = '# New\n\n- edited in source';
+    setMarkdownViewMode('edit');
+
+    const handle = markdownEditorHandle()!;
+    // The push re-serializes through the WYSIWYG: the trailing newline and
+    // the `*` bullet are its own serializer's conventions (what every
+    // visual edit has always stored).
+    expect(handle.editor.action(getMarkdown())).toBe('# New\n\n* edited in source\n');
+    // capture follows the pane again.
+    expect(surface.capture(host)).toBe('# New\n\n* edited in source\n');
+  });
+
+  it('an UNCHANGED source round trip never disturbs the WYSIWYG doc (undo survives)', async () => {
+    const host = freshHost();
+    surface.display(host, { content: '# Stable' });
+    await ready();
+    await settled();
+
+    const handle = markdownEditorHandle()!;
+    const docBefore = handle.view.state.doc;
+    setMarkdownViewMode('source');
+    setMarkdownViewMode('edit');
+    expect(handle.view.state.doc.eq(docBefore)).toBe(true);
+  });
+
+  it('a note switch in source mode rebuilds the pane (undo never crosses notes)', async () => {
+    const host = freshHost();
+    surface.display(host, { content: '# Note one' });
+    await ready();
+    await settled();
+
+    setMarkdownViewMode('source');
+    surface.display(host, { content: '# Note two' });
+    await settled(200);
+
+    const source = host.querySelector('.markdown-source') as HTMLTextAreaElement;
+    expect(source.value).toBe('# Note two');
+    expect(surface.capture(host)).toBe('# Note two');
+    // The hidden WYSIWYG stays in sync for the flip back.
+    setMarkdownViewMode('edit');
+    const handle = markdownEditorHandle()!;
+    // The push re-serializes through the WYSIWYG (the trailing newline
+    // is its own convention, unchanged by the source round trip).
+    expect(handle.editor.action(getMarkdown())).toBe('# Note two\n');
+  });
+
+  it('insertText lands in the source pane (the dictation path)', async () => {
+    const host = freshHost();
+    surface.display(host, { content: 'hello' });
+    await ready();
+    await settled();
+
+    setMarkdownViewMode('source');
+    const source = host.querySelector('.markdown-source') as HTMLTextAreaElement;
+    source.setSelectionRange(5, 5);
+    expect(surface.insertText(host, ' world')).toBe(true);
+    expect(source.value).toBe('hello world\n');
+    expect(surface.capture(host)).toBe('hello world\n');
+  });
+
+  it('focusTarget answers the textarea while source owns the edit', async () => {
+    const host = freshHost();
+    surface.display(host, { content: 'focus me' });
+    await ready();
+    await settled();
+
+    setMarkdownViewMode('source');
+    const source = host.querySelector('.markdown-source') as HTMLTextAreaElement;
+    expect(surface.focusTarget(host)).toBe(source);
+  });
+
+  it('an empty paragraph serializes away — never a <br /> placeholder in the source', async () => {
+    const host = freshHost();
+    surface.display(host, { content: '# A\n\nB' });
+    await ready();
+    await settled();
+
+    // The WYSIWYG's own typing gesture: Enter Enter leaves an empty
+    // paragraph between the blocks.
+    const handle = markdownEditorHandle()!;
+    const { state } = handle.view;
+    const paragraphType = state.schema.nodes.paragraph;
+    const empty = paragraphType.createAndFill();
+    const heading = state.doc.firstChild!;
+    const pos = heading.nodeSize;
+    if (!empty) {
+      throw new Error('the paragraph schema refused an empty paragraph');
+    }
+    handle.view.dispatch(state.tr.insert(pos, empty));
+    expect(handle.view.state.doc.childCount).toBe(3);
+
+    const captured = surface.capture(host)!;
+    // The preset's stock serializer writes a raw `<br />` html node for
+    // the empty paragraph — valid markdown for ITS parser, but the app's
+    // owned renderer escapes raw HTML by security design, so it leaked
+    // as literal text into preview, share links and export.
+    expect(captured).not.toContain('<br');
+    expect(captured).toContain('# A');
+    expect(captured).toContain('B');
+
+    // The preview (the owned renderer) shows the words, nothing else.
+    setMarkdownViewMode('preview');
+    const preview = host.querySelector('.markdown-preview') as HTMLElement;
+    expect(preview.textContent).not.toContain('<br');
+    setMarkdownViewMode('edit');
+  });
+
+  it('split puts the textarea left and the live preview right', async () => {
+    const host = freshHost();
+    surface.display(host, { content: '# Split view' });
+    await ready();
+    await settled();
+
+    setMarkdownViewMode('split');
+    const source = host.querySelector('.markdown-source') as HTMLTextAreaElement;
+    const preview = host.querySelector('.markdown-preview') as HTMLElement;
+    expect(source.value).toBe('# Split view\n');
+    expect(preview.hidden).toBe(false);
+    expect(preview.querySelector('h1')?.textContent).toBe('Split view');
 
     setMarkdownViewMode('edit');
   });
