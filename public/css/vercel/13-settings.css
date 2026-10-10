@@ -169,11 +169,21 @@ body.dark #prefSearch:focus {
   grid-template-columns: 208px minmax(0, 1fr);
 }
 
+/* Search mode: the nav hides ([hidden] below) and the panes auto-place
+   into the leftover FIRST grid track — 208px, text columns collapse to
+   zero. Collapse the grid to a single full-width track instead. */
+.pref-layout.is-searching {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 /* Author-vs-UA discipline (the chime-picker lesson): the hidden attribute
    must always win over the pane/nav display rules below, whatever classes
-   the settings nav toggles. */
+   the settings nav toggles. The nav ITEMS need the guard too — the cloud
+   tab ships hidden until a backend is configured, and .pref-nav-item's
+   display:flex would outrank the UA rule (blank-pane tab). */
 .pref-pane[hidden],
 .pref-nav[hidden],
+.pref-nav-item[hidden],
 .pref-search-empty[hidden] {
   display: none !important;
 }

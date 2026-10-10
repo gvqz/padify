@@ -24,10 +24,20 @@
   box-shadow: none;
 }
 
+/* Focus: keep the pressed/reset look for mouse clicks, but restore a
+   visible ring for keyboard focus — the old outline:none erased every
+   :focus-visible ring the design system defines (02-base.css), leaving
+   tabbed buttons with no focus indication at all. */
 .btn:focus,
 .btn:active:focus,
 .btn.active:focus {
-  outline: none;
+  box-shadow: none;
+}
+
+.btn:focus-visible,
+.form-control:focus-visible {
+  outline: 2px solid var(--vz-fg);
+  outline-offset: 2px;
   box-shadow: none;
 }
 
@@ -103,7 +113,6 @@
 body.dark .form-control:focus {
   border-color: var(--vz-border-strong);
   box-shadow: none !important;
-  outline: none;
 }
 
 .form-control::placeholder,

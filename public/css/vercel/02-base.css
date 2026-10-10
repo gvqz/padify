@@ -124,14 +124,22 @@ kbd {
 body.dark kbd {
   background: var(--vz-bg-chip);
   color: var(--vz-fg-muted);
+  /* The legacy .dark kbd bevel (2px #4a5568 border + 4px hard drop shadow
+     + inset) survives everywhere no other border rule intervenes — the
+     unicode picker's footer keycaps render with the whole plastic bevel.
+     One flat token-backed border matches the light keycaps. */
+  border: 1px solid var(--vz-border);
+  box-shadow: none;
 }
 
 kbd > span {
   font-size: 11.5px;
 }
 
-/* Global focus ring — monochrome, visible only for keyboard users */
-:focus-visible {
+/* Global focus ring — monochrome, visible only for keyboard users.
+   body-scoped (0,1,1): the legacy base.css resets (a:focus, .btn:focus at
+   the same specificity, earlier in the cascade) must not out-rank it. */
+body :focus-visible {
   outline: 2px solid var(--vz-fg);
   outline-offset: 2px;
   border-radius: var(--vz-radius);
