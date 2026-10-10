@@ -388,6 +388,11 @@ function dispatchSourceAction(source: HTMLTextAreaElement, action: string): bool
     case 'undo':
     case 'redo':
       try {
+        // The click that got here moved focus to the BUTTON — a text
+        // control's native undo stack is only reachable while the control
+        // itself is focused (the context menu gets this right; the toolbar
+        // buttons used to be silent no-ops on Windows/Linux).
+        source.focus();
         return document.execCommand(action);
       } catch {
         return false;
