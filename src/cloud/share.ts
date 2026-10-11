@@ -165,6 +165,16 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 const pendingNoteIds: Set<string> = new Set();
 const pendingTombstoneIds: Set<string> = new Set();
 
+/**
+ * Tombstone ids whose revoke PATCH already succeeded. The model's
+ * tombstone list is CUMULATIVE (the cloud sync layer owns emptying it,
+ * and a signed-out or offline user's deletions sit in it indefinitely)
+ * — without this set, every persist re-queued the full list and every
+ * typing pause re-issued the same idempotent PATCH forever (issue #118).
+ * Pruned against the model on each persist, so it stays proportional.
+ */
+const confirmedTombstoneIds: Set<string> = new Set();
+
 async function flushShareUpdates(): Promise<void> {
   debounceTimer = null;
 
@@ -186,6 +196,9 @@ async function flushShareUpdates(): Promise<void> {
         method: 'PATCH',
         body: { note_ids: tombstones, revoked: true },
       });
+      // Only a SUCCESSFUL revoke is settled — a failed one must stay
+      // re-queueable, so the next persist (the natural retry) resends it.
+      tombstones.forEach((id) => confirmedTombstoneIds.add(id));
     }
 
     // Edited notes: refresh title + content on every still-active link.
@@ -220,8 +233,23 @@ function onModelPersisted(payload: TabsSyncPayload): void {
 
   lastPayload = payload;
 
+  // Settle the confirmed set against the model: tombstone ids the sync
+  // layer confirmed away are gone from the payload, so they leave the
+  // confirmed set too (bounded memory, no cross-session leakage).
+  const modelTombstones = new Set(payload.tombstones.map((entry) => entry.id));
+  for (const id of confirmedTombstoneIds) {
+    if (!modelTombstones.has(id)) {
+      confirmedTombstoneIds.delete(id);
+    }
+  }
+
   payload.dirty.forEach((id) => pendingNoteIds.add(id));
-  payload.tombstones.forEach((entry) => pendingTombstoneIds.add(entry.id));
+  payload.tombstones.forEach((entry) => {
+    // Already revoked server-side — re-sending it is the issue #118 churn.
+    if (!confirmedTombstoneIds.has(entry.id)) {
+      pendingTombstoneIds.add(entry.id);
+    }
+  });
 
   if (pendingNoteIds.size === 0 && pendingTombstoneIds.size === 0) {
     return;

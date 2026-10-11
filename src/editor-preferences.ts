@@ -238,13 +238,18 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
   });
 
   notepad.spellCheck.on('change', function () {
-    if ($(this).is(':checked')) {
-      notepad.note.attr('spellcheck', true as unknown as string);
-      setState('userChosenSpellCheck', 'Yes');
-    } else {
-      notepad.note.attr('spellcheck', false as unknown as string);
-      setState('userChosenSpellCheck', 'No');
+    const enabled = $(this).is(':checked');
+    notepad.note.attr('spellcheck', enabled as unknown as string);
+    // The mounted Markdown WYSIWYG pins its own spellcheck at MOUNT (the
+    // ProseMirror root reads the host once, markdown/surface.ts) — write
+    // the live view too, or the setting takes effect only after the next
+    // note switch (issue #116). The source textarea inherits the host,
+    // so the host write already covers it.
+    const proseRoot = document.querySelector('#note .ProseMirror');
+    if (proseRoot) {
+      proseRoot.setAttribute('spellcheck', enabled ? 'true' : 'false');
     }
+    setState('userChosenSpellCheck', enabled ? 'Yes' : 'No');
   });
 
   // ---- font selection ----------------------------------------------

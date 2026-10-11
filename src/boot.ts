@@ -31,6 +31,7 @@ import { initHelp } from './help';
 import { initSnapshots } from './snapshots';
 import { initTimer } from './timer';
 import { mountMusicPlayer } from './features/music-player/markup';
+import { loadPlayerState } from './features/music-player/state';
 import { initContextMenu } from './context-menu';
 import { initBreakReminder } from './break-reminder';
 import { mountModals } from './ui/modals';
@@ -78,7 +79,10 @@ export async function bootPadify(): Promise<void> {
   //    (from the pure-markup module, not the feature barrel); its engines
   //    load on first open — app.ts's initMusicSubsystem.
   initHelp();
-  initTimer();
+  // The chime is music: it honors the SAME persisted volume the player
+  //  restores from (issue #117) — injected here because the timer must
+  //  not import the feature directly (the layering rule).
+  initTimer({ musicVolume: () => loadPlayerState().volume });
   initTooltips(); // after initTimer so the timer modal's tooltip is covered
   mountMusicPlayer();
   initSnapshots();
