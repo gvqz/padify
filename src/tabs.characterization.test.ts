@@ -654,6 +654,27 @@ describe('TabManager (characterization)', () => {
     expect(manager.getActive()!.content).toBe('<div>fresh from the cloud</div>');
   });
 
+  it('applyExternalMerge keeps the editor untouched while a DESCENDANT holds focus (markdown/PiP shape)', async () => {
+    // The Markdown host never holds the caret itself — the caret lives in
+    // a nested editing root (a textarea child, structurally identical to
+    // the PiP window's moved container). The old guard compared
+    // activeElement === #note and was always false here, so a merge
+    // repaint swallowed in-flight markdown keystrokes.
+    const manager = await bootedManager();
+    const activeId = manager.getActive()!.id;
+    $('#note').html('<div>surface</div>');
+    const nested = document.createElement('textarea');
+    document.getElementById('note')!.appendChild(nested);
+    nested.focus(); // focus is INSIDE #note, not on it
+
+    manager.applyExternalMerge([
+      stored(activeId, '<div>fresh from the cloud</div>', { updatedAt: 999 }),
+    ]);
+
+    expect(document.getElementById('note')!.innerHTML).toContain('surface');
+    expect(manager.getActive()!.content).toBe('<div>fresh from the cloud</div>');
+  });
+
   it('applyExternalMerge recreates a welcome tab when the merge empties the list', async () => {
     const manager = await bootedManager();
 

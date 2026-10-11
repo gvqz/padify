@@ -252,9 +252,33 @@ async function boot(): Promise<StorageBackend> {
 
 /** Pagehide/visibility hook — public for completeness. */
 export function flushPendingWrites(): void {
+  // Late captures first: the app's editor flush must land in the model (and
+  // its saveNotes must be queued) BEFORE the kv/mirror drains run, or the
+  // last ~900ms of typing dies with the page.
+  for (const hook of preFlushHooks) {
+    try {
+      hook();
+    } catch {
+      /* a failing capture must not block the drain */
+    }
+  }
   void flushKv();
   flushNotesMirror();
 }
+
+/**
+ * Registers a callback that runs at the top of every unload flush, before
+ * the kv batches and the notes mirror drain. The app uses this to capture
+ * the live editor into the model — closing the ~500ms input + 400ms
+ * persist debounce window that a page kill would otherwise swallow.
+ * Registration order vs. the pagehide listeners above doesn't matter; the
+ * hook list is drained inside flushPendingWrites itself.
+ */
+export function registerPreFlushHook(hook: () => void): void {
+  preFlushHooks.add(hook);
+}
+
+const preFlushHooks = new Set<() => void>();
 
 /** Test hook — full reset (call before booting between tests). */
 export function resetStorageForTests(): void {

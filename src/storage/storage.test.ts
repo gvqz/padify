@@ -137,6 +137,33 @@ describe('notes repository', () => {
     expect(stateGet('padifyActiveTab')).toBe('b');
   });
 
+  it('round-trips syncSeq through a reload — the cloud merge anchor survives boot', async () => {
+    // The save path stamps syncSeq on every row (the cloud layer sets it
+    // when the server accepts a push); the boot hydration used to drop the
+    // field, so every fresh session fell back to client-clock arbitration
+    // until each note was re-adopted by a pull. Pin the round-trip.
+    saveNotes(
+      {
+        tabs: [
+          { ...note('a', 'body'), syncSeq: 42 },
+          { ...note('b', 'body'), syncSeq: 0 },
+        ],
+        tombstones: [],
+      },
+      'a',
+    );
+    await whenNotesIdle();
+
+    localStorage.clear();
+    await reboot();
+
+    const snapshot = await loadNotes();
+    const a = snapshot.tabs.find((tab) => tab.id === 'a');
+    const b = snapshot.tabs.find((tab) => tab.id === 'b');
+    expect(a?.syncSeq).toBe(42); // the anchor survives the reload
+    expect(b?.syncSeq).toBeUndefined(); // seq 0 and junk read as absent
+  });
+
   it('stores tombstones as deleted rows and hard-deletes vanished ids', async () => {
     saveNotes({ tabs: [note('a', 'a'), note('b', 'b')], tombstones: [] }, 'a');
     await whenNotesIdle();
@@ -150,6 +177,34 @@ describe('notes repository', () => {
     const byId = new Map(records.map((record) => [record.id, record]));
     expect(byId.get('a')?.deleted).toBe(true);
     expect(byId.has('b')).toBe(false);
+  });
+
+  it('refuses to resurrect a note another tab deleted (mirror storage event)', async () => {
+    // The cross-tab scenario: tab B deletes note a (its tombstone list
+    // lands in the legacy mirror, which fires a `storage` event in tab A);
+    // tab A still holds a live in its model and keeps typing. Without the
+    // guard, A's next save upserts a live row back over B's tombstone —
+    // locally AND via the next cloud push. With it, A's saves leave the
+    // row alone until a re-hydrate catches up.
+    saveNotes({ tabs: [note('a', 'original')], tombstones: [] }, 'a');
+    await whenNotesIdle();
+
+    // Simulate the other tab's mirror write.
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: 'padifyTabTombstones',
+        newValue: JSON.stringify([{ id: 'a', updatedAt: 99 }]),
+      }),
+    );
+
+    saveNotes({ tabs: [note('a', 'typed after the delete', 50)], tombstones: [] }, 'a');
+    await whenNotesIdle();
+
+    const records = await readAll<NoteRecord>(NOTES_STORE);
+    const byId = new Map(records.map((record) => [record.id, record]));
+    // The live upsert was skipped: the row keeps its original body (and
+    // whatever deletion state the other tab's write left behind).
+    expect(byId.get('a')?.content).toBe('original');
   });
 
   it('persists strip order as position and honours it on load', async () => {

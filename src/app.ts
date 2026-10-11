@@ -27,7 +27,7 @@ import {
 } from './tabs';
 import { setEditorPort, getEditorPort } from './editor/port';
 import { ModelPort } from './editor/model-port';
-import { storageReady } from './storage';
+import { registerPreFlushHook, storageReady } from './storage';
 import { initCloudSync } from './cloud/sync';
 import { initCloudUI } from './cloud/ui';
 import { initCloudShare } from './cloud/share';
@@ -288,6 +288,16 @@ export async function initApp(): Promise<void> {
       updateWordCountPill(tabManager.getActiveText());
     }, 500),
   );
+
+  // Unload capture: the debounce above means up to ~900ms of typing can sit
+  // in the DOM (500ms input debounce + 400ms persist debounce) when the page
+  // dies. The storage layer drains its queues on pagehide/hidden — this
+  // pre-flush hook captures the live editor into the model FIRST, so the
+  // kv write and the synchronous localStorage mirror that follow carry the
+  // user's last words instead of a stale model.
+  registerPreFlushHook(() => {
+    tabManager.saveActiveFromEditor();
+  });
 
   // ---- save-state indicator (see save-indicator.ts) -----------------
   initSaveIndicator(notepad, tabManager);

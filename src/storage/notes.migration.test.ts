@@ -76,6 +76,30 @@ describe('migrateNoteRecord', () => {
     expect(migrated).toEqual(row);
   });
 
+  it('a FUTURE version row passes through untouched — never restamped as current', () => {
+    // A row written by a newer build (say v3 with a new body field) must
+    // not be stamped v2 by this build: the downgrade would make the next
+    // upgrade misread the row forever. Unknown fields ride along; only
+    // the version stamp is sacred.
+    const row: NoteRecord = {
+      id: 'tab-future',
+      name: null,
+      content: 'future body under a v3 field',
+      createdAt: 1,
+      updatedAt: 2,
+      position: 3,
+      deleted: false,
+      v: 3,
+      noteType: 'rich',
+      // A field only v3 builds know about:
+      futureField: { anything: true },
+    } as NoteRecord;
+
+    const migrated = migrateNoteRecord(row);
+
+    expect(migrated).toBe(row); // the exact same record — not even a copy
+  });
+
   it('junk version values read as v1 — never as a newer-than-current shape', () => {
     // A crafted or corrupted v must not smuggle a row past the migration.
     for (const junk of [0, -1, 2.5, Number.NaN]) {

@@ -537,6 +537,14 @@ async function runSyncOnce(): Promise<void> {
   const pull = await pullNotes(userId);
   const remoteRows = pull.rows.map((row) => ({ ...row, deleted: !!row.deleted }));
 
+  // Capture the live editor into the model BEFORE building the merge
+  // payload. Without this, up to ~700ms of debounce lag (Milkdown ~200ms
+  // + the app's 500ms input debounce) can sit in the DOM while the merge
+  // arbitrates a stale capture — keystrokes that were never in `payload`
+  // can neither win the merge nor seed a conflicted copy, so they would
+  // simply vanish when the winner repaints the editor.
+  manager.saveActiveFromEditor();
+
   const payload = manager.exportForSync();
   const merge = mergeRemote(remoteRows, payload, { order: pull.order });
 

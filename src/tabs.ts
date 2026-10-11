@@ -43,7 +43,7 @@ import {
   type StoredNoteTab,
 } from './storage';
 import { sanitizeNoteHtml } from './editor/storage-subset';
-import { currentThemeMode } from './editor/theme-colors';
+import { currentThemeMode, transformNoteColors } from './editor/theme-colors';
 import {
   htmlNoteSurface,
   noteSurfaceFor,
@@ -152,6 +152,18 @@ export interface TabsSyncPayload {
 
 function createTabId(): string {
   return `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * The next edit timestamp for a tab: strictly greater than the current
+ * one, even when two changes land inside the same millisecond (double
+ * restores, programmatic edits, automation). The storage diff and the
+ * cloud merge both treat `updatedAt` as the change signal — a same-ms
+ * second change would otherwise read as "nothing changed" and never
+ * persist.
+ */
+function nextUpdatedAt(previous: number): number {
+  return Math.max(Date.now(), previous + 1);
 }
 
 function createTab(
@@ -410,7 +422,7 @@ export class TabManager {
 
     const active = this.getActive();
     if (active) {
-      const editorFocused = document.activeElement === this.editor.get(0);
+      const editorFocused = this.isEditorFocused();
       const contentChanged =
         !activeBefore || activeBefore.id !== active.id
           ? true
@@ -421,6 +433,23 @@ export class TabManager {
       }
       this.notifyActiveChanged();
     }
+  }
+
+  /**
+   * True when the user is typing in the editor (or its PiP window). The old
+   * check compared activeElement against `#note` directly, which only ever
+   * matches one surface — the Markdown host never holds the caret itself
+   * (it lives in the nested editing root or the source textarea), so a
+   * merge repaint could swallow in-flight markdown keystrokes. Containment
+   * + ownerDocument covers every surface and the floating PiP document.
+   */
+  private isEditorFocused(): boolean {
+    const el = this.editor.get(0);
+    if (!el) return false;
+    const owner = el.ownerDocument;
+    const focused = owner?.activeElement;
+    if (!focused) return false;
+    return focused === el || el.contains(focused);
   }
 
   /** Debounced persistence for editor input — keeps typing smooth. */
@@ -459,7 +488,7 @@ export class TabManager {
     }
 
     active.content = html;
-    active.updatedAt = Date.now();
+    active.updatedAt = nextUpdatedAt(active.updatedAt);
     active.colorTheme = currentThemeMode();
     this.dirtyIds.add(active.id);
     this.schedulePersist();
@@ -479,7 +508,7 @@ export class TabManager {
     }
 
     active.content = surface.capture(this.editorHost()) ?? active.content;
-    active.updatedAt = Date.now();
+    active.updatedAt = nextUpdatedAt(active.updatedAt);
     active.colorTheme = currentThemeMode();
     this.dirtyIds.add(active.id);
     this.persist();
@@ -573,7 +602,7 @@ export class TabManager {
 
     noteSurfaceFor(active).clear(this.editorHost()!);
     active.content = '';
-    active.updatedAt = Date.now();
+    active.updatedAt = nextUpdatedAt(active.updatedAt);
     this.dirtyIds.add(active.id);
     this.persist();
     this.refreshTabLabel(active.id);
@@ -594,7 +623,7 @@ export class TabManager {
    * setEditorHtml); every other kind is written to the model directly,
    * because no editing surface exists for it.
    */
-  applySnapshotToActive(content: string, noteType?: NoteType): void {
+  applySnapshotToActive(content: string, noteType?: NoteType, colorTheme?: 'light' | 'dark'): void {
     const active = this.getActive();
     if (!active) {
       return;
@@ -610,6 +639,21 @@ export class TabManager {
     }
 
     if (isHtmlContent(noteType)) {
+      // Ink theme: a snapshot taken under the OTHER theme carries that
+      // theme's hex colors. The normal open path re-inks on display
+      // (noteRenderedForTheme) — the commit path never does, and the
+      // downstream syncAfterExternalEdit stamps the CURRENT theme onto
+      // foreign ink, which then persists forever (near-black text on the
+      // dark surface). Re-ink the markup BEFORE it commits so the capture,
+      // the stamp, and the stored bytes all agree.
+      let restoredContent = content;
+      const mode = currentThemeMode();
+      if (colorTheme && colorTheme !== mode) {
+        const scratch = document.createElement('div');
+        scratch.innerHTML = content;
+        transformNoteColors(scratch, colorTheme, mode);
+        restoredContent = scratch.innerHTML;
+      }
       // The snapshot may switch the note's kind (a markdown note restored
       // as html): the painter changes outside loadActiveIntoEditor, so the
       // outgoing surface stands down here first — its editor and floating
@@ -621,7 +665,7 @@ export class TabManager {
         }
         this.paintedBy = htmlNoteSurface;
       }
-      const committed = noteSurfaceForKind('html').commit(this.editorHost(), content);
+      const committed = noteSurfaceForKind('html').commit(this.editorHost(), restoredContent);
       if (!committed) {
         // Bare-DOM fallback (pre-boot paths): the surface painted the
         // sanitized content; the save is ours.
@@ -629,7 +673,7 @@ export class TabManager {
       }
     } else {
       active.content = content;
-      active.updatedAt = Date.now();
+      active.updatedAt = nextUpdatedAt(active.updatedAt);
       this.dirtyIds.add(active.id);
       this.persist();
       this.loadActiveIntoEditor();
@@ -849,6 +893,14 @@ export class TabManager {
     }
 
     const isActive = tabId === this.activeId;
+    // Capture the live editor FIRST when closing the active tab: the
+    // emptiness gate below reads the surface, but the snapshot argument
+    // reads the model — inside the input debounce window those disagree,
+    // so a close could skip the safety snapshot (or store it missing the
+    // last words) for exactly the content the user is trying to keep.
+    if (isActive) {
+      this.saveActiveFromEditor();
+    }
     const text = isActive ? this.getActiveText() : htmlToText(tab.content);
 
     const closeNow = async (): Promise<void> => {
@@ -864,6 +916,7 @@ export class TabManager {
             tab.noteType,
             tab.id,
             `Before closing "${deriveTabTitle(tab)}"`,
+            tab.colorTheme,
           );
         } catch {
           /* snapshots unavailable — the close still proceeds */
@@ -943,7 +996,7 @@ export class TabManager {
       const raw = String(input.val() ?? '').trim();
       if (keep && raw && raw !== currentName) {
         tab.name = raw;
-        tab.updatedAt = Date.now();
+        tab.updatedAt = nextUpdatedAt(tab.updatedAt);
         this.dirtyIds.add(tab.id);
         this.persist();
         showToast('Tab renamed.');
