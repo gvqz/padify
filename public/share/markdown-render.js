@@ -199,7 +199,10 @@ function collectBlockquote(lines, start, depth) {
     }
     break;
   }
-  return { markup: `<blockquote>${renderBlocks(inner, depth + 1).join("\n")}</blockquote>`, next: index };
+  return {
+    markup: `<blockquote>${renderBlocks(inner, depth + 1).join("\n")}</blockquote>`,
+    next: index
+  };
 }
 function isListItemStart(line) {
   if (indentWidth(line) >= 4) {
