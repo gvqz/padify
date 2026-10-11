@@ -66,35 +66,12 @@ input[type=radio]:focus {
   display: none;
 }
 
-.pip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: #7e7d7d;
-  font-weight: bold;
-  pointer-events: none;
-  z-index: 1000;
-  background-color: rgba(0, 0, 0, 0.5);
-
-  &::after {
-    content: "Floating Window is Activated";
-  }
-}
-
-.overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  /* Adjust opacity as needed */
-  pointer-events: none;
-  /* Makes overlay non-interactive by default */
-  z-index: 10;
-  display: none;
-}
+/* No `.pip` wash here anymore: while a note floats, #mainContainer keeps
+   its normal layout (the `.pip` marker class stays for hooks/tests) and
+   16-editor-shell.css styles the dock placeholder that fills the editor
+   slot. The old flex-center + dim + "Floating Window is Activated"
+   treatment made the whole main window look broken AND swallowed every
+   pointer event in it. */
 
 .break-veil {
   position: fixed;

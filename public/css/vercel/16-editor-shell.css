@@ -1442,18 +1442,175 @@ body.dark #note[data-empty]::before {
   display: none;
 }
 
-/* Picture-in-Picture host window stays maximally compact */
+/* ---- Floating window (Document Picture-in-Picture) ----
+   pip-window.ts moves #textareaContainer into an always-on-top
+   window whose document only carries what the module put there: a
+   compact header and the editor column. The host rules below target
+   THOSE elements — an earlier revision styled #editorShell/#tabRail
+   here, but those elements stay in the main window, so the rules
+   never applied. */
+
+/* The host body is a column: header on top, editor filling the rest. */
 body.pip-host {
-  padding-top: 0 !important;
-}
-
-body.pip-host #editorShell {
+  display: flex;
+  flex-direction: column;
   height: 100vh;
+  margin: 0;
+  /* The floating window has no navbar — the page's fixed-navbar
+     padding (base.css derives it from --navbar-h) must not show. */
+  padding: 0 !important;
+  overflow: hidden;
+  background: var(--vz-bg);
+  color: var(--vz-fg);
 }
 
-body.pip-host #tabRail,
-body.pip-host #tabRailBackdrop {
-  display: none;
+/* Compact header: the live note title + the dock-back button. */
+.pip-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 6px 0 14px;
+  border-bottom: 1px solid var(--vz-border);
+  background: var(--vz-bg-navbar);
+}
+
+.pip-header-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--vz-fg-muted);
+}
+
+.pip-header-dock {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg-muted);
+  cursor: pointer;
+}
+
+.pip-header-dock:hover {
+  background: var(--vz-bg-hover);
+  color: var(--vz-fg);
+}
+
+.pip-header-dock:focus-visible {
+  outline: 2px solid var(--vz-fg-subtle);
+  outline-offset: -2px;
+}
+
+/* The editor column fills what's left of the floating window. */
+body.pip-host #textareaContainer {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+
+/* Compact typing area — the page paddings assume a full window, and
+   !important is needed because the optimal-line-length preference
+   writes the note's padding as an INLINE style. */
+body.pip-host #note {
+  padding: 14px 16px 16px !important;
+}
+
+/* The save/word-count line is a real status bar here, not a floating
+   chip: in flow, on its own row, so note text can never run under it
+   (the page version parks it absolutely over the note's 80px bottom
+   padding, which a 350px window cannot afford). */
+body.pip-host .bottom-line {
+  position: static;
+  right: auto;
+  bottom: auto;
+  width: 100%;
+  box-sizing: border-box;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 5px 10px;
+  border-top: 1px solid var(--vz-border);
+  background: var(--vz-bg-subtle);
+  font-size: 11px;
+}
+
+/* The statistics anchor opens a main-window modal — inert in here. */
+body.pip-host .word-count-container a {
+  pointer-events: none;
+}
+
+/* ---- Floating window: the main window's dock placeholder ----
+   While the note floats, #editorShell keeps its rail and shows this
+   where the editor was — informative, never blocking: the rail and
+   the navbar stay fully interactive the whole time. */
+.pip-dock {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px;
+  text-align: center;
+}
+
+.pip-dock-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--vz-border);
+  border-radius: 20px;
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg-subtle);
+}
+
+.pip-dock-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--vz-fg);
+}
+
+.pip-dock-sub {
+  margin: 4px 0 0;
+  max-width: 340px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--vz-fg-muted);
+}
+
+.pip-dock-btn {
+  margin-top: 2px;
+  padding: 8px 16px;
+  border: 1px solid var(--vz-border-strong);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pip-dock-btn:hover {
+  background: var(--vz-bg-hover);
+}
+
+.pip-dock-btn:focus-visible {
+  outline: 2px solid var(--vz-fg-subtle);
+  outline-offset: -2px;
 }
 
 /* ---- Save-state indicator (bottom line) ---- */
