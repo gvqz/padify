@@ -167,6 +167,33 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
     return json(request, { error: 'Invalid notes payload.' }, 400);
   }
 
+  // ---- per-user storage quota ---------------------------------------------
+  // One authenticated account used to be able to store unlimited 2 MB
+  // note bodies — a cheap way to exhaust a small host's storage. The cap
+  // counts live note bytes (tombstones are empty), net of what this batch
+  // replaces.
+  const NOTE_BYTES_QUOTA = 25 * 1024 * 1024;
+  const incomingIds = rows.map((row) => row.id);
+  const placeholders = incomingIds.map(() => '?').join(', ');
+  const existingRows = await db.all(
+    `select id, coalesce(length(content), 0) as bytes from notes where user_id = ? and id in (${placeholders})`,
+    [user.id, ...incomingIds]
+  );
+  const existingById = new Map(existingRows.map((row) => [String(row.id), Number(row.bytes) || 0]));
+  const incomingBytes = rows.reduce(
+    (total, row) => total + (row.deleted ? 0 : row.content.length),
+    0
+  );
+  const replacedBytes = rows.reduce((total, row) => total + (existingById.get(row.id) ?? 0), 0);
+  const totalsRows = await db.all(
+    'select coalesce(sum(length(content)), 0) as total from notes where user_id = ? and deleted = 0',
+    [user.id]
+  );
+  const currentTotal = Number(totalsRows[0]?.total ?? 0) || 0;
+  if (currentTotal - replacedBytes + incomingBytes > NOTE_BYTES_QUOTA) {
+    return json(request, { error: 'This account is out of storage space — delete some notes to sync more.' }, 413);
+  }
+
   // Sync v2 stamping: every write reserves its batch's numbers from the
   // user's sequence counter in ONE atomic statement — fresh inserts and
   // conflict updates alike, so a re-push, a position drift and a delete
@@ -228,6 +255,27 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
       ]
     }))
   );
+
+  // Honest accounting: the upsert's WHERE pins updates to rows the user
+  // owns, but a cross-user id collision made the write a silent NO-OP
+  // while the response still said ok — the client dropped the row from
+  // its push queue and the note existed on exactly one device forever,
+  // with no error anywhere. Verify what actually landed.
+  const landedRows = await db.all(
+    `select count(*) as landed from notes where user_id = ? and id in (${placeholders})`,
+    [user.id, ...incomingIds]
+  );
+  const landed = Number(landedRows[0]?.landed ?? 0);
+  if (landed < rows.length) {
+    // Some rows didn't land (a different account owns those ids —
+    // near-impossible with the client's random ids, but no longer
+    // invisible when it happens).
+    return json(
+      request,
+      { error: 'Some notes could not be stored — their ids conflict with another account.' },
+      409
+    );
+  }
 
   return json(request, { ok: true });
 }

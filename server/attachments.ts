@@ -176,17 +176,52 @@ export async function handleAttachmentPost(
     return json(request, { error: 'That attachment id already has different bytes.' }, 409);
   }
 
+  // Per-user quota: unlimited 5 MB uploads from one throwaway account
+  // could fill a small host's storage single-handedly. 200 MB / 500
+  // files is far beyond any real voice-note use and far below trouble.
+  const MAX_TOTAL_ATTACHMENT_BYTES = 200 * 1024 * 1024;
+  const MAX_ATTACHMENT_COUNT = 500;
+  const usageRows = await db.all(
+    'select count(*) as files, coalesce(sum(size), 0) as bytes from attachments where user_id = ?',
+    [user.id]
+  );
+  const usedBytes = Number(usageRows[0]?.bytes ?? 0) || 0;
+  const usedFiles = Number(usageRows[0]?.files ?? 0) || 0;
+  if (usedFiles + 1 > MAX_ATTACHMENT_COUNT || usedBytes + bytes.byteLength > MAX_TOTAL_ATTACHMENT_BYTES) {
+    return json(
+      request,
+      { error: 'Attachment storage is full — delete some recordings before uploading more.' },
+      413
+    );
+  }
+
   const meta = {
     id,
     name: attachmentNameFrom(request.headers.get('x-padify-name')),
     mime: attachmentMimeFrom(request.headers.get('content-type'))
   };
   const createdAt = Date.now();
-  await db.run(
-    `insert into attachments (id, user_id, name, mime, size, sha256, data, created_at)
-     values (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, user.id, meta.name, meta.mime, bytes.byteLength, sha256, encodeAttachmentData(bytes), createdAt]
-  );
+  try {
+    await db.run(
+      `insert into attachments (id, user_id, name, mime, size, sha256, data, created_at)
+       values (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, user.id, meta.name, meta.mime, bytes.byteLength, sha256, encodeAttachmentData(bytes), createdAt]
+    );
+  } catch (error) {
+    // Two tabs racing the same new id both passed the existence check
+    // above; the loser's INSERT hit the primary key and surfaced as a
+    // generic 500 (signup already handled exactly this shape). Re-read
+    // and answer the duplicate question honestly.
+    const raced = await db.all(
+      'select sha256 from attachments where id = ? and user_id = ?',
+      [id, user.id]
+    );
+    if (raced.length > 0 && String(raced[0]?.sha256) === sha256) {
+      return json(request, { ok: true, id, duplicate: true });
+    }
+    console.error('[attachments] insert failed', id, error);
+    return json(request, { error: 'Could not save the attachment. Try again.' }, 500);
+  }
   return json(request, { ...meta, size: bytes.byteLength, sha256, createdAt }, 201);
 }
 
@@ -215,12 +250,18 @@ export async function handleAttachmentGet(
   const bytes = decodeAttachmentData(String(row.data));
   const name = typeof row.name === 'string' && row.name ? row.name : 'attachment';
   const mime = typeof row.mime === 'string' && row.mime ? row.mime : 'application/octet-stream';
+  // The stored mime is pattern-checked, not allow-listed (text/html
+  // passes), and this raw Response carries none of the json() helper's
+  // security headers — an owner-uploaded HTML attachment opened inline
+  // executes same-origin script. Disposition: attachment (download),
+  // plus an explicit nosniff for the belt-and-braces.
   return new Response(bytes, {
     status: 200,
     headers: {
       'content-type': mime,
       'content-length': String(bytes.byteLength),
-      'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(name)}`,
+      'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+      'x-content-type-options': 'nosniff',
       etag,
       'cache-control': 'private, max-age=31536000, immutable',
       ...corsHeaders(request)

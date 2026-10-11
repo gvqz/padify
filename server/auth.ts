@@ -23,15 +23,42 @@ export function hashPassword(password: string): string {
   return `scrypt$${salt.toString('hex')}$${hash.toString('hex')}`;
 }
 
+/**
+ * A fixed, deliberately-wrong hash for the missing-user path. Verifying
+ * against it costs the same ~50-100ms of scrypt as a real check, so the
+ * sign-in route can equalize the timing between "no such account" and
+ * "wrong password" — the `||` short-circuit used to answer missing
+ * emails ~100ms faster, a clean enumeration oracle that defeated the
+ * uniform error copy.
+ */
+const DUMMY_PASSWORD_HASH = hashPassword('padify-timing-equalizer');
+
+export function verifyPasswordWithCost(password: string, stored?: string | null): boolean {
+  // A missing or malformed stored hash runs the SAME scrypt work against
+  // the dummy before failing — callers must not be able to tell "user
+  // absent" from "password wrong" by the clock.
+  const target =
+    stored && typeof stored === 'string' && stored.split('$').length === 3
+      ? stored
+      : DUMMY_PASSWORD_HASH;
+  const parts = target.split('$');
+  const result = parts.length === 3 && parts[0] === 'scrypt' ? verifyAgainst(password, parts) : false;
+  return result;
+}
+
+function verifyAgainst(password: string, parts: string[]): boolean {
+  const salt = Buffer.from(parts[1], 'hex');
+  const expected = Buffer.from(parts[2], 'hex');
+  const actual = scryptSync(password, salt, expected.length || KEY_LENGTH);
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
 export function verifyPassword(password: string, stored: string): boolean {
   const parts = stored.split('$');
   if (parts.length !== 3 || parts[0] !== 'scrypt') {
     return false;
   }
-  const salt = Buffer.from(parts[1], 'hex');
-  const expected = Buffer.from(parts[2], 'hex');
-  const actual = scryptSync(password, salt, expected.length || KEY_LENGTH);
-  return expected.length === actual.length && timingSafeEqual(expected, actual);
+  return verifyAgainst(password, parts);
 }
 
 function sha256(value: string): string {

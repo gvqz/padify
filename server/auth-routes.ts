@@ -16,7 +16,7 @@ import {
 import {
   createSession,
   hashPassword,
-  verifyPassword
+  verifyPasswordWithCost
 } from './auth';
 import { asString } from './notes';
 
@@ -42,7 +42,15 @@ export async function handleSignup(db: Db, request: Request): Promise<Response> 
     return json(request, { error: 'Enter a valid email address.' }, 400);
   }
   if (password.length < 6 || password.length > 200) {
-    return json(request, { error: 'Password must be at least 6 characters.' }, 400);
+    // Distinct messages: a password-manager user with a 201-char secret
+    // used to be told it was TOO SHORT.
+    return json(
+      request,
+      password.length > 200
+        ? { error: 'Password must be 200 characters or fewer.' }
+        : { error: 'Password must be at least 6 characters.' },
+      400,
+    );
   }
 
   const userId = crypto.randomUUID();
@@ -90,7 +98,15 @@ export async function handleSignin(db: Db, request: Request): Promise<Response> 
 
   const rows = await db.all('select id, email, password_hash from users where email = ?', [email]);
   const user = rows[0];
-  if (!user || !verifyPassword(password, String(user.password_hash))) {
+  // Timing-equalized: a missing account runs the same scrypt cost against
+  // a fixed dummy hash, so "no such email" and "wrong password" answer in
+  // the same window (verifyPasswordWithCost). The old `||` short-circuit
+  // leaked account existence to anyone with a stopwatch.
+  if (!verifyPasswordWithCost(password, user ? String(user.password_hash) : null)) {
+    recordSigninFailure(email);
+    return json(request, { error: 'Wrong email or password.' }, 401);
+  }
+  if (!user) {
     recordSigninFailure(email);
     return json(request, { error: 'Wrong email or password.' }, 401);
   }
