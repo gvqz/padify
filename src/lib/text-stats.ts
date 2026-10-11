@@ -16,11 +16,27 @@ export function countWords(str: string): number {
     return 0;
   }
 
-  return trimmedText.split(/\s+/).length;
+  // CJK text carries no spaces — a spaceless Chinese paragraph used to
+  // count as ONE word. Han ideographs and kana count as words
+  // individually (the Word/Docs convention for CJK statistics);
+  // everything else keeps the whitespace split.
+  const withoutCjk = trimmedText.replace(
+    /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/g,
+    ' ',
+  );
+  const cjkCount = (
+    trimmedText.match(/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/g) ?? []
+  ).length;
+  const spaceSeparated = withoutCjk.split(/\s+/).filter((word) => word !== '').length;
+  return spaceSeparated + cjkCount;
 }
 
 export function extractWordTokens(str: string): string[] {
-  return str.toLowerCase().match(/\b[a-z']+\b/g) || [];
+  // Unicode letters, not just ASCII: a CJK or Arabic note used to report
+  // 0 unique words, 'N/A' as its most common word, and 0% lexical
+  // density. Runs of unspaced letters read as one token (a Han phrase).
+  // Internal apostrophes stay part of the word ("don't" is one token).
+  return str.toLowerCase().match(/\p{L}+(?:'\p{L}+)*/gu) || [];
 }
 
 export function countSyllables(word: string): number {
@@ -100,11 +116,22 @@ export function calculateNoteStatistics(str: string): NoteStatistics {
   // Count sentences (split by . ! ?)
   const sentences = str.split(/[.!?]+/).filter((s) => s.trim().length > 0).length;
 
-  // Count paragraphs (split by double newlines or multiple line breaks)
-  const paragraphs = str.split(/\n\n+/).filter((p) => p.trim().length > 0).length;
+  // Count paragraphs — CRLF content normalizes first: a `\r\n\r\n`
+  // break never matched the \n-only pattern, so a pasted CRLF note read
+  // as ONE paragraph.
+  const normalizedBreaks = str.replace(/\r\n?/g, '\n');
+  const paragraphs = normalizedBreaks.split(/\n{2,}/).filter((p) => p.trim().length > 0).length;
 
-  // Calculate average word length
-  const averageWordLength = words > 0 ? (characters / words).toFixed(2) : 0;
+  // Average word length: the mean of the words' lengths (edge
+  // punctuation excluded), NOT characters-per-word — the old formula
+  // counted every space and comma, so 10 short words reported 4.10.
+  const lengthTokens = normalizedBreaks
+    .split(/\s+/)
+    .map((token) => token.replace(/[^\p{L}\p{N}]+$/u, '').replace(/^[^\p{L}\p{N}]+/u, ''))
+    .filter((token) => token !== '');
+  const totalWordLength = lengthTokens.reduce((total, token) => total + [...token].length, 0);
+  const averageWordLength =
+    lengthTokens.length > 0 ? (totalWordLength / lengthTokens.length).toFixed(2) : 0;
 
   // Calculate reading time (average 200 words per minute)
   const readingTimeMinutes = Math.ceil(words / 200);

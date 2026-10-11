@@ -36,6 +36,7 @@
 import { renderMathIn } from './math';
 import { getEditorPort } from './port';
 import { migrateMarginIndentsToTabs } from './plain-indent';
+import { htmlToText } from './note-content';
 import { sanitizeNoteHtml } from './storage-subset';
 import { noteRenderedForTheme } from './theme-colors';
 import { contentKindFor, DEFAULT_NOTE_TYPE, noteTypeLabel, type ContentKind } from './note-types';
@@ -184,14 +185,19 @@ export class HtmlNoteSurface implements NoteSurface {
     if (!host) {
       return '';
     }
-    const text = host.innerText
+    // Read through the canonical plain-text reader instead of innerText:
+    // the LIVE host carries KaTeX's rendering, whose accessibility clone
+    // (.katex-mathml) is clipped rather than display:none — innerText
+    // included it, so every equation counted ~3x (rendered glyphs + raw
+    // LaTeX + annotation) in the word pill and the statistics modal.
+    // htmlToText reads a math shell as its LaTeX source, exactly once.
+    const text = htmlToText(host.innerHTML)
       .replace(/\u00a0/g, ' ')
       // The styled-caret run (U+200B) is formatting, not content.
       .replace(/\u200B/g, '');
     // A bare <br> — the empty state a delete-all leaves — reports "\n"
-    // through innerText, which read as a phantom character on an empty
-    // note ("1 character • 0 words"). Whitespace-only means empty for
-    // every consumer of this text (count pill, statistics, share cards).
+    // through the reader too. Whitespace-only means empty for every
+    // consumer of this text (count pill, statistics, share cards).
     return text.trim() === '' ? '' : text;
   }
 

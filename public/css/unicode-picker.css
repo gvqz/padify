@@ -406,6 +406,29 @@ body.dark .ucp-modal .modal-content {
   font-size: 12.5px;
 }
 
+/* The dataset-failure retry button (see ensureReady's catch in
+   picker.ts) — the app button look, in the picker's token space. */
+.ucp-retry {
+  margin-top: 4px;
+  padding: 6px 16px;
+  border: 1px solid var(--ucp-border);
+  border-radius: var(--ucp-radius, 6px);
+  background: var(--ucp-accent, #0070f3);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ucp-retry:hover {
+  filter: brightness(0.95);
+}
+
+.ucp-retry:focus-visible {
+  outline: 2px solid var(--ucp-accent-ring, rgba(0, 112, 243, 0.45));
+  outline-offset: 2px;
+}
+
 /* ---- detail rail ---------------------------------------------------------- */
 
 .ucp-detail {
@@ -625,7 +648,17 @@ body.dark .ucp-modal .modal-content {
   }
 
   .ucp-modal .modal-content {
-    height: 100%;
+    /* Viewport units, not a percentage: `height: 100%` resolved against
+       the auto-height dialog (its parent has no explicit height), so the
+       content grew to fit ALL 5,418 cards — a ~95,000px modal that
+       defeated the grid's virtualization (clientHeight covered every
+       row) and scrolled on the .modal instead of the grid. Bounded to
+       the real viewport, the grid owns the scroll and renderWindow
+       works. dvh tracks mobile browser chrome show/hide. */
+    height: 100dvh;
+    /* Older browsers without dvh: the vh fallback (no mobile-chrome
+       tracking, but bounded). */
+    height: 100vh;
   }
 
   .ucp-header {

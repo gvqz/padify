@@ -65,11 +65,11 @@ export const ICONS = {
   close: icon('<path d="M18 6 6 18M6 6l12 12"/>', 16),
 };
 
-const playIconSvg = (size: number): string =>
-  `<svg id="mpPlayIcon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M8 5.14v13.72c0 .8.87 1.3 1.56.9l11-6.86a1.05 1.05 0 0 0 0-1.8l-11-6.86A1.05 1.05 0 0 0 8 5.14z"/></svg>`;
+const playIconSvg = (size: number, id = 'mpPlayIcon'): string =>
+  `<svg id="${id}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M8 5.14v13.72c0 .8.87 1.3 1.56.9l11-6.86a1.05 1.05 0 0 0 0-1.8l-11-6.86A1.05 1.05 0 0 0 8 5.14z"/></svg>`;
 
-const pauseIconSvg = (size: number): string =>
-  `<svg id="mpPauseIcon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="display:none;"><rect x="6" y="4" width="4.4" height="16" rx="1.4"/><rect x="13.6" y="4" width="4.4" height="16" rx="1.4"/></svg>`;
+const pauseIconSvg = (size: number, id = 'mpPauseIcon'): string =>
+  `<svg id="${id}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="display:none;"><rect x="6" y="4" width="4.4" height="16" rx="1.4"/><rect x="13.6" y="4" width="4.4" height="16" rx="1.4"/></svg>`;
 
 export const eqMarkup = (cls: string): string =>
   `<span class="mp-eq ${cls}" aria-hidden="true"><span></span><span></span><span></span><span></span></span>`;
@@ -257,7 +257,7 @@ const miniPlayerHtml = `
         </span>
         ${eqMarkup('mp-mini-eq')}
     </button>
-    <button type="button" class="mp-mini-btn" id="mpMiniPlay" title="Play" aria-label="Play">${playIconSvg(16)}${pauseIconSvg(16)}</button>
+    <button type="button" class="mp-mini-btn" id="mpMiniPlay" title="Play" aria-label="Play">${playIconSvg(16, 'mpMiniPlayIcon')}${pauseIconSvg(16, 'mpMiniPauseIcon')}</button>
     <button type="button" class="mp-mini-btn" id="mpMiniNext" title="Next track" aria-label="Next track">${ICONS.next}</button>
     <button type="button" class="mp-mini-close" id="mpMiniClose" title="Stop and hide player" aria-label="Stop and hide player">${ICONS.close}</button>
 </div>`;

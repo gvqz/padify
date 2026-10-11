@@ -926,7 +926,20 @@ import { json } from './http';
 import { asInt } from './notes';
 
 export async function handleMusicCapabilities(request: Request): Promise<Response> {
-  return json(request, { search: searchConfigured(), resolve: resolveConfigured() });
+  // The reason string rides along when a capability is off: the client
+  // used to replace the server's precise diagnosis ("no Spotify
+  // credentials, no yt-dlp") with a generic "looks offline" message,
+  // which is how "spotify isn't linked" rumors start.
+  const search = searchConfigured();
+  const resolve = resolveConfigured();
+  const reason = !search
+    ? !resolve
+      ? 'The music service is not configured on this server (no Spotify credentials and no yt-dlp).'
+      : 'Spotify search is not configured on this server (no credentials) and yt-dlp is unavailable for the free fallback.'
+    : !resolve
+      ? 'Stream resolution is not configured on this server (yt-dlp is unavailable).'
+      : undefined;
+  return json(request, { search, resolve, ...(reason ? { reason } : {}) });
 }
 
 export async function handleMusicSearch(request: Request): Promise<Response> {
@@ -946,7 +959,10 @@ export async function handleMusicSearch(request: Request): Promise<Response> {
   try {
     const tracks = await musicSearch(q, limit);
     return json(request, { tracks });
-  } catch {
+  } catch (error) {
+    // Search-down reports used to leave zero server-side evidence — the
+    // friendly 502 told the user to retry while the log said nothing.
+    console.warn('[music] search failed', q, error);
     return json(request, { error: 'Search is temporarily unavailable — try again.' }, 502);
   }
 }

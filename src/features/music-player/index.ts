@@ -236,8 +236,13 @@ class MusicPlayerApp {
     this.miniSub = byId('mpMiniSub');
     this.miniPlay = byId('mpMiniPlay');
 
-    // Restore persisted UI state.
-    this.appliedVolume = this.state.volume > 0 ? this.state.volume : 1;
+    // Restore persisted UI state. A persisted volume of 0 is a legitimate
+    // muted-by-slider state: the engine reads state.volume (silent), so
+    // appliedVolume must match it or the icon shows an unmuted speaker
+    // over silence, the first mute-click no-ops, and the second blasts
+    // 100%. toggleMute's restore path already has the 0.7 fallback for
+    // unmute-from-0.
+    this.appliedVolume = this.state.volume;
     this.volumeInput.value = String(Math.round(this.state.volume * 100));
     this.shuffleBtn.classList.toggle('is-on', this.state.shuffle);
     this.shuffleBtn.setAttribute('aria-pressed', String(this.state.shuffle));
@@ -321,7 +326,13 @@ class MusicPlayerApp {
     this.updateMini();
     this.updateRowStates();
     this.syncNavbarIcon();
-    if (playing) this.startProgressTimer();
+    // The timer only ticks meaningfully while playing — leaving it
+    // running through a pause was silent battery/CPU churn.
+    if (playing) {
+      this.startProgressTimer();
+    } else {
+      this.stopProgressTimer();
+    }
     if ('mediaSession' in navigator) {
       try {
         navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
@@ -409,7 +420,12 @@ class MusicPlayerApp {
     );
     if (next === null) return;
     if (next === 'stop') {
+      // End of queue: the bar says "Nothing playing" — the source must
+      // agree or the mini player keeps showing the finished track
+      // underneath (bar and mini disagreeing about the same state).
+      this.source = 'none';
       this.updatePlayerBarEmpty();
+      this.updateMini();
       return;
     }
     void this.playFreeAt(next);
@@ -515,8 +531,11 @@ class MusicPlayerApp {
     if (playIcon) playIcon.style.display = playing ? 'none' : 'block';
     if (pauseIcon) pauseIcon.style.display = playing ? 'block' : 'none';
 
-    const miniPlayIcon = this.miniPlay.querySelector<HTMLElement>('#mpPlayIcon');
-    const miniPauseIcon = this.miniPlay.querySelector<HTMLElement>('#mpPauseIcon');
+    // The mini player's icons carry their OWN ids — the markup used to
+    // stamp the same two ids on both players (invalid HTML; only the
+    // scoped querySelector kept it working).
+    const miniPlayIcon = this.miniPlay.querySelector<HTMLElement>('#mpMiniPlayIcon');
+    const miniPauseIcon = this.miniPlay.querySelector<HTMLElement>('#mpMiniPauseIcon');
     if (miniPlayIcon) miniPlayIcon.style.display = playing ? 'none' : 'block';
     if (miniPauseIcon) miniPauseIcon.style.display = playing ? 'block' : 'none';
     this.miniPlay.setAttribute('aria-label', playing ? 'Pause' : 'Play');
@@ -711,7 +730,12 @@ class MusicPlayerApp {
     this.caps = await fetchMusicCapabilities();
     this.capsChecked = true;
     if (!this.caps.search) {
-      this.showSearchNotice('Search needs the Padify music API — it looks offline here.');
+      // The server's own diagnosis beats the generic "looks offline"
+      // copy — "no Spotify credentials, no yt-dlp" tells the owner what
+      // to fix; "offline" starts "spotify isn't linked" guesses.
+      this.showSearchNotice(
+        this.caps.reason ?? 'Search needs the Padify music API — it looks offline here.',
+      );
     }
   }
 
@@ -906,6 +930,11 @@ class MusicPlayerApp {
     }
   }
 
+  /** True while the row ⋯ menu is open (the Escape-consumption guard). */
+  private rowMenuOpen(): boolean {
+    return !this.rowMenu.hidden && this.rowMenu.isConnected;
+  }
+
   private async handleRowMenuAction(action: string, row: HTMLElement): Promise<void> {
     const track = this.trackFromRow(row);
     if (!track) return;
@@ -973,6 +1002,10 @@ class MusicPlayerApp {
       this.resultsList.innerHTML = '';
       this.resultsCount.textContent = '';
       this.resultsEmpty.hidden = true;
+      // Back to the idle view: the Results header used to stay behind
+      // with nothing under it while the notice explained above — an
+      // orphaned header over a void.
+      this.showSearchIdle();
       this.showSearchNotice(
         err instanceof FreeMusicError ? err.message : 'Search failed — try again.',
       );
@@ -1109,6 +1142,24 @@ class MusicPlayerApp {
     this.syncNavbarIcon();
   }
 
+  /**
+   * OS/hardware Stop: ends playback and resets the bar, but keeps the
+   * queue — the mini player's × (stopAndHideMini) is the destructive
+   * variant; a car headunit's Stop button must not wipe what the user
+   * built with +.
+   */
+  private stopPlayback(): void {
+    if (this.source === 'free') {
+      this.engine.stop();
+    }
+    this.source = 'none';
+    this.updatePlayerBarEmpty();
+    this.updateRowStates();
+    this.updateQueueView();
+    this.syncNavbarIcon();
+    this.updateMini();
+  }
+
   // ---- MediaSession ---------------------------------------------------------
 
   private setupMediaSession(): void {
@@ -1118,6 +1169,13 @@ class MusicPlayerApp {
       ['pause', () => this.togglePlay()],
       ['nexttrack', () => this.next()],
       ['previoustrack', () => this.prev()],
+      // OS scrubbers and hardware keys: seekto (the OS slider),
+      // seekbackward/seekforward (the earbud buttons), stop (car
+      // headunits). Without handlers they did nothing.
+      ['seekto', () => undefined],
+      ['seekbackward', () => this.engine.nudgeSeconds(-10)],
+      ['seekforward', () => this.engine.nudgeSeconds(10)],
+      ['stop', () => this.stopPlayback()],
     ];
     for (const [action, handler] of actions) {
       try {
@@ -1125,6 +1183,17 @@ class MusicPlayerApp {
       } catch {
         /* action unsupported in this browser */
       }
+    }
+    // seekto carries its fastSeek/seekTime payload — the bare handler
+    // above only registers support; the real seek runs here.
+    try {
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (typeof details.seekTime === 'number' && details.seekTime >= 0) {
+          this.engine.seekToMs(details.seekTime * 1000);
+        }
+      });
+    } catch {
+      /* seekto unsupported */
     }
   }
 
@@ -1299,7 +1368,15 @@ class MusicPlayerApp {
       return target.closest('[data-menu]') !== null;
     };
     this.root.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') this.closeRowMenu();
+      if (event.key === 'Escape') {
+        // Consume the key while a row menu is open: the document-level
+        // Escape handlers (closeAllModals) must not also fire, or
+        // dismissing the little ⋯ menu closes the whole player.
+        if (this.rowMenuOpen()) {
+          this.closeRowMenu();
+          event.stopPropagation();
+        }
+      }
     });
 
     // ---- Mini player ----
