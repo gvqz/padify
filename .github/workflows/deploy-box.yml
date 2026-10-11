@@ -1,0 +1,79 @@
+name: Deploy (alwaysdata box)
+
+# Continuous delivery for the functionhost box (the non-Netlify host):
+# once CI has proven a push to main, rebuild the site with the box's base
+# path and API base, then push it (plus the API server code) to the box
+# over SSH. The deploy is idempotent and md5-verified — re-running with
+# nothing changed uploads nothing.
+#
+# Gated on CI via workflow_run, so a red main never reaches the box; the
+# exact commit CI validated is the one deployed. workflow_dispatch with an
+# older deploy_ref is the rollback path.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      deploy_ref:
+        description: 'Git ref to deploy (defaults to latest main)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-box
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy to the box
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the validated commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.deploy_ref || github.event.workflow_run.head_sha || github.ref }}
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install paramiko
+        run: pip install paramiko
+
+      # The box recipe (docs/CLOUD_SETUP.md §3): the site lives under
+      # /padify/ and the API is a separate origin behind alwaysdata.
+      - name: Build the site with the box base path
+        env:
+          VITE_BASE_PATH: /padify/
+          VITE_API_BASE: https://functionhost.alwaysdata.net/padifyapi
+        run: npm run build
+
+      - name: Deploy over SSH (md5 diff, verified)
+        env:
+          AD_SSH_KEY: ${{ secrets.AD_SSH_KEY }}
+          AD_SSH_HOST: ssh-functionhost.alwaysdata.net
+          AD_SSH_USER: functionhost
+        run: python3 scripts/deploy_box.py
