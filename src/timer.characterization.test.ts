@@ -37,6 +37,7 @@ import {
 } from 'vitest';
 import { $ } from './lib/q';
 import { initTimer, startTimer, stopTimer, timerConfig, updateTimer } from './timer';
+import { loadPlayerState } from './features/music-player/state';
 import { stateGet, stateSet, resetStorageForTests, storageReady } from './storage';
 
 // ---------------------------------------------------------------------------
@@ -115,7 +116,10 @@ let timerInitialized = false;
 /** Mounts the modal + wires the document-level handlers exactly once. */
 function ensureTimerMounted(): void {
   if (!timerInitialized) {
-    initTimer();
+    // Mirrors boot.ts: the persisted music volume reaches the chime
+    // through the injected provider (tests may import the feature state
+    // directly — the layering rule scopes production files only).
+    initTimer({ musicVolume: () => loadPlayerState().volume });
     timerInitialized = true;
   }
 }
@@ -290,6 +294,67 @@ describe('chime settings (characterization)', () => {
         .querySelector('.chime-option[data-chime="positive"]')!
         .classList.contains('is-playing'),
     ).toBe(true);
+  });
+});
+
+describe('the chime honors the music volume (issue #117)', () => {
+  it('scales the chime by the persisted music volume', () => {
+    ensureTimerMounted();
+    stateSet('padify-music-state', JSON.stringify({ volume: 0.25 }));
+
+    click('.chime-option[data-chime="bells"]');
+
+    expect(timerConfig.alarmSound).not.toBeNull();
+    expect(timerConfig.alarmSound!.volume).toBe(0.25);
+  });
+
+  it('defaults to the player default when nothing is persisted', () => {
+    ensureTimerMounted();
+
+    click('.chime-option[data-chime="bells"]');
+
+    expect(timerConfig.alarmSound!.volume).toBe(0.7);
+  });
+});
+
+describe('a blocked chime gets one gesture retry (issue #117)', () => {
+  it('replays once on any gesture, and only once', async () => {
+    ensureTimerMounted();
+    playSpy.mockRejectedValueOnce(new Error('autoplay blocked'));
+
+    click('.chime-option[data-chime="bells"]');
+    // Let the .catch run and install the retry listeners.
+    await vi.waitFor(() => {
+      expect(pauseSpy).toBeDefined();
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Any gesture — pointer or key — answers the bell exactly once.
+    document.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    expect(playSpy).toHaveBeenCalledTimes(2);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+    document.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    expect(playSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('a superseded chime is not resurrected by the gesture retry', async () => {
+    ensureTimerMounted();
+    playSpy.mockRejectedValueOnce(new Error('autoplay blocked'));
+
+    click('.chime-option[data-chime="bells"]');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // A newer preview supersedes the blocked one…
+    click('.chime-option[data-chime="correct"]');
+    document.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+
+    // …so the gesture must replay the CURRENT chime only: bells stays
+    // silent, and the total play count is first-attempt + current preview.
+    expect(playSpy).toHaveBeenCalledTimes(2);
+    expect(timerConfig.alarmSound!.src).toContain('sounds/chimes/correct.mp3');
   });
 });
 

@@ -164,7 +164,13 @@ const timerModalHtml = `
  * boot.ts; these statements used to run at module evaluation / inside a
  * $(document).ready callback.
  */
-export function initTimer(): void {
+export function initTimer(options: { musicVolume?: () => number } = {}): void {
+  // The composition root (boot.ts) injects the persisted music volume —
+  // the layering rule keeps features reachable only through seams, and
+  // the timer owns nothing about the player except this one number.
+  if (typeof options.musicVolume === 'function') {
+    musicVolumeForChime = options.musicVolume;
+  }
   // Add timer HTML to the DOM
   $(document.body).append(timerModalHtml);
   if (stateGet('timerChime') && stateGet('timerChime') == 'true') {
@@ -290,15 +296,67 @@ function playChime(chimeId: string): void {
   const optionEl = document.querySelector<HTMLElement>(`.chime-option[data-chime="${chime.id}"]`);
   timerConfig.alarmSound = new Audio(chime.file);
   timerConfig.alarmSound.loop = false;
+  // The chime is music, not UI feedback — it honors the SAME persisted
+  // volume the music player restores from (issue #117: a player set to
+  // 20% used to be answered by a 100% bell).
+  timerConfig.alarmSound.volume = chimeVolume();
   if (optionEl) {
     timerConfig.alarmSound.onended = () => optionEl.classList.remove('is-playing');
     timerConfig.alarmSound.onpause = () => optionEl.classList.remove('is-playing');
     optionEl.classList.add('is-playing');
   }
   timerConfig.alarmSound.play().catch(() => {
-    /* Autoplay policy — the session-end chime retried after user gesture. */
+    /* Autoplay policy — the session-end chime gets ONE gesture retry. */
     optionEl?.classList.remove('is-playing');
+    retryChimeOnGesture(timerConfig.alarmSound!);
   });
+}
+
+/**
+ * The persisted music volume the chime honors, injected by boot.ts (the
+ * composition root) from the player's own sanitized state loader. The
+ * fallback matches the player's shipped default; the clamp keeps a
+ * corrupted provider answer in [0, 1], never NaN.
+ */
+const CHIME_FALLBACK_VOLUME = 0.7;
+let musicVolumeForChime: () => number = () => CHIME_FALLBACK_VOLUME;
+
+function chimeVolume(): number {
+  const value = musicVolumeForChime();
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return CHIME_FALLBACK_VOLUME;
+  }
+  return Math.max(0, Math.min(1, value));
+}
+
+/**
+ * One user-gesture retry for a chime the autoplay policy blocked: the
+ * session-end bell rings while the user is away, and the comment that
+ * used to live at the catch site promised this retry without shipping
+ * it (issue #117). One shot, ANY gesture (pointer or key), then the
+ * listeners go — and a two-minute cap keeps a stale bell from ringing
+ * hours later.
+ */
+const CHIME_RETRY_WINDOW_MS = 2 * 60 * 1000;
+
+function retryChimeOnGesture(audio: HTMLAudioElement): void {
+  const retry = (): void => {
+    cleanup();
+    // A newer chime superseded this one — it plays on its own.
+    if (timerConfig.alarmSound !== audio) return;
+    audio.volume = chimeVolume();
+    audio.play().catch(() => {
+      /* a second refusal is final */
+    });
+  };
+  const cleanup = (): void => {
+    document.removeEventListener('pointerdown', retry, true);
+    document.removeEventListener('keydown', retry, true);
+    window.clearTimeout(expiry);
+  };
+  const expiry = window.setTimeout(cleanup, CHIME_RETRY_WINDOW_MS);
+  document.addEventListener('pointerdown', retry, true);
+  document.addEventListener('keydown', retry, true);
 }
 
 // Timer functions
