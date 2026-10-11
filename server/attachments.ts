@@ -27,7 +27,7 @@ import type { SessionUser } from './auth';
 export const MAX_ATTACHMENT_BYTES = 5_000_000;
 
 /** Attachment ids are client-chosen; keep them tight and URL-safe. */
-export const ATTACHMENT_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
+const ATTACHMENT_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 
 const MAX_NAME_CHARS = 200;
 const MAX_MIME_CHARS = 100;

@@ -131,12 +131,10 @@ export interface NoteSurface {
  * The surface for 'html' notes (the classic and rich types): the
  * contenteditable host driven through EditorPort. This is the only
  * EDITING surface this build ships; it is the template for future kinds.
- *
- * Exported as a CLASS type (not the interface) for the one consumer that
- * reads it without going through the registry: its capture() never
- * answers null, and tabs.ts's getEditorHtml wants that in the type.
+ * Module-private: the runtime surface everyone consumes is the stateless
+ * htmlNoteSurface singleton below (and the registry it feeds).
  */
-export class HtmlNoteSurface implements NoteSurface {
+class HtmlNoteSurface implements NoteSurface {
   readonly kind = 'html' as const;
   readonly editable = true;
 

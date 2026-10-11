@@ -35,7 +35,7 @@ function matchesInstalledDisplayMode(): boolean {
  * app window (standalone or any of the installed-style modes — see
  * INSTALLED_DISPLAY_QUERIES), or a plain browser tab. Only this module
  * asks — it decides whether the install pitch makes sense at all. */
-export function getPWADisplayMode(): 'twa' | 'standalone' | 'browser' {
+function getPWADisplayMode(): 'twa' | 'standalone' | 'browser' {
   if (document.referrer.startsWith('android-app://')) {
     return 'twa';
   }

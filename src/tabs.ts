@@ -619,8 +619,8 @@ export class TabManager {
    * markdown restore sets the type accordingly, so the chrome that reads
    * the kind (markdown toolbar, the port's inertness, the tab badge)
    * cannot disagree with the content that just landed. Html snapshots
-   * commit through the surface (the port sanitizes and persists, same as
-   * setEditorHtml); every other kind is written to the model directly,
+   * commit through the surface (the port sanitizes and persists); every
+   * other kind is written to the model directly,
    * because no editing surface exists for it.
    */
   applySnapshotToActive(content: string, noteType?: NoteType, colorTheme?: 'light' | 'dark'): void {
@@ -1158,28 +1158,4 @@ export function getActiveNoteExportBody(): string | null {
     return sanitizeNoteHtml(captured.content);
   }
   return `<pre>${escapeHtml(captured.content)}</pre>`;
-}
-
-/**
- * HTML of the note currently shown in the editor — the html surface's
- * live capture, routed through the EditorPort (see editor/port.ts) with
- * the bare-DOM fallback for the rare paths that run before the
- * composition root installed the port.
- */
-export function getEditorHtml(): string {
-  return htmlNoteSurface.capture(document.getElementById('note'));
-}
-
-/** Replaces the editor content (sanitized in the surface/port) and persists. */
-export function setEditorHtml(html: string): void {
-  const element = document.getElementById('note');
-  if (htmlNoteSurface.commit(element, html)) {
-    // The port applied it and persisted via its onDocumentReplaced wiring.
-    return;
-  }
-  if (element === null) {
-    return;
-  }
-  // Bare fallback: the surface painted the sanitized content — persist now.
-  tabManagerInstance?.syncAfterExternalEdit();
 }

@@ -9,7 +9,7 @@ export interface ThemeConfig {
   metaThemeColor: HTMLElement | null;
 }
 
-export function enableDarkMode(
+function enableDarkMode(
   lightmodeText: string,
   darkMetaColor: string,
   metaThemeColor: HTMLElement | null,
@@ -21,7 +21,7 @@ export function enableDarkMode(
   announceTheme('dark');
 }
 
-export function enableLightMode(
+function enableLightMode(
   darkmodeText: string,
   lightMetaColor: string,
   metaThemeColor: HTMLElement | null,
@@ -38,7 +38,7 @@ function announceTheme(mode: 'light' | 'dark'): void {
   document.dispatchEvent(new CustomEvent('padify:theme', { detail: { mode } }));
 }
 
-export function enableDeviceTheme(themeConfig: ThemeConfig): void {
+function enableDeviceTheme(themeConfig: ThemeConfig): void {
   if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
     enableDarkMode(
       themeConfig.lightmodeText,

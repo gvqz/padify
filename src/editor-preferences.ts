@@ -9,17 +9,17 @@ import { getSetting, removeSetting, setSetting } from './state/settings';
 // owns the preferences — instead of a shared utils file, because no one
 // outside the editor-preferences flow ever calls them.
 
-export function resetFontSize(defaultFontSize: number): void {
+function resetFontSize(defaultFontSize: number): void {
   $('#note').css('font-size', defaultFontSize + 'px');
   $('#fontSize').val(defaultFontSize);
 }
 
-export function resetLineHeight(defaultLineHeight: number): void {
+function resetLineHeight(defaultLineHeight: number): void {
   $('#note').css('line-height', defaultLineHeight + 'px');
   $('#lineHeight').val(defaultLineHeight);
 }
 
-export function resetShowWordCountPill(defaultShowWordCountPill: string): void {
+function resetShowWordCountPill(defaultShowWordCountPill: string): void {
   if (defaultShowWordCountPill === 'Yes') {
     $('.word-count-container').show();
   } else {
@@ -28,12 +28,12 @@ export function resetShowWordCountPill(defaultShowWordCountPill: string): void {
   $('#showWordCountPill').prop('checked', defaultShowWordCountPill === 'Yes');
 }
 
-export function resetWriteDirection(defaultWriteDirection: string): void {
+function resetWriteDirection(defaultWriteDirection: string): void {
   $('#note').css('direction', defaultWriteDirection);
   $('#writeDirection').val(defaultWriteDirection);
 }
 
-export function resetTexture(defaultTexture: string): void {
+function resetTexture(defaultTexture: string): void {
   // The retired textures (chessboard/linen/marble/newspaper) stay in this
   // cleanup so a body still carrying one of their classes from an old
   // session lands back on a paper that exists.
@@ -43,7 +43,7 @@ export function resetTexture(defaultTexture: string): void {
   $('#texture').val(defaultTexture);
 }
 
-export function resetFont(defaultFont: string): void {
+function resetFont(defaultFont: string): void {
   // 'dyslexic' is retired but stays in this cleanup so a note still
   // carrying the class from an old session lands back on a font that
   // exists.
@@ -51,7 +51,7 @@ export function resetFont(defaultFont: string): void {
   $('#font').val(defaultFont);
 }
 
-export function resetOptimalLineLength(defaultEditorPadding: string, defaultOption: boolean): void {
+function resetOptimalLineLength(defaultEditorPadding: string, defaultOption: boolean): void {
   const textArea = document.getElementById('note')!;
   textArea.style.padding = defaultEditorPadding;
   $('#optimalLineLength').prop('checked', defaultOption);

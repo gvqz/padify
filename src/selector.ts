@@ -77,11 +77,11 @@ export interface AppSelector {
 // list, the editor defaults and change notifications — so every legacy
 // setState caller gains change notifications for free. Reads stay direct
 // (they have no side effects to unify).
-export function getState(state: StateKey): string | null {
+function getState(state: StateKey): string | null {
   return isSettingKey(state) ? getSetting(state) : stateGet(state);
 }
 
-export function setState(state: StateKey, value: string): void {
+function setState(state: StateKey, value: string): void {
   if (isSettingKey(state)) {
     setSetting(state, value);
     return;
@@ -89,7 +89,7 @@ export function setState(state: StateKey, value: string): void {
   stateSet(state, value);
 }
 
-export function removeState(state: StateKey): void {
+function removeState(state: StateKey): void {
   if (isSettingKey(state)) {
     removeSetting(state);
     return;
@@ -97,15 +97,15 @@ export function removeState(state: StateKey): void {
   stateRemove(state);
 }
 
-export function selectById(id: string): Q {
+function selectById(id: string): Q {
   return $(`#${id}`);
 }
 
-export function selectByClassName(className: string): Q {
+function selectByClassName(className: string): Q {
   return $(`.${className}`);
 }
 
-export function get(context: string | HTMLElement | Q): Q {
+function get(context: string | HTMLElement | Q): Q {
   return $(context);
 }
 
