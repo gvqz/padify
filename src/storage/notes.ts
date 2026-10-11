@@ -341,9 +341,7 @@ function loadLegacySnapshot(): NotesSnapshot {
                 ? entry.colorTheme
                 : undefined,
             syncSeq:
-              typeof entry.syncSeq === 'number' && entry.syncSeq > 0
-                ? entry.syncSeq
-                : undefined,
+              typeof entry.syncSeq === 'number' && entry.syncSeq > 0 ? entry.syncSeq : undefined,
           });
         }
       });

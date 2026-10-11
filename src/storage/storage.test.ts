@@ -144,7 +144,10 @@ describe('notes repository', () => {
     // until each note was re-adopted by a pull. Pin the round-trip.
     saveNotes(
       {
-        tabs: [{ ...note('a', 'body'), syncSeq: 42 }, { ...note('b', 'body'), syncSeq: 0 }],
+        tabs: [
+          { ...note('a', 'body'), syncSeq: 42 },
+          { ...note('b', 'body'), syncSeq: 0 },
+        ],
         tombstones: [],
       },
       'a',

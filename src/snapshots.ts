@@ -383,10 +383,21 @@ export class SnapshotsManager {
     title: string,
     colorTheme?: 'light' | 'dark',
   ): Promise<void> {
-    await this.createSnapshotFromCapture(content, noteType, noteId, title, {
-      emptyToast: false,
-      duplicateToast: false,
-    }, colorTheme);
+    await this.createSnapshotFromCapture(
+      content,
+      noteType,
+      noteId,
+      title,
+      {
+        emptyToast: false,
+        duplicateToast: false,
+        // Silent by contract — the caller already owns the confirmation
+        // toast ("Tab closed", "Notes deleted"), and a background "Snapshot
+        // created!" landing after it would replace the user-facing message.
+        successToast: false,
+      },
+      colorTheme,
+    );
   }
 
   // The one writer — every path funnels here.
@@ -395,7 +406,12 @@ export class SnapshotsManager {
     noteType: NoteType | undefined,
     noteId: string | undefined,
     title: string | undefined,
-    options: { emptyToast: boolean; duplicateToast: boolean },
+    options: {
+      emptyToast: boolean;
+      duplicateToast: boolean;
+      /** Success toast — silent safety copies opt out (default: show). */
+      successToast?: boolean;
+    },
     colorTheme?: 'light' | 'dark',
   ): Promise<void> {
     if (!this.db) {
@@ -454,33 +470,49 @@ export class SnapshotsManager {
     // The prune call below needs a stable reference after this callback
     // returns — `this.db` narrowing does not survive into event callbacks.
     const database = this.db;
+    const showCreatedToast = options.successToast !== false;
 
-    const request = store.add(snapshot);
+    // The function is async and callers await it to ORDER effects (the
+    // restore path's "Snapshot restored!" must not be clobbered by this
+    // write's own toast landing a microtask later) — so the promise must
+    // settle when the WRITE settles, not when the handlers are attached.
+    // Resolves on error too: a failed safety write must not wedge the
+    // caller's flow (the restore/close already has the user's consent).
+    await new Promise<void>((resolve) => {
+      const request = store.add(snapshot);
 
-    request.onsuccess = () => {
-      showToast('Snapshot created!', 'success');
+      request.onsuccess = () => {
+        if (showCreatedToast) {
+          showToast('Snapshot created!', 'success');
+        }
 
-      // A store that only ever grows is a slow leak: retire the oldest
-      // snapshots beyond the cap so safety copies stay bounded.
-      pruneSnapshots(database, this.storeName)
-        .then((pruned) => {
-          if (pruned > 0) {
-            void this.loadSnapshots();
-            this.updateSnapshotsCount();
-          }
-        })
-        .catch((error) => {
-          console.warn('[snapshots] prune failed — the cap will retry on the next snapshot', error);
-        });
+        // A store that only ever grows is a slow leak: retire the oldest
+        // snapshots beyond the cap so safety copies stay bounded.
+        pruneSnapshots(database, this.storeName)
+          .then((pruned) => {
+            if (pruned > 0) {
+              void this.loadSnapshots();
+              this.updateSnapshotsCount();
+            }
+          })
+          .catch((error) => {
+            console.warn(
+              '[snapshots] prune failed — the cap will retry on the next snapshot',
+              error,
+            );
+          });
 
-      void this.loadSnapshots();
-      this.updateSnapshotsCount();
-    };
+        void this.loadSnapshots();
+        this.updateSnapshotsCount();
+        resolve();
+      };
 
-    request.onerror = (event) => {
-      console.error('Error creating snapshot', event);
-      showToast('Error creating snapshot');
-    };
+      request.onerror = (event) => {
+        console.error('Error creating snapshot', event);
+        showToast('Error creating snapshot');
+        resolve();
+      };
+    });
   }
 
   /** Every snapshot, newest first (the read order the UI wants). */
@@ -645,7 +677,10 @@ export class SnapshotsManager {
               preRestore.noteType,
               getTabManager()?.getActive()?.id,
               `Before restoring "${snapshot.title}"`,
-              { emptyToast: false, duplicateToast: false },
+              // Silent: the "Snapshot restored!" toast below is the
+              // user-facing message for this action — the safety copy
+              // is a background detail and must not replace it.
+              { emptyToast: false, duplicateToast: false, successToast: false },
               getTabManager()?.getActive()?.colorTheme,
             );
           } catch {
