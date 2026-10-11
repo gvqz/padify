@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  peekResolvedStream,
   resetMusicResolverForTests,
   resolveTrackStream,
   setYtDlpRunnerForTests,
@@ -170,6 +171,40 @@ describe('resolveTrackStream', () => {
     expect(fake.calls()).toBe(1);
   });
 
+  it('the cache key binds the query, not just the id — a poisoned pre-resolve cannot serve the real query', async () => {
+    // Same Spotify id, WRONG title/artist: before the round-2 fix the
+    // id-only cache key let any anonymous caller pre-resolve a known id
+    // with junk metadata and poison every legitimate client's answer.
+    const fake = installFakeYtDlp();
+    const db = sqliteDb();
+
+    const poisoned = await resolveTrackStream(
+      db,
+      input({ title: 'Not This Song', artist: 'Nobody' }),
+    );
+    expect(poisoned.cached).toBe(false);
+
+    // The REAL query with the same id must not inherit the poisoned row.
+    const legit = await resolveTrackStream(db, input());
+    expect(legit.cached).toBe(false);
+    expect(fake.calls()).toBe(2);
+
+    // … and only now does the real query's answer start serving repeats.
+    const repeat = await resolveTrackStream(db, input());
+    expect(repeat.cached).toBe(true);
+    expect(fake.calls()).toBe(2);
+  });
+
+  it('a duration change also splits the cache — the key carries the whole query', async () => {
+    const fake = installFakeYtDlp();
+    const db = sqliteDb();
+
+    await resolveTrackStream(db, input());
+    const otherEdit = await resolveTrackStream(db, input({ durationMs: 180_000 }));
+    expect(otherEdit.cached).toBe(false);
+    expect(fake.calls()).toBe(2);
+  });
+
   it('fresh=true bypasses the cache and re-resolves', async () => {
     const fake = installFakeYtDlp({ freshWinnerOnCall: 2 });
     const db = sqliteDb();
@@ -232,5 +267,38 @@ describe('resolveTrackStream', () => {
 
     expect(result.url).toBe('https://stream.example/v4-retry');
     expect(calls).toBe(2);
+  });
+});
+
+describe('peekResolvedStream — the rate-limit-free cache probe', () => {
+  it('answers null when nothing is cached and runs no work', async () => {
+    const fake = installFakeYtDlp();
+
+    const peeked = await peekResolvedStream(sqliteDb(), input());
+
+    expect(peeked).toBeNull();
+    expect(fake.calls()).toBe(0);
+  });
+
+  it('answers the cached row after a resolve, without re-running the work', async () => {
+    const fake = installFakeYtDlp();
+    const db = sqliteDb();
+    const resolved = await resolveTrackStream(db, input());
+
+    const peeked = await peekResolvedStream(db, input());
+
+    expect(peeked?.cached).toBe(true);
+    expect(peeked?.url).toBe(resolved.url);
+    expect(fake.calls()).toBe(1);
+  });
+
+  it('peeks the SAME query key as the resolver — a different query misses', async () => {
+    installFakeYtDlp();
+    const db = sqliteDb();
+    await resolveTrackStream(db, input());
+
+    const other = await peekResolvedStream(db, input({ title: 'Not This Song' }));
+
+    expect(other).toBeNull();
   });
 });

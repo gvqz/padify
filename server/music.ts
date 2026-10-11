@@ -834,7 +834,23 @@ async function writeCache(db: Db, key: string, row: CacheRow): Promise<void> {
  * Resolves a direct audio stream URL for a track. `fresh` bypasses the
  * cached URL (the client asks for this when a previously served URL fails
  * to play — googlevideo links die after a few hours).
+ *
+ * Cache-key discipline: a track id that is NOT a YouTube id (a Spotify
+ * id) resolves by TITLE/ARTIST — so the cache key binds the query, not
+ * just the id. The old id-only key let any anonymous caller pre-resolve
+ * a known id with a wrong title and poison every legitimate client's
+ * answer for the TTL.
  */
+function resolveCacheKey(input: {
+  key: string;
+  title: string;
+  artist: string;
+  durationMs: number | null;
+}): string {
+  if (YT_ID.test(input.key)) return input.key;
+  return `${input.key}:${input.title}|${input.artist}|${input.durationMs ?? 0}`;
+}
+
 export async function resolveTrackStream(
   db: Db,
   input: {
@@ -845,12 +861,13 @@ export async function resolveTrackStream(
     fresh: boolean;
   },
 ): Promise<ResolvedStream> {
-  const pending = inFlight.get(input.key);
+  const cacheKey = resolveCacheKey(input);
+  const pending = inFlight.get(cacheKey);
   if (pending) return pending;
 
   const task = (async (): Promise<ResolvedStream> => {
     if (!input.fresh) {
-      const cached = await readCache(db, input.key);
+      const cached = await readCache(db, cacheKey);
       if (cached) {
         return {
           url: cached.url,
@@ -875,7 +892,7 @@ export async function resolveTrackStream(
       duration_sec: chosen.durationSec,
       expires_at: Date.now() + RESOLVE_TTL_MS,
     };
-    await writeCache(db, input.key, row);
+    await writeCache(db, cacheKey, row);
     return {
       url: chosen.url,
       videoId: chosen.videoId,
@@ -884,12 +901,33 @@ export async function resolveTrackStream(
     };
   })();
 
-  inFlight.set(input.key, task);
+  inFlight.set(cacheKey, task);
   try {
     return await task;
   } finally {
-    inFlight.delete(input.key);
+    inFlight.delete(cacheKey);
   }
+}
+
+/**
+ * The cache peek the rate limiter uses: a cached answer costs the server
+ * nothing, so the resolve bucket is charged only on actual work (the old
+ * flow charged every request — with the shared 'local' bucket under the
+ * default proxy trust, two users skipping through a playlist 429'd within
+ * a minute).
+ */
+export async function peekResolvedStream(
+  db: Db,
+  input: { key: string; title: string; artist: string; durationMs: number | null },
+): Promise<ResolvedStream | null> {
+  const cached = await readCache(db, resolveCacheKey(input));
+  if (!cached) return null;
+  return {
+    url: cached.url,
+    videoId: cached.video_id,
+    durationSec: cached.duration_sec,
+    cached: true,
+  };
 }
 
 /**
@@ -924,6 +962,7 @@ export async function sweepMusicCache(db: Db): Promise<void> {
 
 import { json } from './http';
 import { asInt } from './notes';
+import { rateLimited } from './ratelimit';
 
 export async function handleMusicCapabilities(request: Request): Promise<Response> {
   // The reason string rides along when a capability is off: the client
@@ -985,14 +1024,31 @@ export async function handleMusicResolve(db: Db, request: Request): Promise<Resp
       error: 'Free playback is not configured on this server (yt-dlp missing).'
     }, 503);
   }
+  const input = {
+    key: trackId,
+    title,
+    artist,
+    durationMs: durationMs > 0 ? durationMs : null,
+    fresh
+  };
+  // Cache-first: a cached answer costs the server nothing, so the resolve
+  // bucket charges only when real yt-dlp work is about to run. (The route
+  // itself carries no bucket on purpose — see routes.ts.)
+  if (!fresh) {
+    const cached = await peekResolvedStream(db, input);
+    if (cached) {
+      return json(request, cached);
+    }
+  }
+  if (rateLimited(request, 'music-resolve')) {
+    return json(
+      request,
+      { error: 'Too many song lookups — take a breath and try again in a minute.' },
+      429,
+    );
+  }
   try {
-    const stream = await resolveTrackStream(db, {
-      key: trackId,
-      title,
-      artist,
-      durationMs: durationMs > 0 ? durationMs : null,
-      fresh
-    });
+    const stream = await resolveTrackStream(db, input);
     return json(request, stream);
   } catch (error) {
     const message = error instanceof Error && /timed out/.test(error.message)

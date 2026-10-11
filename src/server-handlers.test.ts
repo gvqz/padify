@@ -3,10 +3,11 @@ import type { Db, Row, SqlStatement, SqlValue } from '../server/db';
 import { clientKey, rateLimited, resetRateLimitsForTests } from '../server/ratelimit';
 import { MAX_BODY_BYTES } from '../server/http';
 import { handleNotesGet, handleNotesPut } from '../server/notes';
-import { handlePublicShareGet, handleSharesPatch } from '../server/shares';
+import { handlePublicShareGet, handleSharesPatch, handleSharesPost } from '../server/shares';
 import { handleSignup } from '../server/auth-routes';
 import { route } from '../server/routes';
-import { hashPassword } from '../server/auth';
+import { hashPassword, verifyPasswordWithCost } from '../server/auth';
+import { handleAttachmentPost } from '../server/attachments';
 
 // The server's first handler tests. The handlers were extracted from
 // index.ts precisely so this file can exist: they are pure functions over
@@ -289,6 +290,9 @@ describe('handleNotesPut — sync v2 seq stamping', () => {
       // The user's counter already stands at 41 — reserving this batch's
       // 2 numbers answers 43, and the rows stamp 42, 43.
       { match: 'sync_counters', rows: [{ value: 43 }] },
+      // The post-write landed verification: both rows of this batch are
+      // the user's own, so the honest-accounting count sees 2 of 2.
+      { match: 'as landed', rows: [{ landed: 2 }] },
     ]);
     const response = await handleNotesPut(
       db,
@@ -654,5 +658,154 @@ describe('signin lockout — failed verifications are counted per account', () =
     expect(again.status).toBe(401);
     const still = await route(emptyDb, signinRequest('wrong-again'), '/api/auth/signin');
     expect(still.status).toBe(401);
+  });
+});
+
+describe('verifyPasswordWithCost — the sign-in timing equalizer', () => {
+  it('answers false for missing or malformed stored hashes without throwing', () => {
+    // The missing-user path must cost the same scrypt work as a real
+    // check (against the dummy hash) — a throw here would 500 the
+    // sign-in route instead of the uniform 401.
+    expect(verifyPasswordWithCost('guess', null)).toBe(false);
+    expect(verifyPasswordWithCost('guess', undefined)).toBe(false);
+    expect(verifyPasswordWithCost('guess', '')).toBe(false);
+    expect(verifyPasswordWithCost('guess', 'not-a-scrypt-hash')).toBe(false);
+  });
+
+  it('verifies a real hash and stays false on a wrong password', () => {
+    const stored = hashPassword('correct horse');
+    expect(verifyPasswordWithCost('correct horse', stored)).toBe(true);
+    expect(verifyPasswordWithCost('wrong horse', stored)).toBe(false);
+  });
+});
+
+describe('handleNotesPut — the round-2 storage guardrails', () => {
+  it('413s a batch that would push the account past the note-bytes quota', async () => {
+    // 24 MB standing + a 1.5 MB newcomer = past the 25 MB cap (the body
+    // stays under the 2 MB request limit the client batches under).
+    const db = new ScriptedDb([{ match: 'as total', rows: [{ total: 24 * 1024 * 1024 }] }]);
+    const response = await handleNotesPut(
+      db,
+      jsonRequest('PUT', {
+        rows: [{ id: 'big', content: 'x'.repeat(1_500_000), updated_at: 5, deleted: false }],
+      }),
+      user,
+    );
+    expect(response.status).toBe(413);
+    expect(String((await bodyOf(response)).error)).toContain('storage space');
+    // Nothing was written — the reservation never ran either.
+    expect(db.sqls.some((sql) => sql.includes('sync_counters'))).toBe(false);
+  });
+
+  it('an overwrite is net of what it replaces — a shrink never trips the cap', async () => {
+    const db = new ScriptedDb([
+      // The batch's id already holds 3 MB server-side.
+      { match: 'as bytes', rows: [{ id: 'big', bytes: 3 * 1024 * 1024 }] },
+      { match: 'as total', rows: [{ total: 24 * 1024 * 1024 }] },
+      { match: 'as landed', rows: [{ landed: 1 }] },
+    ]);
+    const response = await handleNotesPut(
+      db,
+      jsonRequest('PUT', {
+        rows: [{ id: 'big', content: 'x'.repeat(1024 * 1024), updated_at: 9, deleted: false }],
+      }),
+      user,
+    );
+    // 24 MB - 3 MB + 1 MB = 22 MB — under the cap, the write lands.
+    expect(response.status).toBe(200);
+  });
+
+  it('409s when a foreign account already owns one of the batch ids', async () => {
+    const db = new ScriptedDb([
+      { match: 'as total', rows: [{ total: 0 }] },
+      { match: 'as landed', rows: [{ landed: 0 }] },
+    ]);
+    const response = await handleNotesPut(
+      db,
+      jsonRequest('PUT', {
+        rows: [{ id: 'theirs', content: 'mine now', updated_at: 5, deleted: false }],
+      }),
+      user,
+    );
+    expect(response.status).toBe(409);
+    expect(String((await bodyOf(response)).error)).toContain('conflict');
+  });
+});
+
+describe('handleSharesPost — the live-share cap', () => {
+  const shareRequest = (): Request =>
+    jsonRequest('POST', { note_id: 'n1', title: 't', content: '<p>x</p>', days: 7 });
+
+  it('403s the 201st live share', async () => {
+    const db = new ScriptedDb([{ match: 'as live', rows: [{ live: 200 }] }]);
+    const response = await handleSharesPost(db, shareRequest(), user);
+    expect(response.status).toBe(403);
+    expect(String((await bodyOf(response)).error)).toContain('Too many active share links');
+  });
+
+  it('a user under the cap still creates the link', async () => {
+    const db = new ScriptedDb([{ match: 'as live', rows: [{ live: 199 }] }]);
+    const response = await handleSharesPost(db, shareRequest(), user);
+    expect(response.status).toBe(201);
+  });
+});
+
+describe('handleAttachmentPost — the round-2 upload guardrails', () => {
+  const upload = (): Request =>
+    new Request('http://api.test/api/attachments', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/octet-stream',
+        'x-padify-id': 'attachment-test-0001',
+        'x-padify-name': 'voice.webm',
+      },
+      body: new Uint8Array([1, 2, 3, 4]),
+    });
+
+  it('413s when the account is out of attachment storage', async () => {
+    const db = new ScriptedDb([{ match: 'as files', rows: [{ files: 500, bytes: 0 }] }]);
+    const response = await handleAttachmentPost(db, upload(), user);
+    expect(response.status).toBe(413);
+    expect(String((await bodyOf(response)).error)).toContain('storage is full');
+  });
+
+  it('413s when the byte budget is spent', async () => {
+    const db = new ScriptedDb([
+      { match: 'as files', rows: [{ files: 1, bytes: 200 * 1024 * 1024 }] },
+    ]);
+    const response = await handleAttachmentPost(db, upload(), user);
+    expect(response.status).toBe(413);
+  });
+
+  it('a raced duplicate insert with the same digest answers 200 duplicate', async () => {
+    const db = new ScriptedDb([]);
+    // The existence check misses (empty), the insert collides, and the
+    // re-read must see the SAME digest as the request's bytes — the
+    // honest answer is the idempotent OK, not a 500.
+    db.failOn = { fragment: 'insert into attachments', message: 'UNIQUE constraint failed' };
+    const { createHash } = await import('node:crypto');
+    const real = createHash('sha256')
+      .update(new Uint8Array([1, 2, 3, 4]))
+      .digest('hex');
+    const plainAll = db.all.bind(db);
+    db.all = async (sql: string): Promise<Row[]> => {
+      if (sql.includes('select sha256 from attachments')) {
+        // Count sha probes ALREADY RECORDED by plainAll: the existence
+        // check recorded one — when a second arrives, it is the post-
+        // race re-read.
+        const recorded = (db as unknown as { sqls: string[] }).sqls.filter((s) =>
+          s.includes('select sha256 from attachments'),
+        ).length;
+        if (recorded >= 1) return [{ sha256: real }];
+      }
+      return plainAll(sql);
+    };
+    const response = await handleAttachmentPost(db, upload(), user);
+    expect(response.status).toBe(200);
+    expect(await bodyOf(response)).toMatchObject({
+      ok: true,
+      id: 'attachment-test-0001',
+      duplicate: true,
+    });
   });
 });

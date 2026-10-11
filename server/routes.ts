@@ -115,7 +115,10 @@ const ROUTES: Route[] = [
     method: 'GET',
     pattern: /^\/api\/music\/resolve$/,
     auth: 'public',
-    bucket: 'music-resolve',
+    // No bucket here on purpose: the handler peeks the resolve cache and
+    // charges the bucket only on actual yt-dlp work (see handleMusicResolve)
+    // — cached answers are free, or two users skipping a playlist 429'd
+    // each other under the default shared proxy bucket.
     handler: (db, request) => handleMusicResolve(db, request)
   },
 

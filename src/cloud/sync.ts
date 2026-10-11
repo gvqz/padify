@@ -219,6 +219,9 @@ function authErrorMessage(message: string, mode: 'sign-in' | 'sign-up' = 'sign-i
   if (/at least 6/i.test(message)) {
     return 'Password must be at least 6 characters.';
   }
+  if (/200 characters or fewer/i.test(message)) {
+    return 'Password must be 200 characters or fewer.';
+  }
   if (/too many attempts|too many requests/i.test(message)) {
     return 'Too many attempts — wait a moment and try again.';
   }

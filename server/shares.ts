@@ -54,6 +54,23 @@ export async function handleSharesPost(db: Db, request: Request, user: SessionUs
   const noteType = parseNoteType(body.note_type);
   const days = Math.min(3650, Math.max(1, asInt(body.days, 7)));
 
+  // Per-user cap: shares each carry a full denormalized copy of the note
+  // (up to the body limit) — unlimited shares were unlimited storage.
+  // Revoked/expired rows still count until pruned; keeping the cap on
+  // LIVE rows matches what the user perceives as "my links".
+  const MAX_LIVE_SHARES = 200;
+  const liveRows = await db.all(
+    'select count(*) as live from shares where user_id = ? and revoked = 0 and expires_at > ?',
+    [user.id, Date.now()]
+  );
+  if (Number(liveRows[0]?.live ?? 0) >= MAX_LIVE_SHARES) {
+    return json(
+      request,
+      { error: 'Too many active share links — revoke or let expire a few before making more.' },
+      403
+    );
+  }
+
   const token = createShareToken();
   const now = Date.now();
   const expiresAt = now + days * DAY_MS;
@@ -64,8 +81,11 @@ export async function handleSharesPost(db: Db, request: Request, user: SessionUs
        values (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
       [token, user.id, noteId, title, content, noteType, now, expiresAt]
     );
-  } catch {
-    // Token collision (vanishingly rare) — ask the client to retry.
+  } catch (error) {
+    // Token collisions are vanishingly rare — a real failure here is
+    // almost certainly the DATABASE, and swallowing it with a retry
+    // message left outages with zero server-side evidence.
+    console.error('[shares] insert failed', error);
     return json(request, { error: 'Could not create the link. Try again.' }, 500);
   }
 

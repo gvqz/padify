@@ -76,7 +76,10 @@ export function rateLimited(
     auth: 30,
     api: 300,
     'music-search': 60,
-    'music-resolve': 30,
+    // Actual yt-dlp WORK only (cached answers never charge the bucket —
+    // see handleMusicResolve): 60 resolutions/min is still a heavy load
+    // cap, but it no longer counts plays.
+    'music-resolve': 60,
     share: 120
   };
   const limit = limits[bucket] ?? 300;
