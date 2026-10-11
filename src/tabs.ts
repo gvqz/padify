@@ -619,8 +619,8 @@ export class TabManager {
    * markdown restore sets the type accordingly, so the chrome that reads
    * the kind (markdown toolbar, the port's inertness, the tab badge)
    * cannot disagree with the content that just landed. Html snapshots
-   * commit through the surface (the port sanitizes and persists, same as
-   * setEditorHtml); every other kind is written to the model directly,
+   * commit through the surface (the port sanitizes and persists); every
+   * other kind is written to the model directly,
    * because no editing surface exists for it.
    */
   applySnapshotToActive(content: string, noteType?: NoteType, colorTheme?: 'light' | 'dark'): void {
