@@ -260,6 +260,22 @@ export async function initApp(): Promise<void> {
     }
   });
 
+  // File-drop guard: nothing in the app accepts files, but the browser's
+  // default for a file dropped on the page is to NAVIGATE to it — killing
+  // the app (and the in-flight autosave window) mid-gesture. A file
+  // dropped onto the editor itself inserts a blob-URL <img> the sanitizer
+  // strips at the next save (a silent vanish). Swallow both: the drag is
+  // cancelled, and a toast says why, so neither feels like a glitch.
+  window.addEventListener('dragover', (event) => {
+    event.preventDefault();
+  });
+  window.addEventListener('drop', (event) => {
+    if (event.dataTransfer?.types.includes('Files')) {
+      event.preventDefault();
+      showToast('Files cannot be dropped here — text only.');
+    }
+  });
+
   // Editor appearance preferences (font, texture, pill, …).
   const editorPreferences = initEditorPreferences({
     notepad,
@@ -718,12 +734,35 @@ export async function initApp(): Promise<void> {
       closeAllModals();
     }
 
+    // On Apple keyboards Option+letter is ordinary character input. The
+    // Alt-combos below call preventDefault unconditionally, which made
+    // Option+S / C / V untypeable in EVERY text field (tab rename,
+    // settings search, share modal, music search, the markdown source
+    // pane) — the shortcut fired instead. The editor itself is the one
+    // place Alt+V is a deliberate gesture, so: editable targets keep
+    // their characters except the editor host.
+    const shortcutTarget = event.target as unknown as HTMLElement | null;
+    const targetTag = shortcutTarget?.tagName ?? '';
+    const targetIsEditable =
+      !!shortcutTarget &&
+      (shortcutTarget.isContentEditable ||
+        targetTag === 'INPUT' ||
+        targetTag === 'TEXTAREA' ||
+        targetTag === 'SELECT');
+    const altComboBlocked =
+      event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      targetIsEditable &&
+      shortcutTarget !== notepad.note.get(0) &&
+      !notepad.note.get(0)?.contains(shortcutTarget);
+
     if ((event.ctrlKey || event.metaKey) && event.code === 'KeyS') {
       saveTextAsFile(getEditorText(), getFileName());
       event.preventDefault();
     }
 
-    if (event.altKey && event.code === 'KeyS') {
+    if (event.altKey && event.code === 'KeyS' && !altComboBlocked) {
       exportNotesAsPDF(getEditorText(), getPdfFileName());
       event.preventDefault();
     }
@@ -751,7 +790,7 @@ export async function initApp(): Promise<void> {
       unicodePicker.open();
     }
 
-    if (event.altKey && event.code === 'KeyC') {
+    if (event.altKey && event.code === 'KeyC' && !altComboBlocked) {
       event.preventDefault();
       copyNotesToClipboard(getEditorText());
     }
@@ -765,7 +804,7 @@ export async function initApp(): Promise<void> {
     }
 
     // Alt/option + v toggles voice typing.
-    if (event.altKey && event.code === 'KeyV') {
+    if (event.altKey && event.code === 'KeyV' && !altComboBlocked) {
       event.preventDefault();
       toggleVoiceTyping();
     }

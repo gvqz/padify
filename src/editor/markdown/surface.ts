@@ -130,6 +130,13 @@ interface LiveMarkdown {
 let live: LiveMarkdown | null = null;
 
 /**
+ * One-entry render cache for visibleText: the last (source, text) pair.
+ * Pill/statistics asks for the SAME unchanged document on every typing
+ * pause and modal open — the cached answer skips a whole render pass.
+ */
+let visibleTextCache: { source: string; text: string } | null = null;
+
+/**
  * A fresh, empty prosemirror-history state — the value the history plugin
  * resets to when the surface replaces the document wholesale. Built once
  * through the plugin factory's own init (the same module the undo/redo
@@ -376,10 +383,19 @@ export class MarkdownNoteSurface implements NoteSurface {
   visibleText(host: HTMLElement | null, note: SurfaceNote): string {
     // The rendered projection: the pill, statistics, the close prompt and
     // share word counts should count the words the reader SEES, not the
-    // asterisks that produce them.
+    // asterisks that produce them. The render is cached by source: the
+    // pill asks on every 500ms typing pause and statistics on every open
+    // — re-rendering an unchanged document each time was pure cost (and
+    // pathological documents make that cost seconds; see
+    // MAX_NESTING_DEPTH in the renderer).
     const source = this.capture(host) ?? note.content;
+    if (visibleTextCache && visibleTextCache.source === source) {
+      return visibleTextCache.text;
+    }
     const text = htmlToText(renderMarkdownToHtml(source)).replace(/\u00a0/g, ' ');
-    return text.trim() === '' ? '' : text;
+    const trimmed = text.trim() === '' ? '' : text;
+    visibleTextCache = { source, text: trimmed };
+    return trimmed;
   }
 
   commit(host: HTMLElement | null, content: string): boolean {

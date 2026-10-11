@@ -226,6 +226,17 @@ export function sanitizeHref(raw: string): string | null {
  * never drift apart again.
  */
 export function sanitizeNoteHtml(html: string, options: SanitizeOptions = {}): string {
+  // One-entry memo. The sanitize pass is a whole-document DOMParser run,
+  // and a single 500ms typing pause used to pay it multiple times for the
+  // SAME bytes: absorb parses+sanitizes, getHtml re-sanitizes the model's
+  // serialization, the label path re-sanitizes the stored string again.
+  // Pure function, identical input — the memo only skips redundant work.
+  // (Different options always miss: they produce different dialects.)
+  const memoKey = `${options.hardenLinks ? 'H' : ''}${options.mathToText ? 'M' : ''}\u0000${html}`;
+  if (memo?.key === memoKey) {
+    return memo.value;
+  }
+
   const parsed = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
 
   const walk = (node: Node): Node[] => {
@@ -259,8 +270,17 @@ export function sanitizeNoteHtml(html: string, options: SanitizeOptions = {}): s
     // source, rendered children never store (the shell is the truth).
     if (element.tagName === 'SPAN' && element.classList.contains(MATH_CLASS)) {
       const latex = element.getAttribute('data-latex') ?? '';
-      if (!MATH_LATEX_PATTERN.test(latex)) {
+      if (latex === '') {
+        // No source at all — a forged or hand-damaged shell: unwrap to
+        // whatever content it carried (the old behavior).
         return children;
+      }
+      if (!MATH_LATEX_PATTERN.test(latex)) {
+        // Over-cap source can't keep the shell invariant — but the user's
+        // equation must not silently vanish either (it rendered live, then
+        // the next save deleted it). Degrade to the equation's source
+        // text, exactly like the mathToText reader path below.
+        return [document.createTextNode(latex)];
       }
       if (options.mathToText) {
         // A reader without KaTeX gets the equation's source, not an
@@ -321,5 +341,10 @@ export function sanitizeNoteHtml(html: string, options: SanitizeOptions = {}): s
 
   const fragment = document.createElement('div');
   out.forEach((node) => fragment.appendChild(node));
-  return fragment.innerHTML;
+  const value = fragment.innerHTML;
+  memo = { key: memoKey, value };
+  return value;
 }
+
+/** The one-entry memo behind sanitizeNoteHtml (see the comment there). */
+let memo: { key: string; value: string } | null = null;

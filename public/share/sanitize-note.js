@@ -112,6 +112,10 @@ function sanitizeHref(raw) {
   return href.length > 0 && SAFE_HREF_PATTERN.test(href) ? href : null;
 }
 function sanitizeNoteHtml(html, options = {}) {
+  const memoKey = `${options.hardenLinks ? "H" : ""}${options.mathToText ? "M" : ""}\0${html}`;
+  if ((memo == null ? void 0 : memo.key) === memoKey) {
+    return memo.value;
+  }
   const parsed = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
   const walk = (node) => {
     var _a;
@@ -135,8 +139,11 @@ function sanitizeNoteHtml(html, options = {}) {
     const clone = document.createElement(element.tagName);
     if (element.tagName === "SPAN" && element.classList.contains(MATH_CLASS)) {
       const latex = (_a = element.getAttribute("data-latex")) != null ? _a : "";
-      if (!MATH_LATEX_PATTERN.test(latex)) {
+      if (latex === "") {
         return children;
+      }
+      if (!MATH_LATEX_PATTERN.test(latex)) {
+        return [document.createTextNode(latex)];
       }
       if (options.mathToText) {
         return [document.createTextNode(latex)];
@@ -148,12 +155,12 @@ function sanitizeNoteHtml(html, options = {}) {
     const allowedAttrs = ALLOWED_ATTRS.get(element.tagName);
     if (allowedAttrs) {
       allowedAttrs.forEach((attr) => {
-        const value = element.getAttribute(attr);
-        if (value === null) {
+        const value2 = element.getAttribute(attr);
+        if (value2 === null) {
           return;
         }
         if (attr === "href") {
-          const safe = sanitizeHref(value);
+          const safe = sanitizeHref(value2);
           if (safe !== null) {
             clone.setAttribute(attr, safe);
             if (options.hardenLinks) {
@@ -164,7 +171,7 @@ function sanitizeNoteHtml(html, options = {}) {
           return;
         }
         if (attr === "style") {
-          const safe = sanitizeStyle(value, element.tagName === "SPAN");
+          const safe = sanitizeStyle(value2, element.tagName === "SPAN");
           if (safe !== null) {
             clone.setAttribute(attr, safe);
           }
@@ -172,12 +179,12 @@ function sanitizeNoteHtml(html, options = {}) {
         }
         const dataPattern = ALLOWED_DATA_ATTR_VALUES.get(attr);
         if (dataPattern) {
-          if (dataPattern.test(value)) {
-            clone.setAttribute(attr, value);
+          if (dataPattern.test(value2)) {
+            clone.setAttribute(attr, value2);
           }
           return;
         }
-        clone.setAttribute(attr, value);
+        clone.setAttribute(attr, value2);
       });
     }
     children.forEach((child) => clone.appendChild(child));
@@ -188,8 +195,11 @@ function sanitizeNoteHtml(html, options = {}) {
   container.childNodes.forEach((child) => out.push(...walk(child)));
   const fragment = document.createElement("div");
   out.forEach((node) => fragment.appendChild(node));
-  return fragment.innerHTML;
+  const value = fragment.innerHTML;
+  memo = { key: memoKey, value };
+  return value;
 }
+let memo = null;
 export {
   sanitizeHref,
   sanitizeNoteHtml

@@ -25,7 +25,7 @@ import {
 import { isRichNote } from './note-types';
 import { currentThemeMode, resolvePaletteColor } from './theme-colors';
 import { mountColorPicker, type ColorPickerEntry, type ColorPickerHandle } from './color-picker';
-import { MATH_CLASS, MATH_ID_ATTR, renderMathPreview } from './math';
+import { MATH_CLASS, MATH_ID_ATTR, MATH_LATEX_PATTERN, renderMathPreview } from './math';
 import { mountMathPalette } from './math-palette';
 
 /** href schemes the toolbar offers inline (mirrors the storage sanitizer). */
@@ -1096,6 +1096,15 @@ export function initRichToolbar(tabManager: TabManager): void {
       return;
     }
     const latex = elements.mathInput.value.trim();
+    // The stored shell's invariant (see MATH_LATEX_PATTERN) caps the
+    // source at 2000 chars. Over-cap equations used to render live and
+    // then silently VANISH at the next save (the sanitizer dropped the
+    // shell) — refuse at the door instead, keeping the popover open so
+    // the user can shorten it.
+    if (latex !== '' && !MATH_LATEX_PATTERN.test(latex)) {
+      showToast('Equations are capped at 2000 characters — shorten this one.');
+      return;
+    }
     const target = editingMath;
     // Closing refocuses the editor — Chrome restores the note's caret, so
     // a fresh insert lands where it was parked (must run BEFORE we clear
