@@ -38,7 +38,7 @@ export interface CloudConfig {
 }
 
 /** Shipped default: whatever VITE_API_BASE said at build time ('' = same-origin /api). */
-export const CLOUD_BUILD_CONFIG: CloudConfig = {
+const CLOUD_BUILD_CONFIG: CloudConfig = {
   apiBase: normalizeBase(import.meta.env.VITE_API_BASE ?? ''),
 };
 
@@ -64,8 +64,4 @@ export function getCloudConfig(): CloudConfig {
     /* malformed override — fall through to the default */
   }
   return { apiBase: normalizeBase(CLOUD_BUILD_CONFIG.apiBase) };
-}
-
-export function isCloudConfigured(): boolean {
-  return true;
 }

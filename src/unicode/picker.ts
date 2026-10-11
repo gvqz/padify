@@ -1037,5 +1037,3 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
     insertSymbol,
   };
 }
-
-export default initUnicodePicker;

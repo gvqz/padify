@@ -343,7 +343,7 @@ interface AuthResponse {
   user: { id: string; email: string };
 }
 
-export async function signIn(email: string, password: string): Promise<AuthResult> {
+async function signIn(email: string, password: string): Promise<AuthResult> {
   setStatus({ state: 'signed-out' });
   storeSession(null);
 
@@ -365,7 +365,7 @@ export async function signIn(email: string, password: string): Promise<AuthResul
   }
 }
 
-export async function signUp(email: string, password: string): Promise<AuthResult> {
+async function signUp(email: string, password: string): Promise<AuthResult> {
   setStatus({ state: 'signed-out' });
   storeSession(null);
 
@@ -387,7 +387,7 @@ export async function signUp(email: string, password: string): Promise<AuthResul
   }
 }
 
-export async function signOut(): Promise<void> {
+async function signOut(): Promise<void> {
   // Best effort: even if the API is unreachable, drop the local session.
   try {
     await api('/api/auth/signout', { method: 'POST' });
@@ -1121,11 +1121,6 @@ export function getCloudSync(): CloudSync {
     };
   }
   return instance;
-}
-
-/** Test hook — exposes whether the engine actually booted. */
-export function isCloudSyncActive(): boolean {
-  return manager !== null;
 }
 
 /** Signed-in user id, or null when signed out. */

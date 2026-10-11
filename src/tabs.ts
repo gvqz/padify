@@ -1160,26 +1160,3 @@ export function getActiveNoteExportBody(): string | null {
   return `<pre>${escapeHtml(captured.content)}</pre>`;
 }
 
-/**
- * HTML of the note currently shown in the editor — the html surface's
- * live capture, routed through the EditorPort (see editor/port.ts) with
- * the bare-DOM fallback for the rare paths that run before the
- * composition root installed the port.
- */
-export function getEditorHtml(): string {
-  return htmlNoteSurface.capture(document.getElementById('note'));
-}
-
-/** Replaces the editor content (sanitized in the surface/port) and persists. */
-export function setEditorHtml(html: string): void {
-  const element = document.getElementById('note');
-  if (htmlNoteSurface.commit(element, html)) {
-    // The port applied it and persisted via its onDocumentReplaced wiring.
-    return;
-  }
-  if (element === null) {
-    return;
-  }
-  // Bare fallback: the surface painted the sanitized content — persist now.
-  tabManagerInstance?.syncAfterExternalEdit();
-}
