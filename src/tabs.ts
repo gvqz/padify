@@ -1159,4 +1159,3 @@ export function getActiveNoteExportBody(): string | null {
   }
   return `<pre>${escapeHtml(captured.content)}</pre>`;
 }
-
