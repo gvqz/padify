@@ -1,9 +1,16 @@
 import { $ } from './lib/q';
 import { showToast } from './ui/toast';
 import { saveTextAsFile, getFileName } from './exports';
-import { getEditorText, deriveTabTitle, type TabManager } from './tabs';
+import { getEditorText, deriveTabTitle, type NoteTab, type TabManager } from './tabs';
 import { isListening, stopVoiceTyping } from './voice';
-import { normalizeNoteType } from './editor/note-types';
+import { htmlToText } from './editor/note-content';
+import {
+  NOTE_TYPE_ICONS,
+  isHtmlContent,
+  normalizeNoteType,
+  noteTypeLabel,
+  type KnownNoteType,
+} from './editor/note-types';
 
 /**
  * Picture-in-Picture floating window — moves the editor into a small
@@ -14,6 +21,10 @@ import { normalizeNoteType } from './editor/note-types';
  * surface (no rich toolbar, no type-specific chrome), so it is a
  * plain-typing feature — a rich or Markdown note active means the
  * button hides and an open floating window closes itself.
+ *
+ * The floating window carries a NOTE BROWSER in its header — browse
+ * every note, switch the plain ones, start a fresh one — so it works
+ * as a standalone scratchpad, not just a displaced editor.
  *
  * While the note floats, the MAIN window stays fully usable: the
  * editor's slot shows a dock placeholder (with a "Bring it back"
@@ -38,6 +49,10 @@ export function initPipWindow(tabManager: TabManager): void {
   // reached through createElement-held nodes, not string lookups).
   let pipHeader: HTMLElement | null = null;
   let pipHeaderTitle: HTMLElement | null = null;
+  // The note browser — the header's one control. Held the same way.
+  let pipNotesButton: HTMLButtonElement | null = null;
+  let pipNotesPanel: HTMLElement | null = null;
+  let pipNotesOutsideClick: ((event: Event) => void) | null = null;
 
   /** The floating window is a plain-typing surface — standard notes only. */
   const syncAvailability = (): void => {
@@ -55,11 +70,15 @@ export function initPipWindow(tabManager: TabManager): void {
 
   // Visibility follows the active note — boot, switch, create, cloud merge.
   // The same listener keeps the floating window's header title honest when
-  // the user switches notes in the main window while floating.
+  // the user switches notes in the main window while floating, and keeps an
+  // open note browser current (highlight + titles follow the switch).
   tabManager.addActiveListener((tab) => {
     syncAvailability();
     if (pipHeaderTitle) {
       pipHeaderTitle.textContent = deriveTabTitle(tab);
+    }
+    if (pipWindow && pipNotesPanel && !pipNotesPanel.hidden) {
+      renderNotesPanel(pipWindow);
     }
   });
   syncAvailability();
@@ -94,11 +113,167 @@ export function initPipWindow(tabManager: TabManager): void {
     $('#pip').attr('title', pipWindow ? 'Close Floating Window' : 'Activate Floating Window');
   };
 
-  /** The compact header inside the floating window: note title + dock button. */
+  // ---- note browser ---------------------------------------------------------
+
+  /** One-line preview under a row's title — the browse in "browse
+   *  notes". The html subset projects through the same htmlToText the
+   *  titles use; other kinds preview their raw text, which reads fine
+   *  for Markdown source and JSON rows alike. */
+  const notePreview = (tab: NoteTab): string => {
+    const text = isHtmlContent(tab.noteType) ? htmlToText(tab.content) : tab.content;
+    const flat = text.replace(/\s+/g, ' ').trim();
+    if (flat.length === 0) {
+      return 'Empty note';
+    }
+    return flat.length > 90 ? flat.slice(0, 90) + '…' : flat;
+  };
+
+  /** The row's type mark — the rail's badge vocabulary, so the two
+   *  lists read as the same collection. */
+  const noteRowIcon = (noteType: NoteTab['noteType']): string => {
+    const icon = NOTE_TYPE_ICONS[(noteType ?? 'standard') as KnownNoteType];
+    return (
+      icon?.(13) ??
+      `<span style="font-size:10px;font-weight:700;line-height:1">${noteTypeLabel(
+        noteType ?? 'standard',
+      )
+        .charAt(0)
+        .toLowerCase()}</span>`
+    );
+  };
+
+  /** Rebuilds the browser's rows from a fresh model snapshot — every
+   *  open and every active-note change re-renders, so the list never
+   *  shows a stale collection. */
+  const renderNotesPanel = (targetWindow: Window): void => {
+    if (!pipNotesPanel) {
+      return;
+    }
+
+    const tabs = tabManager.exportForSync().tabs;
+    const activeId = tabManager.getActive()?.id ?? null;
+
+    pipNotesPanel.textContent = '';
+
+    const head = targetWindow.document.createElement('div');
+    head.className = 'pip-notes-head';
+    head.textContent = `Notes · ${tabs.length}`;
+    pipNotesPanel.append(head);
+
+    for (const tab of tabs) {
+      const row = targetWindow.document.createElement('button');
+      row.type = 'button';
+      row.className = 'pip-note-row' + (tab.id === activeId ? ' active' : '');
+      row.title = `Open "${deriveTabTitle(tab)}"`;
+
+      if (normalizeNoteType(tab.noteType) === undefined) {
+        row.addEventListener('click', () => {
+          tabManager.switchTo(tab.id);
+          setNotesPanelOpen(targetWindow, false);
+        });
+      } else {
+        // The floating window is a plain-typing surface: rich and
+        // Markdown notes need their own chrome (toolbar / WYSIWYG),
+        // so they browse here but open only from the main window.
+        row.disabled = true;
+        row.title = `${noteTypeLabel(tab.noteType!)} — open it from the main window`;
+      }
+
+      const icon = targetWindow.document.createElement('span');
+      icon.className = 'pip-note-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.innerHTML = noteRowIcon(tab.noteType);
+
+      const body = targetWindow.document.createElement('span');
+      body.className = 'pip-note-body';
+
+      const title = targetWindow.document.createElement('span');
+      title.className = 'pip-note-title';
+      title.textContent = deriveTabTitle(tab);
+
+      const preview = targetWindow.document.createElement('span');
+      preview.className = 'pip-note-preview';
+      preview.textContent = notePreview(tab);
+
+      body.append(title, preview);
+      row.append(icon, body);
+      pipNotesPanel.append(row);
+    }
+
+    const newNote = targetWindow.document.createElement('button');
+    newNote.type = 'button';
+    newNote.className = 'pip-note-row pip-note-new';
+    newNote.title = 'Start a new plain note right here';
+    newNote.innerHTML =
+      '<span class="pip-note-icon" aria-hidden="true">' +
+      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>' +
+      '</span>' +
+      '<span class="pip-note-body"><span class="pip-note-title">New note</span></span>';
+    newNote.addEventListener('click', () => {
+      tabManager.addTab();
+      setNotesPanelOpen(targetWindow, false);
+    });
+    pipNotesPanel.append(newNote);
+  };
+
+  /** Opens/closes the browser, keeping the outside-click listener and
+   *  the button's expanded state in step with the panel. */
+  const setNotesPanelOpen = (targetWindow: Window, open: boolean): void => {
+    if (!pipNotesPanel || !pipNotesButton) {
+      return;
+    }
+
+    if (open && pipNotesPanel.hidden) {
+      renderNotesPanel(targetWindow);
+      pipNotesPanel.hidden = false;
+      pipNotesButton.setAttribute('aria-expanded', 'true');
+      pipNotesButton.classList.add('open');
+      pipNotesOutsideClick = (event: Event) => {
+        const target = event.target as Node | null;
+        if (target && !pipNotesPanel?.contains(target) && !pipNotesButton?.contains(target)) {
+          setNotesPanelOpen(targetWindow, false);
+        }
+      };
+      targetWindow.document.addEventListener('click', pipNotesOutsideClick, true);
+    } else if (!open && !pipNotesPanel.hidden) {
+      pipNotesPanel.hidden = true;
+      pipNotesButton.setAttribute('aria-expanded', 'false');
+      pipNotesButton.classList.remove('open');
+      if (pipNotesOutsideClick) {
+        targetWindow.document.removeEventListener('click', pipNotesOutsideClick, true);
+        pipNotesOutsideClick = null;
+      }
+    }
+  };
+
+  /** The compact header inside the floating window: the note browser
+   *  plus the live note title. No dock-back button — the window's own
+   *  close affordances (the OS button, Escape, the navbar toggle) all
+   *  bring the note home, and a button that repeats them is furniture. */
   const buildPipHeader = (targetWindow: Window): void => {
     const header = targetWindow.document.createElement('div');
     header.className = 'pip-header';
     header.id = 'pipHeader';
+
+    const notesButton = targetWindow.document.createElement('button');
+    notesButton.type = 'button';
+    notesButton.className = 'pip-notes-btn';
+    notesButton.title = 'Browse notes';
+    notesButton.setAttribute('aria-label', 'Browse notes');
+    notesButton.setAttribute('aria-haspopup', 'true');
+    notesButton.setAttribute('aria-expanded', 'false');
+    notesButton.innerHTML =
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.8" stroke-linecap="round" aria-hidden="true">' +
+      '<path d="M9.5 6h11"/><path d="M9.5 12h11"/><path d="M9.5 18h11"/>' +
+      '<path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/>' +
+      '</svg>';
+    notesButton.addEventListener('click', () => {
+      if (pipNotesPanel) {
+        setNotesPanelOpen(targetWindow, pipNotesPanel.hidden);
+      }
+    });
 
     const title = targetWindow.document.createElement('span');
     title.className = 'pip-header-title';
@@ -107,24 +282,22 @@ export function initPipWindow(tabManager: TabManager): void {
     title.textContent = active ? deriveTabTitle(active) : 'Note';
     title.title = 'The note open in this window';
 
-    const dockButton = targetWindow.document.createElement('button');
-    dockButton.type = 'button';
-    dockButton.className = 'pip-header-dock';
-    dockButton.title = 'Bring the note back to the main window';
-    dockButton.setAttribute('aria-label', 'Bring the note back to the main window');
-    dockButton.innerHTML =
-      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-      'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-      '<path d="M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4" />' +
-      '<rect x="12" y="13" width="10" height="7" rx="2" /></svg>';
-    dockButton.addEventListener('click', () => {
-      targetWindow.close();
-    });
-
-    header.append(title, dockButton);
+    header.append(notesButton, title);
     targetWindow.document.body.append(header);
     pipHeader = header;
     pipHeaderTitle = title;
+    pipNotesButton = notesButton;
+  };
+
+  /** The browser's dropdown panel — hidden until the header button
+   *  opens it. */
+  const buildNotesPanel = (targetWindow: Window): void => {
+    const panel = targetWindow.document.createElement('div');
+    panel.className = 'pip-notes';
+    panel.hidden = true;
+    panel.setAttribute('aria-label', 'Notes');
+    targetWindow.document.body.append(panel);
+    pipNotesPanel = panel;
   };
 
   /**
@@ -226,6 +399,10 @@ export function initPipWindow(tabManager: TabManager): void {
         pipHeader?.remove();
         pipHeader = null;
         pipHeaderTitle = null;
+        pipNotesButton = null;
+        pipNotesOutsideClick = null;
+        pipNotesPanel?.remove();
+        pipNotesPanel = null;
         newPipWindow.document.body?.classList.remove('pip-host', ...PIP_THEME_CLASSES);
 
         // The editor's slot in the main window goes back to normal first,
@@ -271,8 +448,10 @@ export function initPipWindow(tabManager: TabManager): void {
         }
       });
 
-      // Compact header first, then the editor under it.
+      // Compact header (with the note browser) first, then the editor
+      // under it.
       buildPipHeader(newPipWindow);
+      buildNotesPanel(newPipWindow);
 
       // Move the editor into the floating window.
       newPipWindow.document.body.append(appTextarea);
@@ -291,12 +470,18 @@ export function initPipWindow(tabManager: TabManager): void {
       document.getElementById('mainContainer')?.classList.add('pip');
       showDockPlaceholder();
 
-      // Keyboard support inside the floating window:
-      // Escape closes it, the format shortcuts edit,
-      // Ctrl/Cmd+S exports the note.
+      // Keyboard support inside the floating window: Escape closes
+      // the note browser first, then the window itself; the format
+      // shortcuts edit; Ctrl/Cmd+S exports the note.
       newPipWindow.document.addEventListener('keydown', (event: KeyboardEvent) => {
         if (event.key === 'Escape') {
           event.preventDefault();
+          // The browser is a layer INSIDE the window — Escape peels it
+          // back before it ever reaches for the window itself.
+          if (pipNotesPanel && !pipNotesPanel.hidden) {
+            setNotesPanelOpen(newPipWindow, false);
+            return;
+          }
           newPipWindow.close();
           return;
         }

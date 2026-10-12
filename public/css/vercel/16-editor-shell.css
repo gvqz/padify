@@ -1450,7 +1450,12 @@ body.dark #note[data-empty]::before {
    here, but those elements stay in the main window, so the rules
    never applied. */
 
-/* The host body is a column: header on top, editor filling the rest. */
+/* The host body is a column: header on top, editor filling the rest.
+   COLOR only, never the background shorthand: the shorthand resets
+   background-image, and this file loads AFTER the texture files
+   (15-textures.css, switches.css), so a shorthand here was wiping every
+   body-painted paper inside the floating window — only starfield, drawn
+   on pseudo-elements, survived. */
 body.pip-host {
   display: flex;
   flex-direction: column;
@@ -1460,18 +1465,20 @@ body.pip-host {
      padding (base.css derives it from --navbar-h) must not show. */
   padding: 0 !important;
   overflow: hidden;
-  background: var(--vz-bg);
+  background-color: var(--vz-bg);
   color: var(--vz-fg);
 }
 
-/* Compact header: the live note title + the dock-back button. */
+/* Compact header: the note browser + the live note title. No dock-back
+   button — the window's own close affordances (the OS button, Escape,
+   the navbar toggle) already bring the note home. */
 .pip-header {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
-  height: 36px;
-  padding: 0 6px 0 14px;
+  height: 38px;
+  padding: 0 10px;
   border-bottom: 1px solid var(--vz-border);
   background: var(--vz-bg-navbar);
 }
@@ -1502,16 +1509,162 @@ body.pip-host {
   background: transparent;
   color: var(--vz-fg-muted);
   cursor: pointer;
+  transition:
+    background var(--vz-dur) var(--vz-ease),
+    border-color var(--vz-dur) var(--vz-ease),
+    color var(--vz-dur) var(--vz-ease);
 }
 
-.pip-header-dock:hover {
+.pip-notes-btn:hover {
   background: var(--vz-bg-hover);
   color: var(--vz-fg);
 }
 
-.pip-header-dock:focus-visible {
+.pip-notes-btn:focus-visible {
   outline: 2px solid var(--vz-fg-subtle);
   outline-offset: -2px;
+}
+
+.pip-notes-btn.open {
+  background: var(--vz-bg-subtle);
+  border-color: var(--vz-border);
+  color: var(--vz-fg);
+}
+
+/* The note browser: browse, switch, start fresh — without leaving the
+   floating window. A dropdown sheet over the editor, sized to the
+   window (the PiP API guarantees a few hundred px minimum width). */
+.pip-notes {
+  position: absolute;
+  top: 44px;
+  left: 8px;
+  right: 8px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  max-height: min(340px, calc(100vh - 60px));
+  overflow-y: auto;
+  padding: 5px;
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  box-shadow: var(--vz-shadow-menu);
+  scrollbar-width: thin;
+  scrollbar-color: var(--vz-border-strong) transparent;
+}
+
+.pip-notes[hidden] {
+  display: none;
+}
+
+.pip-notes-head {
+  padding: 7px 9px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vz-fg-subtle);
+}
+
+.pip-note-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--vz-dur) var(--vz-ease);
+}
+
+.pip-note-row:hover:not([disabled]) {
+  background: var(--vz-bg-hover);
+}
+
+.pip-note-row:focus-visible {
+  outline: 2px solid var(--vz-fg-subtle);
+  outline-offset: -2px;
+}
+
+.pip-note-row.active {
+  background: var(--vz-bg-subtle);
+}
+
+.pip-note-row[disabled] {
+  color: var(--vz-fg-subtle);
+  cursor: default;
+}
+
+.pip-note-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  color: var(--vz-fg-muted);
+}
+
+.pip-note-row.active .pip-note-icon {
+  color: var(--vz-primary);
+}
+
+.pip-note-row[disabled] .pip-note-icon {
+  color: var(--vz-fg-subtle);
+}
+
+.pip-note-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pip-note-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pip-note-preview {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--vz-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pip-note-row[disabled] .pip-note-preview {
+  color: var(--vz-fg-subtle);
+}
+
+/* The "start fresh" row — an action, not a note: divided from the
+   list, and optically centered (single-line rows read better with the
+   mark mid-line than riding the cap-height). */
+.pip-note-new {
+  align-items: center;
+  margin-top: 4px;
+  border-top: 1px solid var(--vz-border);
+  border-radius: 0 0 var(--vz-radius) var(--vz-radius);
+}
+
+.pip-note-new .pip-note-icon {
+  margin-top: 0;
+}
+
+.pip-note-new .pip-note-title {
+  color: var(--vz-fg-muted);
+  font-weight: 500;
 }
 
 /* The editor column fills what's left of the floating window. */
@@ -1528,10 +1681,10 @@ body.pip-host #note {
   padding: 14px 16px 16px !important;
 }
 
-/* The save/word-count line is a real status bar here, not a floating
-   chip: in flow, on its own row, so note text can never run under it
-   (the page version parks it absolutely over the note's 80px bottom
-   padding, which a 350px window cannot afford). */
+/* The save/word-count line stays in flow below the editor (note text
+   can never run under it) but wears no furniture here: no top border,
+   no panel background — just quiet text on the paper, a few pixels
+   tall. */
 body.pip-host .bottom-line {
   position: static;
   right: auto;
@@ -1540,15 +1693,41 @@ body.pip-host .bottom-line {
   box-sizing: border-box;
   justify-content: flex-end;
   gap: 10px;
-  padding: 5px 10px;
-  border-top: 1px solid var(--vz-border);
-  background: var(--vz-bg-subtle);
-  font-size: 11px;
+  padding: 4px 12px 5px;
+  font-size: 10.5px;
+  color: var(--vz-fg-subtle);
 }
 
-/* The statistics anchor opens a main-window modal — inert in here. */
+/* The count is plain text in here, not the capsule it wears on the
+   page — 6px/14px of padding plus border and shadow is shelf-grade
+   furniture a 350px window cannot afford. The .transparency match (and
+   the !important pair) is what outranks the capsule + its dark twin in
+   09-pills.css. */
+body.pip-host .bottom-line .word-count-container.transparency {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--vz-fg-subtle);
+  font-weight: 400;
+  font-size: 10.5px;
+}
+
+body.pip-host .bottom-line .word-count-container p {
+  color: inherit;
+  font-size: inherit;
+}
+
+/* The statistics anchor opens a main-window modal — dead weight in the
+   popup, so it is not painted at all (pointer-dead was not enough). */
 body.pip-host .word-count-container a {
-  pointer-events: none;
+  display: none;
+}
+
+/* Save chip, scaled to the slim line. */
+body.pip-host .bottom-line .save-state {
+  font-size: 10.5px;
 }
 
 /* ---- Floating window: the main window's dock placeholder ----

@@ -71,6 +71,12 @@ test.beforeEach(({ page }) => {
   const errors: string[] = [];
   pageErrors.set(page, errors);
   page.on('pageerror', (error) => errors.push(String(error)));
+  // TEMPORARY DEBUG — Node-side only (no page impact): catch mid-test navigations.
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) {
+      console.log(`[NAV DEBUG ${Date.now() % 100000}] main frame → ${frame.url()}`);
+    }
+  });
 });
 
 test.afterEach(async ({ page }) => {
@@ -92,8 +98,14 @@ test.describe('floating window', () => {
     await expect(popup.locator('.bottom-line')).toBeVisible();
     expect(await popup.evaluate(() => document.body.classList.contains('pip-host'))).toBe(true);
 
-    // The floating window has its compact header with the note's title.
+    // The floating window has its compact header with the note's title
+    // and the note browser — and no dock button (the window's own close
+    // affordances already bring the note home).
     await expect(popup.locator('#pipHeaderTitle')).toHaveText(/Padify/i);
+    await expect(popup.locator('.pip-notes-btn')).toBeVisible();
+    await expect(popup.locator('.pip-header-dock')).toHaveCount(0);
+    // The statistics anchor is dead in a popup — it must not paint.
+    await expect(popup.locator('.word-count-container a')).toBeHidden();
 
     // The main window's editor slot shows the dock placeholder instead.
     await expect(page.locator('.pip-dock')).toBeVisible();
@@ -127,9 +139,13 @@ test.describe('floating window', () => {
     });
 
     // Escape closes the window and returns the editor to the main shell.
+    // The settle mirrors the other close-path tests: the module's pagehide
+    // moves the editor back synchronously, but the app's own follow-up work
+    // (debounced saves, focus handoff) deserves a beat before assertions.
     await popup.keyboard.press('Escape').catch(() => {
       /* the page dies mid-press when the window closes */
     });
+    await page.waitForTimeout(500);
     await expect(page.locator('#note')).toBeVisible();
     await expect(page.locator('#textareaContainer')).toHaveCount(1);
     await expect(page.locator('#note')).toHaveText('Typed in the floating window.');
@@ -162,18 +178,34 @@ test.describe('floating window', () => {
 
     const popup = await openFloatingWindow(page);
 
-    expect(
-      await popup.evaluate(() => ({
-        dark: document.body.classList.contains('dark'),
-        paper: document.body.classList.contains('grain-paper'),
-        bg: getComputedStyle(document.body).backgroundColor,
-      })),
-    ).toEqual({ dark: true, paper: true, bg: 'rgb(0, 0, 0)' });
+    const theme = await popup.evaluate(() => ({
+      dark: document.body.classList.contains('dark'),
+      paper: document.body.classList.contains('grain-paper'),
+      bg: getComputedStyle(document.body).backgroundColor,
+      image: getComputedStyle(document.body).backgroundImage,
+    }));
+    expect(theme.dark).toBe(true);
+    expect(theme.paper).toBe(true);
+    expect(theme.bg).toBe('rgb(0, 0, 0)');
+    // The paper IMAGERY must paint in the floating window, not just its
+    // class ride along — the host body once reset background-image with
+    // a background shorthand, and every texture but starfield died.
+    expect(theme.image).not.toBe('none');
+    expect(theme.image).toContain('data:image/svg+xml');
 
-    // The theme observer propagates a change made while floating.
-    await page.evaluate(() => document.body.classList.remove('grain-paper'));
-    await page.waitForTimeout(300);
-    expect(await popup.evaluate(() => document.body.classList.contains('grain-paper'))).toBe(false);
+    // The theme observer propagates changes made while floating — a
+    // texture switch repaints the floating paper too.
+    await page.evaluate(() => {
+      document.body.classList.remove('grain-paper');
+      document.body.classList.add('dotted-paper');
+    });
+    await popup.waitForTimeout(300);
+    const dotted = await popup.evaluate(() => ({
+      paper: document.body.classList.contains('dotted-paper'),
+      image: getComputedStyle(document.body).backgroundImage,
+    }));
+    expect(dotted.paper).toBe(true);
+    expect(dotted.image).toContain('radial-gradient');
 
     // Closing does not leave the theme classes stranded on the host.
     await popup.keyboard.press('Escape').catch(() => {
@@ -183,6 +215,91 @@ test.describe('floating window', () => {
     expect(
       await page.evaluate(() => document.getElementById('mainContainer')?.className ?? ''),
     ).toBe('');
+  });
+
+  test('the note browser switches and creates notes without leaving the floating window', async ({
+    page,
+  }) => {
+    await page.goto('/');
+
+    // Two plain notes with known content: the welcome note + this one.
+    await page.locator('#addTab').click();
+    await page.locator('#note').click();
+    await page.keyboard.type('Grocery list');
+    await expect(page.locator('#wordCount')).toHaveText('12 characters • 2 words', {
+      timeout: 10_000,
+    });
+
+    const popup = await openFloatingWindow(page);
+    await expect(popup.locator('#pipHeaderTitle')).toHaveText('Grocery list');
+
+    // Open the browser: both notes as rows, the active one highlighted,
+    // the new-note action below them.
+    await popup.locator('.pip-notes-btn').click();
+    await expect(popup.locator('.pip-notes')).toBeVisible();
+    const noteRows = popup.locator('.pip-note-row:not(.pip-note-new)');
+    await expect(noteRows).toHaveCount(2);
+    const groceryRow = popup.locator('.pip-note-row', { hasText: 'Grocery list' });
+    await expect(groceryRow).toHaveClass(/active/);
+    await expect(groceryRow.locator('.pip-note-preview')).toHaveText('Grocery list');
+
+    // Switch to the welcome note from INSIDE the popup: the panel
+    // closes, the title follows, the editor swaps content in place.
+    await popup.locator('.pip-note-row', { hasText: 'Welcome' }).click();
+    await expect(popup.locator('.pip-notes')).toBeHidden();
+    await expect(popup.locator('#pipHeaderTitle')).toHaveText(/Welcome.*Padify/);
+    await expect(popup.locator('#note')).toContainText('offline-capable notepad');
+    await expect(popup.locator('#wordCount')).not.toHaveText('12 characters • 2 words');
+
+    // A new note started from the browser is a plain, empty one.
+    await popup.locator('.pip-notes-btn').click();
+    await popup.locator('.pip-note-new').click();
+    await expect(popup.locator('#pipHeaderTitle')).toHaveText('Untitled');
+    await expect(popup.locator('#wordCount')).toHaveText('0 characters • 0 words');
+    await popup.locator('#note').click();
+    await popup.keyboard.type('From the floating window');
+    await expect(popup.locator('#wordCount')).not.toHaveText('0 characters • 0 words');
+
+    // Escape peels the browser back before it ever reaches the window.
+    await popup.locator('.pip-notes-btn').click();
+    await expect(popup.locator('.pip-notes')).toBeVisible();
+    await popup.keyboard.press('Escape');
+    await expect(popup.locator('.pip-notes')).toBeHidden();
+    await expect(popup.locator('#note')).toBeVisible();
+    await popup.keyboard.press('Escape').catch(() => {
+      /* window closed mid-press */
+    });
+    await expect(page.locator('#note')).toBeVisible();
+    await expect(page.locator('#note')).toContainText('From the floating window');
+  });
+
+  test('rich notes browse in the floating window but open from the main window', async ({
+    page,
+  }) => {
+    await page.goto('/');
+
+    // A rich note exists, but a plain note is active when the window opens.
+    await page.locator('#addTabTypeMenu').click();
+    await page
+      .locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Rich text note' })
+      .click();
+    await expect(page.locator('#richToolbar')).toBeVisible();
+    await page.locator('.tab-strip-tab').first().click();
+    await expect(page.locator('#pipContainer')).toBeVisible();
+
+    const popup = await openFloatingWindow(page);
+    await popup.locator('.pip-notes-btn').click();
+
+    // The rich note browses (with its type mark and a hint) but is
+    // inert: the floating window is a plain-typing surface.
+    const richRow = popup.locator('.pip-note-row[disabled]');
+    await expect(richRow).toHaveCount(1);
+    await expect(richRow).toBeDisabled();
+    await expect(richRow.locator('.pip-note-icon')).toBeVisible();
+
+    // The window stays open, the plain note stays put.
+    await expect(popup.locator('#note')).toBeVisible();
+    await expect(popup.locator('#pipHeaderTitle')).toHaveText(/Padify/i);
   });
 
   test('a rich note active closes the floating window and hides the entry point', async ({
