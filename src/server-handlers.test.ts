@@ -750,6 +750,55 @@ describe('handleSharesPost — the live-share cap', () => {
   });
 });
 
+describe('handleSharesPost — the empty-note refusal', () => {
+  it('400s a blank html note — the delete-all skeleton is emptiness, not words', async () => {
+    const db = new ScriptedDb([{ match: 'as live', rows: [{ live: 0 }] }]);
+    for (const blank of ['', '<p></p>', '<p><br></p>', '   <div>  </div> ']) {
+      const response = await handleSharesPost(
+        db,
+        jsonRequest('POST', { note_id: 'n1', title: 't', content: blank, days: 7 }),
+        user,
+      );
+      expect(response.status).toBe(400);
+      expect(String((await bodyOf(response)).error)).toContain('empty');
+    }
+  });
+
+  it('400s a blank raw-content note of a non-html kind', async () => {
+    const db = new ScriptedDb([{ match: 'as live', rows: [{ live: 0 }] }]);
+    const response = await handleSharesPost(
+      db,
+      jsonRequest('POST', {
+        note_id: 'n1',
+        title: 't',
+        content: '   ',
+        note_type: 'markdown',
+        days: 7,
+      }),
+      user,
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it('a markdown note whose words wear angle brackets still shares', async () => {
+    // The raw kind must NOT be tag-stripped: "<hello>" is the note's
+    // entire text, not markup.
+    const db = new ScriptedDb([{ match: 'as live', rows: [{ live: 0 }] }]);
+    const response = await handleSharesPost(
+      db,
+      jsonRequest('POST', {
+        note_id: 'n1',
+        title: 't',
+        content: '<hello>',
+        note_type: 'markdown',
+        days: 7,
+      }),
+      user,
+    );
+    expect(response.status).toBe(201);
+  });
+});
+
 describe('handleAttachmentPost — the round-2 upload guardrails', () => {
   const upload = (): Request =>
     new Request('http://api.test/api/attachments', {

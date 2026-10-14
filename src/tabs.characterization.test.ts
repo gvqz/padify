@@ -684,6 +684,84 @@ describe('TabManager (characterization)', () => {
     expect(tabs).toHaveLength(1);
     expect(tabs[0].content).toBe(WELCOME_HTML);
   });
+
+  it('applyExternalMerge repaints the editor on an identity change even while focused', async () => {
+    // The active note was closed on another device: the merge removed it and
+    // fell back to another tab. The stale editor DOM (the deleted note's
+    // words) must NOT survive to be captured into the newly-active tab —
+    // that was cross-note contamination. The repaint is forced, typing or
+    // not, because the merge already rescued the unpushed words.
+    const manager = await bootedManager();
+    const first = manager.getActive()!;
+    manager.addTab(false);
+    const second = manager.getActive()!;
+    manager.switchTo(first.id, false);
+    $('#note').html('<b>typing into the doomed note</b>');
+    $('#note').trigger('focus'); // the typist holds the caret
+
+    manager.applyExternalMerge([stored(second.id, '<div>the survivor</div>')]);
+
+    // The survivor is active and the editor paints IT — not the stale DOM.
+    expect(manager.getActive()!.id).toBe(second.id);
+    expect(document.getElementById('note')!.innerHTML).toContain('the survivor');
+  });
+
+  it('a merged-away active tab leaves no dirty id behind', async () => {
+    const manager = await bootedManager();
+    const first = manager.getActive()!;
+    $('#note').html('<b>never confirmed</b>');
+    manager.saveActiveFromEditor(); // first is now dirty
+
+    manager.applyExternalMerge([]);
+
+    expect(manager.exportForSync().dirty).not.toContain(first.id);
+  });
+
+  it('a conflicted copy\u2019s lineage (copyOf) survives a reload', async () => {
+    // The multiplication guard keys on copyOf: if the field fell out of
+    // the storage round trip, every reload would forget the branch and a
+    // repeated race could mint a second copy again.
+    const manager = await bootedManager();
+    const base = manager.getActive()!;
+    const branch: StoredNoteTab = {
+      id: 'branch-tab',
+      name: 'The plan — conflicted copy',
+      content: '<p>the losing words</p>',
+      createdAt: 1,
+      updatedAt: 2,
+      copyOf: base.id,
+    };
+    manager.applyExternalMerge([branch]);
+
+    await flushAndReboot();
+    const persisted = await loadNotes();
+    const restored = persisted.tabs.find((entry) => entry.id === 'branch-tab');
+    expect(restored?.copyOf).toBe(base.id);
+  });
+
+  it('the strip badges a conflicted copy with the fork mark', async () => {
+    const manager = await bootedManager();
+    const base = manager.getActive()!;
+    const branch: StoredNoteTab = {
+      id: 'branch-tab',
+      name: 'The plan — conflicted copy',
+      content: '<p>the losing words</p>',
+      createdAt: 1,
+      updatedAt: 2,
+      copyOf: base.id,
+    };
+
+    manager.applyExternalMerge([branch]);
+
+    const badge = document.querySelector(
+      '.tab-strip-tab[data-tab-id="branch-tab"] .tab-strip-copy',
+    );
+    expect(badge).not.toBeNull();
+    // An ordinary note carries no fork.
+    expect(
+      document.querySelector(`.tab-strip-tab[data-tab-id="${base.id}"] .tab-strip-copy`),
+    ).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------

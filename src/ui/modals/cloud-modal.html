@@ -23,24 +23,24 @@
       </div>
       <div class="modal-body">
         <div id="cloudSignedInPane" hidden>
-          <div class="cloud-status-card">
+          <div class="cloud-status-card" id="cloudStatusCard">
             <span class="cloud-status-dot off" id="cloudModalStatusDot" aria-hidden="true"></span>
             <div class="cloud-status-copy">
               <span class="cloud-status-line" id="cloudStatusLine">Everything is backed up</span>
               <span class="cloud-status-meta" id="cloudLastSync">Syncing for the first time…</span>
             </div>
-          </div>
-          <div class="cloud-account-row">
-            <span class="pref-row-title">Account</span>
-            <span class="cloud-account-email" id="cloudAccountEmail"></span>
-          </div>
-          <div class="cloud-actions">
-            <button type="button" class="pref-action-btn" id="cloudSyncNow">
+            <button
+              type="button"
+              class="cloud-sync-now-btn"
+              id="cloudSyncNow"
+              title="Sync now"
+              aria-label="Sync now"
+            >
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                stroke-width="1.8"
+                stroke-width="1.9"
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 aria-hidden="true"
@@ -48,8 +48,15 @@
                 <path d="M21 12a9 9 0 1 1-2.64-6.36" />
                 <path d="M21 3v6h-6" />
               </svg>
-              Sync now
             </button>
+          </div>
+
+          <div class="pref-card cloud-account-card">
+            <div class="cloud-account-avatar" id="cloudAccountAvatar" aria-hidden="true"></div>
+            <div class="cloud-account-copy">
+              <span class="cloud-account-email" id="cloudAccountEmail"></span>
+              <span class="cloud-account-hint">Your sync account — notes on every device</span>
+            </div>
             <button type="button" class="pref-action-btn cloud-sign-out" id="cloudSignOut">
               <svg
                 viewBox="0 0 24 24"
@@ -67,16 +74,77 @@
               Sign out
             </button>
           </div>
-          <p class="cloud-hint">
-            Notes sync automatically while you're signed in — even offline changes upload once
-            you're back. Snapshots, settings and drawings stay on this device unless a tool says
-            otherwise.
-          </p>
+
+          <div class="cloud-facts">
+            <div class="cloud-fact">
+              <span class="cloud-fact-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path
+                    d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"
+                  />
+                </svg>
+              </span>
+              <div class="cloud-fact-copy">
+                <span class="cloud-fact-title">Works offline</span>
+                <span class="cloud-fact-hint">Anything you write uploads once you reconnect.</span>
+              </div>
+            </div>
+            <div class="cloud-fact">
+              <span class="cloud-fact-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path
+                    d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"
+                  />
+                </svg>
+              </span>
+              <div class="cloud-fact-copy">
+                <span class="cloud-fact-title">Nothing is lost</span>
+                <span class="cloud-fact-hint"
+                  >Notes changed on two devices keep both versions — the other becomes a copy.</span
+                >
+              </div>
+            </div>
+            <div class="cloud-fact">
+              <span class="cloud-fact-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </span>
+              <div class="cloud-fact-copy">
+                <span class="cloud-fact-title">Your notes stay yours</span>
+                <span class="cloud-fact-hint"
+                  >Snapshots, settings and drawings stay on this device unless a tool says
+                  otherwise.</span
+                >
+              </div>
+            </div>
+          </div>
         </div>
 
         <div id="cloudAuthPane">
-          <form id="cloudAuthForm" novalidate>
-            <h5 class="cloud-auth-title" id="cloudAuthTitle">Sign in to sync</h5>
+          <form id="cloudAuthForm" class="cloud-auth-card" novalidate>
             <div class="cloud-field">
               <label class="cloud-label" for="cloudAuthEmail">Email</label>
               <input

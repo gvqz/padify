@@ -41,7 +41,9 @@ async function signUp(page: Page, account: { email: string; password: string }):
   await page.locator('#cloudNavContainer').click();
   await expect(page.locator('#cloudModal')).toBeVisible();
   await page.locator('#cloudAuthSwitch').click();
-  await expect(page.locator('#cloudAuthTitle')).toContainText(/create/i);
+  // The submit button carries the form's mode (the in-form title was
+  // folded into it in the modal redesign).
+  await expect(page.locator('#cloudAuthSubmit')).toContainText(/create/i);
   await page.locator('#cloudAuthEmail').fill(account.email);
   await page.locator('#cloudAuthPassword').fill(account.password);
   await page.locator('#cloudAuthSubmit').click();

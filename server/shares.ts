@@ -54,6 +54,21 @@ export async function handleSharesPost(db: Db, request: Request, user: SessionUs
   const noteType = parseNoteType(body.note_type);
   const days = Math.min(3650, Math.max(1, asInt(body.days, 7)));
 
+  // An empty note is not shareable — the link would hand a reader a blank
+  // page. Html kinds are blank when their tag-stripped text is blank (a
+  // bare <p></p> or <br> is emptiness wearing markup); every other kind
+  // is stored raw, so blank means blank. The client refuses the create
+  // first; this is the contract the wire keeps on its own.
+  const htmlLike = noteType === null || noteType === 'standard' || noteType === 'rich';
+  const readable = (htmlLike ? content.replace(/<[^>]*>/g, '') : content).trim();
+  if (readable === '') {
+    return json(
+      request,
+      { error: 'This note is empty — write something before sharing it.' },
+      400
+    );
+  }
+
   // Per-user cap: shares each carry a full denormalized copy of the note
   // (up to the body limit) — unlimited shares were unlimited storage.
   // Revoked/expired rows still count until pruned; keeping the cap on

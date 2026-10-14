@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   escapeHtml,
+  isConflictedCopyTab,
   legacyTextToHtml,
   sanitizeNoteHtml,
   htmlToText,
@@ -302,5 +303,22 @@ describe('WELCOME_HTML', () => {
   it('is non-empty and introduces the app', () => {
     expect(WELCOME_HTML.length).toBeGreaterThan(100);
     expect(WELCOME_HTML).toContain('Padify');
+  });
+});
+
+describe('isConflictedCopyTab — the strip\u2019s fork badge', () => {
+  it('flags a tab minted on this device by its copyOf lineage', () => {
+    expect(isConflictedCopyTab(tab({ copyOf: 'base-note' }))).toBe(true);
+  });
+
+  it('flags a copy that arrived from another device by its telltale name', () => {
+    expect(isConflictedCopyTab(tab({ name: 'Groceries — conflicted copy' }))).toBe(true);
+    expect(isConflictedCopyTab(tab({ name: 'Draft — copy (deleted elsewhere)' }))).toBe(true);
+  });
+
+  it('never flags an ordinary note — even one mentioning copies mid-name', () => {
+    expect(isConflictedCopyTab(tab({ name: 'conflicted copy notes I keep' }))).toBe(false);
+    expect(isConflictedCopyTab(tab({ name: 'Groceries — shopping list' }))).toBe(false);
+    expect(isConflictedCopyTab(tab())).toBe(false);
   });
 });
