@@ -18,7 +18,8 @@
 
 import { getCloudConfig } from './config';
 import { getCloudUserId } from './sync';
-import { deriveTabTitle, type NoteType, type TabManager, type TabsSyncPayload } from '../tabs';
+import { contentKindFor, type NoteType } from '../editor/note-types';
+import { deriveTabTitle, htmlToText, type TabManager, type TabsSyncPayload } from '../tabs';
 
 // ---------------------------------------------------------------------------
 // Public surface
@@ -61,6 +62,21 @@ function signedIn(): boolean {
   return !!getCloudUserId();
 }
 
+/**
+ * True when a note carries nothing worth sharing: html kinds read through
+ * the tag stripper (a bare <p></p> or <br> is emptiness wearing markup),
+ * every other kind reads raw. The blank note a fresh tab or a delete-all
+ * leaves behind must never become a link — the recipient would get an
+ * empty page and the owner a "share" of nothing.
+ */
+export function noteContentIsEmpty(content: string, noteType?: NoteType | null): boolean {
+  const kind = contentKindFor(noteType ?? undefined);
+  if (kind === 'html') {
+    return htmlToText(content).trim() === '';
+  }
+  return content.trim() === '';
+}
+
 export function shareUrlFor(token: string): string {
   // Resolved against the page, not the origin: hosts that can only hand out
   // a subpath (functionhost.alwaysdata.net/padify) need the viewer link to
@@ -101,6 +117,12 @@ export async function createShare(
 ): Promise<ShareActionResult> {
   if (!signedIn()) {
     return { ok: false, message: 'Sign in to share notes.' };
+  }
+  // The empty note is refused here (the modal disables the button, this is
+  // the safety net for every other caller) — sharing nothing is a broken
+  // link, not a feature.
+  if (noteContentIsEmpty(content, noteType)) {
+    return { ok: false, message: 'This note is empty — write something before sharing it.' };
   }
 
   try {

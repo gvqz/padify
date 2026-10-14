@@ -562,11 +562,17 @@ async function runSyncOnce(): Promise<void> {
   }
 
   if (merge.conflicts.length > 0) {
-    // A rescue the user never sees is half a rescue. The toast is loaded
-    // lazily so this module stays import-clean for its tests.
+    // A rescue the user never sees is half a rescue. One conflict says
+    // which note kept both versions; several summarize instead of stacking
+    // full sentences into a toast nobody can read in 2.2s. The toast is
+    // loaded lazily so this module stays import-clean for its tests.
+    const message =
+      merge.conflicts.length === 1
+        ? `${merge.conflicts[0]}.`
+        : `${merge.conflicts.length} notes were changed on two devices — both versions of each were kept.`;
     void import('../ui/toast')
       .then(({ showToast }) => {
-        showToast(`${merge.conflicts.join('. ')}.`);
+        showToast(message);
       })
       .catch(() => {
         /* the merge itself already succeeded — a lost toast is cosmetic */
@@ -785,29 +791,85 @@ export function mergeRemote(
     !!row.seq && !!local.syncSeq && row.seq === local.syncSeq;
 
   /**
-   * The losing side of a race, kept as its own note. A conflicted copy is
-   * a brand-new tab (fresh id, no syncSeq, nothing dirty to inherit) with
-   * the exact content that was about to be overwritten: the cycle's step 3
-   * pushes every local tab the pull did not deliver, so the copy rides the
-   * very next push and the losing words end up backed up on every device —
-   * not merely rescued on the one that typed them. Tag-stripped emptiness
-   * (<p></p>, <br>) does not deserve a copy; blank losers vanish quietly.
+   * Words worth keeping: non-blank once tags are stripped.
    */
-  const conflictCopyFrom = (local: NoteTab, deletedElsewhere: boolean): NoteTab => {
-    const base = (local.name ?? 'Note').slice(0, 40);
-    return {
-      id: crypto.randomUUID(),
-      name: deletedElsewhere ? `${base} — copy (deleted elsewhere)` : `${base} — conflicted copy`,
-      content: local.content,
-      createdAt: local.createdAt,
-      updatedAt: Date.now(),
-      noteType: local.noteType,
-      colorTheme: local.colorTheme,
-    };
+  const hasWords = (content: string): boolean => content.replace(/<[^>]*>/g, '').trim() !== '';
+
+  /**
+   * The suffix a minted branch carries. Stripped (repeatedly — legacy
+   * branches could nest it) before naming a new copy, so a branch losing
+   * its own race names after the BASE note instead of stacking suffixes
+   * into "X — conflicted copy — conflicted copy".
+   */
+  const stripBranchSuffix = (name: string): string => {
+    let stripped = name;
+    for (let i = 0; i < 5; i += 1) {
+      const next = stripped.replace(/ — (?:conflicted copy|copy \(deleted elsewhere\))$/, '');
+      if (next === stripped) {
+        break;
+      }
+      stripped = next;
+    }
+    return stripped;
   };
 
-  /** Words worth keeping: non-blank once tags are stripped. */
-  const hasWords = (content: string): boolean => content.replace(/<[^>]*>/g, '').trim() !== '';
+  /**
+   * The losing side of a race, kept as its own note — exactly once per
+   * note per device. A conflicted copy is the note's unmerged BRANCH: the
+   * first loss mints a fresh tab (own id, no syncSeq) whose content is the
+   * exact words about to be overwritten, and the cycle's step 3 pushes
+   * every local tab the pull did not deliver, so the branch rides the very
+   * next push and the losing words land on every device. Later losses of
+   * the same lineage UPDATE the branch's words in place — the old
+   * mint-per-cycle behavior filled the strip with near-identical
+   * "X — conflicted copy" tabs, one per 30-second sync, whenever two
+   * devices kept the note open. A copy that loses its own race chains back
+   * to the base note's lineage (the loser's marker drops: it now carries
+   * the winner's content for its own row). Tag-stripped emptiness
+   * (<p></p>, <br>) does not deserve a branch; blank losers vanish
+   * quietly.
+   */
+  const rescueLosingWords = (
+    local: NoteTab,
+    deletedElsewhere: boolean,
+  ): { tab: NoteTab; outcome: 'minted' | 'updated' | 'preserved' } => {
+    // The lineage this branch belongs to: a copy's own conflicts belong to
+    // the base note it was minted from, not to the copy's row.
+    const lineage = local.copyOf ?? local.id;
+    const existing = tabs.find((entry) => entry.copyOf === lineage && entry.id !== local.id);
+
+    if (existing) {
+      if (existing.content === local.content) {
+        // The words are already preserved verbatim — a second copy (or even
+        // an updatedAt bump) would be pure churn re-pushed every cycle.
+        return { tab: existing, outcome: 'preserved' };
+      }
+      existing.content = local.content;
+      existing.updatedAt = Date.now();
+      if (local.noteType) {
+        existing.noteType = local.noteType;
+      } else {
+        delete existing.noteType;
+      }
+      touched = true;
+      return { tab: existing, outcome: 'updated' };
+    }
+
+    const base = stripBranchSuffix(local.name ?? 'Note').slice(0, 40);
+    return {
+      tab: {
+        id: crypto.randomUUID(),
+        name: deletedElsewhere ? `${base} — copy (deleted elsewhere)` : `${base} — conflicted copy`,
+        content: local.content,
+        createdAt: local.createdAt,
+        updatedAt: Date.now(),
+        noteType: local.noteType,
+        colorTheme: local.colorTheme,
+        copyOf: lineage,
+      },
+      outcome: 'minted',
+    };
+  };
 
   remoteRows.forEach((row) => {
     if (row.deleted) {
@@ -823,12 +885,16 @@ export function mergeRemote(
       if (local) {
         if (dirty.has(local.id) && hasWords(local.content)) {
           // Unconfirmed words about to be buried by a tombstone: the
-          // delete still takes the note, the copy keeps the words.
-          const copy = conflictCopyFrom(local, true);
-          freshRemote.push(copy);
-          conflicts.push(
-            `"${copy.name}" was deleted on another device — this device's unsynced changes were kept as a copy`,
-          );
+          // delete still takes the note, the branch keeps the words. A
+          // silent in-place update (not a mint) still tells no toast —
+          // the branch already exists; only its words moved.
+          const rescue = rescueLosingWords(local, true);
+          if (rescue.outcome === 'minted') {
+            freshRemote.push(rescue.tab);
+            conflicts.push(
+              `"${rescue.tab.name}" was deleted on another device — this device's unsynced changes were kept as a copy`,
+            );
+          }
         }
         byId.delete(row.id);
         const index = tabs.findIndex((tab) => tab.id === row.id);
@@ -863,10 +929,14 @@ export function mergeRemote(
         hasWords(local.content)
       ) {
         // Words the cloud never confirmed are about to be overwritten:
-        // the remote takes the canonical row, the copy takes the words.
-        const copy = conflictCopyFrom(local, false);
-        freshRemote.push(copy);
-        conflicts.push(`"${copy.name}" was changed on two devices — both versions were kept`);
+        // the remote takes the canonical row, the branch takes the words.
+        const rescue = rescueLosingWords(local, false);
+        if (rescue.outcome === 'minted') {
+          freshRemote.push(rescue.tab);
+          conflicts.push(
+            `"${rescue.tab.name}" was changed on two devices — both versions were kept`,
+          );
+        }
       }
       local.name = row.name;
       local.content = wireRowContent(row);
@@ -876,6 +946,13 @@ export function mergeRemote(
       // local value instead of resetting the note to the default.
       local.noteType = normalizeNoteType(row.note_type) ?? local.noteType;
       local.syncSeq = row.seq && row.seq > 0 ? row.seq : local.syncSeq;
+      // A branch whose row was replaced by the winner no longer preserves
+      // divergent words — its lineage marker goes, so the branch slot is
+      // free for the next genuinely new conflict. A byte-identical
+      // re-adoption keeps it (that is just the branch syncing normally).
+      if (contentDiffers && local.copyOf) {
+        delete local.copyOf;
+      }
       touched = true;
     }
   });

@@ -52,6 +52,9 @@ export interface StoredNoteTab {
   /** Sync v2: the server sequence of the last synced version (sync
    *  metadata; see tabs.ts NoteTab.syncSeq). */
   syncSeq?: number;
+  /** Conflicted-copy lineage (local-only sync metadata; see
+   *  tabs.ts NoteTab.copyOf). */
+  copyOf?: string;
 }
 
 /** A deletion not yet confirmed by the cloud. */
@@ -262,6 +265,13 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
           (record as { syncSeq: number }).syncSeq > 0
             ? (record as { syncSeq: number }).syncSeq
             : undefined,
+        // Round-trip the conflicted-copy lineage so the multiplication
+        // guard survives reloads (see NoteTab.copyOf).
+        copyOf:
+          typeof (record as { copyOf?: unknown }).copyOf === 'string' &&
+          (record as { copyOf: string }).copyOf
+            ? (record as { copyOf: string }).copyOf
+            : undefined,
       };
     });
 
@@ -342,6 +352,7 @@ function loadLegacySnapshot(): NotesSnapshot {
                 : undefined,
             syncSeq:
               typeof entry.syncSeq === 'number' && entry.syncSeq > 0 ? entry.syncSeq : undefined,
+            copyOf: typeof entry.copyOf === 'string' && entry.copyOf ? entry.copyOf : undefined,
           });
         }
       });

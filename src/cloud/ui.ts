@@ -106,7 +106,6 @@ export function initCloudUI(): void {
 
   // ---- modal ------------------------------------------------------------------
 
-  const $title = $('#cloudAuthTitle');
   const $submit = $('#cloudAuthSubmit');
   const $switch = $('#cloudAuthSwitch');
   const $error = $('#cloudAuthError');
@@ -120,7 +119,6 @@ export function initCloudUI(): void {
     mode = next;
     $error.text('').addClass('hide');
     $notice.text('').addClass('hide');
-    $title.text(next === 'sign-in' ? 'Sign in to sync' : 'Create your sync account');
     $submit.text(next === 'sign-in' ? 'Sign in' : 'Create account');
     $switch.text(
       next === 'sign-in' ? 'New here? Create an account' : 'Already have an account? Sign in',
@@ -208,6 +206,9 @@ export function initCloudUI(): void {
 
     if (signedIn) {
       $('#cloudAccountEmail').text(status.email);
+      // The avatar carries the account's initial — a face for the account
+      // row that a bare email never had.
+      $('#cloudAccountAvatar').text((status.email.trim()[0] ?? '·').toUpperCase());
       $('#cloudLastSync').text(
         status.lastSyncAt
           ? `Last sync ${formatTime(status.lastSyncAt)}`
@@ -215,6 +216,13 @@ export function initCloudUI(): void {
       );
       $('#cloudStatusLine').text(statusLine(status));
     }
+
+    // The manual sync button spins while a sync is in flight — the click
+    // is otherwise indistinguishable from a miss.
+    $('#cloudSyncNow').toggleClass(
+      'is-busy',
+      signedIn && (status.sync === 'syncing' || status.sync === 'pending'),
+    );
   }
 
   function renderSettingsSummary(status: CloudStatus): void {
