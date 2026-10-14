@@ -1,0 +1,1386 @@
+/* ==========================================================================
+   Padify Reminders ("tk") — tasks with dates, flags, priorities and lists:
+
+     Today · Scheduled · All · Flagged · Completed · custom lists
+
+   Layout: sidebar (destinations) + content pane + a composer bar pinned
+   to the bottom of the modal — the music player's shape, wearing Apple
+   Reminders' clothes.
+
+   Styling follows the app-wide Vercel design system: the --tk-* tokens
+   below are local aliases of the --vz-* tokens, so this file stays in
+   lock-step with the rest of the UI. Scoped to #tasksModal so nothing
+   leaks into other app UI.
+   ========================================================================== */
+
+#tasksModal {
+  --tk-accent: var(--vz-primary);
+  --tk-accent-strong: var(--vz-primary-hover);
+  --tk-accent-contrast: var(--vz-primary-fg);
+  --tk-star: var(--vz-star);
+  --tk-success: var(--vz-success);
+  --tk-danger: var(--vz-danger);
+
+  --tk-bg: var(--vz-bg);
+  --tk-card: var(--vz-bg-elevated);
+  --tk-well: var(--vz-bg-subtle);
+  --tk-chip: var(--vz-bg-chip);
+  --tk-border: var(--vz-border);
+  --tk-border-strong: var(--vz-border-strong);
+  --tk-text: var(--vz-fg);
+  --tk-muted: var(--vz-fg-muted);
+  --tk-track: var(--vz-border);
+
+  /* The list palette — the only chroma the feature is allowed. Quiet
+     enough to sit next to the monochrome chrome, distinct enough that
+     six lists never blur together. */
+  --tk-blue: #3d78c4;
+  --tk-red: #cf5a5a;
+  --tk-orange: #c98a3d;
+  --tk-green: #0e9f6e;
+  --tk-purple: #8465c4;
+  --tk-teal: #2f9c9c;
+
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--tk-text);
+}
+
+body.dark #tasksModal {
+  --tk-blue: #6aa2e2;
+  --tk-red: #e28585;
+  --tk-orange: #e0aa66;
+  --tk-green: #2fbd8b;
+  --tk-purple: #a98fe0;
+  --tk-teal: #55bdbd;
+}
+
+/* The list color every descendant reads. */
+#tasksModal .tk-c-blue {
+  --list-c: var(--tk-blue);
+}
+#tasksModal .tk-c-red {
+  --list-c: var(--tk-red);
+}
+#tasksModal .tk-c-orange {
+  --list-c: var(--tk-orange);
+}
+#tasksModal .tk-c-green {
+  --list-c: var(--tk-green);
+}
+#tasksModal .tk-c-purple {
+  --list-c: var(--tk-purple);
+}
+#tasksModal .tk-c-teal {
+  --list-c: var(--tk-teal);
+}
+/* No list (the default Reminders inbox) → the monochrome accent. */
+#tasksModal .tk-c-none {
+  --list-c: var(--tk-accent);
+}
+
+/* The hidden attribute must win over every display rule below (views,
+   empties, badges, buttons) — author styles otherwise override the UA's
+   [hidden] { display: none }. */
+#tasksModal [hidden] {
+  display: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   Modal shell — a tall, quiet frame (the player's, shared)
+   -------------------------------------------------------------------------- */
+
+#tasksModal .tk-dialog {
+  width: 100%;
+  max-width: 960px;
+  margin: 24px auto;
+  display: flex;
+  align-items: stretch;
+}
+
+#tasksModal .tk-content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  height: min(640px, calc(100vh - 48px));
+  border: 1px solid var(--tk-border);
+  border-radius: var(--vz-radius-lg);
+  box-shadow: var(--vz-shadow-dialog);
+  overflow: hidden;
+  background: var(--tk-card);
+}
+
+/* --------------------------------------------------------------------------
+   Header
+   -------------------------------------------------------------------------- */
+
+#tasksModal .tk-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  padding: 14px 20px 10px;
+  border-bottom: 1px solid var(--tk-border);
+}
+
+#tasksModal .tk-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--tk-text);
+}
+
+#tasksModal .tk-title svg {
+  color: var(--tk-accent);
+}
+
+#tasksModal .tk-header .close {
+  margin: 0;
+  padding: 6px;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--tk-muted);
+  opacity: 1;
+  line-height: 0;
+  cursor: pointer;
+  transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
+}
+
+#tasksModal .tk-header .close:hover,
+#tasksModal .tk-header .close:focus-visible {
+  background: var(--tk-well);
+  color: var(--tk-text);
+  outline: none;
+}
+
+#tasksModal .tk-header .close svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* --------------------------------------------------------------------------
+   Body: sidebar + content pane
+   -------------------------------------------------------------------------- */
+
+#tasksModal .tk-body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  padding: 0;
+  position: relative;
+}
+
+#tasksModal .tk-nav {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--tk-border);
+  background: var(--tk-well);
+}
+
+#tasksModal .tk-nav-scroll {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 10px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-track) transparent;
+}
+
+#tasksModal .tk-nav-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+#tasksModal .tk-nav-scroll::-webkit-scrollbar-thumb {
+  background: var(--tk-track);
+  border-radius: 4px;
+}
+
+#tasksModal .tk-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--vz-radius-md);
+  background: transparent;
+  color: var(--tk-muted);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
+}
+
+#tasksModal .tk-nav-item:hover {
+  background: var(--tk-chip);
+  color: var(--tk-text);
+}
+
+#tasksModal .tk-nav-item:focus-visible {
+  outline: 2px solid var(--tk-accent);
+  outline-offset: -2px;
+}
+
+#tasksModal .tk-nav-item.is-active {
+  background: var(--tk-card);
+  color: var(--tk-text);
+  box-shadow: inset 2px 0 0 var(--list-c, var(--tk-accent));
+}
+
+#tasksModal .tk-nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  line-height: 0;
+  color: currentColor;
+}
+
+#tasksModal .tk-nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#tasksModal .tk-nav-count {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--tk-chip);
+  color: var(--tk-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+#tasksModal .tk-nav-item.is-active .tk-nav-count {
+  background: var(--tk-accent);
+  color: var(--tk-accent-contrast);
+}
+
+/* The sidebar search — the player's search box, one pane over. */
+#tasksModal .tk-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 10px 4px;
+  padding: 0 10px;
+  border: 1px solid var(--tk-border);
+  border-radius: var(--vz-radius-md);
+  background: var(--tk-card);
+  transition: border-color 0.15s var(--vz-ease), box-shadow 0.15s var(--vz-ease);
+}
+
+#tasksModal .tk-search:focus-within {
+  border-color: var(--tk-accent);
+  box-shadow: 0 0 0 3px var(--vz-bg-subtle);
+}
+
+#tasksModal .tk-search > svg {
+  flex: 0 0 auto;
+  color: var(--tk-muted);
+}
+
+#tasksModal .tk-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: var(--tk-text);
+  font-size: 13.5px;
+  outline: none;
+}
+
+#tasksModal .tk-search-input::placeholder {
+  color: var(--tk-muted);
+}
+
+#tasksModal .tk-search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+#tasksModal .tk-search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--tk-muted);
+  line-height: 0;
+  cursor: pointer;
+}
+
+#tasksModal .tk-search-clear:hover {
+  color: var(--tk-text);
+  background: var(--tk-well);
+}
+
+#tasksModal .tk-search-clear svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* My Lists group */
+#tasksModal .tk-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--tk-border);
+}
+
+#tasksModal .tk-nav-group-label {
+  padding: 2px 12px 6px;
+  color: var(--tk-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+#tasksModal .tk-dot {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--list-c, var(--tk-muted));
+}
+
+#tasksModal .tk-nav-add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--vz-radius-md);
+  background: transparent;
+  color: var(--tk-muted);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
+}
+
+#tasksModal .tk-nav-add:hover,
+#tasksModal .tk-nav-add:focus-visible {
+  background: var(--tk-chip);
+  color: var(--tk-text);
+  outline: none;
+}
+
+#tasksModal .tk-list-add-form {
+  display: flex;
+  gap: 6px;
+  padding: 4px 6px;
+}
+
+#tasksModal .tk-list-add-form input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--tk-accent);
+  border-radius: var(--vz-radius);
+  background: var(--tk-card);
+  color: var(--tk-text);
+  font-size: 13px;
+  outline: none;
+}
+
+/* --------------------------------------------------------------------------
+   Content pane
+   -------------------------------------------------------------------------- */
+
+#tasksModal .tk-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+#tasksModal .tk-list-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 14px 20px 8px;
+}
+
+#tasksModal .tk-list-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--tk-text);
+}
+
+#tasksModal .tk-section-count {
+  font-size: 12.5px;
+  color: var(--tk-muted);
+}
+
+#tasksModal .tk-list-actions {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+#tasksModal .tk-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 20px 18px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-track) transparent;
+}
+
+#tasksModal .tk-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+#tasksModal .tk-scroll::-webkit-scrollbar-thumb {
+  background: var(--tk-track);
+  border-radius: 4px;
+}
+
+/* --------------------------------------------------------------------------
+   Sections + task rows
+   -------------------------------------------------------------------------- */
+
+#tasksModal .tk-section + .tk-section {
+  margin-top: 6px;
+}
+
+#tasksModal .tk-section-head {
+  padding: 12px 4px 6px;
+}
+
+#tasksModal .tk-section-head h5 {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--tk-muted);
+  text-transform: uppercase;
+}
+
+#tasksModal .tk-section-head.is-danger h5 {
+  color: var(--tk-danger);
+}
+
+#tasksModal .tk-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#tasksModal .tk-task-wrap {
+  border-radius: var(--vz-radius-md);
+  /* The when-popover anchors inside; the row menu class of positioning. */
+  position: relative;
+}
+
+#tasksModal .tk-task {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 8px 8px 4px;
+  border-radius: var(--vz-radius-md);
+  transition: background 0.12s var(--vz-ease);
+}
+
+#tasksModal .tk-task-wrap:hover .tk-task,
+#tasksModal .tk-task-wrap:focus-within .tk-task {
+  background: var(--tk-well);
+}
+
+/* --- the circle --- */
+
+#tasksModal .tk-check {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 1px 0 0;
+  padding: 0;
+  border: 1.5px solid var(--tk-border-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: transparent;
+  line-height: 0;
+  cursor: pointer;
+  transition: background 0.18s var(--vz-ease), border-color 0.18s var(--vz-ease),
+    transform 0.18s var(--vz-spring, var(--vz-ease)), color 0.12s var(--vz-ease);
+}
+
+#tasksModal .tk-check:hover {
+  border-color: var(--list-c, var(--tk-accent));
+  box-shadow: 0 0 0 3px var(--tk-well);
+}
+
+#tasksModal .tk-check:focus-visible {
+  outline: 2px solid var(--tk-accent);
+  outline-offset: 2px;
+}
+
+#tasksModal .tk-check:active {
+  transform: scale(0.88);
+}
+
+#tasksModal .tk-check svg {
+  width: 14px;
+  height: 14px;
+  /* The check draws itself on. */
+  stroke-dasharray: 26;
+  stroke-dashoffset: 26;
+  transition: stroke-dashoffset 0.22s var(--vz-ease) 0.05s;
+}
+
+#tasksModal .tk-task.is-done .tk-check {
+  background: var(--list-c, var(--tk-accent));
+  border-color: var(--list-c, var(--tk-accent));
+  color: #fff;
+}
+
+#tasksModal .tk-task.is-done .tk-check svg {
+  stroke-dashoffset: 0;
+}
+
+/* --- the words --- */
+
+#tasksModal .tk-task-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: text;
+}
+
+#tasksModal .tk-title {
+  font-size: 13.5px;
+  font-weight: 450;
+  line-height: 1.4;
+  color: var(--tk-text);
+  overflow-wrap: anywhere;
+  transition: color 0.18s var(--vz-ease);
+}
+
+#tasksModal .tk-task.is-done .tk-title {
+  color: var(--tk-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--tk-border-strong);
+}
+
+#tasksModal .tk-notes {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--tk-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+#tasksModal .tk-task.is-done .tk-notes {
+  text-decoration: line-through;
+  text-decoration-color: var(--tk-border);
+}
+
+/* --- the chips under a title --- */
+
+#tasksModal .tk-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 1px;
+}
+
+#tasksModal .tk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--tk-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+#tasksModal .tk-chip svg {
+  opacity: 0.75;
+}
+
+#tasksModal .tk-chip.is-overdue {
+  color: var(--tk-danger);
+  font-weight: 600;
+}
+
+#tasksModal .tk-prio {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+#tasksModal .tk-prio-low {
+  color: var(--tk-blue);
+}
+
+#tasksModal .tk-prio-medium {
+  color: var(--tk-star);
+}
+
+#tasksModal .tk-prio-high {
+  color: var(--tk-danger);
+}
+
+#tasksModal .tk-flag {
+  display: inline-flex;
+  color: var(--tk-star);
+  line-height: 0;
+}
+
+/* --- the ⓘ --- */
+
+#tasksModal .tk-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  margin-right: 2px;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--tk-muted);
+  line-height: 0;
+  cursor: pointer;
+  opacity: 0;
+  transition: background 0.12s var(--vz-ease), color 0.12s var(--vz-ease);
+}
+
+#tasksModal .tk-task-wrap:hover .tk-info,
+#tasksModal .tk-task-wrap:focus-within .tk-info,
+#tasksModal .tk-task-wrap.is-editing .tk-info {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  #tasksModal .tk-info {
+    opacity: 0.7;
+  }
+}
+
+#tasksModal .tk-info:hover {
+  background: var(--tk-chip);
+  color: var(--tk-text);
+}
+
+#tasksModal .tk-info:focus-visible {
+  outline: 2px solid var(--tk-accent);
+  outline-offset: -2px;
+  opacity: 1;
+}
+
+/* --------------------------------------------------------------------------
+   Drag affordance
+   -------------------------------------------------------------------------- */
+
+#tasksModal .tk-task-wrap.is-draggable .tk-task {
+  cursor: grab;
+}
+
+#tasksModal .tk-task-wrap.is-draggable .tk-task-main {
+  cursor: inherit;
+}
+
+#tasksModal .tk-task-wrap.is-dragging .tk-task {
+  opacity: 0.35;
+}
+
+#tasksModal .tk-task-wrap.is-drag-over {
+  box-shadow: inset 0 2px 0 var(--list-c, var(--tk-accent));
+}
+
+/* --------------------------------------------------------------------------
+   The completed block
+   -------------------------------------------------------------------------- */
+
+#tasksModal .tk-done-block {
+  margin-top: 6px;
+}
+
+#tasksModal .tk-done-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--tk-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s var(--vz-ease), background 0.15s var(--vz-ease);
+}
+
+#tasksModal .tk-done-toggle:hover,
+#tasksModal .tk-done-toggle:focus-visible {
+  color: var(--tk-text);
+  background: var(--tk-well);
+  outline: none;
+}
+
+#tasksModal .tk-done-toggle .tk-caret {
+  transition: transform 0.15s var(--vz-ease);
+}
+
+#tasksModal .tk-done-toggle[aria-expanded='true'] .tk-caret {
+  transform: rotate(90deg);
+}
+
+/* --------------------------------------------------------------------------
+   The inline detail editor
+   -------------------------------------------------------------------------- */
+
+#tasksModal .tk-editor {
+  position: relative;
+  margin: 0 4px 6px;
+  padding: 10px 12px 10px;
+  border: 1px solid var(--tk-border);
+  border-radius: var(--vz-radius-md);
+  background: var(--tk-card);
+  box-shadow: var(--vz-shadow-card);
+  animation: tk-editor-in 0.16s var(--vz-ease);
+}
+
+@keyframes tk-editor-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+#tasksModal .tk-editor-title {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--tk-border);
+  border-radius: var(--vz-radius);
+  background: var(--tk-card);
+  color: var(--tk-text);
+  font-size: 13.5px;
+  font-weight: 450;
+  outline: none;
+  transition: border-color 0.15s var(--vz-ease), box-shadow 0.15s var(--vz-ease);
+}
+
+#tasksModal .tk-editor-title:focus {
+  border-color: var(--tk-accent);
+  box-shadow: 0 0 0 3px var(--tk-well);
+}
+
+#tasksModal .tk-editor-notes {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--tk-border);
+  border-radius: var(--vz-radius);
+  background: var(--tk-card);
+  color: var(--tk-text);
+  font-size: 12.5px;
+  line-height: 1.45;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 44px;
+  outline: none;
+  transition: border-color 0.15s var(--vz-ease), box-shadow 0.15s var(--vz-ease);
+}
+
+#tasksModal .tk-editor-notes:focus {
+  border-color: var(--tk-accent);
+  box-shadow: 0 0 0 3px var(--tk-well);
+}
+
+/* Placeholders follow the app's muted ink — the UA default gray is too
+   faint in dark mode (caught in the dark-theme review). */
+#tasksModal .tk-editor-title::placeholder,
+#tasksModal .tk-editor-notes::placeholder {
+  color: var(--tk-muted);
+  opacity: 1;
+}
+
+#tasksModal .tk-editor-chips {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+#tasksModal .tk-editor-spacer {
+  flex: 1 1 auto;
+}
+
+#tasksModal .tk-editor-list {
+  max-width: 150px;
+  padding: 4px 6px;
+  border: 1px solid var(--tk-border);
+  border-radius: 999px;
+  background: var(--tk-card);
+  color: var(--tk-text);
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+}
+
+#tasksModal .tk-editor-list:focus-visible {
+  border-color: var(--tk-accent);
+}
+
+/* The chip button — shared by composer + editor + view actions. */
+#tasksModal .tk-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--tk-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tk-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s var(--vz-ease);
+}
+
+#tasksModal .tk-chip-btn:hover,
+#tasksModal .tk-chip-btn:focus-visible {
+  border-color: var(--tk-border-strong);
+  color: var(--tk-text);
+  outline: none;
+}
+
+#tasksModal .tk-chip-btn.is-set {
+  border-color: var(--tk-accent);
+  color: var(--tk-text);
+  background: var(--tk-well);
+}
+
+#tasksModal .tk-chip-btn.tk-chip-danger:hover,
+#tasksModal .tk-chip-btn.tk-chip-danger:focus-visible {
+  border-color: var(--tk-danger);
+  color: var(--tk-danger);
+}
+
+#tasksModal .tk-chip-btn.tk-chip-danger.is-set {
+  border-color: var(--tk-danger);
+  color: var(--tk-danger);
+  background: transparent;
+}
+
+#tasksModal .tk-chip-btn[aria-pressed='true'] {
+  border-color: var(--tk-star);
+  color: var(--tk-star);
+}
+
+/* --------------------------------------------------------------------------
+   The composer (the bottom bar)
+   -------------------------------------------------------------------------- */
+
+#tasksModal .tk-composer {
+  flex: 0 0 auto;
+  padding: 10px 18px;
+  border-top: 1px solid var(--tk-border);
+  background: var(--tk-card);
+}
+
+#tasksModal .tk-composer-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+}
+
+#tasksModal .tk-composer-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tk-muted);
+  line-height: 0;
+  cursor: pointer;
+  transition: color 0.15s var(--vz-ease), background 0.15s var(--vz-ease), transform 0.12s var(--vz-ease);
+}
+
+#tasksModal .tk-composer-add:hover,
+#tasksModal .tk-composer-add:focus-visible {
+  color: var(--list-c, var(--tk-accent));
+  background: var(--tk-well);
+  outline: none;
+}
+
+#tasksModal .tk-composer-add:active {
+  transform: scale(0.9);
+}
+
+#tasksModal .tk-composer-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--tk-text);
+  font-size: 14px;
+  outline: none;
+}
+
+#tasksModal .tk-composer-input::placeholder {
+  color: var(--tk-muted);
+}
+
+#tasksModal .tk-composer-details {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 0 0 40px;
+  animation: tk-editor-in 0.16s var(--vz-ease);
+}
+
+/* --------------------------------------------------------------------------
+   Popovers — the when-picker, the priority menu, the move menu
+   -------------------------------------------------------------------------- */
+
+#tasksModal .tk-when,
+#tasksModal .tk-menu {
+  position: absolute;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 210px;
+  padding: 8px;
+  border: 1px solid var(--tk-border);
+  border-radius: var(--vz-radius-md);
+  background: var(--tk-card);
+  box-shadow: var(--vz-shadow-menu);
+  animation: tk-pop-in 0.14s var(--vz-ease);
+}
+
+@keyframes tk-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+#tasksModal .tk-when {
+  min-width: 248px;
+  /* Opens upward — the composer sits at the modal's floor. */
+  bottom: calc(100% + 8px);
+  left: 0;
+}
+
+#tasksModal .tk-when-presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--tk-border);
+}
+
+#tasksModal .tk-when-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 6px;
+}
+
+#tasksModal .tk-when-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--tk-muted);
+  font-size: 12.5px;
+}
+
+#tasksModal .tk-when-field input {
+  padding: 5px 7px;
+  border: 1px solid var(--tk-border);
+  border-radius: var(--vz-radius);
+  background: var(--tk-card);
+  color: var(--tk-text);
+  font-size: 12.5px;
+  font-family: inherit;
+  outline: none;
+}
+
+#tasksModal .tk-when-field input:focus {
+  border-color: var(--tk-accent);
+}
+
+#tasksModal .tk-when-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
+#tasksModal .tk-menu {
+  min-width: 170px;
+  bottom: calc(100% + 6px);
+  left: 0;
+}
+
+#tasksModal .tk-menu-label {
+  padding: 2px 8px 4px;
+  color: var(--tk-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+#tasksModal .tk-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--tk-text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease);
+}
+
+#tasksModal .tk-menu-item:hover,
+#tasksModal .tk-menu-item:focus-visible {
+  background: var(--tk-well);
+  outline: none;
+}
+
+#tasksModal .tk-menu-item.is-on {
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--tk-accent);
+}
+
+#tasksModal .tk-menu-item .tk-menu-label {
+  padding: 0;
+  font-size: 13px;
+  font-weight: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  color: inherit;
+}
+
+/* --------------------------------------------------------------------------
+   Empty states
+   -------------------------------------------------------------------------- */
+
+#tasksModal .tk-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 72px 24px;
+  text-align: center;
+}
+
+#tasksModal .tk-empty > svg {
+  color: var(--tk-muted);
+  opacity: 0.7;
+}
+
+#tasksModal .tk-empty-title {
+  margin: 10px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tk-text);
+}
+
+#tasksModal .tk-empty-sub {
+  margin: 0;
+  max-width: 340px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--tk-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Reminder toasts (page-level, bottom-right — fired by reminders.ts even
+   while the modal is closed). Sits above the bottom-line pills like the
+   mini player does.
+   -------------------------------------------------------------------------- */
+
+.tk-remind-stack {
+  position: fixed;
+  right: 18px;
+  bottom: 56px;
+  z-index: 1950;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(360px, calc(100vw - 36px));
+}
+
+.tk-remind-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-lg);
+  background: var(--vz-bg-elevated);
+  box-shadow: var(--vz-shadow-card);
+  color: var(--vz-fg);
+  animation: tk-toast-in 0.22s var(--vz-ease);
+}
+
+@keyframes tk-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.tk-remind-toast.tk-remind-out {
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.18s var(--vz-ease), transform 0.18s var(--vz-ease);
+}
+
+.tk-remind-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--vz-radius-md);
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg-muted);
+  line-height: 0;
+}
+
+.tk-remind-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.tk-remind-title {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tk-remind-sub {
+  font-size: 12px;
+  color: var(--vz-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tk-remind-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin: -2px -4px 0 0;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg-muted);
+  line-height: 0;
+  cursor: pointer;
+}
+
+.tk-remind-dismiss:hover {
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg);
+}
+
+.tk-remind-dismiss svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* --------------------------------------------------------------------------
+   Confetti (the all-done celebration — canvas, no dependency)
+   -------------------------------------------------------------------------- */
+
+.tk-confetti {
+  position: fixed;
+  inset: 0;
+  z-index: 2600;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 767px) {
+  #tasksModal .tk-dialog {
+    margin: 8px auto;
+    width: calc(100vw - 16px);
+  }
+  #tasksModal .tk-content {
+    height: calc(100vh - 16px);
+  }
+
+  #tasksModal .tk-body {
+    flex-direction: column;
+  }
+
+  #tasksModal .tk-nav {
+    flex: 0 0 auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--tk-border);
+  }
+
+  #tasksModal .tk-search {
+    margin: 10px 10px 2px;
+  }
+
+  #tasksModal .tk-nav-scroll {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 4px;
+    padding: 8px 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  #tasksModal .tk-nav-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  #tasksModal .tk-nav-item {
+    flex: 0 0 auto;
+    padding: 7px 12px;
+    border: 1px solid var(--tk-border);
+    border-radius: 999px;
+    background: var(--tk-card);
+  }
+
+  #tasksModal .tk-nav-item.is-active {
+    border-color: var(--list-c, var(--tk-accent));
+    box-shadow: none;
+    color: var(--list-c, var(--tk-accent));
+  }
+
+  #tasksModal .tk-nav-count {
+    margin-left: 6px;
+  }
+
+  /* The "My Lists" group flattens into the same pill rail; the Add List
+     button stays reachable as a compact pill at the end. */
+  #tasksModal .tk-nav-group {
+    display: contents;
+  }
+
+  #tasksModal .tk-nav-group-label {
+    display: none;
+  }
+
+  #tasksModal .tk-nav-add {
+    flex: 0 0 auto;
+    padding: 7px 13px;
+    border: 1px solid var(--tk-border);
+    border-radius: 999px;
+    background: var(--tk-card);
+  }
+
+  #tasksModal .tk-list-add-form {
+    flex: 0 0 auto;
+    padding: 0;
+  }
+
+  #tasksModal .tk-list-add-form input {
+    width: 120px;
+  }
+
+  #tasksModal .tk-composer-details {
+    padding-left: 0;
+  }
+}
+
+/* Reduce motion: no drawing, no popping, no confetti. */
+@media (prefers-reduced-motion: reduce) {
+  #tasksModal .tk-check svg,
+  #tasksModal .tk-editor,
+  #tasksModal .tk-composer-details,
+  #tasksModal .tk-when,
+  #tasksModal .tk-menu {
+    animation: none;
+    transition: none;
+  }
+
+  #tasksModal .tk-check svg {
+    stroke-dashoffset: 0;
+  }
+}

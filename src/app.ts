@@ -32,6 +32,9 @@ import { initCloudSync } from './cloud/sync';
 import { initCloudUI } from './cloud/ui';
 import { initCloudShare } from './cloud/share';
 import { initShareUI } from './cloud/share-ui';
+// The Reminders sweep is the feature's always-on half (store + dates + a
+// timer — no UI); the modal's controller stays a lazy chunk like music.
+import { initTaskReminderSweep } from './features/tasks/reminders';
 import { initVoiceTyping, toggleVoiceTyping, handleTabSwitchedWhileListening } from './voice';
 import { initTypingEffects } from './typing-effects';
 import { initPipWindow } from './pip-window';
@@ -165,6 +168,12 @@ export async function initApp(): Promise<void> {
   // music-player/markup.ts); the engines arrive on the first attempt to
   // open the player — see initMusicSubsystem below.
   initMusicSubsystem();
+
+  // Reminders: the sweep (30s + focus/visibility) runs from boot so timed
+  // reminders fire without ever opening the modal; the modal's engine
+  // loads on the first attempt to open it — see initTasksSubsystem below.
+  initTaskReminderSweep();
+  initTasksSubsystem();
 
   // Cloud sync boots only when a sync project is configured; the UI
   // (navbar icon, modal, settings section) stays hidden otherwise.
@@ -886,6 +895,56 @@ function initMusicSubsystem(): void {
   // Belt and braces for opens that bypass the navbar trigger (programmatic
   // opens, tests): the modal's own show event loads the engines too, so a
   // visible-but-unwired player still finishes wiring itself.
+  modal.addEventListener('show.bs.modal', () => {
+    void loadEngines().then(() => {
+      engineReady = true;
+    });
+  });
+}
+
+/**
+ * Reminders lazy seam — the tasks sibling of the music seam above.
+ *
+ * The sweep (store + timer) rides the main bundle so reminders fire even
+ * if the modal is never opened; the controller (the views, the editor, the
+ * composer — features/tasks/index.ts) stays a lazy chunk and wires itself
+ * on the first attempt to open the modal. Same capture-phase interception
+ * as the player, for the same reason: opening the modal before the
+ * controller bound its handlers would drop the first click.
+ */
+function initTasksSubsystem(): void {
+  const modal = document.getElementById('tasksModal');
+  if (!modal) return;
+
+  let engines: Promise<void> | null = null;
+  let engineReady = false;
+
+  const loadEngines = (): Promise<void> => {
+    engines ??= (async () => {
+      const { initTasks } = await import('./features/tasks');
+      initTasks();
+    })();
+    return engines;
+  };
+
+  document.addEventListener(
+    'click',
+    (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const trigger = target.closest<HTMLElement>('a[data-target="#tasksModal"]');
+      if (!trigger || engineReady) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      void loadEngines().then(() => {
+        engineReady = true;
+        openModal(modal, trigger);
+      });
+    },
+    true,
+  );
+
   modal.addEventListener('show.bs.modal', () => {
     void loadEngines().then(() => {
       engineReady = true;

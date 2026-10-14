@@ -152,19 +152,25 @@ describe('layering rules', () => {
   );
   const rel = (f: string) => f.slice(process.cwd().length + 1);
 
-  it('features/music-player is imported only by the composition roots', () => {
-    // The music feature (music-player + music/) is the biggest
-    // module in the app; its public surface is initMusicPlayer/mountMusic-
-    // Player and its only legitimate consumers are the shell (app.ts —
-    // which loads the engines as a lazy chunk on first open — and boot.ts,
-    // which mounts the markup from the pure-markup submodule). Everything
-    // else must go through seams.
-    const allowed = new Set(['src/app.ts', 'src/boot.ts']);
+  // Each feature's public surface is its init/mount pair; the shell (app.ts,
+  // which may load engines as a lazy chunk) and the composition root
+  // (boot.ts, which mounts markup) are the only legitimate consumers.
+  // Everything else must go through seams (settings, ports, storage).
+  const FEATURE_IMPORT_ALLOWLIST: Record<string, string[]> = {
+    'features/music-player': ['src/app.ts', 'src/boot.ts'],
+    'features/tasks': ['src/app.ts', 'src/boot.ts'],
+  };
+
+  it('features are imported only by the composition roots', () => {
     const violators: string[] = [];
     for (const file of srcFiles) {
-      if (file.includes('/features/music-player/')) continue;
-      const outside = importTargets(file).some((t) => t.includes('features/music-player'));
-      if (outside && !allowed.has(rel(file))) violators.push(rel(file));
+      const relFile = rel(file);
+      for (const [feature, allowed] of Object.entries(FEATURE_IMPORT_ALLOWLIST)) {
+        if (file.includes(`/${feature}/`)) continue; // inside the feature itself
+        if (importTargets(file).some((t) => t.includes(feature)) && !allowed.includes(relFile)) {
+          violators.push(relFile);
+        }
+      }
     }
     expect(violators).toEqual([]);
   });
