@@ -321,6 +321,43 @@ body {
   text-underline-offset: 2px;
 }
 
+/* Footnotes — the owned renderer's document-scoped section, the same
+   markup the app's preview shows (sup references + an appendix list). */
+.share-content .md-footnote-ref {
+  font-size: 0.72em;
+  vertical-align: super;
+  line-height: 0;
+}
+
+.share-content .md-footnote-ref a {
+  color: inherit;
+  text-decoration: none;
+  padding: 0 0.15em;
+}
+
+.share-content .md-footnote-ref a:hover {
+  text-decoration: underline;
+}
+
+.share-content section.md-footnotes {
+  margin-top: 1.6em;
+  font-size: 0.86em;
+  color: var(--s-fg-muted);
+}
+
+.share-content .md-footnotes hr {
+  margin: 0 0 0.6em;
+}
+
+.share-content .md-footnotes-list {
+  margin: 0;
+  padding-left: 1.3em;
+}
+
+.share-content .md-footnote-item {
+  margin: 0.2em 0;
+}
+
 /* ---- state (loading / unavailable / error) ---- */
 
 .share-state {

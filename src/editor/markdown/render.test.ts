@@ -507,11 +507,109 @@ describe('renderMarkdownToHtml — security invariants', () => {
 
   it('the only attributes the renderer writes are its own', () => {
     const html = renderMarkdownToHtml(
-      '# h\n[x](https://x.com) ![y](https://x.com/i.png) $a$\n- [ ] t\n\n| a |\n|:--|\n| b |',
+      '# h\n[x](https://x.com) ![y](https://x.com/i.png) $a$\n- [ ] t\n\n| a |\n|:--|\n| b |\n\nA note[^1].\n\n[^1]: def',
     );
     const attributes = [...html.matchAll(/([\w-]+)="([^"]*)"/g)].map((match) => match[1]);
     expect(new Set(attributes)).toEqual(
-      new Set(['href', 'rel', 'class', 'title', 'data-latex', 'contenteditable', 'type', 'style']),
+      new Set([
+        'href',
+        'rel',
+        'class',
+        'title',
+        'data-latex',
+        'contenteditable',
+        'type',
+        'style',
+        'id',
+      ]),
+    );
+  });
+});
+
+describe('renderMarkdownToHtml — footnotes', () => {
+  it('renders a reference and its definitions section, pinned exactly', () => {
+    expect(renderMarkdownToHtml('A note[^1].\n\n[^1]: The definition.')).toBe(
+      '<p>A note<sup class="md-footnote-ref" id="md-fnref-1"><a href="#md-fn-1">1</a></sup>.</p>\n' +
+        '<section class="md-footnotes"><hr><ol class="md-footnotes-list">' +
+        '<li id="md-fn-1" class="md-footnote-item">The definition.</li>' +
+        '</ol></section>',
+    );
+  });
+
+  it('numbers by first reference, not by label or definition order', () => {
+    const html = renderMarkdownToHtml('Second[^b] then first[^a].\n\n[^a]: def a\n[^b]: def b');
+    expect(html).toContain('id="md-fnref-1"><a href="#md-fn-1">1</a></sup> then');
+    expect(html).toContain('first<sup class="md-footnote-ref" id="md-fnref-2">');
+  });
+
+  it('a repeated reference reuses its number', () => {
+    const html = renderMarkdownToHtml('One[^x] and again[^x].\n\n[^x]: def');
+    expect((html.match(/href="#md-fn-1"/g) ?? []).length).toBe(2);
+    expect(html).not.toContain('md-fn-2');
+  });
+
+  it('definition text renders through the inline pass (markup resolves, HTML escapes)', () => {
+    const html = renderMarkdownToHtml(
+      'A[^1].\n\n[^1]: **Bold** and <img src=x> and [a link](https://x.com)',
+    );
+    expect(html).toContain(
+      '<li id="md-fn-1" class="md-footnote-item"><b>Bold</b> and &lt;img src=x&gt; and <a href="https://x.com" rel="noopener noreferrer">a link</a></li>',
+    );
+  });
+
+  it('indented continuation lines fold into the definition; a lazy line too', () => {
+    const indented = renderMarkdownToHtml('A[^1].\n\n[^1]: first line\n    indented continuation');
+    expect(indented).toContain('first line\nindented continuation');
+    const lazy = renderMarkdownToHtml('A[^1].\n\n[^1]: first line\nlazy continuation');
+    expect(lazy).toContain('first line\nlazy continuation');
+  });
+
+  it('a reference without a definition stays literal brackets', () => {
+    expect(renderMarkdownToHtml('No def here[^ghost].')).toBe('<p>No def here[^ghost].</p>');
+  });
+
+  it('a definition without any reference stays a paragraph', () => {
+    const html = renderMarkdownToHtml('[^unused]: a definition with no reference');
+    expect(html).toBe('<p>[^unused]: a definition with no reference</p>');
+  });
+
+  it('code fences and code spans are immune — a [^1] inside them is a literal', () => {
+    const html = renderMarkdownToHtml(
+      '`[^1]` inline\n\n```\ncode [^1] inside\n```\n\nReal[^1].\n\n[^1]: def',
+    );
+    expect(html).toContain('<code>[^1]</code>');
+    expect(html).toContain('code [^1] inside');
+    expect(html).toContain('class="md-footnote-ref"');
+  });
+
+  it('references work inside blockquotes and list items; the section is document-scoped', () => {
+    const html = renderMarkdownToHtml(
+      '> A quote with a ref[^1].\n\n- item with[^2] a ref\n\n[^1]: first\n[^2]: second',
+    );
+    expect(html).toContain('<blockquote><p>A quote with a ref<sup');
+    expect(html).toContain('<li>item with<sup');
+    expect((html.match(/<section class="md-footnotes">/g) ?? []).length).toBe(1);
+  });
+
+  it('duplicate definitions: the first wins, the later ones are consumed silently', () => {
+    const html = renderMarkdownToHtml('A[^1].\n\n[^1]: the one that counts\n[^1]: the impostor');
+    expect(html).toContain('the one that counts');
+    expect(html).not.toContain('the impostor');
+    expect(html).not.toContain('[^1]:');
+  });
+
+  it('a definition interrupts a paragraph (GFM)', () => {
+    const html = renderMarkdownToHtml(
+      'A paragraph line\n[^1]: not part of the paragraph\n\nB[^1].',
+    );
+    expect(html).toContain('<p>A paragraph line</p>');
+    expect(html).not.toContain('A paragraph line\n');
+  });
+
+  it('the section appears at the very end, after every body block', () => {
+    const html = renderMarkdownToHtml('Start[^1].\n\n| a |\n| --- |\n| 1 |\n\n[^1]: def');
+    expect(html.endsWith('<li id="md-fn-1" class="md-footnote-item">def</li></ol></section>')).toBe(
+      true,
     );
   });
 });
@@ -535,8 +633,13 @@ describe('renderMarkdownToHtml — pathological nesting', () => {
     // The content is all there (escaped text of the deepest items).
     expect(html).toContain('level 899');
     expect(html).toContain('level 0');
-    // And it rendered in interactive time, not seconds.
-    expect(elapsed).toBeLessThan(500);
+    // And it rendered in interactive time, not seconds. The budget is
+    // 1.5s, not 0.5s: the regression this guards against measured ~7
+    // SECONDS (the pre-cap O(N³) walk), so the wide margin still catches
+    // it with room to spare — while shared CI runners, which measured
+    // 510-530ms on three separate green-code runs, stop failing the
+    // build on noise (see the worklog's flake notes).
+    expect(elapsed).toBeLessThan(1500);
     // The cap means far fewer than 900 nested <ul>s.
     const ulCount = (html.match(/<ul>/g) ?? []).length;
     expect(ulCount).toBeLessThan(60);

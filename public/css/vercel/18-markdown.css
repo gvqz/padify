@@ -572,6 +572,97 @@ body.dark .markdown-surface .padify-markdown li[data-item-type='task']::before {
   mask-position: center;
 }
 
+/* ---- Footnotes (the renderer's document-scoped section) ----
+   References are quiet superscripts; the section reads as an appendix —
+   small, muted, and set off by the rule the renderer's <hr> paints.
+   scroll-margin keeps an anchor jump from docking under a sticky bar. */
+
+.markdown-preview .md-footnote-ref {
+  font-size: 0.72em;
+  vertical-align: super;
+  line-height: 0;
+}
+
+.markdown-preview .md-footnote-ref a {
+  color: var(--vz-primary);
+  text-decoration: none;
+  padding: 0 0.15em;
+}
+
+.markdown-preview .md-footnote-ref a:hover {
+  text-decoration: underline;
+}
+
+.markdown-preview section.md-footnotes {
+  margin-top: 1.6em;
+  font-size: 0.86em;
+  color: var(--vz-fg-muted);
+}
+
+.markdown-preview .md-footnotes hr {
+  margin: 0 0 0.6em;
+  border: none;
+  border-top: 1px solid var(--vz-border);
+}
+
+.markdown-preview .md-footnotes-list {
+  margin: 0;
+  padding-left: 1.3em;
+}
+
+.markdown-preview .md-footnote-item {
+  margin: 0.2em 0;
+  scroll-margin-top: 2em;
+}
+
+/* ---- Footnotes, the WYSIWYG's own face ----
+   The GFM preset parses `[^1]` into real footnote nodes; these are their
+   editing shapes. The reference matches the preview's superscript; the
+   definition list reads as the appendix row (number, then text inline),
+   and consecutive definitions share one rule instead of stacking them. */
+
+.markdown-surface sup[data-type='footnote_reference'] {
+  font-size: 0.72em;
+  vertical-align: super;
+  line-height: 0;
+  color: var(--vz-primary);
+}
+
+.markdown-surface dl[data-type='footnote_definition'] {
+  margin: 1.2em 0 0;
+  padding: 0.5em 0 0;
+  border-top: 1px solid var(--vz-border);
+  font-size: 0.86em;
+  color: var(--vz-fg-muted);
+}
+
+.markdown-surface dl[data-type='footnote_definition'] + dl[data-type='footnote_definition'] {
+  margin-top: 0.2em;
+  padding-top: 0;
+  border-top: none;
+}
+
+.markdown-surface dl[data-type='footnote_definition'] dt {
+  display: inline;
+  margin-right: 0.45em;
+  color: var(--vz-fg);
+  font-weight: 600;
+}
+
+.markdown-surface dl[data-type='footnote_definition'] dt::after {
+  content: '.';
+}
+
+.markdown-surface dl[data-type='footnote_definition'] dd {
+  display: inline;
+  margin: 0;
+}
+
+.markdown-surface dl[data-type='footnote_definition'] dd p {
+  display: inline;
+  margin: 0;
+}
+
 /* ---- The empty editor's placeholder ----
    Same copy and tone as #note's own (16-editor-shell.css); the PM root
    carries data-placeholder, and :has() only lights it for a truly empty
