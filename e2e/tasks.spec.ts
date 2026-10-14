@@ -180,6 +180,49 @@ test.describe('reminders', () => {
     await expect(row.locator('.tk-chip-remind')).toContainText('Tomorrow');
   });
 
+  test('picking a date or priority from the editor menus keeps the editor open', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await openReminders(page);
+
+    await page.locator('#tkComposerInput').fill('Keep the editor alive');
+    await page.locator('#tkComposerInput').press('Enter');
+
+    const row = page.locator('.tk-task-wrap', { hasText: 'Keep the editor alive' }).first();
+    await row.locator('.tk-info').click();
+    const editor = row.locator('.tk-editor');
+    await expect(editor).toBeVisible();
+
+    // Selecting a priority from the anchored menu used to close the editor:
+    // removing the focused menu node fires focusout with relatedTarget null,
+    // which the commit handler read as "the user left".
+    await editor.locator('[data-editor-priority]').click();
+    await page.locator('[data-priority="high"]').click();
+    await expect(editor).toBeVisible();
+    await expect(
+      page
+        .locator('.tk-task-wrap', { hasText: 'Keep the editor alive' })
+        .first()
+        .locator('.tk-prio'),
+    ).toBeVisible();
+
+    // Same for a date preset from the when-popover.
+    await editor.locator('[data-editor-when="date"]').click();
+    await page.locator('[data-when-preset="tomorrow"]').click();
+    await expect(editor).toBeVisible();
+    await expect(
+      page
+        .locator('.tk-task-wrap', { hasText: 'Keep the editor alive' })
+        .first()
+        .locator('.tk-chip-due'),
+    ).toContainText('Tomorrow');
+
+    // The editor still commits normally afterwards.
+    await editor.locator('.tk-editor-title').press('Enter');
+    await expect(editor).toBeHidden();
+  });
+
   test('search finds tasks by title and clears back to the view', async ({ page }) => {
     await page.goto('/');
     await openReminders(page);
