@@ -52,12 +52,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Upload build output
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist
-          retention-days: 7
+      # No dist artifact upload: nothing downstream downloads it (the
+      # deploy workflow builds its own), and every run's 7-day artifact
+      # exhausted the account's storage quota (63 artifacts, ~1.4 GB when
+      # purged 2026-10-14) — builds failed at the upload step on green
+      # code. Grab dist from a run's logs or rebuild locally if needed.
 
   e2e:
     name: E2E (Playwright)
