@@ -29,12 +29,16 @@
  *            (``` and ~~, info string kept as a class) · blockquotes
  *            (nested, lazy paragraphs) · ordered/unordered lists (nesting
  *            by indentation, tight vs loose, `start` numbers) · task list
- *            items · GFM tables · paragraphs
+ *            items · GFM tables · GFM footnotes (definitions collected at
+ *            their own lines, references numbered in first-use order, the
+ *            section appended after the body) · paragraphs
  *   inline   code spans · **bold** · *italic* · ~~strike~~ (simplified
  *            CommonMark flanking: no intraword `_`, whitespace edges never
  *            open or close) · [links](url) with the safe-href gate ·
- *            images as links · backslash escapes · hard breaks (two
- *            trailing spaces or a trailing backslash) · math
+ *            footnote references `[^label]` (only when a definition
+ *            matches — otherwise literal brackets, a half-written
+ *            note's shape) · images as links · backslash escapes · hard
+ *            breaks (two trailing spaces or a trailing backslash) · math
  *   math     `$…$` and `\(…\)` render inline, `$$…$$` on its own lines
  *            renders as a block — all three become the same `padify-math`
  *            shells the rich editor stores, so the preview reuses
@@ -62,7 +66,164 @@ import { sanitizeHref } from '../storage-subset';
  */
 export function renderMarkdownToHtml(source: string): string {
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
-  return renderBlocks(lines).join('\n');
+  footnotes = scanFootnotes(lines);
+  try {
+    const out = renderBlocks(lines);
+    const section = footnoteSection();
+    if (section) {
+      out.push(section);
+    }
+    return out.join('\n');
+  } finally {
+    footnotes = null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Footnotes — GFM-style, document-scoped
+// ---------------------------------------------------------------------------
+
+/** A footnote definition line — up to 3 spaces of indent, label, colon. */
+const FOOTNOTE_DEF = /^[ \t]{0,3}\[\^([^\]\s]+)\]:[ \t]?(.*)$/;
+
+/**
+ * The footnote state for the render in flight. Set by renderMarkdownToHtml,
+ * cleared on exit — the renderer is synchronous and single-threaded, so a
+ * module-scoped scratch is as safe as a threaded parameter and keeps the
+ * block collectors' signatures untouched.
+ *
+ *   labels    active labels — referenced AND defined (the scan's verdict)
+ *   numbers   label → footnote number, assigned in reference order as the
+ *             refs render (GFM numbers by first reference, not by label)
+ *   texts     label → raw definition text, collected by the block walk
+ *             (continuation lines folded in, inline syntax UNRESOLVED — the
+ *             section renders it through the same renderInline as body text)
+ */
+type FootnoteState = {
+  labels: Set<string>;
+  numbers: Map<string, number>;
+  texts: Map<string, string>;
+};
+
+let footnotes: FootnoteState | null = null;
+
+/**
+ * Pre-scan: which labels have BOTH a reference and a definition anywhere in
+ * the document (fence-interior lines are skipped — a `[^1]` inside a code
+ * block is a literal, not a ref). Only active labels move: inactive refs
+ * keep today's literal-text behavior, inactive definitions stay ordinary
+ * paragraphs (the GFM verdict on both).
+ */
+function scanFootnotes(lines: string[]): FootnoteState {
+  const refs = new Set<string>();
+  const defs = new Set<string>();
+  let insideFence = false;
+  for (const line of lines) {
+    if (FENCE_OPEN.test(line)) {
+      insideFence = !insideFence;
+      continue;
+    }
+    if (insideFence) {
+      continue;
+    }
+    const def = FOOTNOTE_DEF.exec(line);
+    if (def) {
+      defs.add(def[1]!);
+      continue;
+    }
+    for (const match of line.matchAll(/\[\^([^\]\s]+)\]/g)) {
+      refs.add(match[1]!);
+    }
+  }
+  const active = new Set<string>();
+  for (const label of refs) {
+    if (defs.has(label)) {
+      active.add(label);
+    }
+  }
+  return { labels: active, numbers: new Map(), texts: new Map() };
+}
+
+/** The definitions section — `<hr>` + ordered list, GFM's shape. */
+function footnoteSection(): string | null {
+  const state = footnotes;
+  if (!state || state.numbers.size === 0) {
+    return null;
+  }
+  const ordered = [...state.numbers.entries()].sort((a, b) => a[1] - b[1]);
+  const items = ordered
+    .map(
+      ([label, number]) =>
+        `<li id="md-fn-${number}" class="md-footnote-item">${renderInline(state.texts.get(label) ?? '')}</li>`,
+    )
+    .join('');
+  return `<section class="md-footnotes"><hr><ol class="md-footnotes-list">${items}</ol></section>`;
+}
+
+/**
+ * Consumes one footnote definition at `start` (an ACTIVE label — the
+ * pre-scan's verdict) plus its continuation lines: indented ≥ 4 columns
+ * (one indent's worth stripped) or a lazy plain-text run, the same shapes
+ * a blockquote's lazy continuation accepts. Null when the line is not an
+ * active definition — the caller then treats it as ordinary content.
+ *
+ * First definition of a label wins; later ones are consumed silently
+ * (GFM ignores duplicates) — consuming, not skipping, is what keeps a
+ * repeated `[^x]:` line from rendering as a stray literal paragraph.
+ */
+function collectFootnoteDefinition(lines: string[], start: number): { next: number } | null {
+  const state = footnotes;
+  if (!state) {
+    return null;
+  }
+  const def = FOOTNOTE_DEF.exec(lines[start]!);
+  if (!def || !state.labels.has(def[1]!)) {
+    return null;
+  }
+  const label = def[1]!;
+  const text: string[] = [def[2] ?? ''];
+  let index = start + 1;
+
+  while (index < lines.length) {
+    const line = lines[index]!;
+    if (isBlank(line)) {
+      // A blank continues the definition only when indented content
+      // follows it; otherwise the definition ends here.
+      const look = lines[index + 1];
+      if (look !== undefined && !isBlank(look) && indentWidth(look) >= 4) {
+        text.push('');
+        index += 1;
+        continue;
+      }
+      break;
+    }
+    if (indentWidth(line) >= 4) {
+      text.push(stripColumns(line, 4));
+      index += 1;
+      continue;
+    }
+    // Lazy continuation: plain text that starts no new block extends the
+    // definition — the same predicate the blockquote honors.
+    if (
+      !FENCE_OPEN.test(line) &&
+      !ATX_HEADING.test(line) &&
+      !THEMATIC_BREAK.test(line) &&
+      !BLOCKQUOTE_MARKER.test(line) &&
+      !isListItemStart(line) &&
+      !FOOTNOTE_DEF.test(line) &&
+      !line.trimStart().startsWith('$$')
+    ) {
+      text.push(line.trim());
+      index += 1;
+      continue;
+    }
+    break;
+  }
+
+  if (!state.texts.has(label)) {
+    state.texts.set(label, text.join('\n').trim());
+  }
+  return { next: index };
 }
 
 // ---------------------------------------------------------------------------
@@ -175,10 +336,23 @@ function renderBlocks(lines: string[], depth = 0): string[] {
       continue;
     }
 
+    // Thematic break before footnote definition: `[^x]` cannot be a break.
     if (THEMATIC_BREAK.test(line)) {
       flushParagraph();
       out.push('<hr>');
       index += 1;
+      continue;
+    }
+
+    // Footnote definitions for labels the pre-scan activated — consumed
+    // wherever they stand (GFM lets them interrupt a paragraph), their
+    // text hoisted into the document's footnote state instead of the
+    // flow. Inactive labels never reach this branch; they stay paragraph
+    // text exactly as before footnotes existed.
+    const footnote = collectFootnoteDefinition(lines, index);
+    if (footnote) {
+      flushParagraph();
+      index = footnote.next;
       continue;
     }
 
@@ -747,7 +921,18 @@ function renderInline(text: string): string {
       continue;
     }
 
-    // Links and images.
+    // Links and images — footnote references first: `[^label]` shares
+    // the opening bracket but is not a link construct.
+    if (ch === '[') {
+      const ref = matchFootnoteRef(text, i);
+      if (ref) {
+        flushBuffer();
+        tokens.push({ kind: 'html', html: ref.markup });
+        i = ref.next;
+        continue;
+      }
+    }
+
     if (ch === '[' || (ch === '!' && text[i + 1] === '[')) {
       const link = matchLink(text, i);
       if (link) {
@@ -882,6 +1067,40 @@ function matchMath(text: string, i: number): { markup: string; next: number } | 
   }
 
   return null;
+}
+
+/**
+ * A footnote reference `[^label]` at position `i` — the second char must be
+ * `^`, the label non-empty and bracket-free, and the label ACTIVE (the
+ * pre-scan found both this reference and a definition for it). Active refs
+ * number in first-reference order and link into the definitions section;
+ * everything else returns null and the brackets stay literal text (a ref
+ * with no definition was always literal here, as in a code-free GFM
+ * reading of a half-written note).
+ */
+function matchFootnoteRef(text: string, i: number): { markup: string; next: number } | null {
+  const state = footnotes;
+  if (!state || text[i + 1] !== '^') {
+    return null;
+  }
+  const match = /^([^\]\s]+)/.exec(text.slice(i + 2));
+  if (!match || text[i + 2 + match[1]!.length] !== ']') {
+    return null;
+  }
+  const label = match[1]!;
+  if (!state.labels.has(label)) {
+    return null;
+  }
+  let number = state.numbers.get(label);
+  if (number === undefined) {
+    number = state.numbers.size + 1;
+    state.numbers.set(label, number);
+  }
+  const next = i + 2 + label.length + 1;
+  return {
+    markup: `<sup class="md-footnote-ref" id="md-fnref-${number}"><a href="#md-fn-${number}">${number}</a></sup>`,
+    next,
+  };
 }
 
 /**

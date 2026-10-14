@@ -33,7 +33,103 @@ function sanitizeHref(raw) {
 // src/editor/markdown/render.ts
 function renderMarkdownToHtml(source) {
   const lines = source.replace(/\r\n?/g, "\n").split("\n");
-  return renderBlocks(lines).join("\n");
+  footnotes = scanFootnotes(lines);
+  try {
+    const out = renderBlocks(lines);
+    const section = footnoteSection();
+    if (section) {
+      out.push(section);
+    }
+    return out.join("\n");
+  } finally {
+    footnotes = null;
+  }
+}
+var FOOTNOTE_DEF = /^[ \t]{0,3}\[\^([^\]\s]+)\]:[ \t]?(.*)$/;
+var footnotes = null;
+function scanFootnotes(lines) {
+  const refs = /* @__PURE__ */ new Set();
+  const defs = /* @__PURE__ */ new Set();
+  let insideFence = false;
+  for (const line of lines) {
+    if (FENCE_OPEN.test(line)) {
+      insideFence = !insideFence;
+      continue;
+    }
+    if (insideFence) {
+      continue;
+    }
+    const def = FOOTNOTE_DEF.exec(line);
+    if (def) {
+      defs.add(def[1]);
+      continue;
+    }
+    for (const match of line.matchAll(/\[\^([^\]\s]+)\]/g)) {
+      refs.add(match[1]);
+    }
+  }
+  const active = /* @__PURE__ */ new Set();
+  for (const label of refs) {
+    if (defs.has(label)) {
+      active.add(label);
+    }
+  }
+  return { labels: active, numbers: /* @__PURE__ */ new Map(), texts: /* @__PURE__ */ new Map() };
+}
+function footnoteSection() {
+  const state = footnotes;
+  if (!state || state.numbers.size === 0) {
+    return null;
+  }
+  const ordered = [...state.numbers.entries()].sort((a, b) => a[1] - b[1]);
+  const items = ordered.map(
+    ([label, number]) => {
+      var _a;
+      return `<li id="md-fn-${number}" class="md-footnote-item">${renderInline((_a = state.texts.get(label)) != null ? _a : "")}</li>`;
+    }
+  ).join("");
+  return `<section class="md-footnotes"><hr><ol class="md-footnotes-list">${items}</ol></section>`;
+}
+function collectFootnoteDefinition(lines, start) {
+  var _a;
+  const state = footnotes;
+  if (!state) {
+    return null;
+  }
+  const def = FOOTNOTE_DEF.exec(lines[start]);
+  if (!def || !state.labels.has(def[1])) {
+    return null;
+  }
+  const label = def[1];
+  const text = [(_a = def[2]) != null ? _a : ""];
+  let index = start + 1;
+  while (index < lines.length) {
+    const line = lines[index];
+    if (isBlank(line)) {
+      const look = lines[index + 1];
+      if (look !== void 0 && !isBlank(look) && indentWidth(look) >= 4) {
+        text.push("");
+        index += 1;
+        continue;
+      }
+      break;
+    }
+    if (indentWidth(line) >= 4) {
+      text.push(stripColumns(line, 4));
+      index += 1;
+      continue;
+    }
+    if (!FENCE_OPEN.test(line) && !ATX_HEADING.test(line) && !THEMATIC_BREAK.test(line) && !BLOCKQUOTE_MARKER.test(line) && !isListItemStart(line) && !FOOTNOTE_DEF.test(line) && !line.trimStart().startsWith("$$")) {
+      text.push(line.trim());
+      index += 1;
+      continue;
+    }
+    break;
+  }
+  if (!state.texts.has(label)) {
+    state.texts.set(label, text.join("\n").trim());
+  }
+  return { next: index };
 }
 function isBlank(line) {
   return /^[ \t]*$/.test(line);
@@ -110,6 +206,12 @@ function renderBlocks(lines, depth = 0) {
       flushParagraph();
       out.push("<hr>");
       index += 1;
+      continue;
+    }
+    const footnote = collectFootnoteDefinition(lines, index);
+    if (footnote) {
+      flushParagraph();
+      index = footnote.next;
       continue;
     }
     if (BLOCKQUOTE_MARKER.test(line)) {
@@ -473,6 +575,15 @@ function renderInline(text) {
       i += run;
       continue;
     }
+    if (ch === "[") {
+      const ref = matchFootnoteRef(text, i);
+      if (ref) {
+        flushBuffer();
+        tokens.push({ kind: "html", html: ref.markup });
+        i = ref.next;
+        continue;
+      }
+    }
     if (ch === "[" || ch === "!" && text[i + 1] === "[") {
       const link = matchLink(text, i);
       if (link) {
@@ -579,6 +690,30 @@ function matchMath(text, i) {
     return { markup: buildMathShell(latex), next: close + 1 };
   }
   return null;
+}
+function matchFootnoteRef(text, i) {
+  const state = footnotes;
+  if (!state || text[i + 1] !== "^") {
+    return null;
+  }
+  const match = /^([^\]\s]+)/.exec(text.slice(i + 2));
+  if (!match || text[i + 2 + match[1].length] !== "]") {
+    return null;
+  }
+  const label = match[1];
+  if (!state.labels.has(label)) {
+    return null;
+  }
+  let number = state.numbers.get(label);
+  if (number === void 0) {
+    number = state.numbers.size + 1;
+    state.numbers.set(label, number);
+  }
+  const next = i + 2 + label.length + 1;
+  return {
+    markup: `<sup class="md-footnote-ref" id="md-fnref-${number}"><a href="#md-fn-${number}">${number}</a></sup>`,
+    next
+  };
 }
 function matchLink(text, i) {
   const image = text[i] === "!";
