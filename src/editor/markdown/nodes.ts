@@ -196,9 +196,179 @@ export const mathBlockInputRule = $inputRule((ctx) => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Display math — the single-line `$$…$$` parity bridge
+// ---------------------------------------------------------------------------
+
+/**
+ * remark-math 6 parses the compact `$$x$$` form as INLINE math — text math
+ * with a doubled delimiter — while the owned renderer (render.ts
+ * collectDisplayMath: the preview, share and export pipeline) treats it as
+ * DISPLAY math whenever it sits on its own line(s). This bridge keeps the
+ * WYSIWYG honest to that rule, both directions:
+ *
+ *   parse      a paragraph whose children are nothing but `$$…$$` inline
+ *              math (whitespace-only text between allowed) is rewritten to
+ *              one `math` mdast node per equation — the same shape the
+ *              multi-line `$$\nx\n$$` fence parses to, so the visual mode
+ *              shows display math exactly where the preview will. The
+ *              delimiter count is recovered from the SOURCE at the node's
+ *              position offsets (mdast does not keep it), so a plain `$x$`
+ *              paragraph is never touched. Without this, opening a note in
+ *              visual mode degraded every `$$…$$` to `$…$` in the stored
+ *              source — display math silently became inline.
+ *   serialize  a `math` mdast node round-trips as the compact single-line
+ *              `$$x$$` form whenever the latex is single-line-safe (no
+ *              newline, no `$$`, no `$` or whitespace at either edge, non-
+ *              empty); everything else keeps mdast-util-math's padded
+ *              multi-line shape, fence length escalated past the longest
+ *              `$` run in the value. Registered AFTER remarkMath so this
+ *              handler wins (mdast-util-to-markdown merges extensions
+ *              last-wins). The compact form re-parses as a double-dollar
+ *              text-math paragraph — this bridge's parse side turns it
+ *              straight back into a `math` node, so the round trip is
+ *              stable: what the user typed stays typed.
+ */
+export const padifyDisplayMathBridge = $remark(
+  'remarkPadifyDisplayMath',
+  () => padifyDisplayMath as never,
+);
+
+type MdNode = {
+  type: string;
+  value?: string;
+  children?: MdNode[];
+  position?: { start: { offset: number }; end: { offset: number } };
+};
+
+/** The remark plugin: parse-side transform + serialize-side handler. */
+function padifyDisplayMath(this: {
+  data: () => Record<string, unknown>;
+}): (tree: MdNode, file: { value?: string } | string) => void {
+  const data = this.data();
+  const extensions = (data.toMarkdownExtensions as unknown[] | undefined) ?? [];
+  data.toMarkdownExtensions = [...extensions, { handlers: { math: padifyMathToMarkdown } }];
+
+  return (tree, file) => {
+    const source = typeof file === 'string' ? file : String(file.value ?? '');
+    if (source === '') {
+      return;
+    }
+    rewriteDisplayMathParagraphs(tree, source);
+  };
+}
+
+/** `$$…$$` in the raw source at the node's own offsets (mdast drops the
+ * delimiter count; the offsets carry it). Conservative: no position, no
+ * rewrite — the node keeps today's inline behavior. */
+function isDoubleDollarInlineMath(node: MdNode, source: string): boolean {
+  if (node.type !== 'inlineMath' || !node.position) {
+    return false;
+  }
+  const raw = source.slice(node.position.start.offset, node.position.end.offset);
+  return (
+    raw.startsWith('$$') && raw.endsWith('$$') && raw.length > 4 && (node.value ?? '').trim() !== ''
+  );
+}
+
+/** Whitespace-only text node (the newlines between consecutive equations). */
+function isSpaceOnlyText(node: MdNode): boolean {
+  return node.type === 'text' && (node.value ?? '').trim() === '';
+}
+
+/**
+ * Walks the tree; any paragraph made ONLY of double-dollar inline math
+ * (plus whitespace) becomes the equivalent `math` block nodes, in place.
+ * Recursion covers every container that can hold a paragraph — blockquotes,
+ * list items — matching the owned renderer's nested handling.
+ */
+function rewriteDisplayMathParagraphs(node: MdNode, source: string): void {
+  const children = node.children;
+  if (children) {
+    for (let i = children.length - 1; i >= 0; i -= 1) {
+      rewriteDisplayMathParagraphs(children[i]!, source);
+    }
+    for (let i = 0; i < children.length; i += 1) {
+      const para = children[i]!;
+      if (para.type !== 'paragraph') {
+        continue;
+      }
+      const parts = para.children ?? [];
+      const maths = parts.filter((c) => isDoubleDollarInlineMath(c, source));
+      const obstructing = parts.some(
+        (c) => !isDoubleDollarInlineMath(c, source) && !isSpaceOnlyText(c),
+      );
+      if (maths.length === 0 || obstructing) {
+        continue;
+      }
+      const replacement: MdNode[] = maths.map((m) => ({
+        type: 'math',
+        value: m.value,
+      }));
+      children.splice(i, 1, ...replacement);
+    }
+  }
+}
+
+/** Serialize a `math` node — compact `$$x$$` when single-line-safe. */
+function padifyMathToMarkdown(
+  node: { value?: string },
+  _parent: unknown,
+  state: {
+    enter: (construct: string) => () => void;
+    createTracker: (info: unknown) => { move: (s: string) => string };
+  },
+  info: unknown,
+): string {
+  const raw = node.value ?? '';
+  if (isSingleLineSafeLatex(raw)) {
+    const tracker = state.createTracker(info);
+    const exit = state.enter('mathFlow');
+    const value = tracker.move(`$$${raw}$$`);
+    exit();
+    return value;
+  }
+  // mdast-util-math's own multi-line shape: fence escalated past the
+  // longest `$` run so a value containing `$$` cannot close its fence.
+  let longest = 0;
+  let run = 0;
+  for (const ch of raw) {
+    run = ch === '$' ? run + 1 : 0;
+    longest = Math.max(longest, run);
+  }
+  const fence = '$'.repeat(Math.max(longest + 1, 2));
+  const tracker = state.createTracker(info);
+  const exit = state.enter('mathFlow');
+  let value = tracker.move(`${fence}\n`);
+  if (raw !== '') {
+    value += tracker.move(`${raw}\n`);
+  }
+  value += tracker.move(fence);
+  exit();
+  return value;
+}
+
+/**
+ * The compact `$$x$$` form only re-parses cleanly when micromark's text
+ * math cannot misread it: the value must be non-empty with no newline and
+ * no `$$`, and neither edge may be a `$` (a `$$$` run is not a delimiter)
+ * or whitespace (the serializer pads those — a shape this form cannot
+ * round-trip). Everything else rides the multi-line fence, which has no
+ * such constraints.
+ */
+function isSingleLineSafeLatex(raw: string): boolean {
+  if (raw === '' || raw.includes('\n') || raw.includes('$$')) {
+    return false;
+  }
+  const first = raw[0]!;
+  const last = raw[raw.length - 1]!;
+  return !(first === '$' || last === '$' || /\s/.test(first) || /\s/.test(last));
+}
+
 /** Everything the surface .use()s for live math. */
 export const markdownMath: MilkdownPlugin[] = [
   ...remarkMathBridge,
+  ...padifyDisplayMathBridge,
   ...mathInlineSchema,
   ...mathBlockSchema,
   mathInlineInputRule,
