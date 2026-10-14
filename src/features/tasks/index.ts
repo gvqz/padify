@@ -924,6 +924,19 @@ class RemindersController {
   }
 
   private closePopovers(): void {
+    // Pull focus out of the doomed popovers FIRST: Chromium fires focusout
+    // (relatedTarget null) when a focused node is removed, and the editor's
+    // commit handler would read that as "the user left" — selecting a
+    // priority or a date preset used to close the whole editor. Park focus
+    // where the popover lived: the editor's title, or the composer input.
+    const active = document.activeElement;
+    if (
+      active instanceof Node &&
+      (this.whenPop.contains(active) || this.prioMenu.contains(active))
+    ) {
+      const form = active instanceof Element ? active.closest<HTMLElement>('.tk-editor') : null;
+      (form?.querySelector<HTMLElement>('.tk-editor-title') ?? this.composerInput).focus();
+    }
     this.whenPop.remove();
     this.whenPop.hidden = true;
     this.prioMenu.remove();
