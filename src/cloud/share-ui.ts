@@ -12,11 +12,13 @@ import { openModal, closeModal } from '../ui/behavior/modal';
 import Swal from 'sweetalert2';
 import { showToast } from '../ui/toast';
 import { deriveTabTitle, getActiveNoteContent, getTabManager } from '../tabs';
+import { noteTypeLabel, type NoteType } from '../editor/note-types';
 import { getCloudSync } from './sync';
 import {
   createShare,
   isShareAvailable,
   listOwnedShares,
+  noteContentIsEmpty,
   revokeShare,
   shareUrlFor,
   type ShareRecord,
@@ -51,7 +53,8 @@ export function initShareUI(): void {
     void createFromEditor();
   });
 
-  $('#shareAllToggle').on('change', renderLinks);
+  // The links scope: this note only, or every link the account owns.
+  $('input[name="shareScope"]').on('change', renderLinks);
 
   $('#shareModal').on('show.bs.modal', () => {
     renderNoteCard();
@@ -87,7 +90,8 @@ function activeNote(): {
   title: string;
   words: number;
   content: string;
-  noteType: string | null;
+  noteType: NoteType | null;
+  empty: boolean;
 } | null {
   const manager = getTabManager();
   const active = manager?.getActive();
@@ -101,12 +105,15 @@ function activeNote(): {
   // The note's TRUE content: html notes read the live editor, every other
   // kind reads the model (its editor shows a placeholder card).
   const captured = getActiveNoteContent();
+  const content = captured?.content ?? '';
+  const noteType = captured?.noteType ?? null;
   return {
     id: active.id,
     title,
     words,
-    content: captured?.content ?? '',
-    noteType: captured?.noteType ?? null,
+    content,
+    noteType,
+    empty: noteContentIsEmpty(content, noteType),
   };
 }
 
@@ -118,6 +125,26 @@ function renderNoteCard(): void {
 
   $('#shareNoteTitle').text(note.title);
   $('#shareNoteMeta').text(`${note.words.toLocaleString()} word${note.words === 1 ? '' : 's'}`);
+
+  // The type chip: the default stays quiet, every other kind says its name.
+  const $chip = $('#shareNoteTypeChip');
+  if (!note.empty && note.noteType && note.noteType !== 'standard') {
+    $chip.text(noteTypeLabel(note.noteType)).removeAttr('hidden');
+  } else {
+    $chip.attr('hidden', 'hidden');
+  }
+
+  // An empty note cannot be shared — the card itself turns quiet and dashed,
+  // the meta line says why, and the create button goes dark. One place, one
+  // message: not "Untitled / 0 words / This note is empty" stacked three
+  // deep.
+  $('#shareNoteCard').toggleClass('is-empty', note.empty);
+  if (note.empty) {
+    $('#shareNoteMeta').text('Empty — write something first. A link shares what the note says.');
+    $('#shareCreateBtn').prop('disabled', true).attr('title', 'This note is empty');
+  } else {
+    $('#shareCreateBtn').prop('disabled', false).removeAttr('title');
+  }
 }
 
 function selectedDays(): number {
@@ -155,8 +182,20 @@ async function refreshShares(): Promise<void> {
   renderLinks();
 }
 
+/**
+ * The create button's busy state. Re-enabling must respect the empty-note
+ * refusal: the links refresh runs AFTER renderNoteCard disabled the button,
+ * and a blind `disabled = false` used to resurrect it mid-modal for a note
+ * with nothing to share.
+ */
 function renderLinksBusy(busy: boolean): void {
-  $('#shareCreateBtn').prop('disabled', busy);
+  if (busy) {
+    $('#shareCreateBtn').prop('disabled', true);
+    return;
+  }
+  const note = activeNote();
+  const shareable = !!note && !note.empty;
+  $('#shareCreateBtn').prop('disabled', !shareable);
 }
 
 function relativeExpiry(record: ShareRecord): string {
@@ -175,6 +214,20 @@ function relativeExpiry(record: ShareRecord): string {
     return days === 1 ? 'Expires in 1 day' : `Expires in ${days} days`;
   }
   return hours === 1 ? 'Expires in 1 hour' : `Expires in ${Math.max(hours, 1)} hours`;
+}
+
+/** "Created 2 days ago" — the row's age, not part of the countdown. */
+function createdAgo(record: ShareRecord): string {
+  const diff = Date.now() - new Date(record.created_at).getTime();
+  if (diff < 3_600_000) {
+    return 'Just created';
+  }
+  const days = Math.floor(diff / DAY_MS);
+  if (days >= 1) {
+    return days === 1 ? 'Created 1 day ago' : `Created ${days} days ago`;
+  }
+  const hours = Math.floor(diff / 3_600_000);
+  return hours === 1 ? 'Created 1 hour ago' : `Created ${hours} hours ago`;
 }
 
 function shortUrl(token: string): string {
@@ -198,7 +251,7 @@ function statusBadge(record: ShareRecord): string {
 function renderLinks(): void {
   const $list = $('#shareLinksList');
   const note = activeNote();
-  const showAll = $('#shareAllToggle').is(':checked');
+  const showAll = $('#shareScopeAll').is(':checked');
 
   const visible = shares.filter((record) => {
     if (showAll) {
@@ -228,17 +281,25 @@ function renderLinks(): void {
 
     const meta = $('<div class="share-link-meta"></div>');
     meta.append(statusBadge(record));
-    meta.append(document.createTextNode(relativeExpiry(record)));
+    meta.append(document.createTextNode(`${relativeExpiry(record)} · ${createdAgo(record)}`));
     // When the list spans notes (or the link points elsewhere), say which.
     if (showAll || (note && record.note_id !== note.id)) {
       const title = record.title && record.title.trim() ? record.title : 'Untitled';
-      meta.append($('<span></span>').text(`· “${title}”`));
+      meta.append(document.createTextNode(`· “${title}”`));
     }
 
     main.append($('<span class="share-link-url"></span>').text(shortUrl(record.token)));
     main.append(meta);
 
     const actions = $('<div class="share-link-actions"></div>');
+
+    // See it the way a reader will: the viewer page, in a new tab. A link
+    // you cannot sanity-check is a link you cannot trust.
+    const open = $('<button type="button" class="share-chip-btn"></button>').text('Open');
+    open.on('click', () => {
+      window.open(shareUrlFor(record.token), '_blank', 'noopener');
+    });
+    actions.append(open);
 
     const copy = $('<button type="button" class="share-chip-btn"></button>').text('Copy');
     copy.on('click', () => {
@@ -269,6 +330,12 @@ async function createFromEditor(): Promise<void> {
   if (!note) {
     return;
   }
+  if (note.empty) {
+    // The button is already disabled — this guards the keyboard/AT path
+    // that reaches the action without the button.
+    showToast('This note is empty — write something before sharing it.');
+    return;
+  }
 
   renderLinksBusy(true);
   const result = await createShare(
@@ -285,15 +352,25 @@ async function createFromEditor(): Promise<void> {
     return;
   }
 
-  showToast('Share link created — anyone with it can read this note.');
+  // The link was created to be handed to someone: putting it on the
+  // clipboard immediately saves the one extra click for every share
+  // (the list still offers Copy for later use).
+  if (result.token) {
+    void copyLinkText(
+      shareUrlFor(result.token),
+      'Share link created and copied — anyone with it can read this note.',
+    );
+  } else {
+    showToast('Share link created — anyone with it can read this note.');
+  }
   await refreshShares();
 }
 
-async function copyShareLink(record: ShareRecord): Promise<void> {
-  const url = shareUrlFor(record.token);
+/** Writes a URL to the clipboard and reports the outcome as a toast. */
+async function copyLinkText(url: string, message: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(url);
-    showToast('Link copied to clipboard.');
+    showToast(message);
   } catch {
     // Clipboard API can be unavailable (http origins, older browsers).
     const scratch = document.createElement('textarea');
@@ -305,10 +382,12 @@ async function copyShareLink(record: ShareRecord): Promise<void> {
     scratch.select();
     const ok = document.execCommand('copy');
     scratch.remove();
-    showToast(
-      ok ? 'Link copied to clipboard.' : 'Could not copy the link — copy it from the list.',
-    );
+    showToast(ok ? message : 'Link created — copy it from the list below.');
   }
+}
+
+async function copyShareLink(record: ShareRecord): Promise<void> {
+  await copyLinkText(shareUrlFor(record.token), 'Link copied to clipboard.');
 }
 
 async function cancelShareLink(record: ShareRecord): Promise<void> {

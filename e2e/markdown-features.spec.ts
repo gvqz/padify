@@ -66,6 +66,75 @@ test.describe('markdown notes — the feature act', () => {
     await page.waitForTimeout(700);
   });
 
+  test('footnotes: reference + definition survive every mode, and the preview renders them', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await newMarkdownNote(page);
+
+    // Set the document in one shot through the source pane.
+    await page.locator('#markdownToolbar [data-md-view="source"]').click();
+    const source = page.locator('#note .markdown-source');
+    await expect(source).toBeVisible();
+    await source.fill(
+      'A note with a footnote[^1] inside.\n\n[^1]: The definition, **bold** included.',
+    );
+    await page.waitForTimeout(600);
+
+    // The WYSIWYG parses both into their GFM nodes.
+    await page.locator('#markdownToolbar [data-md-view="edit"]').click();
+    const editor = page.locator('#note .ProseMirror');
+    await expect(editor.locator('sup[data-type="footnote_reference"]')).toHaveCount(1);
+    await expect(editor.locator('dl[data-type="footnote_definition"]')).toHaveCount(1);
+
+    // The preview renders the owned renderer's face: a superscript link
+    // into a definitions section.
+    await page.locator('#markdownToolbar [data-md-view="preview"]').click();
+    const preview = page.locator('#note .markdown-preview');
+    await expect(preview.locator('.md-footnote-ref')).toHaveCount(1);
+    await expect(preview.locator('.md-footnote-ref a')).toHaveAttribute('href', '#md-fn-1');
+    await expect(preview.locator('section.md-footnotes')).toHaveCount(1);
+    await expect(preview.locator('.md-footnote-item')).toHaveCount(1);
+    // The definition's markup resolves through the inline pass.
+    await expect(preview.locator('.md-footnote-item b')).toHaveText('bold');
+
+    // Back in source: both halves are still markdown.
+    await page.locator('#markdownToolbar [data-md-view="source"]').click();
+    const roundTrip = await source.inputValue();
+    expect(roundTrip).toContain('[^1]');
+    expect(roundTrip).toContain('[^1]:');
+  });
+
+  test('a single-line $$…$$ paragraph is display math in every mode (no silent inline downgrade)', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await newMarkdownNote(page);
+
+    await page.locator('#markdownToolbar [data-md-view="source"]').click();
+    const source = page.locator('#note .markdown-source');
+    await expect(source).toBeVisible();
+    await source.fill('Intro text.\n\n$$\\frac{1}{2}$$\n\nOutro text.');
+    await page.waitForTimeout(600);
+
+    // The WYSIWYG's display-math bridge: the compact single-line form is a
+    // BLOCK node, not inline math in a paragraph.
+    await page.locator('#markdownToolbar [data-md-view="edit"]').click();
+    const editor = page.locator('#note .ProseMirror');
+    await expect(editor.locator('.md-math-block .katex')).toHaveCount(1);
+    await expect(editor.locator('.md-math-inline')).toHaveCount(0);
+
+    // The preview agrees — the owned renderer's display wrapper.
+    await page.locator('#markdownToolbar [data-md-view="preview"]').click();
+    const preview = page.locator('#note .markdown-preview');
+    await expect(preview.locator('.md-math-block .padify-math')).toHaveCount(1);
+
+    // And the round-trip keeps the compact form the user typed.
+    await page.locator('#markdownToolbar [data-md-view="source"]').click();
+    const roundTrip = await source.inputValue();
+    expect(roundTrip).toContain('$$\\frac{1}{2}$$');
+  });
+
   test('task lists: the button arms checkboxes and clicks toggle them', async ({ page }) => {
     await page.goto('/');
     await newMarkdownNote(page);

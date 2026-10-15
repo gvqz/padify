@@ -52,7 +52,9 @@ async function submitAuth(
   if (mode === 'sign-up') {
     // The form starts in sign-in mode; the switch link flips it.
     await page.locator('#cloudAuthSwitch').click();
-    await expect(page.locator('#cloudAuthTitle')).toContainText(/create/i);
+    // The submit button carries the form's mode (the in-form title was
+    // folded into it in the modal redesign).
+    await expect(page.locator('#cloudAuthSubmit')).toContainText(/create/i);
   }
   await page.locator('#cloudAuthEmail').fill(email);
   await page.locator('#cloudAuthPassword').fill(password);

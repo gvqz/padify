@@ -45,6 +45,14 @@ describe('generated markdown renderer ≡ canonical renderer', () => {
     '<b>bold?</b>',
     'Equation: $x^2$ and display $$\\sum_{i=1}^{n} i$$',
     '-----',
+    // Footnotes — the document-scoped machinery: active refs resolve,
+    // inactive ones stay literal, and definitions never leak as markup.
+    'A ref[^1] with a definition.\n\n[^1]: The definition, **resolved** as inline.',
+    'A ref[^1] and a second[^b] with lazy order.\n\n[^b]: second def\n[^1]: first def',
+    'A ref with no definition[^ghost] stays literal brackets.',
+    'A definition with no ref[^unused]: stays a paragraph line.',
+    'Text[^1] then\n\n```\ncode [^1] inside\n```\n\n[^1]: fence interior is a literal',
+    'Ref[^1] and a <b>hostile</b> def.\n\n[^1]: <img src=x onerror=alert(1)> escaped',
   ];
 
   it('answers identically on the hostile corpus', async () => {
@@ -70,5 +78,18 @@ describe('generated markdown renderer ≡ canonical renderer', () => {
     expect(hostile).not.toContain('href="javascript:');
     expect(hostile).toContain('&lt;img');
     expect(hostile).toContain('&lt;b&gt;');
+  });
+
+  it('the footnote machinery holds in the generated copy too', async () => {
+    const generated = await loadGeneratedRenderer();
+
+    // Definitions render through the inline pass — hostile markup in a
+    // footnote is escaped text, exactly as in a body paragraph.
+    const hostile = generated('Ref[^1].\n\n[^1]: <img src=x onerror=alert(1)> and <b>bold?</b>');
+    expect(hostile).toContain('class="md-footnote-ref"');
+    expect(hostile).toContain('<section class="md-footnotes">');
+    expect(hostile).not.toContain('<img');
+    expect(hostile).not.toContain('<b>');
+    expect(hostile).toContain('&lt;img');
   });
 });

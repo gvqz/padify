@@ -47,10 +47,13 @@
         </div>
 
         <div id="shareSignedInPane" hidden>
-          <div class="share-note-card">
-            <span class="share-note-eyebrow">Sharing</span>
-            <span class="share-note-title" id="shareNoteTitle">Untitled</span>
-            <span class="share-note-meta" id="shareNoteMeta"></span>
+          <div class="share-note-card" id="shareNoteCard">
+            <div class="share-note-copy">
+              <span class="share-note-eyebrow">Sharing</span>
+              <span class="share-note-title" id="shareNoteTitle">Untitled</span>
+              <span class="share-note-meta" id="shareNoteMeta"></span>
+            </div>
+            <span class="share-note-type-chip" id="shareNoteTypeChip" hidden></span>
           </div>
 
           <div class="share-field">
@@ -91,11 +94,17 @@
           </button>
 
           <div class="share-links-head">
-            <span class="share-field-label">Your links</span>
-            <label class="share-all-toggle" for="shareAllToggle">
-              <input type="checkbox" id="shareAllToggle" />
-              <span>All notes</span>
-            </label>
+            <span class="share-links-title">Your links</span>
+            <div
+              class="pref-theme-seg share-scope-seg"
+              role="radiogroup"
+              aria-label="Which links to show"
+            >
+              <input type="radio" id="shareScopeNote" value="note" name="shareScope" checked />
+              <label for="shareScopeNote">This note</label>
+              <input type="radio" id="shareScopeAll" value="all" name="shareScope" />
+              <label for="shareScopeAll">All notes</label>
+            </div>
           </div>
           <div class="share-links-list" id="shareLinksList">
             <p class="share-links-empty" id="shareLinksEmpty">

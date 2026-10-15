@@ -1227,6 +1227,17 @@ body.dark #note[data-empty]::before {
   color: var(--vz-fg);
 }
 
+/* The fork badge marking conflicted copies — a quiet amber so a strip full
+   of branches during a two-device race reads as "sync did this on purpose"
+   rather than "my notes duplicated". */
+.tab-strip-copy {
+  color: #b8860b;
+}
+
+body.dark .tab-strip-copy {
+  color: #d9a441;
+}
+
 .tab-strip-close {
   display: inline-flex;
   align-items: center;
@@ -1995,15 +2006,24 @@ body.pip-host .bottom-line .save-state {
   margin-right: auto;
 }
 
+/* The signed-in hero: dot + status + last-sync, with the manual sync as a
+   quiet icon button inside the card (the old bottom "Sync now" button row
+   read as a form submit; this reads as a status you can nudge). */
 .cloud-status-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: 12px;
+  padding: 14px 14px 14px 16px;
   border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius-md);
   background: var(--vz-bg-subtle);
   margin-bottom: 14px;
+}
+
+.cloud-status-card .cloud-status-dot {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
 }
 
 .cloud-status-copy {
@@ -2011,89 +2031,230 @@ body.pip-host .bottom-line .save-state {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .cloud-status-line {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13.5px;
+  font-weight: 600;
   color: var(--vz-fg);
+  letter-spacing: -0.005em;
 }
 
 .cloud-status-meta {
-  font-size: 12.5px;
-  color: var(--vz-fg-muted);
-}
-
-.cloud-account-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 2px;
-  border-bottom: 1px solid var(--vz-border);
-  margin-bottom: 14px;
-}
-
-.cloud-account-email {
-  font-size: 13.5px;
+  font-size: 12px;
   color: var(--vz-fg-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.cloud-actions {
+.cloud-sync-now-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg-muted);
+  cursor: pointer;
+  box-shadow: none;
+  transition: color var(--vz-dur) ease, border-color var(--vz-dur) ease,
+    background-color var(--vz-dur) ease;
+}
+
+.cloud-sync-now-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.cloud-sync-now-btn:hover,
+.cloud-sync-now-btn:focus-visible {
+  color: var(--vz-fg);
+  border-color: var(--vz-border-strong);
+  outline: none;
+}
+
+.cloud-sync-now-btn:active {
+  transform: scale(0.95);
+}
+
+.cloud-sync-now-btn.is-busy svg {
+  animation: cloud-sync-spin 0.9s linear infinite;
+}
+
+@keyframes cloud-sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The account card: avatar + email + sign-out, the pref-card shape the
+   settings modal established. */
+.cloud-account-card {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
   margin-bottom: 14px;
 }
 
-.cloud-sign-out {
-  color: var(--vz-danger);
+.cloud-account-avatar {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--vz-bg-chip);
+  border: 1px solid var(--vz-border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vz-fg-muted);
+  text-transform: uppercase;
+  user-select: none;
 }
 
-.cloud-sign-out:hover,
-.cloud-sign-out:focus {
-  background: var(--vz-danger-soft);
+.cloud-account-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.cloud-account-email {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vz-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-account-hint {
+  font-size: 11.5px;
+  color: var(--vz-fg-muted);
+  line-height: 1.4;
+}
+
+.cloud-account-card .pref-action-btn {
+  flex: 0 0 auto;
+  padding: 6px 11px;
+  font-size: 12px;
+}
+
+/* Quiet facts: what signing in means. Three rows, icon + title + hint —
+   the reassurance the old paragraph tried to deliver in one wall of
+   text. */
+.cloud-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cloud-fact {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 6px;
+  border-radius: var(--vz-radius);
+}
+
+.cloud-fact-icon {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--vz-radius-sm);
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+}
+
+.cloud-fact-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.cloud-fact-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.cloud-fact-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vz-fg);
+  line-height: 1.35;
+}
+
+.cloud-fact-hint {
+  font-size: 11.5px;
+  color: var(--vz-fg-muted);
+  line-height: 1.45;
 }
 
 .cloud-hint {
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.55;
   color: var(--vz-fg-muted);
-  margin: 0;
+  margin: 14px 2px 0;
 }
 
 /* ---- auth pane ------------------------------------------------------------ */
 
-.cloud-auth-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--vz-fg);
-  margin: 0 0 14px;
+.cloud-auth-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  padding: 16px;
+  margin-bottom: 4px;
+}
+
+body.dark .cloud-auth-card {
+  background: var(--vz-bg-elevated);
 }
 
 .cloud-field {
   margin-bottom: 12px;
 }
 
+.cloud-field:last-of-type {
+  margin-bottom: 0;
+}
+
 .cloud-label {
   display: block;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--vz-fg-muted);
   margin-bottom: 5px;
 }
 
 .cloud-input {
-  height: 38px;
+  height: 36px;
   border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius);
   box-shadow: none;
   background: var(--vz-bg);
   color: var(--vz-fg);
+  font-size: 13px;
   transition: border-color var(--vz-dur) ease, box-shadow var(--vz-dur) ease;
+}
+
+.cloud-input::placeholder {
+  color: var(--vz-fg-subtle);
 }
 
 .cloud-input:focus {
@@ -2103,27 +2264,35 @@ body.pip-host .bottom-line .save-state {
 }
 
 .cloud-feedback {
-  font-size: 13px;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 12.5px;
   line-height: 1.5;
-  margin: 0 0 10px;
+  margin: 12px 0 0;
+  padding: 9px 11px;
+  border-radius: var(--vz-radius);
 }
 
 .cloud-feedback.cloud-error {
   color: var(--vz-danger);
+  background: var(--vz-danger-soft);
 }
 
 .cloud-feedback.cloud-notice {
   color: var(--vz-success);
+  background: rgba(48, 164, 108, 0.1);
 }
 
 .cloud-submit {
   width: 100%;
-  height: 38px;
+  height: 37px;
+  margin-top: 14px;
   border-radius: var(--vz-radius);
   background: var(--vz-primary);
   border: 1px solid var(--vz-primary);
   color: var(--vz-primary-fg);
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
   transition: background-color var(--vz-dur) ease;
 }
@@ -2139,13 +2308,14 @@ body.pip-host .bottom-line .save-state {
 
 .cloud-auth-links {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   gap: 12px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .cloud-auth-links a {
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 500;
   color: var(--vz-fg-muted);
   text-decoration: none;
   transition: color var(--vz-dur) ease;
@@ -2170,11 +2340,22 @@ body.pip-host .bottom-line .save-state {
     width: calc(100% - 24px);
   }
 
-  .cloud-auth-links {
-    flex-direction: column;
-    gap: 8px;
+  .cloud-account-card {
+    flex-wrap: wrap;
+  }
+
+  .cloud-account-card .pref-action-btn {
+    flex: 1 1 100%;
+    justify-content: center;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .cloud-sync-now-btn.is-busy svg {
+    animation: none;
+  }
+}
+
 
 /* ==========================================================================
    Navbar icon buttons (shared base for new inline-SVG buttons)
@@ -2507,13 +2688,21 @@ body.pip-host .bottom-line .save-state {
 
 .share-note-card {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 12px;
   padding: 12px 14px;
   border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius-md);
   background: var(--vz-bg-subtle);
-  margin-bottom: 16px;
+  margin-bottom: 14px;
+}
+
+.share-note-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .share-note-eyebrow {
@@ -2525,9 +2714,10 @@ body.pip-host .bottom-line .save-state {
 }
 
 .share-note-title {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13.5px;
+  font-weight: 600;
   color: var(--vz-fg);
+  letter-spacing: -0.005em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2535,7 +2725,43 @@ body.pip-host .bottom-line .save-state {
 
 .share-note-meta {
   font-size: 11.5px;
-  color: var(--vz-fg-subtle);
+  color: var(--vz-fg-muted);
+}
+
+.share-note-type-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* The empty-note refusal: the card itself goes dashed and muted — the
+   state lives where the note is, not in a banner bolted below it. */
+.share-note-card.is-empty {
+  border-style: dashed;
+  border-color: var(--vz-border-strong);
+  background: transparent;
+}
+
+.share-note-card.is-empty .share-note-eyebrow {
+  color: var(--vz-fg-muted);
+}
+
+.share-note-card.is-empty .share-note-title {
+  color: var(--vz-fg-muted);
+}
+
+.share-note-card.is-empty .share-note-meta {
+  color: var(--vz-fg-muted);
 }
 
 .share-field {
@@ -2547,7 +2773,7 @@ body.pip-host .bottom-line .save-state {
 
 .share-field-label {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--vz-fg-muted);
 }
 
@@ -2567,11 +2793,11 @@ body.pip-host .bottom-line .save-state {
   justify-content: center;
   gap: 8px;
   width: 100%;
-  margin-bottom: 18px;
+  margin-bottom: 20px;
 }
 
 .share-create-btn:disabled {
-  opacity: 0.65;
+  opacity: 0.55;
   cursor: default;
 }
 
@@ -2580,23 +2806,18 @@ body.pip-host .bottom-line .save-state {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
-.share-all-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
+.share-links-title {
   font-size: 12px;
+  font-weight: 600;
   color: var(--vz-fg-muted);
-  cursor: pointer;
-  user-select: none;
 }
 
-.share-all-toggle input {
-  accent-color: var(--vz-fg);
-  margin: 0;
+.share-scope-seg label {
+  padding: 4px 10px;
+  font-size: 11px;
 }
 
 .share-links-list {
@@ -2740,6 +2961,10 @@ body.pip-host .bottom-line .save-state {
   color: var(--vz-fg);
   border-color: var(--vz-border-strong);
   outline: none;
+}
+
+.share-chip-btn.danger {
+  color: #e5484d;
 }
 
 .share-chip-btn.danger:hover,

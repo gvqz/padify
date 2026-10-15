@@ -7,7 +7,9 @@ cd "$(dirname "$0")/.."
 
 PORT=5173
 alive() {
-  curl -s -o /dev/null -m 2 "http://127.0.0.1:${PORT}/"
+  # -w '%{http_code}' prints the code on stdout; the old body-only form
+  # always compared an empty string against "200" and never matched.
+  curl -s -o /dev/null -m 2 -w '%{http_code}' "http://127.0.0.1:${PORT}/"
 }
 
 if [ "$(alive)" = "200" ]; then

@@ -123,6 +123,17 @@ export interface NoteTab {
    * FROM, until its own push lands a new one).
    */
   syncSeq?: number;
+  /**
+   * Conflicted-copy lineage: this tab was minted (or last updated) as the
+   * unmerged branch of the note with this id (see cloud/sync.ts — the
+   * merge's rescueLosingWords). Local-only metadata like syncSeq: it rides
+   * storage and the in-memory model, never the wire — a branch arriving
+   * from ANOTHER device is just a note with a telling name. A tab whose
+   * content a merge replaces drops the marker (it no longer preserves
+   * divergent words); deleting the tab ends the lineage, so a genuinely
+   * new conflict may mint a fresh branch.
+   */
+  copyOf?: string;
 }
 
 const LEGACY_NOTE_KEY = 'note';
@@ -152,6 +163,20 @@ export interface TabsSyncPayload {
 
 function createTabId(): string {
   return `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * True when a tab is a conflicted-copy branch: minted on this device (the
+ * copyOf lineage the sync merge sets) or arrived from another device wearing
+ * the merge's telltale name. Used for the strip's fork badge — a strip that
+ * gathered several of these explains itself at a glance instead of looking
+ * like accidental duplicates.
+ */
+export function isConflictedCopyTab(tab: NoteTab): boolean {
+  if (tab.copyOf) {
+    return true;
+  }
+  return / — (?:conflicted copy|copy \(deleted elsewhere\))$/.test(tab.name ?? '');
 }
 
 /**
@@ -266,6 +291,7 @@ export class TabManager {
               : undefined,
           syncSeq:
             typeof entry.syncSeq === 'number' && entry.syncSeq > 0 ? entry.syncSeq : undefined,
+          copyOf: typeof entry.copyOf === 'string' && entry.copyOf ? entry.copyOf : undefined,
         };
       });
   }
@@ -420,15 +446,36 @@ export class TabManager {
     this.persist();
     this.renderStrip();
 
+    // A merged-away tab can never push again — its pending dirty id would
+    // otherwise sit in the set forever, re-serialized (and skipped) on
+    // every cycle.
+    if (this.dirtyIds.size > 0) {
+      const alive = new Set(this.tabs.map((tab) => tab.id));
+      for (const id of [...this.dirtyIds]) {
+        if (!alive.has(id)) {
+          this.dirtyIds.delete(id);
+        }
+      }
+    }
+
     const active = this.getActive();
     if (active) {
       const editorFocused = this.isEditorFocused();
+      const identityChanged = !activeBefore || activeBefore.id !== active.id;
       const contentChanged =
-        !activeBefore || activeBefore.id !== active.id
-          ? true
-          : activeBefore.content !== active.content || activeBefore.name !== active.name;
+        identityChanged ||
+        activeBefore!.content !== active.content ||
+        activeBefore!.name !== active.name;
 
-      if (contentChanged && !editorFocused) {
+      // An identity change ALWAYS repaints, even mid-typing: the editor's
+      // DOM belongs to a note that no longer exists (closed elsewhere),
+      // and the next capture would write its words into whichever tab
+      // landed active — cross-note contamination. The merge already
+      // rescued the unpushed words into a conflicted copy, so the repaint
+      // costs at most the last ~700ms of un-captured keystrokes. A
+      // content change on the SAME note still defers to the typist: the
+      // conflict machinery preserves the divergent words instead.
+      if (identityChanged || (contentChanged && !editorFocused)) {
         this.loadActiveIntoEditor();
       }
       this.notifyActiveChanged();
@@ -720,6 +767,19 @@ export class TabManager {
     button.dataset.tabId = tab.id;
     button.title = tab.name ? tab.name : 'Double-click to rename';
 
+    // A conflicted copy (this device's mint — copyOf — or one that arrived
+    // from another device wearing the name) gets the fork badge, so a strip
+    // that gathered a few of them during a two-device race explains itself.
+    if (isConflictedCopyTab(tab)) {
+      const copyBadge = document.createElement('span');
+      copyBadge.className = 'tab-strip-type tab-strip-copy';
+      copyBadge.title = 'Conflicted copy — kept when this note changed on two devices';
+      copyBadge.setAttribute('aria-hidden', 'true');
+      copyBadge.innerHTML =
+        '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><circle cx="18" cy="12" r="2.6"/><path d="M8.2 7.4 15.5 11M8.2 16.6 15.5 13"/></svg>';
+      button.appendChild(copyBadge);
+    }
+
     if (tab.noteType && tab.noteType !== DEFAULT_NOTE_TYPE) {
       const typeBadge = document.createElement('span');
       typeBadge.className = 'tab-strip-type';
@@ -992,7 +1052,18 @@ export class TabManager {
     titleElement.replaceWith(input);
     input.trigger('focus');
 
+    // The commit settles ONCE: Enter fires it, and the blur that follows
+    // (the input is replaced, focus moves) would fire it again — a double
+    // persist, a double "renamed" toast, and two DOM swaps racing the
+    // browser's own blur fixup (Chromium's replaceWith can throw
+    // NotFoundError when the node's focus bookkeeping moves mid-swap —
+    // its error text says as much). The second and later calls no-op.
+    let settled = false;
     const commit = (keep: boolean): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       const raw = String(input.val() ?? '').trim();
       if (keep && raw && raw !== currentName) {
         tab.name = raw;
@@ -1001,10 +1072,23 @@ export class TabManager {
         this.persist();
         showToast('Tab renamed.');
       }
-      element
-        .find('.tab-strip-rename')
-        .replaceWith($('<span class="tab-strip-title"></span>').text(deriveTabTitle(tab)));
-      element.attr('title', tab.name ? tab.name : 'Double-click to rename');
+      // Presentation-only swap: the name is already in the model. A sync
+      // merge may have rebuilt the strip while the input was open (the
+      // input then sits in a detached subtree), and the swap itself can
+      // lose the browser's blur race — either way the LIVE strip gets its
+      // label from the model and the user never sees the difference.
+      if (input.get(0)?.isConnected) {
+        try {
+          element
+            .find('.tab-strip-rename')
+            .replaceWith($('<span class="tab-strip-title"></span>').text(deriveTabTitle(tab)));
+        } catch {
+          this.refreshTabLabel(tab.id);
+        }
+        element.attr('title', tab.name ? tab.name : 'Double-click to rename');
+      } else {
+        this.refreshTabLabel(tab.id);
+      }
     };
 
     input.on('keydown', (event) => {

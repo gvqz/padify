@@ -9,6 +9,15 @@ name: Deploy (alwaysdata box)
 # Gated on CI via workflow_run, so a red main never reaches the box; the
 # exact commit CI validated is the one deployed. workflow_dispatch with an
 # older deploy_ref is the rollback path.
+#
+# THE RACE THIS WORKFLOW ONCE LOST (2026-10-14): deploys trigger on CI
+# COMPLETION order, not commit order. Two merges landed close together;
+# the newer commit's CI finished first and deployed, then the older
+# commit's CI (delayed by re-runs) finished and its deploy rolled the
+# box BACK to pre-fix code — a green pipeline shipping a rollback. The
+# freshness job below refuses that: a workflow_run deploy only proceeds
+# when its validated commit is still the tip of main; anything else is a
+# stale result whose commit a newer one has already replaced.
 
 on:
   workflow_run:
@@ -29,11 +38,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  freshness:
+    name: Is the validated commit still the tip of main?
+    runs-on: ubuntu-latest
+    outputs:
+      is_tip: ${{ steps.check.outputs.is_tip }}
+    steps:
+      - name: Compare the CI-validated SHA against main's current tip
+        id: check
+        if: github.event_name == 'workflow_run'
+        run: |
+          TRIGGER_SHA="${{ github.event.workflow_run.head_sha }}"
+          MAIN_SHA="$(curl -s -f -H "Authorization: Bearer ${{ github.token }}" \
+            "https://api.github.com/repos/${{ github.repository }}/commits/main" | jq -r .sha)"
+          if [ "$TRIGGER_SHA" = "$MAIN_SHA" ]; then
+            echo "is_tip=true" >> "$GITHUB_OUTPUT"
+            echo "still the tip — deploying $TRIGGER_SHA"
+          else
+            # A push-to-main SHA that is no longer the tip can only be an
+            # ancestor: main moved on. The newer commit's own CI will deploy
+            # it; this late result must not roll the box back.
+            echo "is_tip=false" >> "$GITHUB_OUTPUT"
+            echo "main has moved on ($MAIN_SHA); the CI result for $TRIGGER_SHA is stale — skipping"
+          fi
+
   deploy:
     name: Build and deploy to the box
+    needs: freshness
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
+      (needs.freshness.outputs.is_tip == 'true' &&
+       github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' &&
        github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
