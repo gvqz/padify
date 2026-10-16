@@ -59,6 +59,7 @@ import {
   hydrateNotes,
   loadNotes,
   parseLegacyNoteRecords,
+  reconcileNotesFromMirror,
   resetNotesForTests,
   saveNotes,
   whenNotesIdle,
@@ -127,6 +128,8 @@ const LEGACY_KV_KEYS: readonly string[] = [
   // music (ambience now rides the player as regular tracks)
   'padify-music-state',
   'padify-music-library',
+  // tasks (the retired modal's store — read by the notes migration)
+  'padify-tasks',
   // cloud
   'padifyCloudConfig',
   'padifySession',
@@ -232,6 +235,15 @@ async function boot(): Promise<StorageBackend> {
     }
 
     hydrateNotes(await readAll<NoteRecord>(NOTES_STORE));
+
+    // The newest note rows may live only in the legacy mirror (a pagehide
+    // save whose IndexedDB write died with the page) — reconcile before
+    // anything reads, then heal the database with an immediate save so
+    // the rescue is not re-needed on the next boot. Same shape as the kv
+    // reconcile above.
+    if (reconcileNotesFromMirror()) {
+      saveNotes(await loadNotes(), null, { immediate: true });
+    }
   }
 
   // Best-effort flush when the page goes away — coalesced kv writes and a

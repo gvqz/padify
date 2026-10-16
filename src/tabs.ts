@@ -44,6 +44,8 @@ import {
 } from './storage';
 import { sanitizeNoteHtml } from './editor/storage-subset';
 import { currentThemeMode, transformNoteColors } from './editor/theme-colors';
+import { parseTaskNoteContent } from './editor/tasks/content';
+import { formatDueChip } from './editor/tasks/dates';
 import {
   htmlNoteSurface,
   noteSurfaceFor,
@@ -209,6 +211,12 @@ function createTab(
 // ---------------------------------------------------------------------------
 
 export class TabManager {
+  /** Every open note, in strip order — read-only for the layers that
+   *  aggregate across notes (the tasks feature's views). */
+  get allTabs(): readonly NoteTab[] {
+    return this.tabs;
+  }
+
   private tabs: NoteTab[] = [];
   private activeId: string | null = null;
   private readonly editor: Q;
@@ -510,6 +518,20 @@ export class TabManager {
     }, 400);
   }
 
+  /**
+   * Drains a pending debounced persist NOW — the page is about to die.
+   * saveActiveFromEditor (the unload hook's capture) only SCHEDULES the
+   * write; without this flush, the last ~400ms of a session's edits sit
+   * in a timer that dies with the page (a note completed and the tab
+   * closed inside the window restored stale — the tasks e2e caught it).
+   */
+  flushPendingPersist(): void {
+    if (!this.saveTimer) return;
+    clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    this.persist();
+  }
+
   getActive(): NoteTab | null {
     return this.tabs.find((tab) => tab.id === this.activeId) ?? null;
   }
@@ -585,7 +607,7 @@ export class TabManager {
    * the tab id it was requested for: a switch that happens mid-retry
    * wins, and a retry never steals focus after the user moved on.
    */
-  private focusEditor(attempt = 0, forTabId = this.activeId): void {
+  focusEditor(attempt = 0, forTabId = this.activeId): void {
     const host = this.editorHost();
     if (!host) {
       return;
@@ -780,7 +802,16 @@ export class TabManager {
       button.appendChild(copyBadge);
     }
 
-    if (tab.noteType && tab.noteType !== DEFAULT_NOTE_TYPE) {
+    if (tab.noteType === 'tasks') {
+      // A task list's badge is its own colored circle — the rail shows
+      // the note AS a list (see editor/tasks/content.ts for the model).
+      const listDot = document.createElement('span');
+      listDot.className = 'tab-strip-type tab-strip-list-dot';
+      listDot.title = 'Task list';
+      listDot.setAttribute('aria-hidden', 'true');
+      listDot.dataset.color = parseTaskNoteContent(tab.content).color;
+      button.appendChild(listDot);
+    } else if (tab.noteType && tab.noteType !== DEFAULT_NOTE_TYPE) {
       const typeBadge = document.createElement('span');
       typeBadge.className = 'tab-strip-type';
       typeBadge.title = `${noteTypeLabel(tab.noteType)} — created via the type menu`;
@@ -819,6 +850,13 @@ export class TabManager {
     }
 
     element.find('.tab-strip-title').text(deriveTabTitle(tab));
+    // A task list's strip badge is its color — the same save that lands
+    // the new color in the note repaints the circle (the rail's dot
+    // follows the aggregate; the strip needed its own refresh).
+    const listDot = element.find('.tab-strip-list-dot');
+    if (listDot.length > 0) {
+      listDot.attr('data-color', parseTaskNoteContent(tab.content).color);
+    }
     if (tab.id === this.activeId) {
       this.syncDocumentTitle();
     }
@@ -944,6 +982,65 @@ export class TabManager {
         ? 'New note created.'
         : `New ${noteTypeLabel(noteType).toLowerCase()} created.`,
     );
+  }
+
+  /**
+   * Appends a note WITHOUT activating it — the migration and the tasks
+   * rail's "New Task List" use it to add fully-formed notes in a row.
+   * The strip gets the tab; the editor never notices until the note is
+   * opened. Returns the note (null when the cap said no).
+   */
+  addBackgroundNote(name: string, noteType: NoteType, content: string): NoteTab | null {
+    const tab = createTab(content, name, noteType);
+    if (name) {
+      tab.name = name;
+    }
+    this.tabs.push(tab);
+    this.dirtyIds.add(tab.id);
+    this.strip.get(0)!.appendChild(this.buildTabElement(tab));
+    this.renderRailCount();
+    this.persist();
+    return tab;
+  }
+
+  /**
+   * Renames a tab programmatically — the tasks surface's page title and
+   * the rail's quick-rename flows. Same rules as the strip's inline
+   * rename (blank never wins; the model leads, the label follows), minus
+   * the toast (the caller owns the feedback).
+   */
+  renameTab(tabId: string, name: string): boolean {
+    const tab = this.tabs.find((entry) => entry.id === tabId);
+    if (!tab) return false;
+    const trimmed = name.trim().slice(0, 60);
+    if (!trimmed || trimmed === tab.name) return false;
+    tab.name = trimmed;
+    tab.updatedAt = nextUpdatedAt(tab.updatedAt);
+    this.dirtyIds.add(tab.id);
+    this.persist();
+    this.refreshTabLabel(tab.id);
+    return true;
+  }
+
+  /**
+   * Writes a note's content from OUTSIDE the editor — the tasks hub and
+   * the reminder sweep edit task notes that are not (necessarily) the
+   * active one. The ACTIVE note repaints through its surface (so a task
+   * list open behind the hub stays truthful); a background note just
+   * takes the bytes. Persistence flows the normal dirty-note path.
+   */
+  writeNoteContent(tabId: string, content: string): void {
+    const tab = this.tabs.find((entry) => entry.id === tabId);
+    if (!tab || tab.content === content) return;
+    tab.content = content;
+    tab.updatedAt = nextUpdatedAt(tab.updatedAt);
+    this.dirtyIds.add(tab.id);
+    if (tab.id === this.activeId) {
+      // The live surface repaints from the new bytes; commit answers
+      // false (the caller owns persistence) so persist exactly once.
+      noteSurfaceFor(tab).commit(this.editorHost(), content);
+    }
+    this.persist();
   }
 
   private requestCloseTab(tabId: string): void {
@@ -1238,8 +1335,32 @@ export function getActiveNoteExportBody(): string | null {
   if (captured.noteType === 'markdown') {
     return renderMarkdownToHtml(captured.content);
   }
+  if (captured.noteType === 'tasks') {
+    // A task list exports as the checklist it is — the same projection
+    // the word count reads, dressed for HTML (all strings escaped).
+    return renderTaskListExportBody(captured.content);
+  }
   if (isHtmlContent(captured.noteType)) {
     return sanitizeNoteHtml(captured.content);
   }
   return `<pre>${escapeHtml(captured.content)}</pre>`;
+}
+
+/** The tasks note's HTML export: a quiet checklist, list color included. */
+function renderTaskListExportBody(content: string): string {
+  const model = parseTaskNoteContent(content);
+  const items = model.tasks
+    .map((task) => {
+      const title = escapeHtml(task.title);
+      let line = `<li class="padify-task${task.completed ? ' is-done' : ''}"><span class="padify-task-title">${title}</span>`;
+      if (task.dueDate) {
+        line += `<span class="padify-task-meta">due ${escapeHtml(formatDueChip(task.dueDate, new Date()))}</span>`;
+      }
+      if (task.notes) {
+        line += `<span class="padify-task-meta">${escapeHtml(task.notes)}</span>`;
+      }
+      return `${line}</li>`;
+    })
+    .join('');
+  return `<ul class="padify-task-list" data-color="${model.color}">${items}</ul>`;
 }

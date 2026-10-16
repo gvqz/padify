@@ -19,6 +19,7 @@
 import { getCloudConfig } from './config';
 import { getCloudUserId } from './sync';
 import { contentKindFor, type NoteType } from '../editor/note-types';
+import { taskNoteContentIsEmpty } from '../editor/tasks/content';
 import { deriveTabTitle, htmlToText, type TabManager, type TabsSyncPayload } from '../tabs';
 
 // ---------------------------------------------------------------------------
@@ -65,11 +66,16 @@ function signedIn(): boolean {
 /**
  * True when a note carries nothing worth sharing: html kinds read through
  * the tag stripper (a bare <p></p> or <br> is emptiness wearing markup),
- * every other kind reads raw. The blank note a fresh tab or a delete-all
- * leaves behind must never become a link — the recipient would get an
- * empty page and the owner a "share" of nothing.
+ * task list notes read their parsed model (an empty list is JSON bytes
+ * with zero reminders — not a share), every other kind reads raw. The
+ * blank note a fresh tab or a delete-all leaves behind must never become
+ * a link — the recipient would get an empty page and the owner a "share"
+ * of nothing.
  */
 export function noteContentIsEmpty(content: string, noteType?: NoteType | null): boolean {
+  if (noteType === 'tasks') {
+    return taskNoteContentIsEmpty(content);
+  }
   const kind = contentKindFor(noteType ?? undefined);
   if (kind === 'html') {
     return htmlToText(content).trim() === '';

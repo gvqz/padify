@@ -81,6 +81,15 @@ function ensureRegistryWiring(): void {
     if (!(target instanceof Node)) {
       return;
     }
+    // A node that left the document mid-dispatch — a re-render replaced
+    // the clicked element's markup during this same click (the tasks
+    // hub's month navigation does exactly this) — cannot be judged
+    // "outside" any layer: contains() walks the tree as it is NOW, and
+    // a detached node is contained by nothing. Closing on its account
+    // would dismiss the very surface the click was operating on.
+    if (!target.isConnected) {
+      return;
+    }
     for (const region of layers) {
       if (region.isOpen() && !region.elements.some((el) => el.contains(target))) {
         region.setOpen(false);

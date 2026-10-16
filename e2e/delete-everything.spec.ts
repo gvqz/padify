@@ -29,6 +29,21 @@ async function createRichNote(page: Page): Promise<void> {
   await expect(page.locator('#richToolbar')).toBeVisible();
 }
 
+/**
+ * Drains the app's save pipeline deterministically (capture + immediate
+ * persist + idle) so the hand-rewrites below can land in IndexedDB
+ * without the page's pagehide flush re-persisting over them.
+ */
+async function settleSaves(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const tabs = (await import('/src/tabs.ts')) as typeof import('/src/tabs.ts');
+    tabs.getTabManager()?.syncAfterExternalEdit();
+    const storage =
+      (await import('/src/storage/index.ts')) as typeof import('/src/storage/index.ts');
+    await storage.whenNotesIdle();
+  });
+}
+
 /** The editor's exact HTML (toHaveHTML is not available on this version). */
 function innerHtml(editor: ReturnType<Page['locator']>): Promise<string> {
   return editor.evaluate((node) => node.innerHTML);
@@ -181,7 +196,7 @@ test.describe('delete everything after typing', () => {
     // stored html the way a pre-fix build would have stored a delete-all.
     await page.locator('#note').click();
     await page.keyboard.type('seed');
-    await page.waitForTimeout(700);
+    await settleSaves(page);
     const noteId = await page.evaluate(async () => {
       // Rewrite the stored html of the active (only) rich note the way a
       // pre-fix build would have stored it after a delete-all.
@@ -199,6 +214,9 @@ test.describe('delete everything after typing', () => {
       });
       const rich = all.find((row) => row.noteType === 'rich') as Record<string, unknown>;
       rich.html = '<br>';
+      // The app's just-persisted seed content must not shadow the crafted
+      // legacy html (the loader reads content ?? html — content wins).
+      delete rich.content;
       store.put(rich);
       await new Promise<void>((resolve, reject) => {
         tx.oncomplete = () => resolve();

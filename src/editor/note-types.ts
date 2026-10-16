@@ -57,7 +57,7 @@ export interface NoteTypeDef {
  * autocomplete for known ids while letting unknown ids (from newer builds,
  * via sync) flow through the system as first-class values.
  */
-export type KnownNoteType = 'standard' | 'rich' | 'markdown';
+export type KnownNoteType = 'standard' | 'rich' | 'markdown' | 'tasks';
 export type NoteType = KnownNoteType | (string & {});
 
 /** Menu order = menu display order; the default first. */
@@ -79,6 +79,12 @@ export const NOTE_TYPES: readonly NoteTypeDef[] = [
     label: 'Markdown note',
     description: 'Write in Markdown — headings, lists, tables & preview',
     contentKind: 'text',
+  },
+  {
+    id: 'tasks',
+    label: 'Task list',
+    description: 'A Reminders list — dates, alerts, flags & priorities',
+    contentKind: 'json',
   },
 ] as const;
 
@@ -126,6 +132,8 @@ export const NOTE_TYPE_ICONS: Record<KnownNoteType, (size: number) => string> = 
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 20 12 4l5.5 16"/><path d="M8.3 14.5h7.4"/><path d="M4 20h16" opacity=".45"/></svg>`,
   markdown: (size) =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16V8l4 5 4-5v8"/><path d="M15 10.5v6"/><path d="m13.2 14.7 1.8 1.8 1.8-1.8"/></svg>`,
+  tasks: (size) =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.75"/><path d="m8.4 12.3 2.4 2.4 4.8-5.2"/></svg>`,
 };
 
 /**

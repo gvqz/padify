@@ -32,9 +32,6 @@ import { initCloudSync } from './cloud/sync';
 import { initCloudUI } from './cloud/ui';
 import { initCloudShare } from './cloud/share';
 import { initShareUI } from './cloud/share-ui';
-// The Reminders sweep is the feature's always-on half (store + dates + a
-// timer — no UI); the modal's controller stays a lazy chunk like music.
-import { initTaskReminderSweep } from './features/tasks/reminders';
 import { initVoiceTyping, toggleVoiceTyping, handleTabSwitchedWhileListening } from './voice';
 import { initTypingEffects } from './typing-effects';
 import { initPipWindow } from './pip-window';
@@ -56,6 +53,10 @@ import { initMarkdownBubble } from './editor/markdown/bubble';
 // import time (editor/markdown/surface.ts) — one import, and every
 // NoteSurface consumer (tabs, snapshots, share) can open markdown notes.
 import './editor/markdown/surface';
+// The tasks surface does the same for 'json' (editor/tasks/surface.ts):
+// task list notes restore at boot, so the surface must be registered
+// before the first note paints.
+import './editor/tasks/surface';
 import {
   focusMarkdownPane,
   markdownSelectionStateNow,
@@ -64,6 +65,11 @@ import {
   setMarkdownViewMode,
 } from './editor/markdown/surface';
 import { isHtmlContent, isMarkdownNote, isRichNote } from './editor/note-types';
+// The tasks feature composes statically now (rail + hub + sweep are
+// small; the heavy markdown engine stays lazy but tasks pages ride the
+// note surface, which is core). Imported by the composition root only —
+// the architecture test's feature allowlist.
+import { initTasks } from './features/tasks';
 import { initThemeColors } from './editor/theme-colors';
 import { initRichShortcuts } from './editor/rich-shortcuts';
 import { initNoteTypeMenu } from './ui/note-type-menu';
@@ -169,11 +175,11 @@ export async function initApp(): Promise<void> {
   // open the player — see initMusicSubsystem below.
   initMusicSubsystem();
 
-  // Reminders: the sweep (30s + focus/visibility) runs from boot so timed
-  // reminders fire without ever opening the modal; the modal's engine
-  // loads on the first attempt to open it — see initTasksSubsystem below.
-  initTaskReminderSweep();
-  initTasksSubsystem();
+  // Reminders: task lists are notes now. initTasks migrates the modal-era
+  // data, wires the rail + hub + sweep, and the topbar button opens
+  // Today. Everything rides the notes layer — sync, snapshots, share
+  // come along for free.
+  initTasks();
 
   // Cloud sync boots only when a sync project is configured; the UI
   // (navbar icon, modal, settings section) stays hidden otherwise.
@@ -319,9 +325,12 @@ export async function initApp(): Promise<void> {
   // dies. The storage layer drains its queues on pagehide/hidden — this
   // pre-flush hook captures the live editor into the model FIRST, so the
   // kv write and the synchronous localStorage mirror that follow carry the
-  // user's last words instead of a stale model.
+  // user's last words instead of a stale model. flushPendingPersist then
+  // runs the debounced saveNotes immediately — without it, the capture
+  // lands in the model but its IDB write dies in the dead timer.
   registerPreFlushHook(() => {
     tabManager.saveActiveFromEditor();
+    tabManager.flushPendingPersist();
   });
 
   // ---- save-state indicator (see save-indicator.ts) -----------------
@@ -895,56 +904,6 @@ function initMusicSubsystem(): void {
   // Belt and braces for opens that bypass the navbar trigger (programmatic
   // opens, tests): the modal's own show event loads the engines too, so a
   // visible-but-unwired player still finishes wiring itself.
-  modal.addEventListener('show.bs.modal', () => {
-    void loadEngines().then(() => {
-      engineReady = true;
-    });
-  });
-}
-
-/**
- * Reminders lazy seam — the tasks sibling of the music seam above.
- *
- * The sweep (store + timer) rides the main bundle so reminders fire even
- * if the modal is never opened; the controller (the views, the editor, the
- * composer — features/tasks/index.ts) stays a lazy chunk and wires itself
- * on the first attempt to open the modal. Same capture-phase interception
- * as the player, for the same reason: opening the modal before the
- * controller bound its handlers would drop the first click.
- */
-function initTasksSubsystem(): void {
-  const modal = document.getElementById('tasksModal');
-  if (!modal) return;
-
-  let engines: Promise<void> | null = null;
-  let engineReady = false;
-
-  const loadEngines = (): Promise<void> => {
-    engines ??= (async () => {
-      const { initTasks } = await import('./features/tasks');
-      initTasks();
-    })();
-    return engines;
-  };
-
-  document.addEventListener(
-    'click',
-    (event) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      const trigger = target.closest<HTMLElement>('a[data-target="#tasksModal"]');
-      if (!trigger || engineReady) return;
-
-      event.preventDefault();
-      event.stopPropagation();
-      void loadEngines().then(() => {
-        engineReady = true;
-        openModal(modal, trigger);
-      });
-    },
-    true,
-  );
-
   modal.addEventListener('show.bs.modal', () => {
     void loadEngines().then(() => {
       engineReady = true;
