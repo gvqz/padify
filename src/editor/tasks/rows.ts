@@ -1,30 +1,28 @@
 /**
- * Reminders row markup — pure builders for everything the controller
- * re-renders: sidebar list items, task sections, task rows, the inline
- * detail editor, the empty states and the shared popovers. No lookups, no
- * state: (task, lists, now) in, HTML out, escaped on the way through.
+ * Task list notes — the row markup builders, pure.
+ *
+ * Everything the surface page and the hub re-render: task sections, task
+ * rows, the inline detail editor, the empty states and the shared
+ * popovers (when-picker, priority menu, move-between-lists menu). No
+ * lookups, no state: (task, lists, now) in, HTML out, escaped on the way
+ * through.
+ *
+ * Rows carry an optional LIST chip: inside a task note the list is the
+ * note itself (no chip), but the hub's aggregated views (Today, All…)
+ * show each row's origin — Apple paints the list's name under the title
+ * the same way.
  */
 
-import { ICONS } from './markup';
-import { PRIORITY_MARKS, type Priority, type Task, type TaskList, type TaskSection } from './types';
+import { ICONS } from './icons';
 import { formatDueChip, formatReminderChip, isOverdue } from './dates';
+import { PRIORITY_MARKS, type Priority, type Task } from './content';
 import { escapeHtml } from '../../lib/escape';
 
-// ---------------------------------------------------------------------------
-// Sidebar
-// ---------------------------------------------------------------------------
-
-/** A custom list's sidebar row — the colored dot IS the icon. */
-export function listNavItem(list: TaskList, count: number, active: boolean): string {
-  const badge = count > 0 ? `<span class="tk-nav-count">${count}</span>` : '';
-  return `
-        <button type="button" class="tk-nav-item tk-list-item${active ? ' is-active' : ''}" data-view="${escapeHtml(
-          `list:${list.id}`,
-        )}" role="tab" aria-selected="${active}" tabindex="-1">
-            <span class="tk-nav-icon"><span class="tk-dot tk-c-${list.color}" aria-hidden="true"></span></span>
-            <span class="tk-nav-label">${escapeHtml(list.name)}</span>
-            ${badge}
-        </button>`;
+/** The list facts a row chip (or a move menu) needs about a note. */
+export interface ListRef {
+  id: string;
+  name: string;
+  color: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,10 +67,26 @@ export function priorityMarks(priority: Priority): string {
   )}</span>`;
 }
 
-/** One task row. The editor expands under .tk-task-wrap. */
-export function taskRow(task: Task, now: Date, listColor: string, draggable: boolean): string {
+/**
+ * One task row. The editor expands under .tk-task-wrap. `list` adds the
+ * origin chip (the hub's aggregated views); color classes ride the wrap.
+ */
+export function taskRow(
+  task: Task,
+  now: Date,
+  listColor: string,
+  draggable: boolean,
+  list?: ListRef,
+): string {
   const title = escapeHtml(task.title);
   const notes = task.notes ? `<span class="tk-notes">${escapeHtml(task.notes)}</span>` : '';
+  const origin = list
+    ? `<span class="tk-origin tk-c-${list.color}" data-list-open="${escapeHtml(list.id)}" role="button" tabindex="0" title="Open ${escapeHtml(
+        list.name,
+      )}"><span class="tk-dot" aria-hidden="true"></span><span class="tk-origin-name">${escapeHtml(
+        list.name,
+      )}</span></span>`
+    : '';
   return `
     <div class="tk-task-wrap tk-c-${listColor}${draggable ? ' is-draggable' : ''}" data-id="${escapeHtml(
       task.id,
@@ -88,6 +102,7 @@ export function taskRow(task: Task, now: Date, listColor: string, draggable: boo
             <button type="button" class="tk-task-main">
                 <span class="tk-title">${title}</span>
                 ${notes}
+                ${origin}
                 ${rowChips(task, now)}
             </button>
             <button type="button" class="tk-info" title="Details" aria-label="Reminder details">${ICONS.info}</button>
@@ -96,21 +111,27 @@ export function taskRow(task: Task, now: Date, listColor: string, draggable: boo
     </div>`;
 }
 
-/** A section: heading + rows. resolveList yields the list color class ('none' for the default). */
+/** A section: heading + rows. resolveColor yields the color class name;
+ *  `color` paints a heading dot when the heading names a list. */
 export function section(
-  sectionData: TaskSection,
+  sectionData: { title: string; tone: 'default' | 'danger'; tasks: Task[]; color?: string },
   now: Date,
   resolveColor: (task: Task) => string,
   draggable: boolean,
+  resolveList?: (task: Task) => ListRef | undefined,
 ): string {
   const rows = sectionData.tasks
-    .map((task) => taskRow(task, now, resolveColor(task), draggable))
+    .map((task) => taskRow(task, now, resolveColor(task), draggable, resolveList?.(task)))
     .join('');
+  const dot =
+    sectionData.color && sectionData.title !== ''
+      ? `<span class="tk-dot tk-c-${sectionData.color}" aria-hidden="true"></span>`
+      : '';
   const heading =
     sectionData.title === ''
       ? ''
       : `<header class="tk-section-head${sectionData.tone === 'danger' ? ' is-danger' : ''}">
-            <h5>${escapeHtml(sectionData.title)}</h5>
+            <h5>${dot}${escapeHtml(sectionData.title)}</h5>
          </header>`;
   return `
         <section class="tk-section">
@@ -135,19 +156,18 @@ export function completedToggle(count: number, expanded: boolean, doneRows: stri
 // The inline detail editor
 // ---------------------------------------------------------------------------
 
-/** The expanded editor under a row: title, notes, and the chip toolbar. */
-export function editor(task: Task, lists: TaskList[], now: Date): string {
-  const options = lists
-    .map(
-      (list) =>
-        `<option value="${escapeHtml(list.id)}"${list.id === task.listId ? ' selected' : ''}>${escapeHtml(
-          list.name,
-        )}</option>`,
-    )
-    .join('');
-  const listSelect = `<select class="tk-editor-list" aria-label="Move to list" title="Move to list"><option value="inbox"${task.listId === 'inbox' ? ' selected' : ''}>Reminders</option>${options}</select>`;
+/**
+ * The expanded editor under a row: title, notes, and the chip toolbar.
+ * `lists` (other task notes) adds the Move chip — inside a single note
+ * there is nothing to move to, in the hub's aggregated views there is.
+ */
+export function editor(task: Task, now: Date, lists: ListRef[] = []): string {
   const dateLabel = task.dueDate ? formatDueChip(task.dueDate, now) : 'Date';
   const remindLabel = task.reminderAt ? formatReminderChip(task.reminderAt, now) : 'Remind';
+  const moveChip =
+    lists.length > 0
+      ? `<button type="button" class="tk-chip-btn" data-editor-move>${ICONS.moveTo}<span>Move</span></button>`
+      : '';
   return `
             <div class="tk-editor-form">
                 <input type="text" class="tk-editor-title" value="${escapeHtml(task.title)}" aria-label="Reminder title" maxlength="600">
@@ -167,8 +187,8 @@ export function editor(task: Task, lists: TaskList[], now: Date): string {
                     <button type="button" class="tk-chip-btn tk-chip-has${task.priority !== 'none' ? ' is-set' : ''}" data-editor-priority>${ICONS.chevron}<span>${priorityLabel(
                       task.priority,
                     )}</span></button>
+                    ${moveChip}
                     <span class="tk-editor-spacer"></span>
-                    ${listSelect}
                     <button type="button" class="tk-chip-btn tk-chip-danger" data-editor-delete title="Delete reminder" aria-label="Delete reminder">${ICONS.trash}<span>Delete</span></button>
                 </div>
             </div>`;
@@ -180,7 +200,7 @@ export function priorityLabel(priority: Priority): string {
 }
 
 // ---------------------------------------------------------------------------
-// Popovers (one shared element each, appended + positioned by the controller)
+// Popovers (one shared element each, appended + positioned by the caller)
 // ---------------------------------------------------------------------------
 
 export function whenPopover(mode: 'date' | 'remind'): string {
@@ -216,6 +236,30 @@ export function priorityMenu(priority: Priority): string {
     item('medium', '!!  Medium'),
     item('high', '!!!  High'),
   ].join('');
+}
+
+/** The move-between-lists menu — one item per task note, dots colored. */
+export function moveMenu(lists: ListRef[], currentListId: string | null): string {
+  const rows = lists
+    .filter((list) => list.id !== currentListId)
+    .map(
+      (list) =>
+        `<button type="button" class="tk-menu-item" data-move-to="${escapeHtml(list.id)}"><span class="tk-dot tk-c-${list.color}" aria-hidden="true"></span><span class="tk-menu-label">${escapeHtml(
+          list.name,
+        )}</span></button>`,
+    );
+  return `<div class="tk-menu-label">Move to list</div>${rows.join('')}`;
+}
+
+/** The list color palette — the page header's circle menu. */
+export function colorMenu(current: string): string {
+  const colors = ['blue', 'red', 'orange', 'green', 'purple', 'teal'] as const;
+  return `<div class="tk-menu-label">List color</div>${colors
+    .map(
+      (color) =>
+        `<button type="button" class="tk-menu-item tk-color-item${color === current ? ' is-on' : ''}" data-list-color="${color}"><span class="tk-dot tk-c-${color}" aria-hidden="true"></span><span class="tk-menu-label">${color}</span></button>`,
+    )
+    .join('')}`;
 }
 
 // ---------------------------------------------------------------------------

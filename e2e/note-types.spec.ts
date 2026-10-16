@@ -50,6 +50,7 @@ test.describe('note types', () => {
     await expect(
       popover.locator('.tab-type-menu-item', { hasText: 'Markdown note' }),
     ).toBeVisible();
+    await expect(popover.locator('.tab-type-menu-item', { hasText: 'Task list' })).toBeVisible();
 
     // Escape closes and returns focus to the trigger.
     await page.keyboard.press('Escape');
@@ -70,6 +71,7 @@ test.describe('note types', () => {
     await page.keyboard.press('ArrowDown');
     await expect(popover.locator('.tab-type-menu-item').nth(1)).toBeFocused();
     await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown'); // four types now — two downs reach the last
     await expect(popover.locator('.tab-type-menu-item').last()).toBeFocused();
     await page.keyboard.press('ArrowDown'); // wraps to the first item
     await expect(popover.locator('.tab-type-menu-item').first()).toBeFocused();

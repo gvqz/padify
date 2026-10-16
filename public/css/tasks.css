@@ -1,19 +1,47 @@
 /* ==========================================================================
-   Padify Reminders ("tk") — tasks with dates, flags, priorities and lists:
+   Padify Reminders ("tk") — task lists as notes, the rail, the hub, the
+   ONE calendar.
 
-     Today · Scheduled · All · Flagged · Completed · custom lists
+   Architecture (the modal era is gone — PRs #143/#144 live on in spirit):
 
-   Layout: sidebar (destinations) + content pane + a composer bar pinned
-   to the bottom of the modal — the music player's shape, wearing Apple
-   Reminders' clothes.
+     • A task list IS a note (noteType 'tasks'): the page that paints
+       inside the editor host carries .tk-scope .tkp — header (color +
+       title + count), rows, composer at the bottom.
+     • The RIGHT rail (#taskRail) navigates: 52px icon strip at rest,
+       expanding on hover/focus/pin to the smart-view cards + My Lists.
+     • The hub (#tasksHub, .tkh) is the aggregated page over the editor
+       area while a Reminders view is open (body.tasks-hub-open).
+     • The calendar (.tkcal) lays every dated task on one month grid.
 
    Styling follows the app-wide Vercel design system: the --tk-* tokens
-   below are local aliases of the --vz-* tokens, so this file stays in
-   lock-step with the rest of the UI. Scoped to #tasksModal so nothing
-   leaks into other app UI.
+   below are local aliases of the --vz-* tokens. The list palette is the
+   only chroma the feature is allowed.
    ========================================================================== */
 
-#tasksModal {
+/* --------------------------------------------------------------------------
+   1. Tokens — the palette is global (the tab strip badge + rail dots read
+      it outside any .tk-scope); the rest alias the vz system per scope.
+   -------------------------------------------------------------------------- */
+
+:root {
+  --tk-blue: #3d78c4;
+  --tk-red: #cf5a5a;
+  --tk-orange: #c98a3d;
+  --tk-green: #0e9f6e;
+  --tk-purple: #8465c4;
+  --tk-teal: #2f9c9c;
+}
+
+body.dark {
+  --tk-blue: #6aa2e2;
+  --tk-red: #e28585;
+  --tk-orange: #e0aa66;
+  --tk-green: #2fbd8b;
+  --tk-purple: #a98fe0;
+  --tk-teal: #55bdbd;
+}
+
+.tk-scope {
   --tk-accent: var(--vz-primary);
   --tk-accent-strong: var(--vz-primary-hover);
   --tk-accent-contrast: var(--vz-primary-fg);
@@ -31,289 +59,302 @@
   --tk-muted: var(--vz-fg-muted);
   --tk-track: var(--vz-border);
 
-  /* The list palette — the only chroma the feature is allowed. Quiet
-     enough to sit next to the monochrome chrome, distinct enough that
-     six lists never blur together. */
-  --tk-blue: #3d78c4;
-  --tk-red: #cf5a5a;
-  --tk-orange: #c98a3d;
-  --tk-green: #0e9f6e;
-  --tk-purple: #8465c4;
-  --tk-teal: #2f9c9c;
-
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   color: var(--tk-text);
 }
 
-body.dark #tasksModal {
-  --tk-blue: #6aa2e2;
-  --tk-red: #e28585;
-  --tk-orange: #e0aa66;
-  --tk-green: #2fbd8b;
-  --tk-purple: #a98fe0;
-  --tk-teal: #55bdbd;
-}
-
 /* The list color every descendant reads. */
-#tasksModal .tk-c-blue {
-  --list-c: var(--tk-blue);
-}
-#tasksModal .tk-c-red {
-  --list-c: var(--tk-red);
-}
-#tasksModal .tk-c-orange {
-  --list-c: var(--tk-orange);
-}
-#tasksModal .tk-c-green {
-  --list-c: var(--tk-green);
-}
-#tasksModal .tk-c-purple {
-  --list-c: var(--tk-purple);
-}
-#tasksModal .tk-c-teal {
-  --list-c: var(--tk-teal);
-}
-/* No list (the default Reminders inbox) → the monochrome accent. */
-#tasksModal .tk-c-none {
-  --list-c: var(--tk-accent);
-}
+.tk-scope.tk-c-blue { --list-c: var(--tk-blue); }
+.tk-scope.tk-c-red { --list-c: var(--tk-red); }
+.tk-scope.tk-c-orange { --list-c: var(--tk-orange); }
+.tk-scope.tk-c-green { --list-c: var(--tk-green); }
+.tk-scope.tk-c-purple { --list-c: var(--tk-purple); }
+.tk-scope.tk-c-teal { --list-c: var(--tk-teal); }
+/* No list (aggregated chrome) → the monochrome accent. */
+.tk-scope.tk-c-none { --list-c: var(--tk-accent); }
 
-/* The hidden attribute must win over every display rule below (views,
-   empties, badges, buttons) — author styles otherwise override the UA's
-   [hidden] { display: none }. */
-#tasksModal [hidden] {
+/* The hidden attribute must win over every display rule below — author
+   styles otherwise override the UA's [hidden] { display: none }. */
+.tk-scope [hidden],
+#tasksHub[hidden] {
   display: none !important;
 }
 
 /* --------------------------------------------------------------------------
-   Modal shell — a tall, quiet frame (the player's, shared)
+   2. The task list PAGE — what paints inside the editor host
    -------------------------------------------------------------------------- */
 
-#tasksModal .tk-dialog {
-  width: 100%;
-  max-width: 960px;
-  margin: 24px auto;
-  display: flex;
-  align-items: stretch;
-}
-
-#tasksModal .tk-content {
+#note > .tkp {
   display: flex;
   flex-direction: column;
-  width: 100%;
-  min-height: 0;
-  height: min(640px, calc(100vh - 48px));
-  border: 1px solid var(--tk-border);
-  border-radius: var(--vz-radius-lg);
-  box-shadow: var(--vz-shadow-dialog);
+  min-height: 100%;
+  padding-right: 6px;
+}
+
+/* The page owns its scrolling; the host stands down (and never shows the
+   typing cursor — its inputs are the editables). */
+#note:has(> .tkp) {
   overflow: hidden;
-  background: var(--tk-card);
+  cursor: default;
 }
 
-/* --------------------------------------------------------------------------
-   Header
-   -------------------------------------------------------------------------- */
-
-#tasksModal .tk-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex: 0 0 auto;
-  padding: 14px 20px 10px;
-  border-bottom: 1px solid var(--tk-border);
-}
-
-#tasksModal .tk-title {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--tk-text);
-}
-
-#tasksModal .tk-title svg {
-  color: var(--tk-accent);
-}
-
-#tasksModal .tk-header .close {
-  margin: 0;
-  padding: 6px;
-  border: 0;
-  border-radius: var(--vz-radius);
-  background: transparent;
-  color: var(--tk-muted);
-  opacity: 1;
-  line-height: 0;
-  cursor: pointer;
-  transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
-}
-
-#tasksModal .tk-header .close:hover,
-#tasksModal .tk-header .close:focus-visible {
-  background: var(--tk-well);
-  color: var(--tk-text);
-  outline: none;
-}
-
-#tasksModal .tk-header .close svg {
-  width: 16px;
-  height: 16px;
-}
-
-/* --------------------------------------------------------------------------
-   Body: sidebar + content pane
-   -------------------------------------------------------------------------- */
-
-#tasksModal .tk-body {
-  flex: 1 1 auto;
-  display: flex;
-  min-height: 0;
-  padding: 0;
-  position: relative;
-}
-
-#tasksModal .tk-nav {
-  flex: 0 0 200px;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border-right: 1px solid var(--tk-border);
-  background: var(--tk-well);
-}
-
-#tasksModal .tk-nav-scroll {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 12px 10px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--tk-track) transparent;
-}
-
-#tasksModal .tk-nav-scroll::-webkit-scrollbar {
-  width: 8px;
-}
-
-#tasksModal .tk-nav-scroll::-webkit-scrollbar-thumb {
-  background: var(--tk-track);
-  border-radius: 4px;
-}
-
-#tasksModal .tk-nav-item {
+.tkp-head {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
-  padding: 8px 12px;
-  border: 0;
-  border-radius: var(--vz-radius-md);
-  background: transparent;
-  color: var(--tk-muted);
-  font-size: 13.5px;
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
+  flex: 0 0 auto;
+  padding: 6px 4px 14px;
 }
 
-#tasksModal .tk-nav-item:hover {
-  background: var(--tk-chip);
-  color: var(--tk-text);
-}
-
-#tasksModal .tk-nav-item:focus-visible {
-  outline: 2px solid var(--tk-accent);
-  outline-offset: -2px;
-}
-
-#tasksModal .tk-nav-item.is-active {
-  background: var(--tk-card);
-  color: var(--tk-text);
-  box-shadow: inset 2px 0 0 var(--list-c, var(--tk-accent));
-}
-
-#tasksModal .tk-nav-icon {
+.tkp-color {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  line-height: 0;
-  color: currentColor;
-}
-
-#tasksModal .tk-nav-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-#tasksModal .tk-nav-count {
-  margin-left: auto;
-  min-width: 20px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--tk-chip);
-  color: var(--tk-muted);
-  font-size: 11px;
-  font-weight: 600;
-  text-align: center;
-}
-
-#tasksModal .tk-nav-item.is-active .tk-nav-count {
-  background: var(--tk-accent);
-  color: var(--tk-accent-contrast);
-}
-
-/* The sidebar search — the player's search box, one pane over. */
-#tasksModal .tk-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 12px 10px 4px;
-  padding: 0 10px;
-  border: 1px solid var(--tk-border);
-  border-radius: var(--vz-radius-md);
-  background: var(--tk-card);
-  transition: border-color 0.15s var(--vz-ease), box-shadow 0.15s var(--vz-ease);
-}
-
-#tasksModal .tk-search:focus-within {
-  border-color: var(--tk-accent);
-  box-shadow: 0 0 0 3px var(--vz-bg-subtle);
-}
-
-#tasksModal .tk-search > svg {
-  flex: 0 0 auto;
-  color: var(--tk-muted);
-}
-
-#tasksModal .tk-search-input {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 8px 0;
+  width: 34px;
+  height: 34px;
+  margin-left: -6px;
   border: 0;
+  border-radius: 50%;
   background: transparent;
-  color: var(--tk-text);
-  font-size: 13.5px;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s var(--vz-ease);
+}
+
+.tkp-color:hover,
+.tkp-color:focus-visible {
+  background: var(--tk-well);
   outline: none;
 }
 
-#tasksModal .tk-search-input::placeholder {
-  color: var(--tk-muted);
+.tkp-color .tk-dot {
+  width: 16px;
+  height: 16px;
+  background: var(--list-c, var(--tk-accent));
 }
 
-#tasksModal .tk-search-input::-webkit-search-cancel-button {
+.tkp-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 8px;
+  margin: 0 -8px;
+  border: 0;
+  border-radius: var(--vz-radius-md);
+  background: transparent;
+  color: var(--list-c, var(--tk-text));
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  outline: none;
+  transition: background 0.15s var(--vz-ease);
+}
+
+.tkp-title::placeholder {
+  color: var(--tk-muted);
+  opacity: 0.6;
+}
+
+.tkp-title:hover {
+  background: var(--tk-well);
+}
+
+.tkp-title:focus {
+  background: var(--tk-well);
+  box-shadow: 0 0 0 2px var(--tk-border);
+}
+
+.tkp-count {
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: var(--tk-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tkp-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.tkp-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 2px 18px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-track) transparent;
+}
+
+.tkp-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tkp-scroll::-webkit-scrollbar-thumb {
+  background: var(--tk-track);
+  border-radius: 4px;
+}
+
+/* The composer bar rides the bottom of the page. */
+.tkp-composer {
+  flex: 0 0 auto;
+  margin: 0 -6px -2px 0;
+  padding: 10px 10px 6px;
+  border-top: 1px solid var(--tk-border);
+  background: var(--tk-bg);
+}
+
+/* --------------------------------------------------------------------------
+   3. The RIGHT rail — Reminders navigation
+   -------------------------------------------------------------------------- */
+
+#taskRail {
+  /* One switch drives every reveal below (labels, search, cards). */
+  --tr-expanded: 0;
+  flex: 0 0 52px;
+  width: 52px;
+  border-left: 1px solid var(--vz-border);
+  background: var(--vz-bg-navbar);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  z-index: 30;
+  transition: flex-basis 0.18s var(--vz-ease), width 0.18s var(--vz-ease);
+}
+
+#taskRail:hover,
+#taskRail:focus-within,
+#taskRail.is-pinned,
+#taskRail.open {
+  --tr-expanded: 1;
+  flex-basis: 274px;
+  width: 274px;
+}
+
+#taskRail .tr-rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 14px 10px 10px 14px;
+  white-space: nowrap;
+}
+
+#taskRail .tr-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--vz-fg-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+#taskRail .tr-eyebrow svg {
+  color: var(--vz-fg);
+  opacity: 0.85;
+}
+
+#taskRail .tr-eyebrow-text {
+  opacity: var(--tr-expanded);
+  transition: opacity 0.15s var(--vz-ease);
+}
+
+#taskRail .tr-pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg-muted);
+  line-height: 0;
+  cursor: pointer;
+  opacity: var(--tr-expanded);
+  transition: opacity 0.15s var(--vz-ease), background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
+}
+
+#taskRail:hover .tr-pin,
+#taskRail:focus-within .tr-pin,
+#taskRail.is-pinned .tr-pin,
+#taskRail.open .tr-pin {
+  opacity: 1;
+}
+
+#taskRail .tr-pin:hover,
+#taskRail .tr-pin:focus-visible {
+  background: var(--vz-bg-hover);
+  color: var(--vz-fg);
+  outline: none;
+}
+
+#taskRail .tr-pin[aria-pressed='true'] {
+  color: var(--vz-fg);
+  background: var(--vz-bg-chip);
+}
+
+/* The search — an expanded-rail affordance (the icon lives in the
+   collapsed rail's head mark). */
+#taskRail .tr-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin: 0 10px 8px 12px;
+  padding: 0 10px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  background: var(--vz-bg-elevated);
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  border-width: 0;
+  transition: max-height 0.18s var(--vz-ease), opacity 0.15s var(--vz-ease);
+}
+
+#taskRail:hover .tr-search,
+#taskRail:focus-within .tr-search,
+#taskRail.is-pinned .tr-search,
+#taskRail.open .tr-search {
+  max-height: 40px;
+  opacity: 1;
+  border-width: 1px;
+}
+
+#taskRail .tr-search:focus-within {
+  border-color: var(--vz-primary);
+}
+
+#taskRail .tr-search > svg {
+  flex: 0 0 auto;
+  color: var(--vz-fg-muted);
+}
+
+#taskRail .tr-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 0;
+  border: 0;
+  background: transparent;
+  color: var(--vz-fg);
+  font-size: 13px;
+  outline: none;
+}
+
+#taskRail .tr-search-input::placeholder {
+  color: var(--vz-fg-muted);
+}
+
+#taskRail .tr-search-input::-webkit-search-cancel-button {
   display: none;
 }
 
-#tasksModal .tk-search-clear {
+#taskRail .tr-search-clear {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -321,187 +362,493 @@ body.dark #tasksModal {
   border: 0;
   border-radius: var(--vz-radius);
   background: transparent;
-  color: var(--tk-muted);
+  color: var(--vz-fg-muted);
   line-height: 0;
   cursor: pointer;
 }
 
-#tasksModal .tk-search-clear:hover {
-  color: var(--tk-text);
-  background: var(--tk-well);
+#taskRail .tr-search-clear:hover {
+  color: var(--vz-fg);
+  background: var(--vz-bg-subtle);
 }
 
-#tasksModal .tk-search-clear svg {
-  width: 14px;
-  height: 14px;
+#taskRail .tr-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 10px 14px 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vz-border) transparent;
 }
 
-/* My Lists group */
-#tasksModal .tk-nav-group {
+#taskRail .tr-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+#taskRail .tr-scroll::-webkit-scrollbar-thumb {
+  background: var(--vz-border);
+  border-radius: 4px;
+}
+
+/* --- the smart-view cards (Apple's grid, our tokens) --- */
+
+#taskRail .tr-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px;
+}
+
+#taskRail .tr-card {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--tk-border);
-}
-
-#tasksModal .tk-nav-group-label {
-  padding: 2px 12px 6px;
-  color: var(--tk-muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-#tasksModal .tk-dot {
-  display: inline-block;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: var(--list-c, var(--tk-muted));
-}
-
-#tasksModal .tk-nav-add {
-  display: flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 12px;
+  gap: 3px;
+  padding: 8px 2px 6px;
   border: 0;
   border-radius: var(--vz-radius-md);
   background: transparent;
-  color: var(--tk-muted);
-  font-size: 13.5px;
-  font-weight: 500;
-  text-align: left;
+  color: var(--vz-fg-muted);
   cursor: pointer;
   transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
 }
 
-#tasksModal .tk-nav-add:hover,
-#tasksModal .tk-nav-add:focus-visible {
-  background: var(--tk-chip);
-  color: var(--tk-text);
+#taskRail:hover .tr-card,
+#taskRail:focus-within .tr-card,
+#taskRail.is-pinned .tr-card,
+#taskRail.open .tr-card {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  align-items: center;
+}
+
+#taskRail .tr-cards {
+  gap: 2px;
+}
+
+#taskRail:hover .tr-cards,
+#taskRail:focus-within .tr-cards,
+#taskRail.is-pinned .tr-cards,
+#taskRail.open .tr-cards {
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+#taskRail .tr-card:hover,
+#taskRail .tr-card:focus-visible {
+  background: var(--vz-bg-hover);
+  color: var(--vz-fg);
   outline: none;
 }
 
-#tasksModal .tk-list-add-form {
-  display: flex;
-  gap: 6px;
-  padding: 4px 6px;
+#taskRail .tr-card:focus-visible {
+  outline: 2px solid var(--vz-primary);
+  outline-offset: -2px;
 }
 
-#tasksModal .tk-list-add-form input {
+#taskRail .tr-card.is-active {
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+  box-shadow: inset 2px 0 0 var(--vz-primary);
+}
+
+#taskRail .tr-card-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  line-height: 0;
+  color: currentColor;
+}
+
+#taskRail .tr-card-count {
+  position: absolute;
+  top: -6px;
+  right: -10px;
+  min-width: 16px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg-muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+#taskRail .tr-card.is-active .tr-card-count {
+  background: var(--vz-primary);
+  color: var(--vz-primary-fg);
+}
+
+/* The calendar card's badge is today's DATE — always shown, no pill. */
+#taskRail .tr-card-count.is-date {
+  position: static;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--vz-fg);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+#taskRail .tr-card-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 550;
+  opacity: var(--tr-expanded);
+  max-height: 16px;
+  transition: opacity 0.15s var(--vz-ease);
+}
+
+#taskRail:hover .tr-card-label,
+#taskRail:focus-within .tr-card-label,
+#taskRail.is-pinned .tr-card-label,
+#taskRail.open .tr-card-label {
+  font-size: 12.5px;
+}
+
+/* --- My Lists --- */
+
+#taskRail .tr-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--vz-border);
+}
+
+#taskRail .tr-group-label {
+  padding: 2px 4px 6px;
+  color: var(--vz-fg-subtle);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: var(--tr-expanded);
+  transition: opacity 0.15s var(--vz-ease);
+}
+
+#taskRail .tr-group.is-empty {
+  display: none;
+}
+
+#taskRail .tr-list {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 6px;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg-muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
+}
+
+#taskRail .tr-list:hover,
+#taskRail .tr-list:focus-visible {
+  background: var(--vz-bg-hover);
+  color: var(--vz-fg);
+  outline: none;
+}
+
+#taskRail .tr-list.is-active {
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+  box-shadow: inset 2px 0 0 var(--list-c, var(--vz-primary));
+}
+
+#taskRail .tr-list-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+}
+
+#taskRail .tr-list-dot .tk-dot {
+  width: 11px;
+  height: 11px;
+}
+
+#taskRail .tr-list-name {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 7px 10px;
-  border: 1px solid var(--tk-accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: var(--tr-expanded);
+  transition: opacity 0.15s var(--vz-ease);
+}
+
+#taskRail .tr-list-count {
+  flex: 0 0 auto;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg-muted);
+  font-size: 10.5px;
+  font-weight: 650;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+#taskRail .tr-new-list {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 6px;
+  border: 0;
   border-radius: var(--vz-radius);
-  background: var(--tk-card);
-  color: var(--tk-text);
+  background: transparent;
+  color: var(--vz-fg-muted);
   font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
+}
+
+#taskRail .tr-new-list:hover,
+#taskRail .tr-new-list:focus-visible {
+  background: var(--vz-bg-hover);
+  color: var(--vz-fg);
   outline: none;
+}
+
+#taskRail .tr-new-list-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+}
+
+#taskRail .tr-new-list-label {
+  opacity: var(--tr-expanded);
+  transition: opacity 0.15s var(--vz-ease);
+}
+
+/* The phone drawer's backdrop. */
+#taskRailBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1035;
+  background: rgba(0, 0, 0, 0.32);
+  opacity: 0;
+  transition: opacity 0.2s var(--vz-ease);
+}
+
+#taskRailBackdrop:not([hidden]) {
+  opacity: 1;
 }
 
 /* --------------------------------------------------------------------------
-   Content pane
+   4. The hub — the aggregated page over the editor area
    -------------------------------------------------------------------------- */
 
-#tasksModal .tk-main {
-  flex: 1 1 auto;
+#tasksHub {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+  background: var(--tk-bg);
 }
 
-#tasksModal .tk-list-head {
+body.tasks-hub-open #richToolbar,
+body.tasks-hub-open #markdownToolbar,
+body.tasks-hub-open #textareaContainer .starter-template,
+body.tasks-hub-open #textareaContainer .bottom-line {
+  display: none !important;
+}
+
+.tkh-head {
   display: flex;
   align-items: center;
   gap: 10px;
   flex: 0 0 auto;
-  padding: 14px 20px 8px;
+  padding: 10px 6px 12px 2px;
 }
 
-#tasksModal .tk-list-title {
+.tkh-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--tk-muted);
+  line-height: 0;
+  cursor: pointer;
+  transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
+}
+
+.tkh-back:hover,
+.tkh-back:focus-visible {
+  background: var(--tk-well);
+  color: var(--tk-text);
+  outline: none;
+}
+
+.tkh-title {
   display: flex;
   align-items: center;
   gap: 8px;
   margin: 0;
-  font-size: 14.5px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
   color: var(--tk-text);
 }
 
-#tasksModal .tk-section-count {
-  font-size: 12.5px;
+.tkh-count {
+  font-size: 13px;
   color: var(--tk-muted);
+  font-variant-numeric: tabular-nums;
 }
 
-#tasksModal .tk-list-actions {
+.tkh-actions {
   display: inline-flex;
   gap: 6px;
   margin-left: auto;
 }
 
-#tasksModal .tk-scroll {
+.tkh-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px 20px 18px;
+  padding: 2px 2px 18px;
   scrollbar-width: thin;
   scrollbar-color: var(--tk-track) transparent;
 }
 
-#tasksModal .tk-scroll::-webkit-scrollbar {
+.tkh-scroll::-webkit-scrollbar {
   width: 8px;
 }
 
-#tasksModal .tk-scroll::-webkit-scrollbar-thumb {
+.tkh-scroll::-webkit-scrollbar-thumb {
   background: var(--tk-track);
   border-radius: 4px;
 }
 
+.tkh-composer {
+  flex: 0 0 auto;
+  padding: 10px 6px 6px 2px;
+  border-top: 1px solid var(--tk-border);
+}
+
+/* The composer's target-list chip (its dot wears the list color). */
+.tkh-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  padding: 0 10px;
+  height: 28px;
+  border: 1px solid var(--tk-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tk-muted);
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+  position: relative;
+  max-width: 150px;
+  white-space: nowrap;
+  transition: border-color 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
+}
+
+.tkh-target:hover,
+.tkh-target:focus-visible {
+  border-color: var(--tk-border-strong);
+  color: var(--tk-text);
+  outline: none;
+}
+
+.tkh-target .tk-dot {
+  width: 9px;
+  height: 9px;
+  background: var(--list-c, var(--tk-accent));
+}
+
+.tkh-target-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* --------------------------------------------------------------------------
-   Sections + task rows
+   5. Sections + task rows (page + hub share these)
    -------------------------------------------------------------------------- */
 
-#tasksModal .tk-section + .tk-section {
+.tk-section + .tk-section {
   margin-top: 6px;
 }
 
-#tasksModal .tk-section-head {
+.tk-section-head {
   padding: 12px 4px 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-#tasksModal .tk-section-head h5 {
+.tk-section-head h5 {
   margin: 0;
   font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--tk-muted);
   text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }
 
-#tasksModal .tk-section-head.is-danger h5 {
+/* The All view's per-list headings: the dot leads the words. */
+.tk-section-head h5 .tk-dot {
+  width: 8px;
+  height: 8px;
+}
+
+.tk-section-head.is-danger h5 {
   color: var(--tk-danger);
 }
 
-#tasksModal .tk-rows {
+.tk-rows {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-#tasksModal .tk-task-wrap {
+.tk-task-wrap {
   border-radius: var(--vz-radius-md);
   /* The when-popover anchors inside; the row menu class of positioning. */
   position: relative;
 }
 
-#tasksModal .tk-task {
+.tk-task {
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -510,14 +857,14 @@ body.dark #tasksModal {
   transition: background 0.12s var(--vz-ease);
 }
 
-#tasksModal .tk-task-wrap:hover .tk-task,
-#tasksModal .tk-task-wrap:focus-within .tk-task {
+.tk-task-wrap:hover .tk-task,
+.tk-task-wrap:focus-within .tk-task {
   background: var(--tk-well);
 }
 
 /* --- the circle --- */
 
-#tasksModal .tk-check {
+.tk-check {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -536,21 +883,21 @@ body.dark #tasksModal {
     transform 0.18s var(--vz-spring, var(--vz-ease)), color 0.12s var(--vz-ease);
 }
 
-#tasksModal .tk-check:hover {
+.tk-check:hover {
   border-color: var(--list-c, var(--tk-accent));
   box-shadow: 0 0 0 3px var(--tk-well);
 }
 
-#tasksModal .tk-check:focus-visible {
+.tk-check:focus-visible {
   outline: 2px solid var(--tk-accent);
   outline-offset: 2px;
 }
 
-#tasksModal .tk-check:active {
+.tk-check:active {
   transform: scale(0.88);
 }
 
-#tasksModal .tk-check svg {
+.tk-check svg {
   width: 14px;
   height: 14px;
   /* The check draws itself on. */
@@ -559,19 +906,19 @@ body.dark #tasksModal {
   transition: stroke-dashoffset 0.22s var(--vz-ease) 0.05s;
 }
 
-#tasksModal .tk-task.is-done .tk-check {
+.tk-task.is-done .tk-check {
   background: var(--list-c, var(--tk-accent));
   border-color: var(--list-c, var(--tk-accent));
   color: #fff;
 }
 
-#tasksModal .tk-task.is-done .tk-check svg {
+.tk-task.is-done .tk-check svg {
   stroke-dashoffset: 0;
 }
 
 /* --- the words --- */
 
-#tasksModal .tk-task-main {
+.tk-task-main {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -587,7 +934,7 @@ body.dark #tasksModal {
   cursor: text;
 }
 
-#tasksModal .tk-title {
+.tk-title {
   font-size: 13.5px;
   font-weight: 450;
   line-height: 1.4;
@@ -596,13 +943,13 @@ body.dark #tasksModal {
   transition: color 0.18s var(--vz-ease);
 }
 
-#tasksModal .tk-task.is-done .tk-title {
+.tk-task.is-done .tk-title {
   color: var(--tk-muted);
   text-decoration: line-through;
   text-decoration-color: var(--tk-border-strong);
 }
 
-#tasksModal .tk-notes {
+.tk-notes {
   font-size: 12px;
   line-height: 1.4;
   color: var(--tk-muted);
@@ -613,14 +960,44 @@ body.dark #tasksModal {
   overflow-wrap: anywhere;
 }
 
-#tasksModal .tk-task.is-done .tk-notes {
+.tk-task.is-done .tk-notes {
   text-decoration: line-through;
   text-decoration-color: var(--tk-border);
 }
 
+/* --- the origin chip (the hub's aggregated rows) --- */
+
+.tk-origin {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 1px 0 -1px;
+  padding: 1px 8px 1px 2px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tk-muted);
+  font-size: 11.5px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease), color 0.12s var(--vz-ease);
+}
+
+.tk-origin:hover,
+.tk-origin:focus-visible {
+  background: var(--tk-chip);
+  color: var(--tk-text);
+  outline: none;
+}
+
+.tk-origin .tk-dot {
+  width: 8px;
+  height: 8px;
+}
+
 /* --- the chips under a title --- */
 
-#tasksModal .tk-chips {
+.tk-chips {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -628,7 +1005,7 @@ body.dark #tasksModal {
   margin-top: 1px;
 }
 
-#tasksModal .tk-chip {
+.tk-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -637,34 +1014,34 @@ body.dark #tasksModal {
   font-variant-numeric: tabular-nums;
 }
 
-#tasksModal .tk-chip svg {
+.tk-chip svg {
   opacity: 0.75;
 }
 
-#tasksModal .tk-chip.is-overdue {
+.tk-chip.is-overdue {
   color: var(--tk-danger);
   font-weight: 600;
 }
 
-#tasksModal .tk-prio {
+.tk-prio {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
 
-#tasksModal .tk-prio-low {
+.tk-prio-low {
   color: var(--tk-blue);
 }
 
-#tasksModal .tk-prio-medium {
+.tk-prio-medium {
   color: var(--tk-star);
 }
 
-#tasksModal .tk-prio-high {
+.tk-prio-high {
   color: var(--tk-danger);
 }
 
-#tasksModal .tk-flag {
+.tk-flag {
   display: inline-flex;
   color: var(--tk-star);
   line-height: 0;
@@ -672,7 +1049,7 @@ body.dark #tasksModal {
 
 /* --- the ⓘ --- */
 
-#tasksModal .tk-info {
+.tk-info {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -690,58 +1067,58 @@ body.dark #tasksModal {
   transition: background 0.12s var(--vz-ease), color 0.12s var(--vz-ease);
 }
 
-#tasksModal .tk-task-wrap:hover .tk-info,
-#tasksModal .tk-task-wrap:focus-within .tk-info,
-#tasksModal .tk-task-wrap.is-editing .tk-info {
+.tk-task-wrap:hover .tk-info,
+.tk-task-wrap:focus-within .tk-info,
+.tk-task-wrap.is-editing .tk-info {
   opacity: 1;
 }
 
 @media (hover: none) {
-  #tasksModal .tk-info {
+  .tk-info {
     opacity: 0.7;
   }
 }
 
-#tasksModal .tk-info:hover {
+.tk-info:hover {
   background: var(--tk-chip);
   color: var(--tk-text);
 }
 
-#tasksModal .tk-info:focus-visible {
+.tk-info:focus-visible {
   outline: 2px solid var(--tk-accent);
   outline-offset: -2px;
   opacity: 1;
 }
 
 /* --------------------------------------------------------------------------
-   Drag affordance
+   6. Drag affordance
    -------------------------------------------------------------------------- */
 
-#tasksModal .tk-task-wrap.is-draggable .tk-task {
+.tk-task-wrap.is-draggable .tk-task {
   cursor: grab;
 }
 
-#tasksModal .tk-task-wrap.is-draggable .tk-task-main {
+.tk-task-wrap.is-draggable .tk-task-main {
   cursor: inherit;
 }
 
-#tasksModal .tk-task-wrap.is-dragging .tk-task {
+.tk-task-wrap.is-dragging .tk-task {
   opacity: 0.35;
 }
 
-#tasksModal .tk-task-wrap.is-drag-over {
+.tk-task-wrap.is-drag-over {
   box-shadow: inset 0 2px 0 var(--list-c, var(--tk-accent));
 }
 
 /* --------------------------------------------------------------------------
-   The completed block
+   7. The completed block
    -------------------------------------------------------------------------- */
 
-#tasksModal .tk-done-block {
+.tk-done-block {
   margin-top: 6px;
 }
 
-#tasksModal .tk-done-toggle {
+.tk-done-toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -756,26 +1133,26 @@ body.dark #tasksModal {
   transition: color 0.15s var(--vz-ease), background 0.15s var(--vz-ease);
 }
 
-#tasksModal .tk-done-toggle:hover,
-#tasksModal .tk-done-toggle:focus-visible {
+.tk-done-toggle:hover,
+.tk-done-toggle:focus-visible {
   color: var(--tk-text);
   background: var(--tk-well);
   outline: none;
 }
 
-#tasksModal .tk-done-toggle .tk-caret {
+.tk-done-toggle .tk-caret {
   transition: transform 0.15s var(--vz-ease);
 }
 
-#tasksModal .tk-done-toggle[aria-expanded='true'] .tk-caret {
+.tk-done-toggle[aria-expanded='true'] .tk-caret {
   transform: rotate(90deg);
 }
 
 /* --------------------------------------------------------------------------
-   The inline detail editor
+   8. The inline detail editor
    -------------------------------------------------------------------------- */
 
-#tasksModal .tk-editor {
+.tk-editor {
   position: relative;
   margin: 0 4px 6px;
   padding: 10px 12px 10px;
@@ -797,7 +1174,7 @@ body.dark #tasksModal {
   }
 }
 
-#tasksModal .tk-editor-title {
+.tk-editor-title {
   width: 100%;
   padding: 6px 8px;
   border: 1px solid var(--tk-border);
@@ -810,12 +1187,12 @@ body.dark #tasksModal {
   transition: border-color 0.15s var(--vz-ease), box-shadow 0.15s var(--vz-ease);
 }
 
-#tasksModal .tk-editor-title:focus {
+.tk-editor-title:focus {
   border-color: var(--tk-accent);
   box-shadow: 0 0 0 3px var(--tk-well);
 }
 
-#tasksModal .tk-editor-notes {
+.tk-editor-notes {
   width: 100%;
   margin-top: 8px;
   padding: 8px;
@@ -832,20 +1209,20 @@ body.dark #tasksModal {
   transition: border-color 0.15s var(--vz-ease), box-shadow 0.15s var(--vz-ease);
 }
 
-#tasksModal .tk-editor-notes:focus {
+.tk-editor-notes:focus {
   border-color: var(--tk-accent);
   box-shadow: 0 0 0 3px var(--tk-well);
 }
 
 /* Placeholders follow the app's muted ink — the UA default gray is too
    faint in dark mode (caught in the dark-theme review). */
-#tasksModal .tk-editor-title::placeholder,
-#tasksModal .tk-editor-notes::placeholder {
+.tk-editor-title::placeholder,
+.tk-editor-notes::placeholder {
   color: var(--tk-muted);
   opacity: 1;
 }
 
-#tasksModal .tk-editor-chips {
+.tk-editor-chips {
   position: relative;
   display: flex;
   align-items: center;
@@ -854,28 +1231,12 @@ body.dark #tasksModal {
   margin-top: 10px;
 }
 
-#tasksModal .tk-editor-spacer {
+.tk-editor-spacer {
   flex: 1 1 auto;
 }
 
-#tasksModal .tk-editor-list {
-  max-width: 150px;
-  padding: 4px 6px;
-  border: 1px solid var(--tk-border);
-  border-radius: 999px;
-  background: var(--tk-card);
-  color: var(--tk-text);
-  font-size: 12px;
-  cursor: pointer;
-  outline: none;
-}
-
-#tasksModal .tk-editor-list:focus-visible {
-  border-color: var(--tk-accent);
-}
-
 /* The chip button — shared by composer + editor + view actions. */
-#tasksModal .tk-chip-btn {
+.tk-chip-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -890,55 +1251,52 @@ body.dark #tasksModal {
   transition: all 0.15s var(--vz-ease);
 }
 
-#tasksModal .tk-chip-btn:hover,
-#tasksModal .tk-chip-btn:focus-visible {
+.tk-chip-btn:hover,
+.tk-chip-btn:focus-visible {
   border-color: var(--tk-border-strong);
   color: var(--tk-text);
   outline: none;
 }
 
-#tasksModal .tk-chip-btn.is-set {
+.tk-chip-btn.is-set {
   border-color: var(--tk-accent);
   color: var(--tk-text);
   background: var(--tk-well);
 }
 
-#tasksModal .tk-chip-btn.tk-chip-danger:hover,
-#tasksModal .tk-chip-btn.tk-chip-danger:focus-visible {
+.tk-chip-btn.tk-chip-danger:hover,
+.tk-chip-btn.tk-chip-danger:focus-visible {
   border-color: var(--tk-danger);
   color: var(--tk-danger);
 }
 
-#tasksModal .tk-chip-btn.tk-chip-danger.is-set {
+.tk-chip-btn.tk-chip-danger.is-set {
   border-color: var(--tk-danger);
   color: var(--tk-danger);
   background: transparent;
 }
 
-#tasksModal .tk-chip-btn[aria-pressed='true'] {
+.tk-chip-btn[aria-pressed='true'] {
   border-color: var(--tk-star);
   color: var(--tk-star);
 }
 
 /* --------------------------------------------------------------------------
-   The composer (the bottom bar)
+   9. The composer (the bottom bar — page + hub share it)
    -------------------------------------------------------------------------- */
 
-#tasksModal .tk-composer {
-  flex: 0 0 auto;
-  padding: 10px 18px;
-  border-top: 1px solid var(--tk-border);
-  background: var(--tk-card);
+.tk-composer {
+  position: relative;
 }
 
-#tasksModal .tk-composer-row {
+.tk-composer-row {
   display: flex;
   align-items: center;
   gap: 12px;
   position: relative;
 }
 
-#tasksModal .tk-composer-add {
+.tk-composer-add {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -954,18 +1312,18 @@ body.dark #tasksModal {
   transition: color 0.15s var(--vz-ease), background 0.15s var(--vz-ease), transform 0.12s var(--vz-ease);
 }
 
-#tasksModal .tk-composer-add:hover,
-#tasksModal .tk-composer-add:focus-visible {
+.tk-composer-add:hover,
+.tk-composer-add:focus-visible {
   color: var(--list-c, var(--tk-accent));
   background: var(--tk-well);
   outline: none;
 }
 
-#tasksModal .tk-composer-add:active {
+.tk-composer-add:active {
   transform: scale(0.9);
 }
 
-#tasksModal .tk-composer-input {
+.tk-composer-input {
   flex: 1 1 auto;
   min-width: 0;
   padding: 6px 0;
@@ -976,11 +1334,11 @@ body.dark #tasksModal {
   outline: none;
 }
 
-#tasksModal .tk-composer-input::placeholder {
+.tk-composer-input::placeholder {
   color: var(--tk-muted);
 }
 
-#tasksModal .tk-composer-details {
+.tk-composer-details {
   position: relative;
   display: flex;
   align-items: center;
@@ -991,11 +1349,11 @@ body.dark #tasksModal {
 }
 
 /* --------------------------------------------------------------------------
-   Popovers — the when-picker, the priority menu, the move menu
+   10. Popovers — the when-picker, the menus
    -------------------------------------------------------------------------- */
 
-#tasksModal .tk-when,
-#tasksModal .tk-menu {
+.tk-when,
+.tk-menu {
   position: absolute;
   z-index: 40;
   display: flex;
@@ -1021,14 +1379,29 @@ body.dark #tasksModal {
   }
 }
 
-#tasksModal .tk-when {
+/* Opens upward — both composers sit at their floor. */
+.tk-when {
   min-width: 248px;
-  /* Opens upward — the composer sits at the modal's floor. */
   bottom: calc(100% + 8px);
   left: 0;
 }
 
-#tasksModal .tk-when-presets {
+/* The editor's popovers open DOWN from the chips. */
+.tk-editor-chips > .tk-when,
+.tk-editor-chips > .tk-menu {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
+
+/* The header's color menu opens DOWN too: its button sits at the top of
+   the editor column, and an upward menu would extend past the column's
+   top edge into the fixed navbar's band (z 1035 > 40) — unreachable. */
+.tkp-color > .tk-menu {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
+
+.tk-when-presets {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 4px;
@@ -1036,14 +1409,14 @@ body.dark #tasksModal {
   border-bottom: 1px solid var(--tk-border);
 }
 
-#tasksModal .tk-when-inputs {
+.tk-when-inputs {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding-top: 6px;
 }
 
-#tasksModal .tk-when-field {
+.tk-when-field {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1052,7 +1425,7 @@ body.dark #tasksModal {
   font-size: 12.5px;
 }
 
-#tasksModal .tk-when-field input {
+.tk-when-field input {
   padding: 5px 7px;
   border: 1px solid var(--tk-border);
   border-radius: var(--vz-radius);
@@ -1063,23 +1436,23 @@ body.dark #tasksModal {
   outline: none;
 }
 
-#tasksModal .tk-when-field input:focus {
+.tk-when-field input:focus {
   border-color: var(--tk-accent);
 }
 
-#tasksModal .tk-when-foot {
+.tk-when-foot {
   display: flex;
   justify-content: flex-end;
   padding-top: 2px;
 }
 
-#tasksModal .tk-menu {
+.tk-menu {
   min-width: 170px;
   bottom: calc(100% + 6px);
   left: 0;
 }
 
-#tasksModal .tk-menu-label {
+.tk-menu-label {
   padding: 2px 8px 4px;
   color: var(--tk-muted);
   font-size: 11px;
@@ -1088,7 +1461,7 @@ body.dark #tasksModal {
   text-transform: uppercase;
 }
 
-#tasksModal .tk-menu-item {
+.tk-menu-item {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -1103,18 +1476,18 @@ body.dark #tasksModal {
   transition: background 0.12s var(--vz-ease);
 }
 
-#tasksModal .tk-menu-item:hover,
-#tasksModal .tk-menu-item:focus-visible {
+.tk-menu-item:hover,
+.tk-menu-item:focus-visible {
   background: var(--tk-well);
   outline: none;
 }
 
-#tasksModal .tk-menu-item.is-on {
+.tk-menu-item.is-on {
   font-weight: 600;
   box-shadow: inset 2px 0 0 var(--tk-accent);
 }
 
-#tasksModal .tk-menu-item .tk-menu-label {
+.tk-menu-item .tk-menu-label {
   padding: 0;
   font-size: 13px;
   font-weight: inherit;
@@ -1123,33 +1496,44 @@ body.dark #tasksModal {
   color: inherit;
 }
 
+.tk-menu-item .tk-dot {
+  width: 10px;
+  height: 10px;
+}
+
+/* The color palette items. */
+.tk-color-item .tk-dot {
+  width: 13px;
+  height: 13px;
+}
+
 /* --------------------------------------------------------------------------
-   Empty states
+   11. Empty states
    -------------------------------------------------------------------------- */
 
-#tasksModal .tk-empty {
+.tk-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 72px 24px;
+  padding: 64px 24px;
   text-align: center;
 }
 
-#tasksModal .tk-empty > svg {
+.tk-empty > svg {
   color: var(--tk-muted);
   opacity: 0.7;
 }
 
-#tasksModal .tk-empty-title {
+.tk-empty-title {
   margin: 10px 0 0;
   font-size: 15px;
   font-weight: 600;
   color: var(--tk-text);
 }
 
-#tasksModal .tk-empty-sub {
+.tk-empty-sub {
   margin: 0;
   max-width: 340px;
   font-size: 13px;
@@ -1158,9 +1542,208 @@ body.dark #tasksModal {
 }
 
 /* --------------------------------------------------------------------------
-   Reminder toasts (page-level, bottom-right — fired by reminders.ts even
-   while the modal is closed). Sits above the bottom-line pills like the
-   mini player does.
+   12. The ONE calendar
+   -------------------------------------------------------------------------- */
+
+.tkcal {
+  display: grid;
+  grid-template-columns: minmax(300px, 400px) 1fr;
+  gap: 26px;
+  align-items: start;
+}
+
+.tkcal-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 2px 10px;
+}
+
+.tkcal-month {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--tk-text);
+}
+
+.tkcal-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--tk-muted);
+  line-height: 0;
+  cursor: pointer;
+  transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
+}
+
+.tkcal-nav:hover,
+.tkcal-nav:focus-visible {
+  background: var(--tk-well);
+  color: var(--tk-text);
+  outline: none;
+}
+
+.tkcal-today {
+  margin-left: auto;
+}
+
+.tkcal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  padding: 0 2px 4px;
+}
+
+.tkcal-weekday {
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 650;
+  color: var(--tk-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tkcal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.tkcal-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-height: 46px;
+  padding: 5px 2px 4px;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--tk-text);
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease);
+}
+
+.tkcal-day:hover,
+.tkcal-day:focus-visible {
+  background: var(--tk-well);
+  outline: none;
+}
+
+.tkcal-day.is-outside {
+  color: var(--tk-muted);
+  opacity: 0.45;
+}
+
+.tkcal-day.is-outside .tkcal-dot {
+  opacity: 0.5;
+}
+
+.tkcal-num {
+  font-size: 12.5px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  min-width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.tkcal-day.is-today .tkcal-num {
+  background: var(--tk-accent);
+  color: var(--tk-accent-contrast);
+  font-weight: 700;
+}
+
+.tkcal-day.is-selected {
+  background: var(--tk-well);
+  box-shadow: inset 0 0 0 1.5px var(--tk-accent);
+}
+
+.tkcal-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 10px;
+}
+
+.tkcal-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--list-c, var(--tk-accent));
+}
+
+.tkcal-more {
+  font-size: 9.5px;
+  font-weight: 650;
+  color: var(--tk-muted);
+}
+
+.tkcal-day-pane {
+  min-width: 0;
+}
+
+.tkcal-day-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px 10px;
+}
+
+.tkcal-day-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--tk-text);
+}
+
+.tkcal-day-count {
+  font-size: 12.5px;
+  color: var(--tk-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tkcal-day-head .tk-chip-btn {
+  margin-left: auto;
+}
+
+.tk-empty-day {
+  padding: 28px 8px;
+  font-size: 13px;
+  color: var(--tk-muted);
+}
+
+/* --------------------------------------------------------------------------
+   13. The tab strip's list badge (outside every scope — the palette vars
+       are global, see the tokens above)
+   -------------------------------------------------------------------------- */
+
+.tab-strip-list-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tk-blue);
+}
+
+.tab-strip-list-dot[data-color='red'] { background: var(--tk-red); }
+.tab-strip-list-dot[data-color='orange'] { background: var(--tk-orange); }
+.tab-strip-list-dot[data-color='green'] { background: var(--tk-green); }
+.tab-strip-list-dot[data-color='purple'] { background: var(--tk-purple); }
+.tab-strip-list-dot[data-color='teal'] { background: var(--tk-teal); }
+
+/* --------------------------------------------------------------------------
+   14. Reminder toasts (page-level, bottom-right — fired by the sweep even
+       with no tasks page open). Sits above the bottom-line pills like the
+       mini player does.
    -------------------------------------------------------------------------- */
 
 .tk-remind-stack {
@@ -1268,7 +1851,7 @@ body.dark #tasksModal {
 }
 
 /* --------------------------------------------------------------------------
-   Confetti (the all-done celebration — canvas, no dependency)
+   15. Confetti (the all-done celebration — canvas, no dependency)
    -------------------------------------------------------------------------- */
 
 .tk-confetti {
@@ -1279,108 +1862,80 @@ body.dark #tasksModal {
 }
 
 /* --------------------------------------------------------------------------
-   Responsive
+   16. Responsive
    -------------------------------------------------------------------------- */
 
-@media (max-width: 767px) {
-  #tasksModal .tk-dialog {
-    margin: 8px auto;
-    width: calc(100vw - 16px);
+@media (max-width: 1020px) {
+  .tkcal {
+    grid-template-columns: 1fr;
   }
-  #tasksModal .tk-content {
-    height: calc(100vh - 16px);
+}
+
+@media (max-width: 820px) {
+  /* The rail is a drawer on phones — the topbar's Reminders button opens
+     it over a backdrop (the notes rail's pattern, mirrored). */
+  #taskRail {
+    position: fixed;
+    top: var(--navbar-h, 56px);
+    right: 0;
+    bottom: 0;
+    z-index: 1040;
+    flex-basis: 288px;
+    width: 288px;
+    --tr-expanded: 1;
+    border-left: 1px solid var(--vz-border);
+    box-shadow: var(--vz-shadow-dialog);
+    transform: translateX(100%);
+    transition: transform 0.22s var(--vz-ease);
   }
 
-  #tasksModal .tk-body {
-    flex-direction: column;
+  #taskRail.open {
+    transform: none;
   }
 
-  #tasksModal .tk-nav {
-    flex: 0 0 auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--tk-border);
+  #taskRailBackdrop {
+    z-index: 1035;
   }
 
-  #tasksModal .tk-search {
-    margin: 10px 10px 2px;
+  #taskRail .tr-cards {
+    grid-template-columns: 1fr 1fr;
   }
 
-  #tasksModal .tk-nav-scroll {
+  #taskRail .tr-card {
     flex-direction: row;
-    flex-wrap: nowrap;
-    gap: 4px;
-    padding: 8px 10px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 9px 10px;
+    align-items: center;
   }
 
-  #tasksModal .tk-nav-scroll::-webkit-scrollbar {
-    display: none;
+  .tkh-title {
+    font-size: 19px;
   }
 
-  #tasksModal .tk-nav-item {
-    flex: 0 0 auto;
-    padding: 7px 12px;
-    border: 1px solid var(--tk-border);
-    border-radius: 999px;
-    background: var(--tk-card);
-  }
-
-  #tasksModal .tk-nav-item.is-active {
-    border-color: var(--list-c, var(--tk-accent));
-    box-shadow: none;
-    color: var(--list-c, var(--tk-accent));
-  }
-
-  #tasksModal .tk-nav-count {
-    margin-left: 6px;
-  }
-
-  /* The "My Lists" group flattens into the same pill rail; the Add List
-     button stays reachable as a compact pill at the end. */
-  #tasksModal .tk-nav-group {
-    display: contents;
-  }
-
-  #tasksModal .tk-nav-group-label {
-    display: none;
-  }
-
-  #tasksModal .tk-nav-add {
-    flex: 0 0 auto;
-    padding: 7px 13px;
-    border: 1px solid var(--tk-border);
-    border-radius: 999px;
-    background: var(--tk-card);
-  }
-
-  #tasksModal .tk-list-add-form {
-    flex: 0 0 auto;
-    padding: 0;
-  }
-
-  #tasksModal .tk-list-add-form input {
-    width: 120px;
-  }
-
-  #tasksModal .tk-composer-details {
+  .tk-composer-details {
     padding-left: 0;
+  }
+
+  .tkp-title {
+    font-size: 20px;
   }
 }
 
 /* Reduce motion: no drawing, no popping, no confetti. */
 @media (prefers-reduced-motion: reduce) {
-  #tasksModal .tk-check svg,
-  #tasksModal .tk-editor,
-  #tasksModal .tk-composer-details,
-  #tasksModal .tk-when,
-  #tasksModal .tk-menu {
+  #taskRail,
+  #taskRail .tr-search,
+  .tk-check svg,
+  .tk-editor,
+  .tk-composer-details,
+  .tk-when,
+  .tk-menu {
     animation: none;
     transition: none;
   }
 
-  #tasksModal .tk-check svg {
+  .tk-check svg {
     stroke-dashoffset: 0;
   }
 }

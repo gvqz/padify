@@ -32,7 +32,7 @@ import { initSnapshots } from './snapshots';
 import { initTimer } from './timer';
 import { mountMusicPlayer } from './features/music-player/markup';
 import { loadPlayerState } from './features/music-player/state';
-import { mountTasks } from './features/tasks/markup';
+import { mountTasksMarkup } from './features/tasks/markup';
 import { initContextMenu } from './context-menu';
 import { initBreakReminder } from './break-reminder';
 import { mountModals } from './ui/modals';
@@ -86,10 +86,11 @@ export async function bootPadify(): Promise<void> {
   initTimer({ musicVolume: () => loadPlayerState().volume });
   initTooltips(); // after initTimer so the timer modal's tooltip is covered
   mountMusicPlayer();
-  // The Reminders modal's markup mounts beside the player's (pure markup
-  // from the feature's markup module); its controller loads on the first
-  // attempt to open the modal — app.ts's initTasksSubsystem.
-  mountTasks();
+  // The tasks hub container mounts beside the note surface inside the
+  // editor column (pure markup from the feature's markup module); the
+  // rail is app chrome in editor-shell.html. Controllers wire in app.ts
+  // (initTasks).
+  mountTasksMarkup();
   initSnapshots();
   initContextMenu();
   // The break popup's controls live in a modal partial — they can only be

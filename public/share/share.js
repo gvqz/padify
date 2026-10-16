@@ -140,6 +140,20 @@ function render(row) {
     return;
   }
 
+  if (String(row.note_type) === 'tasks') {
+    // A shared task list renders as the checklist it is — not the JSON
+    // that stores it. Every user string goes through textContent; the
+    // only markup here is built by this branch itself.
+    const body = row.content == null ? row.html : row.content;
+    try {
+      const model = JSON.parse(String(body == null ? '' : body));
+      renderTaskList(content, model);
+      return;
+    } catch {
+      /* damaged payload — the raw fallback below is the honest answer */
+    }
+  }
+
   // Any other non-html note (a board's JSON, a newer type): honest raw
   // text, never markup. The <pre> keeps structure readable.
   const pre = document.createElement('pre');
@@ -147,6 +161,68 @@ function render(row) {
   const raw = row.content == null ? row.html : row.content;
   pre.textContent = String(raw == null ? '' : raw);
   content.appendChild(pre);
+}
+
+/** A shared task list: colored circles, titles, chips — read-only. */
+function renderTaskList(content, model) {
+  var tasks = Array.isArray(model.tasks) ? model.tasks : [];
+  var color = ['blue', 'red', 'orange', 'green', 'purple', 'teal'].indexOf(model.color) >= 0
+    ? model.color
+    : 'blue';
+  var list = document.createElement('div');
+  list.className = 'share-task-list tk-c-' + color;
+  if (tasks.length === 0) {
+    var empty = document.createElement('p');
+    empty.className = 'share-task-empty';
+    empty.textContent = 'This list is empty.';
+    list.appendChild(empty);
+  }
+  tasks.forEach(function (task) {
+    var row = document.createElement('div');
+    row.className = 'share-task' + (task.completed ? ' is-done' : '');
+    var check = document.createElement('span');
+    check.className = 'share-task-check';
+    check.setAttribute('aria-hidden', 'true');
+    check.textContent = task.completed ? '\u2713' : '';
+    var words = document.createElement('span');
+    words.className = 'share-task-words';
+    var title = document.createElement('span');
+    title.className = 'share-task-title';
+    title.textContent = String(task.title || '');
+    words.appendChild(title);
+    if (task.notes) {
+      var notes = document.createElement('span');
+      notes.className = 'share-task-notes';
+      notes.textContent = String(task.notes);
+      words.appendChild(notes);
+    }
+    var meta = [];
+    if (task.dueDate) meta.push('due ' + shortDate(task.dueDate));
+    if (task.reminderAt) meta.push('reminds ' + shortDate(task.reminderAt));
+    if (task.flagged) meta.push('flagged');
+    if (task.priority && task.priority !== 'none') meta.push(task.priority + ' priority');
+    if (meta.length > 0) {
+      var chips = document.createElement('span');
+      chips.className = 'share-task-chips';
+      chips.textContent = meta.join(' · ');
+      words.appendChild(chips);
+    }
+    row.appendChild(check);
+    row.appendChild(words);
+    list.appendChild(row);
+  });
+  content.appendChild(list);
+}
+
+/** ISO → "Mar 3" / "Mar 3, 5:00 PM" — the chips' compression. */
+function shortDate(iso) {
+  var date = new Date(iso);
+  if (isNaN(date.getTime())) return '';
+  var out = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  if (date.getHours() !== 0 || date.getMinutes() !== 0) {
+    out += ', ' + date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  }
+  return out;
 }
 
 function fail(kind) {

@@ -32,6 +32,23 @@ async function createRichNote(page: Page): Promise<void> {
   await expect(page.locator('#richToolbar')).toBeVisible();
 }
 
+/**
+ * Drains the app's save pipeline deterministically: captures the live
+ * editor into the model, persists immediately (no 500+400ms debounce
+ * roulette), and waits for the IndexedDB write to settle. Tests that
+ * then rewrite the stored row by hand can do so without the page's
+ * pagehide flush re-persisting the stale model over their edit.
+ */
+async function settleSaves(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const tabs = (await import('/src/tabs.ts')) as typeof import('/src/tabs.ts');
+    tabs.getTabManager()?.syncAfterExternalEdit();
+    const storage =
+      (await import('/src/storage/index.ts')) as typeof import('/src/storage/index.ts');
+    await storage.whenNotesIdle();
+  });
+}
+
 /** True when #note's placeholder pseudo-element is painted. */
 const placeholderPainted = (page: Page): Promise<boolean> =>
   page.locator('#note').evaluate((node) => getComputedStyle(node, '::before').content !== 'none');
@@ -69,7 +86,7 @@ test.describe('the empty-state placeholder', () => {
     // engine stores the newline as text — legacy notes carry the br).
     await page.locator('#note').click();
     await page.keyboard.type('seed');
-    await page.waitForTimeout(700);
+    await settleSaves(page);
     await page.evaluate(async () => {
       const request = indexedDB.open('padify');
       const database: IDBDatabase = await new Promise((resolve, reject) => {
@@ -131,7 +148,7 @@ test.describe('the empty-state placeholder', () => {
     await createRichNote(page);
     await page.locator('#note').click();
     await page.keyboard.type('seed');
-    await page.waitForTimeout(700);
+    await settleSaves(page);
     await page.evaluate(async () => {
       const request = indexedDB.open('padify');
       const database: IDBDatabase = await new Promise((resolve, reject) => {

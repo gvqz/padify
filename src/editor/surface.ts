@@ -53,6 +53,13 @@ export interface SurfaceNote {
   noteType?: string;
   /** The theme the note's inline colors were last written under. */
   colorTheme?: 'light' | 'dark';
+  /**
+   * The note's tab id + name, when the caller has them (NoteTab carries
+   * both). The tasks surface uses them: its page title IS the note name
+   * (renaming it renames the note), and its move menus need the id.
+   */
+  id?: string;
+  name?: string | null;
 }
 
 /** What one note kind shows in the editor host. */

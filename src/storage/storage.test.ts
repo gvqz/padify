@@ -287,6 +287,97 @@ describe('notes repository', () => {
 });
 
 // ---------------------------------------------------------------------------
+// mirror reconciliation — the pagehide durability sweep (kv's sibling)
+// ---------------------------------------------------------------------------
+
+describe('mirror reconciliation (pagehide durability)', () => {
+  beforeEach(freshBoot);
+
+  it('recovers a newer mirror row the dying page flushed after its IndexedDB write', async () => {
+    // The committed state…
+    saveNotes({ tabs: [note('a', 'old words', 10)], tombstones: [] }, 'a');
+    await whenNotesIdle();
+
+    // …then the page died mid-flush: the mirror carried the last edit,
+    // the database did not.
+    localStorage.setItem(
+      'padifyTabs',
+      JSON.stringify([{ ...note('a', 'last words', 20), name: 'Journal' }]),
+    );
+
+    await reboot();
+
+    const snapshot = await loadNotes();
+    expect(snapshot.tabs).toHaveLength(1);
+    expect(snapshot.tabs[0].content).toBe('last words');
+    expect(snapshot.tabs[0].name).toBe('Journal');
+    expect(snapshot.tabs[0].updatedAt).toBe(20);
+
+    // The heal: the rescue re-upserted into the database, so a second
+    // boot (mirror now matching) needs no rescue at all.
+    await reboot();
+    const again = await loadNotes();
+    expect(again.tabs[0].content).toBe('last words');
+  });
+
+  it('an older mirror row never beats a committed newer one', async () => {
+    saveNotes({ tabs: [note('a', 'fresh db', 20)], tombstones: [] }, 'a');
+    await whenNotesIdle();
+
+    localStorage.setItem('padifyTabs', JSON.stringify([note('a', 'stale mirror', 10)]));
+
+    await reboot();
+
+    const snapshot = await loadNotes();
+    expect(snapshot.tabs[0].content).toBe('fresh db');
+  });
+
+  it('re-applies a lost delete — a newer mirror tombstone wins over the live row', async () => {
+    saveNotes({ tabs: [note('a', 'about to die', 10)], tombstones: [] }, 'a');
+    await whenNotesIdle();
+
+    // The deletion's pagehide flush: the tombstone reached the mirror,
+    // the database's delete died.
+    localStorage.setItem('padifyTabs', JSON.stringify([]));
+    localStorage.setItem('padifyTabTombstones', JSON.stringify([{ id: 'a', updatedAt: 20 }]));
+
+    await reboot();
+
+    const snapshot = await loadNotes();
+    expect(snapshot.tabs).toHaveLength(0);
+    expect(snapshot.tombstones).toEqual([{ id: 'a', updatedAt: 20 }]);
+  });
+
+  it('keeps the live row when the committed state is newer than the mirror tombstone', async () => {
+    saveNotes({ tabs: [note('a', 'still here', 30)], tombstones: [] }, 'a');
+    await whenNotesIdle();
+
+    localStorage.setItem('padifyTabTombstones', JSON.stringify([{ id: 'a', updatedAt: 20 }]));
+
+    await reboot();
+
+    const snapshot = await loadNotes();
+    expect(snapshot.tabs).toHaveLength(1);
+  });
+
+  it('adopts a note the dying page created in its last moments', async () => {
+    saveNotes({ tabs: [note('a', 'stable', 10)], tombstones: [] }, 'a');
+    await whenNotesIdle();
+
+    localStorage.setItem(
+      'padifyTabs',
+      JSON.stringify([note('a', 'stable', 10), note('new', 'born at pagehide', 20)]),
+    );
+
+    await reboot();
+
+    const snapshot = await loadNotes();
+    expect(snapshot.tabs.map((tab) => tab.id)).toEqual(['a', 'new']);
+    expect(snapshot.tabs[1].content).toBe('born at pagehide');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // compatibility mirror (legacy localStorage blobs)
 // ---------------------------------------------------------------------------
 

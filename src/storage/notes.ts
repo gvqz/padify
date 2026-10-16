@@ -406,6 +406,87 @@ export function parseLegacyNoteRecords(): NoteRecord[] {
 }
 
 // ---------------------------------------------------------------------------
+// Mirror reconciliation (the notes sibling of kv's reconcile)
+// ---------------------------------------------------------------------------
+
+/**
+ * Boot hook (IndexedDB mode): the durability sweep. The legacy mirror is
+ * written SYNCHRONOUSLY at pagehide, while the IndexedDB write issued in
+ * the same breath can die with the page — so the newest state of a note
+ * can exist only in localStorage. For every mirror row strictly newer
+ * than its committed IndexedDB row, the mirror copy is the truth: a
+ * lost edit recovers, a lost delete re-applies so the note cannot
+ * resurrect.
+ *
+ * Rescued rows deliberately keep their STALE diff-index seeds (and new
+ * ids get none), so the next saveNotes diffs them as changed and
+ * re-upserts them into the database — index.ts triggers that heal
+ * immediately. Returns true when anything was rescued.
+ */
+export function reconcileNotesFromMirror(): boolean {
+  if (storageBackend() === 'local-storage' || !bootSnapshot) {
+    return false;
+  }
+  const mirror = loadLegacySnapshot();
+  if (mirror.tabs.length === 0 && mirror.tombstones.length === 0) {
+    return false;
+  }
+
+  const liveById = new Map(bootSnapshot.tabs.map((tab) => [tab.id, tab]));
+  const tombstones = new Map(bootSnapshot.tombstones.map((grave) => [grave.id, grave]));
+  let changed = false;
+
+  // Lost deletes re-apply — unless the committed row is at least as new
+  // (a delete followed by edits that DID commit wins over the tombstone).
+  for (const grave of mirror.tombstones) {
+    const live = liveById.get(grave.id);
+    const existing = tombstones.get(grave.id);
+    if (
+      (live !== undefined && live.updatedAt >= grave.updatedAt) ||
+      (existing !== undefined && existing.updatedAt >= grave.updatedAt)
+    ) {
+      continue;
+    }
+    liveById.delete(grave.id);
+    tombstones.set(grave.id, grave);
+    changed = true;
+  }
+
+  // Lost edits recover: a strictly newer mirror row replaces the
+  // committed one's fields, keeping its strip position; a row the dying
+  // page created at the last moment joins the end of the strip.
+  const order = new Map(bootSnapshot.tabs.map((tab, index) => [tab.id, index]));
+  for (const row of mirror.tabs) {
+    const committed = liveById.get(row.id);
+    if (committed) {
+      if (committed.updatedAt >= row.updatedAt) continue; // IndexedDB is fresh enough
+      committed.name = row.name;
+      committed.content = row.content;
+      committed.updatedAt = row.updatedAt;
+      committed.noteType = row.noteType;
+      committed.colorTheme = row.colorTheme;
+      committed.syncSeq = row.syncSeq;
+      committed.copyOf = row.copyOf;
+      tombstones.delete(row.id);
+    } else {
+      liveById.set(row.id, row);
+    }
+    changed = true;
+  }
+
+  if (!changed) {
+    return false;
+  }
+
+  const end = order.size;
+  const tabs = [...liveById.values()].sort(
+    (a, b) => (order.get(a.id) ?? end) - (order.get(b.id) ?? end),
+  );
+  bootSnapshot = { tabs, tombstones: [...tombstones.values()] };
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Save
 // ---------------------------------------------------------------------------
 

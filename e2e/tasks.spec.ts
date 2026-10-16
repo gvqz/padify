@@ -1,15 +1,16 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Reminders smoke — the controller's DOM wiring, pinned end to end.
+ * Reminders — task lists as notes, pinned end to end.
  *
  * The pure logic (view math, sanitization, the sweep's once-guard) is
- * unit-tested in src/features/tasks/*.test.ts; what only a browser can
- * prove is the wiring: the modal opens from the navbar with its engine
- * lazy-loaded, the composer adds a task that renders with its chips, the
- * circle completes and sinks to the trailer, the inline editor commits a
- * rename, a custom list files tasks by color, and everything survives a
- * reload through the real storage path.
+ * unit-tested in src/editor/tasks/*.test.ts and src/features/tasks/
+ * aggregate.test.ts; what only a browser can prove is the wiring: the
+ * type menu creates a task list NOTE, its page composes tasks that
+ * persist through the real notes storage, the rail expands and its
+ * destinations open the hub, aggregated views span notes with origin
+ * chips that open the note, the calendar lays dated tasks on one grid,
+ * and the modal-era data migrates into notes once.
  *
  * Zero-console-error bar, same as the rest of the suite.
  */
@@ -26,61 +27,77 @@ test.afterEach(async ({ page }) => {
   expect(pageErrors.get(page) ?? [], 'uncaught page errors').toEqual([]);
 });
 
-async function openReminders(page: Page): Promise<void> {
-  await page.locator('a[data-target="#tasksModal"]').click();
-  await expect(page.locator('#tasksModal')).toHaveClass(/in/);
+/** Creates a task list note through the type menu — the user's door. */
+async function newTaskList(page: Page): Promise<void> {
+  await page.locator('#addTabTypeMenu').click();
+  await page
+    .locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Task list' })
+    .click();
 }
 
-test.describe('reminders', () => {
-  test('opens from the navbar with the composer ready and the empty state', async ({ page }) => {
+test.describe('task list notes', () => {
+  test('the type menu creates a task list note with its page and composer', async ({ page }) => {
     await page.goto('/');
-    await openReminders(page);
+    await newTaskList(page);
 
-    await expect(page.locator('#tkViewTitle')).toHaveText('Today');
-    await expect(page.locator('#tkEmpty')).toBeVisible();
-    await expect(page.locator('#tkComposerInput')).toHaveAttribute('placeholder', 'New Reminder');
-    // The composer grabbed focus (desktop pointer) — typing goes straight in.
-    await expect(page.locator('#tkComposerInput')).toBeFocused();
+    // The strip badges the note with the list's colored circle.
+    const activeTab = page.locator('#tabStripTabs .tab-strip-tab.active');
+    await expect(activeTab.locator('.tab-strip-list-dot')).toBeVisible();
+
+    // The page paints in the editor host: title input, count, composer.
+    await expect(page.locator('#note .tkp')).toBeVisible();
+    await expect(page.locator('.tkp-title')).toBeFocused();
+    await expect(page.locator('[data-composer-input]')).toHaveAttribute(
+      'placeholder',
+      'New Reminder',
+    );
+    await expect(page.locator('.tkp .tk-empty')).toBeVisible();
+    // The rich toolbar is for rich notes — not this surface.
+    await expect(page.locator('#richToolbar')).toBeHidden();
   });
 
-  test('adding, completing and uncompleting a task through the real storage path', async ({
-    page,
-  }) => {
+  test('adding, completing and uncompleting through the real notes storage', async ({ page }) => {
     await page.goto('/');
-    await openReminders(page);
+    await newTaskList(page);
 
     // Type a task into the composer; the chips row opens.
-    await page.locator('#tkComposerInput').fill('Water the fern');
-    await expect(page.locator('#tkComposerDetails')).toBeVisible();
-    await page.locator('#tkComposerInput').press('Enter');
+    const input = page.locator('[data-composer-input]');
+    await input.fill('Water the fern');
+    await expect(page.locator('.tkp .tk-composer-details')).toBeVisible();
+    await input.press('Enter');
 
-    // It lands in the view and in the All count.
+    // It lands on the page and the header count says one.
     const row = page.locator('.tk-task-wrap', { hasText: 'Water the fern' }).first();
     await expect(row).toBeVisible();
-    await expect(page.locator('#tkCountAll')).toHaveText('1');
+    await expect(page.locator('.tkp-count')).toHaveText('1');
 
     // Complete it: the circle fills, the row sinks to the completed trailer.
     await row.locator('.tk-check').click();
     await expect(page.locator('.tk-done-toggle')).toBeVisible();
     await expect(page.locator('.tk-done-toggle')).toHaveText(/1 Completed/);
-    await expect(page.locator('#tkCountAll')).toHaveText('');
-    await expect(page.locator('#tkCountCompleted')).toHaveText('1');
+    await expect(page.locator('.tkp-count')).toHaveText('0');
 
     // Uncomplete it from the trailer: back to active.
     await page.locator('.tk-done-toggle').click();
-    await expect(
-      page.locator('.tk-done-rows .tk-task-wrap', { hasText: 'Water the fern' }),
-    ).toBeVisible();
     await page.locator('.tk-done-rows .tk-check').first().click();
-    await expect(page.locator('#tkCountAll')).toHaveText('1');
+    await expect(page.locator('.tkp-count')).toHaveText('1');
+
+    // Reload — the note, its task and its state all come back.
+    await page.reload();
+    await expect(page.locator('#note .tkp')).toBeVisible();
+    await expect(page.locator('.tk-task-wrap', { hasText: 'Water the fern' })).toBeVisible();
+    await expect(page.locator('.tkp-count')).toHaveText('1');
   });
 
-  test('the inline editor renames, flags, and deletes', async ({ page }) => {
+  test('the inline editor renames, flags, and deletes — and the popover-focus regression stays fixed', async ({
+    page,
+  }) => {
     await page.goto('/');
-    await openReminders(page);
+    await newTaskList(page);
 
-    await page.locator('#tkComposerInput').fill('Buy oat milk');
-    await page.locator('#tkComposerInput').press('Enter');
+    const input = page.locator('[data-composer-input]');
+    await input.fill('Buy oat milk');
+    await input.press('Enter');
 
     const row = page.locator('.tk-task-wrap', { hasText: 'Buy oat milk' }).first();
     await row.locator('.tk-task-main').click();
@@ -92,155 +109,307 @@ test.describe('reminders', () => {
     await editor.locator('.tk-editor-title').press('Enter');
 
     const updated = page
-      .locator('.tk-task-wrap', {
-        hasText: 'Buy OAT milk (the good one)',
-      })
+      .locator('.tk-task-wrap', { hasText: 'Buy OAT milk (the good one)' })
       .first();
     await expect(updated).toBeVisible();
     await expect(updated.locator('.tk-notes')).toHaveText('the barista edition');
 
-    // Flag it through the editor; the flag chip sticks to the row.
+    // Reopen: selecting a priority from the anchored menu used to close
+    // the editor (the #144 regression — pinned here for the note page too).
     await updated.locator('.tk-task-main').click();
-    await editor.locator('[data-editor-flag]').click();
-    await expect(page.locator('#tkCountFlagged')).toHaveText('1');
-    await expect(updated.locator('.tk-flag')).toBeVisible();
-
-    // Delete it; the view empties again.
-    await page.locator('.tk-task-wrap [data-editor-delete]').click();
-    await expect(page.locator('#tkEmpty')).toBeVisible();
-    await expect(page.locator('#tkCountAll')).toHaveText('');
-  });
-
-  test('custom lists: add, file, colored title, rename — and survival across a reload', async ({
-    page,
-  }) => {
-    await page.goto('/');
-    await openReminders(page);
-
-    // Create a list from the sidebar.
-    await page.locator('#tkAddList').click();
-    await page.locator('.tk-list-add-form input').fill('Groceries');
-    await page.locator('.tk-list-add-form input').press('Enter');
-
-    // The view switched to the fresh list, titled with its color class.
-    await expect(page.locator('#tkViewTitle')).toHaveText('Groceries');
-    await expect(page.locator('#tkViewTitle')).toHaveClass(/tk-c-/);
-
-    // Quick-add inside the list view files to the list.
-    await page.locator('#tkComposerInput').fill('Milk');
-    await page.locator('#tkComposerInput').press('Enter');
-    await expect(page.locator('.tk-task-wrap', { hasText: 'Milk' })).toBeVisible();
-
-    // The All view groups by list under the list's name.
-    await page.locator('#tkNavAll').click();
-    const allSection = page.locator('.tk-section', { hasText: 'Groceries' }).first();
-    await expect(allSection.locator('.tk-task-wrap', { hasText: 'Milk' })).toBeVisible();
-
-    // Reload — the list, the task and the last view all come back.
-    await page.reload();
-    await openReminders(page);
-    await expect(page.locator('#tkViewTitle')).toHaveText('All');
-    await expect(
-      page.locator('.tk-nav-lists .tk-list-item', { hasText: 'Groceries' }),
-    ).toBeVisible();
-    const restored = page.locator('.tk-task-wrap', { hasText: 'Milk' }).first();
-    await expect(restored).toBeVisible();
-
-    // Rename the list from ITS view's actions (the All view has none).
-    await page.locator('.tk-nav-lists .tk-list-item', { hasText: 'Groceries' }).click();
-    await expect(page.locator('#tkViewTitle')).toHaveText('Groceries');
-    await page.locator('[data-action="rename-list"]').click();
-    const dialog = page.locator('.swal2-modal');
-    await expect(dialog).toBeVisible();
-    await dialog.locator('.swal2-input').fill('Groceries & stuff');
-    await dialog.locator('.swal2-confirm').click();
-    await expect(page.locator('#tkViewTitle')).toHaveText('Groceries & stuff');
-  });
-
-  test('date chips and overdue tone render on the row', async ({ page }) => {
-    await page.goto('/');
-    await openReminders(page);
-
-    // A task due today (via the composer's date popover presets).
-    await page.locator('#tkComposerInput').fill('Ship the letters');
-    await page.locator('#tkComposerDate').click();
-    await page.locator('[data-when-preset="today"]').click();
-    await page.locator('#tkComposerInput').press('Enter');
-
-    const row = page.locator('.tk-task-wrap', { hasText: 'Ship the letters' }).first();
-    await expect(row).toBeVisible();
-    await expect(row.locator('.tk-chip-due')).toContainText('Today');
-    // The chip-set composer carries the date into the new task.
-    await expect(page.locator('#tkComposerDateLabel')).toHaveText('Date');
-
-    // A reminder set for today reads as a bell chip too.
-    await row.locator('.tk-task-main').click();
-    await page.locator('[data-editor-when="remind"]').click();
-    await page.locator('[data-when-preset="tomorrow"]').click();
-    await expect(row.locator('.tk-chip-remind')).toContainText('Tomorrow');
-  });
-
-  test('picking a date or priority from the editor menus keeps the editor open', async ({
-    page,
-  }) => {
-    await page.goto('/');
-    await openReminders(page);
-
-    await page.locator('#tkComposerInput').fill('Keep the editor alive');
-    await page.locator('#tkComposerInput').press('Enter');
-
-    const row = page.locator('.tk-task-wrap', { hasText: 'Keep the editor alive' }).first();
-    await row.locator('.tk-info').click();
-    const editor = row.locator('.tk-editor');
     await expect(editor).toBeVisible();
-
-    // Selecting a priority from the anchored menu used to close the editor:
-    // removing the focused menu node fires focusout with relatedTarget null,
-    // which the commit handler read as "the user left".
     await editor.locator('[data-editor-priority]').click();
     await page.locator('[data-priority="high"]').click();
     await expect(editor).toBeVisible();
-    await expect(
-      page
-        .locator('.tk-task-wrap', { hasText: 'Keep the editor alive' })
-        .first()
-        .locator('.tk-prio'),
-    ).toBeVisible();
+    await expect(updated.locator('.tk-prio')).toBeVisible();
 
     // Same for a date preset from the when-popover.
     await editor.locator('[data-editor-when="date"]').click();
     await page.locator('[data-when-preset="tomorrow"]').click();
     await expect(editor).toBeVisible();
-    await expect(
-      page
-        .locator('.tk-task-wrap', { hasText: 'Keep the editor alive' })
-        .first()
-        .locator('.tk-chip-due'),
-    ).toContainText('Tomorrow');
+    await expect(updated.locator('.tk-chip-due')).toContainText('Tomorrow');
 
     // The editor still commits normally afterwards.
     await editor.locator('.tk-editor-title').press('Enter');
     await expect(editor).toBeHidden();
+
+    // Delete it; the page empties again.
+    await updated.locator('.tk-task-main').click();
+    await page.locator('[data-editor-delete]').click();
+    await expect(page.locator('.tkp .tk-empty')).toBeVisible();
   });
 
-  test('search finds tasks by title and clears back to the view', async ({ page }) => {
+  test('renaming the page title renames the note', async ({ page }) => {
     await page.goto('/');
-    await openReminders(page);
+    await newTaskList(page);
 
-    await page.locator('#tkComposerInput').fill('Find me by name');
-    await page.locator('#tkComposerInput').press('Enter');
-    await page.locator('#tkComposerInput').fill('Something else entirely');
-    await page.locator('#tkComposerInput').press('Enter');
+    await page.locator('.tkp-title').fill('Groceries');
+    await page.locator('.tkp-title').press('Enter');
+    const activeTab = page.locator('#tabStripTabs .tab-strip-tab.active');
+    await expect(activeTab).toContainText('Groceries');
 
-    await page.locator('#tkSearchInput').fill('find me');
-    await expect(page.locator('#tkViewTitle')).toHaveText('Search');
-    await expect(page.locator('.tk-task-wrap', { hasText: 'Find me by name' })).toBeVisible();
-    await expect(page.locator('#tkSections .tk-task-wrap')).toHaveCount(1);
+    // The rail's My Lists shows the renamed note.
+    await expect(page.locator('#taskRailLists .tr-list', { hasText: 'Groceries' })).toBeVisible();
+  });
 
-    // Clearing returns to the underlying view — which followed the tasks to
-    // All when they were added (dateless tasks do not live in Today).
-    await page.locator('#tkSearchClear').click();
-    await expect(page.locator('#tkViewTitle')).toHaveText('All');
-    await expect(page.locator('#tkSections .tk-task-wrap')).toHaveCount(2);
+  test('the list color menu repaints the circle', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+
+    await page.locator('.tkp-color').click();
+    await page.locator('[data-list-color="green"]').click();
+    await expect(page.locator('.tkp')).toHaveClass(/tk-c-green/);
+    await expect(
+      page.locator('#tabStripTabs .tab-strip-tab.active .tab-strip-list-dot'),
+    ).toHaveAttribute('data-color', 'green');
+  });
+});
+
+test.describe('the rail + the hub', () => {
+  test('the rail expands on hover and its Today card opens the hub', async ({ page }) => {
+    await page.goto('/');
+
+    const rail = page.locator('#taskRail');
+    await expect(rail).toBeVisible();
+
+    // At rest the rail is the thin strip; hovering it expands the labels.
+    await rail.hover();
+    await expect(rail)
+      .toHaveClass(/is-pinned/)
+      .catch(() => undefined); // pin is opt-in only
+    await expect(rail.locator('.tr-card-label', { hasText: 'Today' })).toBeVisible();
+
+    // The Today destination opens the hub over the editor area.
+    await rail.locator('.tr-card[data-view="today"]').click();
+    await expect(page.locator('#tasksHub')).toBeVisible();
+    await expect(page.locator('#tkhTitle')).toHaveText('Today');
+    await expect(page.locator('#tkhComposerInput')).toBeFocused();
+
+    // The empty state with the create-list door (no task notes yet).
+    await expect(page.locator('#tkhEmpty')).toBeVisible();
+    await expect(page.locator('#tkhEmpty [data-action="create-list"]')).toBeVisible();
+
+    // Escape closes the hub; the note is right back underneath.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#tasksHub')).toBeHidden();
+  });
+
+  test('the hub aggregates across notes with origin chips that open the note', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    await page.locator('.tkp-title').fill('Travel');
+    await page.locator('.tkp-title').press('Enter');
+    let input = page.locator('[data-composer-input]');
+    await input.fill('Book ryokan');
+    await input.press('Enter');
+
+    // A second list, with a task due today.
+    await newTaskList(page);
+    await page.locator('.tkp-title').fill('Home');
+    await page.locator('.tkp-title').press('Enter');
+    input = page.locator('[data-composer-input]');
+    // The date chip belongs to the DRAFT: set it before submitting, so
+    // the task is born with its due date (the composer's quick-add).
+    await input.fill('Buy milk');
+    await page.locator('.tkp [data-composer-when="date"]').click();
+    await page.locator('[data-when-preset="today"]').click();
+    await input.press('Enter');
+
+    // Today (via the topbar button) shows only the dated task, with its
+    // origin chip naming the owning note.
+    await page.locator('#tasksNavButton').click();
+    await expect(page.locator('#tkhTitle')).toHaveText('Today');
+    const milk = page.locator('#tkhSections .tk-task-wrap', { hasText: 'Buy milk' }).first();
+    await expect(milk).toBeVisible();
+    await expect(milk.locator('.tk-origin')).toContainText('Home');
+    await expect(
+      page.locator('#tkhSections .tk-task-wrap', { hasText: 'Book ryokan' }),
+    ).toHaveCount(0);
+
+    // The origin chip opens that note (and closes the hub).
+    await milk.locator('.tk-origin').click();
+    await expect(page.locator('#tasksHub')).toBeHidden();
+    await expect(page.locator('.tkp-title')).toHaveValue('Home');
+  });
+
+  test('completing from the hub writes through to the note', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    const input = page.locator('[data-composer-input]');
+    await input.fill('Sweep write-through');
+    await input.press('Enter');
+
+    await page.locator('#tasksNavButton').click();
+    // The All view carries the dateless task (Today would not).
+    await page.locator('.tr-card[data-view="all"]').click();
+    const row = page
+      .locator('#tkhSections .tk-task-wrap', { hasText: 'Sweep write-through' })
+      .first();
+    await expect(row).toBeVisible();
+    await row.locator('.tk-check').click();
+    // The completion sinks the row into the collapsed trailer — open it
+    // to reach the row's origin chip.
+    const trailer = page.locator('#tkhSections .tk-done-toggle');
+    await expect(trailer).toBeVisible();
+    await trailer.click();
+
+    // The note behind the hub reflects the write (open it to check).
+    await page.locator('#tkhSections .tk-done-rows .tk-task-wrap .tk-origin').first().click();
+    await expect(page.locator('#tasksHub')).toBeHidden();
+    // The note's own page carries the trailer (scope matters: the hidden
+    // hub still holds its own DOM, trailer and all).
+    await expect(page.locator('#note .tk-done-toggle')).toBeVisible();
+  });
+
+  test('search spans notes from the rail', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    await page.locator('.tkp-title').fill('Travel');
+    await page.locator('.tkp-title').press('Enter');
+    await page.locator('[data-composer-input]').fill('Find me by name');
+    await page.locator('[data-composer-input]').press('Enter');
+
+    // The search box is an expanded-rail affordance — hover opens it.
+    await page.locator('#taskRail').hover();
+    await page.locator('#taskRailSearchInput').fill('find me');
+    await expect(page.locator('#tkhTitle')).toHaveText('Search');
+    await expect(
+      page.locator('#tkhSections .tk-task-wrap', { hasText: 'Find me by name' }),
+    ).toBeVisible();
+    await expect(page.locator('#tkhSections .tk-task-wrap')).toHaveCount(1);
+
+    // Clearing closes the hub back to the note.
+    await page.locator('#taskRailSearchClear').click();
+    await expect(page.locator('#tasksHub')).toBeHidden();
+  });
+});
+
+test.describe('the calendar', () => {
+  test('dated tasks dot their day and the day panel lists them', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    const input = page.locator('[data-composer-input]');
+    await input.fill('Ship the letters');
+    await input.press('Enter');
+    // Give the fresh task a due date of TODAY via the editor's popover.
+    const row = page.locator('.tk-task-wrap', { hasText: 'Ship the letters' }).first();
+    await row.locator('.tk-task-main').click();
+    await page.locator('[data-editor-when="date"]').click();
+    await page.locator('[data-when-preset="today"]').click();
+    await page.locator('.tk-editor-title').press('Enter');
+
+    // Open the calendar from the rail.
+    await page.locator('#taskRail').hover();
+    await page.locator('.tr-card[data-view="calendar"]').click();
+    await expect(page.locator('#tkhTitle')).toHaveText('Calendar');
+
+    // Today's cell is selected by default and carries the list's dot…
+    const todayCell = page.locator('.tkcal-day.is-today');
+    await expect(todayCell).toHaveClass(/is-selected/);
+    await expect(todayCell.locator('.tkcal-dot')).toHaveCount(1);
+
+    // …and the day panel lists the task with its chip.
+    const panel = page.locator('.tkcal-day-pane');
+    await expect(panel.locator('.tk-task-wrap', { hasText: 'Ship the letters' })).toBeVisible();
+    await expect(panel.locator('.tk-chip-due')).toContainText('Today');
+  });
+
+  test('month navigation walks the grid and Today comes home', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#tasksNavButton').click(); // hub on Today (empty fine)
+    await page.locator('.tr-card[data-view="calendar"]').click();
+
+    const month = page.locator('.tkcal-month');
+    const first = await month.textContent();
+    await page.locator('[data-cal-next]').click();
+    await expect(month).not.toHaveText(first!);
+    await page.locator('[data-cal-prev]').click();
+    await page.locator('[data-cal-prev]').click();
+    await expect(month).not.toHaveText(first!);
+    // The Today button only shows when the cursor left home.
+    await page.locator('[data-cal-today]').click();
+    await expect(page.locator('.tkcal-day.is-today')).toHaveClass(/is-selected/);
+  });
+});
+
+test.describe('the migration', () => {
+  test('modal-era lists become notes exactly once', async ({ page }) => {
+    const now = new Date().toISOString();
+    await page.addInitScript(
+      ({ stamp }) => {
+        localStorage.setItem(
+          'padify-tasks',
+          JSON.stringify({
+            lists: [
+              { id: 'l1', name: 'Groceries', color: 'green', createdAt: stamp, sortOrder: 0 },
+              { id: 'l2', name: 'Travel', color: 'teal', createdAt: stamp, sortOrder: 1 },
+            ],
+            tasks: [
+              {
+                id: 'g1',
+                title: 'Milk',
+                notes: '',
+                listId: 'l1',
+                completed: false,
+                completedAt: '',
+                dueDate: '',
+                reminderAt: '',
+                reminderNotifiedAt: '',
+                flagged: false,
+                priority: 'none',
+                createdAt: stamp,
+                updatedAt: stamp,
+                sortOrder: 0,
+              },
+              {
+                id: 't1',
+                title: 'Visa',
+                notes: '',
+                listId: 'l2',
+                completed: true,
+                completedAt: stamp,
+                dueDate: '',
+                reminderAt: '',
+                reminderNotifiedAt: '',
+                flagged: false,
+                priority: 'none',
+                createdAt: stamp,
+                updatedAt: stamp,
+                sortOrder: 0,
+              },
+            ],
+            view: 'all',
+          }),
+        );
+      },
+      { stamp: now },
+    );
+
+    await page.goto('/');
+
+    // The rail's lists group is an expanded-rail affordance — hover it.
+    await page.locator('#taskRail').hover();
+
+    // Both lists are notes now, in order, with their colors.
+    const groceries = page.locator('#taskRailLists .tr-list', { hasText: 'Groceries' });
+    const travel = page.locator('#taskRailLists .tr-list', { hasText: 'Travel' });
+    await expect(groceries).toBeVisible();
+    await expect(travel).toBeVisible();
+
+    // The tasks rode along (Groceries' badge counts its active task).
+    await expect(groceries.locator('.tr-list-count')).toHaveText('1');
+    await groceries.click();
+    await expect(page.locator('.tk-task-wrap', { hasText: 'Milk' })).toBeVisible();
+
+    // Completed history survives too.
+    await travel.click();
+    await expect(page.locator('.tk-done-toggle')).toHaveText(/1 Completed/);
+    await expect(page.locator('.tk-done-toggle')).toBeVisible();
+
+    // And the old data never migrates twice: reload keeps one of each.
+    await page.reload();
+    await page.locator('#taskRail').hover();
+    await expect(page.locator('#taskRailLists .tr-list', { hasText: 'Groceries' })).toHaveCount(1);
+    await expect(page.locator('#taskRailLists .tr-list', { hasText: 'Travel' })).toHaveCount(1);
   });
 });

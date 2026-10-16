@@ -446,3 +446,91 @@ body {
 .share-cta {
   margin-left: 6px;
 }
+
+/* ---- A shared task list (noteType 'tasks') ----
+   The checklist the note is: colored circles, titles, quiet meta chips.
+   The list color paints the circles via the --s-list-c variable each
+   tk-c-* class sets below. */
+
+.share-task-list {
+  --s-list-c: var(--s-accent);
+  --s-blue: #3d78c4;
+  --s-red: #cf5a5a;
+  --s-orange: #c98a3d;
+  --s-green: #0e9f6e;
+  --s-purple: #8465c4;
+  --s-teal: #2f9c9c;
+}
+
+.share-task-list.tk-c-blue { --s-list-c: var(--s-blue); }
+.share-task-list.tk-c-red { --s-list-c: var(--s-red); }
+.share-task-list.tk-c-orange { --s-list-c: var(--s-orange); }
+.share-task-list.tk-c-green { --s-list-c: var(--s-green); }
+.share-task-list.tk-c-purple { --s-list-c: var(--s-purple); }
+.share-task-list.tk-c-teal { --s-list-c: var(--s-teal); }
+
+.share-task-list .share-task-empty {
+  margin: 0;
+  color: var(--s-fg-muted);
+  font-size: 14px;
+}
+
+.share-task {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--s-border);
+}
+
+.share-task:last-child {
+  border-bottom: 0;
+}
+
+.share-task-check {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  border: 1.5px solid var(--s-list-c);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.share-task.is-done .share-task-check {
+  background: var(--s-list-c);
+}
+
+.share-task-words {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.share-task-title {
+  font-size: 15px;
+  color: var(--s-fg);
+  overflow-wrap: anywhere;
+}
+
+.share-task.is-done .share-task-title {
+  color: var(--s-fg-muted);
+  text-decoration: line-through;
+}
+
+.share-task-notes {
+  font-size: 13px;
+  color: var(--s-fg-muted);
+  overflow-wrap: anywhere;
+}
+
+.share-task-chips {
+  font-size: 12.5px;
+  color: var(--s-fg-subtle);
+}
