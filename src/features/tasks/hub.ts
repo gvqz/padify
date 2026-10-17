@@ -43,7 +43,7 @@ import {
 import type { Priority, Task } from '../../editor/tasks/content';
 import { taskNotes, type AggSection, type AggTask, type HubViewId } from './aggregate';
 import { dismissReminderToasts } from './toasts';
-import { initTasksCalendar, renderTasksCalendar } from './calendar';
+import { initTasksCalendar, renderTasksCalendar, selectedDayCount } from './calendar';
 
 export type HubView = HubViewId | 'search' | 'calendar';
 
@@ -530,8 +530,15 @@ function bindRows(): void {
 
 function toggleComplete(id: string): void {
   const now = new Date();
-  const before = taskNotes.sectionsFor((view ?? 'today') as HubViewId, now);
-  const hadActive = before.sections.some((section) => section.rows.length > 0);
+  // The confetti bookkeeping reads the OPEN VIEW's active rows — but the
+  // calendar is not a smart view: sectionsFor would return undefined for
+  // it (no case, no default), and the completion would die before it
+  // started. The calendar's "rows" are the selected day's, so its count
+  // comes from the calendar module (which owns selection + hidden lists).
+  const onCalendar = view === 'calendar';
+  const before = onCalendar
+    ? selectedDayCount()
+    : activeRowCount((view ?? 'today') as HubViewId, now);
   taskNotes.toggleComplete(id);
   const done = taskNotes.taskById(id)?.task.completed ?? false;
   if (!done) {
@@ -543,15 +550,24 @@ function toggleComplete(id: string): void {
     taskEl.classList.add('is-done');
     taskEl.querySelector('.tk-check')?.setAttribute('aria-checked', 'true');
   }
-  const after = taskNotes.sectionsFor((view ?? 'today') as HubViewId, now);
+  const after = onCalendar
+    ? selectedDayCount()
+    : activeRowCount((view ?? 'today') as HubViewId, now);
   const cleared =
-    (view === 'today' || view === 'scheduled' || view === 'flagged') &&
-    hadActive &&
-    !after.sections.some((section) => section.rows.length > 0);
+    (onCalendar || view === 'today' || view === 'scheduled' || view === 'flagged') &&
+    before > 0 &&
+    after === 0;
   window.setTimeout(() => {
     if (cleared) fireTaskConfetti();
     renderHub();
   }, 460);
+}
+
+/** The smart views' active row count (the confetti check's before/after). */
+function activeRowCount(viewId: HubViewId, now: Date): number {
+  return taskNotes
+    .sectionsFor(viewId, now)
+    .sections.reduce((sum, section) => sum + section.rows.length, 0);
 }
 
 function toggleEditor(id: string): void {

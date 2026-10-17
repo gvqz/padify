@@ -413,6 +413,16 @@ function dayTasks(day: Date, now: Date): AggTask[] {
     .sort((a, b) => anchorTime(a.task, now) - anchorTime(b.task, now));
 }
 
+/**
+ * How many active reminders the selected day shows — the hub's confetti
+ * check (complete the day's last reminder on the calendar and the day
+ * empties, exactly like the smart views empty). Lives here because the
+ * selection + the hidden lists are this module's state.
+ */
+export function selectedDayCount(): number {
+  return dayTasks(selectedDay, new Date()).length;
+}
+
 /** The next few dated reminders after the selected day, soonest first. */
 function upcomingAfter(day: Date, now: Date, limit: number): AggTask[] {
   const endOfDay = startOfDay(day);
