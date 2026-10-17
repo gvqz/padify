@@ -89,6 +89,11 @@ body.dark {
   flex-direction: column;
   min-height: 100%;
   padding-right: 6px;
+  /* The host (#note) is a typing surface: pre-wrap. The page's template
+     whitespace would otherwise paint as phantom line boxes — 26px of
+     nothing between every row, editor and section (the "giant gaps"
+     glitch). Text lives in inputs/textareas here; normal is safe. */
+  white-space: normal;
 }
 
 /* The page owns its scrolling; the host stands down (and never shows the
