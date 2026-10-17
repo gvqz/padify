@@ -207,6 +207,14 @@ body.dark {
    3. The RIGHT rail — Reminders navigation
    -------------------------------------------------------------------------- */
 
+/* The rail exists ONLY in task contexts — a task list note open, or a
+   Reminders page (hub view). Everywhere else the editor takes the full
+   width; notes never see a tasks sidebar. rail.ts owns the body class. */
+body:not(.tasks-rail-on) #taskRail,
+body:not(.tasks-rail-on) #taskRailBackdrop {
+  display: none;
+}
+
 #taskRail {
   /* One switch drives every reveal below (labels, search, cards). */
   --tr-expanded: 0;
@@ -516,136 +524,28 @@ body.dark {
   font-size: 12.5px;
 }
 
-/* --- My Lists --- */
+/* --- The footnote: where the lists live (they're notes) --- */
 
-#taskRail .tr-group {
+#taskRail .tr-footnote {
+  margin-top: 12px;
+  padding: 0 2px 2px 4px;
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--vz-border);
+  gap: 2px;
+  white-space: nowrap;
 }
 
-#taskRail .tr-group-label {
-  padding: 2px 4px 6px;
+#taskRail .tr-footnote-text {
+  color: var(--vz-fg-subtle);
+  font-size: 11px;
+  opacity: var(--tr-expanded);
+  transition: opacity 0.15s var(--vz-ease);
+}
+
+#taskRail .tr-footnote-hint {
   color: var(--vz-fg-subtle);
   font-size: 10.5px;
-  font-weight: 650;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  opacity: var(--tr-expanded);
-  transition: opacity 0.15s var(--vz-ease);
-}
-
-#taskRail .tr-group.is-empty {
-  display: none;
-}
-
-#taskRail .tr-list {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 7px 6px;
-  border: 0;
-  border-radius: var(--vz-radius);
-  background: transparent;
-  color: var(--vz-fg-muted);
-  font-size: 13px;
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
-}
-
-#taskRail .tr-list:hover,
-#taskRail .tr-list:focus-visible {
-  background: var(--vz-bg-hover);
-  color: var(--vz-fg);
-  outline: none;
-}
-
-#taskRail .tr-list.is-active {
-  background: var(--vz-bg-elevated);
-  color: var(--vz-fg);
-  box-shadow: inset 2px 0 0 var(--list-c, var(--vz-primary));
-}
-
-#taskRail .tr-list-dot {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-}
-
-#taskRail .tr-list-dot .tk-dot {
-  width: 11px;
-  height: 11px;
-}
-
-#taskRail .tr-list-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  opacity: var(--tr-expanded);
-  transition: opacity 0.15s var(--vz-ease);
-}
-
-#taskRail .tr-list-count {
-  flex: 0 0 auto;
-  min-width: 18px;
-  padding: 1px 5px;
-  border-radius: 999px;
-  background: var(--vz-bg-chip);
-  color: var(--vz-fg-muted);
-  font-size: 10.5px;
-  font-weight: 650;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-#taskRail .tr-new-list {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 7px 6px;
-  border: 0;
-  border-radius: var(--vz-radius);
-  background: transparent;
-  color: var(--vz-fg-muted);
-  font-size: 13px;
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
-}
-
-#taskRail .tr-new-list:hover,
-#taskRail .tr-new-list:focus-visible {
-  background: var(--vz-bg-hover);
-  color: var(--vz-fg);
-  outline: none;
-}
-
-#taskRail .tr-new-list-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-}
-
-#taskRail .tr-new-list-label {
-  opacity: var(--tr-expanded);
+  opacity: calc(var(--tr-expanded) * 0.75);
   transition: opacity 0.15s var(--vz-ease);
 }
 
@@ -736,6 +636,37 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   margin-left: auto;
 }
 
+/* The views button — phones only (desktop has the rail right there).
+   Opens the rail drawer while a Reminders page is on screen. */
+.tkh-views {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  .tkh-views {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    margin-left: 6px;
+    border: 0;
+    border-radius: var(--vz-radius);
+    background: transparent;
+    color: var(--tk-muted);
+    line-height: 0;
+    cursor: pointer;
+    transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
+  }
+
+  .tkh-views:hover,
+  .tkh-views:focus-visible {
+    background: var(--tk-well);
+    color: var(--tk-text);
+    outline: none;
+  }
+}
+
 .tkh-scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -760,13 +691,14 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   border-top: 1px solid var(--tk-border);
 }
 
-/* The composer's target-list chip (its dot wears the list color). */
+/* The composer's target-list chip (its dot wears the list color; the
+   caret says it opens a menu). */
 .tkh-target {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   flex: 0 0 auto;
-  padding: 0 10px;
+  padding: 0 9px 0 10px;
   height: 28px;
   border: 1px solid var(--tk-border);
   border-radius: 999px;
@@ -776,7 +708,7 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   font-weight: 550;
   cursor: pointer;
   position: relative;
-  max-width: 150px;
+  max-width: 170px;
   white-space: nowrap;
   transition: border-color 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
 }
@@ -799,12 +731,17 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   text-overflow: ellipsis;
 }
 
+.tkh-target-caret {
+  flex: 0 0 auto;
+  opacity: 0.55;
+}
+
 /* --------------------------------------------------------------------------
    5. Sections + task rows (page + hub share these)
    -------------------------------------------------------------------------- */
 
 .tk-section + .tk-section {
-  margin-top: 6px;
+  margin-top: 14px;
 }
 
 .tk-section-head {
@@ -852,7 +789,7 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 8px 8px 8px 4px;
+  padding: 10px 8px 10px 4px;
   border-radius: var(--vz-radius-md);
   transition: background 0.12s var(--vz-ease);
 }
@@ -1047,47 +984,6 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   line-height: 0;
 }
 
-/* --- the ⓘ --- */
-
-.tk-info {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
-  margin-right: 2px;
-  border: 0;
-  border-radius: var(--vz-radius);
-  background: transparent;
-  color: var(--tk-muted);
-  line-height: 0;
-  cursor: pointer;
-  opacity: 0;
-  transition: background 0.12s var(--vz-ease), color 0.12s var(--vz-ease);
-}
-
-.tk-task-wrap:hover .tk-info,
-.tk-task-wrap:focus-within .tk-info,
-.tk-task-wrap.is-editing .tk-info {
-  opacity: 1;
-}
-
-@media (hover: none) {
-  .tk-info {
-    opacity: 0.7;
-  }
-}
-
-.tk-info:hover {
-  background: var(--tk-chip);
-  color: var(--tk-text);
-}
-
-.tk-info:focus-visible {
-  outline: 2px solid var(--tk-accent);
-  outline-offset: -2px;
-  opacity: 1;
 }
 
 /* --------------------------------------------------------------------------
@@ -1523,7 +1419,7 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 
 .tk-empty > svg {
   color: var(--tk-muted);
-  opacity: 0.7;
+  opacity: 0.85;
 }
 
 .tk-empty-title {
@@ -1547,33 +1443,39 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 
 .tkcal {
   display: grid;
-  grid-template-columns: minmax(300px, 400px) 1fr;
-  gap: 26px;
+  grid-template-columns: minmax(340px, 460px) 1fr;
+  gap: 30px;
   align-items: start;
 }
+
+
+/* --- the month header --- */
 
 .tkcal-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 2px 10px;
+  gap: 4px;
+  padding: 4px 0 12px;
 }
 
 .tkcal-month {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 650;
+  margin: 0 2px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--tk-text);
+  min-width: 132px;
+  text-align: center;
 }
 
 .tkcal-nav {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 27px;
+  height: 27px;
   border: 0;
-  border-radius: var(--vz-radius);
+  border-radius: 50%;
   background: transparent;
   color: var(--tk-muted);
   line-height: 0;
@@ -1592,10 +1494,12 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   margin-left: auto;
 }
 
+/* --- the weekday initials --- */
+
 .tkcal-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  padding: 0 2px 4px;
+  padding: 0 0 6px;
 }
 
 .tkcal-weekday {
@@ -1607,21 +1511,24 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   letter-spacing: 0.04em;
 }
 
+/* --- the grid --- */
+
 .tkcal-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 3px;
+  gap: 4px;
 }
 
 .tkcal-day {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  min-height: 46px;
-  padding: 5px 2px 4px;
+  justify-content: flex-start;
+  gap: 4px;
+  min-height: 54px;
+  padding: 7px 2px 5px;
   border: 0;
-  border-radius: var(--vz-radius);
+  border-radius: var(--vz-radius-md);
   background: transparent;
   color: var(--tk-text);
   cursor: pointer;
@@ -1636,47 +1543,56 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 
 .tkcal-day.is-outside {
   color: var(--tk-muted);
-  opacity: 0.45;
+  opacity: 0.55;
 }
 
 .tkcal-day.is-outside .tkcal-dot {
-  opacity: 0.5;
+  opacity: 0.55;
 }
 
+/* The number rides a circle so today can fill it and a selection can
+   ring it — one clear treatment each, never both stacked. */
 .tkcal-num {
   font-size: 12.5px;
   font-weight: 550;
   font-variant-numeric: tabular-nums;
-  min-width: 22px;
-  height: 22px;
+  min-width: 27px;
+  height: 27px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
+  transition:
+    background 0.15s var(--vz-ease),
+    color 0.15s var(--vz-ease),
+    box-shadow 0.15s var(--vz-ease);
 }
 
 .tkcal-day.is-today .tkcal-num {
-  background: var(--tk-accent);
-  color: var(--tk-accent-contrast);
+  background: var(--vz-primary);
+  color: var(--vz-primary-fg);
   font-weight: 700;
 }
 
-.tkcal-day.is-selected {
+.tkcal-day.is-selected:not(.is-today) .tkcal-num {
   background: var(--tk-well);
-  box-shadow: inset 0 0 0 1.5px var(--tk-accent);
+  box-shadow: inset 0 0 0 1.75px var(--vz-border-strong);
+  font-weight: 700;
 }
+
+/* --- the day's dots (list colors) --- */
 
 .tkcal-dots {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 3.5px;
   min-height: 10px;
 }
 
 .tkcal-dot {
-  width: 6px;
-  height: 6px;
+  width: 6.5px;
+  height: 6.5px;
   border-radius: 50%;
   background: var(--list-c, var(--tk-accent));
 }
@@ -1687,38 +1603,100 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   color: var(--tk-muted);
 }
 
+/* --- the day panel --- */
+
 .tkcal-day-pane {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .tkcal-day-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 2px 10px;
+  padding: 4px 0 12px;
+}
+
+.tkcal-day-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
 }
 
 .tkcal-day-title {
   margin: 0;
-  font-size: 15px;
-  font-weight: 650;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--tk-text);
 }
 
 .tkcal-day-count {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--tk-muted);
   font-variant-numeric: tabular-nums;
 }
 
 .tkcal-day-head .tk-chip-btn {
   margin-left: auto;
+  flex: 0 0 auto;
 }
 
 .tk-empty-day {
-  padding: 28px 8px;
-  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 26px 10px 22px;
+}
+
+.tk-empty-day-mark {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tk-text);
+}
+
+.tk-empty-day-copy {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
   color: var(--tk-muted);
+}
+
+/* --- Up Next (the panel's second act) --- */
+
+.tkcal-upnext {
+  margin-top: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--tk-border);
+}
+
+.tkcal-upnext-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px 8px;
+}
+
+.tkcal-upnext-label {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tk-muted);
+}
+
+.tkcal-upnext-count {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--vz-bg-chip);
+  color: var(--tk-muted);
+  font-size: 10.5px;
+  font-weight: 650;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 /* --------------------------------------------------------------------------
@@ -1872,8 +1850,9 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 }
 
 @media (max-width: 820px) {
-  /* The rail is a drawer on phones — the topbar's Reminders button opens
-     it over a backdrop (the notes rail's pattern, mirrored). */
+  /* The rail is a drawer on phones — the hub's views button or the
+     notes rail's calendar icon opens it over a backdrop (the notes
+     rail's pattern, mirrored). */
   #taskRail {
     position: fixed;
     top: var(--navbar-h, 56px);

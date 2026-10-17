@@ -3,7 +3,34 @@
     <aside id="tabRail" aria-label="Note tabs">
       <div class="tab-rail-head">
         <span class="tab-rail-eyebrow">Notes</span>
-        <span class="tab-rail-count" id="tabRailCount" title="Notes on this device">1</span>
+        <span class="tab-rail-head-tools">
+          <span class="tab-rail-count" id="tabRailCount" title="Notes on this device">1</span>
+          <button
+            type="button"
+            class="tab-rail-calendar"
+            id="tabRailCalendar"
+            title="Calendar — every reminder, one grid"
+            aria-label="Open the reminders calendar"
+            aria-expanded="false"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+              <path d="M8 3v4M16 3v4M3.5 10h17" />
+            </svg>
+            <!-- today-count badge, filled by the tasks rail -->
+            <span class="tab-rail-calendar-dot" id="tabRailCalendarDot" hidden></span>
+          </button>
+        </span>
       </div>
       <div id="tabStrip" role="tablist" aria-orientation="vertical" aria-label="Note tabs">
         <div id="tabStripTabs" class="tab-strip-tabs"></div>
@@ -1939,11 +1966,12 @@
         </div>
       </div>
     </div>
-    <!-- The Reminders rail — the tasks side of the app (notes left,
-         reminders right). A thin icon strip at rest; hover or focus
-         expands it to the full navigation (smart views + the task
-         notes + search). The destinations open the tasks hub over the
-         editor area; the lists themselves open like any note. -->
+    <!-- The Reminders rail — the tasks side of the app. It appears ONLY in
+         task contexts (a task list note open, or a Reminders page): a thin
+         icon strip at rest, hover/pin expands it to the destinations
+         (Today / Scheduled / All / Flagged / Completed / Calendar) plus
+         search. The lists themselves live in the notes rail — they ARE
+         notes — so this rail never repeats them. -->
     <aside id="taskRail" aria-label="Reminders">
       <div class="tr-rail-head">
         <span class="tr-eyebrow">
@@ -2194,26 +2222,9 @@
             <span class="tr-card-label">Calendar</span>
           </button>
         </div>
-        <div class="tr-group" id="taskRailListsGroup">
-          <span class="tr-group-label">My Lists</span>
-          <div class="tr-lists" id="taskRailLists"></div>
-          <button type="button" class="tr-new-list" id="taskRailNewList" title="New Task List">
-            <span class="tr-new-list-icon"
-              ><svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M12 5v14M5 12h14" /></svg
-            ></span>
-            <span class="tr-new-list-label">New Task List</span>
-          </button>
+        <div class="tr-footnote">
+          <span class="tr-footnote-text">Lists live with your notes</span>
+          <span class="tr-footnote-hint">New note ▸ Task list</span>
         </div>
       </div>
     </aside>

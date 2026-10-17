@@ -7,10 +7,11 @@ import { expect, test, type Page } from '@playwright/test';
  * unit-tested in src/editor/tasks/*.test.ts and src/features/tasks/
  * aggregate.test.ts; what only a browser can prove is the wiring: the
  * type menu creates a task list NOTE, its page composes tasks that
- * persist through the real notes storage, the rail expands and its
- * destinations open the hub, aggregated views span notes with origin
- * chips that open the note, the calendar lays dated tasks on one grid,
- * and the modal-era data migrates into notes once.
+ * persist through the real notes storage, the rail appears ONLY in
+ * task contexts and its destinations open the hub, aggregated views
+ * span notes with origin chips that open the note, the calendar door
+ * in the notes rail's head opens the one grid, and the modal-era data
+ * migrates into notes once.
  *
  * Zero-console-error bar, same as the rest of the suite.
  */
@@ -139,7 +140,9 @@ test.describe('task list notes', () => {
     await expect(page.locator('.tkp .tk-empty')).toBeVisible();
   });
 
-  test('renaming the page title renames the note', async ({ page }) => {
+  test('renaming the page title renames the note (the strip is the lists home)', async ({
+    page,
+  }) => {
     await page.goto('/');
     await newTaskList(page);
 
@@ -147,9 +150,8 @@ test.describe('task list notes', () => {
     await page.locator('.tkp-title').press('Enter');
     const activeTab = page.locator('#tabStripTabs .tab-strip-tab.active');
     await expect(activeTab).toContainText('Groceries');
-
-    // The rail's My Lists shows the renamed note.
-    await expect(page.locator('#taskRailLists .tr-list', { hasText: 'Groceries' })).toBeVisible();
+    // The rail never repeats the lists — no My Lists group exists.
+    await expect(page.locator('#taskRailLists')).toHaveCount(0);
   });
 
   test('the list color menu repaints the circle', async ({ page }) => {
@@ -165,10 +167,36 @@ test.describe('task list notes', () => {
   });
 });
 
-test.describe('the rail + the hub', () => {
+test.describe('the rail — task contexts only', () => {
+  test('the rail is absent on a plain note and appears on a task list note', async ({ page }) => {
+    await page.goto('/');
+
+    // A plain note never sees the reminders rail.
+    await expect(page.locator('#taskRail')).toBeHidden();
+
+    // Create a task list note: the rail appears beside its page.
+    await newTaskList(page);
+    await expect(page.locator('#taskRail')).toBeVisible();
+    await expect(page.locator('body')).toHaveClass(/tasks-rail-on/);
+
+    // Switch back to the plain note: the rail steps aside again.
+    await page.locator('#tabStripTabs .tab-strip-tab').first().click();
+    await expect(page.locator('#taskRail')).toBeHidden();
+
+    // And a hub view keeps it around even over a plain note.
+    await page.locator('#tabRailCalendar').click();
+    await expect(page.locator('#taskRail')).toBeVisible();
+    await expect(page.locator('#tasksHub')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#taskRail')).toBeHidden();
+  });
+
   test('the rail expands on hover and its Today card opens the hub', async ({ page }) => {
     await page.goto('/');
 
+    // No task notes yet — open the hub through the calendar door (the
+    // rail only exists in task contexts, and the hub is one).
+    await page.locator('#tabRailCalendar').click();
     const rail = page.locator('#taskRail');
     await expect(rail).toBeVisible();
 
@@ -215,9 +243,10 @@ test.describe('the rail + the hub', () => {
     await page.locator('[data-when-preset="today"]').click();
     await input.press('Enter');
 
-    // Today (via the topbar button) shows only the dated task, with its
-    // origin chip naming the owning note.
-    await page.locator('#tasksNavButton').click();
+    // Today (via the rail, while the task note is active) shows only the
+    // dated task, with its origin chip naming the owning note.
+    await page.locator('#taskRail').hover();
+    await page.locator('.tr-card[data-view="today"]').click();
     await expect(page.locator('#tkhTitle')).toHaveText('Today');
     const milk = page.locator('#tkhSections .tk-task-wrap', { hasText: 'Buy milk' }).first();
     await expect(milk).toBeVisible();
@@ -239,9 +268,9 @@ test.describe('the rail + the hub', () => {
     await input.fill('Sweep write-through');
     await input.press('Enter');
 
-    await page.locator('#tasksNavButton').click();
-    // The All view carries the dateless task (Today would not).
+    await page.locator('#taskRail').hover();
     await page.locator('.tr-card[data-view="all"]').click();
+    // The All view carries the dateless task (Today would not).
     const row = page
       .locator('#tkhSections .tk-task-wrap', { hasText: 'Sweep write-through' })
       .first();
@@ -285,6 +314,24 @@ test.describe('the rail + the hub', () => {
 });
 
 test.describe('the calendar', () => {
+  test('the notes rail head door opens it — from any note', async ({ page }) => {
+    await page.goto('/');
+
+    // The calendar icon sits beside the notes count; clicking it opens
+    // the one calendar even while a plain note is active.
+    await expect(page.locator('#tabRailCalendar')).toBeVisible();
+    await page.locator('#tabRailCalendar').click();
+    await expect(page.locator('#tasksHub')).toBeVisible();
+    await expect(page.locator('#tkhTitle')).toHaveText('Calendar');
+    await expect(page.locator('.tkcal-grid')).toBeVisible();
+
+    // The door reflects its open state; Escape closes both.
+    await expect(page.locator('#tabRailCalendar')).toHaveAttribute('aria-expanded', 'true');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#tasksHub')).toBeHidden();
+    await expect(page.locator('#tabRailCalendar')).toHaveAttribute('aria-expanded', 'false');
+  });
+
   test('dated tasks dot their day and the day panel lists them', async ({ page }) => {
     await page.goto('/');
     await newTaskList(page);
@@ -298,9 +345,8 @@ test.describe('the calendar', () => {
     await page.locator('[data-when-preset="today"]').click();
     await page.locator('.tk-editor-title').press('Enter');
 
-    // Open the calendar from the rail.
-    await page.locator('#taskRail').hover();
-    await page.locator('.tr-card[data-view="calendar"]').click();
+    // Open the calendar from the notes rail's head.
+    await page.locator('#tabRailCalendar').click();
     await expect(page.locator('#tkhTitle')).toHaveText('Calendar');
 
     // Today's cell is selected by default and carries the list's dot…
@@ -312,12 +358,45 @@ test.describe('the calendar', () => {
     const panel = page.locator('.tkcal-day-pane');
     await expect(panel.locator('.tk-task-wrap', { hasText: 'Ship the letters' })).toBeVisible();
     await expect(panel.locator('.tk-chip-due')).toContainText('Today');
+
+    // The today count also badges the calendar door in the notes rail.
+    await expect(page.locator('#tabRailCalendarDot')).toHaveText('1');
+  });
+
+  test('picking a day with a task selects it; empty days keep their manners', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    const input = page.locator('[data-composer-input]');
+    await input.fill('Future thing');
+    await input.press('Enter');
+    const row = page.locator('.tk-task-wrap', { hasText: 'Future thing' }).first();
+    await row.locator('.tk-task-main').click();
+    await page.locator('[data-editor-when="date"]').click();
+    await page.locator('[data-when-preset="nextWeek"]').click();
+    await page.locator('.tk-editor-title').press('Enter');
+
+    await page.locator('#tabRailCalendar').click();
+
+    // The task rides the Up Next rail of today's panel…
+    const pane = page.locator('.tkcal-day-pane');
+    await expect(pane.locator('.tkcal-upnext')).toBeVisible();
+    await expect(
+      pane.locator('.tkcal-upnext .tk-task-wrap', { hasText: 'Future thing' }),
+    ).toBeVisible();
+
+    // …and clicking a dotted future day moves the selection there.
+    const dotted = page.locator('.tkcal-day:not(.is-outside) .tkcal-dot').first();
+    await dotted.click();
+    await expect(pane.locator('.tk-task-wrap', { hasText: 'Future thing' })).toBeVisible();
+    // Today's empty copy stays friendly when reselected (the Today
+    // button is disabled on the current month — the cell is the door).
+    await page.locator('.tkcal-day.is-today').click();
+    await expect(pane.locator('.tk-empty-day')).toBeVisible();
   });
 
   test('month navigation walks the grid and Today comes home', async ({ page }) => {
     await page.goto('/');
-    await page.locator('#tasksNavButton').click(); // hub on Today (empty fine)
-    await page.locator('.tr-card[data-view="calendar"]').click();
+    await page.locator('#tabRailCalendar').click(); // hub on the calendar
 
     const month = page.locator('.tkcal-month');
     const first = await month.textContent();
@@ -387,17 +466,13 @@ test.describe('the migration', () => {
 
     await page.goto('/');
 
-    // The rail's lists group is an expanded-rail affordance — hover it.
-    await page.locator('#taskRail').hover();
-
-    // Both lists are notes now, in order, with their colors.
-    const groceries = page.locator('#taskRailLists .tr-list', { hasText: 'Groceries' });
-    const travel = page.locator('#taskRailLists .tr-list', { hasText: 'Travel' });
+    // Both lists are notes now — the note strip is their one home.
+    const groceries = page.locator('#tabStripTabs .tab-strip-tab', { hasText: 'Groceries' });
+    const travel = page.locator('#tabStripTabs .tab-strip-tab', { hasText: 'Travel' });
     await expect(groceries).toBeVisible();
     await expect(travel).toBeVisible();
 
-    // The tasks rode along (Groceries' badge counts its active task).
-    await expect(groceries.locator('.tr-list-count')).toHaveText('1');
+    // The tasks rode along (Groceries' page carries its active task).
     await groceries.click();
     await expect(page.locator('.tk-task-wrap', { hasText: 'Milk' })).toBeVisible();
 
@@ -408,8 +483,11 @@ test.describe('the migration', () => {
 
     // And the old data never migrates twice: reload keeps one of each.
     await page.reload();
-    await page.locator('#taskRail').hover();
-    await expect(page.locator('#taskRailLists .tr-list', { hasText: 'Groceries' })).toHaveCount(1);
-    await expect(page.locator('#taskRailLists .tr-list', { hasText: 'Travel' })).toHaveCount(1);
+    await expect(
+      page.locator('#tabStripTabs .tab-strip-tab', { hasText: 'Groceries' }),
+    ).toHaveCount(1);
+    await expect(page.locator('#tabStripTabs .tab-strip-tab', { hasText: 'Travel' })).toHaveCount(
+      1,
+    );
   });
 });

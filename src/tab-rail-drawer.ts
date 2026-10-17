@@ -6,6 +6,18 @@ import type { TabManager } from './tabs';
  * editor behind a backdrop; picking a note, adding one, tapping the
  * backdrop or pressing Escape closes it.
  */
+
+/** Closes the phone drawer from anywhere (e.g. the calendar door). */
+export function closeTabRailDrawer(): void {
+  const rail = document.getElementById('tabRail');
+  const railBackdrop = document.getElementById('tabRailBackdrop');
+  const railToggle = document.getElementById('tabRailToggle');
+  if (!rail || !rail.classList.contains('open')) return;
+  rail.classList.remove('open');
+  railBackdrop?.classList.remove('show');
+  railToggle?.setAttribute('aria-expanded', 'false');
+}
+
 export function initTabRailDrawer(tabManager: TabManager): void {
   const rail = document.getElementById('tabRail');
   const railBackdrop = document.getElementById('tabRailBackdrop');

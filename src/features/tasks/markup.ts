@@ -26,6 +26,9 @@ const tasksHubHtml = `
     <h4 class="tkh-title" id="tkhTitle">Today</h4>
     <span class="tkh-count" id="tkhCount"></span>
     <span class="tkh-actions" id="tkhActions"></span>
+    <button type="button" class="tkh-views" id="tkhViewsButton" title="Reminders views" aria-label="Reminders views" aria-expanded="false">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>
+    </button>
   </header>
 
   <div class="tk-scroll tkh-scroll" id="tkhScroll">

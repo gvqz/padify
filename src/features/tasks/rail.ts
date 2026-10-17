@@ -1,33 +1,39 @@
 /**
  * The Reminders rail — the tasks side of the app's navigation.
  *
- * Notes live left; Reminders live right. At rest the rail is a 52px icon
- * strip (destinations + count badges); hovering it — or focusing into
- * it, or pinning it — expands it to the full navigation: the smart-view
- * card grid (Apple's Reminders sidebar cards), the task notes as My
- * Lists, search, and New Task List. Clicking a destination opens the
- * tasks hub over the editor area; clicking a list opens that NOTE.
+ * The rail appears ONLY in task contexts: while a task list note is the
+ * active note, or while a Reminders page (hub view) is open. Everywhere
+ * else the editor takes its full width — notes never see a tasks
+ * sidebar. A body class (`tasks-rail-on`) drives the CSS; every input
+ * that can change the context (active tab, hub open/close, note
+ * deletion) re-syncs it.
  *
- * On phones (≤820px) the rail is a drawer behind the topbar Reminders
- * button — the same pattern as the notes rail's drawer — with the hub
- * filling the screen once a destination is picked.
+ * At rest the rail is a 52px icon strip (destinations + count badges);
+ * hovering it — or focusing into it, or pinning it — expands it to the
+ * full navigation: the smart-view cards (Today / Scheduled / All /
+ * Flagged / Completed / Calendar) and search. The lists themselves are
+ * notes and live in the notes rail; this rail never repeats them.
+ *
+ * On phones (≤820px) the rail is a drawer — opened from the hub's views
+ * button or the notes rail's calendar icon — the same pattern as the
+ * notes rail's drawer.
  */
 
 import { getTabManager } from '../../tabs';
+import { closeTabRailDrawer } from '../../tab-rail-drawer';
 import { taskNotes } from './aggregate';
 import {
   closeTasksHub,
   currentTasksHubView,
   isTasksHubOpen,
   onTasksHubChanged,
-  openNoteFromTasks,
   openTasksHub,
   setTasksHubSearch,
   type HubView,
 } from './hub';
-import { escapeHtml } from '../../lib/escape';
 
 const MOBILE_MEDIA = '(max-width: 820px)';
+const RAIL_BODY_CLASS = 'tasks-rail-on';
 
 export function initTasksRail(): void {
   const rail = document.getElementById('taskRail');
@@ -36,15 +42,24 @@ export function initTasksRail(): void {
   const searchInput = document.getElementById('taskRailSearchInput') as HTMLInputElement | null;
   const searchClear = document.getElementById('taskRailSearchClear');
   const pinButton = document.getElementById('taskRailPin');
-  const listsEl = document.getElementById('taskRailLists');
-  const newListButton = document.getElementById('taskRailNewList');
+  const calendarButton = document.getElementById('tabRailCalendar');
+  const viewsButton = document.getElementById('tkhViewsButton');
 
   const isMobile = (): boolean => window.matchMedia(MOBILE_MEDIA).matches;
   const setDrawerOpen = (open: boolean): void => {
     rail.classList.toggle('open', open);
+    if (viewsButton) viewsButton.setAttribute('aria-expanded', String(open));
     if (backdrop) {
       backdrop.hidden = !open;
     }
+  };
+
+  // ---- contextual visibility: the rail only exists in task contexts ----
+  const syncRailVisibility = (): void => {
+    const active = getTabManager()?.getActive();
+    const on = (active?.noteType ?? '') === 'tasks' || isTasksHubOpen();
+    document.body.classList.toggle(RAIL_BODY_CLASS, on);
+    if (!on) setDrawerOpen(false);
   };
 
   // ---- the pin (keep the rail expanded) ----
@@ -64,6 +79,25 @@ export function initTasksRail(): void {
       }
       if (isMobile()) setDrawerOpen(false);
     });
+  });
+
+  // ---- the calendar door in the notes rail's head ----
+  calendarButton?.addEventListener('click', () => {
+    if (isTasksHubOpen() && currentTasksHubView() === 'calendar') {
+      closeTasksHub();
+      return;
+    }
+    openTasksHub('calendar');
+    if (isMobile()) {
+      // The door can live inside the notes drawer — let the page show.
+      closeTabRailDrawer();
+      setDrawerOpen(false);
+    }
+  });
+
+  // ---- the hub's views button (phones: the rail is a drawer) ----
+  viewsButton?.addEventListener('click', () => {
+    setDrawerOpen(!rail.classList.contains('open'));
   });
 
   // ---- search ----
@@ -88,39 +122,6 @@ export function initTasksRail(): void {
     }
   });
 
-  // ---- My Lists: the notes ARE the lists ----
-  listsEl?.addEventListener('click', (event) => {
-    const row = (event.target as Element).closest<HTMLElement>('[data-note-id]');
-    if (!row) return;
-    openNoteFromTasks(row.dataset.noteId ?? '');
-    if (isMobile()) setDrawerOpen(false);
-  });
-
-  newListButton?.addEventListener('click', () => {
-    // The caret lands in the fresh list's title (focusTarget's rule for
-    // unnamed lists); the hub steps aside for the new note.
-    closeTasksHub();
-    getTabManager()?.addTab(true, 'tasks');
-    if (isMobile()) setDrawerOpen(false);
-  });
-
-  // The phone drawer: the topbar's Reminders button opens the rail
-  // itself (the hub is one tap deeper, from a destination). Backdrop or
-  // Escape closes it. On desktop the same button opens Today.
-  const navButton = document.getElementById('tasksNavButton');
-  navButton?.addEventListener('click', (event) => {
-    event.preventDefault();
-    if (isMobile()) {
-      setDrawerOpen(!rail.classList.contains('open'));
-      return;
-    }
-    if (isTasksHubOpen() && currentTasksHubView() === 'today') {
-      closeTasksHub();
-    } else {
-      openTasksHub('today');
-    }
-  });
-
   backdrop?.addEventListener('click', () => setDrawerOpen(false));
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && rail.classList.contains('open')) {
@@ -128,21 +129,29 @@ export function initTasksRail(): void {
     }
   });
 
-  // Picking a note closes the drawer on phones (the tab rail's parity).
+  // Every context change re-syncs the rail's reason to exist.
+  getTabManager()?.addActiveListener(() => {
+    syncRailVisibility();
+    refreshRail();
+  });
   getTabManager()?.addPersistListener(() => {
     if (rail.classList.contains('open') && isMobile()) {
       setDrawerOpen(false);
     }
+    syncRailVisibility();
     refreshRail();
   });
-
-  onTasksHubChanged(() => refreshRail());
+  onTasksHubChanged(() => {
+    syncRailVisibility();
+    refreshRail();
+  });
   taskNotes.onChange(() => refreshRail());
 
+  syncRailVisibility();
   refreshRail();
 }
 
-/** Re-renders counts + the lists group from the aggregate. */
+/** Re-renders counts from the aggregate. */
 function refreshRail(): void {
   const rail = document.getElementById('taskRail');
   if (!rail) return;
@@ -171,28 +180,20 @@ function refreshRail(): void {
     card.setAttribute('aria-selected', String(active));
   });
 
-  // My Lists — the task notes, their dots, their counts.
-  const listsEl = document.getElementById('taskRailLists');
-  const groupEl = document.getElementById('taskRailListsGroup');
-  if (!listsEl || !groupEl) return;
-  const lists = taskNotes.lists();
-  const perNote = taskNotes.listCounts();
-  const activeNoteId = getTabManager()?.getActive()?.id;
-  const currentView = currentTasksHubView();
-  listsEl.innerHTML = lists
-    .map((list) => {
-      const count = perNote.get(list.id) ?? 0;
-      const badge = count > 0 ? `<span class="tr-list-count">${count}</span>` : '';
-      const active = !currentView && list.id === activeNoteId;
-      return `
-        <button type="button" class="tr-list${active ? ' is-active' : ''}" data-note-id="${escapeHtml(
-          list.id,
-        )}" title="Open ${escapeHtml(list.name)}">
-            <span class="tk-scope tr-list-dot tk-c-${list.color}"><span class="tk-dot" aria-hidden="true"></span></span>
-            <span class="tr-list-name">${escapeHtml(list.name)}</span>
-            ${badge}
-        </button>`;
-    })
-    .join('');
-  groupEl.classList.toggle('is-empty', lists.length === 0);
+  // The calendar door's badge: how much needs attention today.
+  const calendarDot = document.getElementById('tabRailCalendarDot');
+  const calendarButton = document.getElementById('tabRailCalendar');
+  if (calendarDot && calendarButton) {
+    const todayCount = counts.today;
+    calendarDot.textContent = todayCount > 0 ? String(todayCount) : '';
+    calendarDot.hidden = todayCount === 0;
+    calendarButton.classList.toggle('has-attention', todayCount > 0);
+    calendarButton.setAttribute('aria-expanded', String(current === 'calendar'));
+    calendarButton.setAttribute(
+      'aria-label',
+      todayCount > 0
+        ? `Open the reminders calendar — ${todayCount} due today`
+        : 'Open the reminders calendar',
+    );
+  }
 }

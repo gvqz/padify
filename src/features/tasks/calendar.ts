@@ -1,12 +1,14 @@
 /**
  * The ONE calendar — every dated task, one grid.
  *
- * The rail's Calendar destination: a month grid whose days carry dots
- * (one per contributing list's color, up to three, then a count), and a
- * day panel beside it with that day's reminders — due or reminding —
- * using the same rows as every tasks page, so completing, the inline
- * editor and moving work here too. Quick-add on a day pre-fills the hub
- * composer's date chip.
+ * The calendar door in the notes rail's head (and the rail's Calendar
+ * destination) opens this page: a month grid whose days carry dots (one
+ * per contributing list's color, up to three, then a count), and a day
+ * panel beside it with that day's reminders — due or reminding — using
+ * the same rows as every tasks page, so completing, the inline editor
+ * and moving work here too. Under the day's rows, Up Next carries the
+ * next few dated reminders after the selected day, so the panel is never
+ * a dead end. Quick-add on a day pre-fills the hub composer's date chip.
  *
  * State is module-local (the cursor month + the selected day) and
  * survives view switches; the aggregate is re-read on every render, so
@@ -60,9 +62,16 @@ export function initTasksCalendar(): void {
       const date = parseWhen(`${dayCell.dataset.calDay}T00:00:00`);
       if (date) {
         selectedDay = startOfDay(date);
+        // The cursor follows selections in other months (Apple's rule:
+        // picking a day outside the current page moves the page too).
+        if (
+          date.getMonth() !== cursorMonth.getMonth() ||
+          date.getFullYear() !== cursorMonth.getFullYear()
+        ) {
+          cursorMonth = firstOfMonth(date);
+        }
         renderTasksCalendar();
       }
-      return;
     }
   });
 }
@@ -84,6 +93,11 @@ export function renderTasksCalendar(prefillComposerDate?: (iso: string) => void)
   const isThisMonth =
     cursorMonth.getFullYear() === today.getFullYear() &&
     cursorMonth.getMonth() === today.getMonth();
+  // The Today chip only exists when the cursor left home — on the
+  // current month the filled circle already says it (one Today, not two).
+  const todayChip = isThisMonth
+    ? ''
+    : `<button type="button" class="tk-chip-btn tkcal-today" data-cal-today>Today</button>`;
 
   const gridHtml = monthCells(cursorMonth)
     .map((cell) => {
@@ -95,16 +109,27 @@ export function renderTasksCalendar(prefillComposerDate?: (iso: string) => void)
       const more = dots.length > 3 ? dots.length - 3 : 0;
       const dotsHtml =
         visibleDots
-          .map((color) => `<span class="tkcal-dot tk-c-${color}" aria-hidden="true"></span>`)
+          .map(
+            (color) => `<span class="tkcal-dot tk-scope tk-c-${color}" aria-hidden="true"></span>`,
+          )
           .join('') + (more > 0 ? `<span class="tkcal-more">+${more}</span>` : '');
+      const classes = [
+        'tkcal-day',
+        inMonth ? '' : 'is-outside',
+        isToday ? ' is-today' : '',
+        isSelected ? ' is-selected' : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
       return `
-        <button type="button" class="tkcal-day${inMonth ? '' : ' is-outside'}${isToday ? ' is-today' : ''}${isSelected ? ' is-selected' : ''}" data-cal-day="${dayKey(
-          cell.date,
-        )}" aria-label="${new Intl.DateTimeFormat(undefined, {
-          weekday: 'long',
-          month: 'long',
-          day: 'numeric',
-        }).format(cell.date)}${dots.length > 0 ? `, ${dots.length} reminders` : ''}">
+        <button type="button" class="${classes}" data-cal-day="${dayKey(cell.date)}" aria-label="${new Intl.DateTimeFormat(
+          undefined,
+          {
+            weekday: 'long',
+            month: 'long',
+            day: 'numeric',
+          },
+        ).format(cell.date)}${dots.length > 0 ? `, ${dots.length} reminders` : ''}">
             <span class="tkcal-num">${cell.date.getDate()}</span>
             <span class="tkcal-dots">${dotsHtml}</span>
         </button>`;
@@ -119,7 +144,24 @@ export function renderTasksCalendar(prefillComposerDate?: (iso: string) => void)
   const dayLabel = dayHeading(selectedDay, today);
   const rowsHtml = dayRows.length
     ? dayRows.map((row) => taskRow(row.task, now, row.note.color, false, row.note)).join('')
-    : `<div class="tk-empty tk-empty-day">${emptyDayCopy(selectedDay, today)}</div>`;
+    : `<div class="tk-empty tk-empty-day"><span class="tk-empty-day-mark">${calendarMark(
+        selectedDay,
+        today,
+      )}</span><p class="tk-empty-day-copy">${emptyDayCopy(selectedDay, today)}</p></div>`;
+
+  const upNext = upcomingAfter(selectedDay, now, 5);
+  const upNextHtml = upNext.length
+    ? `
+        <div class="tkcal-upnext">
+          <header class="tkcal-upnext-head">
+            <span class="tkcal-upnext-label">Up Next</span>
+            <span class="tkcal-upnext-count">${upNext.length}</span>
+          </header>
+          <div class="tk-rows" role="list" data-cal-upnext-rows>${upNext
+            .map((row) => taskRow(row.task, now, row.note.color, false, row.note))
+            .join('')}</div>
+        </div>`
+    : '';
 
   sections.innerHTML = `
     <div class="tkcal">
@@ -132,15 +174,21 @@ export function renderTasksCalendar(prefillComposerDate?: (iso: string) => void)
           <button type="button" class="tkcal-nav" data-cal-next title="Next month" aria-label="Next month">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
           </button>
-          ${isThisMonth ? '' : '<button type="button" class="tk-chip-btn tkcal-today" data-cal-today>Today</button>'}
+          ${todayChip}
         </header>
         <div class="tkcal-weekdays">${weekdays}</div>
         <div class="tkcal-grid" role="grid">${gridHtml}</div>
       </div>
       <div class="tkcal-day-pane">
         <header class="tkcal-day-head">
-          <h5 class="tkcal-day-title">${dayLabel}</h5>
-          <span class="tkcal-day-count">${dayRows.length > 0 ? `${dayRows.length}` : ''}</span>
+          <div class="tkcal-day-heading">
+            <h5 class="tkcal-day-title">${dayLabel}</h5>
+            <span class="tkcal-day-count">${
+              dayRows.length > 0
+                ? `${dayRows.length} reminder${dayRows.length === 1 ? '' : 's'}`
+                : ''
+            }</span>
+          </div>
           ${
             prefillComposerDate
               ? `<button type="button" class="tk-chip-btn" data-cal-add title="Add a reminder on this day" aria-label="Add a reminder on this day"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>`
@@ -148,6 +196,7 @@ export function renderTasksCalendar(prefillComposerDate?: (iso: string) => void)
           }
         </header>
         <div class="tk-rows" role="list" data-cal-day-rows>${rowsHtml}</div>
+        ${upNextHtml}
       </div>
     </div>`;
 
@@ -253,6 +302,18 @@ function dayTasks(day: Date, now: Date): AggTask[] {
     .sort((a, b) => anchorTime(a.task, now) - anchorTime(b.task, now));
 }
 
+/** The next few dated reminders after the selected day, soonest first. */
+function upcomingAfter(day: Date, now: Date, limit: number): AggTask[] {
+  const endOfDay = startOfDay(day);
+  endOfDay.setDate(endOfDay.getDate() + 1);
+  return allActiveTasks()
+    .map((row) => ({ row, at: anchorTime(row.task, now) }))
+    .filter(({ at }) => at >= endOfDay.getTime())
+    .sort((a, b) => a.at - b.at)
+    .slice(0, limit)
+    .map(({ row }) => row);
+}
+
 function anchorTime(task: Task, now: Date): number {
   const anchor = parseWhen(task.dueDate || task.reminderAt);
   return anchor?.getTime() ?? now.getTime();
@@ -282,9 +343,16 @@ function dayHeading(day: Date, today: Date): string {
   }).format(day);
 }
 
+function calendarMark(day: Date, today: Date): string {
+  const diff = Math.round((startOfDay(day).getTime() - startOfDay(today).getTime()) / 86_400_000);
+  if (diff > 0) return 'Nothing scheduled yet';
+  if (diff < 0) return 'Nothing was due';
+  return 'Nothing due today';
+}
+
 function emptyDayCopy(day: Date, today: Date): string {
   const diff = Math.round((startOfDay(day).getTime() - startOfDay(today).getTime()) / 86_400_000);
-  if (diff === 0) return 'Nothing due today';
-  if (diff > 0) return 'Nothing due this day yet';
-  return 'Nothing was due this day';
+  if (diff === 0) return 'Pick a day with dots, or add the first one.';
+  if (diff > 0) return 'Add a reminder from this day to fill it in.';
+  return 'A quiet day, in the books.';
 }

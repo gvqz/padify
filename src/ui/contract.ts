@@ -41,7 +41,7 @@ export const MARKUP_CONTRACT: MarkupContractGroup[] = [
       'shareNotes',
       'preferences',
       'cloudNavButton',
-      'tasksNavButton',
+      'tabRailCalendar',
     ],
   },
   {
@@ -80,9 +80,6 @@ export const MARKUP_CONTRACT: MarkupContractGroup[] = [
       'taskRailPin',
       'taskRailSearchInput',
       'taskRailSearchClear',
-      'taskRailListsGroup',
-      'taskRailLists',
-      'taskRailNewList',
     ],
   },
   {
