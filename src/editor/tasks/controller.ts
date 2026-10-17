@@ -341,7 +341,7 @@ export class TaskListPageController {
         }
         return; // clicks inside the editor elsewhere never open/close rows
       }
-      if (wrap && (target.closest('.tk-task-main') || target.closest('.tk-info'))) {
+      if (wrap && target.closest('.tk-task-main')) {
         this.toggleEditor(id!);
       }
     });

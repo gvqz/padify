@@ -111,7 +111,6 @@ export function openTasksHub(next: HubView): void {
   editingId = null;
   closePopovers();
   renderHub();
-  syncTasksNavButton();
   // The composer is where the typing goes — desktop only, so phones
   // don't grow a keyboard uninvited.
   if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
@@ -130,7 +129,6 @@ export function closeTasksHub(): void {
   const hub = hubEl();
   if (hub) hub.hidden = true;
   document.body.classList.remove(HUB_BODY_CLASS);
-  syncTasksNavButton();
   const manager = getTabManager();
   if (manager) {
     // The note the user left is still selected — put the caret back.
@@ -177,7 +175,6 @@ export function setTasksHubSearch(query: string): void {
     completedExpanded = false;
   }
   renderHub();
-  syncTasksNavButton();
   emit();
 }
 
@@ -211,7 +208,7 @@ export function initTasksHub(): void {
   const triggerElements = [
     hubEl(),
     document.getElementById('taskRail'),
-    document.getElementById('tasksNavButton'),
+    document.getElementById('tabRailCalendar'),
   ].filter((el): el is HTMLElement => el !== null);
   registerLayer({
     elements: triggerElements,
@@ -293,13 +290,6 @@ function composerInput(): HTMLInputElement {
   const el = document.getElementById('tkhComposerInput') as HTMLInputElement | null;
   if (!el) throw new Error('Tasks hub markup missing #tkhComposerInput');
   return el;
-}
-
-function syncTasksNavButton(): void {
-  const button = document.getElementById('tasksNavButton');
-  if (button) {
-    button.setAttribute('aria-expanded', String(isTasksHubOpen()));
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -415,10 +405,10 @@ function renderTargetChip(chip: HTMLElement): void {
   const target = lists.find((list) => list.id === targetId) ?? lists[0]!;
   chip.hidden = false;
   chip.classList.add(`tk-c-${target.color}`);
-  chip.title = `New reminders land in ${target.name}`;
+  chip.title = `New reminders land in ${target.name} — click to change`;
   chip.innerHTML = `<span class="tk-dot" aria-hidden="true"></span><span class="tkh-target-name">${escapeText(
     target.name,
-  )}</span>`;
+  )}</span><svg class="tkh-target-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
 }
 
 function escapeText(value: string): string {
@@ -503,7 +493,7 @@ function bindRows(): void {
       }
       return;
     }
-    if (wrap && (target.closest('.tk-task-main') || target.closest('.tk-info'))) {
+    if (wrap && target.closest('.tk-task-main')) {
       toggleEditor(id!);
     }
   });

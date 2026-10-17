@@ -44,7 +44,6 @@ export const ICONS = {
     '<path fill="currentColor" stroke="none" d="M5.6 3.4C7.4 2.2 9.3 2.4 11 4c1.8 1.6 3.7 1.7 5.4.4V14c-1.8 1.3-3.7 1.2-5.4-.4-1.7-1.6-3.6-1.8-5.4-.6z"/><path d="M5 21V4"/>',
     14,
   ),
-  info: icon('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 7.8h.01"/>', 15),
   close: icon('<path d="M18 6 6 18M6 6l12 12"/>', 16),
   chevron: icon('<path d="m9 6 6 6-6 6"/>', 13),
   chevronLeft: icon('<path d="m15 6-6 6 6 6"/>', 15),

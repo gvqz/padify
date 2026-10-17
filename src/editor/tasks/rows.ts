@@ -105,7 +105,6 @@ export function taskRow(
                 ${origin}
                 ${rowChips(task, now)}
             </button>
-            <button type="button" class="tk-info" title="Details" aria-label="Reminder details">${ICONS.info}</button>
         </div>
         <div class="tk-editor" hidden></div>
     </div>`;
@@ -277,7 +276,7 @@ export function emptyStateFor(view: string): string {
     return emptyState(
       ICONS.today,
       'Nothing due today',
-      'Reminders you give today’s date land here.',
+      'Give a reminder today’s date and it will show up here.',
     );
   }
   if (view === 'scheduled') {
