@@ -332,7 +332,7 @@ test.describe('the calendar', () => {
     await expect(page.locator('#tabRailCalendar')).toHaveAttribute('aria-expanded', 'false');
   });
 
-  test('dated tasks dot their day and the day panel lists them', async ({ page }) => {
+  test('dated tasks chip their day and the day panel lists them', async ({ page }) => {
     await page.goto('/');
     await newTaskList(page);
     const input = page.locator('[data-composer-input]');
@@ -349,10 +349,12 @@ test.describe('the calendar', () => {
     await page.locator('#tabRailCalendar').click();
     await expect(page.locator('#tkhTitle')).toHaveText('Calendar');
 
-    // Today's cell is selected by default and carries the list's dot…
+    // Today's cell is selected by default and carries the task as a
+    // chip (the iCloud event chip, tinted with the list's color).
     const todayCell = page.locator('.tkcal-day.is-today');
     await expect(todayCell).toHaveClass(/is-selected/);
-    await expect(todayCell.locator('.tkcal-dot')).toHaveCount(1);
+    await expect(todayCell.locator('.tkcal-chip')).toHaveCount(1);
+    await expect(todayCell.locator('.tkcal-chip')).toHaveText('Ship the letters');
 
     // …and the day panel lists the task with its chip.
     const panel = page.locator('.tkcal-day-pane');
@@ -384,12 +386,12 @@ test.describe('the calendar', () => {
       pane.locator('.tkcal-upnext .tk-task-wrap', { hasText: 'Future thing' }),
     ).toBeVisible();
 
-    // …and clicking a dotted future day moves the selection there.
-    const dotted = page.locator('.tkcal-day:not(.is-outside) .tkcal-dot').first();
-    await dotted.click();
+    // …and clicking a chipped future day moves the selection there.
+    const chipped = page.locator('.tkcal-day:not(.is-outside) .tkcal-chip').first();
+    await chipped.click();
     await expect(pane.locator('.tk-task-wrap', { hasText: 'Future thing' })).toBeVisible();
     // Today's empty copy stays friendly when reselected (the Today
-    // button is disabled on the current month — the cell is the door).
+    // button is always at hand — the cell is the door).
     await page.locator('.tkcal-day.is-today').click();
     await expect(pane.locator('.tk-empty-day')).toBeVisible();
   });
@@ -400,13 +402,15 @@ test.describe('the calendar', () => {
 
     const month = page.locator('.tkcal-month');
     const first = await month.textContent();
-    await page.locator('[data-cal-next]').click();
+    // The page header's navs — the mini month in the sidebar has its own.
+    await page.locator('.tkcal-navs [data-cal-next]').click();
     await expect(month).not.toHaveText(first!);
-    await page.locator('[data-cal-prev]').click();
-    await page.locator('[data-cal-prev]').click();
+    await page.locator('.tkcal-navs [data-cal-prev]').click();
+    await page.locator('.tkcal-navs [data-cal-prev]').click();
     await expect(month).not.toHaveText(first!);
-    // The Today button only shows when the cursor left home.
-    await page.locator('[data-cal-today]').click();
+    // The Today button is always at hand (the iCloud header), and it
+    // walks the selection home.
+    await page.locator('.tkcal-navs [data-cal-today]').click();
     await expect(page.locator('.tkcal-day.is-today')).toHaveClass(/is-selected/);
   });
 });

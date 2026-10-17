@@ -581,6 +581,27 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
   background: var(--tk-bg);
 }
 
+/* The calendar page: the month grid takes the full editor height (no
+   scrolling document), and the hub's own title/count stand down — the
+   big month title IS the page's heading. The back arrow stays. */
+.tkh.is-calendar .tkh-scroll {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tkh.is-calendar .tk-sections {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tkh.is-calendar .tkh-title,
+.tkh.is-calendar .tkh-count {
+  display: none;
+}
+
 body.tasks-hub-open #richToolbar,
 body.tasks-hub-open #markdownToolbar,
 body.tasks-hub-open #textareaContainer .starter-template,
@@ -1443,34 +1464,79 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 }
 
 /* --------------------------------------------------------------------------
-   12. The ONE calendar
+   12. The ONE calendar — the iCloud month page
    -------------------------------------------------------------------------- */
 
 .tkcal {
-  display: grid;
-  grid-template-columns: minmax(340px, 460px) 1fr;
-  gap: 30px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
+/* --- the page header: big month, modes, navs --- */
 
-/* --- the month header --- */
-
-.tkcal-head {
+.tkcal-top {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 0 12px;
+  gap: 14px;
+  padding: 2px 2px 14px;
+  flex: 0 0 auto;
 }
 
 .tkcal-month {
-  margin: 0 2px;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  margin: 0;
+  font-size: 26px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
   color: var(--tk-text);
-  min-width: 132px;
-  text-align: center;
+  white-space: nowrap;
+}
+
+/* Day / Week / Month / Year — the segmented control. Only Month is live
+   for now; the others say so (they dim and explain on hover). */
+.tkcal-modes {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--tk-well);
+}
+
+.tkcal-mode {
+  border: 0;
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--tk-muted);
+  cursor: pointer;
+  transition: background 0.14s var(--vz-ease), color 0.14s var(--vz-ease);
+}
+
+.tkcal-mode:hover:not(.is-on) {
+  color: var(--tk-text);
+}
+
+.tkcal-mode.is-on {
+  background: var(--vz-bg-elevated, #fff);
+  color: var(--tk-text);
+  font-weight: 650;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.1);
+}
+
+.tkcal-mode[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.tkcal-navs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
 }
 
 .tkcal-nav {
@@ -1496,48 +1562,88 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 }
 
 .tkcal-today {
-  margin-left: auto;
+  border: 0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--tk-text);
+  cursor: pointer;
+  transition: background 0.15s var(--vz-ease);
 }
 
-/* --- the weekday initials --- */
+.tkcal-today:hover,
+.tkcal-today:focus-visible {
+  background: var(--tk-well);
+  outline: none;
+}
+
+/* --- the body: grid + right sidebar (the iCloud left sidebar, mirrored) --- */
+
+.tkcal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 264px;
+  gap: 18px;
+  align-items: stretch;
+}
+
+.tkcal-grid-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* --- the weekday header --- */
 
 .tkcal-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   padding: 0 0 6px;
+  flex: 0 0 auto;
 }
 
 .tkcal-weekday {
   text-align: center;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 650;
   color: var(--tk-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
-/* --- the grid --- */
+/* --- the grid: hairline month, iCloud's ruled cells --- */
 
 .tkcal-grid {
+  flex: 1 1 auto;
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
+  grid-auto-rows: 1fr;
+  border: 1px solid var(--tk-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--tk-border);
+  gap: 1px;
 }
 
 .tkcal-day {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 4px;
-  min-height: 54px;
-  padding: 7px 2px 5px;
+  align-items: stretch;
+  gap: 3px;
+  min-height: 0;
+  min-width: 0;
+  padding: 6px 7px 5px;
   border: 0;
-  border-radius: var(--vz-radius-md);
-  background: transparent;
+  background: var(--tk-bg);
   color: var(--tk-text);
+  text-align: left;
   cursor: pointer;
   transition: background 0.12s var(--vz-ease);
+  overflow: hidden;
 }
 
 .tkcal-day:hover,
@@ -1546,81 +1652,259 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   outline: none;
 }
 
+/* The weekend columns read a shade darker, iCloud's quiet rhythm. */
+.tkcal-day.is-weekend {
+  background: var(--vz-bg-subtle, var(--tk-well));
+}
+
+.tkcal-day.is-weekend:hover,
+.tkcal-day.is-weekend:focus-visible {
+  background: var(--tk-well);
+}
+
 .tkcal-day.is-outside {
   color: var(--tk-muted);
-  opacity: 0.55;
 }
 
-.tkcal-day.is-outside .tkcal-dot {
-  opacity: 0.55;
+.tkcal-day.is-outside .tkcal-num {
+  opacity: 0.42;
 }
 
-/* The number rides a circle so today can fill it and a selection can
-   ring it — one clear treatment each, never both stacked. */
+.tkcal-day.is-outside .tkcal-events {
+  display: none;
+}
+
+/* The selected day: a soft wash over the whole cell. */
+.tkcal-day.is-selected {
+  background: color-mix(in srgb, var(--tk-accent) 10%, var(--tk-bg));
+}
+
+.tkcal-day.is-selected:hover {
+  background: color-mix(in srgb, var(--tk-accent) 14%, var(--tk-bg));
+}
+
 .tkcal-num {
-  font-size: 12.5px;
-  font-weight: 550;
-  font-variant-numeric: tabular-nums;
-  min-width: 27px;
-  height: 27px;
+  align-self: flex-start;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  transition:
-    background 0.15s var(--vz-ease),
-    color 0.15s var(--vz-ease),
-    box-shadow 0.15s var(--vz-ease);
+  min-width: 24px;
+  height: 24px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
+/* Today is Apple red — a filled circle, white numeral. */
 .tkcal-day.is-today .tkcal-num {
-  background: var(--vz-primary);
-  color: var(--vz-primary-fg);
+  background: var(--vz-danger);
+  color: #fff;
   font-weight: 700;
 }
 
-.tkcal-day.is-selected:not(.is-today) .tkcal-num {
-  background: var(--tk-well);
-  box-shadow: inset 0 0 0 1.75px var(--vz-border-strong);
-  font-weight: 700;
+/* --- the day's reminders as chips (the events) --- */
+
+/* The .tk-c-* classes pair with .tk-scope everywhere else in this file,
+   but chips and boxes ride inside cells/sidebars whose scope class is
+   the HUB's (it carries no tk-c-* of its own), so the palette is
+   restated for them standalone — otherwise every chip falls back to the
+   accent gray. */
+.tkcal-chip.tk-c-blue,
+.tkcal-box.tk-c-blue {
+  --list-c: var(--tk-blue);
+}
+.tkcal-chip.tk-c-red,
+.tkcal-box.tk-c-red {
+  --list-c: var(--tk-red);
+}
+.tkcal-chip.tk-c-orange,
+.tkcal-box.tk-c-orange {
+  --list-c: var(--tk-orange);
+}
+.tkcal-chip.tk-c-green,
+.tkcal-box.tk-c-green {
+  --list-c: var(--tk-green);
+}
+.tkcal-chip.tk-c-purple,
+.tkcal-box.tk-c-purple {
+  --list-c: var(--tk-purple);
+}
+.tkcal-chip.tk-c-teal,
+.tkcal-box.tk-c-teal {
+  --list-c: var(--tk-teal);
 }
 
-/* --- the day's dots (list colors) --- */
-
-.tkcal-dots {
+.tkcal-events {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3.5px;
-  min-height: 10px;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow: hidden;
+  flex: 1 1 auto;
 }
 
-.tkcal-dot {
-  width: 6.5px;
-  height: 6.5px;
-  border-radius: 50%;
-  background: var(--list-c, var(--tk-accent));
+.tkcal-chip {
+  flex: 0 0 auto;
+  max-width: 100%;
+  padding: 1.5px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.45;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: color-mix(in srgb, var(--list-c, var(--tk-accent)) 17%, var(--tk-bg));
+  color: color-mix(in srgb, var(--list-c, var(--tk-accent)) 78%, var(--tk-text));
 }
 
-.tkcal-more {
-  font-size: 9.5px;
-  font-weight: 650;
+.tkcal-chip-more {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
   color: var(--tk-muted);
 }
 
-/* --- the day panel --- */
+/* --- the right sidebar --- */
+
+.tkcal-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  min-width: 0;
+  /* Fixed anatomy, not a scrolling column: lists on top, the day
+     inspector takes what's left (scrolling inside), the mini month
+     always parked at the bottom — iCloud's sidebar, mirrored. */
+  overflow: hidden;
+}
+
+.tkcal-side-eyebrow {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tk-muted);
+  padding: 2px 2px 6px;
+}
+
+.tkcal-lists {
+  flex: 0 0 auto;
+}
+
+.tkcal-list {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 5px 6px;
+  border-radius: var(--vz-radius);
+  color: var(--tk-text);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease);
+}
+
+.tkcal-list:hover,
+.tkcal-list:focus-visible {
+  background: var(--tk-well);
+  outline: none;
+}
+
+.tkcal-list-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The checkbox: a list-colored rounded square; unchecked = hollow. */
+.tkcal-box {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 4.5px;
+  border: 1.5px solid var(--list-c, var(--tk-accent));
+  background: var(--list-c, var(--tk-accent));
+  color: #fff;
+  line-height: 0;
+  transition: background 0.14s var(--vz-ease);
+}
+
+.tkcal-box svg {
+  width: 9px;
+  height: 9px;
+  opacity: 0.95;
+}
+
+.tkcal-list[aria-pressed="false"] .tkcal-box {
+  background: transparent;
+}
+
+.tkcal-list[aria-pressed="false"] .tkcal-box svg {
+  opacity: 0;
+}
+
+.tkcal-list[aria-pressed="false"] .tkcal-list-name {
+  color: var(--tk-muted);
+}
+
+.tkcal-lists-empty {
+  margin: 0;
+  padding: 4px 6px 2px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--tk-muted);
+}
+
+/* --- the day inspector --- */
 
 .tkcal-day-pane {
+  flex: 1 1 auto;
+  min-height: 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  border-top: 1px solid var(--tk-border);
+  padding-top: 10px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-track) transparent;
+}
+
+.tkcal-day-pane::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tkcal-day-pane::-webkit-scrollbar-thumb {
+  background: var(--tk-track);
+  border-radius: 4px;
 }
 
 .tkcal-day-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 0 12px;
+  padding: 0 2px 10px;
+  /* The inspector scrolls; its heading stays put. */
+  position: sticky;
+  top: -10px;
+  margin: 0 0 0;
+  padding-top: 10px;
+  background: var(--tk-bg);
+  z-index: 1;
 }
 
 .tkcal-day-heading {
@@ -1632,7 +1916,7 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 
 .tkcal-day-title {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--tk-text);
@@ -1653,18 +1937,18 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 26px 10px 22px;
+  padding: 14px 6px 12px;
 }
 
 .tk-empty-day-mark {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--tk-text);
 }
 
 .tk-empty-day-copy {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--tk-muted);
 }
@@ -1702,6 +1986,104 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   font-weight: 650;
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+/* --- the mini month (the sidebar's bottom fixture) --- */
+
+.tkcal-mini {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--tk-border);
+  padding: 10px 2px 2px;
+}
+
+.tkcal-mini-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 2px 8px;
+}
+
+.tkcal-mini-month {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--tk-text);
+  letter-spacing: -0.01em;
+}
+
+.tkcal-mini-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tk-muted);
+  line-height: 0;
+  cursor: pointer;
+  transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
+}
+
+.tkcal-mini-nav:hover,
+.tkcal-mini-nav:focus-visible {
+  background: var(--tk-well);
+  color: var(--tk-text);
+  outline: none;
+}
+
+.tkcal-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px 0;
+  justify-items: center;
+}
+
+.tkcal-mini-wd {
+  font-size: 9px;
+  font-weight: 650;
+  color: var(--tk-muted);
+  text-transform: uppercase;
+  padding-bottom: 3px;
+}
+
+.tkcal-mini-day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tk-text);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease);
+}
+
+.tkcal-mini-day:hover,
+.tkcal-mini-day:focus-visible {
+  background: var(--tk-well);
+  outline: none;
+}
+
+.tkcal-mini-day.is-blank {
+  cursor: default;
+  pointer-events: none;
+}
+
+.tkcal-mini-day.is-today {
+  background: var(--vz-danger);
+  color: #fff;
+  font-weight: 700;
+}
+
+.tkcal-mini-day.is-selected:not(.is-today) {
+  box-shadow: inset 0 0 0 1.5px var(--tk-accent);
+  font-weight: 650;
 }
 
 /* --------------------------------------------------------------------------
@@ -1849,8 +2231,42 @@ body.tasks-hub-open #textareaContainer .bottom-line {
    -------------------------------------------------------------------------- */
 
 @media (max-width: 1020px) {
+  /* The sidebar drops under the grid; the month keeps a workable cell
+     height and the page scrolls again. */
+  .tkh.is-calendar .tkh-scroll {
+    overflow-y: auto;
+    display: block;
+  }
+
+  .tkh.is-calendar .tk-sections {
+    display: block;
+  }
+
   .tkcal {
+    height: auto;
+    min-height: 0;
+  }
+
+  .tkcal-body {
     grid-template-columns: 1fr;
+  }
+
+  .tkcal-grid {
+    min-height: 420px;
+  }
+
+  .tkcal-side {
+    overflow: visible;
+    border-top: 1px solid var(--tk-border);
+    padding-top: 12px;
+  }
+
+  .tkcal-mini {
+    display: none;
+  }
+
+  .tkcal-month {
+    font-size: 21px;
   }
 }
 

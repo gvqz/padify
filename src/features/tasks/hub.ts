@@ -309,6 +309,10 @@ function renderHub(): void {
 
   const searching = view === 'search';
   if (view === 'calendar') {
+    // The calendar is a PAGE, not a subpage: the hub's own title/count
+    // stand down (the month title is the page's), and .is-calendar lets
+    // the CSS give the grid the full height instead of a scrolling doc.
+    hub.classList.add('is-calendar');
     title.textContent = 'Calendar';
     count.textContent = String(taskNotes.smartCounts(now).today);
     actions.innerHTML = '';
@@ -321,6 +325,7 @@ function renderHub(): void {
     renderTargetChip(targetChip);
     return;
   }
+  hub.classList.remove('is-calendar');
   const result = searching
     ? taskNotes.search(searchQuery)
     : taskNotes.sectionsFor((view ?? 'today') as HubViewId, now);

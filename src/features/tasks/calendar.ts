@@ -2,29 +2,37 @@
  * The ONE calendar — every dated task, one grid.
  *
  * The calendar door in the notes rail's head (and the rail's Calendar
- * destination) opens this page: a month grid whose days carry dots (one
- * per contributing list's color, up to three, then a count), and a day
- * panel beside it with that day's reminders — due or reminding — using
- * the same rows as every tasks page, so completing, the inline editor
- * and moving work here too. Under the day's rows, Up Next carries the
- * next few dated reminders after the selected day, so the panel is never
- * a dead end. Quick-add on a day pre-fills the hub composer's date chip.
+ * destination) opens this page: an iCloud-style month view. The grid IS
+ * the page — a big month title up top, the Day/Week/Month/Year modes
+ * (Month for now, the rest wait), prev/Today/next beside them, and a
+ * month grid whose days carry the day's reminders as colored chips (one
+ * per task, tinted with its list's color, three then a count). The
+ * RIGHT sidebar is the iCloud sidebar mirrored: the lists as colored
+ * checkboxes (unchecking one sweeps its reminders off the grid), the
+ * selected day's rows — due or reminding — using the same rows as every
+ * tasks page, so completing, the inline editor and moving work here
+ * too, an Up Next act so the panel is never a dead end, and the mini
+ * month at the bottom. Quick-add on a day pre-fills the hub composer's
+ * date chip.
  *
- * State is module-local (the cursor month + the selected day) and
- * survives view switches; the aggregate is re-read on every render, so
- * edits elsewhere reflect immediately. Rendered INTO the hub's sections
- * container, which means the hub's delegated row handlers serve these
- * rows for free.
+ * State is module-local (the cursor month + the selected day + the
+ * hidden lists) and survives view switches; the aggregate is re-read on
+ * every render, so edits elsewhere reflect immediately. Rendered INTO
+ * the hub's sections container, which means the hub's delegated row
+ * handlers serve these rows for free.
  */
 
 import { taskNotes, type AggTask } from './aggregate';
 import { taskRow } from '../../editor/tasks/rows';
 import { parseWhen, startOfDay } from '../../editor/tasks/dates';
+import { escapeHtml } from '../../lib/escape';
 import type { Task } from '../../editor/tasks/content';
 
 /** The cursor month (a date on its first day) + the selected day. */
 let cursorMonth = firstOfMonth(new Date());
 let selectedDay = startOfDay(new Date());
+/** Task notes the user unchecked in the sidebar — their reminders hide. */
+const hiddenLists = new Set<string>();
 
 let wired = false;
 
@@ -57,6 +65,15 @@ export function initTasksCalendar(): void {
       renderTasksCalendar();
       return;
     }
+    // A sidebar checkbox — sweep that list's reminders off the grid.
+    const listToggle = target.closest<HTMLElement>('[data-cal-list]');
+    if (listToggle) {
+      const id = listToggle.dataset.calList ?? '';
+      if (hiddenLists.has(id)) hiddenLists.delete(id);
+      else hiddenLists.add(id);
+      renderTasksCalendar();
+      return;
+    }
     const dayCell = target.closest<HTMLElement>('[data-cal-day]');
     if (dayCell) {
       const date = parseWhen(`${dayCell.dataset.calDay}T00:00:00`);
@@ -84,38 +101,48 @@ export function renderTasksCalendar(prefillComposerDate?: (iso: string) => void)
 
   const now = new Date();
   const today = startOfDay(now);
+  const lists = taskNotes.lists();
   const byDay = collectByDay();
 
   const monthLabel = new Intl.DateTimeFormat(undefined, {
     month: 'long',
     year: 'numeric',
   }).format(cursorMonth);
-  const isThisMonth =
-    cursorMonth.getFullYear() === today.getFullYear() &&
-    cursorMonth.getMonth() === today.getMonth();
-  // The Today chip only exists when the cursor left home — on the
-  // current month the filled circle already says it (one Today, not two).
-  const todayChip = isThisMonth
-    ? ''
-    : `<button type="button" class="tk-chip-btn tkcal-today" data-cal-today>Today</button>`;
+
+  const modes = ['day', 'week', 'month', 'year']
+    .map((mode) => {
+      const label = mode[0].toUpperCase() + mode.slice(1);
+      const on = mode === 'month';
+      return `<button type="button" class="tkcal-mode${on ? ' is-on' : ''}"${
+        on
+          ? ' aria-pressed="true"'
+          : ' data-cal-mode-wip title="Month for now — more views soon" aria-disabled="true"'
+      }>${label}</button>`;
+    })
+    .join('');
 
   const gridHtml = monthCells(cursorMonth)
     .map((cell) => {
       const inMonth = cell.date.getMonth() === cursorMonth.getMonth();
       const isToday = sameDay(cell.date, today);
       const isSelected = sameDay(cell.date, selectedDay);
-      const dots = byDay.get(dayKey(cell.date)) ?? [];
-      const visibleDots = dots.slice(0, 3);
-      const more = dots.length > 3 ? dots.length - 3 : 0;
-      const dotsHtml =
-        visibleDots
+      const weekend = cell.date.getDay() === 0 || cell.date.getDay() === 6;
+      const events = inMonth ? (byDay.get(dayKey(cell.date)) ?? []) : [];
+      const visible = events.slice(0, 3);
+      const more = events.length > 3 ? events.length - 3 : 0;
+      const chipsHtml =
+        visible
           .map(
-            (color) => `<span class="tkcal-dot tk-scope tk-c-${color}" aria-hidden="true"></span>`,
+            (row) =>
+              `<span class="tkcal-chip tk-c-${row.note.color}" title="${escapeHtml(
+                row.task.title,
+              )}">${escapeHtml(row.task.title)}</span>`,
           )
-          .join('') + (more > 0 ? `<span class="tkcal-more">+${more}</span>` : '');
+          .join('') + (more > 0 ? `<span class="tkcal-chip-more">+${more} more</span>` : '');
       const classes = [
         'tkcal-day',
         inMonth ? '' : 'is-outside',
+        weekend ? 'is-weekend' : '',
         isToday ? ' is-today' : '',
         isSelected ? ' is-selected' : '',
       ]
@@ -129,9 +156,9 @@ export function renderTasksCalendar(prefillComposerDate?: (iso: string) => void)
             month: 'long',
             day: 'numeric',
           },
-        ).format(cell.date)}${dots.length > 0 ? `, ${dots.length} reminders` : ''}">
+        ).format(cell.date)}${events.length > 0 ? `, ${events.length} reminders` : ''}">
             <span class="tkcal-num">${cell.date.getDate()}</span>
-            <span class="tkcal-dots">${dotsHtml}</span>
+            <span class="tkcal-events">${chipsHtml}</span>
         </button>`;
     })
     .join('');
@@ -163,40 +190,82 @@ export function renderTasksCalendar(prefillComposerDate?: (iso: string) => void)
         </div>`
     : '';
 
+  const listsHtml = lists.length
+    ? lists
+        .map((list) => {
+          const shown = !hiddenLists.has(list.id);
+          return `
+          <button type="button" class="tkcal-list" data-cal-list="${escapeHtml(
+            list.id,
+          )}" aria-pressed="${String(shown)}" title="${
+            shown ? 'Hide' : 'Show'
+          } ${escapeHtml(list.name)} on the calendar">
+            <span class="tkcal-box tk-c-${list.color}" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+            </span>
+            <span class="tkcal-list-name">${escapeHtml(list.name)}</span>
+          </button>`;
+        })
+        .join('')
+    : `<p class="tkcal-lists-empty">No lists yet — make a task list and its dated reminders land here.</p>`;
+
   sections.innerHTML = `
     <div class="tkcal">
-      <div class="tkcal-grid-pane">
-        <header class="tkcal-head">
+      <header class="tkcal-top">
+        <h5 class="tkcal-month">${monthLabel}</h5>
+        <div class="tkcal-modes" role="group" aria-label="Calendar view">${modes}</div>
+        <div class="tkcal-navs">
           <button type="button" class="tkcal-nav" data-cal-prev title="Previous month" aria-label="Previous month">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>
           </button>
-          <h5 class="tkcal-month">${monthLabel}</h5>
+          <button type="button" class="tkcal-today" data-cal-today>Today</button>
           <button type="button" class="tkcal-nav" data-cal-next title="Next month" aria-label="Next month">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
           </button>
-          ${todayChip}
-        </header>
-        <div class="tkcal-weekdays">${weekdays}</div>
-        <div class="tkcal-grid" role="grid">${gridHtml}</div>
-      </div>
-      <div class="tkcal-day-pane">
-        <header class="tkcal-day-head">
-          <div class="tkcal-day-heading">
-            <h5 class="tkcal-day-title">${dayLabel}</h5>
-            <span class="tkcal-day-count">${
-              dayRows.length > 0
-                ? `${dayRows.length} reminder${dayRows.length === 1 ? '' : 's'}`
-                : ''
-            }</span>
+        </div>
+      </header>
+      <div class="tkcal-body">
+        <div class="tkcal-grid-pane">
+          <div class="tkcal-weekdays">${weekdays}</div>
+          <div class="tkcal-grid" role="grid">${gridHtml}</div>
+        </div>
+        <aside class="tkcal-side">
+          <div class="tkcal-lists">
+            <div class="tkcal-side-eyebrow">My Lists</div>
+            ${listsHtml}
           </div>
-          ${
-            prefillComposerDate
-              ? `<button type="button" class="tk-chip-btn" data-cal-add title="Add a reminder on this day" aria-label="Add a reminder on this day"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>`
-              : ''
-          }
-        </header>
-        <div class="tk-rows" role="list" data-cal-day-rows>${rowsHtml}</div>
-        ${upNextHtml}
+          <div class="tkcal-day-pane">
+            <header class="tkcal-day-head">
+              <div class="tkcal-day-heading">
+                <h5 class="tkcal-day-title">${dayLabel}</h5>
+                <span class="tkcal-day-count">${
+                  dayRows.length > 0
+                    ? `${dayRows.length} reminder${dayRows.length === 1 ? '' : 's'}`
+                    : ''
+                }</span>
+              </div>
+              ${
+                prefillComposerDate
+                  ? `<button type="button" class="tk-chip-btn" data-cal-add title="Add a reminder on this day" aria-label="Add a reminder on this day"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>`
+                  : ''
+              }
+            </header>
+            <div class="tk-rows" role="list" data-cal-day-rows>${rowsHtml}</div>
+            ${upNextHtml}
+          </div>
+          <div class="tkcal-mini">
+            <header class="tkcal-mini-head">
+              <button type="button" class="tkcal-mini-nav" data-cal-prev title="Previous month" aria-label="Previous month">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>
+              </button>
+              <span class="tkcal-mini-month">${monthLabel}</span>
+              <button type="button" class="tkcal-mini-nav" data-cal-next title="Next month" aria-label="Next month">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+              </button>
+            </header>
+            <div class="tkcal-mini-grid">${miniCells(cursorMonth, selectedDay, today)}</div>
+          </div>
+        </aside>
       </div>
     </div>`;
 
@@ -241,8 +310,8 @@ function dayKey(date: Date): string {
 
 function weekdayLabels(): string[] {
   // Sunday-first, matching the grid below (the US convention the app's
-  // English UI ships with).
-  const fmt = new Intl.DateTimeFormat(undefined, { weekday: 'narrow' });
+  // English UI ships with). Short names — the iCloud header.
+  const fmt = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
   const labels: string[] = [];
   const anchor = new Date(2023, 9, 1); // a Sunday
   for (let i = 0; i < 7; i += 1) {
@@ -253,12 +322,18 @@ function weekdayLabels(): string[] {
   return labels;
 }
 
-/** The 42 cells (6 weeks) covering the cursor month, Sunday-first. */
+/**
+ * The cells covering the cursor month, Sunday-first — exactly as many
+ * weeks as the month needs (five or six, never padding rows), the way
+ * the macOS calendar lays a month out.
+ */
 function monthCells(month: Date): { date: Date; key: string }[] {
   const start = new Date(month);
   start.setDate(1 - start.getDay()); // back to Sunday
+  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const weeks = Math.ceil((month.getDay() + daysInMonth) / 7);
   const cells: { date: Date; key: string }[] = [];
-  for (let i = 0; i < 42; i += 1) {
+  for (let i = 0; i < weeks * 7; i += 1) {
     const date = new Date(start);
     date.setDate(start.getDate() + i);
     cells.push({ date, key: dayKey(date) });
@@ -267,23 +342,59 @@ function monthCells(month: Date): { date: Date; key: string }[] {
 }
 
 /**
- * The dots: for every day, the DISTINCT list colors of that day's active
- * tasks (due or reminding), newest-note-first capped by the caller.
+ * The mini month — only this month's days, six-wide tiny numbers, the
+ * sidebar's bottom fixture. Today rides a red dot; the selected day a
+ * ring. Both are pure CSS states on the buttons.
  */
-function collectByDay(): Map<string, string[]> {
-  const byDay = new Map<string, string[]>();
+function miniCells(month: Date, selected: Date, today: Date): string {
+  const fmt = new Intl.DateTimeFormat(undefined, { weekday: 'narrow' });
+  const anchor = new Date(2023, 9, 1); // a Sunday
+  const head = Array.from({ length: 7 }, (_, i) =>
+    fmt.format(new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + i)),
+  )
+    .map((label) => `<span class="tkcal-mini-wd">${label}</span>`)
+    .join('');
+  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const lead = month.getDay();
+  const blanks = Array.from(
+    { length: lead },
+    () => `<span class="tkcal-mini-day is-blank"></span>`,
+  );
+  const days = Array.from({ length: daysInMonth }, (_, i) => {
+    const date = new Date(month.getFullYear(), month.getMonth(), i + 1);
+    const isToday = sameDay(date, today);
+    const isSelected = sameDay(date, selected);
+    const classes = ['tkcal-mini-day', isToday ? 'is-today' : '', isSelected ? 'is-selected' : '']
+      .filter(Boolean)
+      .join(' ');
+    return `<button type="button" class="${classes}" data-cal-day="${dayKey(date)}" aria-label="${
+      i + 1
+    }">${i + 1}</button>`;
+  });
+  return head + blanks.join('') + days.join('');
+}
+
+/**
+ * The chips: for every day, the visible tasks due or reminding that day
+ * (hidden lists swept out), soonest first.
+ */
+function collectByDay(): Map<string, AggTask[]> {
+  const byDay = new Map<string, AggTask[]>();
   for (const row of allActiveTasks()) {
     for (const iso of [row.task.dueDate, row.task.reminderAt]) {
       if (!iso) continue;
       const date = parseWhen(iso);
       if (!date) continue;
       const key = dayKey(date);
-      const colors = byDay.get(key) ?? [];
-      if (!colors.includes(row.note.color)) {
-        colors.push(row.note.color);
-        byDay.set(key, colors);
+      const rows = byDay.get(key) ?? [];
+      if (!rows.some((candidate) => candidate.task.id === row.task.id)) {
+        rows.push(row);
+        byDay.set(key, rows);
       }
     }
+  }
+  for (const rows of byDay.values()) {
+    rows.sort((a, b) => anchorTime(a.task) - anchorTime(b.task));
   }
   return byDay;
 }
@@ -314,7 +425,7 @@ function upcomingAfter(day: Date, now: Date, limit: number): AggTask[] {
     .map(({ row }) => row);
 }
 
-function anchorTime(task: Task, now: Date): number {
+function anchorTime(task: Task, now: Date = new Date()): number {
   const anchor = parseWhen(task.dueDate || task.reminderAt);
   return anchor?.getTime() ?? now.getTime();
 }
@@ -322,6 +433,7 @@ function anchorTime(task: Task, now: Date): number {
 function allActiveTasks(): AggTask[] {
   const out: AggTask[] = [];
   for (const list of taskNotes.lists()) {
+    if (hiddenLists.has(list.id)) continue;
     const entry = taskNotes.noteById(list.id);
     if (!entry) continue;
     for (const task of entry.model.tasks) {
@@ -352,7 +464,7 @@ function calendarMark(day: Date, today: Date): string {
 
 function emptyDayCopy(day: Date, today: Date): string {
   const diff = Math.round((startOfDay(day).getTime() - startOfDay(today).getTime()) / 86_400_000);
-  if (diff === 0) return 'Pick a day with dots, or add the first one.';
+  if (diff === 0) return 'Pick a day with chips, or add the first one.';
   if (diff > 0) return 'Add a reminder from this day to fill it in.';
   return 'A quiet day, in the books.';
 }
