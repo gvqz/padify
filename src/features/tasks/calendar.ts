@@ -96,6 +96,15 @@ export function initTasksCalendar(): void {
 }
 
 /**
+ * The hub's quick-add callback, remembered between renders. The calendar
+ * re-renders itself constantly — day picks, month flips, list toggles —
+ * and those internal calls don't carry the callback, so it's kept here:
+ * without it the Add button (and the inline row) would vanish the moment
+ * a day gets selected.
+ */
+let quickAddFn: ((title: string, iso: string) => void) | undefined;
+
+/**
  * Renders the calendar page into the hub's sections container.
  *
  * `quickAdd` — when the hub offers it — is how the day pane's inline
@@ -104,6 +113,8 @@ export function initTasksCalendar(): void {
  * row) don't render at all.
  */
 export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => void): void {
+  if (quickAdd) quickAddFn = quickAdd;
+  const add = quickAddFn;
   const hub = document.getElementById('tasksHub');
   const sections = hub?.querySelector<HTMLElement>('#tkhSections');
   if (!sections) return;
@@ -257,13 +268,13 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
                 }</span>
               </div>
               ${
-                quickAdd
+                add
                   ? `<button type="button" class="tk-chip-btn" data-cal-add title="Add a reminder on this day" aria-label="Add a reminder on this day"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>`
                   : ''
               }
             </header>
             ${
-              quickAdd
+              add
                 ? `<form class="tkcal-quickadd" data-cal-quickadd hidden>
                     <span class="tkcal-quickadd-dot tk-c-${targetColor}" aria-hidden="true"></span>
                     <input type="text" class="tkcal-quickadd-input" data-cal-quickadd-input
@@ -291,8 +302,8 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
       </div>
     </div>`;
 
-  if (quickAdd) {
-    wireQuickAdd(sections, quickAdd);
+  if (add) {
+    wireQuickAdd(sections, add);
   }
 }
 
