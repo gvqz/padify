@@ -63,15 +63,32 @@ body.dark {
   color: var(--tk-text);
 }
 
-/* The list color every descendant reads. */
-.tk-scope.tk-c-blue { --list-c: var(--tk-blue); }
-.tk-scope.tk-c-red { --list-c: var(--tk-red); }
-.tk-scope.tk-c-orange { --list-c: var(--tk-orange); }
-.tk-scope.tk-c-green { --list-c: var(--tk-green); }
-.tk-scope.tk-c-purple { --list-c: var(--tk-purple); }
-.tk-scope.tk-c-teal { --list-c: var(--tk-teal); }
+/* The list color every descendant reads — and, stated standalone, any
+   element that carries its own tk-c-* (menu dots, the color picker's
+   swatches, a row's origin dot inside the un-scoped hub/calendar, where
+   no ancestor paints one for them). The element's own definition beats
+   an inherited one, so a swatch always wins over its surroundings. */
+.tk-c-blue { --list-c: var(--tk-blue); }
+.tk-c-red { --list-c: var(--tk-red); }
+.tk-c-orange { --list-c: var(--tk-orange); }
+.tk-c-green { --list-c: var(--tk-green); }
+.tk-c-purple { --list-c: var(--tk-purple); }
+.tk-c-teal { --list-c: var(--tk-teal); }
 /* No list (aggregated chrome) → the monochrome accent. */
-.tk-scope.tk-c-none { --list-c: var(--tk-accent); }
+.tk-c-none { --list-c: var(--tk-accent); }
+
+/* The little list-color dot — origins, section heads, menu rows. Its
+   size is the context's business; the shape and paint are its own.
+   (A rebuild once dropped this base rule and every dot in the tasks UI
+   went invisible — square, transparent — so it stays put.) */
+.tk-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--list-c, var(--tk-muted));
+}
 
 /* The hidden attribute must win over every display rule below — author
    styles otherwise override the UA's [hidden] { display: none }. */
@@ -1718,46 +1735,15 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 
 /* --- the day's reminders as chips (the events) --- */
 
-/* The .tk-c-* classes pair with .tk-scope everywhere else in this file,
-   but chips and boxes ride inside cells/sidebars whose scope class is
-   the HUB's (it carries no tk-c-* of its own), so the palette is
-   restated for them standalone — otherwise every chip falls back to the
-   accent gray. */
-.tkcal-chip.tk-c-blue,
-.tkcal-box.tk-c-blue,
-.tkcal-quickadd-dot.tk-c-blue {
-  --list-c: var(--tk-blue);
-}
-.tkcal-chip.tk-c-red,
-.tkcal-box.tk-c-red,
-.tkcal-quickadd-dot.tk-c-red {
-  --list-c: var(--tk-red);
-}
-.tkcal-chip.tk-c-orange,
-.tkcal-box.tk-c-orange,
-.tkcal-quickadd-dot.tk-c-orange {
-  --list-c: var(--tk-orange);
-}
-.tkcal-chip.tk-c-green,
-.tkcal-box.tk-c-green,
-.tkcal-quickadd-dot.tk-c-green {
-  --list-c: var(--tk-green);
-}
-.tkcal-chip.tk-c-purple,
-.tkcal-box.tk-c-purple,
-.tkcal-quickadd-dot.tk-c-purple {
-  --list-c: var(--tk-purple);
-}
-.tkcal-chip.tk-c-teal,
-.tkcal-box.tk-c-teal,
-.tkcal-quickadd-dot.tk-c-teal {
-  --list-c: var(--tk-teal);
-}
+/* Chips, boxes and the quick-add dot read --list-c from their own
+   tk-c-* class — the palette at the top of this file is standalone, so
+   no per-context restatement is needed (the hub itself carries no
+   scope color; the elements bring their own). */
 
 .tkcal-events {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-height: 0;
   overflow: hidden;
   flex: 1 1 auto;
@@ -1973,7 +1959,9 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--tk-muted);
+  /* The list the reminder will file into (falls back to quiet gray
+     before any list exists). */
+  background: var(--list-c, var(--tk-muted));
   opacity: 0.55;
 }
 
