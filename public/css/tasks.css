@@ -609,10 +609,11 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* The rail that normally frames the right edge stands down on this
-     page — without a gutter of its own the sidebar rides 2px from the
-     window edge. This restores the gap the rail used to supply. */
-  padding-right: 14px;
+  /* The page's own gutters: 14 on both sides (the base 2px left left the
+     grid hugging the notes rail while the right had a real gap), 12 on
+     top so the toolbar breathes under the app navbar, and the base 18
+     at the bottom — the rhythm the rest of the page already had. */
+  padding: 12px 14px 18px;
 }
 
 .tkh.is-calendar .tk-sections {
