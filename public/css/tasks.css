@@ -464,6 +464,10 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
 #taskRail .tr-card.is-active {
   background: var(--vz-bg-elevated);
   color: var(--vz-fg);
+  /* The 2px accent bar tracks these corners — square the left pair off
+     so it reads as a line, not a floating bracket. */
+  border-top-left-radius: 2px;
+  border-bottom-left-radius: 2px;
   box-shadow: inset 2px 0 0 var(--vz-primary);
 }
 
