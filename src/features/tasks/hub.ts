@@ -331,6 +331,12 @@ function renderHub(): void {
     title.textContent = 'Calendar';
     count.textContent = String(taskNotes.smartCounts(now).today);
     actions.innerHTML = '';
+    // The calendar owns its empty states (the day pane's, the zero-list
+    // sidebar copy) — the hub's must stand down, or a view that rendered
+    // it empty earlier (Today with nothing due) leaves its "Nothing due
+    // today" panel parked under the grid, squeezing every row.
+    emptyEl.hidden = true;
+    emptyEl.innerHTML = '';
     renderTasksCalendar(quickAddOnDay);
     renderTargetChip(targetChip);
     return;
