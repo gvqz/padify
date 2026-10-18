@@ -2184,7 +2184,11 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 /* macOS Calendar's year spread: a month name over seven columns of
    bare numerals (no weekday letters), days with reminders reading
    darker, today red-circled, the picked day ringed. The month name is
-   the zoom — it opens that month in Month view. */
+   the zoom — it opens that month in Month view. The rows SHARE the
+   pane's height (minmax + 1fr) so the year fills top to bottom
+   instead of bunching under the toolbar and stranding the lower half
+   of the pane — macOS stretches its rows the same way; a short window
+   flops back to content height and scrolls. */
 .tkcal-year {
   flex: 1 1 auto;
   min-height: 0;
@@ -2193,8 +2197,8 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   scrollbar-color: var(--tk-track) transparent;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 20px 24px;
-  align-content: start;
+  grid-auto-rows: minmax(min-content, 1fr);
+  gap: 14px 20px;
   padding: 2px 2px 10px;
 }
 
@@ -2211,6 +2215,7 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
 .tkcal-year-name {
@@ -2235,24 +2240,34 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 }
 
 .tkcal-year-grid {
+  flex: 1 1 auto;
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
+  /* Stretched months share their height across the numeral rows, each
+     circle centered in its band — the spread reads even instead of
+     stacked. */
+  grid-auto-rows: 1fr;
+  align-items: center;
   justify-items: center;
-  gap: 2px 0;
 }
 
 .tkcal-year-day {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  /* The circle breathes with its column: tight months hold a 24px
+     floor, wide months grow to 30 — never a fixed dot lost in a wide
+     column. */
+  width: clamp(24px, 80%, 30px);
+  aspect-ratio: 1;
+  height: auto;
   padding: 0;
   border: 0;
   border-radius: 50%;
   background: transparent;
   font: inherit;
-  font-size: 11px;
+  font-size: 11.5px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
   /* Plain days whisper; days carrying reminders read full — the year
@@ -2290,9 +2305,11 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   font-weight: 650;
 }
 
-/* The pane's width decides the spread: four across when the sidebar
-   shares the row, three when the pane narrows, two on phones. */
-@container (max-width: 940px) {
+/* The pane's width decides the spread — four across is the floor for a
+   full-size month (≈205px each, circles nearly shoulder to shoulder);
+   below that drop to three, then two. No cap the other way: wide
+   panes keep four and the circles breathe wider. */
+@container (max-width: 860px) {
   .tkcal-year {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -2304,8 +2321,6 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   }
 
   .tkcal-year-day {
-    width: 26px;
-    height: 26px;
     font-size: 12px;
   }
 }
