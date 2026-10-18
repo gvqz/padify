@@ -2,26 +2,31 @@
  * The ONE calendar — every dated task, one grid.
  *
  * The calendar door in the notes rail's head (and the rail's Calendar
- * destination) opens this page: an iCloud-style month view. The grid IS
- * the page — a big month title up top, the Day/Week/Month/Year modes
- * (Month for now, the rest wait), prev/Today/next beside them, and a
- * month grid whose days carry the day's reminders as colored chips (one
- * per task, tinted with its list's color, three then a count). The
- * RIGHT sidebar is the iCloud sidebar mirrored: the lists as colored
+ * destination) opens this page: an iCloud-style calendar. The page IS
+ * the view — a big title up top, the Day/Week/Month/Year modes (Month
+ * and Year live; Day and Week still wait on the bench), prev/Today/next
+ * beside them, and the body: Month is the ruled grid whose days carry
+ * the day's reminders as colored chips (one per task, tinted with its
+ * list's color, three then a count); Year is the twelve-little-months
+ * spread, numbers only, days with reminders reading darker, the month
+ * name zooming into Month.
+ *
+ * The RIGHT sidebar is the iCloud sidebar mirrored: the lists as colored
  * checkboxes (unchecking one sweeps its reminders off the grid), the
  * selected day's rows — due or reminding — using the same rows as every
  * tasks page, so completing, the inline editor and moving work here
  * too, an Up Next act so the panel is never a dead end, and the mini
- * month at the bottom. The day pane's Add button opens an inline
+ * month at the bottom (Month mode only — Year already shows twelve of
+ * them). The day pane's Add button opens an inline
  * quick-add row right there — the hub's bottom composer stays off this
  * page — and Enter files the reminder onto the selected day (9:00),
  * keeping the row open for rapid entry.
  *
  * State is module-local (the cursor month + the selected day + the
- * hidden lists) and survives view switches; the aggregate is re-read on
- * every render, so edits elsewhere reflect immediately. Rendered INTO
- * the hub's sections container, which means the hub's delegated row
- * handlers serve these rows for free.
+ * hidden lists + which mode the page is in) and survives view switches;
+ * the aggregate is re-read on every render, so edits elsewhere reflect
+ * immediately. Rendered INTO the hub's sections container, which means
+ * the hub's delegated row handlers serve these rows for free.
  */
 
 import { taskNotes, type AggTask } from './aggregate';
@@ -30,9 +35,14 @@ import { parseWhen, startOfDay } from '../../editor/tasks/dates';
 import { escapeHtml } from '../../lib/escape';
 import type { Task } from '../../editor/tasks/content';
 
+/** The page's modes — Month is the ruled grid, Year the twelve spreads. */
+type CalMode = 'month' | 'year';
+
 /** The cursor month (a date on its first day) + the selected day. */
 let cursorMonth = firstOfMonth(new Date());
 let selectedDay = startOfDay(new Date());
+/** Which page is on the glass right now. */
+let mode: CalMode = 'month';
 /** Task notes the user unchecked in the sidebar — their reminders hide. */
 const hiddenLists = new Set<string>();
 
@@ -50,14 +60,38 @@ export function initTasksCalendar(): void {
   sections.addEventListener('click', (event) => {
     const target = event.target as Element;
 
+    // The arrows step by the page's own grain: a month in Month view,
+    // a whole year in Year view.
     if (target.closest('[data-cal-prev]')) {
-      cursorMonth = shiftMonth(cursorMonth, -1);
+      cursorMonth = mode === 'year' ? shiftYear(cursorMonth, -1) : shiftMonth(cursorMonth, -1);
       renderTasksCalendar();
       return;
     }
     if (target.closest('[data-cal-next]')) {
-      cursorMonth = shiftMonth(cursorMonth, 1);
+      cursorMonth = mode === 'year' ? shiftYear(cursorMonth, 1) : shiftMonth(cursorMonth, 1);
       renderTasksCalendar();
+      return;
+    }
+    // The segmented control — switching modes re-renders the same state
+    // into the other page (Day and Week are still on the bench).
+    const modeBtn = target.closest<HTMLElement>('[data-cal-mode]');
+    if (modeBtn) {
+      const next = modeBtn.dataset.calMode;
+      if ((next === 'month' || next === 'year') && next !== mode) {
+        mode = next;
+        renderTasksCalendar();
+      }
+      return;
+    }
+    // A year view's month name — zoom into that month (Apple's click).
+    const jump = target.closest<HTMLElement>('[data-cal-jump]');
+    if (jump) {
+      const date = parseWhen(`${jump.dataset.calJump ?? ''}T00:00:00`);
+      if (date) {
+        cursorMonth = firstOfMonth(date);
+        mode = 'month';
+        renderTasksCalendar();
+      }
       return;
     }
     if (target.closest('[data-cal-today]')) {
@@ -128,16 +162,18 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
     month: 'long',
     year: 'numeric',
   }).format(cursorMonth);
+  const yearLabel = String(cursorMonth.getFullYear());
 
+  // The segmented control: Month and Year are live; Day and Week dim
+  // and explain themselves until they're built.
   const modes = ['day', 'week', 'month', 'year']
-    .map((mode) => {
-      const label = mode[0].toUpperCase() + mode.slice(1);
-      const on = mode === 'month';
-      return `<button type="button" class="tkcal-mode${on ? ' is-on' : ''}"${
-        on
-          ? ' aria-pressed="true"'
-          : ' data-cal-mode-wip title="Month for now — more views soon" aria-disabled="true"'
-      }>${label}</button>`;
+    .map((name) => {
+      const label = name[0].toUpperCase() + name.slice(1);
+      if (name === 'day' || name === 'week') {
+        return `<button type="button" class="tkcal-mode" data-cal-mode-wip title="Still on the bench — Month and Year are live" aria-disabled="true">${label}</button>`;
+      }
+      const on = name === mode;
+      return `<button type="button" class="tkcal-mode${on ? ' is-on' : ''}" data-cal-mode="${name}" aria-pressed="${String(on)}">${label}</button>`;
     })
     .join('');
 
@@ -186,6 +222,20 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
   const weekdays = weekdayLabels()
     .map((label) => `<span class="tkcal-weekday">${label}</span>`)
     .join('');
+
+  // The Year page: twelve little months, numbers only. The sidebar
+  // stays (lists + the day inspector still work on a picked day); the
+  // mini month sits out — a year page already shows twelve months.
+  const yearHtml =
+    mode === 'year'
+      ? monthsOfYear(cursorMonth)
+          .map((month) => yearMonthHtml(month, selectedDay, today, byDay))
+          .join('')
+      : '';
+  const gridPaneHtml =
+    mode === 'year'
+      ? `<div class="tkcal-year">${yearHtml}</div>`
+      : `<div class="tkcal-weekdays">${weekdays}</div><div class="tkcal-grid" role="grid">${gridHtml}</div>`;
 
   const dayRows = dayTasks(selectedDay, now);
   const dayLabel = dayHeading(selectedDay, today);
@@ -238,23 +288,20 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
         <button type="button" class="tkh-back tkcal-back" data-hub-close title="Back to the note" aria-label="Back to the note">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
         </button>
-        <h5 class="tkcal-month">${monthLabel}</h5>
+        <h5 class="tkcal-month">${mode === 'year' ? yearLabel : monthLabel}</h5>
         <div class="tkcal-modes" role="group" aria-label="Calendar view">${modes}</div>
         <div class="tkcal-navs">
-          <button type="button" class="tkcal-nav" data-cal-prev title="Previous month" aria-label="Previous month">
+          <button type="button" class="tkcal-nav" data-cal-prev title="Previous ${mode}" aria-label="Previous ${mode}">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>
           </button>
           <button type="button" class="tkcal-today" data-cal-today>Today</button>
-          <button type="button" class="tkcal-nav" data-cal-next title="Next month" aria-label="Next month">
+          <button type="button" class="tkcal-nav" data-cal-next title="Next ${mode}" aria-label="Next ${mode}">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
           </button>
         </div>
       </header>
       <div class="tkcal-body">
-        <div class="tkcal-grid-pane">
-          <div class="tkcal-weekdays">${weekdays}</div>
-          <div class="tkcal-grid" role="grid">${gridHtml}</div>
-        </div>
+        <div class="tkcal-grid-pane">${gridPaneHtml}</div>
         <aside class="tkcal-side">
           <div class="tkcal-lists">
             <div class="tkcal-side-eyebrow">My Lists</div>
@@ -289,7 +336,9 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
             <div class="tk-rows" role="list" data-cal-day-rows>${rowsHtml}</div>
             ${upNextHtml}
           </div>
-          <div class="tkcal-mini">
+          ${
+            mode === 'month'
+              ? `<div class="tkcal-mini">
             <header class="tkcal-mini-head">
               <button type="button" class="tkcal-mini-nav" data-cal-prev title="Previous month" aria-label="Previous month">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>
@@ -300,7 +349,9 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
               </button>
             </header>
             <div class="tkcal-mini-grid">${miniCells(cursorMonth, selectedDay, today)}</div>
-          </div>
+          </div>`
+              : ''
+          }
         </aside>
       </div>
     </div>`;
@@ -412,6 +463,17 @@ function shiftMonth(month: Date, delta: number): Date {
   return copy;
 }
 
+function shiftYear(month: Date, delta: number): Date {
+  const copy = new Date(month);
+  copy.setFullYear(copy.getFullYear() + delta);
+  return copy;
+}
+
+/** The year's twelve cursor months — January through December. */
+function monthsOfYear(year: Date): Date[] {
+  return Array.from({ length: 12 }, (_, i) => new Date(year.getFullYear(), i, 1));
+}
+
 function sameDay(a: Date, b: Date): boolean {
   return (
     a.getFullYear() === b.getFullYear() &&
@@ -489,6 +551,56 @@ function miniCells(month: Date, selected: Date, today: Date): string {
     }">${i + 1}</button>`;
   });
   return head + blanks.join('') + days.join('');
+}
+
+/**
+ * One little month on the Year page — the month's name (a button that
+ * zooms into Month view) over a seven-wide run of bare numerals, no
+ * weekday letters (the macOS year spread). A day carrying reminders
+ * reads darker and medium; today rides the red circle, the picked day
+ * a ring — the same states the mini month wears.
+ */
+function yearMonthHtml(
+  month: Date,
+  selected: Date,
+  today: Date,
+  byDay: Map<string, AggTask[]>,
+): string {
+  const name = new Intl.DateTimeFormat(undefined, { month: 'long' }).format(month);
+  const labelFmt = new Intl.DateTimeFormat(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const blanks = Array.from(
+    { length: month.getDay() },
+    () => `<span class="tkcal-year-day is-blank" aria-hidden="true"></span>`,
+  );
+  const days = Array.from({ length: daysInMonth }, (_, i) => {
+    const date = new Date(month.getFullYear(), month.getMonth(), i + 1);
+    const count = byDay.get(dayKey(date))?.length ?? 0;
+    const classes = [
+      'tkcal-year-day',
+      count > 0 ? 'has-events' : '',
+      sameDay(date, today) ? 'is-today' : '',
+      sameDay(date, selected) ? 'is-selected' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    return `<button type="button" class="${classes}" data-cal-day="${dayKey(
+      date,
+    )}" aria-label="${labelFmt.format(date)}${
+      count > 0 ? `, ${count} reminders` : ''
+    }">${i + 1}</button>`;
+  });
+  return `
+      <section class="tkcal-year-month">
+        <button type="button" class="tkcal-year-name" data-cal-jump="${dayKey(
+          month,
+        )}" title="Open ${name} in Month view">${name}</button>
+        <div class="tkcal-year-grid">${blanks.join('')}${days.join('')}</div>
+      </section>`;
 }
 
 /**

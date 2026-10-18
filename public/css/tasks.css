@@ -1510,7 +1510,7 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 }
 
 /* --------------------------------------------------------------------------
-   12. The ONE calendar — the iCloud month page
+   12. The ONE calendar — the iCloud month + year pages
    -------------------------------------------------------------------------- */
 
 .tkcal {
@@ -1650,6 +1650,10 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  /* A size container: the year spread picks its column count from the
+     pane's real width — which the sidebar's presence decides — not the
+     viewport's. */
+  container-type: inline-size;
 }
 
 /* --- the weekday header --- */
@@ -2173,6 +2177,137 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 .tkcal-mini-day.is-selected:not(.is-today) {
   box-shadow: inset 0 0 0 1.5px var(--tk-accent);
   font-weight: 650;
+}
+
+/* --- the year view: twelve little months --- */
+
+/* macOS Calendar's year spread: a month name over seven columns of
+   bare numerals (no weekday letters), days with reminders reading
+   darker, today red-circled, the picked day ringed. The month name is
+   the zoom — it opens that month in Month view. */
+.tkcal-year {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-track) transparent;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px 24px;
+  align-content: start;
+  padding: 2px 2px 10px;
+}
+
+.tkcal-year::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tkcal-year::-webkit-scrollbar-thumb {
+  background: var(--tk-track);
+  border-radius: 4px;
+}
+
+.tkcal-year-month {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tkcal-year-name {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  padding: 1px 2px 7px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--tk-text);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.14s var(--vz-ease);
+}
+
+.tkcal-year-name:hover,
+.tkcal-year-name:focus-visible {
+  color: var(--tk-accent);
+  outline: none;
+}
+
+.tkcal-year-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  justify-items: center;
+  gap: 2px 0;
+}
+
+.tkcal-year-day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  /* Plain days whisper; days carrying reminders read full — the year
+     spread's only event mark (Apple's darker numerals). */
+  color: color-mix(in srgb, var(--tk-text) 58%, var(--tk-bg));
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease), color 0.12s var(--vz-ease);
+}
+
+.tkcal-year-day:hover,
+.tkcal-year-day:focus-visible {
+  background: var(--tk-well);
+  color: var(--tk-text);
+  outline: none;
+}
+
+.tkcal-year-day.is-blank {
+  pointer-events: none;
+}
+
+.tkcal-year-day.has-events {
+  color: var(--tk-text);
+  font-weight: 600;
+}
+
+.tkcal-year-day.is-today {
+  background: var(--vz-danger);
+  color: #fff;
+  font-weight: 700;
+}
+
+.tkcal-year-day.is-selected:not(.is-today) {
+  box-shadow: inset 0 0 0 1.5px var(--tk-accent);
+  color: var(--tk-text);
+  font-weight: 650;
+}
+
+/* The pane's width decides the spread: four across when the sidebar
+   shares the row, three when the pane narrows, two on phones. */
+@container (max-width: 940px) {
+  .tkcal-year {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 620px) {
+  .tkcal-year {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tkcal-year-day {
+    width: 26px;
+    height: 26px;
+    font-size: 12px;
+  }
 }
 
 /* --------------------------------------------------------------------------

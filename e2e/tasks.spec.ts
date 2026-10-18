@@ -463,6 +463,92 @@ test.describe('the calendar', () => {
     await page.locator('.tkcal-navs [data-cal-today]').click();
     await expect(page.locator('.tkcal-day.is-today')).toHaveClass(/is-selected/);
   });
+
+  test('the year view spreads twelve little months and the title is just the year', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.locator('#tabRailCalendar').click();
+
+    // Month first, then flip to Year the way a user would.
+    await page.locator('[data-cal-mode="year"]').click();
+
+    const title = page.locator('.tkcal-month');
+    await expect(title).toHaveText(String(new Date().getFullYear()));
+    await expect(page.locator('.tkcal-year-month')).toHaveCount(12);
+    // Year is pressed, Month is not, and Day/Week still say they wait.
+    await expect(page.locator('[data-cal-mode="year"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-cal-mode="month"]')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('[data-cal-mode-wip]')).toHaveCount(2);
+    // The sidebar keeps its lists + day inspector; the mini month sits
+    // out — twelve months are already on the glass.
+    await expect(page.locator('.tkcal-lists')).toBeVisible();
+    await expect(page.locator('.tkcal-mini')).toHaveCount(0);
+    // The arrows now step years.
+    await expect(page.locator('.tkcal-navs [data-cal-prev]')).toHaveAttribute(
+      'title',
+      'Previous year',
+    );
+    // …and flipping back to Month restores the ruled grid.
+    await page.locator('[data-cal-mode="month"]').click();
+    await expect(page.locator('.tkcal-grid')).toBeVisible();
+  });
+
+  test('year navigation steps whole years and Today comes home', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#tabRailCalendar').click();
+    await page.locator('[data-cal-mode="year"]').click();
+
+    const title = page.locator('.tkcal-month');
+    await page.locator('.tkcal-navs [data-cal-next]').click();
+    await expect(title).toHaveText(String(new Date().getFullYear() + 1));
+    await page.locator('.tkcal-navs [data-cal-prev]').click();
+    await page.locator('.tkcal-navs [data-cal-prev]').click();
+    await expect(title).toHaveText(String(new Date().getFullYear() - 1));
+    // No today in a year that isn't this one.
+    await expect(page.locator('.tkcal-year-day.is-today')).toHaveCount(0);
+    await page.locator('.tkcal-navs [data-cal-today]').click();
+    await expect(title).toHaveText(String(new Date().getFullYear()));
+    await expect(page.locator('.tkcal-year-day.is-today')).toHaveClass(/is-selected/);
+  });
+
+  test('the year spread marks event days; the month name zooms into Month', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    const input = page.locator('[data-composer-input]');
+    await input.fill('Year mark');
+    await input.press('Enter');
+    const row = page.locator('.tk-task-wrap', { hasText: 'Year mark' }).first();
+    await row.locator('.tk-task-main').click();
+    await page.locator('[data-editor-when="date"]').click();
+    await page.locator('[data-when-preset="nextWeek"]').click();
+    await page.locator('.tk-editor-title').press('Enter');
+
+    await page.locator('#tabRailCalendar').click();
+    await page.locator('[data-cal-mode="year"]').click();
+
+    // The marked day reads darker (the has-events state) — unless the
+    // due date crossed into next year, in which case the spread steps
+    // to it first.
+    const marked = page.locator('.tkcal-year-day.has-events');
+    if ((await marked.count()) === 0) {
+      await page.locator('.tkcal-navs [data-cal-next]').click();
+    }
+    await marked.first().click();
+    const pane = page.locator('.tkcal-day-pane');
+    await expect(pane.locator('.tk-task-wrap', { hasText: 'Year mark' })).toBeVisible();
+
+    // The month name is the zoom: it opens that month in Month view,
+    // selection carried over.
+    const monthName = marked
+      .first()
+      .locator('xpath=ancestor::section[contains(@class,"tkcal-year-month")]//button[@data-cal-jump]');
+    await monthName.click();
+    await expect(page.locator('.tkcal-grid')).toBeVisible();
+    await expect(
+      page.locator('.tkcal-day.is-selected .tkcal-chip', { hasText: 'Year mark' }),
+    ).toBeVisible();
+  });
 });
 
 test.describe('the migration', () => {
