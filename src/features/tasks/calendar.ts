@@ -5,16 +5,19 @@
  * destination) opens this page: an iCloud-style calendar. The page IS
  * the view — a big title up top, the Day/Week/Month/Year modes (all
  * four live), prev/Today/next beside them, and the body: Day is the
- * one wide page for the picked day, its reminders as real rows (the
- * same rows every page wears — completing and the inline editor work
- * right on the sheet, and the sidebar's day inspector stands down so
- * the day isn't listed twice); Week lines up seven tall columns under
- * their day headers, every reminder on the glass (a busy column
- * scrolls); Month is the ruled grid whose days carry the day's
- * reminders as colored chips (one per task, tinted with its list's
- * color, three then a count); Year is the twelve-little-months spread,
- * numbers only, days with reminders reading darker, the month name
- * zooming into Month.
+ * one wide page for the picked day, hour-ruled — a time gutter down
+ * the left, the day's reminders as real rows anchored under their
+ * hour (date-only ones in an All-Day band up top), completing and the
+ * inline editor working right on the sheet, and the sidebar's day
+ * inspector stood down so the day isn't listed twice; Week lines up
+ * seven day headers over the same ruled hours, every reminder on the
+ * glass as a chip at its hour (a busy hour stretches its row for the
+ * whole week at once); both timed pages carry Apple's red now-line in
+ * the current hour and open scrolled to the working hours; Month is
+ * the ruled grid whose days carry the day's reminders as colored
+ * chips (one per task, tinted with its list's color, three then a
+ * count); Year is the twelve-little-months spread, numbers only, days
+ * with reminders reading darker, the month name zooming into Month.
  *
  * The RIGHT sidebar is the iCloud sidebar mirrored: the lists as colored
  * checkboxes (unchecking one sweeps its reminders off the grid), the
@@ -36,7 +39,7 @@
 
 import { taskNotes, type AggTask } from './aggregate';
 import { taskRow } from '../../editor/tasks/rows';
-import { parseWhen, startOfDay } from '../../editor/tasks/dates';
+import { hasTime, parseWhen, startOfDay } from '../../editor/tasks/dates';
 import { escapeHtml } from '../../lib/escape';
 import type { Task } from '../../editor/tasks/content';
 
@@ -244,15 +247,6 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
 
   const dayRows = dayTasks(selectedDay, now);
   const dayLabel = dayHeading(selectedDay, today);
-  // The day sheet's rows — the same real rows every page wears, wide.
-  // When the day is empty, the friendly copy takes the sheet (worded
-  // for a page whose Add button is right there in the head).
-  const dayPageRowsHtml = dayRows.length
-    ? dayRows.map((row) => taskRow(row.task, now, row.note.color, false, row.note)).join('')
-    : `<div class="tk-empty tk-empty-day"><span class="tk-empty-day-mark">${calendarMark(
-        selectedDay,
-        today,
-      )}</span><p class="tk-empty-day-copy">${dayPageEmptyCopy(selectedDay, today)}</p></div>`;
 
   // The quick-add row wears the target list's color — the same list the
   // reminder will file into (the hub remembers the last one used). The
@@ -272,13 +266,13 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
                   </form>`
     : '';
 
-  // The Year page: twelve little months, numbers only. The Week page:
-  // seven tall columns under their day headers. The Day page: one wide
-  // sheet. The sidebar stays on all of them (lists +, on every page
-  // but Day, the day inspector — Day's sheet IS the inspector, wide);
-  // the mini month sits out — a year page already shows twelve months,
-  // and its arrows would step weeks in Week view where it has no
-  // business.
+  // The Year page: twelve little months, numbers only. The Week and
+  // Day pages are the timed pair — day headers over the hour ruling
+  // (Week), one wide ruled sheet (Day). The sidebar stays on all of
+  // them (lists +, on every page but Day, the day inspector — Day's
+  // sheet IS the inspector, wide); the mini month sits out — a year
+  // page already shows twelve months, and its arrows would step weeks
+  // in Week view where it has no business.
   const yearHtml =
     mode === 'year'
       ? monthsOfYear(cursorMonth)
@@ -289,9 +283,9 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
     mode === 'year'
       ? `<div class="tkcal-year">${yearHtml}</div>`
       : mode === 'week'
-        ? `<div class="tkcal-week" role="grid">${weekColumns(cursorWeek, selectedDay, today, byDay)}</div>`
+        ? `<div class="tkcal-week">${weekPageHtml(cursorWeek, selectedDay, today)}</div>`
         : mode === 'day'
-          ? dayPageHtml(selectedDay, today, dayPageRowsHtml, addBtnHtml, quickAddHtml)
+          ? dayPageHtml(selectedDay, today, addBtnHtml, quickAddHtml)
           : `<div class="tkcal-weekdays">${weekdays}</div><div class="tkcal-grid" role="grid">${gridHtml}</div>`;
 
   const rowsHtml = dayRows.length
@@ -333,6 +327,16 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
         })
         .join('')
     : `<p class="tkcal-lists-empty">No lists yet — add the first reminder and its list appears.</p>`;
+
+  // The timed pages' scroll: where the box sat before this render.
+  // A same-page re-render (completing a row, toggling a list) restores
+  // it — completing must never fling the hours back to morning — while
+  // a fresh page (a step, a flip) opens at the working hours. The box
+  // carries its own page key, because the cursors have already moved
+  // by the time this code runs.
+  const prevTimed = sections.querySelector<HTMLElement>('.tkcal-wk-time, .tkcal-daypage-scroll');
+  const prevTimedKey = prevTimed?.dataset.timedKey ?? '';
+  const prevTimedTop = prevTimed?.scrollTop ?? -1;
 
   sections.innerHTML = `
     <div class="tkcal">
@@ -403,9 +407,36 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
       </div>
     </div>`;
 
+  const timedBox = sections.querySelector<HTMLElement>('.tkcal-wk-time, .tkcal-daypage-scroll');
+  if (timedBox) {
+    const showsToday =
+      mode === 'day'
+        ? sameDay(selectedDay, today)
+        : today.getTime() >= weekStart(cursorWeek).getTime() &&
+          today.getTime() <= shiftDay(weekStart(cursorWeek), 6).getTime();
+    const key = `${mode}:${mode === 'day' ? dayKey(selectedDay) : dayKey(weekStart(cursorWeek))}`;
+    timedBox.dataset.timedKey = key;
+    timedBox.scrollTop =
+      key === prevTimedKey && prevTimedTop >= 0
+        ? prevTimedTop
+        : defaultTimedScroll(timedBox, showsToday);
+  }
+
   if (add) {
     wireQuickAdd(sections, add);
   }
+}
+
+/** Where a timed page opens scrolled to: around now when it holds
+ * today, the working hours (7 AM) otherwise — anchored to the hour
+ * label's real offset, so stretched rows above can't skew it. */
+function defaultTimedScroll(box: HTMLElement, showsToday: boolean): number {
+  let hour = 7;
+  if (showsToday) hour = Math.max(0, Math.min(23, new Date().getHours() - 1));
+  const mark = box.querySelector<HTMLElement>(`.tkcal-hour[data-hour="${hour}"]`);
+  const max = box.scrollHeight - box.clientHeight;
+  const top = mark ? mark.offsetTop - 8 : 0;
+  return Math.max(0, Math.min(max, top));
 }
 
 /**
@@ -579,22 +610,48 @@ function dayPageLabel(day: Date, today: Date): string {
 }
 
 /**
- * The Day page — one wide sheet for the picked day. The head pairs the
- * big numeral with the weekday word (both Apple red when the day is
- * today) and, in this view, carries the Add button — the sidebar's day
- * inspector stands down here, because the sheet IS the inspector: the
- * day's reminders as the same real rows every page wears, completing
- * and the inline editor working right on them. A quiet day gets the
- * friendly copy, centered on the wide page.
+ * The Day page — one wide sheet, hour-ruled. The head pairs the big
+ * numeral with the weekday word (both Apple red when the day is
+ * today) and carries the Add button — the sidebar's day inspector
+ * stands down here, because the sheet IS the inspector. Below it the
+ * day's reminders anchor under their hour down a time gutter as the
+ * same real rows every page wears (completing and the inline editor
+ * work right on them), date-only ones in an All-Day band up top, and
+ * Apple's red now-line runs through the current hour. A quiet day
+ * keeps the ruling and floats the friendly copy over it, centered.
  */
-function dayPageHtml(
-  day: Date,
-  today: Date,
-  rowsHtml: string,
-  addBtnHtml: string,
-  quickAddHtml: string,
-): string {
+function dayPageHtml(day: Date, today: Date, addBtnHtml: string, quickAddHtml: string): string {
   const wordFmt = new Intl.DateTimeFormat(undefined, { weekday: 'long' });
+  const schedule = daySchedule(day);
+  const empty = schedule.allDay.length === 0 && schedule.timed.length === 0;
+  const now = new Date();
+  const nowHour = now.getHours();
+
+  const allDayHtml = schedule.allDay.length
+    ? `<div class="tkcal-day-allday"><span class="tkcal-hour">All-Day</span><div class="tkcal-day-allday-body tk-rows" role="list">${schedule.allDay
+        .map((row) => taskRow(row.task, now, row.note.color, false, row.note))
+        .join('')}</div></div>`
+    : '';
+
+  const gutter = hourGutterLabels();
+  const slots = gutter.map((_, hour) => {
+    const rows = schedule.timed.filter((t) => t.at.getHours() === hour);
+    const render = (t: { row: AggTask }): string =>
+      taskRow(t.row.task, now, t.row.note.color, false, t.row.note);
+    let inner: string;
+    if (sameDay(day, today) && hour === nowHour) {
+      const split = nowSplit(rows.length, (index) => rows[index]!.at.getMinutes(), now.getMinutes());
+      const nudge = rows.length === 0 ? Math.round((now.getMinutes() / 60) * 56) : 0;
+      inner =
+        rows.slice(0, split).map(render).join('') +
+        nowDividerHtml(nudge) +
+        rows.slice(split).map(render).join('');
+    } else {
+      inner = rows.map(render).join('');
+    }
+    return `<div class="tkcal-day-slot">${inner}</div>`;
+  });
+
   const classes = [
     'tkcal-daypage',
     day.getDay() === 0 || day.getDay() === 6 ? 'is-weekend' : '',
@@ -610,7 +667,22 @@ function dayPageHtml(
           ${addBtnHtml}
         </div>
         ${quickAddHtml}
-        <div class="tkcal-daypage-rows tk-rows" role="list" data-cal-daypage-rows>${rowsHtml}</div>
+        <div class="tkcal-daypage-body">
+          <div class="tkcal-daypage-scroll" data-cal-daypage-rows>
+            ${allDayHtml}
+            <div class="tkcal-day-hours">${gutter
+              .map((label, hour) => label + slots[hour])
+              .join('')}</div>
+          </div>
+          ${
+            empty
+              ? `<div class="tkcal-daypage-empty"><div class="tk-empty tk-empty-day"><span class="tk-empty-day-mark">${calendarMark(
+                  day,
+                  today,
+                )}</span><p class="tk-empty-day-copy">${dayPageEmptyCopy(day, today)}</p></div></div>`
+              : ''
+          }
+        </div>
       </div>`;
 }
 
@@ -748,60 +820,192 @@ function yearMonthHtml(
       </section>`;
 }
 
+// ---------------------------------------------------------------------------
+// The timed pages — the hour ruling Day and Week share
+// ---------------------------------------------------------------------------
+
+/** One day's reminders, split the way the timed pages show them: the
+ * date-only ones (the All-Day band) and the ones carrying a real
+ * time, soonest first. */
+interface DaySchedule {
+  allDay: AggTask[];
+  timed: { row: AggTask; at: Date }[];
+}
+
+function daySchedule(day: Date): DaySchedule {
+  const allDay: AggTask[] = [];
+  const timed: { row: AggTask; at: Date }[] = [];
+  for (const row of dayTasks(day, new Date())) {
+    const at = timedAnchorOn(row.task, day);
+    if (at) timed.push({ row, at });
+    else allDay.push(row);
+  }
+  timed.sort((a, b) => a.at.getTime() - b.at.getTime());
+  return { allDay, timed };
+}
+
+/** The stamp that anchors a reminder inside its hour — the first of
+ * the reminder time and the due date that carries a real time on this
+ * day. Midnight means "no time set": those land in All-Day, the same
+ * call the due chips make. */
+function timedAnchorOn(task: Task, day: Date): Date | null {
+  for (const iso of [task.reminderAt, task.dueDate]) {
+    if (!iso) continue;
+    const date = parseWhen(iso);
+    if (date && hasTime(date) && sameDay(date, day)) return date;
+  }
+  return null;
+}
+
+/** The gutter: the 24 hour labels, 12 AM through 11 PM in the
+ * locale's own spelling, one per ruled row (`data-hour` is the
+ * scroll anchor the timed pages open at). */
+function hourGutterLabels(): string[] {
+  const fmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric' });
+  return Array.from({ length: 24 }, (_, hour) => {
+    const at = new Date(2023, 0, 1, hour);
+    return `<span class="tkcal-hour" data-hour="${hour}">${fmt.format(at)}</span>`;
+  });
+}
+
+/** A chip's time tag — "9 AM", or "9:30 AM" once minutes join. */
+function chipTimeLabel(at: Date): string {
+  if (at.getMinutes() === 0) {
+    return new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).format(at);
+  }
+  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(at);
+}
+
+/** Apple's red now-line, dot and all. `nudge` pushes it down an empty
+ * hour slot so it sits at the real minute instead of the slot's top
+ * edge — a populated slot gets it in flow, between its children. */
+function nowDividerHtml(nudge: number): string {
+  return `<span class="tkcal-now"${
+    nudge > 0 ? ` style="margin-top:${nudge}px"` : ''
+  } aria-hidden="true"></span>`;
+}
+
+/** Where the now-line goes among a slot's children: before the first
+ * that starts after now, else last — chronology the ruling can trust
+ * even when a busy hour has stretched. */
+function nowSplit(count: number, minutesOf: (index: number) => number, nowMinute: number): number {
+  for (let i = 0; i < count; i += 1) {
+    if (minutesOf(i) > nowMinute) return i;
+  }
+  return count;
+}
+
+/** The washes a week day wears wherever it appears — header, All-Day
+ * cell, hour slot: the weekend whisper, today, the picked day's
+ * accent. */
+function weekDayClasses(date: Date, selected: Date, today: Date): string {
+  return [
+    date.getDay() === 0 || date.getDay() === 6 ? 'is-weekend' : '',
+    sameDay(date, today) ? 'is-today' : '',
+    sameDay(date, selected) ? 'is-selected' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+/** The week chip — the month chip's tint, wearing its hour when the
+ * reminder carries a time ("9 AM · Title"). Every one on the glass. */
+function weekChipHtml(row: AggTask, at?: Date): string {
+  const time = at ? chipTimeLabel(at) : '';
+  return `<span class="tkcal-chip tk-c-${row.note.color}" title="${escapeHtml(
+    time ? `${time} · ${row.task.title}` : row.task.title,
+  )}">${time ? `<span class="tkcal-chip-time">${escapeHtml(time)}</span>` : ''}${escapeHtml(
+    row.task.title,
+  )}</span>`;
+}
+
 /**
- * The Week page — seven tall columns, Sunday-first, one per day. The
- * header rides the top of each column (weekday word + the numeral,
- * today in Apple red); the day's reminders stack beneath it as the
- * same chips the month grid wears, every one of them on the glass —
- * a busy column scrolls instead of trimming to a +N count. The whole
- * column is the day button, so the month grid's picking — select, the
- * sidebar's inspector follows — works here untouched.
+ * The Week page — seven day headers over the hour ruling the Day page
+ * wears: a time gutter down the left, twenty-four ruled rows the
+ * columns share, reminders as chips anchored under their hour, the
+ * date-only ones in an All-Day band pinned under the headers. A busy
+ * hour stretches its row for every column at once, so the ruling
+ * never lies. The headers are the day buttons — the month grid's
+ * picking, keyboard-reachable — and the hour slots pick too: every
+ * pixel of a day's column belongs to some slot of that day.
  */
-function weekColumns(
-  anchor: Date,
-  selected: Date,
-  today: Date,
-  byDay: Map<string, AggTask[]>,
-): string {
+function weekPageHtml(anchor: Date, selected: Date, today: Date): string {
   const start = weekStart(anchor);
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + i);
+    return date;
+  });
+  const schedules = days.map((day) => daySchedule(day));
   const wdFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
   const labelFmt = new Intl.DateTimeFormat(undefined, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
   });
-  const cols: string[] = [];
-  for (let i = 0; i < 7; i += 1) {
-    const date = new Date(start);
-    date.setDate(start.getDate() + i);
-    const events = byDay.get(dayKey(date)) ?? [];
-    const chips = events
-      .map(
-        (row) =>
-          `<span class="tkcal-chip tk-c-${row.note.color}" title="${escapeHtml(
-            row.task.title,
-          )}">${escapeHtml(row.task.title)}</span>`,
-      )
-      .join('');
-    const classes = [
-      'tkcal-week-col',
-      date.getDay() === 0 || date.getDay() === 6 ? 'is-weekend' : '',
-      sameDay(date, today) ? 'is-today' : '',
-      sameDay(date, selected) ? 'is-selected' : '',
-    ]
-      .filter(Boolean)
-      .join(' ');
-    cols.push(`
-        <button type="button" class="${classes}" data-cal-day="${dayKey(date)}" aria-label="${labelFmt.format(
+
+  const heads = days
+    .map((date, i) => {
+      const count = schedules[i]!.allDay.length + schedules[i]!.timed.length;
+      return `<button type="button" class="tkcal-wk-head ${weekDayClasses(
+        date,
+        selected,
+        today,
+      )}" data-cal-day="${dayKey(date)}" aria-label="${labelFmt.format(date)}${
+        count > 0 ? `, ${count} reminders` : ''
+      }"><span class="tkcal-week-head"><span class="tkcal-week-wd">${wdFmt.format(
+        date,
+      )}</span><span class="tkcal-week-num">${date.getDate()}</span></span></button>`;
+    })
+    .join('');
+
+  const hasAllDay = schedules.some((s) => s.allDay.length > 0);
+  const allDayHtml = hasAllDay
+    ? `<div class="tkcal-wk-allday"><span class="tkcal-hour">All-Day</span>${days
+        .map(
+          (date, i) =>
+            `<span class="tkcal-wk-allday-cell ${weekDayClasses(
+              date,
+              selected,
+              today,
+            )}" data-cal-day="${dayKey(date)}">${schedules[i]!
+              .allDay.map((row) => weekChipHtml(row))
+              .join('')}</span>`,
+        )
+        .join('')}</div>`
+    : '';
+
+  const now = new Date();
+  const nowHour = now.getHours();
+  const nowMinute = now.getMinutes();
+  const gutter = hourGutterLabels();
+  const rows = gutter.map((_, hour) => {
+    const cells = days
+      .map((date, i) => {
+        const chips = schedules[i]!.timed.filter((t) => t.at.getHours() === hour);
+        let inner: string;
+        if (sameDay(date, today) && hour === nowHour) {
+          const split = nowSplit(chips.length, (index) => chips[index]!.at.getMinutes(), nowMinute);
+          const nudge = chips.length === 0 ? Math.round((nowMinute / 60) * 56) : 0;
+          const before = chips.slice(0, split).map((t) => weekChipHtml(t.row, t.at)).join('');
+          const after = chips.slice(split).map((t) => weekChipHtml(t.row, t.at)).join('');
+          inner = before + nowDividerHtml(nudge) + after;
+        } else {
+          inner = chips.map((t) => weekChipHtml(t.row, t.at)).join('');
+        }
+        return `<span class="tkcal-wk-slot ${weekDayClasses(
           date,
-        )}${events.length > 0 ? `, ${events.length} reminders` : ''}">
-          <span class="tkcal-week-head"><span class="tkcal-week-wd">${wdFmt.format(
-            date,
-          )}</span><span class="tkcal-week-num">${date.getDate()}</span></span>
-          <span class="tkcal-week-events">${chips}</span>
-        </button>`);
-  }
-  return cols.join('');
+          selected,
+          today,
+        )}" data-cal-day="${dayKey(date)}">${inner}</span>`;
+      })
+      .join('');
+    return gutter[hour] + cells;
+  });
+
+  return `<div class="tkcal-wk-heads"><span class="tkcal-wk-corner" aria-hidden="true"></span>${heads}</div>${allDayHtml}<div class="tkcal-wk-time">${rows.join(
+    '',
+  )}</div>`;
 }
 
 /**

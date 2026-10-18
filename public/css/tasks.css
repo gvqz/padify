@@ -2325,20 +2325,42 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   }
 }
 
-/* --- the week view: seven tall columns --- */
+/* --- the timed pages: the hour ruling Day and Week share --- */
 
-/* macOS Calendar's week page: a ruled strip of day columns under one
-   hairline frame, each column wearing its day header (weekday word +
-   the numeral, today in Apple red) over the day's reminders as the
-   same chips the month grid wears — every one of them, a busy column
-   scrolling instead of trimming to a +N count (a week holds room
-   enough to read its own days). The whole column is the day button,
-   so picking works exactly as it does on the month grid. */
+/* macOS Calendar's Day and Week are timed pages: a time gutter down
+   the left, the day's reminders anchored under their hour, the
+   date-only ones in an All-Day band. Both draw the same ruling —
+   twenty-four ruled rows as a hairline grid (the 1px-gap-over-border
+   recipe the month grid wears), the gutter and the day cells sharing
+   each row so a busy hour stretches for every column at once and the
+   lines never disagree. Apple's red now-line runs through the current
+   hour, and the pages open scrolled to the working hours. */
+
+/* The gutter's labels — the timed pages' left rail. */
+.tkcal-hour {
+  padding: 2px 7px 0 3px;
+  background: var(--tk-bg);
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--tk-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* --- the week view: seven day headers over the ruled hours --- */
+
+/* One hairline frame; the headers, the All-Day band and the timed
+   grid inside it all set the same column template, so their 1px gaps
+   line up into one ruled sheet. The headers are the day buttons; the
+   hour slots pick too — every pixel of a day's column belongs to
+   some slot of that day. */
 .tkcal-week {
   flex: 1 1 auto;
   min-height: 0;
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--tk-border);
   border-radius: 8px;
   overflow: hidden;
@@ -2346,11 +2368,19 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   gap: 1px;
 }
 
-.tkcal-week-col {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  min-width: 0;
+.tkcal-wk-heads,
+.tkcal-wk-allday {
+  display: grid;
+  grid-template-columns: 52px repeat(7, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--tk-border);
+}
+
+.tkcal-wk-corner {
+  background: var(--tk-bg);
+}
+
+.tkcal-wk-head {
   padding: 0;
   border: 0;
   background: var(--tk-bg);
@@ -2358,41 +2388,28 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   text-align: left;
   cursor: pointer;
   transition: background 0.12s var(--vz-ease);
-  overflow: hidden;
 }
 
-.tkcal-week-col:hover,
-.tkcal-week-col:focus-visible {
+.tkcal-wk-head:hover,
+.tkcal-wk-head:focus-visible {
   background: var(--tk-well);
   outline: none;
 }
 
-/* The weekend columns read the month grid's whisper. */
-.tkcal-week-col.is-weekend {
-  background: color-mix(in srgb, var(--tk-text) 3.5%, var(--tk-bg));
-}
-
-.tkcal-week-col.is-weekend:hover,
-.tkcal-week-col.is-weekend:focus-visible {
-  background: var(--tk-well);
-}
-
 /* The picked day: the same soft accent wash the month cell wears. */
-.tkcal-week-col.is-selected {
+.tkcal-wk-head.is-selected {
   background: color-mix(in srgb, var(--tk-accent) 10%, var(--tk-bg));
 }
 
-.tkcal-week-col.is-selected:hover {
+.tkcal-wk-head.is-selected:hover {
   background: color-mix(in srgb, var(--tk-accent) 14%, var(--tk-bg));
 }
 
 .tkcal-week-head {
-  flex: 0 0 auto;
   display: flex;
   align-items: baseline;
   gap: 5px;
   padding: 8px 9px 6px;
-  border-bottom: 1px solid var(--tk-border);
 }
 
 .tkcal-week-wd {
@@ -2411,46 +2428,143 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 
 /* Today: Apple red — the word and the numeral, no filled circle (the
    week page has room for the quieter mark; the month keeps the coin). */
-.tkcal-week-col.is-today .tkcal-week-wd {
+.tkcal-wk-head.is-today .tkcal-week-wd {
   color: var(--vz-danger);
 }
 
-.tkcal-week-col.is-today .tkcal-week-num {
+.tkcal-wk-head.is-today .tkcal-week-num {
   color: var(--vz-danger);
   font-weight: 700;
 }
 
-.tkcal-week-events {
-  flex: 1 1 auto;
-  min-height: 0;
+/* The All-Day band: date-only reminders pinned under the headers,
+   every one on the glass — a busier day scrolls inside its cell. */
+.tkcal-wk-allday .tkcal-hour {
+  padding-top: 6px;
+}
+
+.tkcal-wk-allday-cell {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 3px;
-  padding: 7px 7px 8px;
+  min-width: 0;
+  max-height: 72px;
+  overflow-y: auto;
+  padding: 4px 5px 5px;
+  background: var(--tk-bg);
+  cursor: pointer;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-track) transparent;
+}
+
+/* The timed grid — the ruling itself. It scrolls; the headers and
+   the All-Day band stay put above it. */
+.tkcal-wk-time {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  display: grid;
+  grid-template-columns: 52px repeat(7, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--tk-border);
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--tk-track) transparent;
 }
 
-.tkcal-week-events::-webkit-scrollbar {
+.tkcal-wk-time::-webkit-scrollbar {
   width: 8px;
 }
 
-.tkcal-week-events::-webkit-scrollbar-thumb {
+.tkcal-wk-time::-webkit-scrollbar-thumb {
   background: var(--tk-track);
   border-radius: 4px;
 }
 
-/* --- the day view: one wide sheet --- */
+/* One ruled hour of one day. The row's height is the busiest cell's,
+   so chips stack without ever crossing a line. */
+.tkcal-wk-slot {
+  min-width: 0;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 3px 4px 4px;
+  background: var(--tk-bg);
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease);
+  overflow: hidden;
+}
+
+.tkcal-wk-slot:hover {
+  background: var(--tk-well);
+}
+
+/* The weekend whisper, today's faint tint, the picked day's wash —
+   the same states the month grid teaches, column-wide. */
+.tkcal-wk-slot.is-weekend,
+.tkcal-wk-allday-cell.is-weekend {
+  background: color-mix(in srgb, var(--tk-text) 3.5%, var(--tk-bg));
+}
+
+.tkcal-wk-slot.is-today {
+  background: color-mix(in srgb, var(--tk-accent) 4%, var(--tk-bg));
+}
+
+.tkcal-wk-slot.is-selected,
+.tkcal-wk-allday-cell.is-selected {
+  background: color-mix(in srgb, var(--tk-accent) 10%, var(--tk-bg));
+}
+
+.tkcal-wk-slot.is-selected:hover {
+  background: color-mix(in srgb, var(--tk-accent) 14%, var(--tk-bg));
+}
+
+/* The chip's hour tag — "9 AM" before the title. */
+.tkcal-chip-time {
+  margin-right: 4px;
+  font-weight: 650;
+  opacity: 0.72;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Apple's red now-line: a 2px cut across the current hour with the
+   dot riding its left end (into the gutter on the Day page). It is
+   placed in the slot's flow, among its children, so it reads true
+   even when the hour has stretched. */
+.tkcal-now {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 1;
+  height: 0;
+  margin: 1px -4px;
+  border-top: 2px solid var(--vz-danger);
+  border-radius: 1px;
+}
+
+.tkcal-now::before {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vz-danger);
+}
+
+/* --- the day view: one wide ruled sheet --- */
 
 /* macOS Calendar's day page, spoken in this app's reminders: one wide
-   ruled sheet for the picked day — the big numeral and weekday word in
-   the head (both Apple red when it's today), the day's reminders as
-   the same real rows every page wears, wide. The sidebar's day
-   inspector stands down here (the sheet IS the inspector), so the Add
-   button rides the head's right end and the inline quick-add row sits
-   right under it. A quiet day gets the friendly copy, centered. */
+   hour-ruled sheet for the picked day — the big numeral and weekday
+   word in the head (both Apple red when it's today), the Add button
+   riding the head's right end (the sidebar's day inspector stands
+   down here — the sheet IS the inspector), and the day's reminders
+   as the same real rows every page wears, anchored under their hour
+   down the time gutter, date-only ones in an All-Day band up top.
+   A quiet day keeps the ruling and floats the friendly copy over it. */
 .tkcal-daypage {
   flex: 1 1 auto;
   min-height: 0;
@@ -2512,31 +2626,111 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   padding: 0 2px 8px;
 }
 
-.tkcal-daypage-rows {
+/* The sheet's body — the box the hours scroll inside, and the anchor
+   the empty copy floats over. */
+.tkcal-daypage-body {
   flex: 1 1 auto;
   min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.tkcal-daypage-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
   overflow-y: auto;
-  padding: 8px 12px 12px;
   scrollbar-width: thin;
   scrollbar-color: var(--tk-track) transparent;
 }
 
-.tkcal-daypage-rows::-webkit-scrollbar {
+.tkcal-daypage-scroll::-webkit-scrollbar {
   width: 8px;
 }
 
-.tkcal-daypage-rows::-webkit-scrollbar-thumb {
+.tkcal-daypage-scroll::-webkit-scrollbar-thumb {
   background: var(--tk-track);
   border-radius: 4px;
 }
 
-/* The wide page centers its empty state — the sidebar's left-leaning
-   one reads lost out here. */
-.tkcal-daypage .tk-empty-day {
+/* The All-Day band: date-only reminders as real rows, the label
+   riding the gutter column. */
+.tkcal-day-allday {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 1px;
+  background: var(--tk-border);
+  border-bottom: 1px solid var(--tk-border);
+}
+
+.tkcal-day-allday .tkcal-hour {
+  padding-top: 10px;
+}
+
+.tkcal-day-allday-body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 12px 6px 10px;
+  background: var(--tk-bg);
+}
+
+/* The ruling: the gutter and the day's hour slots sharing every row. */
+.tkcal-day-hours {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 1px;
+  background: var(--tk-border);
+}
+
+.tkcal-day-slot {
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 3px 12px 4px 10px;
+  background: var(--tk-bg);
+}
+
+/* A Saturday or Sunday sheet wears the same whisper the week's
+   weekend columns do. */
+.tkcal-daypage.is-weekend .tkcal-day-slot,
+.tkcal-daypage.is-weekend .tkcal-day-allday-body {
+  background: color-mix(in srgb, var(--tk-text) 3.5%, var(--tk-bg));
+}
+
+/* The now-line reaches across the wide slot and hangs its dot in the
+   gutter, Apple's way. */
+.tkcal-day-slot .tkcal-now {
+  margin-left: -10px;
+  margin-right: -12px;
+}
+
+.tkcal-day-slot .tkcal-now::before {
+  left: -4px;
+}
+
+/* The wide page floats its empty state over the ruled hours — the
+   ruling stays visible behind it, the copy never blocks a scroll. */
+.tkcal-daypage-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 110px;
+  pointer-events: none;
+}
+
+.tkcal-daypage-empty .tk-empty-day {
   align-items: center;
   text-align: center;
   gap: 5px;
-  padding-top: 88px;
 }
 
 /* --------------------------------------------------------------------------

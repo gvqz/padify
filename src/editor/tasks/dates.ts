@@ -96,8 +96,10 @@ const fullDateTime = new Intl.DateTimeFormat(undefined, {
   minute: '2-digit',
 });
 
-/** True when the ISO value carries a time other than exactly midnight. */
-function hasTime(date: Date): boolean {
+/** True when the ISO value carries a time other than exactly midnight.
+ * Exported for the calendar's timed pages — a stamp at midnight is a
+ * plain day (All-Day), anything else anchors an hour slot. */
+export function hasTime(date: Date): boolean {
   return date.getHours() !== 0 || date.getMinutes() !== 0 || date.getSeconds() !== 0;
 }
 
