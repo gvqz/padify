@@ -12,8 +12,10 @@
  * selected day's rows — due or reminding — using the same rows as every
  * tasks page, so completing, the inline editor and moving work here
  * too, an Up Next act so the panel is never a dead end, and the mini
- * month at the bottom. Quick-add on a day pre-fills the hub composer's
- * date chip.
+ * month at the bottom. The day pane's Add button opens an inline
+ * quick-add row right there — the hub's bottom composer stays off this
+ * page — and Enter files the reminder onto the selected day (9:00),
+ * keeping the row open for rapid entry.
  *
  * State is module-local (the cursor month + the selected day + the
  * hidden lists) and survives view switches; the aggregate is re-read on
@@ -93,8 +95,15 @@ export function initTasksCalendar(): void {
   });
 }
 
-/** Renders the calendar page into the hub's sections container. */
-export function renderTasksCalendar(prefillComposerDate?: (iso: string) => void): void {
+/**
+ * Renders the calendar page into the hub's sections container.
+ *
+ * `quickAdd` — when the hub offers it — is how the day pane's inline
+ * row files a reminder: it gets the typed title and the selected day
+ * (9:00 ISO) and owns the creation. Without it the Add button (and the
+ * row) don't render at all.
+ */
+export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => void): void {
   const hub = document.getElementById('tasksHub');
   const sections = hub?.querySelector<HTMLElement>('#tkhSections');
   if (!sections) return;
@@ -169,6 +178,9 @@ export function renderTasksCalendar(prefillComposerDate?: (iso: string) => void)
 
   const dayRows = dayTasks(selectedDay, now);
   const dayLabel = dayHeading(selectedDay, today);
+  // The quick-add row wears the target list's color — the same list the
+  // reminder will file into (the hub remembers the last one used).
+  const targetColor = quickAddTargetColor();
   const rowsHtml = dayRows.length
     ? dayRows.map((row) => taskRow(row.task, now, row.note.color, false, row.note)).join('')
     : `<div class="tk-empty tk-empty-day"><span class="tk-empty-day-mark">${calendarMark(
@@ -207,7 +219,7 @@ export function renderTasksCalendar(prefillComposerDate?: (iso: string) => void)
           </button>`;
         })
         .join('')
-    : `<p class="tkcal-lists-empty">No lists yet — make a task list and its dated reminders land here.</p>`;
+    : `<p class="tkcal-lists-empty">No lists yet — add the first reminder and its list appears.</p>`;
 
   sections.innerHTML = `
     <div class="tkcal">
@@ -245,11 +257,21 @@ export function renderTasksCalendar(prefillComposerDate?: (iso: string) => void)
                 }</span>
               </div>
               ${
-                prefillComposerDate
+                quickAdd
                   ? `<button type="button" class="tk-chip-btn" data-cal-add title="Add a reminder on this day" aria-label="Add a reminder on this day"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>`
                   : ''
               }
             </header>
+            ${
+              quickAdd
+                ? `<form class="tkcal-quickadd" data-cal-quickadd hidden>
+                    <span class="tkcal-quickadd-dot tk-c-${targetColor}" aria-hidden="true"></span>
+                    <input type="text" class="tkcal-quickadd-input" data-cal-quickadd-input
+                      placeholder="New Reminder" autocomplete="off"
+                      aria-label="New reminder on ${dayLabel}">
+                  </form>`
+                : ''
+            }
             <div class="tk-rows" role="list" data-cal-day-rows>${rowsHtml}</div>
             ${upNextHtml}
           </div>
@@ -269,14 +291,95 @@ export function renderTasksCalendar(prefillComposerDate?: (iso: string) => void)
       </div>
     </div>`;
 
-  if (prefillComposerDate) {
-    sections.querySelector('[data-cal-add]')?.addEventListener('click', () => {
-      // The day at 9:00 — the composer's date chip takes it from here.
-      const at = new Date(selectedDay);
-      at.setHours(9, 0, 0, 0);
-      prefillComposerDate(at.toISOString());
-    });
+  if (quickAdd) {
+    wireQuickAdd(sections, quickAdd);
   }
+}
+
+/**
+ * The day pane's inline add: the Add button reveals the row, Enter
+ * files the reminder onto the selected day (9:00) and the row stays
+ * open for the next one; Esc — or a blur with nothing typed — puts it
+ * away. Re-bound on every render; the nodes it touches are always the
+ * fresh ones.
+ */
+function wireQuickAdd(sections: HTMLElement, quickAdd: (title: string, iso: string) => void): void {
+  const row = sections.querySelector<HTMLElement>('[data-cal-quickadd]');
+  const input = row?.querySelector<HTMLInputElement>('[data-cal-quickadd-input]');
+  if (!row || !input) return;
+
+  const openRow = (): void => {
+    row.hidden = false;
+    input.focus();
+  };
+
+  sections.querySelector('[data-cal-add]')?.addEventListener('click', openRow);
+
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      input.value = '';
+      row.hidden = true;
+      return;
+    }
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const title = input.value.trim();
+    if (!title) return;
+    // The day at 9:00 — the same anchor the day pane shows.
+    const at = new Date(selectedDay);
+    at.setHours(9, 0, 0, 0);
+    quickAdd(title, at.toISOString());
+    // The hub re-renders the page (the chip lands on the grid, the row
+    // lands in the pane) — the fresh row paints closed, so open it and
+    // keep the caret there for the next reminder. If the page went away
+    // with the add (the create-first-list rescue closes the hub), the
+    // row sits in a hidden hub and stays put.
+    const fresh = sections.querySelector<HTMLElement>('[data-cal-quickadd]');
+    const freshInput = fresh?.querySelector<HTMLInputElement>('[data-cal-quickadd-input]');
+    const hubLive = !sections.closest<HTMLElement>('#tasksHub')?.hidden;
+    if (fresh && freshInput && hubLive) {
+      fresh.hidden = false;
+      freshInput.focus();
+    }
+  });
+
+  input.addEventListener('focusout', () => {
+    if (input.value === '') row.hidden = true;
+  });
+}
+
+/** The color of the list the quick-add files into (muted when none). */
+function quickAddTargetColor(): string {
+  const lists = taskNotes.lists();
+  if (lists.length === 0) return '';
+  const id = taskNotes.targetListId();
+  const target = lists.find((list) => list.id === id) ?? lists[0]!;
+  return target.color;
+}
+
+/**
+ * Whether the day pane's inline add row is on screen right now — the
+ * hub's Escape bookkeeping counts it as an inner consumer, so closing
+ * the row never closes the page with it.
+ */
+export function calendarQuickAddOpen(): boolean {
+  const row = document
+    .getElementById('tasksHub')
+    ?.querySelector<HTMLElement>('[data-cal-quickadd]');
+  return row != null && !row.hidden;
+}
+
+/** Puts the inline add row away — the hub's Escape dispatcher's act. */
+export function closeCalendarQuickAdd(): void {
+  const row = document
+    .getElementById('tasksHub')
+    ?.querySelector<HTMLElement>('[data-cal-quickadd]');
+  if (!row || row.hidden) return;
+  const input = row.querySelector<HTMLInputElement>('[data-cal-quickadd-input]');
+  if (input) input.value = '';
+  row.hidden = true;
 }
 
 // ---------------------------------------------------------------------------

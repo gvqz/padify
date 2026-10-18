@@ -182,25 +182,39 @@ test.describe('the rail — task contexts only', () => {
     // Switch back to the plain note: the rail steps aside again.
     await page.locator('#tabStripTabs .tab-strip-tab').first().click();
     await expect(page.locator('#taskRail')).toBeHidden();
+  });
 
-    // And a hub view keeps it around even over a plain note.
-    await page.locator('#tabRailCalendar').click();
+  test('the calendar page stands the rail down, and leaving brings it back', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
     await expect(page.locator('#taskRail')).toBeVisible();
+
+    // The calendar page carries its own sidebar — the hover rail would
+    // be double duty on the same edge, so it stands down while the page
+    // is open, and comes back the moment the page closes.
+    await page.locator('#tabRailCalendar').click();
     await expect(page.locator('#tasksHub')).toBeVisible();
-    await page.keyboard.press('Escape');
     await expect(page.locator('#taskRail')).toBeHidden();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#taskRail')).toBeVisible();
   });
 
   test('the rail expands on hover and its Today card opens the hub', async ({ page }) => {
     await page.goto('/');
 
-    // No task notes yet — open the hub through the calendar door (the
-    // rail only exists in task contexts, and the hub is one).
+    // No task notes yet — the calendar door still opens the hub (the
+    // hub is a task context), but the calendar page stands the rail
+    // down: the page has its own sidebar.
     await page.locator('#tabRailCalendar').click();
     const rail = page.locator('#taskRail');
-    await expect(rail).toBeVisible();
+    await expect(page.locator('#tasksHub')).toBeVisible();
+    await expect(rail).toBeHidden();
+    await page.keyboard.press('Escape');
 
-    // At rest the rail is the thin strip; hovering it expands the labels.
+    // A task note brings the rail back. At rest the rail is the thin
+    // strip; hovering it expands the labels.
+    await newTaskList(page);
+    await expect(rail).toBeVisible();
     await rail.hover();
     await expect(rail)
       .toHaveClass(/is-pinned/)
@@ -213,9 +227,8 @@ test.describe('the rail — task contexts only', () => {
     await expect(page.locator('#tkhTitle')).toHaveText('Today');
     await expect(page.locator('#tkhComposerInput')).toBeFocused();
 
-    // The empty state with the create-list door (no task notes yet).
+    // The fresh list is empty: Today's empty state says so.
     await expect(page.locator('#tkhEmpty')).toBeVisible();
-    await expect(page.locator('#tkhEmpty [data-action="create-list"]')).toBeVisible();
 
     // Escape closes the hub; the note is right back underneath.
     await page.keyboard.press('Escape');
@@ -330,6 +343,43 @@ test.describe('the calendar', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('#tasksHub')).toBeHidden();
     await expect(page.locator('#tabRailCalendar')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('the calendar page sheds the hub chrome and adds from the day pane', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    const input = page.locator('[data-composer-input]');
+    await input.fill('Water the fern');
+    await input.press('Enter');
+
+    await page.locator('#tabRailCalendar').click();
+
+    // The page is the calendar's own: no reminders rail hovering on the
+    // edge, no composer bar shoved at the bottom.
+    await expect(page.locator('#taskRail')).toBeHidden();
+    await expect(page.locator('#tkhComposer')).toBeHidden();
+
+    // The day pane's Add opens the inline row right under the day head.
+    await page.locator('[data-cal-add]').click();
+    const quick = page.locator('[data-cal-quickadd-input]');
+    await expect(quick).toBeFocused();
+    await quick.fill('Feed the fern');
+    await quick.press('Enter');
+
+    // It lands as a chip on today's cell and a row in the pane — and
+    // the row stays open, caret parked, for the next one.
+    await expect(
+      page.locator('.tkcal-day.is-today .tkcal-chip', { hasText: 'Feed the fern' }),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-cal-day-rows] .tk-task-wrap', { hasText: 'Feed the fern' }),
+    ).toBeVisible();
+    await expect(page.locator('[data-cal-quickadd-input]')).toBeFocused();
+
+    // Escape puts the row away without leaving the page.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-cal-quickadd]')).toBeHidden();
+    await expect(page.locator('#tasksHub')).toBeVisible();
   });
 
   test('dated tasks chip their day and the day panel lists them', async ({ page }) => {

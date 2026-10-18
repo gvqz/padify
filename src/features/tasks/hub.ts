@@ -43,7 +43,13 @@ import {
 import type { Priority, Task } from '../../editor/tasks/content';
 import { taskNotes, type AggSection, type AggTask, type HubViewId } from './aggregate';
 import { dismissReminderToasts } from './toasts';
-import { initTasksCalendar, renderTasksCalendar, selectedDayCount } from './calendar';
+import {
+  calendarQuickAddOpen,
+  closeCalendarQuickAdd,
+  initTasksCalendar,
+  renderTasksCalendar,
+  selectedDayCount,
+} from './calendar';
 
 export type HubView = HubViewId | 'search' | 'calendar';
 
@@ -238,7 +244,8 @@ export function initTasksHub(): void {
     });
 
   // Escape while an inner consumer is open never reaches the layer
-  // sweep (its isOpen is false): popovers first, then the editor.
+  // sweep (its isOpen is false): popovers first, then the editor, then
+  // the calendar's inline add row.
   hubEl()?.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     if (!innerConsumersClosed()) {
@@ -246,6 +253,8 @@ export function initTasksHub(): void {
         closePopovers();
       } else if (editingId) {
         closeEditor(false);
+      } else {
+        closeCalendarQuickAdd();
       }
       event.stopPropagation();
     }
@@ -276,7 +285,9 @@ export function initTasksHub(): void {
 }
 
 function innerConsumersClosed(): boolean {
-  return popoverClosed() && editingId === null;
+  // The calendar's inline quick-add row counts too — Escape puts the
+  // row away before it may close the page.
+  return popoverClosed() && editingId === null && !calendarQuickAddOpen();
 }
 
 function hubEl(): HTMLElement | null {
@@ -311,17 +322,14 @@ function renderHub(): void {
   if (view === 'calendar') {
     // The calendar is a PAGE, not a subpage: the hub's own title/count
     // stand down (the month title is the page's), and .is-calendar lets
-    // the CSS give the grid the full height instead of a scrolling doc.
+    // the CSS give the grid the full height instead of a scrolling doc
+    // — and keeps the composer bar off the page (the day pane's inline
+    // add is how reminders land on a day).
     hub.classList.add('is-calendar');
     title.textContent = 'Calendar';
     count.textContent = String(taskNotes.smartCounts(now).today);
     actions.innerHTML = '';
-    renderTasksCalendar((iso) => {
-      draft.dueDate = iso;
-      renderComposerChips();
-      openComposerDetails();
-      composerInput().focus();
-    });
+    renderTasksCalendar(quickAddOnDay);
     renderTargetChip(targetChip);
     return;
   }
@@ -700,6 +708,35 @@ async function createFirstList(): Promise<void> {
 // ---------------------------------------------------------------------------
 // The composer
 // ---------------------------------------------------------------------------
+
+/**
+ * The calendar page's quick-add — the day pane's inline row hands us a
+ * typed title and the day (9:00 ISO) and this files it, exactly like
+ * the bottom composer does for the other views (last-used target list,
+ * the create-first-list rescue when none exist). Deliberately outside
+ * the shared composer `draft`: the bottom bar is hidden on the calendar
+ * page, and a date leaked into the draft would surface as a stale chip
+ * on the next view that shows the bar.
+ */
+function quickAddOnDay(title: string, iso: string): void {
+  const lists = taskNotes.lists();
+  if (lists.length === 0) {
+    // No lists yet: the first one is created for the task to land in.
+    const manager = getTabManager();
+    if (!manager) return;
+    manager.addTab(true, 'tasks');
+    void taskNotes.addTaskToNote(manager.getActive()!.id, { title, dueDate: iso });
+    closeTasksHub();
+    showToast('Task list created with your first reminder');
+    return;
+  }
+  const targetId = taskNotes.targetListId() ?? lists[0]!.id;
+  const target = lists.find((list) => list.id === targetId) ?? lists[0]!;
+  const added = taskNotes.addTaskToNote(target.id, { title, dueDate: iso });
+  taskNotes.rememberTargetList(target.id);
+  if (added) showToast(`Added to ${target.name}`);
+  renderHub();
+}
 
 function bindComposer(): void {
   const input = composerInput();

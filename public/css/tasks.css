@@ -602,6 +602,13 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
   display: none;
 }
 
+/* The calendar page doesn't carry the hub's composer bar either —
+   adding happens on the day itself, through the day pane's Add button
+   and its inline row. The other hub views keep the bottom bar. */
+.tkh.is-calendar .tk-composer {
+  display: none;
+}
+
 body.tasks-hub-open #richToolbar,
 body.tasks-hub-open #markdownToolbar,
 body.tasks-hub-open #textareaContainer .starter-template,
@@ -1713,27 +1720,33 @@ body.tasks-hub-open #textareaContainer .bottom-line {
    restated for them standalone — otherwise every chip falls back to the
    accent gray. */
 .tkcal-chip.tk-c-blue,
-.tkcal-box.tk-c-blue {
+.tkcal-box.tk-c-blue,
+.tkcal-quickadd-dot.tk-c-blue {
   --list-c: var(--tk-blue);
 }
 .tkcal-chip.tk-c-red,
-.tkcal-box.tk-c-red {
+.tkcal-box.tk-c-red,
+.tkcal-quickadd-dot.tk-c-red {
   --list-c: var(--tk-red);
 }
 .tkcal-chip.tk-c-orange,
-.tkcal-box.tk-c-orange {
+.tkcal-box.tk-c-orange,
+.tkcal-quickadd-dot.tk-c-orange {
   --list-c: var(--tk-orange);
 }
 .tkcal-chip.tk-c-green,
-.tkcal-box.tk-c-green {
+.tkcal-box.tk-c-green,
+.tkcal-quickadd-dot.tk-c-green {
   --list-c: var(--tk-green);
 }
 .tkcal-chip.tk-c-purple,
-.tkcal-box.tk-c-purple {
+.tkcal-box.tk-c-purple,
+.tkcal-quickadd-dot.tk-c-purple {
   --list-c: var(--tk-purple);
 }
 .tkcal-chip.tk-c-teal,
-.tkcal-box.tk-c-teal {
+.tkcal-box.tk-c-teal,
+.tkcal-quickadd-dot.tk-c-teal {
   --list-c: var(--tk-teal);
 }
 
@@ -1931,6 +1944,49 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 .tkcal-day-head .tk-chip-btn {
   margin-left: auto;
   flex: 0 0 auto;
+}
+
+/* The inline quick-add — the day pane's own New Reminder row. The hub's
+   bottom composer stays off this page; adding a reminder on a day is
+   done here, where the day is. Enter keeps the row open for rapid
+   entry; Esc or an empty blur puts it away. */
+.tkcal-quickadd {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 2px 10px;
+  padding: 0 2px 8px;
+  border-bottom: 1px solid var(--tk-border);
+}
+
+.tkcal-quickadd[hidden] {
+  display: none;
+}
+
+.tkcal-quickadd-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tk-muted);
+  opacity: 0.55;
+}
+
+.tkcal-quickadd-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  padding: 3px 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--tk-text);
+  outline: none;
+}
+
+.tkcal-quickadd-input::placeholder {
+  color: var(--tk-muted);
 }
 
 .tk-empty-day {
