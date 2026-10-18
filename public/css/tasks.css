@@ -1510,7 +1510,7 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 }
 
 /* --------------------------------------------------------------------------
-   12. The ONE calendar — the iCloud month, week + year pages
+   12. The ONE calendar — the iCloud day, week, month + year pages
    -------------------------------------------------------------------------- */
 
 .tkcal {
@@ -2442,6 +2442,103 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   border-radius: 4px;
 }
 
+/* --- the day view: one wide sheet --- */
+
+/* macOS Calendar's day page, spoken in this app's reminders: one wide
+   ruled sheet for the picked day — the big numeral and weekday word in
+   the head (both Apple red when it's today), the day's reminders as
+   the same real rows every page wears, wide. The sidebar's day
+   inspector stands down here (the sheet IS the inspector), so the Add
+   button rides the head's right end and the inline quick-add row sits
+   right under it. A quiet day gets the friendly copy, centered. */
+.tkcal-daypage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--tk-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--tk-bg);
+}
+
+/* A Saturday or Sunday sheet wears the same whisper the week's
+   weekend columns do. */
+.tkcal-daypage.is-weekend {
+  background: color-mix(in srgb, var(--tk-text) 3.5%, var(--tk-bg));
+}
+
+.tkcal-daypage-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 14px 9px;
+  border-bottom: 1px solid var(--tk-border);
+}
+
+.tkcal-daypage-num {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.tkcal-daypage-word {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--tk-muted);
+}
+
+/* Today: Apple red — the quieter week-page mark; the sheet has no
+   need of a coin either. */
+.tkcal-daypage.is-today .tkcal-daypage-num,
+.tkcal-daypage.is-today .tkcal-daypage-word {
+  color: var(--vz-danger);
+}
+
+/* The Add button rides the head's right end (the pane's own spot,
+   carried over). */
+.tkcal-daypage-head .tk-chip-btn {
+  margin-left: auto;
+  align-self: center;
+}
+
+/* The inline quick-add, wide: same row, real margins. */
+.tkcal-daypage .tkcal-quickadd {
+  margin: 8px 14px 0;
+  padding: 0 2px 8px;
+}
+
+.tkcal-daypage-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 12px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-track) transparent;
+}
+
+.tkcal-daypage-rows::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tkcal-daypage-rows::-webkit-scrollbar-thumb {
+  background: var(--tk-track);
+  border-radius: 4px;
+}
+
+/* The wide page centers its empty state — the sidebar's left-leaning
+   one reads lost out here. */
+.tkcal-daypage .tk-empty-day {
+  align-items: center;
+  text-align: center;
+  gap: 5px;
+  padding-top: 88px;
+}
+
 /* --------------------------------------------------------------------------
    13. The tab strip's list badge (outside every scope — the palette vars
        are global, see the tokens above)
@@ -2613,6 +2710,10 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   }
 
   .tkcal-week {
+    min-height: 420px;
+  }
+
+  .tkcal-daypage {
     min-height: 420px;
   }
 

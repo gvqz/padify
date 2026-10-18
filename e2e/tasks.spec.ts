@@ -476,10 +476,12 @@ test.describe('the calendar', () => {
     const title = page.locator('.tkcal-month');
     await expect(title).toHaveText(String(new Date().getFullYear()));
     await expect(page.locator('.tkcal-year-month')).toHaveCount(12);
-    // Year is pressed, Month is not, and only Day still says it waits.
+    // Year is pressed, Month is not, and every mode is a real button
+    // now — no stubs left on the bench.
     await expect(page.locator('[data-cal-mode="year"]')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('[data-cal-mode="month"]')).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.locator('[data-cal-mode-wip]')).toHaveCount(1);
+    await expect(page.locator('[data-cal-mode="day"]')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('[data-cal-mode-wip]')).toHaveCount(0);
     // The sidebar keeps its lists + day inspector; the mini month sits
     // out — twelve months are already on the glass.
     await expect(page.locator('.tkcal-lists')).toBeVisible();
@@ -614,6 +616,89 @@ test.describe('the calendar', () => {
     await page.locator('[data-cal-mode="month"]').click();
     await expect(page.locator('.tkcal-grid')).toBeVisible();
     await expect(page.locator('.tkcal-day.is-selected')).toHaveCount(1);
+  });
+
+  test('the day view opens on the picked day, steps by the day, Today comes home', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.locator('#tabRailCalendar').click();
+    await page.locator('[data-cal-mode="day"]').click();
+
+    // One wide sheet, opened on today: the numeral matches, today's
+    // sheet wears the red mark, and the sidebar's day inspector stands
+    // down — the sheet IS the inspector.
+    const sheet = page.locator('.tkcal-daypage');
+    await expect(sheet).toHaveCount(1);
+    const todayNum = String(new Date().getDate());
+    await expect(page.locator('.tkcal-daypage-num')).toHaveText(todayNum);
+    await expect(sheet).toHaveClass(/is-today/);
+    await expect(page.locator('.tkcal-day-pane')).toHaveCount(0);
+
+    // The arrows step the picked day itself.
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    await page.locator('.tkcal-navs [data-cal-next]').click();
+    await expect(page.locator('.tkcal-daypage-num')).toHaveText(String(tomorrow.getDate()));
+    await expect(sheet).not.toHaveClass(/is-today/);
+    // …and Today walks the sheet home.
+    await page.locator('.tkcal-navs [data-cal-today]').click();
+    await expect(page.locator('.tkcal-daypage-num')).toHaveText(todayNum);
+    await expect(sheet).toHaveClass(/is-today/);
+
+    // Flipping to Month lands on the stepped day's month, selection
+    // carried over.
+    await page.locator('[data-cal-mode="month"]').click();
+    await expect(page.locator('.tkcal-grid')).toBeVisible();
+    await expect(page.locator('.tkcal-day.is-selected')).toHaveCount(1);
+  });
+
+  test('the day sheet lists the day\'s reminders as real rows; completing empties it', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    await page.locator('.tkp-title').fill('Personal');
+    await page.locator('.tkp-title').press('Enter');
+    const input = page.locator('[data-composer-input]');
+    await input.fill('Day page thing');
+    await input.press('Enter');
+    const row = page.locator('.tk-task-wrap', { hasText: 'Day page thing' }).first();
+    await row.locator('.tk-task-main').click();
+    await page.locator('[data-editor-when="date"]').click();
+    await page.locator('[data-when-preset="today"]').click();
+    await page.locator('.tk-editor-title').press('Enter');
+
+    await page.locator('#tabRailCalendar').click();
+    await page.locator('[data-cal-mode="day"]').click();
+
+    // The reminder is on the sheet as a REAL row — not a chip — with
+    // its due chip and its list origin.
+    const rows = page.locator('[data-cal-daypage-rows]');
+    const sheetRow = rows.locator('.tk-task-wrap', { hasText: 'Day page thing' });
+    await expect(sheetRow).toBeVisible();
+    await expect(sheetRow.locator('.tk-chip-due')).toContainText('Today');
+    await expect(sheetRow.locator('.tk-origin')).toContainText('Personal');
+
+    // Completing right on the sheet writes through — the day empties
+    // into its friendly, centered copy.
+    await sheetRow.locator('.tk-check').click();
+    await expect(page.locator('.tkcal-daypage .tk-empty-day')).toBeVisible();
+
+    // The Add button lives in the sheet's head; the inline row files
+    // into the shown day (9:00) and the fresh row lands as a real row.
+    await page.locator('[data-cal-add]').click();
+    const quick = page.locator('[data-cal-quickadd-input]');
+    await expect(quick).toBeFocused();
+    await quick.fill('Second thing');
+    await quick.press('Enter');
+    await expect(rows.locator('.tk-task-wrap', { hasText: 'Second thing' })).toBeVisible();
+    await expect(page.locator('.tkcal-daypage .tk-empty-day')).toHaveCount(0);
+
+    // Escape puts the row away without leaving the page.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-cal-quickadd]')).toBeHidden();
+    await expect(page.locator('#tasksHub')).toBeVisible();
   });
 });
 

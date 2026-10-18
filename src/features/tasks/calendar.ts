@@ -3,14 +3,18 @@
  *
  * The calendar door in the notes rail's head (and the rail's Calendar
  * destination) opens this page: an iCloud-style calendar. The page IS
- * the view — a big title up top, the Day/Week/Month/Year modes (Month,
- * Week and Year live; Day still waits on the bench), prev/Today/next
- * beside them, and the body: Month is the ruled grid whose days carry
- * the day's reminders as colored chips (one per task, tinted with its
- * list's color, three then a count); Week lines up seven tall columns
- * under their day headers, every reminder on the glass (a busy column
- * scrolls); Year is the twelve-little-months spread, numbers only, days
- * with reminders reading darker, the month name zooming into Month.
+ * the view — a big title up top, the Day/Week/Month/Year modes (all
+ * four live), prev/Today/next beside them, and the body: Day is the
+ * one wide page for the picked day, its reminders as real rows (the
+ * same rows every page wears — completing and the inline editor work
+ * right on the sheet, and the sidebar's day inspector stands down so
+ * the day isn't listed twice); Week lines up seven tall columns under
+ * their day headers, every reminder on the glass (a busy column
+ * scrolls); Month is the ruled grid whose days carry the day's
+ * reminders as colored chips (one per task, tinted with its list's
+ * color, three then a count); Year is the twelve-little-months spread,
+ * numbers only, days with reminders reading darker, the month name
+ * zooming into Month.
  *
  * The RIGHT sidebar is the iCloud sidebar mirrored: the lists as colored
  * checkboxes (unchecking one sweeps its reminders off the grid), the
@@ -36,9 +40,9 @@ import { parseWhen, startOfDay } from '../../editor/tasks/dates';
 import { escapeHtml } from '../../lib/escape';
 import type { Task } from '../../editor/tasks/content';
 
-/** The page's modes — Month the ruled grid, Week the seven columns,
- * Year the twelve spreads. */
-type CalMode = 'month' | 'week' | 'year';
+/** The page's modes — Day the wide sheet, Week the seven columns,
+ * Month the ruled grid, Year the twelve spreads. */
+type CalMode = 'day' | 'week' | 'month' | 'year';
 
 /** The cursor month (a date on its first day) + the selected day + the
  * day anchoring the shown week (any day inside it). */
@@ -64,11 +68,14 @@ export function initTasksCalendar(): void {
   sections.addEventListener('click', (event) => {
     const target = event.target as Element;
 
-    // The arrows step by the page's own grain: a week in Week view, a
-    // month in Month view, a whole year in Year view.
+    // The arrows step by the page's own grain: a day in Day view, a
+    // week in Week view, a month in Month view, a whole year in Year
+    // view. Day steps move the picked day itself — and keep the other
+    // pages' cursors on it, so a later flip lands where the user is.
     if (target.closest('[data-cal-prev]')) {
       if (mode === 'year') cursorMonth = shiftYear(cursorMonth, -1);
       else if (mode === 'week') cursorWeek = shiftWeek(cursorWeek, -1);
+      else if (mode === 'day') stepSelectedDay(-1);
       else cursorMonth = shiftMonth(cursorMonth, -1);
       renderTasksCalendar();
       return;
@@ -76,6 +83,7 @@ export function initTasksCalendar(): void {
     if (target.closest('[data-cal-next]')) {
       if (mode === 'year') cursorMonth = shiftYear(cursorMonth, 1);
       else if (mode === 'week') cursorWeek = shiftWeek(cursorWeek, 1);
+      else if (mode === 'day') stepSelectedDay(1);
       else cursorMonth = shiftMonth(cursorMonth, 1);
       renderTasksCalendar();
       return;
@@ -83,11 +91,12 @@ export function initTasksCalendar(): void {
     // The segmented control — switching modes re-renders the same state
     // into the other page. Week opens on the picked day's week; the
     // other pages open on the month the week sat in, so the flip never
-    // jumps the glass to somewhere the user wasn't looking.
+    // jumps the glass to somewhere the user wasn't looking. Day needs
+    // no hand-off: the picked day IS its page.
     const modeBtn = target.closest<HTMLElement>('[data-cal-mode]');
     if (modeBtn) {
       const next = modeBtn.dataset.calMode;
-      const live = next === 'month' || next === 'week' || next === 'year';
+      const live = next === 'day' || next === 'week' || next === 'month' || next === 'year';
       if (live && next !== mode) {
         if (next === 'week') cursorWeek = selectedDay;
         else if (mode === 'week') cursorMonth = firstOfMonth(cursorWeek);
@@ -178,14 +187,10 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
   }).format(cursorMonth);
   const yearLabel = String(cursorMonth.getFullYear());
 
-  // The segmented control: Month, Week and Year are live; Day dims and
-  // explains itself until it's built.
+  // The segmented control: all four pages are live.
   const modes = ['day', 'week', 'month', 'year']
     .map((name) => {
       const label = name[0].toUpperCase() + name.slice(1);
-      if (name === 'day') {
-        return `<button type="button" class="tkcal-mode" data-cal-mode-wip title="Still on the bench — Week, Month and Year are live" aria-disabled="true">${label}</button>`;
-      }
       const on = name === mode;
       return `<button type="button" class="tkcal-mode${on ? ' is-on' : ''}" data-cal-mode="${name}" aria-pressed="${String(on)}">${label}</button>`;
     })
@@ -237,11 +242,43 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
     .map((label) => `<span class="tkcal-weekday">${label}</span>`)
     .join('');
 
+  const dayRows = dayTasks(selectedDay, now);
+  const dayLabel = dayHeading(selectedDay, today);
+  // The day sheet's rows — the same real rows every page wears, wide.
+  // When the day is empty, the friendly copy takes the sheet (worded
+  // for a page whose Add button is right there in the head).
+  const dayPageRowsHtml = dayRows.length
+    ? dayRows.map((row) => taskRow(row.task, now, row.note.color, false, row.note)).join('')
+    : `<div class="tk-empty tk-empty-day"><span class="tk-empty-day-mark">${calendarMark(
+        selectedDay,
+        today,
+      )}</span><p class="tk-empty-day-copy">${dayPageEmptyCopy(selectedDay, today)}</p></div>`;
+
+  // The quick-add row wears the target list's color — the same list the
+  // reminder will file into (the hub remembers the last one used). The
+  // Add button and the inline row render in the day pane's head — or,
+  // in Day view, in the wide sheet's head (the pane stands down there;
+  // the sheet IS the day inspector).
+  const targetColor = quickAddTargetColor();
+  const addBtnHtml = add
+    ? `<button type="button" class="tk-chip-btn" data-cal-add title="Add a reminder on this day" aria-label="Add a reminder on this day"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>`
+    : '';
+  const quickAddHtml = add
+    ? `<form class="tkcal-quickadd" data-cal-quickadd hidden>
+                    <span class="tkcal-quickadd-dot tk-c-${targetColor}" aria-hidden="true"></span>
+                    <input type="text" class="tkcal-quickadd-input" data-cal-quickadd-input
+                      placeholder="New Reminder" autocomplete="off"
+                      aria-label="New reminder on ${dayLabel}">
+                  </form>`
+    : '';
+
   // The Year page: twelve little months, numbers only. The Week page:
-  // seven tall columns under their day headers. The sidebar stays on
-  // both (lists + the day inspector still work on a picked day); the
-  // mini month sits out — a year page already shows twelve months, and
-  // its arrows would step weeks in Week view where it has no business.
+  // seven tall columns under their day headers. The Day page: one wide
+  // sheet. The sidebar stays on all of them (lists +, on every page
+  // but Day, the day inspector — Day's sheet IS the inspector, wide);
+  // the mini month sits out — a year page already shows twelve months,
+  // and its arrows would step weeks in Week view where it has no
+  // business.
   const yearHtml =
     mode === 'year'
       ? monthsOfYear(cursorMonth)
@@ -253,13 +290,10 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
       ? `<div class="tkcal-year">${yearHtml}</div>`
       : mode === 'week'
         ? `<div class="tkcal-week" role="grid">${weekColumns(cursorWeek, selectedDay, today, byDay)}</div>`
-        : `<div class="tkcal-weekdays">${weekdays}</div><div class="tkcal-grid" role="grid">${gridHtml}</div>`;
+        : mode === 'day'
+          ? dayPageHtml(selectedDay, today, dayPageRowsHtml, addBtnHtml, quickAddHtml)
+          : `<div class="tkcal-weekdays">${weekdays}</div><div class="tkcal-grid" role="grid">${gridHtml}</div>`;
 
-  const dayRows = dayTasks(selectedDay, now);
-  const dayLabel = dayHeading(selectedDay, today);
-  // The quick-add row wears the target list's color — the same list the
-  // reminder will file into (the hub remembers the last one used).
-  const targetColor = quickAddTargetColor();
   const rowsHtml = dayRows.length
     ? dayRows.map((row) => taskRow(row.task, now, row.note.color, false, row.note)).join('')
     : `<div class="tk-empty tk-empty-day"><span class="tk-empty-day-mark">${calendarMark(
@@ -307,7 +341,13 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
         </button>
         <h5 class="tkcal-month">${
-          mode === 'year' ? yearLabel : mode === 'week' ? weekLabel(cursorWeek) : monthLabel
+          mode === 'year'
+            ? yearLabel
+            : mode === 'week'
+              ? weekLabel(cursorWeek)
+              : mode === 'day'
+                ? dayPageLabel(selectedDay, today)
+                : monthLabel
         }</h5>
         <div class="tkcal-modes" role="group" aria-label="Calendar view">${modes}</div>
         <div class="tkcal-navs">
@@ -327,7 +367,7 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
             <div class="tkcal-side-eyebrow">My Lists</div>
             ${listsHtml}
           </div>
-          <div class="tkcal-day-pane">
+          ${mode === 'day' ? '' : `<div class="tkcal-day-pane">
             <header class="tkcal-day-head">
               <div class="tkcal-day-heading">
                 <h5 class="tkcal-day-title">${dayLabel}</h5>
@@ -337,25 +377,12 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
                     : ''
                 }</span>
               </div>
-              ${
-                add
-                  ? `<button type="button" class="tk-chip-btn" data-cal-add title="Add a reminder on this day" aria-label="Add a reminder on this day"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>`
-                  : ''
-              }
+              ${addBtnHtml}
             </header>
-            ${
-              add
-                ? `<form class="tkcal-quickadd" data-cal-quickadd hidden>
-                    <span class="tkcal-quickadd-dot tk-c-${targetColor}" aria-hidden="true"></span>
-                    <input type="text" class="tkcal-quickadd-input" data-cal-quickadd-input
-                      placeholder="New Reminder" autocomplete="off"
-                      aria-label="New reminder on ${dayLabel}">
-                  </form>`
-                : ''
-            }
+            ${quickAddHtml}
             <div class="tk-rows" role="list" data-cal-day-rows>${rowsHtml}</div>
             ${upNextHtml}
-          </div>
+          </div>`}
           ${
             mode === 'month'
               ? `<div class="tkcal-mini">
@@ -495,6 +522,21 @@ function shiftWeek(day: Date, delta: number): Date {
   return copy;
 }
 
+function shiftDay(day: Date, delta: number): Date {
+  const copy = new Date(day);
+  copy.setDate(copy.getDate() + delta);
+  return copy;
+}
+
+/** Day view's arrows move the picked day itself — and keep the other
+ * pages' cursors riding on it, so a later flip lands where the user
+ * just was. */
+function stepSelectedDay(delta: number): void {
+  selectedDay = startOfDay(shiftDay(selectedDay, delta));
+  cursorMonth = firstOfMonth(selectedDay);
+  cursorWeek = selectedDay;
+}
+
 /** The Sunday that opens the week containing `day`. */
 function weekStart(day: Date): Date {
   const copy = startOfDay(day);
@@ -522,6 +564,54 @@ function weekLabel(anchor: Date): string {
     return `${dayFmt.format(start)} – ${end.getDate()}, ${start.getFullYear()}`;
   }
   return `${dayFmt.format(start)} – ${dayFmt.format(end)}, ${start.getFullYear()}`;
+}
+
+/** The Day page's title — the whole day spelled out, Apple-style:
+ * "Sunday, October 18", with the year riding along once it's not this
+ * one (stepping across December 31 keeps its bearings). */
+function dayPageLabel(day: Date, today: Date): string {
+  const base = new Intl.DateTimeFormat(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  }).format(day);
+  return day.getFullYear() === today.getFullYear() ? base : `${base}, ${day.getFullYear()}`;
+}
+
+/**
+ * The Day page — one wide sheet for the picked day. The head pairs the
+ * big numeral with the weekday word (both Apple red when the day is
+ * today) and, in this view, carries the Add button — the sidebar's day
+ * inspector stands down here, because the sheet IS the inspector: the
+ * day's reminders as the same real rows every page wears, completing
+ * and the inline editor working right on them. A quiet day gets the
+ * friendly copy, centered on the wide page.
+ */
+function dayPageHtml(
+  day: Date,
+  today: Date,
+  rowsHtml: string,
+  addBtnHtml: string,
+  quickAddHtml: string,
+): string {
+  const wordFmt = new Intl.DateTimeFormat(undefined, { weekday: 'long' });
+  const classes = [
+    'tkcal-daypage',
+    day.getDay() === 0 || day.getDay() === 6 ? 'is-weekend' : '',
+    sameDay(day, today) ? 'is-today' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return `
+      <div class="${classes}">
+        <div class="tkcal-daypage-head">
+          <span class="tkcal-daypage-num">${day.getDate()}</span>
+          <span class="tkcal-daypage-word">${wordFmt.format(day)}</span>
+          ${addBtnHtml}
+        </div>
+        ${quickAddHtml}
+        <div class="tkcal-daypage-rows tk-rows" role="list" data-cal-daypage-rows>${rowsHtml}</div>
+      </div>`;
 }
 
 /** The year's twelve cursor months — January through December. */
@@ -819,4 +909,12 @@ function emptyDayCopy(day: Date, today: Date): string {
   if (diff === 0) return 'Pick a day with chips, or add the first one.';
   if (diff > 0) return 'Add a reminder from this day to fill it in.';
   return 'A quiet day, in the books.';
+}
+
+/** The Day sheet's empty copy — there are no chips to pick out here,
+ * the Add button is in the head, so the hint just says so. */
+function dayPageEmptyCopy(day: Date, today: Date): string {
+  const diff = Math.round((startOfDay(day).getTime() - startOfDay(today).getTime()) / 86_400_000);
+  if (diff < 0) return 'A quiet day, in the books.';
+  return 'Add a reminder and it lands right here.';
 }
