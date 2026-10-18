@@ -158,7 +158,7 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
                 row.task.title,
               )}">${escapeHtml(row.task.title)}</span>`,
           )
-          .join('') + (more > 0 ? `<span class="tkcal-chip-more">+${more} more</span>` : '');
+          .join('') + (more > 0 ? `<span class="tkcal-chip-more">+${more} More</span>` : '');
       const classes = [
         'tkcal-day',
         inMonth ? '' : 'is-outside',
@@ -572,9 +572,11 @@ function dayHeading(day: Date, today: Date): string {
   if (diff === 0) return 'Today';
   if (diff === 1) return 'Tomorrow';
   if (diff === -1) return 'Yesterday';
+  // Compact — "Wed, Oct 21", Apple's inspector style. The long spelling
+  // wraps in a 264px pane that also carries the Add button.
   return new Intl.DateTimeFormat(undefined, {
-    weekday: 'long',
-    month: 'long',
+    weekday: 'short',
+    month: 'short',
     day: 'numeric',
   }).format(day);
 }
