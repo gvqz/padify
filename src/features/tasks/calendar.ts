@@ -3,13 +3,14 @@
  *
  * The calendar door in the notes rail's head (and the rail's Calendar
  * destination) opens this page: an iCloud-style calendar. The page IS
- * the view — a big title up top, the Day/Week/Month/Year modes (Month
- * and Year live; Day and Week still wait on the bench), prev/Today/next
+ * the view — a big title up top, the Day/Week/Month/Year modes (Month,
+ * Week and Year live; Day still waits on the bench), prev/Today/next
  * beside them, and the body: Month is the ruled grid whose days carry
  * the day's reminders as colored chips (one per task, tinted with its
- * list's color, three then a count); Year is the twelve-little-months
- * spread, numbers only, days with reminders reading darker, the month
- * name zooming into Month.
+ * list's color, three then a count); Week lines up seven tall columns
+ * under their day headers, every reminder on the glass (a busy column
+ * scrolls); Year is the twelve-little-months spread, numbers only, days
+ * with reminders reading darker, the month name zooming into Month.
  *
  * The RIGHT sidebar is the iCloud sidebar mirrored: the lists as colored
  * checkboxes (unchecking one sweeps its reminders off the grid), the
@@ -35,12 +36,15 @@ import { parseWhen, startOfDay } from '../../editor/tasks/dates';
 import { escapeHtml } from '../../lib/escape';
 import type { Task } from '../../editor/tasks/content';
 
-/** The page's modes — Month is the ruled grid, Year the twelve spreads. */
-type CalMode = 'month' | 'year';
+/** The page's modes — Month the ruled grid, Week the seven columns,
+ * Year the twelve spreads. */
+type CalMode = 'month' | 'week' | 'year';
 
-/** The cursor month (a date on its first day) + the selected day. */
+/** The cursor month (a date on its first day) + the selected day + the
+ * day anchoring the shown week (any day inside it). */
 let cursorMonth = firstOfMonth(new Date());
 let selectedDay = startOfDay(new Date());
+let cursorWeek = startOfDay(new Date());
 /** Which page is on the glass right now. */
 let mode: CalMode = 'month';
 /** Task notes the user unchecked in the sidebar — their reminders hide. */
@@ -60,24 +64,33 @@ export function initTasksCalendar(): void {
   sections.addEventListener('click', (event) => {
     const target = event.target as Element;
 
-    // The arrows step by the page's own grain: a month in Month view,
-    // a whole year in Year view.
+    // The arrows step by the page's own grain: a week in Week view, a
+    // month in Month view, a whole year in Year view.
     if (target.closest('[data-cal-prev]')) {
-      cursorMonth = mode === 'year' ? shiftYear(cursorMonth, -1) : shiftMonth(cursorMonth, -1);
+      if (mode === 'year') cursorMonth = shiftYear(cursorMonth, -1);
+      else if (mode === 'week') cursorWeek = shiftWeek(cursorWeek, -1);
+      else cursorMonth = shiftMonth(cursorMonth, -1);
       renderTasksCalendar();
       return;
     }
     if (target.closest('[data-cal-next]')) {
-      cursorMonth = mode === 'year' ? shiftYear(cursorMonth, 1) : shiftMonth(cursorMonth, 1);
+      if (mode === 'year') cursorMonth = shiftYear(cursorMonth, 1);
+      else if (mode === 'week') cursorWeek = shiftWeek(cursorWeek, 1);
+      else cursorMonth = shiftMonth(cursorMonth, 1);
       renderTasksCalendar();
       return;
     }
     // The segmented control — switching modes re-renders the same state
-    // into the other page (Day and Week are still on the bench).
+    // into the other page. Week opens on the picked day's week; the
+    // other pages open on the month the week sat in, so the flip never
+    // jumps the glass to somewhere the user wasn't looking.
     const modeBtn = target.closest<HTMLElement>('[data-cal-mode]');
     if (modeBtn) {
       const next = modeBtn.dataset.calMode;
-      if ((next === 'month' || next === 'year') && next !== mode) {
+      const live = next === 'month' || next === 'week' || next === 'year';
+      if (live && next !== mode) {
+        if (next === 'week') cursorWeek = selectedDay;
+        else if (mode === 'week') cursorMonth = firstOfMonth(cursorWeek);
         mode = next;
         renderTasksCalendar();
       }
@@ -98,6 +111,7 @@ export function initTasksCalendar(): void {
       const today = startOfDay(new Date());
       selectedDay = today;
       cursorMonth = firstOfMonth(today);
+      cursorWeek = today;
       renderTasksCalendar();
       return;
     }
@@ -164,13 +178,13 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
   }).format(cursorMonth);
   const yearLabel = String(cursorMonth.getFullYear());
 
-  // The segmented control: Month and Year are live; Day and Week dim
-  // and explain themselves until they're built.
+  // The segmented control: Month, Week and Year are live; Day dims and
+  // explains itself until it's built.
   const modes = ['day', 'week', 'month', 'year']
     .map((name) => {
       const label = name[0].toUpperCase() + name.slice(1);
-      if (name === 'day' || name === 'week') {
-        return `<button type="button" class="tkcal-mode" data-cal-mode-wip title="Still on the bench — Month and Year are live" aria-disabled="true">${label}</button>`;
+      if (name === 'day') {
+        return `<button type="button" class="tkcal-mode" data-cal-mode-wip title="Still on the bench — Week, Month and Year are live" aria-disabled="true">${label}</button>`;
       }
       const on = name === mode;
       return `<button type="button" class="tkcal-mode${on ? ' is-on' : ''}" data-cal-mode="${name}" aria-pressed="${String(on)}">${label}</button>`;
@@ -223,9 +237,11 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
     .map((label) => `<span class="tkcal-weekday">${label}</span>`)
     .join('');
 
-  // The Year page: twelve little months, numbers only. The sidebar
-  // stays (lists + the day inspector still work on a picked day); the
-  // mini month sits out — a year page already shows twelve months.
+  // The Year page: twelve little months, numbers only. The Week page:
+  // seven tall columns under their day headers. The sidebar stays on
+  // both (lists + the day inspector still work on a picked day); the
+  // mini month sits out — a year page already shows twelve months, and
+  // its arrows would step weeks in Week view where it has no business.
   const yearHtml =
     mode === 'year'
       ? monthsOfYear(cursorMonth)
@@ -235,7 +251,9 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
   const gridPaneHtml =
     mode === 'year'
       ? `<div class="tkcal-year">${yearHtml}</div>`
-      : `<div class="tkcal-weekdays">${weekdays}</div><div class="tkcal-grid" role="grid">${gridHtml}</div>`;
+      : mode === 'week'
+        ? `<div class="tkcal-week" role="grid">${weekColumns(cursorWeek, selectedDay, today, byDay)}</div>`
+        : `<div class="tkcal-weekdays">${weekdays}</div><div class="tkcal-grid" role="grid">${gridHtml}</div>`;
 
   const dayRows = dayTasks(selectedDay, now);
   const dayLabel = dayHeading(selectedDay, today);
@@ -288,7 +306,9 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
         <button type="button" class="tkh-back tkcal-back" data-hub-close title="Back to the note" aria-label="Back to the note">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
         </button>
-        <h5 class="tkcal-month">${mode === 'year' ? yearLabel : monthLabel}</h5>
+        <h5 class="tkcal-month">${
+          mode === 'year' ? yearLabel : mode === 'week' ? weekLabel(cursorWeek) : monthLabel
+        }</h5>
         <div class="tkcal-modes" role="group" aria-label="Calendar view">${modes}</div>
         <div class="tkcal-navs">
           <button type="button" class="tkcal-nav" data-cal-prev title="Previous ${mode}" aria-label="Previous ${mode}">
@@ -469,6 +489,41 @@ function shiftYear(month: Date, delta: number): Date {
   return copy;
 }
 
+function shiftWeek(day: Date, delta: number): Date {
+  const copy = new Date(day);
+  copy.setDate(copy.getDate() + delta * 7);
+  return copy;
+}
+
+/** The Sunday that opens the week containing `day`. */
+function weekStart(day: Date): Date {
+  const copy = startOfDay(day);
+  copy.setDate(copy.getDate() - copy.getDay());
+  return copy;
+}
+
+/** The Week page's title — the range on the glass, Apple-style:
+ * "Oct 19 – 25, 2026", crossing months "Sep 28 – Oct 4, 2026",
+ * crossing years "Dec 28, 2026 – Jan 3, 2027". */
+function weekLabel(anchor: Date): string {
+  const start = weekStart(anchor);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  const dayFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+  if (start.getFullYear() !== end.getFullYear()) {
+    const fullFmt = new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+    return `${fullFmt.format(start)} – ${fullFmt.format(end)}`;
+  }
+  if (start.getMonth() === end.getMonth()) {
+    return `${dayFmt.format(start)} – ${end.getDate()}, ${start.getFullYear()}`;
+  }
+  return `${dayFmt.format(start)} – ${dayFmt.format(end)}, ${start.getFullYear()}`;
+}
+
 /** The year's twelve cursor months — January through December. */
 function monthsOfYear(year: Date): Date[] {
   return Array.from({ length: 12 }, (_, i) => new Date(year.getFullYear(), i, 1));
@@ -601,6 +656,62 @@ function yearMonthHtml(
         )}" title="Open ${name} in Month view">${name}</button>
         <div class="tkcal-year-grid">${blanks.join('')}${days.join('')}</div>
       </section>`;
+}
+
+/**
+ * The Week page — seven tall columns, Sunday-first, one per day. The
+ * header rides the top of each column (weekday word + the numeral,
+ * today in Apple red); the day's reminders stack beneath it as the
+ * same chips the month grid wears, every one of them on the glass —
+ * a busy column scrolls instead of trimming to a +N count. The whole
+ * column is the day button, so the month grid's picking — select, the
+ * sidebar's inspector follows — works here untouched.
+ */
+function weekColumns(
+  anchor: Date,
+  selected: Date,
+  today: Date,
+  byDay: Map<string, AggTask[]>,
+): string {
+  const start = weekStart(anchor);
+  const wdFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
+  const labelFmt = new Intl.DateTimeFormat(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+  const cols: string[] = [];
+  for (let i = 0; i < 7; i += 1) {
+    const date = new Date(start);
+    date.setDate(start.getDate() + i);
+    const events = byDay.get(dayKey(date)) ?? [];
+    const chips = events
+      .map(
+        (row) =>
+          `<span class="tkcal-chip tk-c-${row.note.color}" title="${escapeHtml(
+            row.task.title,
+          )}">${escapeHtml(row.task.title)}</span>`,
+      )
+      .join('');
+    const classes = [
+      'tkcal-week-col',
+      date.getDay() === 0 || date.getDay() === 6 ? 'is-weekend' : '',
+      sameDay(date, today) ? 'is-today' : '',
+      sameDay(date, selected) ? 'is-selected' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    cols.push(`
+        <button type="button" class="${classes}" data-cal-day="${dayKey(date)}" aria-label="${labelFmt.format(
+          date,
+        )}${events.length > 0 ? `, ${events.length} reminders` : ''}">
+          <span class="tkcal-week-head"><span class="tkcal-week-wd">${wdFmt.format(
+            date,
+          )}</span><span class="tkcal-week-num">${date.getDate()}</span></span>
+          <span class="tkcal-week-events">${chips}</span>
+        </button>`);
+  }
+  return cols.join('');
 }
 
 /**

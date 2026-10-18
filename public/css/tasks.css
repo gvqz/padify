@@ -1510,7 +1510,7 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 }
 
 /* --------------------------------------------------------------------------
-   12. The ONE calendar — the iCloud month + year pages
+   12. The ONE calendar — the iCloud month, week + year pages
    -------------------------------------------------------------------------- */
 
 .tkcal {
@@ -2325,6 +2325,123 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   }
 }
 
+/* --- the week view: seven tall columns --- */
+
+/* macOS Calendar's week page: a ruled strip of day columns under one
+   hairline frame, each column wearing its day header (weekday word +
+   the numeral, today in Apple red) over the day's reminders as the
+   same chips the month grid wears — every one of them, a busy column
+   scrolling instead of trimming to a +N count (a week holds room
+   enough to read its own days). The whole column is the day button,
+   so picking works exactly as it does on the month grid. */
+.tkcal-week {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border: 1px solid var(--tk-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--tk-border);
+  gap: 1px;
+}
+
+.tkcal-week-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: var(--tk-bg);
+  color: var(--tk-text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease);
+  overflow: hidden;
+}
+
+.tkcal-week-col:hover,
+.tkcal-week-col:focus-visible {
+  background: var(--tk-well);
+  outline: none;
+}
+
+/* The weekend columns read the month grid's whisper. */
+.tkcal-week-col.is-weekend {
+  background: color-mix(in srgb, var(--tk-text) 3.5%, var(--tk-bg));
+}
+
+.tkcal-week-col.is-weekend:hover,
+.tkcal-week-col.is-weekend:focus-visible {
+  background: var(--tk-well);
+}
+
+/* The picked day: the same soft accent wash the month cell wears. */
+.tkcal-week-col.is-selected {
+  background: color-mix(in srgb, var(--tk-accent) 10%, var(--tk-bg));
+}
+
+.tkcal-week-col.is-selected:hover {
+  background: color-mix(in srgb, var(--tk-accent) 14%, var(--tk-bg));
+}
+
+.tkcal-week-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 8px 9px 6px;
+  border-bottom: 1px solid var(--tk-border);
+}
+
+.tkcal-week-wd {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--tk-muted);
+  letter-spacing: 0.02em;
+}
+
+.tkcal-week-num {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* Today: Apple red — the word and the numeral, no filled circle (the
+   week page has room for the quieter mark; the month keeps the coin). */
+.tkcal-week-col.is-today .tkcal-week-wd {
+  color: var(--vz-danger);
+}
+
+.tkcal-week-col.is-today .tkcal-week-num {
+  color: var(--vz-danger);
+  font-weight: 700;
+}
+
+.tkcal-week-events {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  padding: 7px 7px 8px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-track) transparent;
+}
+
+.tkcal-week-events::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tkcal-week-events::-webkit-scrollbar-thumb {
+  background: var(--tk-track);
+  border-radius: 4px;
+}
+
 /* --------------------------------------------------------------------------
    13. The tab strip's list badge (outside every scope — the palette vars
        are global, see the tokens above)
@@ -2492,6 +2609,10 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   }
 
   .tkcal-grid {
+    min-height: 420px;
+  }
+
+  .tkcal-week {
     min-height: 420px;
   }
 

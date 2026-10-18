@@ -476,10 +476,10 @@ test.describe('the calendar', () => {
     const title = page.locator('.tkcal-month');
     await expect(title).toHaveText(String(new Date().getFullYear()));
     await expect(page.locator('.tkcal-year-month')).toHaveCount(12);
-    // Year is pressed, Month is not, and Day/Week still say they wait.
+    // Year is pressed, Month is not, and only Day still says it waits.
     await expect(page.locator('[data-cal-mode="year"]')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('[data-cal-mode="month"]')).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.locator('[data-cal-mode-wip]')).toHaveCount(2);
+    await expect(page.locator('[data-cal-mode-wip]')).toHaveCount(1);
     // The sidebar keeps its lists + day inspector; the mini month sits
     // out — twelve months are already on the glass.
     await expect(page.locator('.tkcal-lists')).toBeVisible();
@@ -548,6 +548,72 @@ test.describe('the calendar', () => {
     await expect(
       page.locator('.tkcal-day.is-selected .tkcal-chip', { hasText: 'Year mark' }),
     ).toBeVisible();
+  });
+
+  test('the week view lines up seven columns, steps by the week, Today comes home', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.locator('#tabRailCalendar').click();
+    await page.locator('[data-cal-mode="week"]').click();
+
+    // Seven columns, today's picked by default, the title reading the
+    // week's range with the year in it.
+    await expect(page.locator('.tkcal-week-col')).toHaveCount(7);
+    await expect(page.locator('.tkcal-week-col.is-today')).toHaveClass(/is-selected/);
+    const title = page.locator('.tkcal-month');
+    await expect(title).toContainText(String(new Date().getFullYear()));
+    await expect(page.locator('.tkcal-navs [data-cal-prev]')).toHaveAttribute(
+      'title',
+      'Previous week',
+    );
+    // The mini month keeps out of the week page (its arrows step months).
+    await expect(page.locator('.tkcal-mini')).toHaveCount(0);
+
+    // The arrows step whole weeks — off today's page there is no today.
+    const home = await title.textContent();
+    await page.locator('.tkcal-navs [data-cal-next]').click();
+    await expect(title).not.toHaveText(home!);
+    await expect(page.locator('.tkcal-week-col.is-today')).toHaveCount(0);
+    await page.locator('.tkcal-navs [data-cal-today]').click();
+    await expect(title).toHaveText(home!);
+    await expect(page.locator('.tkcal-week-col.is-today')).toHaveClass(/is-selected/);
+  });
+
+  test('a week column carries its chips; picking one feeds the day pane; Month picks up the week', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    const input = page.locator('[data-composer-input]');
+    await input.fill('Week chip');
+    await input.press('Enter');
+    const row = page.locator('.tk-task-wrap', { hasText: 'Week chip' }).first();
+    await row.locator('.tk-task-main').click();
+    await page.locator('[data-editor-when="date"]').click();
+    await page.locator('[data-when-preset="today"]').click();
+    await page.locator('.tk-editor-title').press('Enter');
+
+    await page.locator('#tabRailCalendar').click();
+    await page.locator('[data-cal-mode="week"]').click();
+
+    // Today's column carries the reminder as a chip.
+    await expect(
+      page.locator('.tkcal-week-col.is-today .tkcal-chip', { hasText: 'Week chip' }),
+    ).toBeVisible();
+
+    // Picking another column moves the wash — and the day pane — to it.
+    const another = page.locator('.tkcal-week-col:not(.is-today)').first();
+    await another.click();
+    await expect(another).toHaveClass(/is-selected/);
+    await expect(page.locator('.tkcal-week-col.is-today')).not.toHaveClass(/is-selected/);
+    await expect(page.locator('.tkcal-day-pane .tk-empty-day')).toBeVisible();
+
+    // Flipping back to Month lands on the week's month — the glass
+    // never jumps somewhere the user wasn't looking.
+    await page.locator('[data-cal-mode="month"]').click();
+    await expect(page.locator('.tkcal-grid')).toBeVisible();
+    await expect(page.locator('.tkcal-day.is-selected')).toHaveCount(1);
   });
 });
 
