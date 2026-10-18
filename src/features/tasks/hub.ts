@@ -237,11 +237,13 @@ export function initTasksHub(): void {
 
   document.getElementById('tkhComposerAdd')?.addEventListener('click', () => submitComposer());
 
-  hubEl()
-    ?.querySelectorAll<HTMLElement>('[data-hub-close]')
-    .forEach((button) => {
-      button.addEventListener('click', () => closeTasksHub());
-    });
+  // Delegated, not direct-bound: the calendar page renders its own back
+  // arrow inside the toolbar row on every re-render, and a boot-time
+  // querySelectorAll would never reach the fresh nodes.
+  hubEl()?.addEventListener('click', (event) => {
+    const through = event.target as HTMLElement | null;
+    if (through?.closest('[data-hub-close]')) closeTasksHub();
+  });
 
   // Escape while an inner consumer is open never reaches the layer
   // sweep (its isOpen is false): popovers first, then the editor, then

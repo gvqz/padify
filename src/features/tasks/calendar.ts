@@ -235,6 +235,9 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
   sections.innerHTML = `
     <div class="tkcal">
       <header class="tkcal-top">
+        <button type="button" class="tkh-back tkcal-back" data-hub-close title="Back to the note" aria-label="Back to the note">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+        </button>
         <h5 class="tkcal-month">${monthLabel}</h5>
         <div class="tkcal-modes" role="group" aria-label="Calendar view">${modes}</div>
         <div class="tkcal-navs">

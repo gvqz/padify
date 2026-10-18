@@ -634,6 +634,21 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
   display: none;
 }
 
+/* Desktop: the calendar's toolbar row (back arrow + month + modes +
+   navs) replaces the hub head entirely — one iCloud-tight line instead
+   of a lonely arrow floating above the title. Phones keep the hub head
+   (it carries their views button) and the inline back arrow stays
+   hidden (see .tkcal-back). */
+@media (min-width: 821px) {
+  .tkh.is-calendar .tkh-head {
+    display: none;
+  }
+
+  .tkh.is-calendar .tkcal-back {
+    display: inline-flex;
+  }
+}
+
 body.tasks-hub-open #richToolbar,
 body.tasks-hub-open #markdownToolbar,
 body.tasks-hub-open #textareaContainer .starter-template,
@@ -1509,15 +1524,24 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 .tkcal-top {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 2px 2px 14px;
+  gap: 10px;
+  padding: 2px 2px 10px;
+  flex: 0 0 auto;
+}
+
+/* The back-to-note arrow lives IN the toolbar row on desktop — the
+   hub's own head row stands down here (below), so nothing is left
+   floating on a line of its own. Phones keep the hub head (it carries
+   their views button) and hide this duplicate instead. */
+.tkcal-back {
+  display: none;
   flex: 0 0 auto;
 }
 
 .tkcal-month {
   margin: 0;
-  font-size: 26px;
-  font-weight: 750;
+  font-size: 24px;
+  font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--tk-text);
   white-space: nowrap;
