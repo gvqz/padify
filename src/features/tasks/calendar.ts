@@ -13,7 +13,12 @@
  * seven day headers over the same ruled hours, every reminder on the
  * glass as a chip at its hour (a busy hour stretches its row for the
  * whole week at once); both timed pages carry Apple's red now-line in
- * the current hour and open scrolled to the working hours; Month is
+ * the current hour and open scrolled to the working hours, and both
+ * retime by drag: a chip or row picked off the ruling drops into
+ * another hour (the drop line previews the exact minute), across the
+ * columns to another day, or into the All-Day band to take the time
+ * back off — and double-clicking a bare hour files a reminder right
+ * there; Month is
  * the ruled grid whose days carry the day's reminders as colored
  * chips (one per task, tinted with its list's color, three then a
  * count); Year is the twelve-little-months spread, numbers only, days
@@ -56,6 +61,31 @@ let cursorWeek = startOfDay(new Date());
 let mode: CalMode = 'month';
 /** Task notes the user unchecked in the sidebar — their reminders hide. */
 const hiddenLists = new Set<string>();
+
+/** The bare hour slot clicked last (the double-click detector — a
+ * re-render sits between the two clicks, so the browser's own dblclick
+ * never sees the same node twice). */
+let lastSlotClick: { key: string; at: number } | null = null;
+/** The hour a slot double-click aimed the quick-add at, while it's open. */
+let quickAddSlot: { day: Date; hour: number } | null = null;
+
+/** The chip or row currently picked up: which task it is, the day it
+ * was picked from (the stamp that gets retimed) and its element (for
+ * the lifted look). */
+interface DragRetime {
+  taskId: string;
+  fromKey: string;
+  el: Element;
+}
+let dragRetime: DragRetime | null = null;
+/** The one drop marker (accent line + minute bubble) shared by every
+ * slot, and the slot currently painted as the target. */
+let dropMarker: HTMLElement | null = null;
+let dropOver: Element | null = null;
+/** A drop the next render should celebrate: the chip pulses where it
+ * landed, so a retime reads as something that happened. */
+let landedTaskId: string | null = null;
+let landedAt = 0;
 
 let wired = false;
 
@@ -136,6 +166,25 @@ export function initTasksCalendar(): void {
       renderTasksCalendar();
       return;
     }
+    // A bare hour slot: two quick clicks open the quick-add aimed at
+    // that exact hour (a chip or row under the pointer keeps its own
+    // acts; the browser's dblclick can't see through the re-render the
+    // first click causes, so the pair is matched here by hand). Week
+    // slots fall through — the click still picks the day below.
+    const slotCell = target.closest<HTMLElement>(
+      '.tkcal-wk-slot[data-hour], .tkcal-day-slot[data-hour]',
+    );
+    if (slotCell && !target.closest('.tk-task-wrap')) {
+      const key = `${slotCell.dataset.calDay ?? dayKey(selectedDay)}T${slotCell.dataset.hour ?? ''}`;
+      const stamp = Date.now();
+      if (lastSlotClick && lastSlotClick.key === key && stamp - lastSlotClick.at < 600) {
+        lastSlotClick = null;
+        openQuickAddForSlot(sections, slotCell);
+        return;
+      }
+      lastSlotClick = { key, at: stamp };
+      if (slotCell.classList.contains('tkcal-day-slot')) return;
+    }
     const dayCell = target.closest<HTMLElement>('[data-cal-day]');
     if (dayCell) {
       const date = parseWhen(`${dayCell.dataset.calDay}T00:00:00`);
@@ -153,6 +202,9 @@ export function initTasksCalendar(): void {
       }
     }
   });
+
+  // The retime drag — chips between the hours, rows across the sheet.
+  wireRetime(sections);
 }
 
 /**
@@ -371,7 +423,10 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
             <div class="tkcal-side-eyebrow">My Lists</div>
             ${listsHtml}
           </div>
-          ${mode === 'day' ? '' : `<div class="tkcal-day-pane">
+          ${
+            mode === 'day'
+              ? ''
+              : `<div class="tkcal-day-pane">
             <header class="tkcal-day-head">
               <div class="tkcal-day-heading">
                 <h5 class="tkcal-day-title">${dayLabel}</h5>
@@ -386,7 +441,8 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
             ${quickAddHtml}
             <div class="tk-rows" role="list" data-cal-day-rows>${rowsHtml}</div>
             ${upNextHtml}
-          </div>`}
+          </div>`
+          }
           ${
             mode === 'month'
               ? `<div class="tkcal-mini">
@@ -406,6 +462,21 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
         </aside>
       </div>
     </div>`;
+
+  // A retime that just landed: pulse the chip (or row) at its new
+  // hour, so the drop reads as something that happened. One render
+  // only — the next paints plain again.
+  if (landedTaskId) {
+    if (Date.now() - landedAt < 2000) {
+      const landed = sections.querySelector(
+        `[data-cal-task="${CSS.escape(landedTaskId)}"], .tk-task-wrap[data-id="${CSS.escape(
+          landedTaskId,
+        )}"]`,
+      );
+      landed?.classList.add('is-landed');
+    }
+    landedTaskId = null;
+  }
 
   const timedBox = sections.querySelector<HTMLElement>('.tkcal-wk-time, .tkcal-daypage-scroll');
   if (timedBox) {
@@ -452,6 +523,10 @@ function wireQuickAdd(sections: HTMLElement, quickAdd: (title: string, iso: stri
   if (!row || !input) return;
 
   const openRow = (): void => {
+    // The Add button aims plain: the selected day at 9:00 (a slot
+    // double-click aims its own hour instead, and it goes with the row).
+    quickAddSlot = null;
+    input.placeholder = 'New Reminder';
     row.hidden = false;
     input.focus();
   };
@@ -463,6 +538,7 @@ function wireQuickAdd(sections: HTMLElement, quickAdd: (title: string, iso: stri
       event.preventDefault();
       event.stopPropagation();
       input.value = '';
+      quickAddSlot = null;
       row.hidden = true;
       return;
     }
@@ -470,9 +546,10 @@ function wireQuickAdd(sections: HTMLElement, quickAdd: (title: string, iso: stri
     event.preventDefault();
     const title = input.value.trim();
     if (!title) return;
-    // The day at 9:00 — the same anchor the day pane shows.
-    const at = new Date(selectedDay);
-    at.setHours(9, 0, 0, 0);
+    // The aimed hour when a slot double-click opened the row, else the
+    // day at 9:00 — the same anchor the day pane shows.
+    const at = new Date(quickAddSlot ? quickAddSlot.day : selectedDay);
+    at.setHours(quickAddSlot ? quickAddSlot.hour : 9, 0, 0, 0);
     quickAdd(title, at.toISOString());
     // The hub re-renders the page (the chip lands on the grid, the row
     // lands in the pane) — the fresh row paints closed, so open it and
@@ -484,12 +561,16 @@ function wireQuickAdd(sections: HTMLElement, quickAdd: (title: string, iso: stri
     const hubLive = !sections.closest<HTMLElement>('#tasksHub')?.hidden;
     if (fresh && freshInput && hubLive) {
       fresh.hidden = false;
+      if (quickAddSlot) applySlotPlaceholder(freshInput);
       freshInput.focus();
     }
   });
 
   input.addEventListener('focusout', () => {
-    if (input.value === '') row.hidden = true;
+    if (input.value === '') {
+      quickAddSlot = null;
+      row.hidden = true;
+    }
   });
 }
 
@@ -522,7 +603,266 @@ export function closeCalendarQuickAdd(): void {
   if (!row || row.hidden) return;
   const input = row.querySelector<HTMLInputElement>('[data-cal-quickadd-input]');
   if (input) input.value = '';
+  quickAddSlot = null;
   row.hidden = true;
+}
+
+// ---------------------------------------------------------------------------
+// Drag a chip between the hours — the retime
+// ---------------------------------------------------------------------------
+
+/**
+ * The retime drag, wired once on the sections container: chips (Week)
+ * and the Day sheet's rows are draggable; the hour slots and the
+ * All-Day cells are the targets. Hovering paints the accent drop line
+ * with the exact minute as a bubble; dropping rewrites the stamp that
+ * anchored the chip on the day it was picked from (reminderAt first,
+ * then dueDate — the same anchor the ruling shows) to the drop's day
+ * and minute. The All-Day band takes a chip back out of the hours (the
+ * time comes off), an hour slot puts one in, and a cross-column drop
+ * moves the day with it. The inline editor's inputs keep their text
+ * selection: a drag started inside an open editor is cancelled.
+ */
+function wireRetime(sections: HTMLElement): void {
+  sections.addEventListener('dragstart', (event) => {
+    const target = event.target as Element;
+    const wrap = target.closest<HTMLElement>('.tk-task-wrap[draggable]');
+    let picked: DragRetime;
+    if (wrap) {
+      if (wrap.classList.contains('is-editing')) {
+        event.preventDefault();
+        return;
+      }
+      const fromKey = wrap.closest('.tkcal-daypage')
+        ? dayKey(selectedDay)
+        : (wrap.getAttribute('data-cal-from') ?? '');
+      picked = { taskId: wrap.dataset.id ?? '', fromKey, el: wrap };
+      wrap.classList.add('is-dragging');
+    } else {
+      const chip = target.closest<HTMLElement>('.tkcal-chip[draggable]');
+      if (!chip) return;
+      picked = {
+        taskId: chip.dataset.calTask ?? '',
+        fromKey: chip.dataset.calFrom ?? '',
+        el: chip,
+      };
+      chip.classList.add('is-dragging');
+    }
+    dragRetime = picked;
+    event.dataTransfer?.setData('text/plain', picked.taskId);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+  });
+
+  sections.addEventListener('dragover', (event) => {
+    if (!dragRetime) return;
+    const hit = dropTargetAt(event.target as Element);
+    if (!hit) {
+      clearDropPaint();
+      return;
+    }
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    paintDrop(hit, event.clientY);
+    nudgeScroll(hit.el, event.clientY);
+  });
+
+  sections.addEventListener('drop', (event) => {
+    if (!dragRetime) return;
+    const hit = dropTargetAt(event.target as Element);
+    if (hit) {
+      event.preventDefault();
+      commitRetime(dragRetime.taskId, dragRetime.fromKey, hit, event.clientY);
+    }
+    endRetime();
+  });
+
+  sections.addEventListener('dragend', () => endRetime());
+
+  // Leaving the glass — not just crossing between children — puts the
+  // drop paint away; dragend closes whatever remains.
+  sections.addEventListener('dragleave', (event) => {
+    if (!dragRetime) return;
+    const next = event.relatedTarget;
+    if (next instanceof Node && sections.contains(next)) return;
+    clearDropPaint();
+  });
+}
+
+/** Where a drop would land: an hour slot (it wears data-hour) or an
+ * All-Day cell — the Day sheet's slots resolve their day through the
+ * picked day, the Week's carry it in plain sight. */
+function dropTargetAt(
+  target: Element,
+): { kind: 'hour'; el: HTMLElement } | { kind: 'allday'; el: HTMLElement } | null {
+  const slot = target.closest<HTMLElement>('.tkcal-wk-slot[data-hour], .tkcal-day-slot[data-hour]');
+  if (slot) return { kind: 'hour', el: slot };
+  const cell = target.closest<HTMLElement>('.tkcal-wk-allday-cell, .tkcal-day-allday-body');
+  if (cell) return { kind: 'allday', el: cell };
+  return null;
+}
+
+/** The minute a drop at `clientY` means inside `slot`: the slot IS the
+ * hour, so its height maps to sixty minutes, snapped to five. */
+function minuteAt(slot: HTMLElement, clientY: number): number {
+  const rect = slot.getBoundingClientRect();
+  const frac = rect.height > 0 ? (clientY - rect.top) / rect.height : 0;
+  const clamped = Math.max(0, Math.min(0.999, frac));
+  return Math.min(55, Math.floor(clamped * 12) * 5);
+}
+
+/** Paints the target: the slot wears the wash and carries the accent
+ * drop line with the exact minute as a bubble; the All-Day cell just
+ * the wash (its label already says All-Day). */
+function paintDrop(
+  hit: { kind: 'hour'; el: HTMLElement } | { kind: 'allday'; el: HTMLElement },
+  clientY: number,
+): void {
+  if (dropOver !== hit.el) {
+    dropOver?.classList.remove('is-drop-over');
+    hit.el.classList.add('is-drop-over');
+    dropOver = hit.el;
+  }
+  if (hit.kind !== 'hour') {
+    dropMarker?.remove();
+    dropMarker = null;
+    return;
+  }
+  if (!dropMarker) {
+    dropMarker = document.createElement('span');
+    dropMarker.className = 'tkcal-dropline';
+    dropMarker.setAttribute('aria-hidden', 'true');
+    const bubble = document.createElement('span');
+    bubble.className = 'tkcal-dropline-time';
+    dropMarker.appendChild(bubble);
+  }
+  const slot = hit.el;
+  const rect = slot.getBoundingClientRect();
+  const top = Math.max(0, Math.min(rect.height - 1, clientY - rect.top));
+  const bubble = dropMarker.querySelector<HTMLElement>('.tkcal-dropline-time');
+  if (bubble) bubble.textContent = dropTimeLabel(slot, minuteAt(slot, clientY));
+  dropMarker.style.top = `${top}px`;
+  slot.appendChild(dropMarker);
+}
+
+/** The time the bubble promises: the slot's day and hour plus the
+ * dragged minute — "2:35 PM". */
+function dropTimeLabel(slot: HTMLElement, minute: number): string {
+  const day = parseWhen(`${slot.dataset.calDay ?? dayKey(selectedDay)}T00:00:00`);
+  const at = day ? new Date(day) : new Date();
+  at.setHours(Number(slot.dataset.hour ?? 0), minute, 0, 0);
+  return chipTimeLabel(at);
+}
+
+/** Sliding near a timed page's top or bottom edge scrolls the hours —
+ * a drag can reach an hour that isn't on screen yet. */
+function nudgeScroll(el: HTMLElement, clientY: number): void {
+  const box = el.closest<HTMLElement>('.tkcal-wk-time, .tkcal-daypage-scroll');
+  if (!box) return;
+  const rect = box.getBoundingClientRect();
+  if (clientY < rect.top + 36) box.scrollTop -= 14;
+  else if (clientY > rect.bottom - 36) box.scrollTop += 14;
+}
+
+function clearDropPaint(): void {
+  dropOver?.classList.remove('is-drop-over');
+  dropOver = null;
+  dropMarker?.remove();
+  dropMarker = null;
+}
+
+function endRetime(): void {
+  dragRetime?.el.classList.remove('is-dragging');
+  dragRetime = null;
+  clearDropPaint();
+}
+
+/** Writes the drop. The stamp that anchored the chip on the day it was
+ * picked from moves to the drop's day and minute; into the All-Day
+ * band it lands at midnight — this model's "no time set". Midnight
+ * itself is never written (it would read as All-Day), so the earliest
+ * minute in the 12 AM slot is 12:01. A no-op drop — the chip's own
+ * slot, the same minute — writes nothing at all. */
+function commitRetime(
+  taskId: string,
+  fromKey: string,
+  hit: { kind: 'hour'; el: HTMLElement } | { kind: 'allday'; el: HTMLElement },
+  clientY: number,
+): void {
+  const found = taskNotes.taskById(taskId);
+  if (!found) return;
+  const sourceDay = parseWhen(`${fromKey}T00:00:00`) ?? startOfDay(new Date());
+  const field = retimeField(found.task, sourceDay);
+  if (!field) return;
+  const day = parseWhen(`${hit.el.dataset.calDay ?? dayKey(selectedDay)}T00:00:00`) ?? sourceDay;
+  const stamp = startOfDay(day);
+  if (hit.kind === 'allday') {
+    applyRetime(taskId, field, stamp.toISOString());
+    return;
+  }
+  const hour = Number(hit.el.dataset.hour ?? 0);
+  const minute = minuteAt(hit.el, clientY);
+  stamp.setHours(hour, hour === 0 && minute === 0 ? 1 : minute, 0, 0);
+  applyRetime(taskId, field, stamp.toISOString());
+}
+
+function applyRetime(taskId: string, field: 'reminderAt' | 'dueDate', iso: string): void {
+  const found = taskNotes.taskById(taskId);
+  if (!found || found.task[field] === iso) return;
+  landedTaskId = taskId;
+  landedAt = Date.now();
+  if (field === 'reminderAt') taskNotes.updateTask(taskId, { reminderAt: iso });
+  else taskNotes.updateTask(taskId, { dueDate: iso });
+}
+
+/** Which stamp a drag retimes: the one anchoring the chip on the day
+ * it was picked from — a stamp carrying a real time wins (the
+ * reminder time first, then the due date, the ruling's own order),
+ * else whichever date-only stamp put it on that day. */
+function retimeField(task: Task, sourceDay: Date): 'reminderAt' | 'dueDate' | null {
+  for (const field of ['reminderAt', 'dueDate'] as const) {
+    const date = parseWhen(task[field]);
+    if (date && hasTime(date) && sameDay(date, sourceDay)) return field;
+  }
+  for (const field of ['reminderAt', 'dueDate'] as const) {
+    const date = parseWhen(task[field]);
+    if (date && sameDay(date, sourceDay)) return field;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Double-click a bare hour — quick-add aimed at that exact hour
+// ---------------------------------------------------------------------------
+
+/**
+ * Opens the page's quick-add row aiming at the double-clicked slot:
+ * Enter files at that day and hour instead of the 9:00 default, and
+ * the placeholder says so ("New Reminder on Tue at 2 PM"). The aim
+ * rides the module state — it goes with the row across the re-render
+ * each filed reminder causes, and clears the moment the row closes.
+ */
+function openQuickAddForSlot(sections: HTMLElement, slot: HTMLElement): void {
+  const day = parseWhen(`${slot.dataset.calDay ?? dayKey(selectedDay)}T00:00:00`);
+  const hour = Number(slot.dataset.hour ?? NaN);
+  if (!day || !Number.isInteger(hour) || hour < 0 || hour > 23) return;
+  const row = sections.querySelector<HTMLElement>('[data-cal-quickadd]');
+  const input = row?.querySelector<HTMLInputElement>('[data-cal-quickadd-input]');
+  if (!row || !input) return;
+  quickAddSlot = { day, hour };
+  applySlotPlaceholder(input);
+  row.hidden = false;
+  input.focus();
+}
+
+/** The placeholder while the row aims at a slot — the exact hour spelled out. */
+function applySlotPlaceholder(input: HTMLInputElement): void {
+  if (!quickAddSlot) return;
+  const at = new Date(quickAddSlot.day);
+  at.setHours(quickAddSlot.hour, 0, 0, 0);
+  const time = chipTimeLabel(at);
+  const word = new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(quickAddSlot.day);
+  input.placeholder =
+    mode === 'day' ? `New Reminder at ${time}` : `New Reminder on ${word} at ${time}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -629,7 +969,7 @@ function dayPageHtml(day: Date, today: Date, addBtnHtml: string, quickAddHtml: s
 
   const allDayHtml = schedule.allDay.length
     ? `<div class="tkcal-day-allday"><span class="tkcal-hour">All-Day</span><div class="tkcal-day-allday-body tk-rows" role="list">${schedule.allDay
-        .map((row) => taskRow(row.task, now, row.note.color, false, row.note))
+        .map((row) => taskRow(row.task, now, row.note.color, true, row.note))
         .join('')}</div></div>`
     : '';
 
@@ -637,10 +977,14 @@ function dayPageHtml(day: Date, today: Date, addBtnHtml: string, quickAddHtml: s
   const slots = gutter.map((_, hour) => {
     const rows = schedule.timed.filter((t) => t.at.getHours() === hour);
     const render = (t: { row: AggTask }): string =>
-      taskRow(t.row.task, now, t.row.note.color, false, t.row.note);
+      taskRow(t.row.task, now, t.row.note.color, true, t.row.note);
     let inner: string;
     if (sameDay(day, today) && hour === nowHour) {
-      const split = nowSplit(rows.length, (index) => rows[index]!.at.getMinutes(), now.getMinutes());
+      const split = nowSplit(
+        rows.length,
+        (index) => rows[index]!.at.getMinutes(),
+        now.getMinutes(),
+      );
       const nudge = rows.length === 0 ? Math.round((now.getMinutes() / 60) * 56) : 0;
       inner =
         rows.slice(0, split).map(render).join('') +
@@ -649,7 +993,7 @@ function dayPageHtml(day: Date, today: Date, addBtnHtml: string, quickAddHtml: s
     } else {
       inner = rows.map(render).join('');
     }
-    return `<div class="tkcal-day-slot">${inner}</div>`;
+    return `<div class="tkcal-day-slot" data-hour="${hour}">${inner}</div>`;
   });
 
   const classes = [
@@ -909,10 +1253,15 @@ function weekDayClasses(date: Date, selected: Date, today: Date): string {
 }
 
 /** The week chip — the month chip's tint, wearing its hour when the
- * reminder carries a time ("9 AM · Title"). Every one on the glass. */
-function weekChipHtml(row: AggTask, at?: Date): string {
+ * reminder carries a time ("9 AM · Title"), draggable so it can be
+ * dropped into another hour (or day, or the All-Day band) to retime;
+ * `from` is the day column it was rendered in — the stamp that gets
+ * retimed is the one anchoring it there. Every one on the glass. */
+function weekChipHtml(row: AggTask, at?: Date, from?: string): string {
   const time = at ? chipTimeLabel(at) : '';
-  return `<span class="tkcal-chip tk-c-${row.note.color}" title="${escapeHtml(
+  return `<span class="tkcal-chip tk-c-${row.note.color}" draggable="true" data-cal-task="${escapeHtml(
+    row.task.id,
+  )}"${from ? ` data-cal-from="${from}"` : ''} title="${escapeHtml(
     time ? `${time} · ${row.task.title}` : row.task.title,
   )}">${time ? `<span class="tkcal-chip-time">${escapeHtml(time)}</span>` : ''}${escapeHtml(
     row.task.title,
@@ -968,9 +1317,9 @@ function weekPageHtml(anchor: Date, selected: Date, today: Date): string {
               date,
               selected,
               today,
-            )}" data-cal-day="${dayKey(date)}">${schedules[i]!
-              .allDay.map((row) => weekChipHtml(row))
-              .join('')}</span>`,
+            )}" data-cal-day="${dayKey(date)}">${schedules[i]!.allDay.map((row) =>
+              weekChipHtml(row, undefined, dayKey(date)),
+            ).join('')}</span>`,
         )
         .join('')}</div>`
     : '';
@@ -987,17 +1336,23 @@ function weekPageHtml(anchor: Date, selected: Date, today: Date): string {
         if (sameDay(date, today) && hour === nowHour) {
           const split = nowSplit(chips.length, (index) => chips[index]!.at.getMinutes(), nowMinute);
           const nudge = chips.length === 0 ? Math.round((nowMinute / 60) * 56) : 0;
-          const before = chips.slice(0, split).map((t) => weekChipHtml(t.row, t.at)).join('');
-          const after = chips.slice(split).map((t) => weekChipHtml(t.row, t.at)).join('');
+          const before = chips
+            .slice(0, split)
+            .map((t) => weekChipHtml(t.row, t.at, dayKey(date)))
+            .join('');
+          const after = chips
+            .slice(split)
+            .map((t) => weekChipHtml(t.row, t.at, dayKey(date)))
+            .join('');
           inner = before + nowDividerHtml(nudge) + after;
         } else {
-          inner = chips.map((t) => weekChipHtml(t.row, t.at)).join('');
+          inner = chips.map((t) => weekChipHtml(t.row, t.at, dayKey(date))).join('');
         }
         return `<span class="tkcal-wk-slot ${weekDayClasses(
           date,
           selected,
           today,
-        )}" data-cal-day="${dayKey(date)}">${inner}</span>`;
+        )}" data-cal-day="${dayKey(date)}" data-hour="${hour}">${inner}</span>`;
       })
       .join('');
     return gutter[hour] + cells;

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
  * Reminders — task lists as notes, pinned end to end.
@@ -34,6 +34,32 @@ async function newTaskList(page: Page): Promise<void> {
   await page
     .locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Task list' })
     .click();
+}
+
+/**
+ * Drives an HTML5 drag between two calendar elements — the shared
+ * DataTransfer Chromium's constructor path needs, dragstart →
+ * dragover(at) → drop, with the drop point `offsetY` into the target
+ * (the hour slot's height is the hour, so the offset is the minute).
+ * The target rides the middle of its scroll box first: the drag's own
+ * edge auto-scroll must not move the ground under a dispatched drop —
+ * a dragover near the rim scrolls the hours and shifts the very slot
+ * the drop is measured against.
+ */
+async function calDrag(page: Page, from: Locator, to: Locator, offsetY = 8): Promise<void> {
+  await to.evaluate((el) => {
+    const box = el.closest<HTMLElement>('.tkcal-wk-time, .tkcal-daypage-scroll');
+    if (!box) return;
+    const br = box.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    box.scrollTop += r.top + r.height / 2 - (br.top + br.height / 2);
+  });
+  const transfer = await page.evaluateHandle(() => new DataTransfer());
+  await from.dispatchEvent('dragstart', { dataTransfer: transfer });
+  const box = await to.boundingBox();
+  const clientY = (box?.y ?? 0) + offsetY;
+  await to.dispatchEvent('dragover', { dataTransfer: transfer, clientY });
+  await to.dispatchEvent('drop', { dataTransfer: transfer, clientY });
 }
 
 test.describe('task list notes', () => {
@@ -544,7 +570,9 @@ test.describe('the calendar', () => {
     // selection carried over.
     const monthName = marked
       .first()
-      .locator('xpath=ancestor::section[contains(@class,"tkcal-year-month")]//button[@data-cal-jump]');
+      .locator(
+        'xpath=ancestor::section[contains(@class,"tkcal-year-month")]//button[@data-cal-jump]',
+      );
     await monthName.click();
     await expect(page.locator('.tkcal-grid')).toBeVisible();
     await expect(
@@ -693,7 +721,7 @@ test.describe('the calendar', () => {
     await expect(page.locator('.tkcal-day.is-selected')).toHaveCount(1);
   });
 
-  test('the day sheet lists the day\'s reminders as real rows; completing empties it', async ({
+  test("the day sheet lists the day's reminders as real rows; completing empties it", async ({
     page,
   }) => {
     await page.goto('/');
@@ -736,10 +764,129 @@ test.describe('the calendar', () => {
     await expect(quick).toBeFocused();
     await quick.fill('Second thing');
     await quick.press('Enter');
-    await expect(
-      page.locator('.tkcal-day-slot', { hasText: 'Second thing' }),
-    ).toBeVisible();
+    await expect(page.locator('.tkcal-day-slot', { hasText: 'Second thing' })).toBeVisible();
     await expect(page.locator('.tkcal-daypage .tk-empty-day')).toHaveCount(0);
+
+    // Escape puts the row away without leaving the page.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-cal-quickadd]')).toBeHidden();
+    await expect(page.locator('#tasksHub')).toBeVisible();
+  });
+
+  test('a week chip drags between the hours and the reminder retimes', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    const input = page.locator('[data-composer-input]');
+    await input.fill('Nine o clock');
+    await input.press('Enter');
+    const row = page.locator('.tk-task-wrap', { hasText: 'Nine o clock' }).first();
+    await row.locator('.tk-task-main').click();
+    await page.locator('[data-editor-when="date"]').click();
+    await page.locator('[data-when-preset="today"]').click();
+    await page.locator('.tk-editor-title').press('Enter');
+
+    await page.locator('#tabRailCalendar').click();
+    await page.locator('[data-cal-mode="week"]').click();
+
+    // The day pane's quick-add files at 9:00 — the chip anchors there,
+    // carrying its task id (the drop machinery's handle).
+    await page.locator('[data-cal-add]').click();
+    const quick = page.locator('[data-cal-quickadd-input]');
+    await quick.fill('Retime me');
+    await quick.press('Enter');
+    const chip = page.locator('.tkcal-chip', { hasText: 'Retime me' });
+    await expect(chip).toBeVisible();
+    expect(await chip.getAttribute('data-cal-task')).toBeTruthy();
+    await expect(page.locator('.tkcal-wk-slot[data-hour="9"] .tkcal-chip')).toHaveCount(1);
+
+    // Drag it into today's 2 PM slot — the drop line previews the
+    // exact minute before the drop.
+    const slot = page.locator('.tkcal-wk-slot.is-today[data-hour="14"]');
+    await calDrag(page, chip, slot);
+    await expect(slot.locator('.tkcal-dropline-time')).toHaveCount(0); // paint cleared after the drop
+    const landed = page.locator('.tkcal-wk-slot[data-hour="14"] .tkcal-chip', {
+      hasText: 'Retime me',
+    });
+    await expect(landed).toBeVisible();
+    await expect(landed.locator('.tkcal-chip-time')).toContainText(/2:0\d PM/);
+    await expect(page.locator('.tkcal-wk-slot[data-hour="9"] .tkcal-chip')).toHaveCount(0);
+
+    // The write went through to the reminder itself: the day pane's
+    // row wears the new time on its due chip.
+    const paneRow = page.locator('.tkcal-day-pane .tk-task-wrap', { hasText: 'Retime me' });
+    await expect(paneRow.locator('.tk-chip-due')).toContainText(/2:0\d PM/);
+  });
+
+  test('the All-Day band and the hours trade a chip', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    const input = page.locator('[data-composer-input]');
+    for (const title of ['Band chip', 'Still all day']) {
+      await input.fill(title);
+      await input.press('Enter');
+      const row = page.locator('.tk-task-wrap', { hasText: title }).first();
+      await row.locator('.tk-task-main').click();
+      await page.locator('[data-editor-when="date"]').click();
+      await page.locator('[data-when-preset="today"]').click();
+      await page.locator('.tk-editor-title').press('Enter');
+    }
+
+    await page.locator('#tabRailCalendar').click();
+    await page.locator('[data-cal-mode="week"]').click();
+
+    // Date-only rides the band; dropping it into the 10 AM slot gives
+    // it a time — and the band keeps standing (the other chip holds it).
+    const bandChip = page.locator('.tkcal-wk-allday-cell.is-today .tkcal-chip', {
+      hasText: 'Band chip',
+    });
+    await expect(bandChip).toBeVisible();
+    const slot = page.locator('.tkcal-wk-slot.is-today[data-hour="10"]');
+    await calDrag(page, bandChip, slot);
+    const timed = page.locator('.tkcal-wk-slot[data-hour="10"] .tkcal-chip', {
+      hasText: 'Band chip',
+    });
+    await expect(timed).toBeVisible();
+    await expect(timed.locator('.tkcal-chip-time')).toContainText(/10:0\d AM/);
+    await expect(page.locator('.tkcal-wk-allday')).toBeVisible();
+
+    // …and back: dropping on the band takes the time off again.
+    const cell = page.locator('.tkcal-wk-allday-cell.is-today');
+    await calDrag(page, timed, cell);
+    await expect(
+      page.locator('.tkcal-wk-allday-cell.is-today .tkcal-chip', { hasText: 'Band chip' }),
+    ).toBeVisible();
+    await expect(
+      page
+        .locator('.tkcal-wk-allday-cell.is-today .tkcal-chip', { hasText: 'Band chip' })
+        .locator('.tkcal-chip-time'),
+    ).toHaveCount(0);
+    await expect(page.locator('.tkcal-wk-slot[data-hour="10"] .tkcal-chip')).toHaveCount(0);
+  });
+
+  test('double-clicking a bare hour files a reminder right there', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    await page.locator('#tabRailCalendar').click();
+    await page.locator('[data-cal-mode="day"]').click();
+
+    // Two quick clicks on the 3 PM slot open the quick-add aimed at
+    // that exact hour — the placeholder says so.
+    const slot = page.locator('.tkcal-day-slot[data-hour="15"]');
+    await slot.scrollIntoViewIfNeeded();
+    const box = await slot.boundingBox();
+    await page.mouse.dblclick(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    const quick = page.locator('[data-cal-quickadd-input]');
+    await expect(quick).toBeFocused();
+    await expect(quick).toHaveAttribute('placeholder', 'New Reminder at 3 PM');
+
+    // Enter files at 3:00 — the row lands in the 3 PM slot on the sheet.
+    await quick.fill('Three o clock');
+    await quick.press('Enter');
+    const landedRow = page.locator('.tkcal-day-slot[data-hour="15"] .tk-task-wrap', {
+      hasText: 'Three o clock',
+    });
+    await expect(landedRow).toBeVisible();
+    await expect(landedRow.locator('.tk-chip-due')).toContainText('3:00 PM');
 
     // Escape puts the row away without leaving the page.
     await page.keyboard.press('Escape');
