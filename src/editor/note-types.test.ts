@@ -26,10 +26,9 @@ describe('note types registry', () => {
     expect(NOTE_TYPES[0].id).toBe('standard');
   });
 
-  it('every type def carries the menu copy', () => {
+  it('every type def carries its label (the menu reads the label alone)', () => {
     for (const def of NOTE_TYPES) {
       expect(def.label.trim().length).toBeGreaterThan(0);
-      expect(def.description.trim().length).toBeGreaterThan(0);
     }
   });
 
