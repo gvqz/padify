@@ -51,9 +51,7 @@ export interface NoteTypeDef {
 }
 
 /**
- * The types this build knows. Open on purpose: `(string & {})` keeps
- * autocomplete for known ids while letting unknown ids (from newer builds,
- * via sync) flow through the system as first-class values.
+ * The types this build knows. Open on purpose: `(string & {})` keeps * via sync) flow through the system as first-class values.
  */
 export type KnownNoteType = 'standard' | 'rich' | 'markdown' | 'tasks';
 export type NoteType = KnownNoteType | (string & {});

@@ -134,11 +134,7 @@ function renderTypeMenuItems(popover: HTMLElement): void {
     const label = document.createElement('span');
     label.className = 'tab-type-menu-label';
     label.textContent = def.label;
-    const description = document.createElement('span');
-    description.className = 'tab-type-menu-desc';
-    description.textContent = def.description;
     text.appendChild(label);
-    text.appendChild(description);
     item.appendChild(text);
 
     popover.appendChild(item);

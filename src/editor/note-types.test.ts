@@ -29,7 +29,6 @@ describe('note types registry', () => {
   it('every type def carries the menu copy', () => {
     for (const def of NOTE_TYPES) {
       expect(def.label.trim().length).toBeGreaterThan(0);
-      expect(def.description.trim().length).toBeGreaterThan(0);
     }
   });
 
