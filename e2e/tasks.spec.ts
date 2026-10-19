@@ -544,7 +544,9 @@ test.describe('the calendar', () => {
     // selection carried over.
     const monthName = marked
       .first()
-      .locator('xpath=ancestor::section[contains(@class,"tkcal-year-month")]//button[@data-cal-jump]');
+      .locator(
+        'xpath=ancestor::section[contains(@class,"tkcal-year-month")]//button[@data-cal-jump]',
+      );
     await monthName.click();
     await expect(page.locator('.tkcal-grid')).toBeVisible();
     await expect(
@@ -693,7 +695,7 @@ test.describe('the calendar', () => {
     await expect(page.locator('.tkcal-day.is-selected')).toHaveCount(1);
   });
 
-  test('the day sheet lists the day\'s reminders as real rows; completing empties it', async ({
+  test("the day sheet lists the day's reminders as real rows; completing empties it", async ({
     page,
   }) => {
     await page.goto('/');
@@ -736,9 +738,7 @@ test.describe('the calendar', () => {
     await expect(quick).toBeFocused();
     await quick.fill('Second thing');
     await quick.press('Enter');
-    await expect(
-      page.locator('.tkcal-day-slot', { hasText: 'Second thing' }),
-    ).toBeVisible();
+    await expect(page.locator('.tkcal-day-slot', { hasText: 'Second thing' })).toBeVisible();
     await expect(page.locator('.tkcal-daypage .tk-empty-day')).toHaveCount(0);
 
     // Escape puts the row away without leaving the page.

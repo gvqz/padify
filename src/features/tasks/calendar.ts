@@ -371,7 +371,10 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
             <div class="tkcal-side-eyebrow">My Lists</div>
             ${listsHtml}
           </div>
-          ${mode === 'day' ? '' : `<div class="tkcal-day-pane">
+          ${
+            mode === 'day'
+              ? ''
+              : `<div class="tkcal-day-pane">
             <header class="tkcal-day-head">
               <div class="tkcal-day-heading">
                 <h5 class="tkcal-day-title">${dayLabel}</h5>
@@ -386,7 +389,8 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
             ${quickAddHtml}
             <div class="tk-rows" role="list" data-cal-day-rows>${rowsHtml}</div>
             ${upNextHtml}
-          </div>`}
+          </div>`
+          }
           ${
             mode === 'month'
               ? `<div class="tkcal-mini">
@@ -640,7 +644,11 @@ function dayPageHtml(day: Date, today: Date, addBtnHtml: string, quickAddHtml: s
       taskRow(t.row.task, now, t.row.note.color, false, t.row.note);
     let inner: string;
     if (sameDay(day, today) && hour === nowHour) {
-      const split = nowSplit(rows.length, (index) => rows[index]!.at.getMinutes(), now.getMinutes());
+      const split = nowSplit(
+        rows.length,
+        (index) => rows[index]!.at.getMinutes(),
+        now.getMinutes(),
+      );
       const nudge = rows.length === 0 ? Math.round((now.getMinutes() / 60) * 56) : 0;
       inner =
         rows.slice(0, split).map(render).join('') +
@@ -968,9 +976,9 @@ function weekPageHtml(anchor: Date, selected: Date, today: Date): string {
               date,
               selected,
               today,
-            )}" data-cal-day="${dayKey(date)}">${schedules[i]!
-              .allDay.map((row) => weekChipHtml(row))
-              .join('')}</span>`,
+            )}" data-cal-day="${dayKey(date)}">${schedules[i]!.allDay.map((row) =>
+              weekChipHtml(row),
+            ).join('')}</span>`,
         )
         .join('')}</div>`
     : '';
@@ -987,8 +995,14 @@ function weekPageHtml(anchor: Date, selected: Date, today: Date): string {
         if (sameDay(date, today) && hour === nowHour) {
           const split = nowSplit(chips.length, (index) => chips[index]!.at.getMinutes(), nowMinute);
           const nudge = chips.length === 0 ? Math.round((nowMinute / 60) * 56) : 0;
-          const before = chips.slice(0, split).map((t) => weekChipHtml(t.row, t.at)).join('');
-          const after = chips.slice(split).map((t) => weekChipHtml(t.row, t.at)).join('');
+          const before = chips
+            .slice(0, split)
+            .map((t) => weekChipHtml(t.row, t.at))
+            .join('');
+          const after = chips
+            .slice(split)
+            .map((t) => weekChipHtml(t.row, t.at))
+            .join('');
           inner = before + nowDividerHtml(nudge) + after;
         } else {
           inner = chips.map((t) => weekChipHtml(t.row, t.at)).join('');
