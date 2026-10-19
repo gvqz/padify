@@ -2334,7 +2334,10 @@ body.tasks-hub-open #textareaContainer .bottom-line {
    recipe the month grid wears), the gutter and the day cells sharing
    each row so a busy hour stretches for every column at once and the
    lines never disagree. Apple's red now-line runs through the current
-   hour, and the pages open scrolled to the working hours. */
+   hour, the pages open scrolled to the working hours, and the ruling
+   takes drags: a chip or row drops into another hour (the accent drop
+   line previews the exact minute), another day's column, or the
+   All-Day band — the reminder is retimed to match. */
 
 /* The gutter's labels — the timed pages' left rail. */
 .tkcal-hour {
@@ -2487,6 +2490,7 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 .tkcal-wk-slot {
   min-width: 0;
   min-height: 56px;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -2688,6 +2692,7 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 
 .tkcal-day-slot {
   min-height: 56px;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -2731,6 +2736,100 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   align-items: center;
   text-align: center;
   gap: 5px;
+}
+
+/* --- dragging the hours: pick up a chip, drop it retimed --- */
+
+/* Pickable from the glass: week chips take the grab cursor (the Day
+   sheet's rows get theirs from the note page's drag affordance, which
+   dresses every .tk-task-wrap[draggable]). */
+.tkcal-chip[draggable='true'] {
+  cursor: grab;
+  user-select: none;
+}
+
+.tkcal-chip[draggable='true']:active {
+  cursor: grabbing;
+}
+
+/* The picked-up piece goes translucent — the ghost the browser drags
+   is enough of it; the glass keeps the hole where it came from. */
+.tkcal .tkcal-chip.is-dragging {
+  opacity: 0.35;
+}
+
+/* The slot (or All-Day cell) waiting for the drop wears the accent
+   wash — one step past the picked day's. */
+.tkcal-wk-slot.is-drop-over,
+.tkcal-day-slot.is-drop-over,
+.tkcal-wk-allday-cell.is-drop-over,
+.tkcal-day-allday-body.is-drop-over {
+  background: color-mix(in srgb, var(--tk-accent) 16%, var(--tk-bg));
+}
+
+/* The drop line: exactly where the chip would land inside the hour —
+   the accent answer to the red now-line, with the minute as a pill. */
+.tkcal-dropline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  height: 0;
+  border-top: 2px solid var(--tk-accent);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.tkcal-dropline::before {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tk-accent);
+}
+
+.tkcal-dropline-time {
+  position: absolute;
+  right: 6px;
+  top: -10px;
+  padding: 1px 7px 2px;
+  border-radius: 999px;
+  background: var(--tk-accent);
+  /* The ink that opposes the accent in BOTH themes — the accent flips
+     light in the dark, where #fff would vanish into its own pill. */
+  color: var(--tk-bg);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  box-shadow: 0 1px 5px color-mix(in srgb, var(--tk-text) 25%, transparent);
+}
+
+/* A retime landing: one accent bloom where the chip arrived, so the
+   drop reads as something that happened even before the chip moved. */
+@keyframes tkcal-land {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--tk-accent) 50%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--tk-accent) 0%, transparent);
+  }
+}
+
+.tkcal-chip.is-landed,
+.tkcal .tk-task-wrap.is-landed .tk-task {
+  animation: tkcal-land 0.9s var(--vz-ease) 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tkcal-chip.is-landed,
+  .tkcal .tk-task-wrap.is-landed .tk-task {
+    animation: none;
+  }
 }
 
 /* --------------------------------------------------------------------------
