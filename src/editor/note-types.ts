@@ -46,8 +46,6 @@ export type ContentKind = 'html' | 'text' | 'json' | 'opaque';
 export interface NoteTypeDef {
   id: KnownNoteType;
   label: string;
-  /** One-line description shown in the creation menu. */
-  description: string;
   /** How this note's content is stored — see the ContentKind contract. */
   contentKind: Exclude<ContentKind, 'opaque'>;
 }
@@ -65,25 +63,21 @@ export const NOTE_TYPES: readonly NoteTypeDef[] = [
   {
     id: 'standard',
     label: 'Plain note',
-    description: 'The classic Padify note — type and go',
     contentKind: 'html',
   },
   {
     id: 'rich',
     label: 'Rich text note',
-    description: 'Docs-style formatting — fonts, colors, lists & links',
     contentKind: 'html',
   },
   {
     id: 'markdown',
     label: 'Markdown note',
-    description: 'Write in Markdown — headings, lists, tables & preview',
     contentKind: 'text',
   },
   {
     id: 'tasks',
     label: 'Task list',
-    description: 'A Reminders list — dates, alerts, flags & priorities',
     contentKind: 'json',
   },
 ] as const;
