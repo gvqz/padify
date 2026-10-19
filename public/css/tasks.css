@@ -63,15 +63,32 @@ body.dark {
   color: var(--tk-text);
 }
 
-/* The list color every descendant reads. */
-.tk-scope.tk-c-blue { --list-c: var(--tk-blue); }
-.tk-scope.tk-c-red { --list-c: var(--tk-red); }
-.tk-scope.tk-c-orange { --list-c: var(--tk-orange); }
-.tk-scope.tk-c-green { --list-c: var(--tk-green); }
-.tk-scope.tk-c-purple { --list-c: var(--tk-purple); }
-.tk-scope.tk-c-teal { --list-c: var(--tk-teal); }
+/* The list color every descendant reads — and, stated standalone, any
+   element that carries its own tk-c-* (menu dots, the color picker's
+   swatches, a row's origin dot inside the un-scoped hub/calendar, where
+   no ancestor paints one for them). The element's own definition beats
+   an inherited one, so a swatch always wins over its surroundings. */
+.tk-c-blue { --list-c: var(--tk-blue); }
+.tk-c-red { --list-c: var(--tk-red); }
+.tk-c-orange { --list-c: var(--tk-orange); }
+.tk-c-green { --list-c: var(--tk-green); }
+.tk-c-purple { --list-c: var(--tk-purple); }
+.tk-c-teal { --list-c: var(--tk-teal); }
 /* No list (aggregated chrome) → the monochrome accent. */
-.tk-scope.tk-c-none { --list-c: var(--tk-accent); }
+.tk-c-none { --list-c: var(--tk-accent); }
+
+/* The little list-color dot — origins, section heads, menu rows. Its
+   size is the context's business; the shape and paint are its own.
+   (A rebuild once dropped this base rule and every dot in the tasks UI
+   went invisible — square, transparent — so it stays put.) */
+.tk-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--list-c, var(--tk-muted));
+}
 
 /* The hidden attribute must win over every display rule below — author
    styles otherwise override the UA's [hidden] { display: none }. */
@@ -89,6 +106,11 @@ body.dark {
   flex-direction: column;
   min-height: 100%;
   padding-right: 6px;
+  /* The host (#note) is a typing surface: pre-wrap. The page's template
+     whitespace would otherwise paint as phantom line boxes — 26px of
+     nothing between every row, editor and section (the "giant gaps"
+     glitch). Text lives in inputs/textareas here; normal is safe. */
+  white-space: normal;
 }
 
 /* The page owns its scrolling; the host stands down (and never shows the
@@ -459,6 +481,10 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
 #taskRail .tr-card.is-active {
   background: var(--vz-bg-elevated);
   color: var(--vz-fg);
+  /* The 2px accent bar tracks these corners — square the left pair off
+     so it reads as a line, not a floating bracket. */
+  border-top-left-radius: 2px;
+  border-bottom-left-radius: 2px;
   box-shadow: inset 2px 0 0 var(--vz-primary);
 }
 
@@ -574,6 +600,54 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
   min-width: 0;
   min-height: 0;
   background: var(--tk-bg);
+}
+
+/* The calendar page: the month grid takes the full editor height (no
+   scrolling document), and the hub's own title/count stand down — the
+   big month title IS the page's heading. The back arrow stays. */
+.tkh.is-calendar .tkh-scroll {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* The page's own gutters: 14 on both sides (the base 2px left left the
+     grid hugging the notes rail while the right had a real gap), 12 on
+     top so the toolbar breathes under the app navbar, and the base 18
+     at the bottom — the rhythm the rest of the page already had. */
+  padding: 12px 14px 18px;
+}
+
+.tkh.is-calendar .tk-sections {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tkh.is-calendar .tkh-title,
+.tkh.is-calendar .tkh-count {
+  display: none;
+}
+
+/* The calendar page doesn't carry the hub's composer bar either —
+   adding happens on the day itself, through the day pane's Add button
+   and its inline row. The other hub views keep the bottom bar. */
+.tkh.is-calendar .tk-composer {
+  display: none;
+}
+
+/* Desktop: the calendar's toolbar row (back arrow + month + modes +
+   navs) replaces the hub head entirely — one iCloud-tight line instead
+   of a lonely arrow floating above the title. Phones keep the hub head
+   (it carries their views button) and the inline back arrow stays
+   hidden (see .tkcal-back). */
+@media (min-width: 821px) {
+  .tkh.is-calendar .tkh-head {
+    display: none;
+  }
+
+  .tkh.is-calendar .tkcal-back {
+    display: inline-flex;
+  }
 }
 
 body.tasks-hub-open #richToolbar,
@@ -982,8 +1056,6 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   display: inline-flex;
   color: var(--tk-star);
   line-height: 0;
-}
-
 }
 
 /* --------------------------------------------------------------------------
@@ -1438,34 +1510,88 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 }
 
 /* --------------------------------------------------------------------------
-   12. The ONE calendar
+   12. The ONE calendar — the iCloud day, week, month + year pages
    -------------------------------------------------------------------------- */
 
 .tkcal {
-  display: grid;
-  grid-template-columns: minmax(340px, 460px) 1fr;
-  gap: 30px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
+/* --- the page header: big month, modes, navs --- */
 
-/* --- the month header --- */
-
-.tkcal-head {
+.tkcal-top {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 0 12px;
+  gap: 10px;
+  padding: 2px 2px 10px;
+  flex: 0 0 auto;
+}
+
+/* The back-to-note arrow lives IN the toolbar row on desktop — the
+   hub's own head row stands down here (below), so nothing is left
+   floating on a line of its own. Phones keep the hub head (it carries
+   their views button) and hide this duplicate instead. */
+.tkcal-back {
+  display: none;
+  flex: 0 0 auto;
 }
 
 .tkcal-month {
-  margin: 0 2px;
-  font-size: 16px;
+  margin: 0;
+  font-size: 24px;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   color: var(--tk-text);
-  min-width: 132px;
-  text-align: center;
+  white-space: nowrap;
+}
+
+/* Day / Week / Month / Year — the segmented control. Only Month is live
+   for now; the others say so (they dim and explain on hover). */
+.tkcal-modes {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--tk-well);
+}
+
+.tkcal-mode {
+  border: 0;
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--tk-muted);
+  cursor: pointer;
+  transition: background 0.14s var(--vz-ease), color 0.14s var(--vz-ease);
+}
+
+.tkcal-mode:hover:not(.is-on) {
+  color: var(--tk-text);
+}
+
+.tkcal-mode.is-on {
+  background: var(--vz-bg-elevated, #fff);
+  color: var(--tk-text);
+  font-weight: 650;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.1);
+}
+
+.tkcal-mode[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.tkcal-navs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
 }
 
 .tkcal-nav {
@@ -1491,48 +1617,92 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 }
 
 .tkcal-today {
-  margin-left: auto;
+  border: 0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--tk-text);
+  cursor: pointer;
+  transition: background 0.15s var(--vz-ease);
 }
 
-/* --- the weekday initials --- */
+.tkcal-today:hover,
+.tkcal-today:focus-visible {
+  background: var(--tk-well);
+  outline: none;
+}
+
+/* --- the body: grid + right sidebar (the iCloud left sidebar, mirrored) --- */
+
+.tkcal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 264px;
+  gap: 18px;
+  align-items: stretch;
+}
+
+.tkcal-grid-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  /* A size container: the year spread picks its column count from the
+     pane's real width — which the sidebar's presence decides — not the
+     viewport's. */
+  container-type: inline-size;
+}
+
+/* --- the weekday header --- */
 
 .tkcal-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   padding: 0 0 6px;
+  flex: 0 0 auto;
 }
 
 .tkcal-weekday {
   text-align: center;
-  font-size: 10.5px;
-  font-weight: 650;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--tk-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
-/* --- the grid --- */
+/* --- the grid: hairline month, iCloud's ruled cells --- */
 
 .tkcal-grid {
+  flex: 1 1 auto;
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
+  grid-auto-rows: 1fr;
+  border: 1px solid var(--tk-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--tk-border);
+  gap: 1px;
 }
 
 .tkcal-day {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 4px;
-  min-height: 54px;
-  padding: 7px 2px 5px;
+  align-items: stretch;
+  gap: 3px;
+  min-height: 0;
+  min-width: 0;
+  padding: 8px 9px 7px;
   border: 0;
-  border-radius: var(--vz-radius-md);
-  background: transparent;
+  background: var(--tk-bg);
   color: var(--tk-text);
+  text-align: left;
   cursor: pointer;
   transition: background 0.12s var(--vz-ease);
+  overflow: hidden;
 }
 
 .tkcal-day:hover,
@@ -1541,81 +1711,241 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   outline: none;
 }
 
+/* The weekend columns read a shade darker — a whisper of it, not a
+   paint fill; iCloud keeps its month grid almost paper-white. */
+.tkcal-day.is-weekend {
+  background: color-mix(in srgb, var(--tk-text) 3.5%, var(--tk-bg));
+}
+
+.tkcal-day.is-weekend:hover,
+.tkcal-day.is-weekend:focus-visible {
+  background: var(--tk-well);
+}
+
 .tkcal-day.is-outside {
   color: var(--tk-muted);
-  opacity: 0.55;
 }
 
-.tkcal-day.is-outside .tkcal-dot {
-  opacity: 0.55;
+.tkcal-day.is-outside .tkcal-num {
+  opacity: 0.42;
 }
 
-/* The number rides a circle so today can fill it and a selection can
-   ring it — one clear treatment each, never both stacked. */
+.tkcal-day.is-outside .tkcal-events {
+  display: none;
+}
+
+/* The selected day: a soft wash over the whole cell. */
+.tkcal-day.is-selected {
+  background: color-mix(in srgb, var(--tk-accent) 10%, var(--tk-bg));
+}
+
+.tkcal-day.is-selected:hover {
+  background: color-mix(in srgb, var(--tk-accent) 14%, var(--tk-bg));
+}
+
+/* The date numeral rides a FIXED circle — min-width + padding used to
+   stretch two-digit days into a 27×24 stadium, and "the red dot
+   doesn't go around the date" is exactly that. One true circle for
+   every date, single- or double-digit. */
 .tkcal-num {
-  font-size: 12.5px;
-  font-weight: 550;
-  font-variant-numeric: tabular-nums;
-  min-width: 27px;
-  height: 27px;
+  align-self: flex-start;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
   border-radius: 50%;
-  transition:
-    background 0.15s var(--vz-ease),
-    color 0.15s var(--vz-ease),
-    box-shadow 0.15s var(--vz-ease);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
+/* Today is Apple red — a filled circle, white numeral. */
 .tkcal-day.is-today .tkcal-num {
-  background: var(--vz-primary);
-  color: var(--vz-primary-fg);
+  background: var(--vz-danger);
+  color: #fff;
   font-weight: 700;
 }
 
-.tkcal-day.is-selected:not(.is-today) .tkcal-num {
-  background: var(--tk-well);
-  box-shadow: inset 0 0 0 1.75px var(--vz-border-strong);
-  font-weight: 700;
+/* --- the day's reminders as chips (the events) --- */
+
+/* Chips, boxes and the quick-add dot read --list-c from their own
+   tk-c-* class — the palette at the top of this file is standalone, so
+   no per-context restatement is needed (the hub itself carries no
+   scope color; the elements bring their own). */
+
+.tkcal-events {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 0;
+  overflow: hidden;
+  flex: 1 1 auto;
 }
 
-/* --- the day's dots (list colors) --- */
+.tkcal-chip {
+  flex: 0 0 auto;
+  max-width: 100%;
+  padding: 1.5px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: color-mix(in srgb, var(--list-c, var(--tk-accent)) 17%, var(--tk-bg));
+  color: color-mix(in srgb, var(--list-c, var(--tk-accent)) 78%, var(--tk-text));
+}
 
-.tkcal-dots {
+.tkcal-chip-more {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--tk-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- the right sidebar --- */
+
+.tkcal-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  min-width: 0;
+  /* Fixed anatomy, not a scrolling column: lists on top, the day
+     inspector takes what's left (scrolling inside), the mini month
+     always parked at the bottom — iCloud's sidebar, mirrored. */
+  overflow: hidden;
+}
+
+.tkcal-side-eyebrow {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tk-muted);
+  padding: 2px 2px 6px;
+}
+
+.tkcal-lists {
+  flex: 0 0 auto;
+}
+
+.tkcal-list {
   display: flex;
   align-items: center;
+  gap: 9px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 5px 6px;
+  border-radius: var(--vz-radius);
+  color: var(--tk-text);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease);
+}
+
+.tkcal-list:hover,
+.tkcal-list:focus-visible {
+  background: var(--tk-well);
+  outline: none;
+}
+
+.tkcal-list-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The checkbox: a list-colored rounded square; unchecked = hollow. */
+.tkcal-box {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  gap: 3.5px;
-  min-height: 10px;
-}
-
-.tkcal-dot {
-  width: 6.5px;
-  height: 6.5px;
-  border-radius: 50%;
+  width: 15px;
+  height: 15px;
+  border-radius: 4.5px;
+  border: 1.5px solid var(--list-c, var(--tk-accent));
   background: var(--list-c, var(--tk-accent));
+  color: #fff;
+  line-height: 0;
+  transition: background 0.14s var(--vz-ease);
 }
 
-.tkcal-more {
-  font-size: 9.5px;
-  font-weight: 650;
+.tkcal-box svg {
+  width: 9px;
+  height: 9px;
+  opacity: 0.95;
+}
+
+.tkcal-list[aria-pressed="false"] .tkcal-box {
+  background: transparent;
+}
+
+.tkcal-list[aria-pressed="false"] .tkcal-box svg {
+  opacity: 0;
+}
+
+.tkcal-list[aria-pressed="false"] .tkcal-list-name {
   color: var(--tk-muted);
 }
 
-/* --- the day panel --- */
+.tkcal-lists-empty {
+  margin: 0;
+  padding: 4px 6px 2px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--tk-muted);
+}
+
+/* --- the day inspector --- */
 
 .tkcal-day-pane {
+  flex: 1 1 auto;
+  min-height: 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  border-top: 1px solid var(--tk-border);
+  padding-top: 10px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-track) transparent;
+}
+
+.tkcal-day-pane::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tkcal-day-pane::-webkit-scrollbar-thumb {
+  background: var(--tk-track);
+  border-radius: 4px;
 }
 
 .tkcal-day-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 0 12px;
+  padding: 0 2px 10px;
+  /* The inspector scrolls; its heading stays put. */
+  position: sticky;
+  top: -10px;
+  margin: 0 0 0;
+  padding-top: 10px;
+  background: var(--tk-bg);
+  z-index: 1;
 }
 
 .tkcal-day-heading {
@@ -1627,7 +1957,7 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 
 .tkcal-day-title {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--tk-text);
@@ -1644,22 +1974,74 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   flex: 0 0 auto;
 }
 
+/* The inline quick-add — the day pane's own New Reminder row. The hub's
+   bottom composer stays off this page; adding a reminder on a day is
+   done here, where the day is. Enter keeps the row open for rapid
+   entry; Esc or an empty blur puts it away. */
+.tkcal-quickadd {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 2px 10px;
+  padding: 0 2px 8px;
+  border-bottom: 1px solid var(--tk-border);
+}
+
+.tkcal-quickadd[hidden] {
+  display: none;
+}
+
+.tkcal-quickadd-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  /* The list the reminder will file into (falls back to quiet gray
+     before any list exists). */
+  background: var(--list-c, var(--tk-muted));
+  opacity: 0.55;
+}
+
+.tkcal-quickadd-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  padding: 3px 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--tk-text);
+  outline: none;
+}
+
+/* The row is its own affordance — the list-colored dot and the caret.
+   The app-wide :focus-visible ring (2px fg) is for boxed controls; here
+   it just crashes into the pane's edge. */
+.tkcal-quickadd-input:focus-visible {
+  outline: none;
+}
+
+.tkcal-quickadd-input::placeholder {
+  color: var(--tk-muted);
+}
+
 .tk-empty-day {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 26px 10px 22px;
+  padding: 14px 6px 12px;
 }
 
 .tk-empty-day-mark {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--tk-text);
 }
 
 .tk-empty-day-copy {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--tk-muted);
 }
@@ -1697,6 +2079,658 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   font-weight: 650;
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+/* --- the mini month (the sidebar's bottom fixture) --- */
+
+.tkcal-mini {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--tk-border);
+  padding: 10px 2px 2px;
+}
+
+.tkcal-mini-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 2px 8px;
+}
+
+.tkcal-mini-month {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--tk-text);
+  letter-spacing: -0.01em;
+}
+
+.tkcal-mini-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tk-muted);
+  line-height: 0;
+  cursor: pointer;
+  transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
+}
+
+.tkcal-mini-nav:hover,
+.tkcal-mini-nav:focus-visible {
+  background: var(--tk-well);
+  color: var(--tk-text);
+  outline: none;
+}
+
+.tkcal-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px 0;
+  justify-items: center;
+}
+
+.tkcal-mini-wd {
+  font-size: 9px;
+  font-weight: 650;
+  color: var(--tk-muted);
+  text-transform: uppercase;
+  padding-bottom: 3px;
+}
+
+.tkcal-mini-day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tk-text);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease);
+}
+
+.tkcal-mini-day:hover,
+.tkcal-mini-day:focus-visible {
+  background: var(--tk-well);
+  outline: none;
+}
+
+.tkcal-mini-day.is-blank {
+  cursor: default;
+  pointer-events: none;
+}
+
+.tkcal-mini-day.is-today {
+  background: var(--vz-danger);
+  color: #fff;
+  font-weight: 700;
+}
+
+.tkcal-mini-day.is-selected:not(.is-today) {
+  box-shadow: inset 0 0 0 1.5px var(--tk-accent);
+  font-weight: 650;
+}
+
+/* --- the year view: twelve little months --- */
+
+/* macOS Calendar's year spread: a month name over seven columns of
+   bare numerals (no weekday letters), days with reminders reading
+   darker, today red-circled, the picked day ringed. The month name is
+   the zoom — it opens that month in Month view. The rows SHARE the
+   pane's height (minmax + 1fr) so the year fills top to bottom
+   instead of bunching under the toolbar and stranding the lower half
+   of the pane — macOS stretches its rows the same way; a short window
+   flops back to content height and scrolls. */
+.tkcal-year {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-track) transparent;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(min-content, 1fr);
+  gap: 14px 20px;
+  padding: 2px 2px 10px;
+}
+
+.tkcal-year::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tkcal-year::-webkit-scrollbar-thumb {
+  background: var(--tk-track);
+  border-radius: 4px;
+}
+
+.tkcal-year-month {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.tkcal-year-name {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  padding: 1px 2px 7px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--tk-text);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.14s var(--vz-ease);
+}
+
+.tkcal-year-name:hover,
+.tkcal-year-name:focus-visible {
+  color: var(--tk-accent);
+  outline: none;
+}
+
+.tkcal-year-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  /* Stretched months share their height across the numeral rows, each
+     circle centered in its band — the spread reads even instead of
+     stacked. */
+  grid-auto-rows: 1fr;
+  align-items: center;
+  justify-items: center;
+}
+
+.tkcal-year-day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* The circle breathes with its column: tight months hold a 24px
+     floor, wide months grow to 30 — never a fixed dot lost in a wide
+     column. */
+  width: clamp(24px, 80%, 30px);
+  aspect-ratio: 1;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  /* Plain days whisper; days carrying reminders read full — the year
+     spread's only event mark (Apple's darker numerals). */
+  color: color-mix(in srgb, var(--tk-text) 58%, var(--tk-bg));
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease), color 0.12s var(--vz-ease);
+}
+
+.tkcal-year-day:hover,
+.tkcal-year-day:focus-visible {
+  background: var(--tk-well);
+  color: var(--tk-text);
+  outline: none;
+}
+
+.tkcal-year-day.is-blank {
+  pointer-events: none;
+}
+
+.tkcal-year-day.has-events {
+  color: var(--tk-text);
+  font-weight: 600;
+}
+
+.tkcal-year-day.is-today {
+  background: var(--vz-danger);
+  color: #fff;
+  font-weight: 700;
+}
+
+.tkcal-year-day.is-selected:not(.is-today) {
+  box-shadow: inset 0 0 0 1.5px var(--tk-accent);
+  color: var(--tk-text);
+  font-weight: 650;
+}
+
+/* The pane's width decides the spread — four across is the floor for a
+   full-size month (≈205px each, circles nearly shoulder to shoulder);
+   below that drop to three, then two. No cap the other way: wide
+   panes keep four and the circles breathe wider. */
+@container (max-width: 860px) {
+  .tkcal-year {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 620px) {
+  .tkcal-year {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tkcal-year-day {
+    font-size: 12px;
+  }
+}
+
+/* --- the timed pages: the hour ruling Day and Week share --- */
+
+/* macOS Calendar's Day and Week are timed pages: a time gutter down
+   the left, the day's reminders anchored under their hour, the
+   date-only ones in an All-Day band. Both draw the same ruling —
+   twenty-four ruled rows as a hairline grid (the 1px-gap-over-border
+   recipe the month grid wears), the gutter and the day cells sharing
+   each row so a busy hour stretches for every column at once and the
+   lines never disagree. Apple's red now-line runs through the current
+   hour, and the pages open scrolled to the working hours. */
+
+/* The gutter's labels — the timed pages' left rail. */
+.tkcal-hour {
+  padding: 2px 7px 0 3px;
+  background: var(--tk-bg);
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--tk-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* --- the week view: seven day headers over the ruled hours --- */
+
+/* One hairline frame; the headers, the All-Day band and the timed
+   grid inside it all set the same column template, so their 1px gaps
+   line up into one ruled sheet. The headers are the day buttons; the
+   hour slots pick too — every pixel of a day's column belongs to
+   some slot of that day. */
+.tkcal-week {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--tk-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--tk-border);
+  gap: 1px;
+}
+
+.tkcal-wk-heads,
+.tkcal-wk-allday {
+  display: grid;
+  grid-template-columns: 52px repeat(7, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--tk-border);
+}
+
+.tkcal-wk-corner {
+  background: var(--tk-bg);
+}
+
+.tkcal-wk-head {
+  padding: 0;
+  border: 0;
+  background: var(--tk-bg);
+  color: var(--tk-text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease);
+}
+
+.tkcal-wk-head:hover,
+.tkcal-wk-head:focus-visible {
+  background: var(--tk-well);
+  outline: none;
+}
+
+/* The picked day: the same soft accent wash the month cell wears. */
+.tkcal-wk-head.is-selected {
+  background: color-mix(in srgb, var(--tk-accent) 10%, var(--tk-bg));
+}
+
+.tkcal-wk-head.is-selected:hover {
+  background: color-mix(in srgb, var(--tk-accent) 14%, var(--tk-bg));
+}
+
+.tkcal-week-head {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 8px 9px 6px;
+}
+
+.tkcal-week-wd {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--tk-muted);
+  letter-spacing: 0.02em;
+}
+
+.tkcal-week-num {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* Today: Apple red — the word and the numeral, no filled circle (the
+   week page has room for the quieter mark; the month keeps the coin). */
+.tkcal-wk-head.is-today .tkcal-week-wd {
+  color: var(--vz-danger);
+}
+
+.tkcal-wk-head.is-today .tkcal-week-num {
+  color: var(--vz-danger);
+  font-weight: 700;
+}
+
+/* The All-Day band: date-only reminders pinned under the headers,
+   every one on the glass — a busier day scrolls inside its cell. */
+.tkcal-wk-allday .tkcal-hour {
+  padding-top: 6px;
+}
+
+.tkcal-wk-allday-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  min-width: 0;
+  max-height: 72px;
+  overflow-y: auto;
+  padding: 4px 5px 5px;
+  background: var(--tk-bg);
+  cursor: pointer;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-track) transparent;
+}
+
+/* The timed grid — the ruling itself. It scrolls; the headers and
+   the All-Day band stay put above it. */
+.tkcal-wk-time {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  display: grid;
+  grid-template-columns: 52px repeat(7, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--tk-border);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-track) transparent;
+}
+
+.tkcal-wk-time::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tkcal-wk-time::-webkit-scrollbar-thumb {
+  background: var(--tk-track);
+  border-radius: 4px;
+}
+
+/* One ruled hour of one day. The row's height is the busiest cell's,
+   so chips stack without ever crossing a line. */
+.tkcal-wk-slot {
+  min-width: 0;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 3px 4px 4px;
+  background: var(--tk-bg);
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease);
+  overflow: hidden;
+}
+
+.tkcal-wk-slot:hover {
+  background: var(--tk-well);
+}
+
+/* The weekend whisper, today's faint tint, the picked day's wash —
+   the same states the month grid teaches, column-wide. */
+.tkcal-wk-slot.is-weekend,
+.tkcal-wk-allday-cell.is-weekend {
+  background: color-mix(in srgb, var(--tk-text) 3.5%, var(--tk-bg));
+}
+
+.tkcal-wk-slot.is-today {
+  background: color-mix(in srgb, var(--tk-accent) 4%, var(--tk-bg));
+}
+
+.tkcal-wk-slot.is-selected,
+.tkcal-wk-allday-cell.is-selected {
+  background: color-mix(in srgb, var(--tk-accent) 10%, var(--tk-bg));
+}
+
+.tkcal-wk-slot.is-selected:hover {
+  background: color-mix(in srgb, var(--tk-accent) 14%, var(--tk-bg));
+}
+
+/* The chip's hour tag — "9 AM" before the title. */
+.tkcal-chip-time {
+  margin-right: 4px;
+  font-weight: 650;
+  opacity: 0.72;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Apple's red now-line: a 2px cut across the current hour with the
+   dot riding its left end (into the gutter on the Day page). It is
+   placed in the slot's flow, among its children, so it reads true
+   even when the hour has stretched. */
+.tkcal-now {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 1;
+  height: 0;
+  margin: 1px -4px;
+  border-top: 2px solid var(--vz-danger);
+  border-radius: 1px;
+}
+
+.tkcal-now::before {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vz-danger);
+}
+
+/* --- the day view: one wide ruled sheet --- */
+
+/* macOS Calendar's day page, spoken in this app's reminders: one wide
+   hour-ruled sheet for the picked day — the big numeral and weekday
+   word in the head (both Apple red when it's today), the Add button
+   riding the head's right end (the sidebar's day inspector stands
+   down here — the sheet IS the inspector), and the day's reminders
+   as the same real rows every page wears, anchored under their hour
+   down the time gutter, date-only ones in an All-Day band up top.
+   A quiet day keeps the ruling and floats the friendly copy over it. */
+.tkcal-daypage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--tk-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--tk-bg);
+}
+
+/* A Saturday or Sunday sheet wears the same whisper the week's
+   weekend columns do. */
+.tkcal-daypage.is-weekend {
+  background: color-mix(in srgb, var(--tk-text) 3.5%, var(--tk-bg));
+}
+
+.tkcal-daypage-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 14px 9px;
+  border-bottom: 1px solid var(--tk-border);
+}
+
+.tkcal-daypage-num {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.tkcal-daypage-word {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--tk-muted);
+}
+
+/* Today: Apple red — the quieter week-page mark; the sheet has no
+   need of a coin either. */
+.tkcal-daypage.is-today .tkcal-daypage-num,
+.tkcal-daypage.is-today .tkcal-daypage-word {
+  color: var(--vz-danger);
+}
+
+/* The Add button rides the head's right end (the pane's own spot,
+   carried over). */
+.tkcal-daypage-head .tk-chip-btn {
+  margin-left: auto;
+  align-self: center;
+}
+
+/* The inline quick-add, wide: same row, real margins. */
+.tkcal-daypage .tkcal-quickadd {
+  margin: 8px 14px 0;
+  padding: 0 2px 8px;
+}
+
+/* The sheet's body — the box the hours scroll inside, and the anchor
+   the empty copy floats over. */
+.tkcal-daypage-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.tkcal-daypage-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-track) transparent;
+}
+
+.tkcal-daypage-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tkcal-daypage-scroll::-webkit-scrollbar-thumb {
+  background: var(--tk-track);
+  border-radius: 4px;
+}
+
+/* The All-Day band: date-only reminders as real rows, the label
+   riding the gutter column. */
+.tkcal-day-allday {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 1px;
+  background: var(--tk-border);
+  border-bottom: 1px solid var(--tk-border);
+}
+
+.tkcal-day-allday .tkcal-hour {
+  padding-top: 10px;
+}
+
+.tkcal-day-allday-body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 12px 6px 10px;
+  background: var(--tk-bg);
+}
+
+/* The ruling: the gutter and the day's hour slots sharing every row. */
+.tkcal-day-hours {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 1px;
+  background: var(--tk-border);
+}
+
+.tkcal-day-slot {
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 3px 12px 4px 10px;
+  background: var(--tk-bg);
+}
+
+/* A Saturday or Sunday sheet wears the same whisper the week's
+   weekend columns do. */
+.tkcal-daypage.is-weekend .tkcal-day-slot,
+.tkcal-daypage.is-weekend .tkcal-day-allday-body {
+  background: color-mix(in srgb, var(--tk-text) 3.5%, var(--tk-bg));
+}
+
+/* The now-line reaches across the wide slot and hangs its dot in the
+   gutter, Apple's way. */
+.tkcal-day-slot .tkcal-now {
+  margin-left: -10px;
+  margin-right: -12px;
+}
+
+.tkcal-day-slot .tkcal-now::before {
+  left: -4px;
+}
+
+/* The wide page floats its empty state over the ruled hours — the
+   ruling stays visible behind it, the copy never blocks a scroll. */
+.tkcal-daypage-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 110px;
+  pointer-events: none;
+}
+
+.tkcal-daypage-empty .tk-empty-day {
+  align-items: center;
+  text-align: center;
+  gap: 5px;
 }
 
 /* --------------------------------------------------------------------------
@@ -1844,8 +2878,51 @@ body.tasks-hub-open #textareaContainer .bottom-line {
    -------------------------------------------------------------------------- */
 
 @media (max-width: 1020px) {
+  /* The sidebar drops under the grid; the month keeps a workable cell
+     height and the page scrolls again. */
+  .tkh.is-calendar .tkh-scroll {
+    overflow-y: auto;
+    display: block;
+    padding-right: 2px;
+  }
+
+  .tkh.is-calendar .tk-sections {
+    display: block;
+  }
+
   .tkcal {
+    height: auto;
+    min-height: 0;
+  }
+
+  .tkcal-body {
     grid-template-columns: 1fr;
+  }
+
+  .tkcal-grid {
+    min-height: 420px;
+  }
+
+  .tkcal-week {
+    min-height: 420px;
+  }
+
+  .tkcal-daypage {
+    min-height: 420px;
+  }
+
+  .tkcal-side {
+    overflow: visible;
+    border-top: 1px solid var(--tk-border);
+    padding-top: 12px;
+  }
+
+  .tkcal-mini {
+    display: none;
+  }
+
+  .tkcal-month {
+    font-size: 21px;
   }
 }
 

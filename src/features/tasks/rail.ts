@@ -14,9 +14,13 @@
  * Flagged / Completed / Calendar) and search. The lists themselves are
  * notes and live in the notes rail; this rail never repeats them.
  *
- * On phones (≤820px) the rail is a drawer — opened from the hub's views
- * button or the notes rail's calendar icon — the same pattern as the
- * notes rail's drawer.
+ * The calendar page is the exception: it already carries its own
+ * sidebar (lists, the day inspector, the mini month), so the rail
+ * stands down while that page is open — desktop shouldn't stack two
+ * task sidebars on one screen. On phones (≤820px) the rail is a
+ * drawer — opened from the hub's views button or the notes rail's
+ * calendar icon — the same pattern as the notes rail's drawer, and it
+ * stays available there (the calendar page starts with it closed).
  */
 
 import { getTabManager } from '../../tabs';
@@ -55,9 +59,15 @@ export function initTasksRail(): void {
   };
 
   // ---- contextual visibility: the rail only exists in task contexts ----
+  // The calendar page is the one hub view that sends the rail home
+  // (desktop): the page has its own sidebar, and a hover-expand rail on
+  // the same edge is double duty. Phones keep the drawer — the views
+  // button is their only nav — it just starts closed.
   const syncRailVisibility = (): void => {
     const active = getTabManager()?.getActive();
-    const on = (active?.noteType ?? '') === 'tasks' || isTasksHubOpen();
+    const inTaskContext = (active?.noteType ?? '') === 'tasks' || isTasksHubOpen();
+    const calendarPage = isTasksHubOpen() && currentTasksHubView() === 'calendar';
+    const on = inTaskContext && !(calendarPage && !isMobile());
     document.body.classList.toggle(RAIL_BODY_CLASS, on);
     if (!on) setDrawerOpen(false);
   };
@@ -127,6 +137,12 @@ export function initTasksRail(): void {
     if (event.key === 'Escape' && rail.classList.contains('open')) {
       setDrawerOpen(false);
     }
+  });
+
+  // Crossing the phone breakpoint flips the calendar-page rule (drawer
+  // vs. no rail at all) — re-sync when the window changes size.
+  window.matchMedia(MOBILE_MEDIA).addEventListener('change', () => {
+    syncRailVisibility();
   });
 
   // Every context change re-syncs the rail's reason to exist.

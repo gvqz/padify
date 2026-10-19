@@ -43,7 +43,13 @@ import {
 import type { Priority, Task } from '../../editor/tasks/content';
 import { taskNotes, type AggSection, type AggTask, type HubViewId } from './aggregate';
 import { dismissReminderToasts } from './toasts';
-import { initTasksCalendar, renderTasksCalendar } from './calendar';
+import {
+  calendarQuickAddOpen,
+  closeCalendarQuickAdd,
+  initTasksCalendar,
+  renderTasksCalendar,
+  selectedDayCount,
+} from './calendar';
 
 export type HubView = HubViewId | 'search' | 'calendar';
 
@@ -231,14 +237,17 @@ export function initTasksHub(): void {
 
   document.getElementById('tkhComposerAdd')?.addEventListener('click', () => submitComposer());
 
-  hubEl()
-    ?.querySelectorAll<HTMLElement>('[data-hub-close]')
-    .forEach((button) => {
-      button.addEventListener('click', () => closeTasksHub());
-    });
+  // Delegated, not direct-bound: the calendar page renders its own back
+  // arrow inside the toolbar row on every re-render, and a boot-time
+  // querySelectorAll would never reach the fresh nodes.
+  hubEl()?.addEventListener('click', (event) => {
+    const through = event.target as HTMLElement | null;
+    if (through?.closest('[data-hub-close]')) closeTasksHub();
+  });
 
   // Escape while an inner consumer is open never reaches the layer
-  // sweep (its isOpen is false): popovers first, then the editor.
+  // sweep (its isOpen is false): popovers first, then the editor, then
+  // the calendar's inline add row.
   hubEl()?.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     if (!innerConsumersClosed()) {
@@ -246,6 +255,8 @@ export function initTasksHub(): void {
         closePopovers();
       } else if (editingId) {
         closeEditor(false);
+      } else {
+        closeCalendarQuickAdd();
       }
       event.stopPropagation();
     }
@@ -276,7 +287,9 @@ export function initTasksHub(): void {
 }
 
 function innerConsumersClosed(): boolean {
-  return popoverClosed() && editingId === null;
+  // The calendar's inline quick-add row counts too — Escape puts the
+  // row away before it may close the page.
+  return popoverClosed() && editingId === null && !calendarQuickAddOpen();
 }
 
 function hubEl(): HTMLElement | null {
@@ -309,18 +322,26 @@ function renderHub(): void {
 
   const searching = view === 'search';
   if (view === 'calendar') {
+    // The calendar is a PAGE, not a subpage: the hub's own title/count
+    // stand down (the month title is the page's), and .is-calendar lets
+    // the CSS give the grid the full height instead of a scrolling doc
+    // — and keeps the composer bar off the page (the day pane's inline
+    // add is how reminders land on a day).
+    hub.classList.add('is-calendar');
     title.textContent = 'Calendar';
     count.textContent = String(taskNotes.smartCounts(now).today);
     actions.innerHTML = '';
-    renderTasksCalendar((iso) => {
-      draft.dueDate = iso;
-      renderComposerChips();
-      openComposerDetails();
-      composerInput().focus();
-    });
+    // The calendar owns its empty states (the day pane's, the zero-list
+    // sidebar copy) — the hub's must stand down, or a view that rendered
+    // it empty earlier (Today with nothing due) leaves its "Nothing due
+    // today" panel parked under the grid, squeezing every row.
+    emptyEl.hidden = true;
+    emptyEl.innerHTML = '';
+    renderTasksCalendar(quickAddOnDay);
     renderTargetChip(targetChip);
     return;
   }
+  hub.classList.remove('is-calendar');
   const result = searching
     ? taskNotes.search(searchQuery)
     : taskNotes.sectionsFor((view ?? 'today') as HubViewId, now);
@@ -525,8 +546,15 @@ function bindRows(): void {
 
 function toggleComplete(id: string): void {
   const now = new Date();
-  const before = taskNotes.sectionsFor((view ?? 'today') as HubViewId, now);
-  const hadActive = before.sections.some((section) => section.rows.length > 0);
+  // The confetti bookkeeping reads the OPEN VIEW's active rows — but the
+  // calendar is not a smart view: sectionsFor would return undefined for
+  // it (no case, no default), and the completion would die before it
+  // started. The calendar's "rows" are the selected day's, so its count
+  // comes from the calendar module (which owns selection + hidden lists).
+  const onCalendar = view === 'calendar';
+  const before = onCalendar
+    ? selectedDayCount()
+    : activeRowCount((view ?? 'today') as HubViewId, now);
   taskNotes.toggleComplete(id);
   const done = taskNotes.taskById(id)?.task.completed ?? false;
   if (!done) {
@@ -538,15 +566,24 @@ function toggleComplete(id: string): void {
     taskEl.classList.add('is-done');
     taskEl.querySelector('.tk-check')?.setAttribute('aria-checked', 'true');
   }
-  const after = taskNotes.sectionsFor((view ?? 'today') as HubViewId, now);
+  const after = onCalendar
+    ? selectedDayCount()
+    : activeRowCount((view ?? 'today') as HubViewId, now);
   const cleared =
-    (view === 'today' || view === 'scheduled' || view === 'flagged') &&
-    hadActive &&
-    !after.sections.some((section) => section.rows.length > 0);
+    (onCalendar || view === 'today' || view === 'scheduled' || view === 'flagged') &&
+    before > 0 &&
+    after === 0;
   window.setTimeout(() => {
     if (cleared) fireTaskConfetti();
     renderHub();
   }, 460);
+}
+
+/** The smart views' active row count (the confetti check's before/after). */
+function activeRowCount(viewId: HubViewId, now: Date): number {
+  return taskNotes
+    .sectionsFor(viewId, now)
+    .sections.reduce((sum, section) => sum + section.rows.length, 0);
 }
 
 function toggleEditor(id: string): void {
@@ -679,6 +716,35 @@ async function createFirstList(): Promise<void> {
 // ---------------------------------------------------------------------------
 // The composer
 // ---------------------------------------------------------------------------
+
+/**
+ * The calendar page's quick-add — the day pane's inline row hands us a
+ * typed title and the day (9:00 ISO) and this files it, exactly like
+ * the bottom composer does for the other views (last-used target list,
+ * the create-first-list rescue when none exist). Deliberately outside
+ * the shared composer `draft`: the bottom bar is hidden on the calendar
+ * page, and a date leaked into the draft would surface as a stale chip
+ * on the next view that shows the bar.
+ */
+function quickAddOnDay(title: string, iso: string): void {
+  const lists = taskNotes.lists();
+  if (lists.length === 0) {
+    // No lists yet: the first one is created for the task to land in.
+    const manager = getTabManager();
+    if (!manager) return;
+    manager.addTab(true, 'tasks');
+    void taskNotes.addTaskToNote(manager.getActive()!.id, { title, dueDate: iso });
+    closeTasksHub();
+    showToast('Task list created with your first reminder');
+    return;
+  }
+  const targetId = taskNotes.targetListId() ?? lists[0]!.id;
+  const target = lists.find((list) => list.id === targetId) ?? lists[0]!;
+  const added = taskNotes.addTaskToNote(target.id, { title, dueDate: iso });
+  taskNotes.rememberTargetList(target.id);
+  if (added) showToast(`Added to ${target.name}`);
+  renderHub();
+}
 
 function bindComposer(): void {
   const input = composerInput();
