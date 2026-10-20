@@ -75,8 +75,10 @@ describe('renderMarkdownToHtml — thematic breaks & code fences', () => {
     );
   });
 
-  it('a weird info string is dropped, not emitted as an attribute', () => {
-    expect(renderMarkdownToHtml('```"><script>\ncode\n```')).toBe('<pre><code>code</code></pre>');
+  it('a hostile info string is escaped into the class, never emitted as markup', () => {
+    expect(renderMarkdownToHtml('```"><script>\ncode\n```')).toBe(
+      '<pre><code class="language-&quot;&gt;&lt;script&gt;">code</code></pre>',
+    );
   });
 
   it('a fence interrupts a paragraph', () => {
@@ -161,9 +163,9 @@ describe('renderMarkdownToHtml — emphasis', () => {
     expect(renderMarkdownToHtml('_em_')).toBe('<p><i>em</i></p>');
   });
 
-  it('strikethrough is exactly two tildes', () => {
+  it("strikethrough takes one or two tildes (github's reading); three is literal", () => {
     expect(renderMarkdownToHtml('~~gone~~')).toBe('<p><s>gone</s></p>');
-    expect(renderMarkdownToHtml('~single~')).toBe('<p>~single~</p>');
+    expect(renderMarkdownToHtml('~single~')).toBe('<p><s>single</s></p>');
     expect(renderMarkdownToHtml('a ~~~b~~~ c')).toBe('<p>a ~~~b~~~ c</p>');
   });
 
@@ -233,9 +235,9 @@ describe('renderMarkdownToHtml — links & images', () => {
     );
   });
 
-  it('a quoted title is parsed and ignored', () => {
+  it('a quoted title rides the anchor as its tooltip', () => {
     expect(renderMarkdownToHtml('[a](https://example.com "Title")')).toBe(
-      '<p><a href="https://example.com" rel="noopener noreferrer">a</a></p>',
+      '<p><a href="https://example.com" title="Title" rel="noopener noreferrer">a</a></p>',
     );
   });
 
@@ -245,15 +247,15 @@ describe('renderMarkdownToHtml — links & images', () => {
 
   it('images render as links with the alt text — nothing loads remotely', () => {
     expect(renderMarkdownToHtml('![alt text](https://example.com/i.png)')).toBe(
-      '<p><a href="https://example.com/i.png" class="md-image-link" title="image">alt text</a></p>',
+      '<p><a href="https://example.com/i.png" class="md-image-link">alt text</a></p>',
     );
     const html = renderMarkdownToHtml('![x](https://example.com/i.png)');
     expect(html).not.toContain('<img');
   });
 
-  it('an href escapes for the attribute context', () => {
+  it('an href percent-encodes for the attribute context', () => {
     expect(renderMarkdownToHtml('[x](https://example.com/?q="a&b")')).toContain(
-      'href="https://example.com/?q=&quot;a&amp;b&quot;"',
+      'href="https://example.com/?q=%22a&amp;b%22"',
     );
   });
 });
@@ -367,8 +369,10 @@ describe('renderMarkdownToHtml — lists', () => {
     expect(renderMarkdownToHtml('- a\n  more text')).toBe('<ul>\n<li>a\nmore text</li>\n</ul>');
   });
 
-  it('a blank line then indented content stays inside the item (and loosens it)', () => {
-    expect(renderMarkdownToHtml('- a\n\n  more')).toBe('<ul>\n<li><p>a\nmore</p></li>\n</ul>');
+  it('a blank line then indented content stays inside the item — and loosens it', () => {
+    expect(renderMarkdownToHtml('- a\n\n  more')).toBe(
+      '<ul>\n<li><p>a</p>\n<p>more</p></li>\n</ul>',
+    );
   });
 
   it('lazy continuation text joins the item paragraph', () => {
@@ -511,17 +515,7 @@ describe('renderMarkdownToHtml — security invariants', () => {
     );
     const attributes = [...html.matchAll(/([\w-]+)="([^"]*)"/g)].map((match) => match[1]);
     expect(new Set(attributes)).toEqual(
-      new Set([
-        'href',
-        'rel',
-        'class',
-        'title',
-        'data-latex',
-        'contenteditable',
-        'type',
-        'style',
-        'id',
-      ]),
+      new Set(['href', 'rel', 'class', 'data-latex', 'contenteditable', 'type', 'style', 'id']),
     );
   });
 });
@@ -531,7 +525,8 @@ describe('renderMarkdownToHtml — footnotes', () => {
     expect(renderMarkdownToHtml('A note[^1].\n\n[^1]: The definition.')).toBe(
       '<p>A note<sup class="md-footnote-ref" id="md-fnref-1"><a href="#md-fn-1">1</a></sup>.</p>\n' +
         '<section class="md-footnotes"><hr><ol class="md-footnotes-list">' +
-        '<li id="md-fn-1" class="md-footnote-item">The definition.</li>' +
+        '<li id="md-fn-1" class="md-footnote-item"><p>The definition.</p>' +
+        '<a href="#md-fnref-1" class="md-footnote-backref">↩</a></li>' +
         '</ol></section>',
     );
   });
@@ -548,12 +543,12 @@ describe('renderMarkdownToHtml — footnotes', () => {
     expect(html).not.toContain('md-fn-2');
   });
 
-  it('definition text renders through the inline pass (markup resolves, HTML escapes)', () => {
+  it('definition text renders through the block pass (markup resolves, HTML escapes)', () => {
     const html = renderMarkdownToHtml(
       'A[^1].\n\n[^1]: **Bold** and <img src=x> and [a link](https://x.com)',
     );
     expect(html).toContain(
-      '<li id="md-fn-1" class="md-footnote-item"><b>Bold</b> and &lt;img src=x&gt; and <a href="https://x.com" rel="noopener noreferrer">a link</a></li>',
+      '<li id="md-fn-1" class="md-footnote-item"><p><b>Bold</b> and &lt;img src=x&gt; and <a href="https://x.com" rel="noopener noreferrer">a link</a></p>',
     );
   });
 
@@ -608,9 +603,11 @@ describe('renderMarkdownToHtml — footnotes', () => {
 
   it('the section appears at the very end, after every body block', () => {
     const html = renderMarkdownToHtml('Start[^1].\n\n| a |\n| --- |\n| 1 |\n\n[^1]: def');
-    expect(html.endsWith('<li id="md-fn-1" class="md-footnote-item">def</li></ol></section>')).toBe(
-      true,
-    );
+    expect(
+      html.endsWith(
+        '<li id="md-fn-1" class="md-footnote-item"><p>def</p><a href="#md-fnref-1" class="md-footnote-backref">↩</a></li></ol></section>',
+      ),
+    ).toBe(true);
   });
 });
 
