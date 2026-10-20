@@ -57,33 +57,35 @@ describe('renderMarkdownToHtml — thematic breaks & code fences', () => {
 
   it('renders fenced code blocks with the info string as a class', () => {
     expect(renderMarkdownToHtml('```js\nconst x = 1;\n```')).toBe(
-      '<pre><code class="language-js">const x = 1;</code></pre>',
+      '<pre><code class="language-js">const x = 1;\n</code></pre>',
     );
   });
 
   it('tilde fences work, and the closing fence may be longer', () => {
-    expect(renderMarkdownToHtml('~~~\na\n~~~~')).toBe('<pre><code>a</code></pre>');
+    expect(renderMarkdownToHtml('~~~\na\n~~~~')).toBe('<pre><code>a\n</code></pre>');
   });
 
   it('an unclosed fence runs to the end of the source', () => {
-    expect(renderMarkdownToHtml('```\nnever closed')).toBe('<pre><code>never closed</code></pre>');
+    expect(renderMarkdownToHtml('```\nnever closed')).toBe(
+      '<pre><code>never closed\n</code></pre>',
+    );
   });
 
   it('code content escapes — a fence is not an HTML smuggle route', () => {
     expect(renderMarkdownToHtml('```\n<script>alert(1)</script>\n```')).toBe(
-      '<pre><code>&lt;script&gt;alert(1)&lt;/script&gt;</code></pre>',
+      '<pre><code>&lt;script&gt;alert(1)&lt;/script&gt;\n</code></pre>',
     );
   });
 
   it('a hostile info string is escaped into the class, never emitted as markup', () => {
     expect(renderMarkdownToHtml('```"><script>\ncode\n```')).toBe(
-      '<pre><code class="language-&quot;&gt;&lt;script&gt;">code</code></pre>',
+      '<pre><code class="language-&quot;&gt;&lt;script&gt;">code\n</code></pre>',
     );
   });
 
   it('a fence interrupts a paragraph', () => {
     expect(renderMarkdownToHtml('text\n```\ncode\n```\nafter')).toBe(
-      '<p>text</p>\n<pre><code>code</code></pre>\n<p>after</p>',
+      '<p>text</p>\n<pre><code>code\n</code></pre>\n<p>after</p>',
     );
   });
 });
@@ -393,7 +395,7 @@ describe('renderMarkdownToHtml — lists', () => {
 
   it('a fence inside an item becomes a code block inside the li', () => {
     expect(renderMarkdownToHtml('- item\n\n  ```\n  code\n  ```')).toBe(
-      '<ul>\n<li><p>item</p>\n<pre><code>code</code></pre></li>\n</ul>',
+      '<ul>\n<li><p>item</p>\n<pre><code>code\n</code></pre></li>\n</ul>',
     );
   });
 
@@ -473,9 +475,21 @@ describe('renderMarkdownToHtml — tables', () => {
     expect(html).toContain('<tr><td>1</td></tr>');
   });
 
-  it('a table cannot interrupt a paragraph', () => {
-    expect(renderMarkdownToHtml('text\n| A |\n|---|\n| 1 |')).toBe(
-      '<p>text\n| A |\n|---|\n| 1 |</p>',
+  it('a table interrupts a paragraph (the reference reading)', () => {
+    // The fuzzer caught this: micromark (and github.com) start the table
+    // wherever the header + delimiter pair stands, even under an open
+    // paragraph — the old pin ("cannot interrupt") was the renderer's own
+    // invention, and the oracle disagreed.
+    const html = renderMarkdownToHtml('text\n| A |\n|---|\n| 1 |');
+    expect(html).toContain('<p>text</p>');
+    expect(html).toContain('<th>A</th>');
+    expect(html).toContain('<td>1</td>');
+  });
+
+  it('a failed pair leaves the paragraph flowing', () => {
+    // Header 2 cells, delimiter 1: no table — every line stays paragraph.
+    expect(renderMarkdownToHtml('text\n| A | B |\n|---|\n| 1 |')).toBe(
+      '<p>text\n| A | B |\n|---|\n| 1 |</p>',
     );
   });
 });
@@ -631,12 +645,14 @@ describe('renderMarkdownToHtml — pathological nesting', () => {
     expect(html).toContain('level 899');
     expect(html).toContain('level 0');
     // And it rendered in interactive time, not seconds. The budget is
-    // 1.5s, not 0.5s: the regression this guards against measured ~7
+    // 3s, not 0.5s: the regression this guards against measured ~7
     // SECONDS (the pre-cap O(N³) walk), so the wide margin still catches
-    // it with room to spare — while shared CI runners, which measured
-    // 510-530ms on three separate green-code runs, stop failing the
-    // build on noise (see the worklog's flake notes).
-    expect(elapsed).toBeLessThan(1500);
+    // it with 2x to spare — while shared CI runners, which measured
+    // 510-530ms green before the torture suite and ~1-2.2s since (the
+    // suite's own per-item invariant work is ~40ms locally; the rest is
+    // worker contention), stop failing the build on noise (see the
+    // worklog's flake notes).
+    expect(elapsed).toBeLessThan(3000);
     // The cap means far fewer than 900 nested <ul>s.
     const ulCount = (html.match(/<ul>/g) ?? []).length;
     expect(ulCount).toBeLessThan(60);
