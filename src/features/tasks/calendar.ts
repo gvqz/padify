@@ -390,6 +390,19 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
   const prevTimedKey = prevTimed?.dataset.timedKey ?? '';
   const prevTimedTop = prevTimed?.scrollTop ?? -1;
 
+  // The inline add row rides the render too: an open row survives it
+  // (with the caret, if the user was mid-thought), because a render is
+  // allowed to arrive at any moment — the persistence write completes
+  // after the Enter that queued it — and the row must not blink shut
+  // out from under the next reminder. A closed row stays closed.
+  const prevQuickAdd = sections.querySelector<HTMLElement>('[data-cal-quickadd]');
+  const prevQuickAddInput = prevQuickAdd?.querySelector<HTMLInputElement>(
+    '[data-cal-quickadd-input]',
+  );
+  const quickAddWasOpen = prevQuickAdd != null && !prevQuickAdd.hidden;
+  const quickAddHadFocus = quickAddWasOpen && document.activeElement === prevQuickAddInput;
+  const quickAddText = prevQuickAddInput?.value ?? '';
+
   sections.innerHTML = `
     <div class="tkcal">
       <header class="tkcal-top">
@@ -496,6 +509,17 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
   if (add) {
     wireQuickAdd(sections, add);
   }
+
+  if (quickAddWasOpen) {
+    const row = sections.querySelector<HTMLElement>('[data-cal-quickadd]');
+    const input = row?.querySelector<HTMLInputElement>('[data-cal-quickadd-input]');
+    if (row && input) {
+      row.hidden = false;
+      if (quickAddText) input.value = quickAddText;
+      if (quickAddSlot) applySlotPlaceholder(input);
+      if (quickAddHadFocus) input.focus();
+    }
+  }
 }
 
 /** Where a timed page opens scrolled to: around now when it holds
@@ -546,6 +570,10 @@ function wireQuickAdd(sections: HTMLElement, quickAdd: (title: string, iso: stri
     event.preventDefault();
     const title = input.value.trim();
     if (!title) return;
+    // The words go with the submit: the row survives the re-render now
+    // (the preserve below re-opens it), and it opens empty for the
+    // next reminder — the just-added title must not read as pending.
+    input.value = '';
     // The aimed hour when a slot double-click opened the row, else the
     // day at 9:00 — the same anchor the day pane shows.
     const at = new Date(quickAddSlot ? quickAddSlot.day : selectedDay);

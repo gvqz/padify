@@ -59,7 +59,15 @@ async function calDrag(page: Page, from: Locator, to: Locator, offsetY = 8): Pro
   const box = await to.boundingBox();
   const clientY = (box?.y ?? 0) + offsetY;
   await to.dispatchEvent('dragover', { dataTransfer: transfer, clientY });
-  await to.dispatchEvent('drop', { dataTransfer: transfer, clientY });
+  // Let the ground settle before the drop measures: a dragover-driven
+  // rim nudge — or the persistence write completing mid-drag and its
+  // re-render restoring the hours' scroll — can shift the very slot
+  // the drop is measured against (the 10:20-not-10:05 flake). The drop
+  // re-aims at the slot's settled position, 8px in, whatever moved.
+  await page.waitForTimeout(60);
+  const settled = await to.boundingBox();
+  const dropY = (settled?.y ?? box?.y ?? 0) + offsetY;
+  await to.dispatchEvent('drop', { dataTransfer: transfer, clientY: dropY });
 }
 
 test.describe('task list notes', () => {
