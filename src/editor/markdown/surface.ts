@@ -312,6 +312,84 @@ function renderLivePreview(): void {
   }
 }
 
+/**
+ * The task-line scan for the preview toggle: the same shapes the renderer
+ * reads as task items (a list marker, one to four spaces, the bracket) in
+ * document order — the nth match is the nth checkbox the preview shows.
+ */
+const PREVIEW_TASK_LINE = /^([ \t]*)(?:[-*+]|\d{1,9}[.)])[ ]{1,4}\[([ xX])\]/gm;
+
+/**
+ * Flips the clicked task item's checkbox by rewriting the SOURCE: the nth
+ * task marker in the markdown corresponds to the nth checkbox in the
+ * render (both walk the document in order). Returns false when the source
+ * holds no matching marker — a hand-mangled note renders checkboxes the
+ * source cannot express, and those stay read-only.
+ */
+function togglePreviewTask(item: Element): boolean {
+  if (!live) {
+    return false;
+  }
+  const checkboxes = [...live.preview.querySelectorAll('input[type="checkbox"]')];
+  const index = checkboxes.findIndex((box) => item === box.parentElement);
+  if (index === -1) {
+    return false;
+  }
+  const source = liveMarkdown();
+  PREVIEW_TASK_LINE.lastIndex = 0;
+  let seen = 0;
+  for (
+    let match = PREVIEW_TASK_LINE.exec(source);
+    match !== null;
+    match = PREVIEW_TASK_LINE.exec(source)
+  ) {
+    if (seen === index) {
+      // The match ends at the closing ']' — the check character sits one
+      // before it.
+      const toggleAt = match.index + match[0].length - 2;
+      const checked = match[2] !== ' ';
+      const toggled =
+        source.slice(0, toggleAt) + (checked ? ' ' : 'x') + source.slice(toggleAt + 1);
+      applyToggledSource(toggled);
+      return true;
+    }
+    seen += 1;
+  }
+  return false;
+}
+
+/**
+ * Writes a toggled source back through whichever pane owns the note — the
+ * textarea directly (its native undo keeps the gesture), the WYSIWYG as a
+ * wholesale replace — and announces the edit so autosave, the word count
+ * and the save indicator follow, exactly as if the user had typed it.
+ */
+function applyToggledSource(nextSource: string): void {
+  if (!live) {
+    return;
+  }
+  if (live.source && usesSourcePane(viewMode)) {
+    if (live.source.value === nextSource) {
+      return;
+    }
+    live.source.value = nextSource;
+    live.host.dispatchEvent(new Event('input', { bubbles: true }));
+    scheduleSplitRender();
+    return;
+  }
+  if (live.editor && live.view) {
+    if (live.editor.action(getMarkdown()) === nextSource) {
+      return;
+    }
+    applyContent(nextSource);
+    // applyContent marks its own doc silent — the click was a USER edit,
+    // so announce it here; the debounced markdownUpdated that follows is
+    // the silent one and will not double-announce.
+    live.host.dispatchEvent(new Event('input', { bubbles: true }));
+    scheduleSplitRender();
+  }
+}
+
 /** The split pane's re-render debounce — typing stays smooth, the pane settles a beat behind. */
 const SPLIT_RENDER_DEBOUNCE_MS = 250;
 let splitRenderTimer: ReturnType<typeof setTimeout> | null = null;
@@ -514,6 +592,27 @@ export class MarkdownNoteSurface implements NoteSurface {
         event.preventDefault();
         event.stopPropagation();
         document.dispatchEvent(new CustomEvent('padify:open-link'));
+      }
+    });
+
+    // Task checkboxes in the rendered panes are LIVE — the one GFM gesture
+    // the preview owns. The renderer emits them disabled (a preview is a
+    // reading surface), so the pointer-events trick hands the click to the
+    // list item, and the toggle is written back into the SOURCE — the same
+    // note the WYSIWYG and the textarea edit — then announced like any
+    // other user edit (autosave, word count, the save pill all follow).
+    preview.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      const item = target.closest('li');
+      if (!item || !item.querySelector(':scope > input[type="checkbox"]')) {
+        return;
+      }
+      if (togglePreviewTask(item)) {
+        event.preventDefault();
+        renderLivePreview();
       }
     });
 

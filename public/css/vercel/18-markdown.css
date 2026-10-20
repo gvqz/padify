@@ -136,7 +136,10 @@
 
 /* Task list checkboxes answer the monochrome primary, like the app's
    switches; the browser's default blue would be the only hue on the
-   page. */
+   page. In the PREVIEW they are also live: the rendered input is
+   disabled (a reading surface), so pointer-events hands its clicks to
+   the list item and the surface writes the toggle back into the source
+   — the whole row is the hit target, cursor included. */
 .markdown-surface .padify-markdown li:has(> input[type='checkbox']),
 .markdown-preview li:has(> input[type='checkbox']) {
   list-style: none;
@@ -146,6 +149,18 @@
 .markdown-preview input[type='checkbox'] {
   accent-color: var(--vz-primary);
   margin-right: 0.35em;
+}
+
+.markdown-preview input[type='checkbox'] {
+  pointer-events: none;
+}
+
+.markdown-preview li:has(> input[type='checkbox']) {
+  cursor: pointer;
+}
+
+.markdown-preview li:has(> input[type='checkbox']:checked) {
+  color: var(--vz-fg-muted);
 }
 
 .markdown-surface .padify-markdown blockquote,
