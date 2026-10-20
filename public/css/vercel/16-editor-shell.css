@@ -1492,12 +1492,6 @@ body.dark .tab-strip-copy {
   line-height: 1.4;
 }
 
-.tab-type-menu-desc {
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--vz-fg-muted);
-}
-
 .tab-strip-rename {
   flex: 1 1 auto;
   width: 100%;

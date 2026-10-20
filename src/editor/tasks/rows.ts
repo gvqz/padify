@@ -70,6 +70,11 @@ export function priorityMarks(priority: Priority): string {
 /**
  * One task row. The editor expands under .tk-task-wrap. `list` adds the
  * origin chip (the hub's aggregated views); color classes ride the wrap.
+ *
+ * The row reads on ONE line: the title carries the line and the metadata
+ * chips (due, remind, priority, flag) ride its right end — Apple's own
+ * row anatomy, the one the day pane already speaks. Only real second-line
+ * content (notes, the hub's origin chip) wraps under.
  */
 export function taskRow(
   task: Task,
@@ -87,6 +92,8 @@ export function taskRow(
         list.name,
       )}</span></span>`
     : '';
+  const chips = rowChips(task, now);
+  const chipLine = chips ? `<span class="tk-chips">${chips}</span>` : '';
   return `
     <div class="tk-task-wrap tk-c-${listColor}${draggable ? ' is-draggable' : ''}" data-id="${escapeHtml(
       task.id,
@@ -100,10 +107,9 @@ export function taskRow(
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6.5 12.4 3.5 3.5 7.2-7.8"/></svg>
             </button>
             <button type="button" class="tk-task-main">
-                <span class="tk-title">${title}</span>
+                <span class="tk-title-line"><span class="tk-title">${title}</span>${chipLine}</span>
                 ${notes}
                 ${origin}
-                ${rowChips(task, now)}
             </button>
         </div>
         <div class="tk-editor" hidden></div>
@@ -193,9 +199,11 @@ export function editor(task: Task, now: Date, lists: ListRef[] = []): string {
             </div>`;
 }
 
+/** The editor chip's label — words, not glyphs (the menu carries the
+ * ! marks; the pill reads like a control, not like shouting). */
 export function priorityLabel(priority: Priority): string {
   if (priority === 'none') return 'Priority';
-  return `${'!'.repeat(PRIORITY_MARKS[priority])} ${priority} priority`;
+  return `${priority.charAt(0).toUpperCase()}${priority.slice(1)} priority`;
 }
 
 // ---------------------------------------------------------------------------

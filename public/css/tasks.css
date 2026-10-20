@@ -173,8 +173,11 @@ body.dark {
 }
 
 .tkp-title::placeholder {
-  color: var(--tk-muted);
-  opacity: 0.6;
+  /* An unnamed list still wears its color — Apple's move: the ghost
+     name reads in the list's hue, clearly a placeholder, never dead
+     gray. */
+  color: var(--list-c, var(--tk-muted));
+  opacity: 0.55;
 }
 
 .tkp-title:hover {
@@ -216,14 +219,9 @@ body.dark {
   border-radius: 4px;
 }
 
-/* The composer bar rides the bottom of the page. */
-.tkp-composer {
-  flex: 0 0 auto;
-  margin: 0 -6px -2px 0;
-  padding: 10px 10px 6px;
-  border-top: 1px solid var(--tk-border);
-  background: var(--tk-bg);
-}
+/* The composer bar rides the bottom of the page. Its real chrome (the
+   hairline floor, the rounded field) lives with .tk-composer in
+   section 9 — page and hub share one bar. */
 
 /* --------------------------------------------------------------------------
    3. The RIGHT rail — Reminders navigation
@@ -653,7 +651,11 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
 body.tasks-hub-open #richToolbar,
 body.tasks-hub-open #markdownToolbar,
 body.tasks-hub-open #textareaContainer .starter-template,
-body.tasks-hub-open #textareaContainer .bottom-line {
+body.tasks-hub-open #textareaContainer .bottom-line,
+/* The task list PAGE too (the rail-on contexts are exactly the task
+   contexts): the editor's word-count pill and save state are note
+   furniture — on a structured list they count nothing worth counting. */
+body.tasks-rail-on #textareaContainer .bottom-line {
   display: none !important;
 }
 
@@ -850,7 +852,7 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 .tk-rows {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .tk-task-wrap {
@@ -863,7 +865,7 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 10px 8px 10px 4px;
+  padding: 6px 8px 6px 4px;
   border-radius: var(--vz-radius-md);
   transition: background 0.12s var(--vz-ease);
 }
@@ -880,9 +882,9 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  margin: 1px 0 0;
+  width: 21px;
+  height: 21px;
+  margin: 0;
   padding: 0;
   border: 1.5px solid var(--tk-border-strong);
   border-radius: 50%;
@@ -933,7 +935,7 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 3px;
+  gap: 2px;
   flex: 1 1 auto;
   min-width: 0;
   padding: 0;
@@ -945,7 +947,21 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   cursor: text;
 }
 
+/* The title line — the row reads on ONE line: the title carries it and
+   the metadata chips (due, remind, priority, flag) ride its right end,
+   the day pane's row anatomy brought home. Only real second-line
+   content (notes, the hub's origin chip) wraps under. */
+.tk-title-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
 .tk-title {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 13.5px;
   font-weight: 450;
   line-height: 1.4;
@@ -1006,14 +1022,14 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   height: 8px;
 }
 
-/* --- the chips under a title --- */
+/* --- the chips riding the title's right end --- */
 
 .tk-chips {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  margin-top: 1px;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 .tk-chip {
@@ -1023,6 +1039,7 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   font-size: 12px;
   color: var(--tk-muted);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .tk-chip svg {
@@ -1036,8 +1053,8 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 
 .tk-prio {
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 800;
+  letter-spacing: 0.05em;
 }
 
 .tk-prio-low {
@@ -1056,6 +1073,13 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   display: inline-flex;
   color: var(--tk-star);
   line-height: 0;
+}
+
+/* Done rows quiet their metadata with the title. */
+.tk-task.is-done .tk-chip,
+.tk-task.is-done .tk-prio,
+.tk-task.is-done .tk-flag {
+  opacity: 0.55;
 }
 
 /* --------------------------------------------------------------------------
@@ -1101,6 +1125,15 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   transition: color 0.15s var(--vz-ease), background 0.15s var(--vz-ease);
 }
 
+.tk-done-toggle span {
+  /* The count and the word are one thought — they never split around
+     the space (the "1" over "Completed" break). The nowrap rides the
+     SPAN, not the button: on the button it turns the template's own
+     whitespace into flex items, which squeezed the unsized caret svg
+     out of existence. */
+  white-space: nowrap;
+}
+
 .tk-done-toggle:hover,
 .tk-done-toggle:focus-visible {
   color: var(--tk-text);
@@ -1109,6 +1142,11 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 }
 
 .tk-done-toggle .tk-caret {
+  /* The only unsized svg in the scope — without a box it collapses to
+     nothing the moment the flex line gets squeeze pressure. */
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
   transition: transform 0.15s var(--vz-ease);
 }
 
@@ -1255,13 +1293,31 @@ body.tasks-hub-open #textareaContainer .bottom-line {
 
 .tk-composer {
   position: relative;
+  flex: 0 0 auto;
+  padding: 8px 2px 4px;
+  border-top: 1px solid var(--tk-border);
+  background: var(--tk-bg);
 }
 
+/* The field is the affordance: a rounded well the eye lands on, tinted
+   by the list when it takes focus — the bar was previously a bare text
+   line with its styles parked on a class the markup never wore. */
 .tk-composer-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  position: relative;
+  gap: 8px;
+  padding: 3px 12px 3px 5px;
+  border: 1px solid var(--tk-border);
+  border-radius: 999px;
+  background: var(--tk-well);
+  transition: border-color 0.15s var(--vz-ease), background 0.15s var(--vz-ease),
+    box-shadow 0.15s var(--vz-ease);
+}
+
+.tk-composer:focus-within .tk-composer-row {
+  border-color: var(--list-c, var(--tk-accent));
+  background: var(--tk-card);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--list-c, var(--tk-accent)) 14%, transparent);
 }
 
 .tk-composer-add {
@@ -1299,6 +1355,21 @@ body.tasks-hub-open #textareaContainer .bottom-line {
   background: transparent;
   color: var(--tk-text);
   font-size: 14px;
+  outline: none;
+}
+
+/* Text entry on the tasks surface never wears the browser's own black
+   ring — every one of these fields carries (or sits inside) its own
+   focus treatment, and the UA's focus-visible outline drew a second,
+   heavier frame on top (caught double-framing the composer in the
+   shots). */
+.tk-composer-input:focus-visible,
+.tkp-title:focus-visible,
+.tk-editor-title:focus-visible,
+.tk-editor-notes:focus-visible,
+.tk-when-field input:focus-visible,
+.tkcal-quickadd-input:focus-visible,
+#taskRail .tr-search-input:focus-visible {
   outline: none;
 }
 
