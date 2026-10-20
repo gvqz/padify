@@ -12,17 +12,12 @@ Visual overhauls:
                                 users should be able to choose between current one(right) and the sidebar one(which is not made yet)
                 - unicode menu. I don't know what to do with this right now, it's a bit broken and looks bad.
 
-
-Others:
-I don't believe spotify app is currently linked(for searchingstill free)
-
 Improvements in the very far future
         - add drawing pad
                 - add option to add end to end encyrption to notes [low priority, make them actually work first]
-        - add tasks/notes (based on apple reminders/tasks)
-        - detect dates and suggest to add them to calander
+       - detect dates and suggest to add them to calander in tasks (and notes?)
         - Heavily improve PWA experience
-                - save notes to users computer documents folder, use .padify format, which will be able to load all note types and drawing
+                - save notes to users computer documents folder, use .padify format, which will be able to load all note types and drawing, everything will still be synced
                 - push notifications for timers, reminders, etc
                 - automatically open .padify files
 
@@ -30,7 +25,7 @@ Improvements in the very far future
 
 
 about /markdownreports
-        markdownreports\drawingpad.md: not super important, just remember that Excalidraw will be used for canvas, could also require to download PWA for this(so that nothing needs to be sent to the server and just stays on the device instead)
+        markdownreports\drawingpad.md: not super important, just remember that Excalidraw will be used for canvas
         markdownreports\tasks.md: not super important either, will be based on apple reminders/tasks and will have a lot more features
 
 the rest of the features will be made as "tools" (a tool icon in the topbar + popup) if they are made
