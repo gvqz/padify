@@ -11,6 +11,9 @@
  * implementations; each output is canonicalized through a DOM walk
  * (tag aliases b↔strong, attribute order, whitespace collapse — the
  * things HTML rendering treats as identical) and the results must match.
+ * The canonicalizer, the oracle and the divergence rules live in
+ * render.testkit.ts — the fuzzer and the torture suite judge with the
+ * exact same instruments.
  *
  * DOCUMENTED DIVERGENCES (excluded, never "fixed"):
  *   raw HTML   — the renderer escapes it (the note is data, never markup);
@@ -33,247 +36,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { micromark } from 'micromark';
-import { gfm, gfmHtml } from 'micromark-extension-gfm';
-import { gfmTaskListItem } from 'micromark-extension-gfm-task-list-item';
+import { canonicalizeHtml, oracleHtml, oracleUsesPolicyPower } from './render.testkit';
 import { renderMarkdownToHtml } from './render';
-
-// ---------------------------------------------------------------------------
-// The oracle
-// ---------------------------------------------------------------------------
-
-const ORACLE_OPTIONS = {
-  extensions: [gfm(), gfmTaskListItem()],
-  htmlExtensions: [gfmHtml(), gfmTaskListItem()],
-} as Parameters<typeof micromark>[1];
-
-/** Micromark's footnote anchors are user-content-fn(-ref)-N; ours md-fn(-ref)-N. */
-function normalizeOracleFootnoteAnchors(html: string): string {
-  return html.replace(/#user-content-fn/g, '#md-fn');
-}
-
-function oracleHtml(source: string): string {
-  return normalizeOracleFootnoteAnchors(micromark(source, ORACLE_OPTIONS));
-}
-
-// ---------------------------------------------------------------------------
-// The canonicalizer — a DOM walk that equates what HTML rendering equates
-// ---------------------------------------------------------------------------
-
-/** Our vocabulary aliases (b/i/s) against the spec's (strong/em/del). */
-const TAG_ALIAS: Record<string, string> = { strong: 'b', em: 'i', del: 's' };
-
-const VOID_TAGS = new Set(['br', 'hr', 'img', 'input']);
-
-function canonicalizeHtml(html: string, oracleCodeTail = false): string {
-  const doc = new DOMParser().parseFromString(`<!doctype html><body>${html}</body>`, 'text/html');
-  let out = '';
-  for (const child of Array.from(doc.body.childNodes)) {
-    out += serializeNode(child, false, oracleCodeTail);
-  }
-  return out.trim();
-}
-
-function serializeNode(node: Node, rawText: boolean, oracleCodeTail: boolean): string {
-  if (node.nodeType === Node.TEXT_NODE) {
-    const text = node.nodeValue ?? '';
-    if (rawText) {
-      // Code interiors are byte-exact — except tabs, which the owned
-      // renderer pre-expands to 4-column stops before parsing (a
-      // documented divergence); expand the oracle's raw tabs the same way
-      // so the comparison sees the rendering, not the byte choice.
-      return expandCodeTabs(text);
-    }
-    let collapsed = text.replace(/\s+/g, ' ');
-    // The oracle emits a literal newline after <br />; HTML rendering glues
-    // the following text straight to the break — trim to that truth.
-    if (collapsed.startsWith(' ')) {
-      const prev = node.previousSibling;
-      if (prev && prev.nodeType === Node.ELEMENT_NODE && (prev as Element).tagName === 'BR') {
-        collapsed = collapsed.slice(1);
-      }
-    }
-    return collapsed === ' ' ? '' : collapsed;
-  }
-  if (node.nodeType !== Node.ELEMENT_NODE) {
-    return '';
-  }
-  const el = node as Element;
-  const name = TAG_ALIAS[el.tagName.toLowerCase()] ?? el.tagName.toLowerCase();
-  const raw = rawText || name === 'pre' || name === 'code';
-
-  const attrs: string[] = [];
-  for (const attr of Array.from(el.attributes)) {
-    const attrName = attr.name.toLowerCase();
-    let value = attr.value;
-    // `rel` is the app's own hardening (noopener noreferrer), not grammar —
-    // both sides carry it; it stays out of the comparison.
-    if (attrName === 'rel') {
-      continue;
-    }
-    // micromark expresses table alignment as align="right"; we express the
-    // same truth as style="text-align:right" — canonicalize to one form.
-    if (attrName === 'align' && (name === 'th' || name === 'td')) {
-      attrs.push(`style:text-align:${value}`);
-      continue;
-    }
-    if (attrName === 'style') {
-      value = value.replace(/\s+/g, '');
-    }
-    attrs.push(`${attrName}:${value}`);
-  }
-  attrs.sort();
-
-  const open = `<${name}${attrs.length > 0 ? ` ${attrs.join(' ')}` : ''}>`;
-  if (VOID_TAGS.has(name)) {
-    return open;
-  }
-  let inner = '';
-  for (const child of Array.from(el.childNodes)) {
-    inner += serializeNode(child, raw, oracleCodeTail);
-  }
-  if (raw && oracleCodeTail && inner.endsWith('\n')) {
-    // The oracle's code blocks end their content with one more newline
-    // than the owned join (one per line) — drop it so both sides read as
-    // the same lines.
-    inner = inner.slice(0, -1);
-  }
-  return `${open}${inner}</${name}>`;
-}
-
-/** Tabs advance to 4-column stops — the owned renderer's expansion. */
-function expandCodeTabs(text: string): string {
-  if (!text.includes('\t')) {
-    return text;
-  }
-  let out = '';
-  let column = 0;
-  for (const ch of text) {
-    if (ch === '\t') {
-      const stop = column + 4 - (column % 4);
-      while (column < stop) {
-        out += ' ';
-        column += 1;
-      }
-      continue;
-    }
-    if (ch === '\n') {
-      column = 0;
-    } else {
-      column += 1;
-    }
-    out += ch;
-  }
-  return out;
-}
-
-// ---------------------------------------------------------------------------
-// The divergence rules — an example is excluded when the ORACLE side uses a
-// power the renderer declines by policy. Never hand-picked per example.
-// ---------------------------------------------------------------------------
-
-/** Every tag the owned renderer is allowed to emit. */
-const OWNED_VOCABULARY = new Set([
-  'p',
-  'h1',
-  'h2',
-  'h3',
-  'h4',
-  'h5',
-  'h6',
-  'hr',
-  'pre',
-  'code',
-  'blockquote',
-  'ul',
-  'ol',
-  'li',
-  'input',
-  'table',
-  'thead',
-  'tbody',
-  'tr',
-  'td',
-  'th',
-  'a',
-  'b',
-  'i',
-  's',
-  'br',
-  'sup',
-  'section',
-  'span',
-  'div',
-]);
-
-function oracleUsesPolicyPower(markdown: string, oracleHtml: string): boolean {
-  // Raw HTML in the source is escaped by policy. A "raw HTML candidate" is
-  // CommonMark's own raw-HTML shapes — a valid inline tag, comment, PI,
-  // declaration, CDATA, or a line OPENING with a tag-like run (HTML blocks
-  // do not need their closing bracket on the opening line) — minus the
-  // angle autolinks (<scheme:…>, <email@…>) which are links, not markup.
-  // (A bare `a<b` is not a tag and stays compared: CommonMark renders it
-  // as literal text in both implementations.)
-  const withoutAutolinks = markdown
-    .replace(/<(?:https?:\/\/|mailto:)[^<>\s]*>/gi, '')
-    .replace(/<[\w.+-]+@[\w-]+(?:\.[\w-]+)+>/g, '');
-  if (/<!--|<[?$]|<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^<>]*)?\/?>/.test(withoutAutolinks)) {
-    return true;
-  }
-  if (/(^|\n) {0,3}<[a-zA-Z!?/]/.test(withoutAutolinks)) {
-    return true;
-  }
-  // Angle autolinks with a scheme outside the safe-href gate stay literal
-  // here (the whole construct is text) while the oracle emits an anchor —
-  // the app's gate is deliberately stricter than the spec's.
-  for (const match of markdown.matchAll(/<([a-zA-Z][a-zA-Z0-9+.-]{1,31}):[^<>\s]*>/g)) {
-    const scheme = match[1]!.toLowerCase();
-    if (scheme !== 'http' && scheme !== 'https' && scheme !== 'mailto') {
-      return true;
-    }
-  }
-  // Inline destinations carrying a colon whose prefix is not a safe scheme
-  // hit the same gate (the oracle emits an anchor with an emptied href).
-  // The destination is scanned to its real closing paren on the RAW text
-  // (backslash escapes honored) and unescaped before the scheme check —
-  // `foo\)\:` reads as the destination `foo):`.
-  for (let at = markdown.indexOf(']('); at !== -1; at = markdown.indexOf('](', at + 2)) {
-    let depth = 1;
-    let scan = at + 2;
-    while (scan < markdown.length && depth > 0) {
-      const ch = markdown[scan]!;
-      if (ch === '\\') {
-        scan += 2;
-        continue;
-      }
-      if (ch === '(') depth += 1;
-      if (ch === ')') depth -= 1;
-      scan += 1;
-    }
-    if (depth !== 0) {
-      break;
-    }
-    const dest = markdown.slice(at + 2, scan - 1).replace(/\\(.)/g, '$1');
-    const colon = dest.indexOf(':');
-    if (colon === -1) {
-      continue;
-    }
-    const scheme = dest.slice(0, colon).toLowerCase();
-    if (scheme !== 'http' && scheme !== 'https' && scheme !== 'mailto') {
-      return true;
-    }
-  }
-  // A tag outside the owned vocabulary in the ORACLE output can only be a
-  // raw-HTML pass-through or an <img> (links by policy).
-  for (const match of oracleHtml.matchAll(/<([a-zA-Z][a-zA-Z0-9-]*)/g)) {
-    if (!OWNED_VOCABULARY.has(match[1]!.toLowerCase())) {
-      return true;
-    }
-  }
-  // The footnote section's wrapper shape is owned (section + hr), pinned
-  // separately; oracle-side sections are structurally different.
-  return /class="footnote/.test(oracleHtml) || oracleHtml.includes('data-footnote');
-}
 
 // ---------------------------------------------------------------------------
 // The official CommonMark 0.31.2 corpus
@@ -311,7 +75,7 @@ describe('differential — official CommonMark 0.31.2 corpus vs the spec-faithfu
         }
         compared += 1;
         const ours = canonicalizeHtml(oursHtml);
-        const oracle = canonicalizeHtml(theirs, true);
+        const oracle = canonicalizeHtml(theirs);
         if (ours !== oracle) {
           sectionFailures.push(
             `spec#${example.example}\n  in:     ${JSON.stringify(example.markdown)}\n  ours:   ${ours}\n  oracle: ${oracle}`,
@@ -412,11 +176,11 @@ describe('differential — GFM extension corpus vs the spec-faithful oracle', ()
   it('every GFM case canonicalizes identically', () => {
     const failures: string[] = [];
     for (const markdown of GFM_CORPUS) {
-      const oracle = canonicalizeHtml(oracleHtml(markdown), true);
+      const oracle = canonicalizeHtml(oracleHtml(markdown));
       if (oracleUsesPolicyPower(markdown, oracle)) {
         continue;
       }
-      const ours = canonicalizeHtml(renderMarkdownToHtml(markdown));
+      const ours = canonicalizeHtml(renderMarkdownToHtml(markdown), true);
       if (ours !== oracle) {
         failures.push(
           `in:     ${JSON.stringify(markdown)}\n  ours:   ${ours}\n  oracle: ${oracle}`,
