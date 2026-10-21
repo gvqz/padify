@@ -25,13 +25,16 @@ import {
   completedToggle,
   editor as editorMarkup,
   emptyStateFor,
+  isoDayKey,
   moveMenu,
   colorMenu,
+  monthGrid,
   rowChips,
   taskRow,
   whenPopover,
   type ListRef,
 } from './rows';
+import { parseQuickAdd } from './nl-dates';
 import {
   dateAndTimeToIso,
   formatDueChip,
@@ -60,16 +63,14 @@ export interface TaskPageHooks {
   dismissToasts?: (taskId?: string) => void;
 }
 
-/** What the composer's chips know before the task exists. */
+/** What the quick-add's chips know before the task exists. */
 interface ComposerDraft {
   dueDate: string;
-  reminderAt: string;
   flagged: boolean;
 }
 
 const DEFAULT_DRAFT: ComposerDraft = {
   dueDate: '',
-  reminderAt: '',
   flagged: false,
 };
 
@@ -87,11 +88,10 @@ export class TaskListPageController {
   private readonly sectionsEl: HTMLElement;
   private readonly emptyEl: HTMLElement;
 
-  private readonly composer: HTMLElement;
+  private readonly quickAdd: HTMLElement;
   private readonly composerInput: HTMLInputElement;
-  private readonly composerDetails: HTMLElement;
+  private readonly quickAddLive: HTMLElement;
   private readonly composerDate: HTMLButtonElement;
-  private readonly composerRemind: HTMLButtonElement;
   private readonly composerFlag: HTMLButtonElement;
 
   private readonly whenPop = document.createElement('div');
@@ -102,9 +102,11 @@ export class TaskListPageController {
   private editingId: string | null = null;
   private draft: ComposerDraft = { ...DEFAULT_DRAFT };
 
-  /** What the when-popover is currently editing (composer draft vs a task). */
+  /** What the when-popover is currently editing (quick-add draft vs a task). */
   private whenTarget: { kind: 'draft' } | { kind: 'task'; id: string } | null = null;
   private whenMode: 'date' | 'remind' = 'date';
+  /** The month the popover's grid shows (prev/next walks it). */
+  private whenView: { year: number; month: number } = { year: 0, month: 0 };
   private moveTargetId: string | null = null;
   private dragId: string | null = null;
 
@@ -120,11 +122,10 @@ export class TaskListPageController {
     this.clearDone = this.q<HTMLButtonElement>('[data-action="clear-completed"]');
     this.sectionsEl = this.q('.tk-sections');
     this.emptyEl = this.q('.tk-empty');
-    this.composer = this.q('.tk-composer');
+    this.quickAdd = this.q('.tk-quickadd');
     this.composerInput = this.q<HTMLInputElement>('[data-composer-input]');
-    this.composerDetails = this.q('.tk-composer-details');
+    this.quickAddLive = this.q('[data-quickadd-live]');
     this.composerDate = this.q<HTMLButtonElement>('[data-composer-when="date"]');
-    this.composerRemind = this.q<HTMLButtonElement>('[data-composer-when="remind"]');
     this.composerFlag = this.q<HTMLButtonElement>('[data-composer-flag]');
 
     this.titleInput.value = name;
@@ -311,6 +312,7 @@ export class TaskListPageController {
           this.openWhen(
             { kind: 'task', id },
             when.dataset.editorWhen === 'remind' ? 'remind' : 'date',
+            when.closest('.tk-editor-chips'),
           );
           return;
         }
@@ -327,6 +329,15 @@ export class TaskListPageController {
           return;
         }
         return; // clicks inside the editor elsewhere never open/close rows
+      }
+      // The row's hover tools: date + flag without opening the accordion.
+      if (wrap && target.closest('[data-row-when]') && id) {
+        this.openWhen({ kind: 'task', id }, 'date', target.closest('.tk-rowtools'));
+        return;
+      }
+      if (wrap && target.closest('[data-row-flag]') && id) {
+        this.toggleFlag(id);
+        return;
       }
       if (wrap && target.closest('.tk-task-main')) {
         this.toggleEditor(id!);
@@ -389,32 +400,18 @@ export class TaskListPageController {
     });
     this.sectionsEl.addEventListener('dragend', () => this.endDrag());
 
-    // ---- the composer ----
-    this.composerInput.addEventListener('focus', () => this.openComposerDetails());
-    this.composerInput.addEventListener('input', () => this.openComposerDetails());
+    // ---- the quick-add ----
+    this.composerInput.addEventListener('input', () => this.renderQuickAddLive());
     this.composerInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
         event.preventDefault();
         this.submitComposer();
       }
     });
-    this.q<HTMLButtonElement>('[data-composer-add]').addEventListener('click', () =>
-      this.submitComposer(),
-    );
-    this.composer.addEventListener('focusout', (event) => {
-      const next = event.relatedTarget;
-      if (next instanceof Node && this.composer.contains(next)) return;
-      // Leaving the composer entirely: collapse the chips only when the
-      // draft is untouched (typed text and set chips stay open on purpose).
-      if (this.composerInput.value === '' && !this.draftIsSet() && this.popoverClosed()) {
-        this.composerDetails.hidden = true;
-      }
-    });
     this.composerDate.addEventListener('click', () => this.openWhen({ kind: 'draft' }, 'date'));
-    this.composerRemind.addEventListener('click', () => this.openWhen({ kind: 'draft' }, 'remind'));
     this.composerFlag.addEventListener('click', () => {
       this.draft.flagged = !this.draft.flagged;
-      this.renderComposerChips();
+      this.renderQuickAddChips();
     });
 
     // ---- popovers: shared wiring ----
@@ -426,12 +423,17 @@ export class TaskListPageController {
     this.outsideClick = (event: MouseEvent): void => {
       if (this.popoverClosed()) return;
       const target = event.target instanceof Element ? event.target : null;
+      // A click whose target the click itself destroyed (the popover
+      // re-rendered its grid mid-bubble) is not an outside click.
+      if (target && !target.isConnected) return;
       if (
         target &&
         (this.whenPop.contains(target) ||
           this.movePop.contains(target) ||
           this.colorPop.contains(target) ||
-          target.closest('[data-editor-when],[data-editor-move],[data-composer-when],.tkp-color'))
+          target.closest(
+            '[data-editor-when],[data-editor-move],[data-row-when],[data-composer-when],.tkp-color,.tk-rowtools',
+          ))
       ) {
         return;
       }
@@ -557,7 +559,7 @@ export class TaskListPageController {
     this.refreshRowChips(id);
   }
 
-  /** Replaces a row's chips (date / reminder / priority / flag) in place. */
+  /** Replaces a row's chips (date / reminder / flag) in place. */
   private refreshRowChips(id: string): void {
     const task = this.taskById(id);
     const main = this.wrapFor(id)?.querySelector<HTMLElement>('.tk-task-main');
@@ -574,6 +576,11 @@ export class TaskListPageController {
       current.remove();
     } else if (fresh && anchor) {
       anchor.insertAdjacentHTML('afterend', fresh);
+    }
+    // The hover tools' flag icon rides the state too.
+    const flagTool = this.wrapFor(id)?.querySelector<HTMLElement>('[data-row-flag]');
+    if (flagTool) {
+      flagTool.innerHTML = task.flagged ? ICONS.flagFilled : ICONS.flag;
     }
   }
 
@@ -597,46 +604,70 @@ export class TaskListPageController {
   }
 
   // ========================================================================
-  // The composer
+  // The quick-add
   // ========================================================================
 
-  private openComposerDetails(): void {
-    this.composerDetails.hidden = false;
-  }
-
   private draftIsSet(): boolean {
-    return this.draft.dueDate !== '' || this.draft.reminderAt !== '' || this.draft.flagged;
+    return this.draft.dueDate !== '' || this.draft.flagged;
   }
 
   private submitComposer(): void {
-    const title = this.composerInput.value.trim();
-    if (!title) {
+    const raw = this.composerInput.value.trim();
+    if (!raw) {
       this.composerInput.focus();
       return;
     }
+    // The natural language speaks first: when-words at the end of the
+    // line become dates; the explicit draft chips override them.
+    const parsed = parseQuickAdd(raw, new Date());
+    const title = parsed.matched.length > 0 ? parsed.title : raw;
+    const dueDate = this.draft.dueDate || parsed.dueDate;
+    const reminderAt = parsed.reminderAt;
     const minOrder =
       this.model.tasks.length > 0 ? Math.min(...this.model.tasks.map((task) => task.sortOrder)) : 0;
     this.mutate(() => {
-      this.model.tasks.unshift(buildTask({ title, ...this.draft }, minOrder));
+      this.model.tasks.unshift(
+        buildTask({ title, dueDate, reminderAt, flagged: this.draft.flagged }, minOrder),
+      );
     });
     this.composerInput.value = '';
     this.draft = { ...DEFAULT_DRAFT };
-    this.renderComposerChips();
+    this.renderQuickAddChips();
+    this.quickAddLive.hidden = true;
     this.render();
     this.composerInput.focus();
   }
 
-  private renderComposerChips(): void {
+  /** The live NL chip: what the parse reads in the current input. */
+  private renderQuickAddLive(): void {
+    const raw = this.composerInput.value.trim();
+    if (!raw) {
+      this.quickAddLive.hidden = true;
+      this.quickAddLive.textContent = '';
+      return;
+    }
+    const parsed = parseQuickAdd(raw, new Date());
+    const now = new Date();
+    const label = parsed.dueDate
+      ? formatDueChip(parsed.dueDate, now)
+      : parsed.reminderAt
+        ? `Reminds ${formatReminderChip(parsed.reminderAt, now)}`
+        : '';
+    if (!label || parsed.matched.length === 0) {
+      this.quickAddLive.hidden = true;
+      this.quickAddLive.textContent = '';
+      return;
+    }
+    this.quickAddLive.textContent = label;
+    this.quickAddLive.hidden = false;
+  }
+
+  private renderQuickAddChips(): void {
     const now = new Date();
     this.setChip(
       this.composerDate,
       this.draft.dueDate !== '',
       this.draft.dueDate ? formatDueChip(this.draft.dueDate, now) : 'Date',
-    );
-    this.setChip(
-      this.composerRemind,
-      this.draft.reminderAt !== '',
-      this.draft.reminderAt ? formatReminderChip(this.draft.reminderAt, now) : 'Remind',
     );
     this.composerFlag.classList.toggle('is-set', this.draft.flagged);
     this.composerFlag.setAttribute('aria-pressed', String(this.draft.flagged));
@@ -669,6 +700,28 @@ export class TaskListPageController {
         this.closePopovers();
         return;
       }
+      // The grid's day buttons: pick the day and close — the decisive
+      // flow (a time can follow through a reopen; the picked day stays
+      // selected and the time field carries over).
+      const day = target.closest<HTMLElement>('[data-when-day]')?.dataset.whenDay;
+      if (day) {
+        this.applyWhen(dateAndTimeToIso(day, this.currentWhenTime()));
+        this.closePopovers();
+        return;
+      }
+      // Prev/next walks the grid's month without touching the value.
+      const nav = target.closest<HTMLElement>('[data-when-nav]')?.dataset.whenNav;
+      if (nav) {
+        const step = Number(nav);
+        this.whenView = {
+          year:
+            this.whenView.year +
+            (this.whenView.month + step < 0 ? -1 : this.whenView.month + step > 11 ? 1 : 0),
+          month: (this.whenView.month + step + 12) % 12,
+        };
+        this.rerenderWhenPopover();
+        return;
+      }
       if (target.closest('[data-when-clear]')) {
         this.applyWhen('');
         this.closePopovers();
@@ -676,21 +729,12 @@ export class TaskListPageController {
     });
     this.whenPop.addEventListener('change', (event) => {
       const input = event.target as HTMLInputElement;
-      if (!input.matches('[data-when-date],[data-when-time]')) return;
-      const dateInput = this.whenPop.querySelector<HTMLInputElement>('[data-when-date]');
-      const timeInput = this.whenPop.querySelector<HTMLInputElement>('[data-when-time]');
-      let dateValue = dateInput?.value ?? '';
-      const timeValue = timeInput?.value ?? '';
-      // Typing a time first pins the date to today (a reminder needs a day).
-      if (!dateValue && input.matches('[data-when-time]') && timeValue) {
-        const now = new Date();
-        const pad = (n: number): string => String(n).padStart(2, '0');
-        dateValue = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-        if (dateInput) dateInput.value = dateValue;
-      }
-      if (!dateValue) return; // nothing to build yet
-      const effectiveTime = this.whenMode === 'remind' && !timeValue ? '09:00' : timeValue;
-      this.applyWhen(dateAndTimeToIso(dateValue, effectiveTime));
+      if (!input.matches('[data-when-time]')) return;
+      // The grid's selected day (or today) carries the typed time.
+      const selected = this.whenPop.querySelector<HTMLElement>('.tk-wgrid-day.is-selected');
+      const day = selected?.getAttribute('data-when-day') ?? isoDayKey(new Date().toISOString());
+      const effectiveTime = this.whenMode === 'remind' && !input.value ? '09:00' : input.value;
+      this.applyWhen(dateAndTimeToIso(day, effectiveTime));
     });
   }
 
@@ -703,7 +747,7 @@ export class TaskListPageController {
   private currentWhenIso(): string {
     if (!this.whenTarget) return '';
     if (this.whenTarget.kind === 'draft') {
-      return this.whenMode === 'date' ? this.draft.dueDate : this.draft.reminderAt;
+      return this.whenMode === 'date' ? this.draft.dueDate : '';
     }
     const task = this.taskById(this.whenTarget.id);
     if (!task) return '';
@@ -713,19 +757,22 @@ export class TaskListPageController {
   private openWhen(
     target: { kind: 'draft' } | { kind: 'task'; id: string },
     mode: 'date' | 'remind',
+    anchor?: Element | null,
   ): void {
     this.closePopovers();
     this.whenTarget = target;
     this.whenMode = mode;
-    this.whenPop.innerHTML = whenPopover(mode);
-    const { date, time } = isoToDateAndTime(this.currentWhenIso());
-    this.whenPop.querySelector<HTMLInputElement>('[data-when-date]')!.value = date;
-    this.whenPop.querySelector<HTMLInputElement>('[data-when-time]')!.value = time;
+    const selected = this.currentWhenIso();
+    const base = selected ? new Date(selected) : new Date();
+    this.whenView = { year: base.getFullYear(), month: base.getMonth() };
+    this.whenPop.innerHTML = whenPopover(mode, this.whenView, selected, new Date());
 
-    const anchor =
-      target.kind === 'draft'
-        ? this.composerDetails
-        : this.wrapFor(target.id)?.querySelector('.tk-editor-chips');
+    if (!anchor) {
+      anchor =
+        target.kind === 'draft'
+          ? this.quickAdd
+          : this.wrapFor(target.id)?.querySelector('.tk-rowtools');
+    }
     if (!anchor) return;
     anchor.appendChild(this.whenPop);
     this.whenPop.hidden = false;
@@ -734,12 +781,29 @@ export class TaskListPageController {
     }
   }
 
+  /** Repaints the popover's grid after a day pick (the selection moves). */
+  private rerenderWhenGrid(selectedKey: string): void {
+    const grid = this.whenPop.querySelector<HTMLElement>('[data-when-grid]');
+    if (!grid) return;
+    grid.outerHTML = monthGrid(this.whenView.year, this.whenView.month, selectedKey, new Date());
+  }
+
+  /** Repaints the whole popover body after a month walk (keeps the time). */
+  private rerenderWhenPopover(): void {
+    const timeInput = this.whenPop.querySelector<HTMLInputElement>('[data-when-time]');
+    const time = timeInput?.value ?? '';
+    const selected = this.whenPop.querySelector<HTMLElement>('.tk-wgrid-day.is-selected');
+    const selectedKey = selected?.getAttribute('data-when-day') ?? this.currentWhenIso();
+    this.whenPop.innerHTML = whenPopover(this.whenMode, this.whenView, selectedKey, new Date());
+    const fresh = this.whenPop.querySelector<HTMLInputElement>('[data-when-time]');
+    if (fresh && time) fresh.value = time;
+  }
+
   private applyWhen(value: string): void {
     if (!this.whenTarget) return;
     if (this.whenTarget.kind === 'draft') {
       if (this.whenMode === 'date') this.draft.dueDate = value;
-      else this.draft.reminderAt = value;
-      this.renderComposerChips();
+      this.renderQuickAddChips();
       return;
     }
     const id = this.whenTarget.id;

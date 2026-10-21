@@ -23,6 +23,7 @@ import {
   completedToggle,
   editor as editorMarkup,
   emptyStateFor,
+  isoDayKey,
   moveMenu,
   rowChips,
   section as sectionMarkup,
@@ -30,6 +31,7 @@ import {
   whenPopover,
   type ListRef,
 } from '../../editor/tasks/rows';
+import { parseQuickAdd } from '../../editor/tasks/nl-dates';
 import {
   dateAndTimeToIso,
   formatDueChip,
@@ -61,22 +63,22 @@ let searchQuery = '';
 let editingId: string | null = null;
 let completedExpanded = false;
 
-/** The composer's chips before the task exists. */
+/** What the quick-add's chips know before the task exists. */
 interface ComposerDraft {
   dueDate: string;
-  reminderAt: string;
   flagged: boolean;
 }
 
 const DEFAULT_DRAFT: ComposerDraft = {
   dueDate: '',
-  reminderAt: '',
   flagged: false,
 };
 let draft: ComposerDraft = { ...DEFAULT_DRAFT };
 
 let whenTarget: { kind: 'draft' } | { kind: 'task'; id: string } | null = null;
 let whenMode: 'date' | 'remind' = 'date';
+/** The month the popover's grid shows (prev/next walks it). */
+let whenView: { year: number; month: number } = { year: 0, month: 0 };
 let moveTargetId: string | null = null;
 
 const whenPop = document.createElement('div');
@@ -223,11 +225,9 @@ export function initTasksHub(): void {
   });
 
   bindRows();
-  bindComposer();
+  bindQuickAdd();
   bindPopovers();
   initTasksCalendar();
-
-  document.getElementById('tkhComposerAdd')?.addEventListener('click', () => submitComposer());
 
   // Delegated, not direct-bound: the calendar page renders its own back
   // arrow inside the toolbar row on every re-render, and a boot-time
@@ -235,6 +235,10 @@ export function initTasksHub(): void {
   hubEl()?.addEventListener('click', (event) => {
     const through = event.target as HTMLElement | null;
     if (through?.closest('[data-hub-close]')) closeTasksHub();
+    const dest = through?.closest<HTMLElement>('[data-cal-dest]');
+    if (dest?.dataset.calDest) {
+      openTasksHub(dest.dataset.calDest as HubView);
+    }
   });
 
   // Escape while an inner consumer is open never reaches the layer
@@ -258,22 +262,27 @@ export function initTasksHub(): void {
   document.addEventListener('click', (event) => {
     if (popoverClosed()) return;
     const target = event.target instanceof Element ? event.target : null;
+    // A click whose target the click itself destroyed (the popover
+    // re-rendered its grid mid-bubble) is not an outside click.
+    if (target && !target.isConnected) return;
     if (
       target &&
       (whenPop.contains(target) ||
         movePop.contains(target) ||
         targetMenu.contains(target) ||
-        target.closest('#tkhComposerDetails,.tk-editor-chips,#tkhTarget'))
+        target.closest('[data-quickadd],.tk-editor-chips,.tk-rowtools,#tkhTarget'))
     ) {
       return;
     }
     closePopovers();
   });
 
-  // The aggregate moves → the open view re-renders (unless the editor is
-  // mid-edit; the editor's own close re-renders).
+  // The aggregate moves → the open view re-renders (unless an inner
+  // consumer holds the DOM: the inline editor mid-edit, or a when-
+  // popover over a task row — a day pick must not rebuild the view out
+  // from under the open grid; the close re-syncs).
   taskNotes.onChange(() => {
-    if (editingId === null) refreshTasksHub();
+    if (editingId === null && whenTarget === null) refreshTasksHub();
   });
 }
 
@@ -291,8 +300,8 @@ function hubEl(): HTMLElement | null {
 }
 
 function composerInput(): HTMLInputElement {
-  const el = document.getElementById('tkhComposerInput') as HTMLInputElement | null;
-  if (!el) throw new Error('Tasks hub markup missing #tkhComposerInput');
+  const el = hubEl()?.querySelector<HTMLInputElement>('[data-composer-input]');
+  if (!el) throw new Error('Tasks hub markup missing [data-composer-input]');
   return el;
 }
 
@@ -487,7 +496,11 @@ function bindRows(): void {
     if (wrap && target.closest('.tk-editor-chips')) {
       const when = target.closest<HTMLElement>('[data-editor-when]');
       if (when && id) {
-        openWhen({ kind: 'task', id }, when.dataset.editorWhen === 'remind' ? 'remind' : 'date');
+        openWhen(
+          { kind: 'task', id },
+          when.dataset.editorWhen === 'remind' ? 'remind' : 'date',
+          when.closest('.tk-editor-chips') ?? wrap,
+        );
         return;
       }
       if (target.closest('[data-editor-flag]') && id) {
@@ -502,6 +515,15 @@ function bindRows(): void {
         deleteTask(id);
         return;
       }
+      return;
+    }
+    // The row's hover tools: date + flag without opening the accordion.
+    if (wrap && target.closest('[data-row-when]') && id) {
+      openWhen({ kind: 'task', id }, 'date', target.closest('.tk-rowtools') ?? wrap);
+      return;
+    }
+    if (wrap && target.closest('[data-row-flag]') && id) {
+      toggleFlag(id);
       return;
     }
     if (wrap && target.closest('.tk-task-main')) {
@@ -627,6 +649,11 @@ function refreshRowChips(id: string): void {
   } else if (fresh && anchor) {
     anchor.insertAdjacentHTML('afterend', fresh);
   }
+  // The hover tools' flag icon rides the state too.
+  const flagTool = wrapFor(id)?.querySelector<HTMLElement>('[data-row-flag]');
+  if (flagTool) {
+    flagTool.innerHTML = found.task.flagged ? ICONS.flagFilled : ICONS.flag;
+  }
 }
 
 function refreshEditorFlag(id: string): void {
@@ -710,62 +737,48 @@ function quickAddOnDay(title: string, iso: string): void {
   renderHub();
 }
 
-function bindComposer(): void {
+function bindQuickAdd(): void {
   const input = composerInput();
   const hub = hubEl();
   if (!hub) return;
 
-  input.addEventListener('focus', () => openComposerDetails());
-  input.addEventListener('input', () => openComposerDetails());
+  // The live natural-language preview: typing "dentist tomorrow 9am"
+  // lights the when-chip up as you type — no popover, no fields.
+  input.addEventListener('input', () => renderQuickAddLive());
   input.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      submitComposer();
+      submitQuickAdd();
     }
   });
 
-  const composer = hub.querySelector<HTMLElement>('#tkhComposer')!;
-  composer.addEventListener('focusout', (event) => {
-    const next = event.relatedTarget;
-    if (next instanceof Node && composer.contains(next)) return;
-    if (input.value === '' && !draftIsSet() && popoverClosed()) {
-      (hub.querySelector('#tkhComposerDetails') as HTMLElement).hidden = true;
-    }
-  });
-
-  hub.querySelector('#tkhComposerDate')?.addEventListener('click', () => {
+  hub.querySelector('[data-composer-when="date"]')?.addEventListener('click', () => {
     openWhen({ kind: 'draft' }, 'date');
   });
-  hub.querySelector('#tkhComposerRemind')?.addEventListener('click', () => {
-    openWhen({ kind: 'draft' }, 'remind');
-  });
-  const flag = hub.querySelector<HTMLButtonElement>('#tkhComposerFlag');
+  const flag = hub.querySelector<HTMLButtonElement>('[data-composer-flag]');
   flag?.addEventListener('click', () => {
     draft.flagged = !draft.flagged;
-    renderComposerChips();
+    renderQuickAddChips();
   });
 
   // The target-list chip menu.
   hub.querySelector('#tkhTarget')?.addEventListener('click', () => openTargetMenu());
 }
 
-function openComposerDetails(): void {
-  const details = hubEl()?.querySelector<HTMLElement>('#tkhComposerDetails');
-  if (details) details.hidden = false;
-}
-
-function draftIsSet(): boolean {
-  return draft.dueDate !== '' || draft.reminderAt !== '' || draft.flagged;
-}
-
-function submitComposer(): void {
+function submitQuickAdd(): void {
   const input = composerInput();
-  const title = input.value.trim();
-  const lists = taskNotes.lists();
-  if (!title) {
+  const raw = input.value.trim();
+  if (!raw) {
     input.focus();
     return;
   }
+  // The natural language speaks first: when-words at the end of the
+  // line become dates; the explicit draft chips override them.
+  const parsed = parseQuickAdd(raw, new Date());
+  const title = parsed.matched.length > 0 ? parsed.title : raw;
+  const dueDate = draft.dueDate || parsed.dueDate;
+  const reminderAt = parsed.reminderAt;
+  const lists = taskNotes.lists();
   if (lists.length === 0) {
     // No lists yet: the first one is created for the task to land in.
     const manager = getTabManager();
@@ -773,19 +786,29 @@ function submitComposer(): void {
     manager.addTab(true, 'tasks');
     input.value = '';
     draft = { ...DEFAULT_DRAFT };
-    renderComposerChips();
-    void taskNotes.addTaskToNote(manager.getActive()!.id, { title, ...draft });
+    renderQuickAddChips();
+    void taskNotes.addTaskToNote(manager.getActive()!.id, {
+      title,
+      dueDate,
+      reminderAt,
+      flagged: draft.flagged,
+    });
     closeTasksHub();
     showToast('Task list created with your first reminder');
     return;
   }
   const targetId = taskNotes.targetListId() ?? lists[0]!.id;
   const target = lists.find((list) => list.id === targetId) ?? lists[0]!;
-  const added = taskNotes.addTaskToNote(target.id, { title, ...draft });
+  const added = taskNotes.addTaskToNote(target.id, {
+    title,
+    dueDate,
+    reminderAt,
+    flagged: draft.flagged,
+  });
   taskNotes.rememberTargetList(target.id);
   input.value = '';
   draft = { ...DEFAULT_DRAFT };
-  renderComposerChips();
+  renderQuickAddChips();
   if (added) {
     showToast(`Added to ${target.name}`);
   }
@@ -793,19 +816,38 @@ function submitComposer(): void {
   input.focus();
 }
 
-function renderComposerChips(): void {
+/** The live NL chip: what the parse reads in the current input. */
+function renderQuickAddLive(): void {
+  const hub = hubEl();
+  if (!hub) return;
+  const live = hub.querySelector<HTMLElement>('[data-quickadd-live]');
+  const input = composerInput();
+  if (!live) return;
+  const parsed = input.value.trim() ? parseQuickAdd(input.value, new Date()) : null;
+  const now = new Date();
+  const label = parsed
+    ? parsed.dueDate
+      ? formatDueChip(parsed.dueDate, now)
+      : parsed.reminderAt
+        ? `Reminds ${formatReminderChip(parsed.reminderAt, now)}`
+        : ''
+    : '';
+  if (!label || parsed?.matched.length === 0) {
+    live.hidden = true;
+    live.textContent = '';
+    return;
+  }
+  live.textContent = label;
+  live.hidden = false;
+}
+
+function renderQuickAddChips(): void {
   const hub = hubEl();
   if (!hub) return;
   const now = new Date();
-  const date = hub.querySelector<HTMLButtonElement>('#tkhComposerDate')!;
-  const remind = hub.querySelector<HTMLButtonElement>('#tkhComposerRemind')!;
-  const flag = hub.querySelector<HTMLButtonElement>('#tkhComposerFlag')!;
+  const date = hub.querySelector<HTMLButtonElement>('[data-composer-when="date"]')!;
+  const flag = hub.querySelector<HTMLButtonElement>('[data-composer-flag]')!;
   setChip(date, draft.dueDate !== '', draft.dueDate ? formatDueChip(draft.dueDate, now) : 'Date');
-  setChip(
-    remind,
-    draft.reminderAt !== '',
-    draft.reminderAt ? formatReminderChip(draft.reminderAt, now) : 'Remind',
-  );
   flag.classList.toggle('is-set', draft.flagged);
   flag.setAttribute('aria-pressed', String(draft.flagged));
 }
@@ -833,6 +875,27 @@ function bindPopovers(): void {
       closePopovers();
       return;
     }
+    // The grid's day buttons: pick the day and close — the decisive
+    // flow (a time can follow through a reopen; the picked day stays
+    // selected and the time field carries over).
+    const day = target.closest<HTMLElement>('[data-when-day]')?.dataset.whenDay;
+    if (day) {
+      applyWhen(dateAndTimeToIso(day, currentWhenTime()));
+      closePopovers();
+      return;
+    }
+    // Prev/next walks the grid's month without touching the value.
+    const nav = target.closest<HTMLElement>('[data-when-nav]')?.dataset.whenNav;
+    if (nav) {
+      whenView = {
+        year:
+          whenView.year +
+          (whenView.month + Number(nav) < 0 ? -1 : whenView.month + Number(nav) > 11 ? 1 : 0),
+        month: (whenView.month + Number(nav) + 12) % 12,
+      };
+      rerenderWhenPopover();
+      return;
+    }
     if (target.closest('[data-when-clear]')) {
       applyWhen('');
       closePopovers();
@@ -840,20 +903,12 @@ function bindPopovers(): void {
   });
   whenPop.addEventListener('change', (event) => {
     const input = event.target as HTMLInputElement;
-    if (!input.matches('[data-when-date],[data-when-time]')) return;
-    const dateInput = whenPop.querySelector<HTMLInputElement>('[data-when-date]');
-    const timeInput = whenPop.querySelector<HTMLInputElement>('[data-when-time]');
-    let dateValue = dateInput?.value ?? '';
-    const timeValue = timeInput?.value ?? '';
-    if (!dateValue && input.matches('[data-when-time]') && timeValue) {
-      const now = new Date();
-      const pad = (n: number): string => String(n).padStart(2, '0');
-      dateValue = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-      if (dateInput) dateInput.value = dateValue;
-    }
-    if (!dateValue) return;
-    const effectiveTime = whenMode === 'remind' && !timeValue ? '09:00' : timeValue;
-    applyWhen(dateAndTimeToIso(dateValue, effectiveTime));
+    if (!input.matches('[data-when-time]')) return;
+    // The grid's selected day (or today) carries the typed time.
+    const selected = whenPop.querySelector<HTMLElement>('.tk-wgrid-day.is-selected');
+    const day = selected?.getAttribute('data-when-day') ?? isoDayKey(new Date().toISOString());
+    const effectiveTime = whenMode === 'remind' && !input.value ? '09:00' : input.value;
+    applyWhen(dateAndTimeToIso(day, effectiveTime));
   });
 
   movePop.addEventListener('click', (event) => {
@@ -895,7 +950,7 @@ function currentWhenTime(): string {
 function currentWhenIso(): string {
   if (!whenTarget) return '';
   if (whenTarget.kind === 'draft') {
-    return whenMode === 'date' ? draft.dueDate : draft.reminderAt;
+    return whenMode === 'date' ? draft.dueDate : '';
   }
   const found = taskNotes.taskById(whenTarget.id);
   if (!found) return '';
@@ -905,18 +960,21 @@ function currentWhenIso(): string {
 function openWhen(
   target: { kind: 'draft' } | { kind: 'task'; id: string },
   mode: 'date' | 'remind',
+  anchor?: Element | null,
 ): void {
   closePopovers();
   whenTarget = target;
   whenMode = mode;
-  whenPop.innerHTML = whenPopover(mode);
-  const { date, time } = isoToDateAndTime(currentWhenIso());
-  whenPop.querySelector<HTMLInputElement>('[data-when-date]')!.value = date;
-  whenPop.querySelector<HTMLInputElement>('[data-when-time]')!.value = time;
-  const anchor =
-    target.kind === 'draft'
-      ? hubEl()?.querySelector('#tkhComposerDetails')
-      : wrapFor(target.id)?.querySelector('.tk-editor-chips');
+  const selected = currentWhenIso();
+  const base = selected ? new Date(selected) : new Date();
+  whenView = { year: base.getFullYear(), month: base.getMonth() };
+  whenPop.innerHTML = whenPopover(mode, whenView, selected, new Date());
+  if (!anchor) {
+    anchor =
+      target.kind === 'draft'
+        ? hubEl()?.querySelector('[data-quickadd]')
+        : wrapFor(target.id)?.querySelector('.tk-rowtools');
+  }
   if (!anchor) return;
   anchor.appendChild(whenPop);
   whenPop.hidden = false;
@@ -925,12 +983,22 @@ function openWhen(
   }
 }
 
+/** Repaints the whole popover body after a month walk (keeps the time). */
+function rerenderWhenPopover(): void {
+  const timeInput = whenPop.querySelector<HTMLInputElement>('[data-when-time]');
+  const time = timeInput?.value ?? '';
+  const selected = whenPop.querySelector<HTMLElement>('.tk-wgrid-day.is-selected');
+  const selectedKey = selected?.getAttribute('data-when-day') ?? currentWhenIso();
+  whenPop.innerHTML = whenPopover(whenMode, whenView, selectedKey, new Date());
+  const fresh = whenPop.querySelector<HTMLInputElement>('[data-when-time]');
+  if (fresh && time) fresh.value = time;
+}
+
 function applyWhen(value: string): void {
   if (!whenTarget) return;
   if (whenTarget.kind === 'draft') {
     if (whenMode === 'date') draft.dueDate = value;
-    else draft.reminderAt = value;
-    renderComposerChips();
+    renderQuickAddChips();
     return;
   }
   const id = whenTarget.id;
@@ -983,6 +1051,7 @@ function openTargetMenu(): void {
 }
 
 function closePopovers(): void {
+  const heldTask = whenTarget?.kind === 'task';
   const active = document.activeElement;
   if (
     active instanceof Node &&
@@ -997,6 +1066,9 @@ function closePopovers(): void {
   }
   whenTarget = null;
   moveTargetId = null;
+  // The change guard held the view while a task popover was open — sync
+  // it now (a draft popover never touched the aggregate, no sync due).
+  if (heldTask) refreshTasksHub();
 }
 
 function popoverClosed(): boolean {

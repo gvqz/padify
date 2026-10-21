@@ -2,13 +2,13 @@
  * Task list notes — the surface's page markup (pure HTML string).
  *
  * The page that paints inside the editor host when a task list note is
- * open: a header (list color + inline-editable title + count), the rows
- * scroll, and the composer bar riding the bottom — the retired modal's
- * content pane promoted to a page. No ids: the page is scoped markup
+ * open: a header (list color + inline-editable title + count), the
+ * quick-add row at the top of the list (desktop's add affordance), the
+ * rows scroll, and the completed tail. No ids: the page is scoped markup
  * the controller queries from its own root.
  */
 
-import { ICONS } from './icons';
+import { quickAddRow } from './rows';
 
 export function taskListPageMarkup(): string {
   return `
@@ -21,20 +21,10 @@ export function taskListPageMarkup(): string {
         <button type="button" class="tk-chip-btn tk-chip-danger" data-action="clear-completed" hidden>Clear</button>
       </span>
     </header>
+    <div class="tk-quickadd-wrap tkp-quickadd">${quickAddRow()}</div>
     <div class="tk-scroll tkp-scroll">
       <div class="tk-sections"></div>
       <div class="tk-empty" hidden></div>
     </div>
-    <footer class="tk-composer">
-      <div class="tk-composer-row">
-        <button type="button" class="tk-composer-add" data-composer-add title="Add reminder" aria-label="Add reminder">${ICONS.addCircle}</button>
-        <input type="text" data-composer-input class="tk-composer-input" placeholder="New Reminder" autocomplete="off" aria-label="New reminder title">
-      </div>
-      <div class="tk-composer-details" hidden>
-        <button type="button" class="tk-chip-btn" data-composer-when="date">${ICONS.calendar}<span>Date</span></button>
-        <button type="button" class="tk-chip-btn" data-composer-when="remind">${ICONS.bell}<span>Remind</span></button>
-        <button type="button" class="tk-chip-btn" data-composer-flag aria-pressed="false">${ICONS.flag}<span>Flag</span></button>
-      </div>
-    </footer>
   </div>`;
 }

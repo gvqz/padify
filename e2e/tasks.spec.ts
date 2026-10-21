@@ -79,12 +79,12 @@ test.describe('task list notes', () => {
     const activeTab = page.locator('#tabStripTabs .tab-strip-tab.active');
     await expect(activeTab.locator('.tab-strip-list-dot')).toBeVisible();
 
-    // The page paints in the editor host: title input, count, composer.
+    // The page paints in the editor host: title input, count, quick-add.
     await expect(page.locator('#note .tkp')).toBeVisible();
     await expect(page.locator('.tkp-title')).toBeFocused();
-    await expect(page.locator('[data-composer-input]')).toHaveAttribute(
+    await expect(page.locator('.tkp [data-composer-input]')).toHaveAttribute(
       'placeholder',
-      'New Reminder',
+      'Add a reminder — “dentist tomorrow 9am” works',
     );
     await expect(page.locator('.tkp .tk-empty')).toBeVisible();
     // The rich toolbar is for rich notes — not this surface.
@@ -95,10 +95,10 @@ test.describe('task list notes', () => {
     await page.goto('/');
     await newTaskList(page);
 
-    // Type a task into the composer; the chips row opens.
-    const input = page.locator('[data-composer-input]');
+    // Type a task into the quick-add; the chips ride the row itself.
+    const input = page.locator('.tkp [data-composer-input]');
     await input.fill('Water the fern');
-    await expect(page.locator('.tkp .tk-composer-details')).toBeVisible();
+    await expect(page.locator('.tkp .tk-quickadd')).toBeVisible();
     await input.press('Enter');
 
     // It lands on the page and the header count says one.
@@ -130,7 +130,7 @@ test.describe('task list notes', () => {
     await page.goto('/');
     await newTaskList(page);
 
-    const input = page.locator('[data-composer-input]');
+    const input = page.locator('.tkp [data-composer-input]');
     await input.fill('Buy oat milk');
     await input.press('Enter');
 
@@ -202,19 +202,23 @@ test.describe('task list notes', () => {
     ).toHaveAttribute('data-color', 'green');
   });
 
-  test('the priority machinery is gone — three chips, no ! marks', async ({ page }) => {
+  test('the quick-add wears two chips, the editor four — no priority anywhere', async ({
+    page,
+  }) => {
     await page.goto('/');
     await newTaskList(page);
 
-    // The composer's detail chips: Date, Remind, Flag. No Priority.
-    await page.locator('[data-composer-input]').click();
+    // The quick-add's chips: Date, Flag. No Priority, no Remind (the
+    // natural language speaks "at 9" now).
+    await page.locator('.tkp [data-composer-input]').click();
     await expect(page.locator('.tkp [data-composer-priority]')).toHaveCount(0);
     await expect(page.locator('.tkp [data-composer-flag]')).toBeVisible();
+    await expect(page.locator('.tkp .tk-quickadd-tools .tk-chip-btn')).toHaveCount(2);
 
     // A task lands; its editor wears Date / Remind / Flag / Delete only,
     // and the row paints no ! marks even though the model still carries
     // the field for old notes.
-    const input = page.locator('[data-composer-input]');
+    const input = page.locator('.tkp [data-composer-input]');
     await input.fill('Priorities are not a feature');
     await input.press('Enter');
     const row = page.locator('.tk-task-wrap', { hasText: 'Priorities are not a feature' });
@@ -283,7 +287,7 @@ test.describe('the rail — task contexts only', () => {
     await rail.locator('.tr-card[data-view="today"]').click();
     await expect(page.locator('#tasksHub')).toBeVisible();
     await expect(page.locator('#tkhTitle')).toHaveText('Today');
-    await expect(page.locator('#tkhComposerInput')).toBeFocused();
+    await expect(page.locator('#tasksHub [data-composer-input]')).toBeFocused();
 
     // The fresh list is empty: Today's empty state says so.
     await expect(page.locator('#tkhEmpty')).toBeVisible();
@@ -298,7 +302,7 @@ test.describe('the rail — task contexts only', () => {
     await newTaskList(page);
     await page.locator('.tkp-title').fill('Travel');
     await page.locator('.tkp-title').press('Enter');
-    let input = page.locator('[data-composer-input]');
+    let input = page.locator('.tkp [data-composer-input]');
     await input.fill('Book ryokan');
     await input.press('Enter');
 
@@ -306,7 +310,7 @@ test.describe('the rail — task contexts only', () => {
     await newTaskList(page);
     await page.locator('.tkp-title').fill('Home');
     await page.locator('.tkp-title').press('Enter');
-    input = page.locator('[data-composer-input]');
+    input = page.locator('.tkp [data-composer-input]');
     // The date chip belongs to the DRAFT: set it before submitting, so
     // the task is born with its due date (the composer's quick-add).
     await input.fill('Buy milk');
@@ -335,7 +339,7 @@ test.describe('the rail — task contexts only', () => {
   test("the All view's heads name the lists; the rows don't repeat them", async ({ page }) => {
     await page.goto('/');
     await newTaskList(page);
-    const input = page.locator('[data-composer-input]');
+    const input = page.locator('.tkp [data-composer-input]');
     await input.fill('First chore');
     await input.press('Enter');
     await input.fill('Second chore');
@@ -356,7 +360,7 @@ test.describe('the rail — task contexts only', () => {
   test('completing from the hub writes through to the note', async ({ page }) => {
     await page.goto('/');
     await newTaskList(page);
-    const input = page.locator('[data-composer-input]');
+    const input = page.locator('.tkp [data-composer-input]');
     await input.fill('Sweep write-through');
     await input.press('Enter');
 
@@ -387,8 +391,8 @@ test.describe('the rail — task contexts only', () => {
     await newTaskList(page);
     await page.locator('.tkp-title').fill('Travel');
     await page.locator('.tkp-title').press('Enter');
-    await page.locator('[data-composer-input]').fill('Find me by name');
-    await page.locator('[data-composer-input]').press('Enter');
+    await page.locator('.tkp [data-composer-input]').fill('Find me by name');
+    await page.locator('.tkp [data-composer-input]').press('Enter');
 
     // The search box is an expanded-rail affordance — hover opens it.
     await page.locator('#taskRail').hover();
@@ -427,7 +431,7 @@ test.describe('the calendar', () => {
   test('the calendar page sheds the hub chrome and adds from the day pane', async ({ page }) => {
     await page.goto('/');
     await newTaskList(page);
-    const input = page.locator('[data-composer-input]');
+    const input = page.locator('.tkp [data-composer-input]');
     await input.fill('Water the fern');
     await input.press('Enter');
 
@@ -436,7 +440,7 @@ test.describe('the calendar', () => {
     // The page is the calendar's own: no reminders rail hovering on the
     // edge, no composer bar shoved at the bottom.
     await expect(page.locator('#taskRail')).toBeHidden();
-    await expect(page.locator('#tkhComposer')).toBeHidden();
+    await expect(page.locator('#tasksHub .tk-quickadd-wrap')).toBeHidden();
 
     // The day pane's Add opens the inline row right under the day head.
     await page.locator('[data-cal-add]').click();
@@ -464,7 +468,7 @@ test.describe('the calendar', () => {
   test('dated tasks chip their day and the day panel lists them', async ({ page }) => {
     await page.goto('/');
     await newTaskList(page);
-    const input = page.locator('[data-composer-input]');
+    const input = page.locator('.tkp [data-composer-input]');
     await input.fill('Ship the letters');
     await input.press('Enter');
     // Give the fresh task a due date of TODAY via the editor's popover.
@@ -497,7 +501,7 @@ test.describe('the calendar', () => {
   test('picking a day with a task selects it; empty days keep their manners', async ({ page }) => {
     await page.goto('/');
     await newTaskList(page);
-    const input = page.locator('[data-composer-input]');
+    const input = page.locator('.tkp [data-composer-input]');
     await input.fill('Future thing');
     await input.press('Enter');
     const row = page.locator('.tk-task-wrap', { hasText: 'Future thing' }).first();
@@ -596,7 +600,7 @@ test.describe('the calendar', () => {
   test('the year spread marks event days; the month name zooms into Month', async ({ page }) => {
     await page.goto('/');
     await newTaskList(page);
-    const input = page.locator('[data-composer-input]');
+    const input = page.locator('.tkp [data-composer-input]');
     await input.fill('Year mark');
     await input.press('Enter');
     const row = page.locator('.tk-task-wrap', { hasText: 'Year mark' }).first();
@@ -676,7 +680,7 @@ test.describe('the calendar', () => {
   }) => {
     await page.goto('/');
     await newTaskList(page);
-    const input = page.locator('[data-composer-input]');
+    const input = page.locator('.tkp [data-composer-input]');
     await input.fill('Week chip');
     await input.press('Enter');
     const row = page.locator('.tk-task-wrap', { hasText: 'Week chip' }).first();
@@ -781,7 +785,7 @@ test.describe('the calendar', () => {
     await newTaskList(page);
     await page.locator('.tkp-title').fill('Personal');
     await page.locator('.tkp-title').press('Enter');
-    const input = page.locator('[data-composer-input]');
+    const input = page.locator('.tkp [data-composer-input]');
     await input.fill('Day page thing');
     await input.press('Enter');
     const row = page.locator('.tk-task-wrap', { hasText: 'Day page thing' }).first();
@@ -829,7 +833,7 @@ test.describe('the calendar', () => {
   test('a week chip drags between the hours and the reminder retimes', async ({ page }) => {
     await page.goto('/');
     await newTaskList(page);
-    const input = page.locator('[data-composer-input]');
+    const input = page.locator('.tkp [data-composer-input]');
     await input.fill('Nine o clock');
     await input.press('Enter');
     const row = page.locator('.tk-task-wrap', { hasText: 'Nine o clock' }).first();
@@ -873,7 +877,7 @@ test.describe('the calendar', () => {
   test('the All-Day band and the hours trade a chip', async ({ page }) => {
     await page.goto('/');
     await newTaskList(page);
-    const input = page.locator('[data-composer-input]');
+    const input = page.locator('.tkp [data-composer-input]');
     for (const title of ['Band chip', 'Still all day']) {
       await input.fill(title);
       await input.press('Enter');
@@ -1026,5 +1030,134 @@ test.describe('the migration', () => {
     await expect(page.locator('#tabStripTabs .tab-strip-tab', { hasText: 'Travel' })).toHaveCount(
       1,
     );
+  });
+});
+
+test.describe('the desktop rework — quick-add, tools, popover, destinations', () => {
+  test('the quick-add speaks natural language: live chip, date words stripped on submit', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await newTaskList(page);
+
+    const input = page.locator('.tkp [data-composer-input]');
+    await input.fill('Call the dentist tomorrow 9am');
+    // The live read: the parse sees a date while you type.
+    await expect(page.locator('.tkp [data-quickadd-live]')).toHaveText(/Tomorrow\s*9:00 AM/u);
+    await input.press('Enter');
+
+    // The when-words went into the date, not the title.
+    const row = page.locator('.tk-task-wrap', { hasText: 'Call the dentist' }).first();
+    await expect(row).toBeVisible();
+    await expect(page.locator('.tk-title', { hasText: 'tomorrow' })).toHaveCount(0);
+    await expect(row.locator('.tk-chip-due')).toContainText(/Tomorrow\s*9:00 AM/u);
+
+    // A line without when-words files as plain text, no chip.
+    await input.fill('Just a plain note to self');
+    await input.press('Enter');
+    const plain = page.locator('.tk-task-wrap', { hasText: 'Just a plain note to self' }).first();
+    await expect(plain).toBeVisible();
+    await expect(plain.locator('.tk-chip-due')).toHaveCount(0);
+  });
+
+  test('the row tools set a date and a flag without opening the editor', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    const input = page.locator('.tkp [data-composer-input]');
+    await input.fill('Hover tools target');
+    await input.press('Enter');
+
+    const row = page.locator('.tk-task-wrap', { hasText: 'Hover tools target' }).first();
+    // The tools exist on the row (hover-revealed on fine pointers).
+    await expect(row.locator('[data-row-when]')).toBeAttached();
+    await expect(row.locator('[data-row-flag]')).toBeAttached();
+
+    // The when tool opens the month-grid popover anchored to the row.
+    await row.hover();
+    await row.locator('[data-row-when]').click();
+    const grid = page.locator('.tk-when .tk-wgrid');
+    await expect(grid).toBeVisible();
+    await grid.locator('.tk-wgrid-day:not(.is-blank)').first().click();
+    // The day lands on the row without any accordion ever opening.
+    await expect(row.locator('.tk-chip-due')).toBeVisible();
+    await expect(row.locator('.tk-editor')).toBeHidden();
+
+    // The flag tool flips the row's flag in one click.
+    await row.hover();
+    await row.locator('[data-row-flag]').click();
+    await expect(row.locator('.tk-flag')).toBeVisible();
+  });
+
+  test('the when-popover walks months and picks a far day', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    const input = page.locator('.tkp [data-composer-input]');
+    await input.fill('Far away thing');
+    await input.press('Enter');
+    const row = page.locator('.tk-task-wrap', { hasText: 'Far away thing' }).first();
+
+    await row.hover();
+    await row.locator('[data-row-when]').click();
+    const grid = page.locator('.tk-when .tk-wgrid');
+    const label = grid.locator('.tk-wgrid-month');
+    const first = await label.textContent();
+
+    // Next month walks the grid; the value stays untouched so far.
+    await grid.locator('[data-when-nav="1"]').click();
+    await expect(label).not.toHaveText(first!);
+    // …and a day in THAT month lands as the due date.
+    await grid.locator('.tk-wgrid-day:not(.is-blank)').first().click();
+    await expect(row.locator('.tk-chip-due')).toBeVisible();
+    // The popover closed; the grid is gone; the row carries the date.
+    await expect(grid).toHaveCount(0);
+  });
+
+  test('no back arrow on desktop, and the calendar sidebar opens the views', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    const input = page.locator('.tkp [data-composer-input]');
+    await input.fill('Visible from everywhere');
+    await input.press('Enter');
+
+    // Desktop hub heads carry no back arrow.
+    await page.locator('.tr-card[data-view="all"]').click();
+    await expect(page.locator('#tkhTitle')).toHaveText('All');
+    await expect(page.locator('.tkh-back')).toBeHidden();
+
+    // The calendar's sidebar destinations open the other views — the
+    // desktop way out, no arrow needed.
+    await page.locator('#tabRailCalendar').click();
+    await expect(page.locator('.tkcal-grid')).toBeVisible();
+    await page.locator('.tkcal-dest[data-cal-dest="all"]').click();
+    await expect(page.locator('#tkhTitle')).toHaveText('All');
+    await expect(
+      page.locator('#tkhSections .tk-task-wrap', { hasText: 'Visible from everywhere' }),
+    ).toBeVisible();
+    // …and the calendar keeps its own sidebar (lists + day pane + mini).
+    await page.locator('#tabRailCalendar').click();
+    await expect(page.locator('.tkcal-dests')).toBeVisible();
+    await expect(page.locator('.tkcal-lists')).toBeVisible();
+  });
+
+  test('the quick-add lives at the top of the hub views with its target chip', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    await page.locator('.tr-card[data-view="all"]').click();
+    await expect(page.locator('#tkhTitle')).toHaveText('All');
+
+    // The quick-add sits above the sections, target chip present.
+    const quick = page.locator('#tasksHub .tk-quickadd');
+    await expect(quick).toBeVisible();
+    await expect(quick.locator('#tkhTarget')).toBeVisible();
+    const box = await quick.boundingBox();
+    const sectionsBox = await page.locator('#tkhSections').boundingBox();
+    expect(box!.y).toBeLessThan(sectionsBox!.y);
+
+    // Filing from the hub lands in the target list and re-renders the view.
+    await page.locator('#tasksHub [data-composer-input]').fill('Filed from the hub');
+    await page.locator('#tasksHub [data-composer-input]').press('Enter');
+    await expect(
+      page.locator('#tkhSections .tk-task-wrap', { hasText: 'Filed from the hub' }),
+    ).toBeVisible();
   });
 });
