@@ -239,13 +239,12 @@ body.dark {
   border-radius: 4px;
 }
 
-/* The composer bar rides the bottom of the page. Its real chrome (the
-   hairline floor, the rounded field) lives with .tk-composer in
-   section 9 — page and hub share one bar. The page caps the field to
-   the shared measure so the well, the rows and the header share one
-   column (the hub's own caps live in section 4). */
-.tkp .tk-composer-row,
-.tkp .tk-composer-details {
+/* The quick-add row rides the top of the page — its real chrome (the
+   rounded well) lives with .tk-quickadd in section 9. The page caps the
+   row to the shared measure so the field, the rows and the header share
+   one column (the hub's own caps live in section 4). */
+.tkp .tk-quickadd-wrap,
+.tkp .tk-quickadd {
   width: 100%;
   max-width: var(--tk-measure);
   margin-inline: auto;
@@ -571,6 +570,51 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
 }
 
 /* --------------------------------------------------------------------------
+   3b. The rail, desktop — always labeled, never a hover trick
+   -------------------------------------------------------------------------- */
+
+/* At desktop widths the rail is a REAL sidebar: expanded, labeled,
+   searchable, without a hover to survive. A phone tab bar rotated
+   sideways was the single loudest "mobile app on a desktop" tell; the
+   hover-expand survives only in the 821-1080 band (and as the phone
+   drawer below 821). */
+@media (min-width: 1081px) {
+  #taskRail {
+    --tr-expanded: 1;
+    flex-basis: 274px;
+    width: 274px;
+  }
+
+  #taskRail .tr-search {
+    max-height: 40px;
+    opacity: 1;
+    border-width: 1px;
+  }
+
+  #taskRail .tr-cards {
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+
+  #taskRail .tr-card {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 9px 10px;
+    align-items: center;
+  }
+
+  #taskRail .tr-card-count {
+    top: -6px;
+    right: -10px;
+  }
+
+  #taskRail .tr-card-label {
+    font-size: 12.5px;
+  }
+}
+
+/* --------------------------------------------------------------------------
    4. The hub — the aggregated page over the editor area
    -------------------------------------------------------------------------- */
 
@@ -583,10 +627,10 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
   background: var(--tk-bg);
 }
 
-/* The list views' shared measure — the head, the sections, the empty
-   state and the composer land on the same centered column as the note
-   page. The CALENDAR page is exempt: it is a full-bleed grid with its
-   own sidebar, and .tkh.is-calendar stands these rules down below. */
+/* The list views' shared measure — the head, the quick-add, the
+   sections and the empty state land on the same centered column as the
+   note page. The CALENDAR page is exempt: it is a full-bleed grid with
+   its own sidebar, and .tkh.is-calendar stands these rules down below. */
 .tkh:not(.is-calendar) .tkh-head,
 .tkh:not(.is-calendar) .tk-sections,
 .tkh:not(.is-calendar) .tk-empty {
@@ -595,8 +639,8 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
   margin-inline: auto;
 }
 
-.tkh:not(.is-calendar) .tk-composer-row,
-.tkh:not(.is-calendar) .tk-composer-details {
+.tkh:not(.is-calendar) .tk-quickadd-wrap,
+.tkh:not(.is-calendar) .tk-quickadd {
   width: 100%;
   max-width: var(--tk-measure);
   margin-inline: auto;
@@ -628,25 +672,22 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
   display: none;
 }
 
-/* The calendar page doesn't carry the hub's composer bar either —
-   adding happens on the day itself, through the day pane's Add button
-   and its inline row. The other hub views keep the bottom bar. */
-.tkh.is-calendar .tk-composer {
+/* The calendar page doesn't carry the quick-add either — adding happens
+   on the day itself, through the day pane's Add button and its inline
+   row. The other hub views keep the row at their top. */
+.tkh.is-calendar .tk-quickadd-wrap {
   display: none;
 }
 
-/* Desktop: the calendar's toolbar row (back arrow + month + modes +
-   navs) replaces the hub head entirely — one iCloud-tight line instead
-   of a lonely arrow floating above the title. Phones keep the hub head
-   (it carries their views button) and the inline back arrow stays
-   hidden (see .tkcal-back). */
+/* Desktop: the calendar's toolbar row (month + modes + navs) replaces
+   the hub head entirely. There is no back arrow anywhere on desktop —
+   the calendar's own sidebar carries the destinations (data-cal-dest),
+   and leaving is a click on any note or view, the desktop way. Phones
+   keep the hub head (it carries their views button) and the inline
+   back arrow stays hidden (see .tkcal-back). */
 @media (min-width: 821px) {
   .tkh.is-calendar .tkh-head {
     display: none;
-  }
-
-  .tkh.is-calendar .tkcal-back {
-    display: inline-flex;
   }
 }
 
@@ -682,6 +723,16 @@ body.tasks-rail-on #textareaContainer .bottom-line {
   line-height: 0;
   cursor: pointer;
   transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
+}
+
+/* The back arrow is a PHONE affordance — a pushed page needs an exit.
+   Desktop panes navigate by the rails (the sidebar is always there), so
+   the arrow stands down at ≥821px; declared after the base rule so the
+   media query wins the cascade at equal specificity. */
+@media (min-width: 821px) {
+  .tkh-back {
+    display: none;
+  }
 }
 
 .tkh-back:hover,
@@ -763,13 +814,7 @@ body.tasks-rail-on #textareaContainer .bottom-line {
   border-radius: 4px;
 }
 
-.tkh-composer {
-  flex: 0 0 auto;
-  padding: 10px 6px 6px 2px;
-  border-top: 1px solid var(--tk-border);
-}
-
-/* The composer's target-list chip (its dot wears the list color; the
+/* The quick-add's target-list chip (its dot wears the list color; the
    caret says it opens a menu). */
 .tkh-target {
   display: inline-flex;
@@ -950,20 +995,24 @@ body.tasks-rail-on #textareaContainer .bottom-line {
 }
 
 /* The title line — the row reads on ONE line: the title carries it and
-   the metadata chips (due, remind, priority, flag) ride its right end,
-   the day pane's row anatomy brought home. Only real second-line
-   content (notes, the hub's origin chip) wraps under. */
+   the metadata chips (due, remind, flag) hug its right end. When the
+   line genuinely runs out of room (narrow sidebars, long titles), the
+   chips wrap UNDER the title instead of squeezing letters apart. */
 .tk-title-line {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 2px 10px;
   width: 100%;
   min-width: 0;
 }
 
 .tk-title {
   flex: 1 1 auto;
-  min-width: 0;
+  /* A floor under the squeeze: when the line runs out of room the CHIP
+     wraps under the title (flex-wrap above) — the title itself never
+     breaks letters apart to make room for a date. */
+  min-width: 14ch;
   font-size: 14px;
   font-weight: 450;
   line-height: 1.45;
@@ -1026,11 +1075,16 @@ body.tasks-rail-on #textareaContainer .bottom-line {
 
 /* --- the chips riding the title's right end --- */
 
+/* The chips HUG the title — a short title with a date should read as
+   one thought, not send the date to the row's far edge on a wide
+   screen (the detached-chip artifact the audit caught). The row's far
+   right belongs to the hover tools. */
 .tk-chips {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: 2px;
   white-space: nowrap;
 }
 
@@ -1063,6 +1117,58 @@ body.tasks-rail-on #textareaContainer .bottom-line {
 .tk-task.is-done .tk-chip,
 .tk-task.is-done .tk-flag {
   opacity: 0.55;
+}
+
+/* --- the hover tools — one-click date + flag, no accordion --- */
+
+.tk-rowtools {
+  flex: 0 0 auto;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  /* Out of the layout at rest — opacity-hiding still consumed the row's
+     width and squeezed titles in the narrow day pane (the sidebar's
+     "Call the denti st" wrap). The row's hover (or focus) reveals them. */
+}
+
+.tk-task:hover .tk-rowtools,
+.tk-task:focus-within .tk-rowtools {
+  display: inline-flex;
+}
+
+/* Touch has no hover: the tools stay discoverable — coarse pointers
+   get them always-on. */
+@media (hover: none) {
+  .tk-rowtools {
+    display: inline-flex;
+  }
+}
+
+.tk-rowtool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--tk-muted);
+  line-height: 0;
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease), color 0.12s var(--vz-ease);
+}
+
+.tk-rowtool:hover,
+.tk-rowtool:focus-visible {
+  background: var(--tk-chip);
+  color: var(--tk-text);
+  outline: none;
+}
+
+.tk-rowtool[data-row-flag]:hover {
+  color: var(--tk-star);
 }
 
 /* --------------------------------------------------------------------------
@@ -1271,69 +1377,39 @@ body.tasks-rail-on #textareaContainer .bottom-line {
 }
 
 /* --------------------------------------------------------------------------
-   9. The composer (the bottom bar — page + hub share it)
+   9. The quick-add — one row at the top of every list view
    -------------------------------------------------------------------------- */
 
-.tk-composer {
-  position: relative;
+.tk-quickadd-wrap {
   flex: 0 0 auto;
-  padding: 8px 2px 4px;
-  border-top: 1px solid var(--tk-border);
-  background: var(--tk-bg);
+  padding: 0 2px 10px;
 }
 
-/* The field is the affordance: a rounded well the eye lands on, tinted
-   by the list when it takes focus — the bar was previously a bare text
-   line with its styles parked on a class the markup never wore. */
-.tk-composer-row {
+/* The row: a quiet well the eye lands on — [target] [input] [live chip]
+   [Date] [Flag] — tinted by the list when it takes focus. It replaces
+   the floating chat pill the surface used to park at its floor. */
+.tk-quickadd {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 3px 12px 3px 5px;
+  padding: 3px 6px 3px 12px;
   border: 1px solid var(--tk-border);
-  border-radius: 999px;
+  border-radius: 12px;
   background: var(--tk-well);
   transition: border-color 0.15s var(--vz-ease), background 0.15s var(--vz-ease),
     box-shadow 0.15s var(--vz-ease);
 }
 
-.tk-composer:focus-within .tk-composer-row {
+.tk-quickadd:focus-within {
   border-color: var(--list-c, var(--tk-accent));
   background: var(--tk-card);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--list-c, var(--tk-accent)) 14%, transparent);
 }
 
-.tk-composer-add {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--tk-muted);
-  line-height: 0;
-  cursor: pointer;
-  transition: color 0.15s var(--vz-ease), background 0.15s var(--vz-ease), transform 0.12s var(--vz-ease);
-}
-
-.tk-composer-add:hover,
-.tk-composer-add:focus-visible {
-  color: var(--list-c, var(--tk-accent));
-  background: var(--tk-well);
-  outline: none;
-}
-
-.tk-composer-add:active {
-  transform: scale(0.9);
-}
-
-.tk-composer-input {
+.tk-quickadd-input {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 6px 0;
+  padding: 8px 0;
   border: 0;
   background: transparent;
   color: var(--tk-text);
@@ -1341,33 +1417,48 @@ body.tasks-rail-on #textareaContainer .bottom-line {
   outline: none;
 }
 
+.tk-quickadd-input::placeholder {
+  color: var(--tk-muted);
+}
+
+/* The live natural-language read: what the parse sees in the line —
+   quiet, italic, gone the moment the words stop meaning a date. */
+.tk-quickadd-live {
+  flex: 0 0 auto;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--list-c, var(--tk-accent)) 14%, transparent);
+  color: var(--list-c, var(--tk-accent));
+  font-size: 12px;
+  font-weight: 600;
+  font-style: italic;
+  font-variant-numeric: tabular-nums;
+}
+
+.tk-quickadd-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
 /* Text entry on the tasks surface never wears the browser's own black
    ring — every one of these fields carries (or sits inside) its own
    focus treatment, and the UA's focus-visible outline drew a second,
    heavier frame on top (caught double-framing the composer in the
    shots). */
-.tk-composer-input:focus-visible,
+.tk-quickadd-input:focus-visible,
 .tkp-title:focus-visible,
 .tk-editor-title:focus-visible,
 .tk-editor-notes:focus-visible,
-.tk-when-field input:focus-visible,
+.tk-when-time input:focus-visible,
 .tkcal-quickadd-input:focus-visible,
 #taskRail .tr-search-input:focus-visible {
   outline: none;
-}
-
-.tk-composer-input::placeholder {
-  color: var(--tk-muted);
-}
-
-.tk-composer-details {
-  position: relative;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 0 0 40px;
-  animation: tk-editor-in 0.16s var(--vz-ease);
 }
 
 /* --------------------------------------------------------------------------
@@ -1401,18 +1492,21 @@ body.tasks-rail-on #textareaContainer .bottom-line {
   }
 }
 
-/* Opens upward — both composers sit at their floor. */
+/* Opens DOWN — the quick-add sits at the top of the list and the row
+   tools sit mid-page; an upward popover would cover what it edits. */
 .tk-when {
-  min-width: 248px;
-  bottom: calc(100% + 8px);
+  min-width: 262px;
+  bottom: auto;
+  top: calc(100% + 6px);
   left: 0;
 }
 
-/* The editor's popovers open DOWN from the chips. */
+/* The editor's popovers open DOWN from the chips too. */
 .tk-editor-chips > .tk-when,
 .tk-editor-chips > .tk-menu {
   bottom: auto;
   top: calc(100% + 6px);
+  left: 0;
 }
 
 /* The header's color menu opens DOWN too: its button sits at the top of
@@ -1431,23 +1525,122 @@ body.tasks-rail-on #textareaContainer .bottom-line {
   border-bottom: 1px solid var(--tk-border);
 }
 
-.tk-when-inputs {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* --- the month grid — the popover's calendar --- */
+
+.tk-wgrid {
   padding-top: 6px;
 }
 
-.tk-when-field {
+.tk-wgrid-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  color: var(--tk-muted);
-  font-size: 12.5px;
+  gap: 6px;
+  padding: 0 2px 6px;
 }
 
-.tk-when-field input {
+.tk-wgrid-month {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--tk-text);
+}
+
+.tk-wgrid-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--tk-muted);
+  line-height: 0;
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease), color 0.12s var(--vz-ease);
+}
+
+.tk-wgrid-nav:hover,
+.tk-wgrid-nav:focus-visible {
+  background: var(--tk-well);
+  color: var(--tk-text);
+  outline: none;
+}
+
+.tk-wgrid-cells {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+}
+
+.tk-wgrid-wd {
+  padding: 3px 0;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 650;
+  color: var(--tk-muted);
+}
+
+.tk-wgrid-day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tk-text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease);
+}
+
+.tk-wgrid-day:hover,
+.tk-wgrid-day:focus-visible {
+  background: var(--tk-well);
+  outline: none;
+}
+
+.tk-wgrid-day.is-today {
+  box-shadow: inset 0 0 0 1.5px var(--list-c, var(--tk-accent));
+  font-weight: 650;
+}
+
+.tk-wgrid-day.is-selected {
+  background: var(--list-c, var(--tk-accent));
+  color: #fff;
+  font-weight: 650;
+}
+
+.tk-wgrid-day.is-blank {
+  pointer-events: none;
+}
+
+.tk-when-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--tk-border);
+}
+
+.tk-when-heading {
+  flex: 1 1 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tk-muted);
+}
+
+.tk-when-time {
+  display: inline-flex;
+  align-items: center;
+}
+
+.tk-when-time input {
   padding: 5px 7px;
   border: 1px solid var(--tk-border);
   border-radius: var(--vz-radius);
@@ -1458,14 +1651,8 @@ body.tasks-rail-on #textareaContainer .bottom-line {
   outline: none;
 }
 
-.tk-when-field input:focus {
+.tk-when-time input:focus {
   border-color: var(--tk-accent);
-}
-
-.tk-when-foot {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 2px;
 }
 
 .tk-menu {
@@ -1530,37 +1717,54 @@ body.tasks-rail-on #textareaContainer .bottom-line {
 }
 
 /* --------------------------------------------------------------------------
-   11. Empty states
+   11. Empty states — quiet, top-of-list, never a full-canvas sermon
    -------------------------------------------------------------------------- */
 
 .tk-empty {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  grid-template-areas:
+    'icon title'
+    'icon sub'
+    'icon cta';
+  column-gap: 12px;
+  row-gap: 1px;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 64px 24px;
-  text-align: center;
+  padding: 18px 10px;
+  text-align: left;
 }
 
 .tk-empty > svg {
+  grid-area: icon;
+  align-self: start;
+  margin-top: 2px;
+  width: 20px;
+  height: 20px;
   color: var(--tk-muted);
-  opacity: 0.85;
+  opacity: 0.7;
 }
 
 .tk-empty-title {
-  margin: 10px 0 0;
-  font-size: 15px;
+  grid-area: title;
+  margin: 0;
+  font-size: 13.5px;
   font-weight: 600;
   color: var(--tk-text);
 }
 
 .tk-empty-sub {
+  grid-area: sub;
   margin: 0;
-  max-width: 340px;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12.5px;
+  line-height: 1.45;
   color: var(--tk-muted);
+}
+
+/* The first-list empty state keeps its CTA — parked under the words. */
+.tk-empty > .tk-chip-btn {
+  grid-area: cta;
+  justify-self: start;
+  margin-top: 8px;
 }
 
 /* --------------------------------------------------------------------------
@@ -1890,6 +2094,59 @@ body.tasks-rail-on #textareaContainer .bottom-line {
 
 .tkcal-lists {
   flex: 0 0 auto;
+}
+
+/* --- the destinations — the calendar page's way out, desktop-style ---
+
+   The grid page carries no back arrow: its sidebar's top block IS the
+   reminders navigation (Today / Scheduled / All / Flagged / Completed),
+   so leaving is a click on any destination — the same move every other
+   reminders surface offers, in the same place on the screen. */
+
+.tkcal-dests {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+.tkcal-dest {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg-muted);
+  font-size: 12.5px;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s var(--vz-ease), color 0.12s var(--vz-ease);
+}
+
+.tkcal-dest:hover,
+.tkcal-dest:focus-visible {
+  background: var(--tk-well);
+  color: var(--tk-text);
+  outline: none;
+}
+
+.tkcal-dest svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  line-height: 0;
+}
+
+.tkcal-dest-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--tk-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .tkcal-list {
@@ -3111,10 +3368,6 @@ body.tasks-rail-on #textareaContainer .bottom-line {
     font-size: 19px;
   }
 
-  .tk-composer-details {
-    padding-left: 0;
-  }
-
   .tkp-title {
     font-size: 20px;
   }
@@ -3126,7 +3379,7 @@ body.tasks-rail-on #textareaContainer .bottom-line {
   #taskRail .tr-search,
   .tk-check svg,
   .tk-editor,
-  .tk-composer-details,
+  .tk-quickadd-live,
   .tk-when,
   .tk-menu {
     animation: none;

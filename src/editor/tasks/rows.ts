@@ -60,10 +60,11 @@ export function rowChips(task: Task, now: Date): string {
  * One task row. The editor expands under .tk-task-wrap. `list` adds the
  * origin chip (the hub's aggregated views); color classes ride the wrap.
  *
- * The row reads on ONE line: the title carries the line and the metadata
- * chips (due, remind, priority, flag) ride its right end — Apple's own
- * row anatomy, the one the day pane already speaks. Only real second-line
- * content (notes, the hub's origin chip) wraps under.
+ * The row reads on ONE line: the title carries the line, the metadata
+ * chips (due, remind, flag) hug its right end, and the hover tools
+ * (date, flag) sit at the row's far right — one click to the two most
+ * common acts, no accordion required. Only real second-line content
+ * (notes, the hub's origin chip) wraps under.
  */
 export function taskRow(
   task: Task,
@@ -100,6 +101,10 @@ export function taskRow(
                 ${notes}
                 ${origin}
             </button>
+            <span class="tk-rowtools">
+                <button type="button" class="tk-rowtool" data-row-when title="Add date" aria-label="Add a date to ${title}">${ICONS.calendar}</button>
+                <button type="button" class="tk-rowtool" data-row-flag title="Flag" aria-label="Flag ${title}">${task.flagged ? ICONS.flagFilled : ICONS.flag}</button>
+            </span>
         </div>
         <div class="tk-editor" hidden></div>
     </div>`;
@@ -186,11 +191,121 @@ export function editor(task: Task, now: Date, lists: ListRef[] = []): string {
 }
 
 // ---------------------------------------------------------------------------
+// The quick-add — one input at the top of every list view
+// ---------------------------------------------------------------------------
+
+/**
+ * The quick-add row: plus dot, input, live NL preview slot, Date + Flag
+ * chips. Sits at the TOP of every list view (the note page and the hub
+ * views alike) — desktop's add-row, not a floating chat pill at the
+ * floor. `withTarget` (hub views) carries the target-list chip; the
+ * note page never needs one (its list IS the note).
+ *
+ * The Date/Flag chips edit a DRAFT; the natural-language parse runs in
+ * the controller and writes the live preview into [data-quickadd-live].
+ * The input keeps the `data-composer-input` name the e2e suite speaks.
+ */
+export function quickAddRow(opts: { withTarget?: boolean; placeholder?: string } = {}): string {
+  const target = opts.withTarget ? `<span class="tkh-target" id="tkhTarget"></span>` : '';
+  return `
+        <div class="tk-quickadd" data-quickadd>
+            ${target}
+            <input type="text" data-composer-input class="tk-quickadd-input" placeholder="${escapeHtml(
+              opts.placeholder ?? 'Add a reminder — “dentist tomorrow 9am” works',
+            )}" autocomplete="off" aria-label="New reminder title">
+            <span class="tk-quickadd-live" data-quickadd-live hidden></span>
+            <span class="tk-quickadd-tools">
+                <button type="button" class="tk-chip-btn tk-chip-has" data-composer-when="date">${ICONS.calendar}<span>Date</span></button>
+                <button type="button" class="tk-chip-btn tk-chip-has" data-composer-flag aria-pressed="false">${ICONS.flag}<span>Flag</span></button>
+            </span>
+        </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// The when-popover — presets, a real month grid, an optional time
+// ---------------------------------------------------------------------------
+
+const WEEKDAY_HEADS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+/** An ISO stamp → its yyyy-mm-dd local day key. */
+export function isoDayKey(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (v: number): string => String(v).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** An ISO stamp → the hh:mm a time input expects ('' when midnight). */
+export function isoTimeValue(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  if (date.getHours() === 0 && date.getMinutes() === 0) return '';
+  const pad = (v: number): string => String(v).padStart(2, '0');
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** A mini month grid: the popover's calendar. Weeks start Sunday, the
+ * month's own days are buttons (data-when-day), today wears a ring,
+ * the selected day a fill. Pure: callers re-render on prev/next. */
+export function monthGrid(year: number, month: number, selectedIso: string, now: Date): string {
+  const pad = (v: number): string => String(v).padStart(2, '0');
+  const first = new Date(year, month, 1);
+  const lead = first.getDay(); // blanks before the 1st
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayKey = isoDayKey(now.toISOString());
+  const selectedKey = selectedIso ? isoDayKey(selectedIso) : '';
+
+  const heads = WEEKDAY_HEADS.map((d) => `<span class="tk-wgrid-wd">${d}</span>`).join('');
+  const blanks = Array.from(
+    { length: lead },
+    () => `<span class="tk-wgrid-day is-blank"></span>`,
+  ).join('');
+  const days = Array.from({ length: daysInMonth }, (_, i) => {
+    const day = i + 1;
+    const key = `${year}-${pad(month + 1)}-${pad(day)}`;
+    const classes = [
+      'tk-wgrid-day',
+      key === todayKey ? 'is-today' : '',
+      key === selectedKey ? 'is-selected' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    return `<button type="button" class="${classes}" data-when-day="${key}" aria-label="${month + 1}/${day}">${day}</button>`;
+  }).join('');
+  const monthLabel = new Date(year, month, 1).toLocaleString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  });
+
+  return `
+        <div class="tk-wgrid" data-when-grid data-year="${year}" data-month="${month}">
+            <header class="tk-wgrid-head">
+                <button type="button" class="tk-wgrid-nav" data-when-nav="-1" title="Previous month" aria-label="Previous month"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+                <span class="tk-wgrid-month">${escapeHtml(monthLabel)}</span>
+                <button type="button" class="tk-wgrid-nav" data-when-nav="1" title="Next month" aria-label="Next month"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+            </header>
+            <div class="tk-wgrid-cells">${heads}${blanks}${days}</div>
+        </div>`;
+}
+
+// ---------------------------------------------------------------------------
 // Popovers (one shared element each, appended + positioned by the caller)
 // ---------------------------------------------------------------------------
 
-export function whenPopover(mode: 'date' | 'remind'): string {
+/**
+ * The when-popover: quick presets, the month grid, the optional time.
+ * `view` is the month the grid shows (the caller owns prev/next state
+ * and re-renders); `selectedIso` fills the day it edits.
+ */
+export function whenPopover(
+  mode: 'date' | 'remind',
+  view: { year: number; month: number },
+  selectedIso: string,
+  now: Date,
+): string {
   const heading = mode === 'date' ? 'Due date' : 'Remind me';
+  const timeValue = selectedIso ? isoTimeValue(selectedIso) : '';
+  const selectedKey = selectedIso ? isoDayKey(selectedIso) : '';
   return `
         <div class="tk-when-presets">
             <button type="button" class="tk-chip-btn" data-when-preset="today">Today</button>
@@ -198,15 +313,12 @@ export function whenPopover(mode: 'date' | 'remind'): string {
             <button type="button" class="tk-chip-btn" data-when-preset="weekend">This Weekend</button>
             <button type="button" class="tk-chip-btn" data-when-preset="nextWeek">Next Week</button>
         </div>
-        <div class="tk-when-inputs">
-            <label class="tk-when-field"><span>${heading}</span><input type="date" data-when-date aria-label="${
-              mode === 'date' ? 'Due date' : 'Reminder date'
-            }"></label>
-            <label class="tk-when-field"><span>Time</span><input type="time" data-when-time aria-label="${
-              mode === 'date' ? 'Due time (optional)' : 'Reminder time'
-            }"${mode === 'remind' ? ' required' : ''}></label>
-        </div>
+        ${monthGrid(view.year, view.month, selectedKey, now)}
         <div class="tk-when-foot">
+            <span class="tk-when-heading">${heading}</span>
+            <label class="tk-when-time"><input type="time" data-when-time aria-label="${
+              mode === 'date' ? 'Due time (optional)' : 'Reminder time'
+            }"${mode === 'remind' ? ' required' : ''} value="${timeValue}"></label>
             <button type="button" class="tk-chip-btn" data-when-clear>Clear</button>
         </div>`;
 }
@@ -267,7 +379,11 @@ export function emptyStateFor(view: string): string {
     return emptyState(ICONS.completed, 'Nothing completed', 'Check one off and it moves here.');
   }
   if (view === 'all') {
-    return emptyState(ICONS.all, 'No reminders', 'Write one down in the bar below.');
+    return emptyState(ICONS.all, 'No reminders', 'Write one down in the quick-add above.');
   }
-  return emptyState(ICONS.done, 'This list is empty', 'Add a reminder below.');
+  return emptyState(
+    ICONS.done,
+    'This list is empty',
+    'Type in the quick-add above — “friday 3pm” works.',
+  );
 }
