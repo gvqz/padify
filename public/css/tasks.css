@@ -30,6 +30,12 @@
   --tk-green: #0e9f6e;
   --tk-purple: #8465c4;
   --tk-teal: #2f9c9c;
+  /* The list surfaces' reading measure: one column width shared by the
+     note page and the hub's list views — rows, the inline editor, the
+     composer and the headings all stop here and center, instead of
+     stretching a phone-ish list across a 1600px desktop. The calendar
+     page is exempt (it lays out its own full-bleed grid + sidebar). */
+  --tk-measure: 860px;
 }
 
 body.dark {
@@ -126,6 +132,11 @@ body.dark {
   gap: 10px;
   flex: 0 0 auto;
   padding: 6px 4px 14px;
+  /* The shared measure — the header, the rows and the composer land on
+     the same column. */
+  width: 100%;
+  max-width: var(--tk-measure);
+  margin-inline: auto;
 }
 
 .tkp-color {
@@ -210,6 +221,15 @@ body.dark {
   scrollbar-color: var(--tk-track) transparent;
 }
 
+/* The sections + the empty state ride the same measure as the header
+   and the composer — one column, centered, at every width. */
+.tkp-scroll .tk-sections,
+.tkp-scroll .tk-empty {
+  width: 100%;
+  max-width: var(--tk-measure);
+  margin-inline: auto;
+}
+
 .tkp-scroll::-webkit-scrollbar {
   width: 8px;
 }
@@ -221,7 +241,15 @@ body.dark {
 
 /* The composer bar rides the bottom of the page. Its real chrome (the
    hairline floor, the rounded field) lives with .tk-composer in
-   section 9 — page and hub share one bar. */
+   section 9 — page and hub share one bar. The page caps the field to
+   the shared measure so the well, the rows and the header share one
+   column (the hub's own caps live in section 4). */
+.tkp .tk-composer-row,
+.tkp .tk-composer-details {
+  width: 100%;
+  max-width: var(--tk-measure);
+  margin-inline: auto;
+}
 
 /* --------------------------------------------------------------------------
    3. The RIGHT rail — Reminders navigation
@@ -253,7 +281,6 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
 
 #taskRail:hover,
 #taskRail:focus-within,
-#taskRail.is-pinned,
 #taskRail.open {
   --tr-expanded: 1;
   flex-basis: 274px;
@@ -271,6 +298,11 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
 }
 
 #taskRail .tr-eyebrow {
+  /* The whole mark fades with the expansion — an icon stranded in the
+     52px strip read as a clipped dark blob at the screen's corner (the
+     collapsed rail's identity is the card icons below, not this). */
+  opacity: var(--tr-expanded);
+  transition: opacity 0.15s var(--vz-ease);
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -289,41 +321,6 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
 #taskRail .tr-eyebrow-text {
   opacity: var(--tr-expanded);
   transition: opacity 0.15s var(--vz-ease);
-}
-
-#taskRail .tr-pin {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: 0;
-  border-radius: var(--vz-radius);
-  background: transparent;
-  color: var(--vz-fg-muted);
-  line-height: 0;
-  cursor: pointer;
-  opacity: var(--tr-expanded);
-  transition: opacity 0.15s var(--vz-ease), background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
-}
-
-#taskRail:hover .tr-pin,
-#taskRail:focus-within .tr-pin,
-#taskRail.is-pinned .tr-pin,
-#taskRail.open .tr-pin {
-  opacity: 1;
-}
-
-#taskRail .tr-pin:hover,
-#taskRail .tr-pin:focus-visible {
-  background: var(--vz-bg-hover);
-  color: var(--vz-fg);
-  outline: none;
-}
-
-#taskRail .tr-pin[aria-pressed='true'] {
-  color: var(--vz-fg);
-  background: var(--vz-bg-chip);
 }
 
 /* The search — an expanded-rail affordance (the icon lives in the
@@ -347,7 +344,6 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
 
 #taskRail:hover .tr-search,
 #taskRail:focus-within .tr-search,
-#taskRail.is-pinned .tr-search,
 #taskRail.open .tr-search {
   max-height: 40px;
   opacity: 1;
@@ -438,12 +434,15 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
   background: transparent;
   color: var(--vz-fg-muted);
   cursor: pointer;
+  /* The count badge anchors HERE — its only positioned ancestor used to
+     be the rail itself, so every counted card painted its pill at the
+     rail's top-right corner, stacked and clipped (the "artifact"). */
+  position: relative;
   transition: background 0.15s var(--vz-ease), color 0.15s var(--vz-ease);
 }
 
 #taskRail:hover .tr-card,
 #taskRail:focus-within .tr-card,
-#taskRail.is-pinned .tr-card,
 #taskRail.open .tr-card {
   flex-direction: row;
   justify-content: flex-start;
@@ -458,7 +457,6 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
 
 #taskRail:hover .tr-cards,
 #taskRail:focus-within .tr-cards,
-#taskRail.is-pinned .tr-cards,
 #taskRail.open .tr-cards {
   grid-template-columns: 1fr 1fr;
   gap: 4px;
@@ -499,8 +497,11 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
 
 #taskRail .tr-card-count {
   position: absolute;
-  top: -6px;
-  right: -10px;
+  top: 0;
+  /* Collapsed, the badge tucks INSIDE the 52px strip — the old 10px
+     overhang poked past `overflow: hidden` and read as a clipped dark
+     blob pinned to the screen's corner. */
+  right: 2px;
   min-width: 16px;
   padding: 1px 4px;
   border-radius: 999px;
@@ -511,6 +512,14 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
   line-height: 1.3;
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+/* Expanded, the badge hangs off the row's corner again — room to breathe. */
+#taskRail:hover .tr-card-count,
+#taskRail:focus-within .tr-card-count,
+#taskRail.open .tr-card-count {
+  top: -6px;
+  right: -10px;
 }
 
 #taskRail .tr-card.is-active .tr-card-count {
@@ -543,34 +552,8 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
 
 #taskRail:hover .tr-card-label,
 #taskRail:focus-within .tr-card-label,
-#taskRail.is-pinned .tr-card-label,
 #taskRail.open .tr-card-label {
   font-size: 12.5px;
-}
-
-/* --- The footnote: where the lists live (they're notes) --- */
-
-#taskRail .tr-footnote {
-  margin-top: 12px;
-  padding: 0 2px 2px 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  white-space: nowrap;
-}
-
-#taskRail .tr-footnote-text {
-  color: var(--vz-fg-subtle);
-  font-size: 11px;
-  opacity: var(--tr-expanded);
-  transition: opacity 0.15s var(--vz-ease);
-}
-
-#taskRail .tr-footnote-hint {
-  color: var(--vz-fg-subtle);
-  font-size: 10.5px;
-  opacity: calc(var(--tr-expanded) * 0.75);
-  transition: opacity 0.15s var(--vz-ease);
 }
 
 /* The phone drawer's backdrop. */
@@ -598,6 +581,25 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
   min-width: 0;
   min-height: 0;
   background: var(--tk-bg);
+}
+
+/* The list views' shared measure — the head, the sections, the empty
+   state and the composer land on the same centered column as the note
+   page. The CALENDAR page is exempt: it is a full-bleed grid with its
+   own sidebar, and .tkh.is-calendar stands these rules down below. */
+.tkh:not(.is-calendar) .tkh-head,
+.tkh:not(.is-calendar) .tk-sections,
+.tkh:not(.is-calendar) .tk-empty {
+  width: 100%;
+  max-width: var(--tk-measure);
+  margin-inline: auto;
+}
+
+.tkh:not(.is-calendar) .tk-composer-row,
+.tkh:not(.is-calendar) .tk-composer-details {
+  width: 100%;
+  max-width: var(--tk-measure);
+  margin-inline: auto;
 }
 
 /* The calendar page: the month grid takes the full editor height (no
@@ -865,7 +867,7 @@ body.tasks-rail-on #textareaContainer .bottom-line {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 6px 8px 6px 4px;
+  padding: 8px 10px 8px 6px;
   border-radius: var(--vz-radius-md);
   transition: background 0.12s var(--vz-ease);
 }
@@ -882,8 +884,8 @@ body.tasks-rail-on #textareaContainer .bottom-line {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 21px;
-  height: 21px;
+  width: 22px;
+  height: 22px;
   margin: 0;
   padding: 0;
   border: 1.5px solid var(--tk-border-strong);
@@ -962,9 +964,9 @@ body.tasks-rail-on #textareaContainer .bottom-line {
 .tk-title {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 450;
-  line-height: 1.4;
+  line-height: 1.45;
   color: var(--tk-text);
   overflow-wrap: anywhere;
   transition: color 0.18s var(--vz-ease);
@@ -1051,24 +1053,6 @@ body.tasks-rail-on #textareaContainer .bottom-line {
   font-weight: 600;
 }
 
-.tk-prio {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-}
-
-.tk-prio-low {
-  color: var(--tk-blue);
-}
-
-.tk-prio-medium {
-  color: var(--tk-star);
-}
-
-.tk-prio-high {
-  color: var(--tk-danger);
-}
-
 .tk-flag {
   display: inline-flex;
   color: var(--tk-star);
@@ -1077,7 +1061,6 @@ body.tasks-rail-on #textareaContainer .bottom-line {
 
 /* Done rows quiet their metadata with the title. */
 .tk-task.is-done .tk-chip,
-.tk-task.is-done .tk-prio,
 .tk-task.is-done .tk-flag {
   opacity: 0.55;
 }
@@ -3033,18 +3016,7 @@ body.tasks-rail-on #textareaContainer .bottom-line {
 }
 
 /* --------------------------------------------------------------------------
-   15. Confetti (the all-done celebration — canvas, no dependency)
-   -------------------------------------------------------------------------- */
-
-.tk-confetti {
-  position: fixed;
-  inset: 0;
-  z-index: 2600;
-  pointer-events: none;
-}
-
-/* --------------------------------------------------------------------------
-   16. Responsive
+   15. Responsive
    -------------------------------------------------------------------------- */
 
 @media (max-width: 1020px) {
@@ -3148,7 +3120,7 @@ body.tasks-rail-on #textareaContainer .bottom-line {
   }
 }
 
-/* Reduce motion: no drawing, no popping, no confetti. */
+/* Reduce motion: no drawing, no popping. */
 @media (prefers-reduced-motion: reduce) {
   #taskRail,
   #taskRail .tr-search,

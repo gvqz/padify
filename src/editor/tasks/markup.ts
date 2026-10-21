@@ -34,7 +34,6 @@ export function taskListPageMarkup(): string {
         <button type="button" class="tk-chip-btn" data-composer-when="date">${ICONS.calendar}<span>Date</span></button>
         <button type="button" class="tk-chip-btn" data-composer-when="remind">${ICONS.bell}<span>Remind</span></button>
         <button type="button" class="tk-chip-btn" data-composer-flag aria-pressed="false">${ICONS.flag}<span>Flag</span></button>
-        <button type="button" class="tk-chip-btn" data-composer-priority>${ICONS.chevron}<span>Priority</span></button>
       </div>
     </footer>
   </div>`;

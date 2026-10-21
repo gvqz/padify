@@ -26,18 +26,11 @@ import { formatDueChip, parseWhen } from './dates';
 // Vocabulary
 // ---------------------------------------------------------------------------
 
-/** A task's priority — Apple's !, !!, !!! minus the shouting. */
+/** A task's priority — kept for DATA compatibility only: older notes
+ *  carry the field, the sanitizer preserves it, and no UI paints it. */
 export type Priority = 'none' | 'low' | 'medium' | 'high';
 
 export const PRIORITIES: Priority[] = ['none', 'low', 'medium', 'high'];
-
-/** How many ! marks each priority renders as (0 for none). */
-export const PRIORITY_MARKS: Record<Priority, number> = {
-  none: 0,
-  low: 1,
-  medium: 2,
-  high: 3,
-};
 
 /** The note type id this model belongs to (editor/note-types registry). */
 export const TASK_NOTE_TYPE = 'tasks';
