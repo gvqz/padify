@@ -149,14 +149,16 @@ test.describe('task list notes', () => {
     await expect(updated).toBeVisible();
     await expect(updated.locator('.tk-notes')).toHaveText('the barista edition');
 
-    // Reopen: selecting a priority from the anchored menu used to close
-    // the editor (the #144 regression — pinned here for the note page too).
+    // Reopen: choosing a date preset from the anchored popover used to
+    // close the editor (the #144 regression — pinned here for the note
+    // page too; the flag chip covers the same "menu inside the editor"
+    // ground the priority chip once did).
     await updated.locator('.tk-task-main').click();
     await expect(editor).toBeVisible();
-    await editor.locator('[data-editor-priority]').click();
-    await page.locator('[data-priority="high"]').click();
+    await editor.locator('[data-editor-flag]').click();
+    await editor.locator('.tk-editor-title').click();
     await expect(editor).toBeVisible();
-    await expect(updated.locator('.tk-prio')).toBeVisible();
+    await expect(updated.locator('.tk-flag')).toBeVisible();
 
     // Same for a date preset from the when-popover.
     await editor.locator('[data-editor-when="date"]').click();
@@ -198,6 +200,30 @@ test.describe('task list notes', () => {
     await expect(
       page.locator('#tabStripTabs .tab-strip-tab.active .tab-strip-list-dot'),
     ).toHaveAttribute('data-color', 'green');
+  });
+
+  test('the priority machinery is gone — three chips, no ! marks', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+
+    // The composer's detail chips: Date, Remind, Flag. No Priority.
+    await page.locator('[data-composer-input]').click();
+    await expect(page.locator('.tkp [data-composer-priority]')).toHaveCount(0);
+    await expect(page.locator('.tkp [data-composer-flag]')).toBeVisible();
+
+    // A task lands; its editor wears Date / Remind / Flag / Delete only,
+    // and the row paints no ! marks even though the model still carries
+    // the field for old notes.
+    const input = page.locator('[data-composer-input]');
+    await input.fill('Priorities are not a feature');
+    await input.press('Enter');
+    const row = page.locator('.tk-task-wrap', { hasText: 'Priorities are not a feature' });
+    await row.locator('.tk-task-main').click();
+    await expect(row.locator('.tk-editor')).toBeVisible();
+    await expect(page.locator('[data-editor-priority]')).toHaveCount(0);
+    await expect(page.locator('.tk-editor-chips .tk-chip-btn')).toHaveCount(4);
+    await expect(page.locator('[data-editor-delete]')).toBeVisible();
+    await expect(row.locator('.tk-prio')).toHaveCount(0);
   });
 });
 
@@ -250,9 +276,7 @@ test.describe('the rail — task contexts only', () => {
     await newTaskList(page);
     await expect(rail).toBeVisible();
     await rail.hover();
-    await expect(rail)
-      .toHaveClass(/is-pinned/)
-      .catch(() => undefined); // pin is opt-in only
+    await expect(rail).not.toHaveClass(/is-pinned/); // pinning is gone — hover is the whole deal
     await expect(rail.locator('.tr-card-label', { hasText: 'Today' })).toBeVisible();
 
     // The Today destination opens the hub over the editor area.
@@ -306,6 +330,27 @@ test.describe('the rail — task contexts only', () => {
     await milk.locator('.tk-origin').click();
     await expect(page.locator('#tasksHub')).toBeHidden();
     await expect(page.locator('.tkp-title')).toHaveValue('Home');
+  });
+
+  test("the All view's heads name the lists; the rows don't repeat them", async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    const input = page.locator('[data-composer-input]');
+    await input.fill('First chore');
+    await input.press('Enter');
+    await input.fill('Second chore');
+    await input.press('Enter');
+
+    await page.locator('#taskRail').hover();
+    await page.locator('.tr-card[data-view="all"]').click();
+    await expect(page.locator('#tkhTitle')).toHaveText('All');
+
+    // The section head carries the list (dot + name); the active rows
+    // carry NO origin chip — the head already said it.
+    const section = page.locator('#tkhSections .tk-section').first();
+    await expect(section.locator('.tk-section-head h5')).toContainText('Untitled list');
+    await expect(section.locator('.tk-origin')).toHaveCount(0);
+    await expect(section.locator('.tk-task-wrap')).toHaveCount(2);
   });
 
   test('completing from the hub writes through to the note', async ({ page }) => {

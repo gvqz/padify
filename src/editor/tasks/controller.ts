@@ -27,14 +27,11 @@ import {
   emptyStateFor,
   moveMenu,
   colorMenu,
-  priorityMenu,
-  priorityLabel,
   rowChips,
   taskRow,
   whenPopover,
   type ListRef,
 } from './rows';
-import { fireTaskConfetti } from './confetti';
 import {
   dateAndTimeToIso,
   formatDueChip,
@@ -42,7 +39,7 @@ import {
   isoToDateAndTime,
   quickPresetIso,
 } from './dates';
-import { buildTask, sanitizeTask, type Priority, type Task, type TaskNoteContent } from './content';
+import { buildTask, sanitizeTask, type Task, type TaskNoteContent } from './content';
 import { showToast } from '../../ui/toast';
 
 /** What the page asks the world around it to do. */
@@ -68,14 +65,12 @@ interface ComposerDraft {
   dueDate: string;
   reminderAt: string;
   flagged: boolean;
-  priority: Priority;
 }
 
 const DEFAULT_DRAFT: ComposerDraft = {
   dueDate: '',
   reminderAt: '',
   flagged: false,
-  priority: 'none',
 };
 
 export class TaskListPageController {
@@ -98,10 +93,8 @@ export class TaskListPageController {
   private readonly composerDate: HTMLButtonElement;
   private readonly composerRemind: HTMLButtonElement;
   private readonly composerFlag: HTMLButtonElement;
-  private readonly composerPriority: HTMLButtonElement;
 
   private readonly whenPop = document.createElement('div');
-  private readonly prioMenu = document.createElement('div');
   private readonly movePop = document.createElement('div');
   private readonly colorPop = document.createElement('div');
 
@@ -112,7 +105,6 @@ export class TaskListPageController {
   /** What the when-popover is currently editing (composer draft vs a task). */
   private whenTarget: { kind: 'draft' } | { kind: 'task'; id: string } | null = null;
   private whenMode: 'date' | 'remind' = 'date';
-  private prioTarget: { kind: 'draft' } | { kind: 'task'; id: string } | null = null;
   private moveTargetId: string | null = null;
   private dragId: string | null = null;
 
@@ -134,11 +126,10 @@ export class TaskListPageController {
     this.composerDate = this.q<HTMLButtonElement>('[data-composer-when="date"]');
     this.composerRemind = this.q<HTMLButtonElement>('[data-composer-when="remind"]');
     this.composerFlag = this.q<HTMLButtonElement>('[data-composer-flag]');
-    this.composerPriority = this.q<HTMLButtonElement>('[data-composer-priority]');
 
     this.titleInput.value = name;
 
-    for (const pop of [this.whenPop, this.prioMenu, this.movePop, this.colorPop]) {
+    for (const pop of [this.whenPop, this.movePop, this.colorPop]) {
       pop.className = pop === this.whenPop ? 'tk-when' : 'tk-menu';
       pop.hidden = true;
     }
@@ -327,10 +318,6 @@ export class TaskListPageController {
           this.toggleFlag(id);
           return;
         }
-        if (target.closest('[data-editor-priority]') && id) {
-          this.openPriorityMenu({ kind: 'task', id });
-          return;
-        }
         if (target.closest('[data-editor-move]') && id) {
           this.openMoveMenu(id);
           return;
@@ -429,11 +416,9 @@ export class TaskListPageController {
       this.draft.flagged = !this.draft.flagged;
       this.renderComposerChips();
     });
-    this.composerPriority.addEventListener('click', () => this.openPriorityMenu({ kind: 'draft' }));
 
     // ---- popovers: shared wiring ----
     this.bindWhenPopover();
-    this.bindPriorityMenu();
     this.bindMoveMenu();
     this.bindColorMenu();
 
@@ -444,12 +429,9 @@ export class TaskListPageController {
       if (
         target &&
         (this.whenPop.contains(target) ||
-          this.prioMenu.contains(target) ||
           this.movePop.contains(target) ||
           this.colorPop.contains(target) ||
-          target.closest(
-            '[data-editor-when],[data-editor-priority],[data-editor-move],[data-composer-when],[data-composer-priority],.tkp-color',
-          ))
+          target.closest('[data-editor-when],[data-editor-move],[data-composer-when],.tkp-color'))
       ) {
         return;
       }
@@ -487,7 +469,6 @@ export class TaskListPageController {
   private toggleComplete(id: string): void {
     const task = this.taskById(id);
     if (!task) return;
-    const wasAllActive = this.model.tasks.some((entry) => !entry.completed);
     this.mutate(() => {
       task.completed = !task.completed;
       task.completedAt = task.completed ? new Date().toISOString() : '';
@@ -503,11 +484,7 @@ export class TaskListPageController {
       taskEl.classList.add('is-done');
       taskEl.querySelector('.tk-check')?.setAttribute('aria-checked', 'true');
     }
-    const cleared = wasAllActive && this.model.tasks.every((entry) => entry.completed);
-    window.setTimeout(() => {
-      if (cleared) fireTaskConfetti();
-      this.render();
-    }, 460);
+    window.setTimeout(() => this.render(), 460);
   }
 
   // ========================================================================
@@ -628,12 +605,7 @@ export class TaskListPageController {
   }
 
   private draftIsSet(): boolean {
-    return (
-      this.draft.dueDate !== '' ||
-      this.draft.reminderAt !== '' ||
-      this.draft.flagged ||
-      this.draft.priority !== 'none'
-    );
+    return this.draft.dueDate !== '' || this.draft.reminderAt !== '' || this.draft.flagged;
   }
 
   private submitComposer(): void {
@@ -668,11 +640,6 @@ export class TaskListPageController {
     );
     this.composerFlag.classList.toggle('is-set', this.draft.flagged);
     this.composerFlag.setAttribute('aria-pressed', String(this.draft.flagged));
-    this.setChip(
-      this.composerPriority,
-      this.draft.priority !== 'none',
-      priorityLabel(this.draft.priority),
-    );
   }
 
   private setChip(button: HTMLButtonElement, isSet: boolean, label: string): void {
@@ -804,53 +771,6 @@ export class TaskListPageController {
   }
 
   // ========================================================================
-  // The priority menu
-  // ========================================================================
-
-  private bindPriorityMenu(): void {
-    this.prioMenu.addEventListener('click', (event) => {
-      const item = (event.target as Element).closest<HTMLElement>('[data-priority]');
-      if (!item) return;
-      const priority = item.dataset.priority as Priority;
-      if (this.prioTarget?.kind === 'draft') {
-        this.draft.priority = priority;
-        this.renderComposerChips();
-      } else if (this.prioTarget?.kind === 'task') {
-        const id = this.prioTarget.id;
-        const task = this.taskById(id);
-        if (task) {
-          this.mutate(() => {
-            task.priority = priority;
-            task.updatedAt = new Date().toISOString();
-          });
-        }
-        const button = this.wrapFor(id)?.querySelector<HTMLButtonElement>('[data-editor-priority]');
-        if (button) this.setChip(button, priority !== 'none', priorityLabel(priority));
-        this.refreshRowChips(id);
-      }
-      this.closePopovers();
-    });
-  }
-
-  private openPriorityMenu(target: { kind: 'draft' } | { kind: 'task'; id: string }): void {
-    this.closePopovers();
-    this.prioTarget = target;
-    const current =
-      target.kind === 'draft'
-        ? this.draft.priority
-        : (this.taskById(target.id)?.priority ?? 'none');
-    this.prioMenu.innerHTML = priorityMenu(current);
-    const anchor =
-      target.kind === 'draft'
-        ? this.composerDetails
-        : this.wrapFor(target.id)?.querySelector('.tk-editor-chips');
-    if (!anchor) return;
-    anchor.appendChild(this.prioMenu);
-    this.prioMenu.hidden = false;
-    this.prioMenu.querySelector<HTMLElement>('.tk-menu-item')?.focus();
-  }
-
-  // ========================================================================
   // The move menu (between notes) + the color menu
   // ========================================================================
 
@@ -929,32 +849,28 @@ export class TaskListPageController {
     // Pull focus out of the doomed popovers FIRST: Chromium fires focusout
     // (relatedTarget null) when a focused node is removed, and the editor's
     // commit handler would read that as "the user left" — selecting a
-    // priority or a date preset used to close the whole editor. Park focus
+    // date preset used to close the whole editor. Park focus
     // where the popover lived: the editor's title, or the composer input.
     const active = document.activeElement;
     if (
       active instanceof Node &&
       (this.whenPop.contains(active) ||
-        this.prioMenu.contains(active) ||
         this.movePop.contains(active) ||
         this.colorPop.contains(active))
     ) {
       const form = active instanceof Element ? active.closest<HTMLElement>('.tk-editor') : null;
       (form?.querySelector<HTMLElement>('.tk-editor-title') ?? this.composerInput).focus();
     }
-    for (const pop of [this.whenPop, this.prioMenu, this.movePop, this.colorPop]) {
+    for (const pop of [this.whenPop, this.movePop, this.colorPop]) {
       pop.remove();
       pop.hidden = true;
     }
     this.whenTarget = null;
-    this.prioTarget = null;
     this.moveTargetId = null;
   }
 
   private popoverClosed(): boolean {
-    return (
-      this.whenPop.hidden && this.prioMenu.hidden && this.movePop.hidden && this.colorPop.hidden
-    );
+    return this.whenPop.hidden && this.movePop.hidden && this.colorPop.hidden;
   }
 
   // ========================================================================

@@ -15,7 +15,7 @@
 
 import { ICONS } from './icons';
 import { formatDueChip, formatReminderChip, isOverdue } from './dates';
-import { PRIORITY_MARKS, type Priority, type Task } from './content';
+import { type Task } from './content';
 import { escapeHtml } from '../../lib/escape';
 
 /** The list facts a row chip (or a move menu) needs about a note. */
@@ -29,7 +29,7 @@ export interface ListRef {
 // Task rows
 // ---------------------------------------------------------------------------
 
-/** The little chips under a title: due date, reminder, priority marks, flag. */
+/** The little chips under a title: due date, reminder, flag. */
 export function rowChips(task: Task, now: Date): string {
   const chips: string[] = [];
   if (task.dueDate) {
@@ -48,23 +48,12 @@ export function rowChips(task: Task, now: Date): string {
       )}">${ICONS.bell}<span>${escapeHtml(formatReminderChip(task.reminderAt, now))}</span></span>`,
     );
   }
-  if (task.priority !== 'none') {
-    chips.push(priorityMarks(task.priority));
-  }
   if (task.flagged) {
     chips.push(
       `<span class="tk-flag" title="Flagged" aria-label="Flagged">${ICONS.flagFilled}</span>`,
     );
   }
   return chips.join('');
-}
-
-/** The ! marks — count carries the level, color is the garnish. */
-export function priorityMarks(priority: Priority): string {
-  const marks = '!'.repeat(PRIORITY_MARKS[priority]);
-  return `<span class="tk-prio tk-prio-${priority}" aria-label="${priority} priority">${escapeHtml(
-    marks,
-  )}</span>`;
 }
 
 /**
@@ -189,21 +178,11 @@ export function editor(task: Task, now: Date, lists: ListRef[] = []): string {
                     <button type="button" class="tk-chip-btn tk-chip-has${task.flagged ? ' is-set' : ''}" data-editor-flag aria-pressed="${
                       task.flagged
                     }">${task.flagged ? ICONS.flagFilled : ICONS.flag}<span>Flag</span></button>
-                    <button type="button" class="tk-chip-btn tk-chip-has${task.priority !== 'none' ? ' is-set' : ''}" data-editor-priority>${ICONS.chevron}<span>${priorityLabel(
-                      task.priority,
-                    )}</span></button>
                     ${moveChip}
                     <span class="tk-editor-spacer"></span>
                     <button type="button" class="tk-chip-btn tk-chip-danger" data-editor-delete title="Delete reminder" aria-label="Delete reminder">${ICONS.trash}<span>Delete</span></button>
                 </div>
             </div>`;
-}
-
-/** The editor chip's label — words, not glyphs (the menu carries the
- * ! marks; the pill reads like a control, not like shouting). */
-export function priorityLabel(priority: Priority): string {
-  if (priority === 'none') return 'Priority';
-  return `${priority.charAt(0).toUpperCase()}${priority.slice(1)} priority`;
 }
 
 // ---------------------------------------------------------------------------
@@ -230,19 +209,6 @@ export function whenPopover(mode: 'date' | 'remind'): string {
         <div class="tk-when-foot">
             <button type="button" class="tk-chip-btn" data-when-clear>Clear</button>
         </div>`;
-}
-
-export function priorityMenu(priority: Priority): string {
-  const item = (value: Priority, label: string): string =>
-    `<button type="button" class="tk-menu-item${priority === value ? ' is-on' : ''}" data-priority="${value}">${escapeHtml(
-      label,
-    )}</button>`;
-  return [
-    item('none', 'None'),
-    item('low', '!  Low'),
-    item('medium', '!!  Medium'),
-    item('high', '!!!  High'),
-  ].join('');
 }
 
 /** The move-between-lists menu — one item per task note, dots colored. */

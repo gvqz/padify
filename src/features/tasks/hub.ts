@@ -24,15 +24,12 @@ import {
   editor as editorMarkup,
   emptyStateFor,
   moveMenu,
-  priorityMenu,
-  priorityLabel,
   rowChips,
   section as sectionMarkup,
   taskRow,
   whenPopover,
   type ListRef,
 } from '../../editor/tasks/rows';
-import { fireTaskConfetti } from '../../editor/tasks/confetti';
 import {
   dateAndTimeToIso,
   formatDueChip,
@@ -40,7 +37,7 @@ import {
   isoToDateAndTime,
   quickPresetIso,
 } from '../../editor/tasks/dates';
-import type { Priority, Task } from '../../editor/tasks/content';
+import type { Task } from '../../editor/tasks/content';
 import { taskNotes, type AggSection, type AggTask, type HubViewId } from './aggregate';
 import { dismissReminderToasts } from './toasts';
 import {
@@ -48,7 +45,6 @@ import {
   closeCalendarQuickAdd,
   initTasksCalendar,
   renderTasksCalendar,
-  selectedDayCount,
 } from './calendar';
 
 export type HubView = HubViewId | 'search' | 'calendar';
@@ -70,24 +66,20 @@ interface ComposerDraft {
   dueDate: string;
   reminderAt: string;
   flagged: boolean;
-  priority: Priority;
 }
 
 const DEFAULT_DRAFT: ComposerDraft = {
   dueDate: '',
   reminderAt: '',
   flagged: false,
-  priority: 'none',
 };
 let draft: ComposerDraft = { ...DEFAULT_DRAFT };
 
 let whenTarget: { kind: 'draft' } | { kind: 'task'; id: string } | null = null;
 let whenMode: 'date' | 'remind' = 'date';
-let prioTarget: { kind: 'draft' } | { kind: 'task'; id: string } | null = null;
 let moveTargetId: string | null = null;
 
 const whenPop = document.createElement('div');
-const prioMenu = document.createElement('div');
 const movePop = document.createElement('div');
 const targetMenu = document.createElement('div');
 
@@ -199,7 +191,7 @@ export function initTasksHub(): void {
   if (initialized) return;
   initialized = true;
 
-  for (const pop of [whenPop, prioMenu, movePop, targetMenu]) {
+  for (const pop of [whenPop, movePop, targetMenu]) {
     pop.className = pop === whenPop ? 'tk-when' : 'tk-menu';
     pop.hidden = true;
   }
@@ -269,7 +261,6 @@ export function initTasksHub(): void {
     if (
       target &&
       (whenPop.contains(target) ||
-        prioMenu.contains(target) ||
         movePop.contains(target) ||
         targetMenu.contains(target) ||
         target.closest('#tkhComposerDetails,.tk-editor-chips,#tkhTarget'))
@@ -388,7 +379,10 @@ function renderHub(): void {
         now,
         (task) => colorOf(task),
         false,
-        (task) => listFor({ task, note: noteOf(task) }),
+        // The list chip rides a row only where the section head doesn't
+        // already name the list. All + Search group BY list (the head is
+        // the list) — a chip under every title just says it twice.
+        view === 'all' || searching ? undefined : (task) => listFor({ task, note: noteOf(task) }),
       ),
     )
     .join('');
@@ -500,10 +494,6 @@ function bindRows(): void {
         toggleFlag(id);
         return;
       }
-      if (target.closest('[data-editor-priority]') && id) {
-        openPriorityMenu({ kind: 'task', id });
-        return;
-      }
       if (target.closest('[data-editor-move]') && id) {
         openMoveMenu(id);
         return;
@@ -545,16 +535,6 @@ function bindRows(): void {
 }
 
 function toggleComplete(id: string): void {
-  const now = new Date();
-  // The confetti bookkeeping reads the OPEN VIEW's active rows — but the
-  // calendar is not a smart view: sectionsFor would return undefined for
-  // it (no case, no default), and the completion would die before it
-  // started. The calendar's "rows" are the selected day's, so its count
-  // comes from the calendar module (which owns selection + hidden lists).
-  const onCalendar = view === 'calendar';
-  const before = onCalendar
-    ? selectedDayCount()
-    : activeRowCount((view ?? 'today') as HubViewId, now);
   taskNotes.toggleComplete(id);
   const done = taskNotes.taskById(id)?.task.completed ?? false;
   if (!done) {
@@ -566,24 +546,8 @@ function toggleComplete(id: string): void {
     taskEl.classList.add('is-done');
     taskEl.querySelector('.tk-check')?.setAttribute('aria-checked', 'true');
   }
-  const after = onCalendar
-    ? selectedDayCount()
-    : activeRowCount((view ?? 'today') as HubViewId, now);
-  const cleared =
-    (onCalendar || view === 'today' || view === 'scheduled' || view === 'flagged') &&
-    before > 0 &&
-    after === 0;
-  window.setTimeout(() => {
-    if (cleared) fireTaskConfetti();
-    renderHub();
-  }, 460);
-}
-
-/** The smart views' active row count (the confetti check's before/after). */
-function activeRowCount(viewId: HubViewId, now: Date): number {
-  return taskNotes
-    .sectionsFor(viewId, now)
-    .sections.reduce((sum, section) => sum + section.rows.length, 0);
+  // Let the row sink before the view repaints around it.
+  window.setTimeout(renderHub, 460);
 }
 
 function toggleEditor(id: string): void {
@@ -780,9 +744,6 @@ function bindComposer(): void {
     draft.flagged = !draft.flagged;
     renderComposerChips();
   });
-  hub.querySelector('#tkhComposerPriority')?.addEventListener('click', () => {
-    openPriorityMenu({ kind: 'draft' });
-  });
 
   // The target-list chip menu.
   hub.querySelector('#tkhTarget')?.addEventListener('click', () => openTargetMenu());
@@ -794,9 +755,7 @@ function openComposerDetails(): void {
 }
 
 function draftIsSet(): boolean {
-  return (
-    draft.dueDate !== '' || draft.reminderAt !== '' || draft.flagged || draft.priority !== 'none'
-  );
+  return draft.dueDate !== '' || draft.reminderAt !== '' || draft.flagged;
 }
 
 function submitComposer(): void {
@@ -841,7 +800,6 @@ function renderComposerChips(): void {
   const date = hub.querySelector<HTMLButtonElement>('#tkhComposerDate')!;
   const remind = hub.querySelector<HTMLButtonElement>('#tkhComposerRemind')!;
   const flag = hub.querySelector<HTMLButtonElement>('#tkhComposerFlag')!;
-  const priority = hub.querySelector<HTMLButtonElement>('#tkhComposerPriority')!;
   setChip(date, draft.dueDate !== '', draft.dueDate ? formatDueChip(draft.dueDate, now) : 'Date');
   setChip(
     remind,
@@ -850,7 +808,6 @@ function renderComposerChips(): void {
   );
   flag.classList.toggle('is-set', draft.flagged);
   flag.setAttribute('aria-pressed', String(draft.flagged));
-  setChip(priority, draft.priority !== 'none', priorityLabel(draft.priority));
 }
 
 function setChip(button: HTMLButtonElement, isSet: boolean, label: string): void {
@@ -860,7 +817,7 @@ function setChip(button: HTMLButtonElement, isSet: boolean, label: string): void
 }
 
 // ---------------------------------------------------------------------------
-// Popovers: when / priority / move / target
+// Popovers: when / move / target
 // ---------------------------------------------------------------------------
 
 function bindPopovers(): void {
@@ -897,24 +854,6 @@ function bindPopovers(): void {
     if (!dateValue) return;
     const effectiveTime = whenMode === 'remind' && !timeValue ? '09:00' : timeValue;
     applyWhen(dateAndTimeToIso(dateValue, effectiveTime));
-  });
-
-  prioMenu.addEventListener('click', (event) => {
-    const item = (event.target as Element).closest<HTMLElement>('[data-priority]');
-    if (!item) return;
-    const priority = item.dataset.priority as Priority;
-    if (prioTarget?.kind === 'draft') {
-      draft.priority = priority;
-      renderComposerChips();
-    } else if (prioTarget?.kind === 'task') {
-      taskNotes.updateTask(prioTarget.id, { priority });
-      const button = wrapFor(prioTarget.id)?.querySelector<HTMLButtonElement>(
-        '[data-editor-priority]',
-      );
-      if (button) setChip(button, priority !== 'none', priorityLabel(priority));
-      refreshRowChips(prioTarget.id);
-    }
-    closePopovers();
   });
 
   movePop.addEventListener('click', (event) => {
@@ -1008,24 +947,6 @@ function applyWhen(value: string): void {
   refreshRowChips(id);
 }
 
-function openPriorityMenu(target: { kind: 'draft' } | { kind: 'task'; id: string }): void {
-  closePopovers();
-  prioTarget = target;
-  const current =
-    target.kind === 'draft'
-      ? draft.priority
-      : (taskNotes.taskById(target.id)?.task.priority ?? 'none');
-  prioMenu.innerHTML = priorityMenu(current);
-  const anchor =
-    target.kind === 'draft'
-      ? hubEl()?.querySelector('#tkhComposerDetails')
-      : wrapFor(target.id)?.querySelector('.tk-editor-chips');
-  if (!anchor) return;
-  anchor.appendChild(prioMenu);
-  prioMenu.hidden = false;
-  prioMenu.querySelector<HTMLElement>('.tk-menu-item')?.focus();
-}
-
 function openMoveMenu(id: string): void {
   const found = taskNotes.taskById(id);
   if (!found) return;
@@ -1065,23 +986,19 @@ function closePopovers(): void {
   const active = document.activeElement;
   if (
     active instanceof Node &&
-    (whenPop.contains(active) ||
-      prioMenu.contains(active) ||
-      movePop.contains(active) ||
-      targetMenu.contains(active))
+    (whenPop.contains(active) || movePop.contains(active) || targetMenu.contains(active))
   ) {
     const form = active instanceof Element ? active.closest<HTMLElement>('.tk-editor') : null;
     (form?.querySelector<HTMLElement>('.tk-editor-title') ?? composerInput()).focus();
   }
-  for (const pop of [whenPop, prioMenu, movePop, targetMenu]) {
+  for (const pop of [whenPop, movePop, targetMenu]) {
     pop.remove();
     pop.hidden = true;
   }
   whenTarget = null;
-  prioTarget = null;
   moveTargetId = null;
 }
 
 function popoverClosed(): boolean {
-  return whenPop.hidden && prioMenu.hidden && movePop.hidden && targetMenu.hidden;
+  return whenPop.hidden && movePop.hidden && targetMenu.hidden;
 }

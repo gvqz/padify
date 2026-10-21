@@ -77,7 +77,6 @@ export const MARKUP_CONTRACT: MarkupContractGroup[] = [
       'wordCount',
       'taskRail',
       'taskRailBackdrop',
-      'taskRailPin',
       'taskRailSearchInput',
       'taskRailSearchClear',
     ],

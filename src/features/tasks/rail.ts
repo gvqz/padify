@@ -45,7 +45,6 @@ export function initTasksRail(): void {
   const backdrop = document.getElementById('taskRailBackdrop');
   const searchInput = document.getElementById('taskRailSearchInput') as HTMLInputElement | null;
   const searchClear = document.getElementById('taskRailSearchClear');
-  const pinButton = document.getElementById('taskRailPin');
   const calendarButton = document.getElementById('tabRailCalendar');
   const viewsButton = document.getElementById('tkhViewsButton');
 
@@ -71,12 +70,6 @@ export function initTasksRail(): void {
     document.body.classList.toggle(RAIL_BODY_CLASS, on);
     if (!on) setDrawerOpen(false);
   };
-
-  // ---- the pin (keep the rail expanded) ----
-  pinButton?.addEventListener('click', () => {
-    const pinned = rail.classList.toggle('is-pinned');
-    pinButton.setAttribute('aria-pressed', String(pinned));
-  });
 
   // ---- destination cards ----
   rail.querySelectorAll<HTMLElement>('.tr-card[data-view]').forEach((card) => {
