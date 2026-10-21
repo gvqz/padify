@@ -235,10 +235,6 @@ export function initTasksHub(): void {
   hubEl()?.addEventListener('click', (event) => {
     const through = event.target as HTMLElement | null;
     if (through?.closest('[data-hub-close]')) closeTasksHub();
-    const dest = through?.closest<HTMLElement>('[data-cal-dest]');
-    if (dest?.dataset.calDest) {
-      openTasksHub(dest.dataset.calDest as HubView);
-    }
   });
 
   // Escape while an inner consumer is open never reaches the layer

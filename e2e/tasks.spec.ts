@@ -1112,31 +1112,33 @@ test.describe('the desktop rework — quick-add, tools, popover, destinations', 
     await expect(grid).toHaveCount(0);
   });
 
-  test('no back arrow on desktop, and the calendar sidebar opens the views', async ({ page }) => {
+  test('hub heads stand the arrow down on desktop; the calendar keeps its own', async ({
+    page,
+  }) => {
     await page.goto('/');
     await newTaskList(page);
     const input = page.locator('.tkp [data-composer-input]');
     await input.fill('Visible from everywhere');
     await input.press('Enter');
 
-    // Desktop hub heads carry no back arrow.
+    // Desktop hub heads carry no back arrow — the rail navigates.
     await page.locator('.tr-card[data-view="all"]').click();
     await expect(page.locator('#tkhTitle')).toHaveText('All');
-    await expect(page.locator('.tkh-back')).toBeHidden();
+    await expect(page.locator('#tasksHub .tkh-back')).toBeHidden();
 
-    // The calendar's sidebar destinations open the other views — the
-    // desktop way out, no arrow needed.
+    // The calendar page keeps its own toolbar arrow on desktop — the
+    // way out of the grid is the arrow, as it always was.
     await page.locator('#tabRailCalendar').click();
     await expect(page.locator('.tkcal-grid')).toBeVisible();
-    await page.locator('.tkcal-dest[data-cal-dest="all"]').click();
-    await expect(page.locator('#tkhTitle')).toHaveText('All');
-    await expect(
-      page.locator('#tkhSections .tk-task-wrap', { hasText: 'Visible from everywhere' }),
-    ).toBeVisible();
-    // …and the calendar keeps its own sidebar (lists + day pane + mini).
-    await page.locator('#tabRailCalendar').click();
-    await expect(page.locator('.tkcal-dests')).toBeVisible();
+    const back = page.locator('.tkcal-back');
+    await expect(back).toBeVisible();
+    // The hub head stays out of the way; the sidebar is the lists.
+    await expect(page.locator('.tkh.is-calendar .tkh-head')).toBeHidden();
     await expect(page.locator('.tkcal-lists')).toBeVisible();
+
+    // The arrow leaves the page: the note is right back underneath.
+    await back.click();
+    await expect(page.locator('#tasksHub')).toBeHidden();
   });
 
   test('the quick-add lives at the top of the hub views with its target chip', async ({ page }) => {

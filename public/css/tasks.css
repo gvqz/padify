@@ -679,15 +679,18 @@ body:not(.tasks-rail-on) #taskRailBackdrop {
   display: none;
 }
 
-/* Desktop: the calendar's toolbar row (month + modes + navs) replaces
-   the hub head entirely. There is no back arrow anywhere on desktop —
-   the calendar's own sidebar carries the destinations (data-cal-dest),
-   and leaving is a click on any note or view, the desktop way. Phones
-   keep the hub head (it carries their views button) and the inline
-   back arrow stays hidden (see .tkcal-back). */
+/* Desktop: the calendar's toolbar row (back arrow + month + modes +
+   navs) replaces the hub head entirely — one iCloud-tight line instead
+   of a lonely arrow floating above the title. Phones keep the hub head
+   (it carries their views button) and the inline back arrow stays
+   hidden (see .tkcal-back). */
 @media (min-width: 821px) {
   .tkh.is-calendar .tkh-head {
     display: none;
+  }
+
+  .tkh.is-calendar .tkcal-back {
+    display: inline-flex;
   }
 }
 
@@ -2094,59 +2097,6 @@ body.tasks-rail-on #textareaContainer .bottom-line {
 
 .tkcal-lists {
   flex: 0 0 auto;
-}
-
-/* --- the destinations — the calendar page's way out, desktop-style ---
-
-   The grid page carries no back arrow: its sidebar's top block IS the
-   reminders navigation (Today / Scheduled / All / Flagged / Completed),
-   so leaving is a click on any destination — the same move every other
-   reminders surface offers, in the same place on the screen. */
-
-.tkcal-dests {
-  flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2px;
-}
-
-.tkcal-dest {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: var(--vz-radius);
-  background: transparent;
-  color: var(--vz-fg-muted);
-  font-size: 12.5px;
-  font-weight: 550;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.12s var(--vz-ease), color 0.12s var(--vz-ease);
-}
-
-.tkcal-dest:hover,
-.tkcal-dest:focus-visible {
-  background: var(--tk-well);
-  color: var(--tk-text);
-  outline: none;
-}
-
-.tkcal-dest svg {
-  flex: 0 0 auto;
-  width: 14px;
-  height: 14px;
-  line-height: 0;
-}
-
-.tkcal-dest-count {
-  margin-left: auto;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--tk-muted);
-  font-variant-numeric: tabular-nums;
 }
 
 .tkcal-list {

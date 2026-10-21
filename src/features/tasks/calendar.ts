@@ -48,53 +48,6 @@ import { hasTime, parseWhen, startOfDay } from '../../editor/tasks/dates';
 import { escapeHtml } from '../../lib/escape';
 import type { Task } from '../../editor/tasks/content';
 
-/** The calendar sidebar's destination cluster — the page's way out,
- * desktop-style. `data-cal-dest` rides the hub's delegated handler,
- * which opens the matching view. */
-function destinationsHtml(): string {
-  const now = new Date();
-  const counts = taskNotes.smartCounts(now);
-  const views: Array<{ id: string; label: string; icon: string; count?: number }> = [
-    {
-      id: 'today',
-      label: 'Today',
-      icon: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/><circle cx="12" cy="14.6" r="1.3" fill="currentColor" stroke="none"/>',
-      count: counts.today,
-    },
-    {
-      id: 'scheduled',
-      label: 'Scheduled',
-      icon: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
-    },
-    {
-      id: 'all',
-      label: 'All',
-      icon: '<path d="M3.5 13h4l2 4.5h5l2-4.5h4"/><path d="M5.3 7.5 3.5 13v4.5a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2V13l-1.8-5.5a2 2 0 0 0-1.9-1.4H7.2a2 2 0 0 0-1.9 1.4z"/>',
-      count: counts.all + counts.today + counts.scheduled,
-    },
-    {
-      id: 'flagged',
-      label: 'Flagged',
-      icon: '<path d="M5 21V4.5C7 3 9 3 11 4.5s4 1.5 6 0V14c-2 1.5-4 1.5-6 0s-4-1.5-6 0"/>',
-      count: counts.flagged,
-    },
-    {
-      id: 'completed',
-      label: 'Completed',
-      icon: '<circle cx="12" cy="12" r="8.5"/><path d="m8.3 12.4 2.5 2.5 5-5.4"/>',
-      count: counts.completed,
-    },
-  ];
-  return views
-    .map(
-      (view) =>
-        `<button type="button" class="tkcal-dest" data-cal-dest="${view.id}" title="${view.label}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${view.icon}</svg><span>${escapeHtml(view.label)}</span>${
-          view.count && view.count > 0 ? `<span class="tkcal-dest-count">${view.count}</span>` : ''
-        }</button>`,
-    )
-    .join('');
-}
-
 /** The page's modes — Day the wide sheet, Week the seven columns,
  * Month the ruled grid, Year the twelve spreads. */
 type CalMode = 'day' | 'week' | 'month' | 'year';
@@ -453,6 +406,9 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
   sections.innerHTML = `
     <div class="tkcal">
       <header class="tkcal-top">
+        <button type="button" class="tkh-back tkcal-back" data-hub-close title="Back to the note" aria-label="Back to the note">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+        </button>
         <h5 class="tkcal-month">${
           mode === 'year'
             ? yearLabel
@@ -476,7 +432,6 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
       <div class="tkcal-body">
         <div class="tkcal-grid-pane">${gridPaneHtml}</div>
         <aside class="tkcal-side">
-          <nav class="tkcal-dests" aria-label="Reminders views">${destinationsHtml()}</nav>
           <div class="tkcal-lists">
             <div class="tkcal-side-eyebrow">My Lists</div>
             ${listsHtml}
