@@ -4,7 +4,8 @@ import type { NotepadUI } from '../selector';
 import type { UnicodeSymbol } from './types';
 import { showToast } from '../ui/toast';
 import { getEditorPort } from '../editor/port';
-import { insertTextIntoActiveNote } from '../tabs';
+import { isHtmlContent } from '../editor/note-types';
+import { getTabManager, insertTextIntoActiveNote } from '../tabs';
 import { escapeHtml } from '../lib/escape';
 import { stateGet, stateSet } from '../storage';
 
@@ -573,6 +574,27 @@ export function initUnicodePicker(notepad: NotepadUI): UnicodePickerHandle {
   function insertSymbol(symbol: UnicodeSymbol, keepOpen = false): void {
     const editor = notepad.note.get(0) as HTMLElement | undefined;
     if (!editor) return;
+
+    // Whose host is this? The caret parking, the port rung and the raw-DOM
+    // rung below all serve the HTML surface. When another kind owns the
+    // host — a task page, the drawing scaffold's card, a newer type's
+    // placeholder — the note's OWN surface is the only insertion path:
+    // parking a caret on its markup and splicing a text node into it
+    // would paint ghost words on a display the note never owned (its
+    // surface's capture keeps the real bytes safe, but the display lies
+    // until the next repaint).
+    const activeNote = getTabManager()?.getActive();
+    if (activeNote && !isHtmlContent(activeNote.noteType)) {
+      if (insertTextIntoActiveNote(symbol.char)) {
+        pushRecent(symbol.char);
+        if (!keepOpen) {
+          close();
+        }
+      } else {
+        showToast("Symbols can't be typed into this note.");
+      }
+      return;
+    }
 
     editor.focus();
 

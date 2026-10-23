@@ -123,8 +123,10 @@ interpreter:
 | Sync v2 (seq/cursor pulls) | scene rides tombstones + last-write-wins + seq stamping | nothing — the merge compares strings |
 | Snapshots | content + noteType captured verbatim; titles derive "Drawing" | nothing |
 | Exports | `<pre>`-escaped scene for now; PNG/SVG in the canvas phase | deferred by design |
+| Share modal | a never-drawn note and a cleared-canvas scene refuse to share (`noteContentIsEmpty` reads the scene, like the empty task list); scenes with elements share as raw text | the drawing branch in `cloud/share.ts` |
 | Share viewer | raw scene text (the viewer renders non-html kinds as text) | phase 3 decides rendering vs hiding |
 | The HTML sanitizer | never applies — `isHtmlContent('drawing')` is false | the gate already existed |
+| Unicode picker | `insertSymbol` consults the active surface first; a kind whose surface cannot take text is refused with a toast — no glyph is spliced into the placeholder card | the kind gate in `unicode/picker.ts` |
 
 Free-tier arithmetic, for the record: Turso's free plan is 5 GB storage,
 500 M row reads and 10 M row writes a month. A synced 50 KB scene costs
@@ -241,9 +243,12 @@ client never learns about it.
 **Share links for drawings** are a phase-3 sibling: either render scenes
 in the public viewer (the vendored canvas in read-only mode — heavier
 page, honest preview) or export a PNG snapshot at share time. Decide
-when the canvas exists; until then the share modal may offer drawings as
-raw text (today's behavior) or hide them — a one-line gate in
-`cloud/share-ui.ts` if "hide" wins.
+when the canvas exists; until then the share modal offers drawings as
+raw text (today's behavior) — except emptiness, which the drawing
+branch of `noteContentIsEmpty` already refuses: a never-drawn note and
+a cleared-canvas envelope never become links, the same rule as the
+empty task list. If "hide" wins later it is a one-line gate in
+`cloud/share-ui.ts`.
 
 ## Test map
 
@@ -254,6 +259,8 @@ raw text (today's behavior) or hide them — a one-line gate in
 | Registry precedence: type → kind → opaque | `src/editor/surface.test.ts` |
 | Type registry entry, sanitizer gate, icon | `src/editor/note-types.test.ts` |
 | Server border: scene bytes verbatim through `parseNoteRows` | `src/server-notes.test.ts` |
+| Share emptiness per kind (drawing scene, task list, html projection) | `src/cloud/share-url.test.ts` |
+| Picker insert gate: refusal for kinds without a text-taking surface, ladder preserved for html | `src/unicode/picker-insert.test.ts` |
 | Creation flow, badge, title, placeholder (browser) | `e2e/note-types.spec.ts` |
 | Old build meets a drawing note | covered by the opaque fallback + the unknown-type corpus (no new test needed) |
 
@@ -262,7 +269,9 @@ raw text (today's behavior) or hide them — a one-line gate in
 - [x] Scaffold (this branch): type registered end-to-end, scene contract
       pinned, placeholder surface, sync verified content-agnostic,
       free-tier budget confirmed — **the note is durable before the
-      canvas exists**.
+      canvas exists**. Cross-kind guards shipped with it: the share
+      modal refuses empty scenes, the unicode picker refuses kinds it
+      cannot type into.
 - [ ] Canvas PR: Excalidraw behind the dynamic import, the mount
       lifecycle above, autosave + announce, clear-canvas confirm,
       PNG/SVG export, `editable` flips with its test.

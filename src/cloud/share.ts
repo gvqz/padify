@@ -19,6 +19,7 @@
 import { getCloudConfig } from './config';
 import { getCloudUserId } from './sync';
 import { contentKindFor, type NoteType } from '../editor/note-types';
+import { parseDrawingScene } from '../editor/drawing/scene';
 import { taskNoteContentIsEmpty } from '../editor/tasks/content';
 import { deriveTabTitle, htmlToText, type TabManager, type TabsSyncPayload } from '../tabs';
 
@@ -67,14 +68,28 @@ function signedIn(): boolean {
  * True when a note carries nothing worth sharing: html kinds read through
  * the tag stripper (a bare <p></p> or <br> is emptiness wearing markup),
  * task list notes read their parsed model (an empty list is JSON bytes
- * with zero reminders — not a share), every other kind reads raw. The
- * blank note a fresh tab or a delete-all leaves behind must never become
- * a link — the recipient would get an empty page and the owner a "share"
- * of nothing.
+ * with zero reminders — not a share), drawing notes read their scene (a
+ * cleared canvas is the empty envelope, not a share of nothing), and
+ * every other kind reads raw. The blank note a fresh tab or a delete-all
+ * leaves behind must never become a link — the recipient would get an
+ * empty page and the owner a "share" of nothing.
  */
 export function noteContentIsEmpty(content: string, noteType?: NoteType | null): boolean {
   if (noteType === 'tasks') {
     return taskNoteContentIsEmpty(content);
+  }
+  if (noteType === 'drawing') {
+    // '' = a drawing note never drawn on; a parsed scene with zero
+    // elements = the cleared-canvas envelope the canvas phase writes.
+    // Both are emptiness wearing JSON, the same rule as the empty task
+    // list. Content this build cannot parse is a NEWER build's real
+    // scene — it stays shareable (the viewer shows non-html kinds as
+    // raw text), so refusing to understand can never block sharing.
+    if (content.trim() === '') {
+      return true;
+    }
+    const scene = parseDrawingScene(content);
+    return scene !== null && scene.elements.length === 0;
   }
   const kind = contentKindFor(noteType ?? undefined);
   if (kind === 'html') {
