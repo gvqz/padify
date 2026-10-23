@@ -18,6 +18,7 @@ import {
   isRichNote,
   normalizeNoteType,
   NOTE_TYPES,
+  NOTE_TYPE_ICONS,
 } from './note-types';
 
 describe('note types registry', () => {
@@ -107,5 +108,30 @@ describe('contentKindFor', () => {
     expect(isHtmlContent('rich')).toBe(true);
     expect(isHtmlContent(undefined)).toBe(true);
     expect(isHtmlContent('markdown')).toBe(false);
+  });
+});
+
+describe('the drawing type', () => {
+  it('is a registered json kind — its scene is structured content', () => {
+    expect(isNoteType('drawing')).toBe(true);
+    expect(contentKindFor('drawing')).toBe('json');
+  });
+
+  it('sits outside the html sanitizer gate — scene JSON is never rewritten as markup', () => {
+    // The registry's contentKind contract: running the HTML sanitizer
+    // over a drawing scene would rewrite angle brackets inside the data
+    // and silently corrupt the note.
+    expect(isHtmlContent('drawing')).toBe(false);
+  });
+
+  it('survives normalization as a registered non-default type', () => {
+    expect(normalizeNoteType('drawing')).toBe('drawing');
+  });
+
+  it('carries the menu label and the pencil icon', () => {
+    const def = NOTE_TYPES.find((entry) => entry.id === 'drawing');
+    expect(def?.label).toBe('Drawing');
+    expect(NOTE_TYPE_ICONS.drawing(10)).toContain('<svg');
+    expect(NOTE_TYPE_ICONS.drawing(10)).toContain('path');
   });
 });

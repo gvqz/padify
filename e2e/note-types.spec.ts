@@ -51,6 +51,7 @@ test.describe('note types', () => {
       popover.locator('.tab-type-menu-item', { hasText: 'Markdown note' }),
     ).toBeVisible();
     await expect(popover.locator('.tab-type-menu-item', { hasText: 'Task list' })).toBeVisible();
+    await expect(popover.locator('.tab-type-menu-item', { hasText: 'Drawing' })).toBeVisible();
 
     // Escape closes and returns focus to the trigger.
     await page.keyboard.press('Escape');
@@ -71,7 +72,8 @@ test.describe('note types', () => {
     await page.keyboard.press('ArrowDown');
     await expect(popover.locator('.tab-type-menu-item').nth(1)).toBeFocused();
     await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('ArrowDown'); // four types now — two downs reach the last
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown'); // five types now — four downs reach the last
     await expect(popover.locator('.tab-type-menu-item').last()).toBeFocused();
     await page.keyboard.press('ArrowDown'); // wraps to the first item
     await expect(popover.locator('.tab-type-menu-item').first()).toBeFocused();
@@ -130,6 +132,31 @@ test.describe('note types', () => {
     await expect(reloaded.locator('b')).toHaveCount(1);
     // The active note is still rich: the toolbar is visible after boot.
     await expect(page.locator('#richToolbar')).toBeVisible();
+  });
+
+  test('a drawing note opens the placeholder card and badges the strip', async ({ page }) => {
+    // The scaffold state (docs/DRAWINGPAD_PLAN.md): the type ships now —
+    // creatable, badged, titled, stored and synced — while the canvas
+    // itself lands with the next phase. The note must present as a
+    // drawing everywhere the type is visible, and never as an editable
+    // text surface.
+    await page.goto('/');
+    await openTypeMenu(page);
+    await page
+      .locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Drawing' })
+      .click();
+
+    // The new note is active, carries the pencil badge, and derives its
+    // strip title from the registry label (no name, empty content).
+    const activeTab = page.locator('#tabStripTabs .tab-strip-tab.active');
+    await expect(activeTab.locator('.tab-strip-type')).toHaveCount(1);
+    await expect(activeTab.locator('.tab-strip-title')).toHaveText('Drawing');
+
+    // The host is not editable text: the placeholder card is the paint,
+    // and no rich toolbar appears for it.
+    const card = page.locator('#note .unsupported-note');
+    await expect(card).toBeVisible();
+    await expect(page.locator('#richToolbar')).toBeHidden();
   });
 
   test('switching between notes shows and hides the toolbar', async ({ page }) => {

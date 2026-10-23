@@ -57,6 +57,12 @@ import './editor/markdown/surface';
 // task list notes restore at boot, so the surface must be registered
 // before the first note paints.
 import './editor/tasks/surface';
+// The drawing surface claims its TYPE (editor/drawing/surface.ts) —
+// 'drawing' shares the 'json' kind with 'tasks', so it registers through
+// the type-keyed layer. Scaffold state: display-only placeholder; the
+// Excalidraw canvas replaces its internals in the next phase
+// (docs/DRAWINGPAD_PLAN.md).
+import './editor/drawing/surface';
 import {
   focusMarkdownPane,
   markdownSelectionStateNow,
