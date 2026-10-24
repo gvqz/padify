@@ -203,7 +203,7 @@ test.describe('note types', () => {
     // clicked elsewhere) must not keep the caret's pressed states lit.
     await page.evaluate(() => {
       const range = document.createRange();
-      range.selectNodeContents(document.querySelector('.word-count-container a')!);
+      range.selectNodeContents(document.querySelector('.word-count-container p')!);
       const selection = window.getSelection();
       selection?.removeAllRanges();
       selection?.addRange(range);

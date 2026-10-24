@@ -1,6 +1,6 @@
 import { $ } from './lib/q';
 import { selector } from './selector';
-import { calculateNoteStatistics } from './lib/text-stats';
+import { calculateCharactersAndWords, calculateNoteStatistics } from './lib/text-stats';
 import { debounce } from './lib/debounce';
 import { shortcutLabel } from './lib/platform';
 import { copyNotesToClipboard, deleteNotes } from './context-menu';
@@ -15,6 +15,7 @@ import {
   getHtmlFileName,
   getMarkdownFileName,
 } from './exports';
+import { updateWordCountPill } from './word-count-pill';
 import { initUnicodePicker } from './unicode/picker';
 import {
   TabManager,
@@ -163,6 +164,7 @@ export async function initApp(): Promise<void> {
   tabManager.addActiveListener(syncPortInert);
 
   tabManager.onActiveChanged = () => {
+    updateWordCountPill(tabManager.getActiveText());
     handleTabSwitchedWhileListening();
   };
   await tabManager.init();
@@ -192,6 +194,8 @@ export async function initApp(): Promise<void> {
     initCloudUI();
     initShareUI();
   });
+  const characterAndWordCountText = calculateCharactersAndWords(tabManager.getActiveText());
+
   // Typing explosion effects (see typing-effects.ts).
   const typingEffects = initTypingEffects(notepad, editorConfig);
 
@@ -231,6 +235,8 @@ export async function initApp(): Promise<void> {
   notepad.note.on('input', () => {
     trackWritingActivity();
   });
+
+  notepad.wordCount.text(characterAndWordCountText);
 
   // Paste keeps the note's own formatting subset: a styled clipboard
   // (text/html — copied from this note, another note, or any web page)
@@ -317,6 +323,7 @@ export async function initApp(): Promise<void> {
     'input',
     debounce(function () {
       tabManager.saveActiveFromEditor();
+      updateWordCountPill(tabManager.getActiveText());
     }, 500),
   );
 

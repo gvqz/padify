@@ -29,6 +29,7 @@ import Swal from 'sweetalert2';
 import { getActiveNoteContent, getEditorText, getTabManager, htmlToText } from './tabs';
 import { isHtmlContent, noteTypeLabel, type NoteType } from './editor/note-types';
 import { showToast } from './ui/toast';
+import { updateWordCountPill } from './word-count-pill';
 
 interface Snapshot {
   id?: number;
@@ -697,6 +698,7 @@ export class SnapshotsManager {
           snapshot.noteType as NoteType | undefined,
           snapshot.colorTheme,
         );
+        updateWordCountPill(getEditorText());
 
         showToast('Snapshot restored!', 'success');
 

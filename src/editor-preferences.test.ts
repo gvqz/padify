@@ -13,7 +13,8 @@ import { resetStorageForTests, storageReady } from './storage';
  * effect only after the next note switch.
  *
  * The shell mounts exactly what initEditorPreferences touches at runtime:
- * the note host with a nested ProseMirror root and the settings controls.
+ * the note host with a nested ProseMirror root, the settings controls,
+ * and the word-count container the pill toggle drives.
  */
 
 const editorConfig: EditorConfig = {
@@ -21,6 +22,7 @@ const editorConfig: EditorConfig = {
   defaultLineHeight: 24,
   defaultOptimalLineLengthPadding: '0px',
   defaultOptimalLineLength: false,
+  defaultShowWordCountPill: 'Yes',
   defaultSpellCheck: true,
   defaultWriteDirection: 'ltr',
   defaultTexture: 'normal',
@@ -39,6 +41,8 @@ function mountShell(): void {
     <select id="font"><option value="default">default</option></select>
     <input type="checkbox" id="optimalLineLength" />
     <input type="checkbox" id="spellCheck" checked />
+    <input type="checkbox" id="showWordCountPill" checked />
+    <div class="word-count-container"></div>
     <button id="resetPreferences"></button>
   `;
 }
@@ -52,6 +56,8 @@ function wirePreferences(): void {
     texture: $('#texture'),
     optimalLineLength: $('#optimalLineLength'),
     spellCheck: $('#spellCheck'),
+    showWordCountPill: $('#showWordCountPill'),
+    wordCountContainer: $('.word-count-container'),
   } as unknown as NotepadUI;
 
   initEditorPreferences({

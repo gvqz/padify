@@ -1866,9 +1866,9 @@ body.pip-host .bottom-line {
   color: var(--vz-fg-subtle);
 }
 
-/* The stats capsule is plain in here, not the bordered capsule it wears
-   on the page — shelf-grade furniture a 350px window cannot afford (the
-   counter text it used to carry is retired). The .transparency match (and
+/* The count is plain text in here, not the capsule it wears on the
+   page — 6px/14px of padding plus border and shadow is shelf-grade
+   furniture a 350px window cannot afford. The .transparency match (and
    the !important pair) is what outranks the capsule + its dark twin in
    09-pills.css. */
 body.pip-host .bottom-line .word-count-container.transparency {
@@ -1880,6 +1880,11 @@ body.pip-host .bottom-line .word-count-container.transparency {
   color: var(--vz-fg-subtle);
   font-weight: 400;
   font-size: 10.5px;
+}
+
+body.pip-host .bottom-line .word-count-container p {
+  color: inherit;
+  font-size: inherit;
 }
 
 /* The statistics anchor opens a main-window modal — dead weight in the

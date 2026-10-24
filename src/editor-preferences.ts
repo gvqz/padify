@@ -19,6 +19,15 @@ function resetLineHeight(defaultLineHeight: number): void {
   $('#lineHeight').val(defaultLineHeight);
 }
 
+function resetShowWordCountPill(defaultShowWordCountPill: string): void {
+  if (defaultShowWordCountPill === 'Yes') {
+    $('.word-count-container').show();
+  } else {
+    $('.word-count-container').hide();
+  }
+  $('#showWordCountPill').prop('checked', defaultShowWordCountPill === 'Yes');
+}
+
 function resetWriteDirection(defaultWriteDirection: string): void {
   $('#note').css('direction', defaultWriteDirection);
   $('#writeDirection').val(defaultWriteDirection);
@@ -57,9 +66,9 @@ export interface EditorPreferencesContext {
 
 /**
  * Editor appearance preferences — font family/size, line height, write
- * direction, paper texture, Easy Read and spell check. Wires the
- * preferences-modal controls, restores the stored choices on boot and
- * handles the font-selection migration.
+ * direction, paper texture, word-count pill, Easy Read and spell check.
+ * Wires the preferences-modal controls, restores the stored choices on
+ * boot and handles the font-selection migration.
  */
 export function initEditorPreferences(ctx: EditorPreferencesContext): {
   resetToDefaults: () => void;
@@ -110,6 +119,23 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
   } else {
     resetLineHeight(editorConfig.defaultLineHeight);
   }
+
+  const userChosenWordCountPillSelected = getSetting('userChosenWordCountPillSelected');
+
+  if (userChosenWordCountPillSelected) {
+    if (userChosenWordCountPillSelected === 'Yes') {
+      notepad.wordCountContainer.show();
+    } else {
+      notepad.wordCountContainer.hide();
+    }
+    notepad.showWordCountPill.prop('checked', userChosenWordCountPillSelected === 'Yes');
+  } else {
+    notepad.wordCountContainer.show();
+    notepad.showWordCountPill.prop('checked', true);
+  }
+
+  // The word count pill always uses the counter pill style.
+  notepad.wordCountContainer.addClass('transparency');
 
   const userChosenWriteDirection = getSetting('userChosenWriteDirection');
   if (userChosenWriteDirection) {
@@ -187,6 +213,16 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
 
     applyTexture(textureSelected);
     setState('userChosenTexture', textureSelected);
+  });
+
+  notepad.showWordCountPill.on('change', function () {
+    if ($(this).is(':checked')) {
+      notepad.wordCountContainer.show();
+      setState('userChosenWordCountPillSelected', 'Yes');
+    } else {
+      notepad.wordCountContainer.hide();
+      setState('userChosenWordCountPillSelected', 'No');
+    }
   });
 
   notepad.optimalLineLength.on('change', function () {
@@ -325,6 +361,11 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
       if (userChosenLineHeight) {
         removeState('userChosenLineHeight');
         resetLineHeight(editorConfig.defaultLineHeight);
+      }
+
+      if (getSetting('userChosenWordCountPillSelected')) {
+        removeState('userChosenWordCountPillSelected');
+        resetShowWordCountPill(editorConfig.defaultShowWordCountPill);
       }
 
       const userChosenWriteDirection = getSetting('userChosenWriteDirection');

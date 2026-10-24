@@ -17,8 +17,8 @@
  *
  * THE ANNOUNCE CONTRACT: user edits surface as ONE bubbling `input` event
  * on the host, trailing-debounced 300 ms (the Gen-2 autosave rhythm) —
- * autosave and the save indicator both follow it. The debounce is not
- * just thrift: an equality guard re-serializes the live
+ * autosave, the word-count pill and the save indicator all follow it. The
+ * debounce is not just thrift: an equality guard re-serializes the live
  * scene at announce time and stays SILENT when the bytes match what
  * display()/commit()/clear() fed in — so opening a note, panning, zooming
  * and selecting never write, and the vendor's onChange (which fires for

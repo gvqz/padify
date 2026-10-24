@@ -104,6 +104,8 @@ const LEGACY_KV_KEYS: readonly string[] = [
   'userChosenFontSize',
   'userChosenFontWeight',
   'userChosenLineHeight',
+  'userChosenWordCountPillSelected',
+  'userChosenTransparentWordCountPillSelected',
   'userChosenWriteDirection',
   'userChosenTexture',
   'userChosenOptimalLineLengthSelected',

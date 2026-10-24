@@ -630,11 +630,11 @@ describe('pill docking (characterization)', () => {
 
     startTimer(10);
 
-    // The shell mounts .word-count-container display:none, so the timer
-    // moves to the 1.4em right offset. In jsdom every element is
-    // zero-footprint, which reads as hidden to the q facade's :hidden
-    // check — the same branch a real browser takes wherever the bottom
-    // strip is hidden (the tasks hub's full-bleed pages).
+    // The shell mounts .word-count-container display:none (the pill-less
+    // layout), so the timer moves to the 1.4em right offset. In jsdom every
+    // element is zero-footprint, which reads as hidden to the q facade's
+    // :hidden check — the same branch a real browser takes with the word
+    // count pill disabled in preferences.
     expect(pill().style.right).toBe('1.4em');
 
     stopTimer();

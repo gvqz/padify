@@ -119,6 +119,30 @@
               type="button"
               class="pref-nav-item"
               role="tab"
+              id="prefNavInterface"
+              aria-controls="prefPaneInterface"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <rect width="18" height="18" x="3" y="3" rx="2" />
+                <path d="M3 9h18" />
+                <path d="M9 21V9" />
+              </svg>
+              <span class="pref-nav-label">Interface</span>
+            </button>
+            <button
+              type="button"
+              class="pref-nav-item"
+              role="tab"
               id="prefNavEffects"
               aria-controls="prefPaneEffects"
               aria-selected="false"
@@ -456,6 +480,56 @@
                     <div class="checkbox checbox-switch">
                       <label>
                         <input type="checkbox" name="breakReminders" id="breakReminders" />
+                        <span></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="pref-pane"
+              role="tabpanel"
+              id="prefPaneInterface"
+              aria-labelledby="prefNavInterface"
+            >
+              <header class="pref-section-head">
+                <span class="pref-section-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect width="18" height="18" x="3" y="3" rx="2" />
+                    <path d="M3 9h18" />
+                    <path d="M9 21V9" />
+                  </svg>
+                </span>
+                <div>
+                  <h5 class="pref-section-title">Interface</h5>
+                  <p class="pref-section-hint">What you see around the editor.</p>
+                </div>
+              </header>
+              <div class="pref-card">
+                <div class="pref-row">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Character &amp; word count</span>
+                    <span class="pref-row-hint">The counter pill in the bottom corner.</span>
+                  </div>
+                  <div class="pref-row-control">
+                    <div class="checkbox checbox-switch">
+                      <label>
+                        <input
+                          type="checkbox"
+                          name="showWordCountPill"
+                          id="showWordCountPill"
+                          checked="checked"
+                        />
                         <span></span>
                       </label>
                     </div>
