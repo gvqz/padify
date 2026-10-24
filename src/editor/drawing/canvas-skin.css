@@ -1,0 +1,406 @@
+/*
+ * canvas-skin.css — the Padify skin over the vendored Excalidraw chrome.
+ *
+ * WHY THIS FILE EXISTS. The canvas is an embedded product with its own
+ * design language — purple brand accents, floating glass islands with
+ * layered shadows, pill toolbars, the Assistant typeface, lavender-tinted
+ * surfaces. Dropped into Padify's Vercel-style monochrome (1px borders,
+ * black primary, 6/8/12px radii, the system type stack) it reads as a
+ * foreign frame — "an iframe shoved into the project". This skin re-maps
+ * the vendor's ENTIRE theme-variable surface onto Padify's design tokens
+ * (public/css/tokens.css), then patches the few structures variables
+ * cannot reach (borders on islands, the context menu's inverted hover,
+ * the floating hint banner, the Library trigger).
+ *
+ * HOW IT LOADS. Imported from canvas.ts right AFTER the vendor's own
+ * index.css, so both ride the same lazy chunk and the skin wins the
+ * cascade. Every rule is scoped under [data-drawing-canvas] — the
+ * surface's wrapper (surface.ts sets it) — which buys one class of
+ * specificity over every vendor rule (.excalidraw …), so the skin never
+ * relies on source order alone. public/css's dead-CSS audit never sees
+ * this file (it scans index.html's <link> chain only).
+ *
+ * THEMING. The skin speaks ONLY in tokens — var(--surface-*), var(--fg*),
+ * var(--border), var(--danger), var(--shadow-*), var(--radius-*) — which
+ * tokens.css remaps under body.dark. One declaration, both themes; the
+ * chrome follows the app's theme switch live (the vendor's own theme
+ * prop is a mount-time snapshot and stays stale until the next mount).
+ *
+ * WHAT IS DELIBERATELY NOT SKINNED: the drawing itself. Element colors,
+ * roughness, fonts-in-use are the note's CONTENT — scenes must render
+ * identically on every device and in exported PNG/SVG, so nothing here
+ * touches element rendering beyond the selection indicator (which is
+ * chrome, read live from --color-selection by the vendor's renderer).
+ */
+
+/* ---------------------------------------------------------------------------
+ * 1. The theme-variable bridge — vendor palette → Padify tokens
+ *
+ * Declared on BOTH the plain and .theme--dark forms: the vendor re-declares
+ * its whole palette at .excalidraw.theme--dark (0,2,0), so the skin's dark
+ * companion (0,3,0) must outrank it. The values are theme-agnostic because
+ * the tokens themselves flip under body.dark.
+ * ------------------------------------------------------------------------- */
+
+[data-drawing-canvas] .excalidraw,
+[data-drawing-canvas] .excalidraw.theme--dark {
+  /* Type — the island stops speaking Assistant and speaks the app's stack */
+  --ui-font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans',
+    sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+
+  /* Brand purple → the app's monochrome ink. Every purple surface, icon,
+     active state and outline in the vendor traces back to this family. */
+  --color-primary: var(--fg);
+  --color-primary-darker: var(--fg);
+  --color-primary-darkest: var(--fg);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-light: var(--surface-hover);
+  --color-primary-light-darker: var(--surface-hover);
+  --color-brand-hover: var(--fg);
+  --color-brand-active: var(--fg);
+  --color-on-primary-container: var(--fg);
+  --color-surface-primary-container: var(--surface-hover);
+  --color-promo: var(--fg-muted);
+  --color-selection: var(--fg-muted); /* read at runtime by the renderer */
+  --color-logo-icon: var(--fg-muted);
+  --color-logo-text: var(--fg-muted);
+
+  /* Surfaces — the vendor's lavender-tinted grays become the app's neutral
+     scale (#f1f0ff and friends carry a measurable blue-violet cast) */
+  --color-surface-high: var(--surface-hover);
+  --color-surface-mid: var(--surface-subtle);
+  --color-surface-low: var(--surface-chip);
+  --color-surface-lowest: var(--surface-page);
+  --color-on-surface: var(--fg);
+  --color-border-outline: var(--border-strong);
+  --color-border-outline-variant: var(--border);
+  --default-bg-color: var(--surface-raised);
+
+  /* Islands & popups — the app's bordered-card elevation, not floating glass */
+  --island-bg-color: var(--surface-raised);
+  --popup-bg-color: var(--surface-raised);
+  --popup-secondary-bg-color: var(--surface-subtle);
+  --popup-text-color: var(--fg);
+  --popup-text-inverted-color: var(--surface-page);
+  --shadow-island: var(--shadow-card);
+  --modal-shadow: var(--shadow-dialog);
+  --sidebar-shadow: var(--shadow-dialog);
+  --library-dropdown-shadow: var(--shadow-menu);
+  --dialog-border-color: var(--border);
+  --sidebar-border-color: var(--border);
+  --overlay-bg-color: rgba(0, 0, 0, 0.32);
+
+  /* Buttons — quiet chips on hover, the app's border-strong press line */
+  --button-hover-bg: var(--surface-hover);
+  --button-active-bg: var(--surface-hover);
+  --button-active-border: var(--border-strong);
+  --button-selected-bg: var(--surface-hover);
+  --button-selected-hover-bg: var(--surface-hover);
+  --button-selected-border: var(--border-strong);
+  --button-special-active-bg-color: var(--surface-hover);
+  --button-gray-1: var(--surface-chip);
+  --button-gray-2: var(--border);
+  --button-gray-3: var(--border-strong);
+  --button-destructive-bg-color: var(--danger-soft);
+  --button-destructive-color: var(--danger);
+  --default-border-color: var(--border);
+
+  /* Ink, icons, inputs */
+  --text-primary-color: var(--fg);
+  --icon-fill-color: var(--fg);
+  --keybinding-color: var(--fg-subtle);
+  --input-bg-color: var(--surface-raised);
+  --input-hover-bg-color: var(--surface-subtle);
+  --input-border-color: var(--border);
+  --input-label-color: var(--fg-muted);
+  --focus-highlight-color: var(--fg);
+  --select-highlight-color: var(--surface-hover);
+  --link-color: var(--fg);
+
+  /* Chrome details — scrollbars, sliders, the lot */
+  --scrollbar-thumb: var(--border);
+  --scrollbar-thumb-hover: var(--border-strong);
+  --color-slider-track: var(--surface-chip);
+  --color-slider-thumb: var(--fg-muted);
+  --color-muted: var(--fg-subtle);
+  --color-muted-darker: var(--fg-muted);
+  --color-muted-darkest: var(--fg);
+  --color-disabled: var(--fg-subtle);
+  --color-icon-white: #ffffff;
+  --avatar-border-color: var(--border);
+
+  /* Danger — the app's one semantic hue, replacing the vendor's coral */
+  --color-danger: var(--danger);
+  --color-danger-dark: var(--danger);
+  --color-danger-darker: var(--danger-hover);
+  --color-danger-darkest: var(--danger-hover);
+  --color-danger-text: var(--danger);
+  --color-danger-background: var(--danger-soft);
+  --color-danger-icon-background: var(--danger-soft);
+  --color-danger-color: var(--danger);
+  --color-danger-icon-color: var(--danger);
+
+  /* Radii — the app's scale (vendor ships 6/8px here already; pinned
+     explicitly so a vendor bump cannot drift the geometry) */
+  --border-radius-md: 6px;
+  --border-radius-lg: 8px;
+}
+
+/* ---------------------------------------------------------------------------
+ * 2. Islands — bordered cards
+ *
+ * The vendor floats every panel on a layered glass shadow with no border.
+ * Padify's elevation story is a 1px border plus the faint card shadow
+ * (tokens: --shadow-card). box-sizing is already border-box, so the
+ * hairline eats into the padding, never the layout.
+ * ------------------------------------------------------------------------- */
+
+[data-drawing-canvas] .excalidraw .Island {
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+}
+
+/* The toolbar's hairline separators between tool groups */
+[data-drawing-canvas] .excalidraw .App-toolbar__divider {
+  background-color: var(--border);
+}
+
+/* ---------------------------------------------------------------------------
+ * 3. Buttons — quiet icon buttons, the app's interaction grammar
+ *
+ * The vendor's chrome buttons (zoom, undo/redo, help, kebab, the main-menu
+ * trigger) carry a 1px gray border and their own background. The app's
+ * icon buttons are transparent until hovered, 6px corners, a 150ms fade,
+ * and 0.98 press feedback — matched here rule for rule.
+ * ------------------------------------------------------------------------- */
+
+[data-drawing-canvas] .excalidraw .excalidraw-button,
+[data-drawing-canvas] .excalidraw .dropdown-menu-button,
+[data-drawing-canvas] .excalidraw .help-icon {
+  --background: transparent;
+  background-color: transparent;
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  transition:
+    background-color 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    color 150ms var(--ease-out),
+    transform 100ms ease;
+}
+
+[data-drawing-canvas] .excalidraw .excalidraw-button:hover,
+[data-drawing-canvas] .excalidraw .dropdown-menu-button:hover,
+[data-drawing-canvas] .excalidraw .help-icon:hover {
+  --background: var(--surface-hover);
+  background-color: var(--surface-hover);
+  border-color: transparent;
+  color: var(--fg);
+}
+
+[data-drawing-canvas] .excalidraw .excalidraw-button:active,
+[data-drawing-canvas] .excalidraw .dropdown-menu-button:active,
+[data-drawing-canvas] .excalidraw .help-icon:active {
+  transform: scale(0.98);
+}
+
+[data-drawing-canvas] .excalidraw .excalidraw-button:focus-visible,
+[data-drawing-canvas] .excalidraw .dropdown-menu-button:focus-visible,
+[data-drawing-canvas] .excalidraw .help-icon:focus-visible,
+[data-drawing-canvas] .excalidraw .ToolIcon__icon:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* The help button's white halo ring (a 0 0 0 1px shadow against the page)
+   has no place in the app's border language */
+[data-drawing-canvas] .excalidraw .help-icon {
+  box-shadow: none;
+  background-color: transparent;
+}
+
+/* Tool icons in the toolbar: the active tool reads as the app's selected
+   chip — surface-hover under the ink, a border-strong edge on press */
+[data-drawing-canvas] .excalidraw .ToolIcon .ToolIcon__icon {
+  border-radius: var(--radius-sm);
+  transition:
+    background-color 150ms var(--ease-out),
+    transform 100ms ease;
+}
+
+[data-drawing-canvas] .excalidraw .ToolIcon .ToolIcon__icon:active {
+  transform: scale(0.98);
+}
+
+/* The zoom readout — the app's pill typography (the word-count pill) */
+[data-drawing-canvas] .excalidraw .reset-zoom-button {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ---------------------------------------------------------------------------
+ * 4. Menus — dropdowns and the canvas context menu, the Vercel popover
+ *
+ * The vendor's dropdowns are borderless glass with 14px/400 rows; the
+ * app's are 1px-bordered cards, 8px radius, menu shadow, 13px/500 rows
+ * with 6px row radius and the surface-hover hover (vercel/04-dropdowns).
+ * The context menu additionally inverts its hover (light text on a blue
+ * fill) — replaced with the app's plain hover chip, and its dangerous
+ * rows with the app's danger tokens.
+ * ------------------------------------------------------------------------- */
+
+[data-drawing-canvas] .excalidraw .dropdown-menu .dropdown-menu-container {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-menu);
+  padding: 4px;
+}
+
+[data-drawing-canvas] .excalidraw .dropdown-menu .dropdown-menu-item-base {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+[data-drawing-canvas] .excalidraw .dropdown-menu .dropdown-menu-item {
+  height: 30px;
+  border-radius: 4px;
+}
+
+[data-drawing-canvas] .excalidraw .dropdown-menu .dropdown-menu-group-title {
+  font-size: 12px;
+  color: var(--fg-muted);
+  margin: 6px 4px 2px;
+}
+
+[data-drawing-canvas] .excalidraw .context-menu {
+  background-color: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-menu);
+  padding: 4px;
+}
+
+[data-drawing-canvas] .excalidraw .context-menu-item {
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* The vendor's inverted hover (text colored as the popup background over a
+   blue fill) — the app hovers with a chip and keeps the ink */
+[data-drawing-canvas] .excalidraw .context-menu-item:hover {
+  color: var(--fg);
+  background-color: var(--surface-hover);
+}
+
+[data-drawing-canvas] .excalidraw .context-menu-item:hover.dangerous {
+  background-color: var(--danger);
+}
+
+[data-drawing-canvas] .excalidraw .context-menu-item:hover.dangerous .context-menu-item__label {
+  color: #ffffff;
+}
+
+[data-drawing-canvas] .excalidraw .context-menu-item.dangerous .context-menu-item__label {
+  color: var(--danger);
+}
+
+[data-drawing-canvas] .excalidraw .context-menu-item-separator {
+  border-top: 1px solid var(--border);
+}
+
+/* ---------------------------------------------------------------------------
+ * 5. Panels, pickers, dialogs
+ *
+ * The style panel rides the Island restyle; the color pickers float as
+ * popovers and need the bordered-card treatment here; the dialogs already
+ * follow --modal-shadow/--dialog-border-color but their internal canvas
+ * title carries a hardcoded gray.
+ * ------------------------------------------------------------------------- */
+
+[data-drawing-canvas] .excalidraw .color-picker-content {
+  background-color: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-menu);
+}
+
+[data-drawing-canvas] .excalidraw .color-picker-content--default {
+  border-radius: 4px;
+}
+
+[data-drawing-canvas] .excalidraw .color-picker-content--canvas-title {
+  color: var(--fg-muted);
+}
+
+/* Swatch focus ring — a neutral ring, not the vendor's blue */
+[data-drawing-canvas] .excalidraw .color-picker-swatch:focus {
+  border-color: var(--fg);
+  box-shadow: none;
+}
+
+[data-drawing-canvas] .excalidraw .color-picker__button:focus-visible::after {
+  border-color: var(--fg);
+}
+
+/* The custom-color input row */
+[data-drawing-canvas] .excalidraw .color-input-container input {
+  border-radius: var(--radius-sm);
+}
+
+/* ---------------------------------------------------------------------------
+ * 6. Tooltips — the app's inverted chips
+ *
+ * The vendor ships near-black chips (#000); the app's are #171717/#fafafa
+ * in light and inverted under body.dark (vercel/08-toasts.css). 12px/500.
+ * ------------------------------------------------------------------------- */
+
+.excalidraw-tooltip {
+  --ui-font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans',
+    sans-serif;
+  background: #171717;
+  color: #fafafa;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 10px;
+  line-height: 1.5;
+}
+
+body.dark .excalidraw-tooltip {
+  background: #ededed;
+  color: #171717;
+}
+
+/* ---------------------------------------------------------------------------
+ * 7. The cut list — chrome the pad does not want
+ *
+ * • HintViewer: the floating "To move canvas, hold mouse wheel…" banner
+ *   that prints under the toolbar on every fresh canvas — instructional
+ *   clutter a notes app cannot afford; the gesture still works, it just
+ *   does not advertise itself.
+ * • The Library sidebar trigger: a top-right floating pill for the
+ *   vendor's reusable-shapes library — extra surface area for a feature
+ *   a minimalist notepad never asked to surface. (The library itself is
+ *   untouched; only the always-visible trigger is hidden.)
+ * ------------------------------------------------------------------------- */
+
+[data-drawing-canvas] .excalidraw .HintViewer {
+  display: none;
+}
+
+[data-drawing-canvas] .excalidraw .sidebar-trigger__label-element {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * 8. Text editing on the canvas — selection follows the app's ink
+ * ------------------------------------------------------------------------- */
+
+[data-drawing-canvas] .excalidraw .excalidraw-textEditorContainer ::selection {
+  background-color: rgba(128, 128, 128, 0.35);
+}

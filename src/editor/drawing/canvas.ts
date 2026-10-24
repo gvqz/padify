@@ -24,6 +24,13 @@
  *    "Save as image" rows (PNG/SVG) — the same exporter the vendor's own
  *    "Save as image" dialog uses.
  *
+ * THE SKIN. The import right after the vendor's stylesheet re-maps the
+ * vendor's whole theme-variable surface onto Padify's design tokens —
+ * same chunk, later in the cascade, scoped under [data-drawing-canvas].
+ * Without it the canvas ships the vendor's own chrome: purple accents,
+ * floating glass islands, the Assistant typeface — a design language the
+ * app's monochrome never invited. See canvas-skin.css for the full map.
+ *
  * NO JSX BY DESIGN: the app is a vanilla-TS codebase with no JSX tooling;
  * `createElement` keeps this island a plain .ts file (no tsconfig/eslint
  * JSX setup, no prettier JSX surprises) — the mount reads as one prop bag.
@@ -33,6 +40,7 @@ import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import {
   Excalidraw,
+  FONT_FAMILY,
   MainMenu,
   MIME_TYPES,
   exportToBlob,
@@ -42,6 +50,7 @@ import {
 // d.ts tree) — no runtime cost, no phantom-module games.
 import type { AppState, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import '@excalidraw/excalidraw/index.css';
+import './canvas-skin.css';
 
 /** The canvas's theme — the vendor's Theme, spelled without a type import
  * so this module owns its own contract ('light' | 'dark'). */
@@ -175,13 +184,21 @@ export function mountDrawingCanvas(
   const render = (): void => {
     if (!root) return;
     // initialData only takes effect on the FIRST render; the rename
-    // re-render passes it unchanged (ignored) and swaps `name`.
+    // re-render passes it unchanged (ignored) and swaps `name`. The font
+    // default is the PADIFY choice, not the vendor's: new text speaks
+    // the vendor's "normal" Nunito instead of the hand-drawn Excalifont
+    // (a minimalist notepad's canvas should read like the app). A scene
+    // that carries its own pick — every previously saved scene does, the
+    // whitelist persists the key — overrides the default via the spread.
     root.render(
       drawingCanvasElement(
         props,
         {
           elements: options.initialScene.elements,
-          appState: options.initialScene.appState,
+          appState: {
+            currentItemFontFamily: FONT_FAMILY.Nunito,
+            ...options.initialScene.appState,
+          },
         },
         (instance: ExcalidrawImperativeAPI) => {
           api = instance;
@@ -195,7 +212,15 @@ export function mountDrawingCanvas(
     updateScene(scene: DrawingCanvasScene): void {
       api?.updateScene({
         elements: scene.elements,
-        appState: scene.appState,
+        // The same Padify font default as initialData — the note-switch
+        // path (drawing→drawing reuse) never re-runs initialData, so a
+        // fresh scene (appState {}) would otherwise inherit the previous
+        // note's live tool state. A scene that carries its own pick wins
+        // the spread, exactly as at mount.
+        appState: {
+          currentItemFontFamily: FONT_FAMILY.Nunito,
+          ...scene.appState,
+        },
       } as unknown as UpdateScenePayload);
       if (scene.elements.length > 0) {
         api?.scrollToContent();

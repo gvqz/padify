@@ -256,6 +256,43 @@ from then on it is offline-capable like every other hashed artifact.
 React (18.3.1) and react-dom ship inside the island's graph — the boot
 payload never sees them.
 
+**The skin (`src/editor/drawing/canvas-skin.css`).** The vendor ships
+its own design language — purple brand accents, floating glass islands
+on layered shadows, the Assistant typeface, lavender-tinted surfaces —
+which inside Padify's Vercel-style monochrome read as a foreign frame.
+The skin re-maps the vendor's entire theme-variable surface (the
+`--color-*`, `--island-*`, `--button-*`, `--shadow-*`, `--ui-font`
+families) onto Padify's design tokens, then patches the few structures
+variables cannot reach: islands become 1px-bordered cards, dropdowns
+and the canvas context menu become the app's popover pattern (8px
+radius, menu shadow, 13px/500 rows, surface-hover hovers — the
+context menu's inverted hover is replaced outright), chrome buttons
+become quiet icon buttons (transparent until hover, 0.98 press
+feedback), tooltips become the app's inverted chips, and the
+`--color-selection` override retints the on-canvas selection box (the
+renderer reads that variable live). Two pieces of vendor chrome are
+hidden by policy rather than restyled: the `HintViewer` instructional
+banner and the always-visible Library sidebar trigger. The skin is
+imported from `canvas.ts` right after the vendor's own stylesheet, so
+both ride the same lazy chunk with the skin later in the cascade;
+every rule is scoped under `[data-drawing-canvas]` for one class of
+specificity over the vendor, so nothing relies on source order alone.
+Because it speaks only in tokens (`--surface-*`, `--fg*`,
+`--border`, …), one declaration serves both themes and the chrome
+follows the app's theme switch live — even though the vendor's own
+`theme` prop is a mount-time snapshot. What is deliberately NOT
+skinned: the drawing itself. Element colors, roughness and fonts-in-use
+are the note's content and must render identically on every device and
+in exports; the one content-adjacent choice that IS made is the
+default: new text speaks the vendor's "normal" Nunito
+(`FONT_FAMILY.Nunito`, injected at both the `initialData` and
+`updateScene` seams — a scene's persisted `currentItemFontFamily`
+always wins the spread) instead of the hand-drawn Excalifont default.
+The public/css dead-CSS audit never sees the skin (it scans
+index.html's `<link>` chain only); a future vendor bump is caught the
+same way every other pin catches it — visually, and by the e2e menu
+assertions.
+
 ## Phase 3 — embedded images (the attachments upgrade path)
 
 The scene format does not change; the storage story does, and it is
