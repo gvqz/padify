@@ -246,28 +246,54 @@ function mountLiveCanvas(
       if (current.disposed || !current.mount.isConnected || live !== current) {
         return; // the stage moved on mid-download — this mount is dead
       }
-      loading.remove();
-      current.handle = canvas.mountDrawingCanvas(mount, {
-        initialScene: { elements: current.snapshot.elements, appState: current.snapshot.appState },
-        theme: document.body.classList.contains('dark') ? 'dark' : 'light',
-        name: current.noteName,
-        onChange: (next) => {
-          current.snapshot = next;
-          scheduleAnnounce(current);
-        },
-        onImagePaste: () => {
-          showToast('Embedded images arrive in a later Padify — drawings stay vector for now.');
-        },
-      });
+      try {
+        loading.remove();
+        current.handle = canvas.mountDrawingCanvas(mount, {
+          initialScene: {
+            elements: current.snapshot.elements,
+            appState: current.snapshot.appState,
+          },
+          theme: document.body.classList.contains('dark') ? 'dark' : 'light',
+          name: current.noteName,
+          onChange: (next) => {
+            current.snapshot = next;
+            scheduleAnnounce(current);
+          },
+          onImagePaste: () => {
+            showToast('Embedded images arrive in a later Padify — drawings stay vector for now.');
+          },
+        });
+      } catch {
+        // The island crashed mid-mount (or the environment beneath it is
+        // gone): the honest card replaces the loading paint when anything
+        // is left to paint on.
+        try {
+          mount.replaceChildren(
+            buildCard(
+              'The canvas could not load',
+              'The drawing is safe and syncs like any other note. Check the connection and reopen the note to try again.',
+            ),
+          );
+        } catch {
+          /* the environment beneath the mount is gone — nothing to paint */
+        }
+      }
     })
     .catch(() => {
-      if (current.disposed || live !== current) return;
-      mount.replaceChildren(
-        buildCard(
-          'The canvas could not load',
-          'The drawing is safe and syncs like any other note. Check the connection and reopen the note to try again.',
-        ),
-      );
+      // A dead mount (dismissed, or the stage moved on) stays down; the
+      // isConnected check also covers a torn-down test environment — the
+      // island may take longer to REJECT than its suite takes to finish.
+      if (current.disposed || live !== current || !current.mount.isConnected) return;
+      try {
+        mount.replaceChildren(
+          buildCard(
+            'The canvas could not load',
+            'The drawing is safe and syncs like any other note. Check the connection and reopen the note to try again.',
+          ),
+        );
+      } catch {
+        /* the environment beneath the mount is gone — nothing to paint */
+      }
     });
 }
 

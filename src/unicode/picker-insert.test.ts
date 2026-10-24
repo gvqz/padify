@@ -22,7 +22,7 @@
 import 'fake-indexeddb/auto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { $ } from '../lib/q';
 import { initUnicodePicker } from './picker';
 import { UNICODE_SYMBOLS } from './symbols-data';
@@ -188,13 +188,24 @@ beforeEach(async () => {
   await new Promise((resolvePromise) => setTimeout(resolvePromise, 80));
 });
 
+afterEach(async () => {
+  // The insert flows close the picker modal, whose bootstrap-style
+  // transition timers (a 300 ms fade, then a 150 ms backdrop removal) are
+  // REAL timers — they must drain while this environment still exists.
+  // CI's fast teardown lets pending ones fire into a torn-down jsdom
+  // otherwise, and vitest fails the whole file as unhandled errors that
+  // have nothing to do with what the tests assert.
+  await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+});
+
 describe('insertSymbol across note kinds — the surface seam', () => {
   it('a drawing note refuses the insert: toast, no ghost glyph, no recents entry', () => {
     manager.addTab(false, 'drawing');
     drawingTabId = manager.getActive()!.id;
     expect(drawingTabId).not.toBe(standardTabId);
 
-    // The scaffold's placeholder card is the paint.
+    // The drawing surface's paint — the canvas wrapper's card (loading,
+    // read-only, or error) never belongs to the note's bytes.
     const card = document.querySelector('#note .unsupported-note');
     expect(card).not.toBeNull();
     const cardTextBefore = (card as HTMLElement).textContent ?? '';
