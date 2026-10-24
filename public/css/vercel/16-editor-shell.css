@@ -130,6 +130,32 @@ body.dark #note[data-empty]::before {
   height: 100%;
 }
 
+/* ---- The full-bleed takeover ----
+   While a drawing note owns the host, the reading column's furniture
+   steps aside: the host sheds its padding and border (the wrapper above
+   fills it edge to edge) and the bottom strip — save state, timer, the
+   stats capsule — gets out of the canvas's way. The class rides the
+   HOST (surface.ts adds it with the wrapper and stands it down with the
+   canvas), so the state follows the editor wherever it lives. The
+   !important is the pip-host precedent: the optimal-line-length
+   preference writes the note's padding as an INLINE style, and a plain
+   rule would lose to it. */
+#note.drawing-canvas-open {
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden;
+  /* editor.css pins scrollbar-gutter: stable for the reading column's
+     scroll; a hidden-overflow box is still a scroll container, so the
+     gutter would burn 10px of the canvas's right edge. */
+  scrollbar-gutter: auto;
+}
+
+/* The strip is the host's SIBLING (absolute-positioned over the note's
+   old bottom padding) — reach it through the column that holds both. */
+#textareaContainer:has(#note.drawing-canvas-open) .bottom-line {
+  display: none;
+}
+
 /* ---- The island boundary: bootstrap's shared class names, neutralized ----
    Excalidraw ships radix widgets under the SAME class names bootstrap uses
    app-wide, and bootstrap's rules are written for its own open/close
@@ -1840,9 +1866,9 @@ body.pip-host .bottom-line {
   color: var(--vz-fg-subtle);
 }
 
-/* The count is plain text in here, not the capsule it wears on the
-   page — 6px/14px of padding plus border and shadow is shelf-grade
-   furniture a 350px window cannot afford. The .transparency match (and
+/* The stats capsule is plain in here, not the bordered capsule it wears
+   on the page — shelf-grade furniture a 350px window cannot afford (the
+   counter text it used to carry is retired). The .transparency match (and
    the !important pair) is what outranks the capsule + its dark twin in
    09-pills.css. */
 body.pip-host .bottom-line .word-count-container.transparency {
@@ -1854,11 +1880,6 @@ body.pip-host .bottom-line .word-count-container.transparency {
   color: var(--vz-fg-subtle);
   font-weight: 400;
   font-size: 10.5px;
-}
-
-body.pip-host .bottom-line .word-count-container p {
-  color: inherit;
-  font-size: inherit;
 }
 
 /* The statistics anchor opens a main-window modal — dead weight in the

@@ -1,6 +1,6 @@
 /**
  * Note text statistics — pure functions, no DOM. Everything the statistics
- * modal and the word-count pill display is computed here: word/character/
+ * modal displays is computed here: word/character/
  * sentence/paragraph counts, reading and speaking time, lexical density,
  * the Flesch readability estimate and the most common content word.
  *
@@ -52,16 +52,6 @@ export function countSyllables(word: string): number {
     .match(/[aeiouy]{1,2}/g);
 
   return syllableMatches ? syllableMatches.length : 1;
-}
-
-export function calculateCharactersAndWords(str: string): string {
-  const characterCount = str.length;
-  const wordCount = str !== '' ? countWords(str) : 0;
-  const characterString = characterCount === 1 ? 'character' : 'characters';
-  const wordString = wordCount === 1 ? 'word' : 'words';
-  const wordCountText = `${characterCount} ${characterString} • ${wordCount} ${wordString}`;
-
-  return wordCountText;
 }
 
 export interface NoteStatistics {

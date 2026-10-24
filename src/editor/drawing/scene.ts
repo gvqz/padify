@@ -182,8 +182,8 @@ export function drawingSceneHasContent(content: string): boolean {
 }
 
 /**
- * The plain-text projection of a scene — what the word-count pill, the
- * statistics modal, the close-tab prompt and the snapshots preview read
+ * The plain-text projection of a scene — what the statistics modal, the
+ * close-tab prompt and the snapshots preview read
  * (via the surface's visibleText). Text elements count as words: a sketch
  * annotated "grocery list / call the dentist" reads as those words, the
  * same way a task list reads as its rows' titles. A scene with no text

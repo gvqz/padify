@@ -31,10 +31,7 @@ export interface NotepadUI {
   note: Q;
   preferencesModal: Q;
   resetPreferences: Q;
-  showWordCountPill: Q;
-  wordCount: Q;
   installAppButtonContainer: Q;
-  wordCountContainer: Q;
   keyboardShortcutsModal: Q;
   fullScreenButton: Q;
   optimalLineLength: Q;
@@ -50,7 +47,6 @@ export interface EditorConfig {
   defaultFontSize: number;
   defaultLineHeight: number;
   defaultFont: string;
-  defaultShowWordCountPill: string;
   defaultWriteDirection: string;
   defaultTexture: string;
   defaultOptimalLineLength: boolean;
@@ -134,10 +130,7 @@ export function selector(): AppSelector {
       note: selectById('note'),
       preferencesModal: selectById('preferencesModal'),
       resetPreferences: selectById('resetPreferences'),
-      showWordCountPill: selectById('showWordCountPill'),
-      wordCount: selectById('wordCount'),
       installAppButtonContainer: selectByClassName('install-app-btn-container'),
-      wordCountContainer: selectByClassName('word-count-container'),
       keyboardShortcutsModal: selectById('keyboardShortcutsModal'),
       fullScreenButton: selectById('fullScreenButton'),
       optimalLineLength: selectById('optimalLineLength'),

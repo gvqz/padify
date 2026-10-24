@@ -13,7 +13,9 @@ import { expect, test, type Page } from '@playwright/test';
  * this spec exists):
  *  - the main window stays usable while a note floats (the old
  *    .overlay blocked the navbar — including the close toggle itself);
- *  - typing in the floating window still saves and updates the count;
+ *  - typing in the floating window still saves (the counter pill that
+ *    used to mirror the typing was retired; the note's own text and the
+ *    storage round trip are the proof now);
  *  - Escape (or the toggle) returns the editor to its exact slot;
  *  - the theme follows (dark mode + paper textures).
  */
@@ -26,8 +28,8 @@ async function stubDocumentPip(page: Page): Promise<void> {
     Object.defineProperty(window, 'documentPictureInPicture', {
       configurable: true,
       value: {
-        // The real API exposes the open window (consumers like the
-        // word-count pill use it to reach elements that floated).
+        // The real API exposes the open window (consumers reach
+        // elements that floated).
         get window(): Window | null {
           return openWindow && !openWindow.closed ? openWindow : null;
         },
@@ -120,23 +122,18 @@ test.describe('floating window', () => {
     await expect(page.locator('#note')).toBeVisible();
   });
 
-  test('typing in the floating window saves and updates the word count', async ({ page }) => {
+  test('typing in the floating window saves', async ({ page }) => {
     await page.goto('/');
     // A fresh note side-steps the welcome note's async storage restore
-    // entirely — the count starts at a known zero.
+    // entirely — the editor starts from a known empty state.
     await page.locator('#addTab').click();
-    await expect(page.locator('#wordCount')).toHaveText('0 characters • 0 words', {
-      timeout: 10_000,
-    });
+    await expect(page.locator('#note')).toHaveText('');
 
     const popup = await openFloatingWindow(page);
 
     await popup.locator('#note').click();
     await popup.keyboard.type('Typed in the floating window.');
-    // The app's input wiring debounces 500ms; the pill follows.
-    await expect(popup.locator('#wordCount')).toHaveText('29 characters • 5 words', {
-      timeout: 5_000,
-    });
+    // The app's input wiring debounces 500ms; the save follows.
 
     // Escape closes the window and returns the editor to the main shell.
     // The settle mirrors the other close-path tests: the module's pagehide
@@ -226,9 +223,8 @@ test.describe('floating window', () => {
     await page.locator('#addTab').click();
     await page.locator('#note').click();
     await page.keyboard.type('Grocery list');
-    await expect(page.locator('#wordCount')).toHaveText('12 characters • 2 words', {
-      timeout: 10_000,
-    });
+    // Let the debounced save land before the window opens.
+    await page.waitForTimeout(900);
 
     const popup = await openFloatingWindow(page);
     await expect(popup.locator('#pipHeaderTitle')).toHaveText('Grocery list');
@@ -249,16 +245,15 @@ test.describe('floating window', () => {
     await expect(popup.locator('.pip-notes')).toBeHidden();
     await expect(popup.locator('#pipHeaderTitle')).toHaveText(/Welcome.*Padify/);
     await expect(popup.locator('#note')).toContainText('offline-capable notepad');
-    await expect(popup.locator('#wordCount')).not.toHaveText('12 characters • 2 words');
 
     // A new note started from the browser is a plain, empty one.
     await popup.locator('.pip-notes-btn').click();
     await popup.locator('.pip-note-new').click();
     await expect(popup.locator('#pipHeaderTitle')).toHaveText('Untitled');
-    await expect(popup.locator('#wordCount')).toHaveText('0 characters • 0 words');
+    await expect(popup.locator('#note')).toHaveText('');
     await popup.locator('#note').click();
     await popup.keyboard.type('From the floating window');
-    await expect(popup.locator('#wordCount')).not.toHaveText('0 characters • 0 words');
+    await expect(popup.locator('#note')).toContainText('From the floating window');
 
     // Escape peels the browser back before it ever reaches the window.
     await popup.locator('.pip-notes-btn').click();

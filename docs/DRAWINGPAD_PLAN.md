@@ -293,6 +293,26 @@ index.html's `<link>` chain only); a future vendor bump is caught the
 same way every other pin catches it — visually, and by the e2e menu
 assertions.
 
+**The takeover (`drawing-canvas-open`, the full-bleed stage).** A drawing
+note is not a reading column — while the canvas owns the host, the
+surface paints `drawing-canvas-open` on it (with the wrapper, so even the
+loading card sits on the full-bleed stage and nothing reflows when the
+chunk lands) and `vercel/16-editor-shell.css` does the rest: the host's
+padding/border drop to zero (`!important`, the pip-host precedent — the
+optimal-line-length preference writes the host's padding as an inline
+style a plain rule would lose to), overflow hides, and the bottom strip
+(save state, timer, the stats capsule) steps aside through
+`#textareaContainer:has(#note.drawing-canvas-open)`. The navbar and the
+notes rail stay: they are app chrome, and everything below/right of them
+belongs to the drawing. The class stands down with the canvas
+(`standDownLive`, and the two failure-card paths) — a text note gets its
+padded column and bottom strip back. The counter pill that used to sit in
+that strip is retired app-wide (its "Character & word count" preference
+went with it); the quiet statistics icon stays as the Statistics modal's
+one entry point, so the strip a text note keeps is the save chip, the
+timer and that icon. `drawing-canvas.spec.ts` pins the takeover, the
+edge-to-edge geometry and the stand-down.
+
 ## Phase 3 — embedded images (the attachments upgrade path)
 
 The scene format does not change; the storage story does, and it is

@@ -628,8 +628,8 @@ describe('renderMarkdownToHtml — footnotes', () => {
 describe('renderMarkdownToHtml — pathological nesting', () => {
   it('caps nesting depth: a 900-deep outline renders fast, content preserved', () => {
     // The shape that used to cost ~O(N^3): depth 900 measured 7 s of
-    // main-thread block (the word-count pill pays this render on every
-    // typing pause). Past the cap the deeper markers degrade to paragraph
+    // main-thread block (the statistics modal pays this render on open).
+    // Past the cap the deeper markers degrade to paragraph
     // text — every word must survive, structure flattens.
     const lines: string[] = [];
     for (let depth = 0; depth < 900; depth += 1) {

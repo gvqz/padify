@@ -17,8 +17,8 @@
  *
  * THE ANNOUNCE CONTRACT: user edits surface as ONE bubbling `input` event
  * on the host, trailing-debounced 300 ms (the Gen-2 autosave rhythm) —
- * autosave, the word-count pill and the save indicator all follow it. The
- * debounce is not just thrift: an equality guard re-serializes the live
+ * autosave and the save indicator both follow it. The debounce is not
+ * just thrift: an equality guard re-serializes the live
  * scene at announce time and stays SILENT when the bytes match what
  * display()/commit()/clear() fed in — so opening a note, panning, zooming
  * and selecting never write, and the vendor's onChange (which fires for
@@ -60,6 +60,15 @@ import type { DrawingCanvasHandle, DrawingCanvasScene } from './canvas';
 
 /** The Gen-2 autosave rhythm: announce 300 ms after the last change. */
 export const DRAWING_ANNOUNCE_DEBOUNCE_MS = 300;
+
+/**
+ * The full-bleed state class the canvas paints on its host while a
+ * drawing note owns the stage (vercel/16-editor-shell.css): the host
+ * sheds the reading column's padding/border and the bottom strip steps
+ * aside, so the canvas fills the editor edge to edge. Named in tests —
+ * drawing-canvas.spec.ts pins the takeover and the stand-down.
+ */
+export const DRAWING_CANVAS_OPEN_CLASS = 'drawing-canvas-open';
 
 // ---------------------------------------------------------------------------
 // The live canvas
@@ -162,6 +171,7 @@ function standDownLive(): void {
   if (!current) return;
   cancelAnnounce(current);
   current.disposed = true;
+  current.host.classList.remove(DRAWING_CANVAS_OPEN_CLASS);
   current.handle?.unmount();
   live = null;
 }
@@ -212,6 +222,10 @@ function mountLiveCanvas(
 ): void {
   standDownLive();
   host.replaceChildren();
+  // The full-bleed takeover starts with the wrapper (not the canvas's
+  // mount — the loading card paints full-bleed too, so the stage never
+  // reflows when the vendor chunk lands).
+  host.classList.add(DRAWING_CANVAS_OPEN_CLASS);
 
   const mount = document.createElement('div');
   mount.dataset.drawingCanvas = '';
@@ -266,7 +280,9 @@ function mountLiveCanvas(
       } catch {
         // The island crashed mid-mount (or the environment beneath it is
         // gone): the honest card replaces the loading paint when anything
-        // is left to paint on.
+        // is left to paint on. A card is not a canvas — the host goes back
+        // to the padded reading column.
+        host.classList.remove(DRAWING_CANVAS_OPEN_CLASS);
         try {
           mount.replaceChildren(
             buildCard(
@@ -284,6 +300,7 @@ function mountLiveCanvas(
       // isConnected check also covers a torn-down test environment — the
       // island may take longer to REJECT than its suite takes to finish.
       if (current.disposed || live !== current || !current.mount.isConnected) return;
+      host.classList.remove(DRAWING_CANVAS_OPEN_CLASS);
       try {
         mount.replaceChildren(
           buildCard(

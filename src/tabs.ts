@@ -1230,7 +1230,7 @@ export class TabManager {
     });
   }
 
-  /** Hook for app.ts to refresh the word-count pill on tab switches. */
+  /** Hook for app.ts on tab switches (voice typing's listening state). */
   onActiveChanged: ((tab: NoteTab) => void) | null = null;
 
   /** Hook for the cloud sync layer — fires after every model persist. */

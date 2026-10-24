@@ -22,17 +22,22 @@ test.afterEach(async ({ page }) => {
 });
 
 test.describe('editor core', () => {
-  test('boots with the welcome note and a live word pill', async ({ page }) => {
+  test('boots with the welcome note — no counter pill, the stats entry stays', async ({ page }) => {
     await page.goto('/');
 
     const editor = page.locator('#note');
     await expect(editor).toContainText('Welcome! Padify is an offline-capable notepad');
 
-    const pill = page.locator('#wordCount');
-    await expect(pill).toContainText(/characters? • \d+ words?/);
+    // The character/word counter pill is retired: no #wordCount text, and
+    // the bottom line's capsule is only the statistics icon (no counter).
+    await expect(page.locator('#wordCount')).toHaveCount(0);
+    await expect(page.locator('.bottom-line .word-count-container')).toBeVisible();
+    await expect(page.locator('.bottom-line .word-count-container')).not.toContainText(
+      /characters? •/,
+    );
   });
 
-  test('typing updates the pill and survives a reload (IndexedDB autosave)', async ({ page }) => {
+  test('typing survives a reload (IndexedDB autosave)', async ({ page }) => {
     await page.goto('/');
     const editor = page.locator('#note');
     await expect(editor).toBeVisible();

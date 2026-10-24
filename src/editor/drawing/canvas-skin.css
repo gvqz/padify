@@ -234,7 +234,7 @@
   transform: scale(0.98);
 }
 
-/* The zoom readout — the app's pill typography (the word-count pill) */
+/* The zoom readout — the app's pill typography (the bottom capsules) */
 [data-drawing-canvas] .excalidraw .reset-zoom-button {
   font-size: 12px;
   font-weight: 500;

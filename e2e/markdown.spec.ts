@@ -28,9 +28,7 @@ test.describe('markdown notes', () => {
     await expect(activeTab.locator('.tab-strip-type')).toHaveCount(1);
   });
 
-  test('input rules format while typing, and the pill counts words not syntax', async ({
-    page,
-  }) => {
+  test('input rules format while typing', async ({ page }) => {
     await page.goto('/');
     await newMarkdownNote(page);
 
@@ -49,11 +47,6 @@ test.describe('markdown notes', () => {
     await expect(editor.locator('h1')).toHaveText('Trip plan');
     await expect(editor.locator('li')).toHaveCount(1);
     await expect(editor.locator('strong')).toHaveText('good bag');
-
-    // The pill reads the rendered projection — no asterisks, no dash.
-    const pill = await page.locator('#wordCount').textContent();
-    expect(pill).not.toContain('#');
-    expect(pill).not.toContain('-');
   });
 
   test('the toolbar formats the selection and pressed states follow', async ({ page }) => {

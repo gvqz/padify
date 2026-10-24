@@ -165,6 +165,58 @@ test.describe('the drawing canvas', () => {
     await expect(menu.getByText('Excalidraw links')).toHaveCount(0);
   });
 
+  test('the canvas takes over the full stage — edge to edge, no bottom strip', async ({ page }) => {
+    await openDrawingCanvas(page);
+    await page.waitForTimeout(500);
+
+    // The host wears the takeover state: no reading-column padding, no
+    // border, and the bottom strip (save state, stats capsule) is gone.
+    const host = page.locator('#note');
+    await expect(host).toHaveClass(/drawing-canvas-open/);
+    const hostState = await host.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        paddingTop: cs.paddingTop,
+        paddingRight: cs.paddingRight,
+        paddingBottom: cs.paddingBottom,
+        paddingLeft: cs.paddingLeft,
+        borderTopWidth: cs.borderTopWidth,
+        overflow: cs.overflow,
+      };
+    });
+    expect(hostState.paddingTop).toBe('0px');
+    expect(hostState.paddingRight).toBe('0px');
+    expect(hostState.paddingBottom).toBe('0px');
+    expect(hostState.paddingLeft).toBe('0px');
+    expect(hostState.borderTopWidth).toBe('0px');
+    expect(hostState.overflow).toBe('hidden');
+    await expect(page.locator('.bottom-line')).toBeHidden();
+
+    // The canvas fills the editor column edge to edge — the wrapper's box
+    // IS the column's box (the navbar and the notes rail are app chrome,
+    // everything below/right of them belongs to the drawing).
+    const boxes = await page.evaluate(() => {
+      const col = document.getElementById('textareaContainer')!.getBoundingClientRect();
+      const wrap = document.querySelector('#note [data-drawing-canvas]')!.getBoundingClientRect();
+      return {
+        col: { x: col.x, y: col.y, w: col.width, h: col.height },
+        wrap: { x: wrap.x, y: wrap.y, w: wrap.width, h: wrap.height },
+      };
+    });
+    expect(boxes.wrap.x).toBeCloseTo(boxes.col.x, 0);
+    expect(boxes.wrap.y).toBeCloseTo(boxes.col.y, 0);
+    expect(boxes.wrap.w).toBeCloseTo(boxes.col.w, 0);
+    expect(boxes.wrap.h).toBeCloseTo(boxes.col.h, 0);
+
+    // Switching to a text note stands the takeover down: the padded
+    // reading column comes back with its bottom strip.
+    await page.locator('#tabStripTabs .tab-strip-tab').first().click();
+    await expect(page.locator('#note [data-drawing-canvas]')).toHaveCount(0);
+    await expect(page.locator('#note')).not.toHaveClass(/drawing-canvas-open/);
+    await expect(page.locator('#note')).toHaveAttribute('contenteditable', 'true');
+    await expect(page.locator('.bottom-line')).toBeVisible();
+  });
+
   test('drawing ↔ text switches stand the canvas down and bring it back', async ({ page }) => {
     await openDrawingCanvas(page);
     await drawRectangle(page);
