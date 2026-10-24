@@ -6,10 +6,7 @@
         <div class="pref-header-copy">
           <span class="pref-eyebrow">Padify</span>
           <h4 class="modal-title custom-modal-title" id="snapshotsTitle">Snapshots</h4>
-          <p class="pref-subtitle">
-            Safety copies of your notes, taken by hand or before risky changes — restore any
-            version.
-          </p>
+          <p class="pref-subtitle">Safety copies of your notes — restore any version.</p>
         </div>
         <button type="button" class="close" data-dismiss="modal" aria-label="Close snapshots">
           <svg
@@ -25,7 +22,8 @@
           </svg>
         </button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body snapshots-body">
+        <!-- The toolbar is pinned — only the list below it scrolls. -->
         <div class="snapshots-toolbar">
           <button id="createSnapshotBtn" class="btn btn-primary snapshots-take-btn">
             <svg
@@ -69,32 +67,33 @@
             />
           </div>
         </div>
+        <!-- The scroll area — day-grouped timeline of snapshot rows. -->
         <div class="snapshots-list-container">
           <div id="noSnapshots" class="no-snapshots">
             <svg
-              width="48"
-              height="48"
+              width="44"
+              height="44"
               viewBox="0 0 24 24"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
               aria-hidden="true"
             >
               <path
-                d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"
+                d="M3 12a9 9 0 1 0 3-6.7L3 8"
                 stroke="currentColor"
                 stroke-width="1.5"
                 stroke-linecap="round"
                 stroke-linejoin="round"
               />
               <path
-                d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"
+                d="M3 3v5h5"
                 stroke="currentColor"
                 stroke-width="1.5"
                 stroke-linecap="round"
                 stroke-linejoin="round"
               />
               <path
-                d="M7 3v4a1 1 0 0 0 1 1h7"
+                d="M12 7v5l3 2"
                 stroke="currentColor"
                 stroke-width="1.5"
                 stroke-linecap="round"
@@ -115,12 +114,14 @@
         </div>
       </div>
       <div class="modal-footer">
-        <div class="snapshots-stats"><span id="snapshotsCount">0</span> snapshots</div>
+        <div class="snapshots-stats">
+          <span id="snapshotsCount">0</span><span class="snapshots-cap">of 200</span>
+        </div>
         <div class="snapshots-actions delete-all-container">
-          <button id="deleteAllSnapshotsBtn" class="btn btn-danger" disabled>
+          <button id="deleteAllSnapshotsBtn" class="btn snapshots-delete-all" disabled>
             <svg
-              width="16"
-              height="16"
+              width="15"
+              height="15"
               viewBox="0 0 24 24"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
@@ -134,7 +135,7 @@
                 stroke-linejoin="round"
               />
             </svg>
-            Delete All
+            Delete all
           </button>
           <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
         </div>

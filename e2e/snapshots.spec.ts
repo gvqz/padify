@@ -395,3 +395,176 @@ test.describe('deleting', () => {
     await expect(page.locator('#noSnapshotsEmpty')).toBeVisible();
   });
 });
+
+test.describe('the timeline redesign', () => {
+  test('rows group under one Today header', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+    await page.keyboard.type(' more words');
+    await page.keyboard.press('Control+U');
+
+    await openSnapshots(page);
+    const days = page.locator('#snapshotsList .snapshots-day');
+    await expect(days).toHaveCount(1);
+    await expect(days.first()).toHaveText('Today');
+    await expect(snapshotRows(page)).toHaveCount(2);
+    // The header is not a row.
+    await expect(days.first()).not.toHaveClass(/snapshot-item/);
+  });
+
+  test('a row expands to its readable text and collapses again', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' expandable body copy lives here');
+    await page.keyboard.press('Control+U');
+    await openSnapshots(page);
+
+    const row = snapshotRows(page).first();
+    const main = row.locator('.snapshot-main');
+    await expect(main).toHaveAttribute('aria-expanded', 'false');
+
+    await main.click();
+    await expect(main).toHaveAttribute('aria-expanded', 'true');
+    const panel = row.locator('.snapshot-expand');
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText('expandable body copy');
+
+    await main.click();
+    await expect(main).toHaveAttribute('aria-expanded', 'false');
+    await expect(panel).toBeHidden();
+  });
+
+  test('Enter toggles the expansion from the keyboard', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+    await openSnapshots(page);
+
+    const main = snapshotRows(page).first().locator('.snapshot-main');
+    await main.focus();
+    await page.keyboard.press('Enter');
+    await expect(main).toHaveAttribute('aria-expanded', 'true');
+    await page.keyboard.press('Enter');
+    await expect(main).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('the matching row wears the Current chip; an edit drops it', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+    await openSnapshots(page);
+
+    const row = snapshotRows(page).first();
+    await expect(row).toHaveClass(/is-current/);
+    await expect(row.locator('.snapshot-current')).toBeVisible();
+    await expect(row.locator('.snapshot-current')).toContainText('Current');
+
+    // Change the note WITHOUT snapshotting — the row no longer matches.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' changed after the fact');
+    await openSnapshots(page);
+    await expect(snapshotRows(page).first()).not.toHaveClass(/is-current/);
+  });
+
+  test('a just-taken row arrives flashing', async ({ page }) => {
+    await page.goto('/');
+    await openSnapshots(page);
+
+    await page.locator('#createSnapshotBtn').click();
+    await toastSays(page, 'Snapshot created!');
+    await expect(snapshotRows(page).first()).toHaveClass(/is-new/);
+  });
+
+  test('restore is a labeled button, delete sits apart', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+    await openSnapshots(page);
+
+    const actions = snapshotRows(page).first().locator('.snapshot-actions');
+    await expect(actions.locator('.restore')).toHaveText('Restore');
+    // The hairline between copy and delete keeps a slip off the trash.
+    await expect(actions.locator('.snapshot-actions-sep')).toBeVisible();
+    await expect(actions.locator('.copy')).toBeVisible();
+    await expect(actions.locator('.delete')).toBeVisible();
+  });
+
+  test('the footer tells the whole story: N of 200', async ({ page }) => {
+    await page.goto('/');
+    await openSnapshots(page);
+    await expect(page.locator('#snapshotsCount')).toHaveText('0');
+    await expect(page.locator('#snapshotsModal .snapshots-cap')).toHaveText('of 200');
+  });
+
+  test('the toolbar stays pinned while the list scrolls, day header rides along', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.setViewportSize({ width: 1280, height: 560 });
+    await page.locator('#note').click();
+    // Enough rows to overflow the list's scroll area at this height.
+    for (let i = 0; i < 8; i++) {
+      await page.keyboard.type(` row number ${i}`);
+      await page.keyboard.press('Control+U');
+    }
+    await openSnapshots(page);
+
+    const container = page.locator('.snapshots-list-container');
+    const scrolls = await container.evaluate((el) => el.scrollHeight > el.clientHeight);
+    expect(scrolls, 'the list overflows its own scroll area').toBe(true);
+
+    // Scroll the LIST to the bottom — the toolbar must still be on stage.
+    await container.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    await page.waitForTimeout(150);
+
+    const toolbar = page.locator('.snapshots-toolbar');
+    await expect(toolbar).toBeVisible();
+    const toolbarBox = await toolbar.boundingBox();
+    expect(toolbarBox).not.toBeNull();
+    expect(toolbarBox!.y + toolbarBox!.height, 'toolbar stays inside the viewport').toBeLessThan(
+      560,
+    );
+
+    // The Today header is sticky — still pinned to the container's top.
+    const offsets = await page.evaluate(() => {
+      const header = document.querySelector('.snapshots-day') as HTMLElement;
+      const box = document.querySelector('.snapshots-list-container') as HTMLElement;
+      return {
+        headerTop: header.getBoundingClientRect().top,
+        boxTop: box.getBoundingClientRect().top,
+      };
+    });
+    expect(Math.abs(offsets.headerTop - offsets.boxTop)).toBeLessThan(2);
+  });
+
+  test('mobile: rows stack and every action stays reachable', async ({ page }) => {
+    await page.goto('/');
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+
+    // The navbar collapses its tools behind the hamburger at this width.
+    await page.locator('.navbar-toggle').click();
+    await openSnapshots(page);
+
+    await expect(page.locator('#snapshotsList .snapshots-day')).toHaveText('Today');
+    const row = snapshotRows(page).first();
+    await expect(row.locator('.snapshot-main')).toBeVisible();
+    await expect(row.locator('.restore')).toBeVisible();
+    await expect(row.locator('.copy')).toBeVisible();
+    await expect(row.locator('.delete')).toBeVisible();
+    // The side column stacks under the content as a full-width row.
+    const side = await row.locator('.snapshot-side').boundingBox();
+    const main = await row.locator('.snapshot-main').boundingBox();
+    expect(side).not.toBeNull();
+    expect(main).not.toBeNull();
+    expect(side!.y).toBeGreaterThan(main!.y);
+  });
+});

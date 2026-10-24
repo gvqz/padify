@@ -5,10 +5,15 @@ import {
   deriveSnapshotPreview,
   deriveSnapshotTitle,
   findLatestForNote,
+  formatSnapshotClock,
+  formatSnapshotDayLabel,
   formatSnapshotTimestamp,
+  isCurrentSnapshotState,
   isSameSnapshotState,
   pruneSnapshots,
+  snapshotDayKey,
   snapshotHasContent,
+  snapshotReadableText,
   snapshotSearchText,
   snapshotTypeBadgeLabel,
 } from './snapshots';
@@ -350,5 +355,109 @@ describe('formatSnapshotTimestamp — dates at render time', () => {
   it('is derived from the timestamp — the same moment renders the same twice', () => {
     const ts = 1696598400000;
     expect(formatSnapshotTimestamp(ts)).toBe(formatSnapshotTimestamp(ts));
+  });
+});
+
+describe('the timeline helpers — day groups, clocks, readable text', () => {
+  // A fixed 'now' (2026-10-25T12:00:00 local) so Today/Yesterday and
+  // the year-rollover cases are deterministic.
+  const now = new Date(2026, 9, 25, 12, 0, 0).getTime();
+  const sameDay = (hoursAgo: number) => now - hoursAgo * 60 * 60 * 1000;
+
+  it('day keys are local calendar days — midnight splits, hours do not', () => {
+    const morning = new Date(2026, 9, 25, 9, 30).getTime();
+    const night = new Date(2026, 9, 25, 23, 45).getTime();
+    const nextDay = new Date(2026, 9, 26, 0, 5).getTime();
+    expect(snapshotDayKey(morning)).toBe(snapshotDayKey(night));
+    expect(snapshotDayKey(morning)).not.toBe(snapshotDayKey(nextDay));
+  });
+
+  it('labels Today, Yesterday, and calendar dates', () => {
+    expect(formatSnapshotDayLabel(sameDay(3), now)).toBe('Today');
+    expect(formatSnapshotDayLabel(sameDay(20), now)).toBe('Yesterday');
+    // Two days back in the same year: month name and day, no year.
+    expect(formatSnapshotDayLabel(new Date(2026, 9, 23, 10, 0).getTime(), now)).toBe('October 23');
+  });
+
+  it('appends the year once the date leaves the current one', () => {
+    expect(formatSnapshotDayLabel(new Date(2024, 11, 31, 10, 0).getTime(), now)).toBe(
+      'December 31, 2024',
+    );
+  });
+
+  it('the clock is a short time string with digits', () => {
+    const clock = formatSnapshotClock(now);
+    expect(clock).toMatch(/^\d{1,2}:\d{2}/);
+  });
+});
+
+describe('snapshotReadableText — per-kind projections', () => {
+  it('html kinds read their rendered text', () => {
+    expect(snapshotReadableText('<div>milk &amp; eggs</div>')).toBe('milk & eggs');
+  });
+
+  it('markdown and unknown kinds are their raw bytes', () => {
+    expect(snapshotReadableText('# Heading', 'markdown')).toBe('# Heading');
+    expect(snapshotReadableText('opaque bytes', 'future-kind')).toBe('opaque bytes');
+  });
+
+  it('drawings read their text elements, not their JSON', () => {
+    const scene = JSON.stringify({
+      version: 1,
+      elements: [{ id: 'a', type: 'text', text: 'grocery list' }],
+      appState: {},
+    });
+    expect(snapshotReadableText(scene, 'drawing')).toBe('grocery list');
+    // A shapes-only scene answers the element count, never raw braces.
+    const shapes = JSON.stringify({
+      version: 1,
+      elements: [
+        { id: 'a', type: 'rectangle' },
+        { id: 'b', type: 'ellipse' },
+      ],
+      appState: {},
+    });
+    expect(snapshotReadableText(shapes, 'drawing')).toBe('Drawing — 2 elements');
+    // An empty scene is empty, not '{}'.
+    expect(snapshotReadableText('{"version":1,"elements":[],"appState":{}}', 'drawing')).toBe('');
+  });
+
+  it('task lists read their rows', () => {
+    const list = JSON.stringify({
+      version: 1,
+      color: 'blue',
+      tasks: [{ id: 't1', title: 'call the dentist', done: false, sortOrder: 0 }],
+    });
+    const text = snapshotReadableText(list, 'tasks');
+    expect(text).toContain('call the dentist');
+    expect(text).not.toContain('"tasks"');
+  });
+});
+
+describe('isCurrentSnapshotState — the Current chip', () => {
+  it('matches on identical bytes and a normalized type', () => {
+    expect(
+      isCurrentSnapshotState({ content: 'abc' }, { content: 'abc', noteType: 'standard' }),
+    ).toBe(true);
+    expect(
+      isCurrentSnapshotState(
+        { content: 'abc', noteType: 'markdown' },
+        {
+          content: 'abc',
+          noteType: 'markdown',
+        },
+      ),
+    ).toBe(true);
+  });
+
+  it('differs on bytes or on kind', () => {
+    expect(isCurrentSnapshotState({ content: 'abc' }, { content: 'abcd' })).toBe(false);
+    expect(
+      isCurrentSnapshotState({ content: 'abc', noteType: 'markdown' }, { content: 'abc' }),
+    ).toBe(false);
+  });
+
+  it('no active note answers false', () => {
+    expect(isCurrentSnapshotState({ content: 'abc' }, null)).toBe(false);
   });
 });

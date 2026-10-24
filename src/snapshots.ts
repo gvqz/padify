@@ -28,6 +28,8 @@ import { openModal, closeModal } from './ui/behavior/modal';
 import Swal from 'sweetalert2';
 import { getActiveNoteContent, getEditorText, getTabManager, htmlToText } from './tabs';
 import { isHtmlContent, noteTypeLabel, type NoteType } from './editor/note-types';
+import { drawingScenePlainText } from './editor/drawing/scene';
+import { parseTaskNoteContent, taskNotePlainText } from './editor/tasks/content';
 import { showToast } from './ui/toast';
 import { updateWordCountPill } from './word-count-pill';
 
@@ -154,15 +156,16 @@ export function findLatestForNote(
 }
 
 /**
- * What a row is searched by: the copy it shows, plus the FULL text of
- * the note — for html kinds its text projection (searching raw markup
- * would answer every query about tags, not about the note), for text
- * kinds their raw source, whose bytes ARE their text. Computed once per
+ * What a row is searched by: the copy it shows, plus the FULL readable
+ * projection of the note (see snapshotReadableText) — computed once per
  * load and cached on the row, so each keystroke filters strings.
  */
 export function snapshotSearchText(snapshot: Snapshot): string {
   const label = snapshot.noteType ? snapshotTypeBadgeLabel(snapshot.noteType) : '';
-  const text = isHtmlContent(snapshot.noteType) ? htmlToText(snapshot.content) : snapshot.content;
+  // The readable projection — searching what a person would read, never
+  // the storage bytes (searching 'div' must not answer every html row,
+  // and a drawing's JSON braces are not its words).
+  const text = snapshotReadableText(snapshot.content, snapshot.noteType);
   return `${snapshot.title}\n${snapshot.preview}\n${label}\n${text}`.toLowerCase();
 }
 
@@ -193,6 +196,101 @@ export function formatSnapshotTimestamp(timestamp: number): string {
   });
 }
 
+/** The row's clock — HH:MM; the day header above it carries the day. */
+export function formatSnapshotClock(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * The local calendar day a timestamp falls on, as 'YYYY-MM-DD'. Day
+ * grouping keys on this — two snapshots on the same local day share a
+ * header no matter how close to midnight they were taken.
+ */
+export function snapshotDayKey(timestamp: number): string {
+  const date = new Date(timestamp);
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * The day group's label: 'Today', 'Yesterday', else the calendar date
+ * ('October 24', with the year appended when it is not this year — a
+ * long-lived store can hold snapshots from previous years, and a bare
+ * 'October 24' next to 'Today' would read as a recent day that simply
+ * is not today). English only, matching every other string in the app.
+ */
+export function formatSnapshotDayLabel(timestamp: number, now: number = Date.now()): string {
+  const date = new Date(timestamp);
+  const nowDate = new Date(now);
+  const startOfToday = new Date(
+    nowDate.getFullYear(),
+    nowDate.getMonth(),
+    nowDate.getDate(),
+  ).getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  if (timestamp >= startOfToday) {
+    return 'Today';
+  }
+  if (timestamp >= startOfToday - dayMs) {
+    return 'Yesterday';
+  }
+  const sameYear = date.getFullYear() === nowDate.getFullYear();
+  return date.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  });
+}
+
+/**
+ * What a row's expandable panel and the readable previews show: html
+ * kinds read their text projection; drawings read their text elements'
+ * plain projection; task lists read their rows' titles. Markdown and
+ * unknown kinds are their raw bytes — a markdown note's source IS its
+ * text. Unparseable drawing/tasks bytes (corrupt or hand-edited) fall
+ * back to the raw content rather than an empty panel.
+ */
+export function snapshotReadableText(content: string, noteType?: string): string {
+  if (isHtmlContent(noteType)) {
+    return htmlToText(content);
+  }
+  // Both projections carry their own fallbacks: a corrupt scene/list
+  // answers its raw bytes, an empty one answers '' (which the preview
+  // renders as 'No content' — not a wall of JSON braces).
+  if (noteType === 'drawing') {
+    return drawingScenePlainText(content);
+  }
+  if (noteType === 'tasks') {
+    return taskNotePlainText(parseTaskNoteContent(content));
+  }
+  return content;
+}
+
+/**
+ * Whether a snapshot is byte-identical to a note's current state — the
+ * 'Current' chip. Types normalize 'standard' and absent to the same
+ * thing: a legacy snapshot without a type and a plain note are the same
+ * kind, and pretending otherwise would hide the chip on the one row it
+ * matters most for (an unchanged note's newest snapshot).
+ */
+export function isCurrentSnapshotState(
+  snapshot: { content: string; noteType?: string },
+  active: { content: string; noteType?: string } | null,
+): boolean {
+  if (!active) {
+    return false;
+  }
+  const normalize = (type: string | undefined) => (type === 'standard' ? undefined : type);
+  return (
+    snapshot.content === active.content &&
+    normalize(snapshot.noteType) === normalize(active.noteType)
+  );
+}
+
 /** First meaningful line (html) or the type's label, capped at 50 chars. */
 export function deriveSnapshotTitle(content: string, noteType?: string): string {
   const firstLine = isHtmlContent(noteType)
@@ -208,14 +306,42 @@ export function deriveSnapshotTitle(content: string, noteType?: string): string 
 
 /** 100 characters of what the row should show of the note. */
 export function deriveSnapshotPreview(content: string, noteType?: string): string {
-  const preview = (
-    isHtmlContent(noteType) ? htmlToText(content).replace(/\s+\n/g, '\n') : content
-  ).trim();
+  const preview = snapshotReadableText(content, noteType).replace(/\s+\n/g, '\n').trim();
   if (preview.length > 100) {
     return `${preview.substring(0, 97)}...`;
   }
   return preview || 'No content';
 }
+
+/**
+ * The rail icon a row leads with — the note's kind at a glance.
+ * Standard and unknown kinds share the note glyph; the special kinds
+ * get their own. Inline SVG strings (stroke currentColor), scoped by
+ * nothing — they are painted inside the row's rail.
+ */
+const SNAPSHOT_TYPE_ICONS: Record<string, string> = {
+  // note glyph — the classic document with lines
+  standard:
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>',
+  // markdown — the hash
+  markdown:
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h16"/><path d="M4 15h16"/><path d="M10 3 8 21"/><path d="M16 3l-2 18"/></svg>',
+  // rich text — the type glyph
+  rich: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7V5h16v2"/><path d="M12 5v14"/><path d="M9 19h6"/></svg>',
+  // drawing — the pencil
+  drawing:
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>',
+  // tasks — the checked list
+  tasks:
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 7 2 2 4-4"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>',
+};
+
+function snapshotTypeIcon(noteType?: string): string {
+  return SNAPSHOT_TYPE_ICONS[noteType ?? 'standard'] ?? SNAPSHOT_TYPE_ICONS.standard;
+}
+
+/** How much of the readable text the expand panel shows. */
+const SNAPSHOT_EXPAND_CAP = 2000;
 
 export class SnapshotsManager {
   dbName: string;
@@ -225,6 +351,10 @@ export class SnapshotsManager {
   /** The last read, with each row's search text precomputed — keystrokes
    *  filter this array instead of re-reading IndexedDB. */
   private cache: { snapshot: Snapshot; searchText: string }[] = [];
+
+  /** The just-created snapshot's id — renderRows flashes exactly this
+   *  row (and scrolls it into view) once, then clears the flag. */
+  private pendingHighlightId: number | null = null;
 
   /**
    * Resolves once the IndexedDB open completes (or rejects if it errors).
@@ -482,6 +612,9 @@ export class SnapshotsManager {
       const request = store.add(snapshot);
 
       request.onsuccess = () => {
+        // The new row flashes once when the list next renders — this is
+        // that row's id (the store's auto-increment key).
+        this.pendingHighlightId = request.result as number;
         if (showCreatedToast) {
           showToast('Snapshot created!', 'success');
         }
@@ -560,9 +693,43 @@ export class SnapshotsManager {
       ? this.cache.filter((row) => row.searchText.includes(term)).map((row) => row.snapshot)
       : this.cache.map((row) => row.snapshot);
 
+    // The 'Current' chip answers one question — is this row the note I
+    // have open, byte for byte? Read once per render; typing can't race
+    // it (the modal covers the editor).
+    const active = getActiveNoteContent();
+
     snapshotsList.innerHTML = '';
+    // Day grouping: rows arrive newest-first, so the day only moves
+    // backwards — a header li is inserted whenever the calendar day
+    // changes, giving the list a timeline shape (Today / Yesterday / …).
+    let currentDay = '';
+    let highlighted = false;
     for (const snapshot of rows) {
-      snapshotsList.appendChild(this.createSnapshotElement(snapshot));
+      const dayKey = snapshotDayKey(snapshot.timestamp);
+      if (dayKey !== currentDay) {
+        currentDay = dayKey;
+        const header = document.createElement('li');
+        header.className = 'snapshots-day';
+        header.textContent = formatSnapshotDayLabel(snapshot.timestamp);
+        snapshotsList.appendChild(header);
+      }
+      const li = this.createSnapshotElement(snapshot);
+      li.classList.toggle('is-current', isCurrentSnapshotState(snapshot, active));
+      if (snapshot.id !== undefined && snapshot.id === this.pendingHighlightId) {
+        li.classList.add('is-new');
+        this.pendingHighlightId = null;
+        highlighted = true;
+      }
+      snapshotsList.appendChild(li);
+    }
+
+    // A just-taken snapshot lands at the top of a long list — bring it
+    // into view so the flash is not wasted off-screen.
+    if (highlighted) {
+      snapshotsList.querySelector('.snapshot-item.is-new')?.scrollIntoView({
+        block: 'nearest',
+        behavior: 'smooth',
+      });
     }
 
     // The empty state has two faces: nothing stored yet, or nothing that
@@ -577,10 +744,13 @@ export class SnapshotsManager {
     document.getElementById('noSnapshotsMiss')?.toggleAttribute('hidden', !showMiss);
   }
 
-  // Create a snapshot element for the UI
+  // Create a snapshot element for the UI — the timeline row. The main
+  // area is a real button (expand/collapse), the side column carries the
+  // clock and the three actions; the expand panel spans below both.
   createSnapshotElement(snapshot: Snapshot): HTMLLIElement {
     const li = document.createElement('li');
     li.className = 'snapshot-item';
+    li.dataset.snapshotId = String(snapshot.id ?? '');
 
     // The type badge — shown for non-default types only, matching the tab
     // rail's convention: a badge matters when restoring would SWITCH the
@@ -590,32 +760,53 @@ export class SnapshotsManager {
         ? `<span class="snapshot-type-badge">${this.escapeHtml(snapshotTypeBadgeLabel(snapshot.noteType))}</span>`
         : '';
 
+    // The expandable panel's text — the readable projection, capped so a
+    // giant note cannot turn the row into a wall.
+    const readable = snapshotReadableText(snapshot.content, snapshot.noteType).trim();
+    const expandText =
+      readable.length > SNAPSHOT_EXPAND_CAP
+        ? `${readable.slice(0, SNAPSHOT_EXPAND_CAP)}\u2026`
+        : readable;
+    const expandId = `snapshot-expand-${snapshot.id ?? 'x'}`;
+
     li.innerHTML = `
-            <div class="snapshot-info">
-                <h4 class="snapshot-title" title="${this.escapeHtml(snapshot.title)}">${this.escapeHtml(snapshot.title)}</h4>
-                <p class="snapshot-preview" title="${this.escapeHtml(snapshot.preview)}">${this.escapeHtml(snapshot.preview)}</p>
-                <div class="snapshot-meta">
-                ${badge}
-                <span class="snapshot-date">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                    <path d="M8 7V3M16 7V3M7 11H17M5 21H19C20.1046 21 21 20.1046 21 19V7C21 5.89543 20.1046 5 19 5H5C3.89543 5 3 5.89543 3 7V19C3 20.1046 3.89543 21 5 21Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    ${this.escapeHtml(formatSnapshotTimestamp(snapshot.timestamp))}
+            <button type="button" class="snapshot-main" aria-expanded="false" aria-controls="${expandId}" title="Show this snapshot's text">
+                <span class="snapshot-rail" aria-hidden="true">${snapshotTypeIcon(snapshot.noteType)}</span>
+                <span class="snapshot-body">
+                    <span class="snapshot-headline">
+                        <span class="snapshot-title" title="${this.escapeHtml(snapshot.title)}">${this.escapeHtml(snapshot.title)}</span>
+                        ${badge}
+                        <span class="snapshot-current" title="Identical to the note you have open"><span class="snapshot-current-dot" aria-hidden="true"></span>Current</span>
+                    </span>
+                    <span class="snapshot-preview" title="${this.escapeHtml(snapshot.preview)}">${this.escapeHtml(snapshot.preview)}</span>
                 </span>
-                </div>
+                <svg class="snapshot-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <div class="snapshot-side">
+                <span class="snapshot-date" title="${this.escapeHtml(formatSnapshotTimestamp(snapshot.timestamp))}">${this.escapeHtml(formatSnapshotClock(snapshot.timestamp))}</span>
+                <span class="snapshot-actions">
+                    <button type="button" class="snapshot-btn restore" title="Restore this snapshot" aria-label="Restore this snapshot">Restore</button>
+                    <button type="button" class="snapshot-btn copy" title="Copy snapshot content" aria-label="Copy snapshot content">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                    <span class="snapshot-actions-sep" aria-hidden="true"></span>
+                    <button type="button" class="snapshot-btn delete" title="Delete this snapshot" aria-label="Delete this snapshot">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11V17"></path><path d="M14 11V17"></path><path d="M4 7H20"></path><path d="M6 7H12H18V18C18 19.6569 16.6569 21 15 21H9C7.34315 21 6 19.6569 6 18V7Z"></path><path d="M9 5C9 3.89543 9.89543 3 11 3H13C14.1046 3 15 3.89543 15 5V7H9V5Z"></path></svg>
+                    </button>
+                </span>
             </div>
-            <div class="snapshot-actions">
-                <button class="snapshot-btn restore" title="Restore this snapshot">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="0.45600000000000007"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="M4.52185 7H7C7.55229 7 8 7.44772 8 8C8 8.55229 7.55228 9 7 9H3C1.89543 9 1 8.10457 1 7V3C1 2.44772 1.44772 2 2 2C2.55228 2 3 2.44772 3 3V5.6754C4.26953 3.8688 6.06062 2.47676 8.14852 1.69631C10.6633 0.756291 13.435 0.768419 15.9415 1.73041C18.448 2.69239 20.5161 4.53782 21.7562 6.91897C22.9963 9.30013 23.3228 12.0526 22.6741 14.6578C22.0254 17.263 20.4464 19.541 18.2345 21.0626C16.0226 22.5842 13.3306 23.2444 10.6657 22.9188C8.00083 22.5931 5.54702 21.3041 3.76664 19.2946C2.20818 17.5356 1.25993 15.3309 1.04625 13.0078C0.995657 12.4579 1.45216 12.0088 2.00445 12.0084C2.55673 12.0079 3.00351 12.4566 3.06526 13.0055C3.27138 14.8374 4.03712 16.5706 5.27027 17.9625C6.7255 19.605 8.73118 20.6586 10.9094 20.9247C13.0876 21.1909 15.288 20.6513 17.0959 19.4075C18.9039 18.1638 20.1945 16.3018 20.7247 14.1724C21.2549 12.043 20.9881 9.79319 19.9745 7.8469C18.9608 5.90061 17.2704 4.3922 15.2217 3.6059C13.173 2.8196 10.9074 2.80968 8.8519 3.57803C7.11008 4.22911 5.62099 5.40094 4.57993 6.92229C4.56156 6.94914 4.54217 6.97505 4.52185 7Z" fill="currentColor"></path> </g></svg>
-                </button>
-                <button class="snapshot-btn copy" title="Copy snapshot content">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect> <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path> </g></svg>
-                </button>
-                <button class="snapshot-btn delete" title="Delete this snapshot">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="M10 11V17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path> <path d="M14 11V17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path> <path d="M4 7H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path> <path d="M6 7H12H18V18C18 19.6569 16.6569 21 15 21H9C7.34315 21 6 19.6569 6 18V7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path> <path d="M9 5C9 3.89543 9.89543 3 11 3H13C14.1046 3 15 3.89543 15 5V7H9V5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path> </g></svg>
-                </button>
+            <div class="snapshot-expand" id="${expandId}" hidden>
+                <div class="snapshot-expand-text">${this.escapeHtml(expandText) || 'No content'}</div>
             </div>
         `;
+
+    // The row's main button expands the readable text.
+    const mainBtn = li.querySelector<HTMLElement>('.snapshot-main')!;
+    mainBtn.addEventListener('click', () => {
+      const open = li.classList.toggle('is-open');
+      mainBtn.setAttribute('aria-expanded', String(open));
+      li.querySelector('.snapshot-expand')?.toggleAttribute('hidden', !open);
+    });
 
     // Add event listeners
     const restoreBtn = li.querySelector('.restore')!;
@@ -836,6 +1027,13 @@ export class SnapshotsManager {
 
       if (countElement) {
         countElement.textContent = String(countRequest.result);
+      }
+
+      // The cap is part of the story the footer tells — render it from
+      // the constant so the copy can never drift from the behavior.
+      const capElement = document.querySelector('#snapshotsModal .snapshots-cap');
+      if (capElement) {
+        capElement.textContent = `of ${MAX_SNAPSHOTS}`;
       }
 
       if (deleteAllBtn) {

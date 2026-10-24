@@ -1,19 +1,20 @@
-/* vercel design system — part 11/17: Snapshots — the rebuilt menu.
+/* vercel design system — part 11/17: Snapshots — the timeline redesign.
    Split from the former vercel.css (cascade order preserved —
    index.html loads these files in numeric order, last in the
    stylesheet chain, exactly where the monolith sat).
 
-   Rebuilt with the menu (see tasks.txt, "Complex"): the dialog follows
-   the pref-header recipe (eyebrow + title + subtitle), rows show their
-   note type and render-time dates, the toolbar pairs the take button
-   with the search field, and every color comes from the token aliases —
-   dark mode needs no rules of its own here. */
+   The second rebuild turns the flat list into a timeline: rows group
+   under sticky day headers (Today / Yesterday / the date), each row is
+   an expandable card — type rail, title + badge + Current chip, one
+   line of preview, clock and actions on the right — and the toolbar
+   stays pinned while only the list scrolls. Every color comes from the
+   token aliases; dark mode needs no rules of its own here. */
 /* --------------------------------------------------------------------------
-   11. Snapshots — the rebuilt menu
+   11. Snapshots — the timeline menu
    -------------------------------------------------------------------------- */
 
 #snapshotsModal .modal-dialog {
-  max-width: 720px;
+  max-width: 760px;
 }
 
 /* Header — the pref recipe: eyebrow + title + subtitle, close at the edge */
@@ -31,12 +32,16 @@
   letter-spacing: -0.02em;
 }
 
-/* Body — scroll the list, keep the toolbar pinned */
+/* Body — a flex column: toolbar pinned on top, the list area below is
+   the ONLY scroller (the old body-level scroll carried the toolbar away
+   with the rows). */
 #snapshotsModal .modal-body {
-  padding: 6px 20px 18px;
-  max-height: calc(100vh - 190px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  padding: 4px 20px 18px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
 }
 
 /* Footer — count at the left, actions at the right */
@@ -55,14 +60,15 @@
   display: none;
 }
 
-/* Toolbar — take button + search side by side */
+/* Toolbar — take button + search side by side, pinned above the scroller */
 .snapshots-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 10px;
-  margin: 10px 0 14px;
+  margin: 8px 0 12px;
+  flex: 0 0 auto;
 }
 
 .snapshots-take-btn {
@@ -116,13 +122,17 @@
   height: 34px;
 }
 
-/* The list card — one bordered surface, rows divided by hairlines */
+/* The scroll area — one bordered surface, a hairline inset tone away
+   from the dialog so rows sit in a well instead of floating on it. */
 .snapshots-list-container {
   border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius-md);
-  background: var(--vz-bg-elevated);
+  background: var(--vz-bg);
   min-height: 180px;
-  overflow: hidden;
+  max-height: calc(100vh - 340px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  flex: 0 1 auto;
 }
 
 .snapshots-list {
@@ -132,17 +142,43 @@
   display: none;
 }
 
-.snapshot-item {
-  padding: 12px 16px;
+/* Day group headers — the timeline's spine. Sticky so the current day
+   rides with the scroll; solid background (not translucent) so rows
+   never show through. */
+.snapshots-day {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  padding: 9px 16px 7px;
+  background: var(--vz-bg);
+  border-bottom: 1px solid var(--vz-border);
+  color: var(--vz-fg-subtle);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.snapshots-day:not(:first-child) {
+  margin-top: 0;
+}
+
+/* ---- The row: grid of [main button | side column], expand spans both ---- */
+.snapshot-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  padding: 0;
   border-bottom: 1px solid var(--vz-border);
   transition: background-color var(--vz-dur) ease;
 }
 
-.snapshot-item:last-child {
+.snapshot-item:last-child,
+.snapshot-item:last-child .snapshot-expand {
   border-bottom: none;
 }
 
@@ -150,78 +186,205 @@
   background: var(--vz-bg-subtle);
 }
 
-.snapshot-info {
-  max-width: 100%;
-  flex: 1;
+/* The main area — a real button so the expand toggle is keyboard-native.
+   Resets every UA button style; the row's hover carries the affordance. */
+.snapshot-main {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  padding: 10px 4px 10px 12px;
+  cursor: pointer;
+  border-radius: var(--vz-radius) 0 0 var(--vz-radius);
+}
+
+.snapshot-main:focus-visible {
+  outline: 2px solid var(--vz-fg);
+  outline-offset: -2px;
+}
+
+/* The type rail — the note's kind at a glance, a squircle chip that
+   leans into the row's hover. */
+.snapshot-rail {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--vz-border);
+  border-radius: 8px;
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg-muted);
+  transition: color var(--vz-dur) ease, border-color var(--vz-dur) ease;
+}
+
+.snapshot-item:hover .snapshot-rail {
+  color: var(--vz-fg);
+  border-color: var(--vz-border-strong);
+}
+
+.snapshot-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.snapshot-headline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 
 .snapshot-title {
-  margin: 0 0 3px 0;
   color: var(--vz-fg);
   font-weight: 600;
   font-size: 13.5px;
   letter-spacing: -0.005em;
   white-space: nowrap;
+  overflow: hidden;
   text-overflow: ellipsis;
-  overflow-x: auto;
 }
 
-.snapshot-preview {
-  margin: 0;
-  color: var(--vz-fg-muted);
-  font-size: 12.5px;
-  line-height: 1.45;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow-x: auto;
-}
-
-.snapshot-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 6px;
-}
-
-/* Type badge — chips like the pref NEW badge; shown only for non-default
+/* Type badge — a chip like the pref NEW badge; shown only for non-default
    types (restoring those switches the note's type — worth the flag). */
 .snapshot-type-badge {
+  flex: 0 0 auto;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
   padding: 2px 6px;
   border-radius: 4px;
   color: var(--vz-fg-muted);
-  background: var(--vz-bg-subtle);
+  background: var(--vz-bg-chip);
   border: 1px solid var(--vz-border);
   line-height: 1.4;
   text-transform: uppercase;
 }
 
+/* The Current chip — this row IS the note you have open. A soft
+   success-tinted chip (the flash's tint, at rest) rather than bare
+   green text. Hidden unless the row carries .is-current. */
+.snapshot-current {
+  display: none;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--vz-success);
+  background: color-mix(in srgb, var(--vz-success) 12%, transparent);
+  padding: 2.5px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.snapshot-item.is-current .snapshot-current {
+  display: inline-flex;
+}
+
+.snapshot-current-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--vz-success);
+}
+
+.snapshot-preview {
+  color: var(--vz-fg-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The expand affordance — quiet until the row hovers, turns with the open */
+.snapshot-chevron {
+  flex: 0 0 auto;
+  margin-left: 2px;
+  color: var(--vz-fg-subtle);
+  transition: transform 160ms var(--vz-ease), color var(--vz-dur) ease;
+}
+
+.snapshot-item:hover .snapshot-chevron {
+  color: var(--vz-fg-muted);
+}
+
+.snapshot-item.is-open .snapshot-chevron {
+  transform: rotate(90deg);
+  color: var(--vz-fg);
+}
+
+/* The side column — clock over actions, right-aligned */
+.snapshot-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 10px 12px 10px 0;
+}
+
 .snapshot-date {
+  color: var(--vz-fg-subtle);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.snapshot-actions {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: var(--vz-fg-subtle);
-  font-size: 11.5px;
 }
 
-.snapshot-date svg {
-  flex: 0 0 auto;
+/* Restore — the row's primary action, a real labeled button (quiet,
+   bordered). It reads before it can be misread. */
+.snapshot-btn.restore {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  height: 26px;
+  padding: 0 11px;
+  border: 1px solid var(--vz-border-strong);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+  transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease,
+    transform 100ms ease;
 }
 
-/* Ghost icon buttons — mono; delete reads as danger */
-.snapshot-actions {
-  display: flex;
-  gap: 6px;
-  flex: 0 0 auto;
+.snapshot-btn.restore:hover {
+  background: var(--vz-primary);
+  border-color: var(--vz-primary);
+  color: var(--vz-primary-fg);
 }
 
-.snapshot-btn {
+.snapshot-btn.restore:active {
+  transform: scale(0.98);
+}
+
+.snapshot-btn.restore:focus-visible,
+.snapshot-btn.copy:focus-visible,
+.snapshot-btn.delete:focus-visible {
+  outline: 2px solid var(--vz-fg);
+  outline-offset: 1px;
+}
+
+/* Ghost icon buttons — mono; the hairline separates delete from the
+   restore/copy pair so a slip cannot land on it. Both share the labeled
+   Restore button's 26px height so the cluster sits on one grid. */
+.snapshot-btn.copy,
+.snapshot-btn.delete {
   background: none;
   border: none;
-  padding: 5px;
+  padding: 0;
+  width: 26px;
+  height: 26px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -231,7 +394,8 @@
   transition: background-color var(--vz-dur) ease, color var(--vz-dur) ease;
 }
 
-.snapshot-btn:hover {
+.snapshot-btn.copy:hover,
+.snapshot-btn.delete:hover {
   background: var(--vz-bg-chip);
   color: var(--vz-fg);
 }
@@ -245,6 +409,47 @@
   color: var(--vz-danger);
 }
 
+.snapshot-actions-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: var(--vz-border);
+}
+
+/* The expand panel — spans the full row under both columns, padded past
+   the rail so the text lines up with the row's copy. */
+.snapshot-expand {
+  grid-column: 1 / -1;
+  border-top: 1px dashed var(--vz-border);
+  background: var(--vz-bg-subtle);
+  padding: 10px 16px 12px 57px;
+}
+
+.snapshot-expand-text {
+  color: var(--vz-fg-muted);
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* The just-taken row — one success-tinted flash that fades on its own. */
+.snapshot-item.is-new {
+  animation: snapshot-flash 1100ms var(--vz-ease) 1;
+}
+
+@keyframes snapshot-flash {
+  0% {
+    background: color-mix(in srgb, var(--vz-success) 14%, var(--vz-bg));
+  }
+  100% {
+    background: transparent;
+  }
+}
+
 /* Empty state */
 .no-snapshots {
   display: flex;
@@ -252,14 +457,14 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 44px 20px;
+  padding: 48px 20px;
   text-align: center;
   color: var(--vz-fg-muted);
 }
 
 .no-snapshots svg {
   color: var(--vz-border-strong);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .no-snapshots p {
@@ -280,8 +485,11 @@
   vertical-align: baseline;
 }
 
-/* Footer stats + actions */
+/* Footer stats + actions — the count tells the whole story: N of 200. */
 .snapshots-stats {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
   color: var(--vz-fg-muted);
   font-size: 12.5px;
 }
@@ -291,19 +499,47 @@
   font-weight: 600;
 }
 
+.snapshots-cap {
+  color: var(--vz-fg-subtle);
+  font-size: 11.5px;
+}
+
 .delete-all-container {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-#deleteAllSnapshotsBtn {
+/* Delete all — a quiet ghost, danger only on approach. The old solid
+   red button shouted past every safe action in the dialog. */
+.snapshots-delete-all {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg-muted);
+  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease,
+    border-color var(--vz-dur) ease;
 }
 
-/* Responsive — stack the row's actions under the copy on phones */
+.snapshots-delete-all:hover:not(:disabled),
+.snapshots-delete-all:focus-visible:not(:disabled) {
+  color: var(--vz-danger);
+  background: var(--vz-danger-soft);
+  border-color: transparent;
+}
+
+.snapshots-delete-all:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Responsive — the row stacks: content on top, clock + actions below */
 @media (max-width: 767px) {
   .snapshots-toolbar {
     align-items: stretch;
@@ -316,12 +552,22 @@
   }
 
   .snapshot-item {
-    flex-direction: column;
-    align-items: flex-start;
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .snapshot-actions {
-    align-self: flex-end;
-    margin-top: 8px;
+  .snapshot-side {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0 12px 12px 4px;
+  }
+
+  .snapshot-expand {
+    padding: 10px 16px 12px 12px;
+  }
+
+  .snapshots-list-container {
+    max-height: calc(100vh - 380px);
   }
 }
