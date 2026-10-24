@@ -58,6 +58,20 @@ describe('parseNoteRows', () => {
     expect(rows![0].content).toBe('{"cards":[]}');
   });
 
+  it('carries drawing scenes verbatim — the content is scene JSON, the type a plain slug', () => {
+    // The drawing note type rides the notes pipeline without a schema
+    // change: the scene serializes into `content`, `note_type` carries
+    // the slug, and the border stores both exactly as sent. Scene bytes
+    // with angle brackets or quotes must survive the round trip untouched
+    // (the HTML sanitizer is a client concern that never applies here).
+    const scene =
+      '{"version":1,"savedAt":1700000000000,"elements":[{"id":"a","type":"rectangle","strokeColor":"#1e1e1e<not-markup>"}],"appState":{"viewBackgroundColor":"#ffffff"}}';
+    const rows = parseNoteRows([row({ note_type: 'drawing', content: scene })]);
+
+    expect(rows![0].note_type).toBe('drawing');
+    expect(rows![0].content).toBe(scene);
+  });
+
   it('accepts the legacy html key from a pre-rename client, content wins', () => {
     // The rename transition: the server takes `content` or `html` (or
     // both, same value) so a deploy gap between site and API never

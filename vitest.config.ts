@@ -10,5 +10,15 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['src/**/*.test.ts'],
     reporters: 'default',
+    // The Excalidraw island is the one dependency that ships bare JSON
+    // imports (open-color) without Node's import attributes — inlining it
+    // routes those through Vite's transform, which handles JSON natively.
+    // Only the scene-format pin (editor/drawing/scene-pin.test.ts) imports
+    // the package; every other test meets it behind the './canvas' mock.
+    server: {
+      deps: {
+        inline: ['@excalidraw/excalidraw'],
+      },
+    },
   },
 });

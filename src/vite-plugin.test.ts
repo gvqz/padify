@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { stripDependencyEvalSinks } from '../vite.config';
+import { stripDependencyEvalSinks, stubExcalidrawFontSubsetting } from '../vite.config';
 
 type TransformFn = (code: string, id: string) => { code: string; map: unknown } | null;
 
@@ -12,6 +12,28 @@ function transformOf(plugin: ReturnType<typeof stripDependencyEvalSinks>): Trans
   }
   return ((code: string, id: string) =>
     (hook as { handler: TransformFn }).handler(code, id)) as TransformFn;
+}
+
+type LoadFn = (id: string) => string | null;
+type ResolveFn = (source: string, importer: string | undefined) => string | null;
+
+/** The stub plugin's load hook, as a plain callable. */
+function loadOf(plugin: ReturnType<typeof stubExcalidrawFontSubsetting>): LoadFn {
+  const hook = plugin.load;
+  if (typeof hook === 'function') {
+    return hook as unknown as LoadFn;
+  }
+  return ((id: string) => (hook as { handler: LoadFn }).handler(id)) as LoadFn;
+}
+
+/** The stub plugin's resolveId hook, as a plain callable. */
+function resolveOf(plugin: ReturnType<typeof stubExcalidrawFontSubsetting>): ResolveFn {
+  const hook = plugin.resolveId;
+  if (typeof hook === 'function') {
+    return hook as unknown as ResolveFn;
+  }
+  return ((source: string, importer: string | undefined) =>
+    (hook as { handler: ResolveFn }).handler(source, importer)) as ResolveFn;
 }
 
 /**
@@ -69,5 +91,58 @@ describe('stripDependencyEvalSinks', () => {
     );
 
     expect(result).toBeNull();
+  });
+});
+
+/**
+ * The Excalidraw font-subsetting stub, pinned: the vendor's wasm
+ * subsetter (an Emscripten blob that constructs functions from strings)
+ * must never ship — both interception paths answer the same throwing
+ * stub, scoping is id-tight (only the vendor's own subset chunks), and
+ * everything else passes through to the real file. The vendor's font
+ * manager wraps every subsetting call in a try/catch that falls back to
+ * the full font URL, so the throw degrades embed-fonts exports without
+ * breaking them — and forbidEvalSinks() keeps the whole arrangement
+ * honest on every future vendor bump.
+ */
+describe('stubExcalidrawFontSubsetting', () => {
+  const VENDOR = '/repo/node_modules/@excalidraw/excalidraw/dist/prod';
+
+  it('load() answers the throwing stub for the resolved subset chunks', () => {
+    const plugin = stubExcalidrawFontSubsetting();
+    const load = loadOf(plugin);
+    for (const name of ['subset-shared.chunk.js', 'subset-worker.chunk.js']) {
+      const code = load(`${VENDOR}/${name}`);
+      expect(code, name).not.toBeNull();
+      expect(code).toContain(
+        "throw new Error('Padify: Excalidraw font subsetting is not shipped')",
+      );
+    }
+  });
+
+  it('resolveId() claims the vendor\u2019s internal dynamic imports (the dev path)', () => {
+    const plugin = stubExcalidrawFontSubsetting();
+    const resolve = resolveOf(plugin);
+    expect(resolve('./subset-shared.chunk.js', `${VENDOR}/chunk-K2UTITRG.js`)).toBe(
+      '\0padify-excalidraw-subset-stub',
+    );
+    expect(resolve('./subset-worker.chunk.js', `${VENDOR}/chunk-K2UTITRG.js`)).toBe(
+      '\0padify-excalidraw-subset-stub',
+    );
+  });
+
+  it('the stub id itself loads (the resolveId arm and the load arm agree)', () => {
+    const plugin = stubExcalidrawFontSubsetting();
+    expect(loadOf(plugin)('\0padify-excalidraw-subset-stub')).toContain('throw new Error');
+  });
+
+  it('nothing else is claimed or stubbed — scope is the vendor\u2019s subsetter only', () => {
+    const plugin = stubExcalidrawFontSubsetting();
+    const load = loadOf(plugin);
+    const resolve = resolveOf(plugin);
+    expect(resolve('./subset-shared.chunk.js', '/repo/src/editor/drawing/canvas.ts')).toBeNull();
+    expect(resolve('./main.js', VENDOR)).toBeNull();
+    expect(load(`${VENDOR}/chunk-EIO257PC.js`)).toBeNull();
+    expect(load('/repo/src/editor/drawing/canvas.ts')).toBeNull();
   });
 });

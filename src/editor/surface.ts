@@ -20,6 +20,15 @@
  * Kanban surface ships it calls registerNoteSurface('text'/'json', …) and
  * every consumer follows without a single call site changing.
  *
+ * KIND surfaces serve many note types — but two types can share a kind
+ * and still need different surfaces ('tasks' and 'drawing' are both
+ * 'json'), so the registry has a second, TYPE-keyed layer consulted
+ * FIRST: registerNoteSurfaceForType('drawing', …) claims a note type
+ * outright, ahead of its kind's surface. The kind layer stays the
+ * default path (and the fallback for everything else), so a type-keyed
+ * claim is the exception mechanism, not a second registry to keep in
+ * sync — one type, one surface, one kind each.
+ *
  * Architecture notes:
  *  - Surfaces are STATELESS singletons: the host element is a parameter,
  *    not constructor state, so the same surface serves any host (the main
@@ -328,6 +337,10 @@ const surfaces = new Map<ContentKind, NoteSurface>([
   ['opaque', opaqueNoteSurface],
 ]);
 
+/** The type-keyed claims — consulted before the kind layer (see the
+ * module docs for why two 'json' types need separate surfaces). */
+const surfacesByType = new Map<string, NoteSurface>();
+
 /**
  * Registers the surface for a note kind. New kinds (Markdown's 'text',
  * a board's 'json') call this from their feature module at import time;
@@ -341,12 +354,29 @@ export function registerNoteSurface(
   surfaces.set(kind, surface);
 }
 
+/**
+ * Registers a surface for ONE note type, claiming it ahead of the kind
+ * lookup — the mechanism for two types that share a content kind but
+ * need different surfaces ('tasks' and 'drawing' are both 'json'). The
+ * id should be a registry type (editor/note-types.ts); an unknown id
+ * claims nothing since noteSurfaceFor only consults this layer for the
+ * note's own type id.
+ */
+export function registerNoteSurfaceForType(type: string, surface: NoteSurface): void {
+  surfacesByType.set(type, surface);
+}
+
 /** The surface serving a content kind (unknown/unregistered → opaque). */
 export function noteSurfaceForKind(kind: ContentKind): NoteSurface {
   return surfaces.get(kind) ?? opaqueNoteSurface;
 }
 
-/** The surface for the note a tab holds (absent type = the html default). */
+/** The surface for the note a tab holds (absent type = the html default).
+ * A type-keyed claim wins; everything else falls to the kind layer. */
 export function noteSurfaceFor(note: SurfaceNote | null | undefined): NoteSurface {
-  return noteSurfaceForKind(contentKindFor(note?.noteType));
+  const type = note?.noteType;
+  if (typeof type === 'string' && type !== '' && surfacesByType.has(type)) {
+    return surfacesByType.get(type)!;
+  }
+  return noteSurfaceForKind(contentKindFor(type));
 }

@@ -75,6 +75,69 @@ export function stripDependencyEvalSinks(): Plugin {
 }
 
 /**
+ * Stubs Excalidraw's font-subsetting chunks out of the shipped bundle.
+ *
+ * @excalidraw/excalidraw 0.18 embeds a HarfBuzz-wasm font subsetter: the
+ * vendor's `subset-shared.chunk.js` re-exports `chunk-EIO257PC.js`, whose
+ * Emscripten glue constructs functions from strings (`new Function(...)`
+ * — twice) — the exact CSP-incompatible eval sink forbidEvalSinks() exists
+ * to keep out of dist. The subsetter only serves the "embed fonts into an
+ * exported artifact" path, and the vendor's own font-manager wraps every
+ * subsetting call in a try/catch whose fallback references the FULL font
+ * URL instead of a base64 subset — so a stub that throws at module
+ * evaluation lands in the vendor's documented degradation, not a crash:
+ * exports stay valid, they just don't carry a subset font payload.
+ *
+ * The redirect is scoped to the vendor's internal dynamic imports of
+ * `./subset-shared.chunk.js` / `./subset-worker.chunk.js`; the wasm chunk
+ * behind them becomes unreachable and Rollup drops it. If a future
+ * version renames the chunks the stub stops matching — and the build
+ * fails loudly on the eval sink, so the miss can never ship silently.
+ */
+export function stubExcalidrawFontSubsetting(): Plugin {
+  const STUB_ID = '\0padify-excalidraw-subset-stub';
+  const STUB_CODE = [
+    '// Padify stub: Excalidraw font subsetting is not shipped (eval-free',
+    '// builds; the vendor falls back to referencing the full font URL).',
+    "throw new Error('Padify: Excalidraw font subsetting is not shipped');",
+  ].join('\n');
+  /** The vendor's subsetter chunks, however the resolver spelled them. */
+  const isSubsetChunk = (id: string): boolean =>
+    id.includes('@excalidraw/excalidraw/dist/') &&
+    /subset-(shared|worker)\.chunk\.[cm]?js/.test(id);
+  return {
+    name: 'padify-stub-excalidraw-font-subsetting',
+    resolveId(source, importer) {
+      if (
+        (source === './subset-shared.chunk.js' || source === './subset-worker.chunk.js') &&
+        typeof importer === 'string' &&
+        importer.includes('@excalidraw/excalidraw/dist/')
+      ) {
+        return STUB_ID;
+      }
+      return null;
+    },
+    load(id) {
+      // Rollup resolves the vendor's internal relative imports natively —
+      // the resolveId hook never sees them — so the interception happens
+      // at load time, on the resolved absolute path (dev keeps the
+      // resolveId path above).
+      if (isSubsetChunk(id)) {
+        console.warn(
+          `[vite] stubbed Excalidraw font subsetting (${id.split('/').pop()}) — ` +
+            'exports fall back to the full font URL, no eval shipped.',
+        );
+        return STUB_CODE;
+      }
+      if (id === STUB_ID) {
+        return STUB_CODE;
+      }
+      return null;
+    },
+  };
+}
+
+/**
  * Build invariant: no eval sinks in any shipped chunk. Runs after the
  * bundle is written; a reintroduced `new Function(` anywhere in dist
  * fails the build instead of shipping a scanner-detectable signature.
@@ -170,7 +233,12 @@ export default defineConfig({
   // build with VITE_BASE_PATH=/padify/ and everything (index.html refs,
   // asset URLs, the manifest link) moves with it.
   base: process.env.VITE_BASE_PATH || '/',
-  plugins: [htmlIncludes(), stripDependencyEvalSinks(), forbidEvalSinks()],
+  plugins: [
+    htmlIncludes(),
+    stripDependencyEvalSinks(),
+    stubExcalidrawFontSubsetting(),
+    forbidEvalSinks(),
+  ],
   publicDir: 'public',
   build: {
     outDir: 'dist',
