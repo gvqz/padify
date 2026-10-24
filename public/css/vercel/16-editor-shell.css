@@ -105,6 +105,79 @@ body.dark #note[data-empty]::before {
   color: var(--fg-subtle);
 }
 
+/* ---- Drawing note canvas ----
+   The Excalidraw island mounts inside a wrapper ([data-drawing-canvas])
+   the drawing surface owns; the vendor's own stylesheet handles
+   everything inside .excalidraw. The host has a definite height (the
+   flex column), so the wrapper takes it all — the canvas IS the note. */
+
+#note [data-drawing-canvas] {
+  height: 100%;
+  min-height: 320px;
+  outline: none;
+  /* The reading column's padding would pinch a full-bleed canvas; the
+     wrapper sheds it so drawings get the whole stage. */
+  width: 100%;
+  max-width: none;
+}
+
+#note [data-drawing-canvas]:focus,
+#note [data-drawing-canvas]:focus-visible {
+  outline: none;
+}
+
+#note [data-drawing-canvas] .excalidraw {
+  height: 100%;
+}
+
+/* ---- The island boundary: bootstrap's shared class names, neutralized ----
+   Excalidraw ships radix widgets under the SAME class names bootstrap uses
+   app-wide, and bootstrap's rules are written for its own open/close
+   protocol (.show) and chrome (frame, shadow, widths):
+
+   - `.dropdown-menu` — bootstrap holds it display:none until .show; the
+     vendor's menu is mount/unmount based, so it would stay invisible
+     forever, and bootstrap's padding/min-width/frame would mangle it;
+   - `.popover` — same display:none, plus a 276px max-width the vendor's
+     color/style pickers do not redeclare;
+   - `.container` — bootstrap's media-query widths and 15px gutters would
+     break the vendor's dialogs (e.g. PasteChartDialog).
+
+   The resets are scoped INSIDE the canvas island only, and re-enable
+   exactly the properties bootstrap injects — the vendor's own scoped
+   rules (`.excalidraw .popover`, `.dropdown-menu` positioning) keep
+   styling everything else. */
+
+#note [data-drawing-canvas] .excalidraw .dropdown-menu {
+  display: block;
+  float: none;
+  min-width: 0;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  font-size: inherit;
+  list-style: none;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+#note [data-drawing-canvas] .excalidraw .popover {
+  display: block;
+  max-width: none;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+#note [data-drawing-canvas] .excalidraw .container {
+  width: auto;
+  padding: 0;
+  margin: 0;
+}
+
 /* ---- Rich text note vocabulary ----
    Headings, lists, quotes, code blocks and links inside the note surface.
    Sized to sit calmly inside the note's 15px line rhythm; tokens keep dark

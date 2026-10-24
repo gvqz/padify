@@ -20,17 +20,22 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@excalidraw/excalidraw": "^0.18.1",
     "@floating-ui/dom": "^1.8.0",
     "@milkdown/kit": "^7.22.2",
     "docx": "^8.5.0",
     "jspdf": "^2.5.2",
     "katex": "^0.18.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "remark-math": "6.0.0",
     "sweetalert2": "^11.14.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
     "bun-types": "^1.4.2",
     "commonmark": "^0.31.2",
     "entities": "^8.1.0",

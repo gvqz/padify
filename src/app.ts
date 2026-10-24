@@ -59,10 +59,11 @@ import './editor/markdown/surface';
 import './editor/tasks/surface';
 // The drawing surface claims its TYPE (editor/drawing/surface.ts) —
 // 'drawing' shares the 'json' kind with 'tasks', so it registers through
-// the type-keyed layer. Scaffold state: display-only placeholder; the
-// Excalidraw canvas replaces its internals in the next phase
-// (docs/DRAWINGPAD_PLAN.md).
-import './editor/drawing/surface';
+// the type-keyed layer. The canvas phase: display() mounts the
+// Excalidraw island behind a lazy chunk (editor/drawing/canvas.ts) and
+// this import also brings the image-export seam for the download menu.
+import { exportActiveDrawingImage } from './editor/drawing/surface';
+import { drawingSceneHasContent } from './editor/drawing/scene';
 import {
   focusMarkdownPane,
   markdownSelectionStateNow,
@@ -503,6 +504,11 @@ export async function initApp(): Promise<void> {
 
   notepad.downloadNotes.click(function () {
     downloadLayer.toggle();
+    // The drawing rows answer "is there anything to save as an image" —
+    // content, not just the active type — so they sync as the menu opens,
+    // fresh off the live surface (a draw since the last active-note
+    // change must be seen without waiting for any save debounce).
+    syncDrawingExportRows();
   });
 
   notepad.downloadNotesPlain.click(function () {
@@ -550,6 +556,30 @@ export async function initApp(): Promise<void> {
   };
   tabManager.addActiveListener(syncMarkdownExportRow);
   syncMarkdownExportRow();
+
+  // The drawing rows follow the same rule — a drawing with something in
+  // it can become a PNG or an SVG (the plan's canvas-phase export seam;
+  // the empty canvas has nothing to save as an image, same rule as the
+  // share modal's emptiness gate).
+  notepad.downloadNotesPng.click(function () {
+    void exportActiveDrawingImage('png');
+  });
+  notepad.downloadNotesSvg.click(function () {
+    void exportActiveDrawingImage('svg');
+  });
+  const syncDrawingExportRows = (): void => {
+    const captured = getActiveNoteContent();
+    const exportable = captured?.noteType === 'drawing' && drawingSceneHasContent(captured.content);
+    if (exportable) {
+      notepad.downloadNotesPng.removeAttr('hidden');
+      notepad.downloadNotesSvg.removeAttr('hidden');
+    } else {
+      notepad.downloadNotesPng.attr('hidden', 'hidden');
+      notepad.downloadNotesSvg.attr('hidden', 'hidden');
+    }
+  };
+  tabManager.addActiveListener(syncDrawingExportRows);
+  syncDrawingExportRows();
 
   // ---- split view — the top bar's Markdown-only toggle. The icon flips
   // the surface between the last working mode and the side-by-side

@@ -8,35 +8,47 @@
 > the contract the scaffold (this branch) put in place and the design the
 > canvas phase builds against.
 
-## Status of this branch (the scaffold)
+## Status of this branch
 
-The type exists end-to-end; the canvas does not. Everything around the
-scene — registry, storage, sync, projection, placeholder — ships now so
-the canvas lands as one self-contained change later:
+The canvas ships with this branch — the type exists end-to-end AND the
+Excalidraw island renders it (the phase-2 design below, as built):
 
 - **`src/editor/drawing/scene.ts`** — the scene content model: the
   Generation-2 persistence contract (version, `elements`, whitelisted
   `appState`, `savedAt`) as parse/serialize/projection helpers over the
   note's `content` string.
-- **`src/editor/drawing/surface.ts`** — the drawing `NoteSurface`,
-  display-only for now: a placeholder card with an honest scene summary,
-  the correct plain-text projection, and the opaque discipline (bytes
-  never enter the editor host, `capture()` answers null).
-- **`src/editor/surface.ts`** — the surface registry gained a **type-keyed
-  layer** (`registerNoteSurfaceForType`): 'drawing' and 'tasks' share the
-  `json` content kind, so the kind registry alone cannot serve both. The
-  kind layer stays the default; a type claim is the exception mechanism.
-- **`src/editor/note-types.ts`** — the registry entry: id `drawing`, label
-  "Drawing", contentKind `json`, a pencil icon. The new-note menu, the
-  strip badge and every `contentKindFor` consumer pick it up from here.
-- **Tests** — the scene contract, the surface claims (including
-  tasks/drawing coexistence), the registry precedence, the server border
-  (scene bytes cross untouched), and e2e coverage of the creation flow.
-
-What this deliberately does NOT contain: Excalidraw itself, React, any
-new dependency, any schema change, and any new infrastructure. A drawing
-note created on this build is already durable — it persists, syncs, and
-round-trips; opening it shows the card below.
+- **`src/editor/drawing/canvas.ts`** — the Excalidraw island, the ONE
+  module that imports the vendor (React included), loaded exclusively
+  through `import('./canvas')`: the surface's lazy chunk. It mounts the
+  component with the Gen-2 chrome (open/save `.excalidraw`, save as
+  PNG/SVG, canvas background — with the vendor's clear-canvas, full
+  export, theme toggle, socials, search, command palette and image tool
+  all off) and exposes the export API behind the download menu's rows.
+- **`src/editor/drawing/surface.ts`** — the drawing `NoteSurface`: the
+  mount lifecycle (wrapper + loading card + lazy import with a
+  mid-download race guard), the announce discipline (one bubbling
+  `input` per user edit, 300 ms trailing, byte-equality-guarded so
+  opens/pans/zooms never write), capture's savedAt stamping, the reuse
+  path (drawing→drawing keeps the canvas, swaps the scene, clears the
+  history), the teardown (dismiss unmounts the React root and kills
+  pending announces), and the read-only refusal for newer format
+  versions.
+- **`src/editor/surface.ts`** — the surface registry's **type-keyed
+  layer** (`registerNoteSurfaceForType`): 'drawing' and 'tasks' share
+  the `json` content kind, so the kind registry alone cannot serve
+  both. The kind layer stays the default; a type claim is the exception.
+- **`src/editor/note-types.ts`** — the registry entry: id `drawing`,
+  label "Drawing", contentKind `json`, a pencil icon. The new-note
+  menu, the strip badge and every `contentKindFor` consumer pick it up
+  from here.
+- **Tests** — the scene contract, the surface lifecycle (vendor mocked
+  at the island seam), the **vendor pin** (`scene-pin.test.ts`: the
+  appState whitelist keys exist in the installed Excalidraw's default
+  state and its own serializer agrees), the registry precedence, the
+  server border (scene bytes cross untouched), the Vite stub pin, e2e
+  for the draw → autosave → reload round trip and the menu chrome, and
+  the cross-kind guards (share emptiness, picker refusal) from the
+  scaffold.
 
 ## Decisions (made once, recorded here)
 
@@ -122,7 +134,7 @@ interpreter:
 | Server (Turso `notes` table) | `content` text, `note_type` column | nothing — `parseNoteRows` stores any well-formed slug verbatim |
 | Sync v2 (seq/cursor pulls) | scene rides tombstones + last-write-wins + seq stamping | nothing — the merge compares strings |
 | Snapshots | content + noteType captured verbatim; titles derive "Drawing" | nothing |
-| Exports | `<pre>`-escaped scene for now; PNG/SVG in the canvas phase | deferred by design |
+| Exports | `<pre>`-escaped scene for the text family; "Download as PNG/SVG image" rows appear for drawn scenes (the Excalidraw export API, behind the island's lazy import) | the drawing rows in the download menu |
 | Share modal | a never-drawn note and a cleared-canvas scene refuse to share (`noteContentIsEmpty` reads the scene, like the empty task list); scenes with elements share as raw text | the drawing branch in `cloud/share.ts` |
 | Share viewer | raw scene text (the viewer renders non-html kinds as text) | phase 3 decides rendering vs hiding |
 | The HTML sanitizer | never applies — `isHtmlContent('drawing')` is false | the gate already existed |
@@ -211,11 +223,38 @@ that precedent.)
   Excalidraw export API; the existing HTML/text exports keep reading the
   projection.
 
-**Pinning the format.** The appState whitelist keys must be checked
-against the pinned `@excalidraw/excalidraw` version once it is
-installed — the key names above are the stable ones, but the round-trip
-test should assert the canvas's own `exportToBlob`/`serialize` output
-survives `parseDrawingScene` unchanged.
+**Pinning the format.** DONE as shipped: `scene-pin.test.ts` asserts every
+`DRAWING_APP_STATE_KEYS` entry exists in the installed
+`@excalidraw/excalidraw` (0.18.1) default appState (`restore(null,…)`),
+that the vendor's default values survive the whitelist serialize → parse
+round trip verbatim, and that the vendor's own `serializeAsJSON` agrees on
+every whitelisted key it keeps. A vendor rename fails the pin at the
+seam, not silently in every future save.
+
+**The build-hygiene discovery (and why the plan is better for it).** The
+vendor's `subset-shared.chunk.js` re-exports an Emscripten blob
+(HarfBuzz-wasm for font subsetting) that constructs functions from
+strings — the exact `new Function(` sink the repo's
+`forbidEvalSinks()` build invariant refuses (CSP without `unsafe-eval`,
+malware-scanner heuristics). The fix followed the repo's own precedent
+(`stripDependencyEvalSinks`): `stubExcalidrawFontSubsetting()` in
+vite.config.ts redirects both subsetter chunks to a throwing stub — the
+vendor's font manager already wraps every subsetting call in a try/catch
+whose fallback references the FULL font URL, so embed-font exports
+degrade instead of breaking — and the wasm chunk becomes unreachable,
+so Rollup drops it. `vite-plugin.test.ts` pins both interception arms,
+and a future vendor bump that renames the chunks fails the build loudly
+on the eval sink instead of shipping silently.
+
+**What the shipped chunk graph looks like.** The island is
+`assets/canvas-*.js` (~1.27 MB with the vendor's own prebundled graph)
+plus `canvas-*.css` and the vendor's locale/font assets — all in the
+service worker's RUNTIME-CACHE class (build-sw's three-way
+split put 207 lazy files there; the precache stayed at the app shell +
+small public assets). First drawing note downloads the island once;
+from then on it is offline-capable like every other hashed artifact.
+React (18.3.1) and react-dom ship inside the island's graph — the boot
+payload never sees them.
 
 ## Phase 3 — embedded images (the attachments upgrade path)
 
@@ -255,26 +294,31 @@ empty task list. If "hide" wins later it is a one-line gate in
 | Concern | File |
 |---|---|
 | Scene envelope, whitelist, determinism, projections | `src/editor/drawing/scene.test.ts` |
-| Surface claims: type-keyed win, tasks coexistence, card paint, capture discipline | `src/editor/drawing/surface.test.ts` |
+| Surface claims + lifecycle: mount, announce guard, capture stamping, clear, reuse, teardown, newer-version refusal | `src/editor/drawing/surface.test.ts` (vendor mocked at the island seam) |
+| The vendor pin: whitelist keys vs the installed Excalidraw | `src/editor/drawing/scene-pin.test.ts` |
 | Registry precedence: type → kind → opaque | `src/editor/surface.test.ts` |
 | Type registry entry, sanitizer gate, icon | `src/editor/note-types.test.ts` |
 | Server border: scene bytes verbatim through `parseNoteRows` | `src/server-notes.test.ts` |
 | Share emptiness per kind (drawing scene, task list, html projection) | `src/cloud/share-url.test.ts` |
 | Picker insert gate: refusal for kinds without a text-taking surface, ladder preserved for html | `src/unicode/picker-insert.test.ts` |
-| Creation flow, badge, title, placeholder (browser) | `e2e/note-types.spec.ts` |
+| The font-subsetting stub: both arms, scoped, stubbing throws | `src/vite-plugin.test.ts` |
+| Creation flow, badge, title, canvas mounts (browser) | `e2e/note-types.spec.ts` |
+| Draw → autosave → IndexedDB envelope → reload restore, download rows, curated menu, kind switching | `e2e/drawing-canvas.spec.ts` |
 | Old build meets a drawing note | covered by the opaque fallback + the unknown-type corpus (no new test needed) |
 
 ## Milestones
 
-- [x] Scaffold (this branch): type registered end-to-end, scene contract
-      pinned, placeholder surface, sync verified content-agnostic,
-      free-tier budget confirmed — **the note is durable before the
-      canvas exists**. Cross-kind guards shipped with it: the share
-      modal refuses empty scenes, the unicode picker refuses kinds it
-      cannot type into.
-- [ ] Canvas PR: Excalidraw behind the dynamic import, the mount
-      lifecycle above, autosave + announce, clear-canvas confirm,
-      PNG/SVG export, `editable` flips with its test.
+- [x] Scaffold: type registered end-to-end, scene contract pinned, sync
+      verified content-agnostic, free-tier budget confirmed — the note
+      was durable before the canvas existed. Cross-kind guards shipped
+      with it: the share modal refuses empty scenes, the unicode picker
+      refuses kinds it cannot type into.
+- [x] Canvas: Excalidraw behind the dynamic import, the mount lifecycle,
+      autosave + announce (equality-guarded, `savedAt` stamped at save),
+      clear-canvas as the Padify-confirmed flow only, PNG/SVG rows in
+      the download menu, `editable` flipped with its test — plus the
+      format pin against the installed vendor and the eval-sink stub
+      the build invariant demanded.
 - [ ] Images PR: the attachments mapping (upload on insert, hydrate on
       load, GC on delete), the image tool re-enabled.
 - [ ] Shares: decide viewer-rendering vs snapshot-export vs hide, then

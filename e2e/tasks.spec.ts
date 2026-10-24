@@ -716,15 +716,15 @@ test.describe('the calendar', () => {
     await expect(page.locator('.tkcal-wk-head.is-today')).not.toHaveClass(/is-selected/);
     await expect(page.locator('.tkcal-day-pane .tk-empty-day')).toBeVisible();
 
-    // The hour slots pick too: any hour of a day belongs to that day.
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const pad = (n: number): string => String(n).padStart(2, '0');
-    const tomorrowKey = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(
-      tomorrow.getDate(),
-    )}`;
-    await page.locator(`.tkcal-wk-slot[data-cal-day="${tomorrowKey}"]`).first().click();
-    await expect(page.locator(`.tkcal-wk-head[data-cal-day="${tomorrowKey}"]`)).toHaveClass(
+    // The hour slots pick too: any hour of a day belongs to that day. The
+    // day is read from the RENDERED week (the header already picked above)
+    // instead of clock math — "tomorrow" leaves the displayed week when
+    // today is its last day (Saturdays on the Sunday-start calendar), and
+    // the slot for it never exists.
+    const otherKey = await another.getAttribute('data-cal-day');
+    expect(otherKey).not.toBeNull();
+    await page.locator(`.tkcal-wk-slot[data-cal-day="${otherKey}"]`).first().click();
+    await expect(page.locator(`.tkcal-wk-head[data-cal-day="${otherKey}"]`)).toHaveClass(
       /is-selected/,
     );
 

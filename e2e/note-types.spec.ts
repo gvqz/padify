@@ -134,12 +134,12 @@ test.describe('note types', () => {
     await expect(page.locator('#richToolbar')).toBeVisible();
   });
 
-  test('a drawing note opens the placeholder card and badges the strip', async ({ page }) => {
-    // The scaffold state (docs/DRAWINGPAD_PLAN.md): the type ships now —
-    // creatable, badged, titled, stored and synced — while the canvas
-    // itself lands with the next phase. The note must present as a
-    // drawing everywhere the type is visible, and never as an editable
-    // text surface.
+  test('a drawing note opens the canvas and badges the strip', async ({ page }) => {
+    // The canvas phase (docs/DRAWINGPAD_PLAN.md): the type is real end to
+    // end — creatable, badged, titled — and opening it mounts the
+    // Excalidraw island (a lazy chunk on first drawing note). The note
+    // must present as a drawing everywhere the type is visible, and never
+    // as an editable text surface.
     await page.goto('/');
     await openTypeMenu(page);
     await page
@@ -152,10 +152,10 @@ test.describe('note types', () => {
     await expect(activeTab.locator('.tab-strip-type')).toHaveCount(1);
     await expect(activeTab.locator('.tab-strip-title')).toHaveText('Drawing');
 
-    // The host is not editable text: the placeholder card is the paint,
-    // and no rich toolbar appears for it.
-    const card = page.locator('#note .unsupported-note');
-    await expect(card).toBeVisible();
+    // The host is not editable text: the canvas wrapper mounts and the
+    // Excalidraw island lands in it (the chunk rides the first drawing).
+    await expect(page.locator('#note [data-drawing-canvas]')).toBeVisible();
+    await expect(page.locator('#note .excalidraw')).toBeVisible({ timeout: 20_000 });
     await expect(page.locator('#richToolbar')).toBeHidden();
   });
 
