@@ -3,15 +3,23 @@ import { expect, test, type Page } from '@playwright/test';
 /**
  * The share flow, end to end against the real API.
  *
- * The modal redesign's two contracts live here:
+ * The share sheet's contracts live here:
  *
- *  1. The empty-note refusal — a blank note never becomes a link. The
+ *  1. The signed-out gate — sharing is a cloud-account feature; the
+ *     gate points at the cloud modal, and the sheet's footer stays
+ *     quiet (it speaks for the links list, not the gate).
+ *
+ *  2. The empty-note refusal — a blank note never becomes a link. The
  *     note card goes dashed and says why, the create button stays dark,
  *     and the server would refuse the row even if the button were forced.
  *
- *  2. The happy path — a note with words shares: the link lands in the
- *     list with an Active badge, cancelling it flips the badge, and the
- *     signed-out gate points at the cloud modal.
+ *  3. The happy path — a note with words shares: the link lands in the
+ *     list as Active, newest first, and the foot counts it.
+ *
+ *  4. The two-step cancel — the confirm state IS the button: the first
+ *     click arms it ("Really cancel?"), a click anywhere else disarms
+ *     it, and the second click revokes the link. No second dialog ever
+ *     stacks over the sheet.
  *
  * The e2e config boots the API against a throwaway SQLite file (see
  * playwright.config.ts); nothing here touches a real database.
@@ -62,11 +70,18 @@ async function typeIntoFreshNote(page: Page, text: string): Promise<void> {
 }
 
 test.describe('share links (real API)', () => {
-  test('the signed-out gate points at the cloud modal', async ({ page }) => {
+  test('the sheet docks to the right edge and the gate points at the cloud modal', async ({
+    page,
+  }) => {
     await page.goto('/');
     await openShareModal(page);
 
+    // The sheet frame: edge-attached host, sheet dialog, gate pane.
+    await expect(page.locator('#shareModal.share-sheet-host')).toBeVisible();
+    await expect(page.locator('#shareModal .modal-dialog.share-sheet')).toBeVisible();
     await expect(page.locator('#shareSignedOutPane')).toBeVisible();
+    await expect(page.locator('#shareFoot')).toBeHidden();
+
     await page.locator('#shareSignInCta').click();
     await expect(page.locator('#cloudModal')).toBeVisible();
   });
@@ -95,7 +110,7 @@ test.describe('share links (real API)', () => {
     await expect(page.locator('#shareCreateBtn')).toBeDisabled();
   });
 
-  test('a note with words shares: the link lists as Active and cancels to Revoked', async ({
+  test('a note with words shares: the link lists as Active and the foot counts it', async ({
     page,
   }) => {
     test.setTimeout(60_000);
@@ -107,16 +122,46 @@ test.describe('share links (real API)', () => {
     await page.locator('#shareCreateBtn').click();
     await expect(page.locator('.share-link-row')).toHaveCount(1);
     await expect(page.locator('.share-link-row .share-badge.active')).toBeVisible();
+    await expect(page.locator('#shareFootCount')).toHaveText('1 link');
 
-    // Cancel: Swal asks first, then the badge flips to Revoked and the row
-    // dims.
-    await page.locator('.share-link-row .share-chip-btn.danger').click();
-    await expect(page.locator('.swal2-confirm')).toBeVisible();
-    await page.locator('.swal2-confirm').click();
-    await expect(page.locator('.share-link-row .share-badge.revoked')).toBeVisible();
+    // The link's URL is on the clipboard-ready row: a real share URL shape.
+    await expect(page.locator('.share-link-url')).toContainText('/share/?t=');
   });
 
-  test('the scope switch lists other notes\u2019 links', async ({ page }) => {
+  test('cancelling is a two-step arm on the button — no second dialog', async ({ page }) => {
+    test.setTimeout(60_000);
+    await signUp(page, freshAccount());
+    await typeIntoFreshNote(page, 'the cancellable line');
+    await openShareModal(page);
+
+    await page.locator('#shareCreateBtn').click();
+    await expect(page.locator('.share-link-row')).toHaveCount(1);
+
+    // First press: the button arms — filled, asking the question. No
+    // Swal, no stacked dialog: the sheet's own DOM is all there is.
+    await page.locator('.share-link-row .share-chip-btn.danger').click();
+    await expect(page.locator('.share-link-row .share-chip-btn.danger.is-armed')).toHaveText(
+      'Really cancel?',
+    );
+    await expect(page.locator('.swal2-container')).toHaveCount(0);
+    await expect(page.locator('.share-link-row .share-badge.active')).toBeVisible();
+
+    // A click anywhere else disarms — the confirm is a gesture on the
+    // button, not a state to wander away from.
+    await page.locator('.share-links-title').click();
+    await expect(page.locator('.share-chip-btn.danger.is-armed')).toHaveCount(0);
+    await expect(page.locator('.share-link-row .share-chip-btn.danger')).toHaveText('Cancel link');
+
+    // Arm again; the second press commits and the badge flips.
+    await page.locator('.share-link-row .share-chip-btn.danger').click();
+    await page.locator('.share-link-row .share-chip-btn.danger.is-armed').click();
+    await expect(page.locator('.share-link-row .share-badge.revoked')).toBeVisible();
+    await expect(page.locator('.share-link-row')).toHaveClass(/dim/);
+    // A cancelled link offers no cancel button anymore.
+    await expect(page.locator('.share-chip-btn.danger')).toHaveCount(0);
+  });
+
+  test('the scope switch lists other notes\u2019 links, newest first', async ({ page }) => {
     test.setTimeout(60_000);
     await signUp(page, freshAccount());
 
@@ -131,11 +176,18 @@ test.describe('share links (real API)', () => {
     await openShareModal(page);
     await page.locator('#shareCreateBtn').click();
     await expect(page.locator('.share-link-row')).toHaveCount(1);
+    await expect(page.locator('#shareFootCount')).toHaveText('1 link');
 
-    // "This note" shows only the current note's link; "All notes" shows both.
-    // The segmented control hides its radios (labels take the clicks).
+    // "This note" shows only the current note's link; "All notes" shows both,
+    // newest first — the link you just made leads. The segmented control
+    // hides its radios (labels take the clicks).
     await page.locator('label[for="shareScopeAll"]').click();
     await expect(page.locator('.share-link-row')).toHaveCount(2);
+    await expect(page.locator('#shareFootCount')).toHaveText('2 links');
+    await expect(page.locator('.share-link-row .share-link-meta').first()).toContainText(
+      'second shared note',
+    );
+
     await page.locator('label[for="shareScopeNote"]').click();
     await expect(page.locator('.share-link-row')).toHaveCount(1);
   });

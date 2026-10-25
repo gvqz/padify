@@ -1,15 +1,22 @@
 /**
  * Padify share links — user interface.
  *
- * The navbar share button opens a custom modal (no navigator.share): the
- * signed-in user picks how many days a read-only link stays live, creates
- * it, copies it, and can cancel any link at any time. Signed-out visitors
- * get a sign-in prompt — sharing is a cloud-account feature.
+ * The share sheet — the History sheet's sibling: a right-side panel that
+ * reads top to bottom as WHAT you are sharing (the note card), HOW LONG
+ * a new link works (the expiry choice + the one primary action), and
+ * WHICH keys are already out there (the links list). The signed-in user
+ * picks how many days a read-only link stays live, creates it — the link
+ * lands on the clipboard immediately — and manages every link from its
+ * own row. Signed-out visitors get a sign-in gate — sharing is a
+ * cloud-account feature.
+ *
+ * Nothing here opens a second dialog: cancelling a link arms the row's
+ * own button (the confirm state IS the button), the same two-step
+ * contract the History sheet's deletes follow.
  */
 
 import { $ } from '../lib/q';
 import { openModal, closeModal } from '../ui/behavior/modal';
-import Swal from 'sweetalert2';
 import { showToast } from '../ui/toast';
 import { deriveTabTitle, getActiveNoteContent, getTabManager } from '../tabs';
 import { noteTypeLabel, type NoteType } from '../editor/note-types';
@@ -25,8 +32,14 @@ import {
 } from './share';
 
 const DAY_MS = 86_400_000;
+/** How long a cancel button stays armed before it disarms itself. */
+const ARM_TIMEOUT_MS = 4000;
 
 let shares: ShareRecord[] = [];
+
+/** The two-step cancel: the armed row's token, and its auto-disarm timer. */
+let armedToken: string | null = null;
+let armedTimer: number | null = null;
 
 export function initShareUI(): void {
   if (!isShareAvailable()) {
@@ -57,9 +70,21 @@ export function initShareUI(): void {
   $('input[name="shareScope"]').on('change', renderLinks);
 
   $('#shareModal').on('show.bs.modal', () => {
+    // A stale armed button from the previous visit must not survive the
+    // reopen — the confirm state belongs to this visit's list only.
+    disarmCancel();
     renderNoteCard();
     renderExpiryPreview();
     void refreshShares();
+  });
+
+  // A click anywhere else disarms whatever is armed — the confirm is a
+  // gesture on the button, not a state to wander away from.
+  document.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement | null;
+    if (armedToken !== null && !target?.closest('.share-chip-btn.danger')) {
+      disarmCancel();
+    }
   });
 
   // Signed-in state swaps the modal panes (also fires once at startup).
@@ -81,6 +106,9 @@ function renderPanes(): void {
   const signedIn = signedInNow();
   $('#shareSignedOutPane').attr('hidden', signedIn ? 'hidden' : null);
   $('#shareSignedInPane').attr('hidden', signedIn ? null : 'hidden');
+  // The footer speaks for the links list; it has nothing to say to a
+  // signed-out visitor.
+  $('#shareFoot').attr('hidden', signedIn ? null : 'hidden');
 }
 
 // ---- note card + expiry preview ----------------------------------------------
@@ -107,9 +135,16 @@ function activeNote(): {
   const captured = getActiveNoteContent();
   const content = captured?.content ?? '';
   const noteType = captured?.noteType ?? null;
+
+  // The card names what will actually be shared. A freshly typed first
+  // line has not reached the saved model yet — the title derives from the
+  // LIVE capture, not the stale one, or the card says "Untitled" over a
+  // note that visibly has words.
+  const liveTitle = active.name?.trim() ? title : deriveTabTitle({ ...active, content });
+
   return {
     id: active.id,
-    title,
+    title: liveTitle,
     words,
     content,
     noteType,
@@ -189,6 +224,7 @@ async function refreshShares(): Promise<void> {
  * with nothing to share.
  */
 function renderLinksBusy(busy: boolean): void {
+  $('.share-create-label').text(busy ? 'Creating…' : 'Create link');
   if (busy) {
     $('#shareCreateBtn').prop('disabled', true);
     return;
@@ -232,10 +268,12 @@ function createdAgo(record: ShareRecord): string {
 
 function shortUrl(token: string): string {
   const url = shareUrlFor(token);
-  if (url.length <= 46) {
+  // The sheet has room for the whole typical link; the cap only tames
+  // pathological hosts. The row's own ellipsis handles the rest.
+  if (url.length <= 64) {
     return url;
   }
-  return `${url.slice(0, 42)}…`;
+  return `${url.slice(0, 60)}…`;
 }
 
 function statusBadge(record: ShareRecord): string {
@@ -248,48 +286,52 @@ function statusBadge(record: ShareRecord): string {
   return '<span class="share-badge active">Active</span>';
 }
 
+function isLinkActive(record: ShareRecord): boolean {
+  return !record.revoked && new Date(record.expires_at).getTime() > Date.now();
+}
+
 function renderLinks(): void {
   const $list = $('#shareLinksList');
   const note = activeNote();
   const showAll = $('#shareScopeAll').is(':checked');
 
-  const visible = shares.filter((record) => {
-    if (showAll) {
-      return true;
-    }
-    return note ? record.note_id === note.id : true;
-  });
+  // Newest first — the link you just made is the one you most likely
+  // want to copy, so it leads.
+  const visible = shares
+    .filter((record) => (showAll ? true : note ? record.note_id === note.id : true))
+    .sort((a, b) => b.created_at - a.created_at);
 
   $list.empty();
+  disarmCancel();
 
   if (visible.length === 0) {
     const message = showAll
       ? 'No links yet. Create one above — anyone with it sees a read-only copy of the note.'
       : 'No links yet for this note. Create one above — anyone with it sees a read-only copy.';
     $list.append($('<p class="share-links-empty"></p>').text(message));
+    renderFoot(0);
     return;
   }
 
   visible.forEach((record) => {
-    const isActive = !record.revoked && new Date(record.expires_at).getTime() > Date.now();
+    const isActive = isLinkActive(record);
     const row = $('<div class="share-link-row"></div>');
     if (!isActive) {
       row.addClass('dim');
     }
 
-    const main = $('<div class="share-link-main"></div>');
+    const top = $('<div class="share-link-top"></div>');
+    top.append($('<span class="share-link-url"></span>').text(shortUrl(record.token)));
+    top.append(statusBadge(record));
 
     const meta = $('<div class="share-link-meta"></div>');
-    meta.append(statusBadge(record));
-    meta.append(document.createTextNode(`${relativeExpiry(record)} · ${createdAgo(record)}`));
+    const parts = [relativeExpiry(record), createdAgo(record)];
     // When the list spans notes (or the link points elsewhere), say which.
     if (showAll || (note && record.note_id !== note.id)) {
       const title = record.title && record.title.trim() ? record.title : 'Untitled';
-      meta.append(document.createTextNode(`· “${title}”`));
+      parts.push(`\u201C${title}\u201D`);
     }
-
-    main.append($('<span class="share-link-url"></span>').text(shortUrl(record.token)));
-    main.append(meta);
+    meta.text(parts.join(' · '));
 
     const actions = $('<div class="share-link-actions"></div>');
 
@@ -311,16 +353,77 @@ function renderLinks(): void {
       const cancel = $('<button type="button" class="share-chip-btn danger"></button>').text(
         'Cancel link',
       );
+      cancel.attr('data-token', record.token);
       cancel.on('click', () => {
-        void cancelShareLink(record);
+        onCancelClick(record);
       });
       actions.append(cancel);
     }
 
-    row.append(main);
+    row.append(top);
+    row.append(meta);
     row.append(actions);
     $list.append(row);
   });
+
+  renderFoot(visible.length);
+}
+
+function renderFoot(count: number): void {
+  const noun = count === 1 ? 'link' : 'links';
+  $('#shareFootCount').text(count === 0 ? 'No links yet' : `${count} ${noun}`);
+}
+
+// ---- the two-step cancel -------------------------------------------------------
+
+/**
+ * The confirm state IS the button: the first click arms it (the label
+ * asks the question), the second commits. Auto-disarms after a few
+ * seconds; a click anywhere else disarms it; only one button is armed
+ * at a time. The twin of the History sheet's armed deletes.
+ */
+function onCancelClick(record: ShareRecord): void {
+  const button = document.querySelector(
+    `.share-chip-btn.danger[data-token="${CSS.escape(record.token)}"]`,
+  );
+  if (!button) {
+    return;
+  }
+  if (armedToken === record.token) {
+    disarmCancel();
+    void commitCancel(record);
+    return;
+  }
+  disarmCancel();
+  armedToken = record.token;
+  button.classList.add('is-armed');
+  button.textContent = 'Really cancel?';
+  armedTimer = window.setTimeout(() => disarmCancel(), ARM_TIMEOUT_MS);
+}
+
+/** Returns every cancel button to its quiet state (idempotent). */
+function disarmCancel(): void {
+  if (armedTimer !== null) {
+    window.clearTimeout(armedTimer);
+    armedTimer = null;
+  }
+  armedToken = null;
+  document.querySelectorAll('.share-chip-btn.danger.is-armed').forEach((button) => {
+    button.classList.remove('is-armed');
+    button.textContent = 'Cancel link';
+  });
+}
+
+async function commitCancel(record: ShareRecord): Promise<void> {
+  const result = await revokeShare(record.token);
+  if (!result.ok) {
+    showToast(result.message ?? 'Could not cancel the link.');
+    return;
+  }
+
+  record.revoked = true;
+  showToast('Link cancelled — it no longer works for anyone.');
+  renderLinks();
 }
 
 // ---- actions -----------------------------------------------------------------
@@ -388,29 +491,4 @@ async function copyLinkText(url: string, message: string): Promise<void> {
 
 async function copyShareLink(record: ShareRecord): Promise<void> {
   await copyLinkText(shareUrlFor(record.token), 'Link copied to clipboard.');
-}
-
-async function cancelShareLink(record: ShareRecord): Promise<void> {
-  const confirmation = await Swal.fire({
-    title: 'Cancel this link?',
-    text: 'Anyone who has it will immediately lose access to the note. This cannot be undone.',
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonText: 'Cancel link',
-    cancelButtonText: 'Keep it',
-  });
-
-  if (!confirmation.isConfirmed) {
-    return;
-  }
-
-  const result = await revokeShare(record.token);
-  if (!result.ok) {
-    showToast(result.message ?? 'Could not cancel the link.');
-    return;
-  }
-
-  record.revoked = true;
-  showToast('Link cancelled — it no longer works for anyone.');
-  renderLinks();
 }

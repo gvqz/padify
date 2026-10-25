@@ -1,9 +1,23 @@
-<div id="shareModal" class="modal fade" role="dialog" aria-labelledby="shareModalTitle">
-  <div class="modal-dialog cloud-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <div class="pref-header-copy">
-          <h4 class="modal-title custom-modal-title" id="shareModalTitle">Share this note</h4>
+<!-- Share — a right-side sheet, the History sheet's sibling. A share is a
+     key you hand out: the sheet reads top to bottom as WHAT you are
+     sharing (the note card), HOW LONG the key works (the expiry choice
+     and the one primary action), and WHICH keys are already out there
+     (the links list, each row owning its own Open / Copy / Cancel).
+     Structure and rendering live in src/cloud/share-ui.ts, styles in
+     public/css/vercel/19-share.css. Nothing here opens a second
+     dialog — cancelling a link arms its own button in place. -->
+<div
+  id="shareModal"
+  class="modal fade share-sheet-host"
+  role="dialog"
+  aria-labelledby="shareModalTitle"
+>
+  <div class="modal-dialog share-sheet">
+    <div class="modal-content share-content">
+      <header class="share-head">
+        <div class="share-head-copy">
+          <h2 class="share-title" id="shareModalTitle">Share</h2>
+          <p class="share-subtitle">Read-only links to this note — you keep the pen.</p>
         </div>
         <button type="button" class="close" data-dismiss="modal" aria-label="Close share">
           <svg
@@ -18,51 +32,55 @@
             <path d="M6 6l12 12M18 6L6 18" />
           </svg>
         </button>
-      </div>
-      <div class="modal-body">
+      </header>
+
+      <div class="share-scroll">
+        <!-- Signed out: sharing is a cloud-account feature. The gate
+             fills the sheet like an empty state — icon, one sentence,
+             one way forward. -->
         <div id="shareSignedOutPane" hidden>
-          <div class="share-signedout">
-            <span class="share-lock-icon" aria-hidden="true">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <rect x="3" y="11" width="18" height="11" rx="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-            </span>
-            <h5 class="share-signedout-title">Sign in to share notes</h5>
-            <p class="share-signedout-copy">
+          <div class="share-gate">
+            <svg
+              width="40"
+              height="40"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="11" width="18" height="11" rx="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            <h5 class="share-gate-title">Sign in to share notes</h5>
+            <p class="share-gate-copy">
               Sharing creates a private link to this note that you can cancel at any time. Sign in
               to your Padify account to create and manage your links.
             </p>
-            <button type="button" class="btn btn-primary" id="shareSignInCta">Sign in</button>
+            <button type="button" class="share-gate-cta" id="shareSignInCta">Sign in</button>
           </div>
         </div>
 
         <div id="shareSignedInPane" hidden>
-          <div class="share-note-card" id="shareNoteCard">
+          <!-- What is being shared. The card goes dashed and says why
+               when the note has nothing to share. -->
+          <section class="share-note-card" id="shareNoteCard" aria-label="The note being shared">
             <div class="share-note-copy">
               <span class="share-note-eyebrow">Sharing</span>
               <span class="share-note-title" id="shareNoteTitle">Untitled</span>
               <span class="share-note-meta" id="shareNoteMeta"></span>
             </div>
             <span class="share-note-type-chip" id="shareNoteTypeChip" hidden></span>
-          </div>
+          </section>
 
-          <div class="share-field">
-            <span class="share-field-label" id="shareDurationLabel">Link expires after</span>
-            <div
-              class="pref-theme-seg share-duration-seg"
-              role="radiogroup"
-              aria-labelledby="shareDurationLabel"
-            >
+          <!-- The one primary movement: pick how long the link lives,
+               create it. The preview line says the exact date so the
+               choice is never abstract. -->
+          <section class="share-new" aria-label="Create a new link">
+            <span class="share-sec-label" id="shareDurationLabel">New link expires after</span>
+            <div class="share-dur" role="radiogroup" aria-labelledby="shareDurationLabel">
               <input type="radio" id="shareDur1" value="1" name="shareDuration" />
               <label for="shareDur1">1 day</label>
               <input type="radio" id="shareDur7" value="7" name="shareDuration" checked />
@@ -73,50 +91,52 @@
               <label for="shareDur90">90 days</label>
             </div>
             <span class="share-expiry-preview" id="shareExpiryPreview"></span>
-          </div>
+            <button type="button" class="share-create" id="shareCreateBtn">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              </svg>
+              <span class="share-create-label">Create link</span>
+            </button>
+          </section>
 
-          <button type="button" class="btn btn-primary share-create-btn" id="shareCreateBtn">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-            </svg>
-            Create share link
-          </button>
-
-          <div class="share-links-head">
-            <span class="share-links-title">Your links</span>
-            <div
-              class="pref-theme-seg share-scope-seg"
-              role="radiogroup"
-              aria-label="Which links to show"
-            >
-              <input type="radio" id="shareScopeNote" value="note" name="shareScope" checked />
-              <label for="shareScopeNote">This note</label>
-              <input type="radio" id="shareScopeAll" value="all" name="shareScope" />
-              <label for="shareScopeAll">All notes</label>
+          <!-- The keys already handed out. The scope narrows the list
+               to this note or spans every link the account owns; a row
+               never opens a dialog — cancelling arms the row's own
+               button, exactly like the History sheet's deletes. -->
+          <section class="share-links" aria-label="Existing links">
+            <div class="share-links-head">
+              <span class="share-links-title">Your links</span>
+              <div class="share-scope" role="radiogroup" aria-label="Which links to show">
+                <input type="radio" id="shareScopeNote" value="note" name="shareScope" checked />
+                <label for="shareScopeNote">This note</label>
+                <input type="radio" id="shareScopeAll" value="all" name="shareScope" />
+                <label for="shareScopeAll">All notes</label>
+              </div>
             </div>
-          </div>
-          <div class="share-links-list" id="shareLinksList">
-            <p class="share-links-empty" id="shareLinksEmpty">
-              No links yet. Create one above — anyone with the link sees a read-only copy of this
-              note.
-            </p>
-          </div>
-          <p class="share-hint">
-            Cancelling a link immediately cuts off access for everyone who has it.
-          </p>
+            <div class="share-links-list" id="shareLinksList">
+              <!-- Link rows render here -->
+            </div>
+          </section>
         </div>
       </div>
+
+      <footer class="share-foot" id="shareFoot" hidden>
+        <span class="share-foot-count" id="shareFootCount"></span>
+        <span class="share-foot-hint"
+          >Cancelling a link cuts off access for everyone who has it.</span
+        >
+      </footer>
     </div>
   </div>
 </div>
