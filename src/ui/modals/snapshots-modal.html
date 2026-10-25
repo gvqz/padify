@@ -34,7 +34,10 @@
         </button>
       </header>
 
-      <!-- Pinned toolbar: the filter and the one primary action. -->
+      <!-- Pinned toolbar: the two filters (text and type) and the one
+           primary action. The type filter narrows the timeline to one
+           kind of note; it never reorders it — time stays the only
+           axis. Its menu is a small popover owned by .snap-type-wrap. -->
       <div class="snap-toolbar">
         <div class="snap-search">
           <svg
@@ -80,7 +83,56 @@
           </button>
           <span class="snap-search-slash" aria-hidden="true"><kbd>/</kbd></span>
         </div>
-        <button id="createSnapshotBtn" class="snap-take" type="button">
+        <div class="snap-type-wrap">
+          <button
+            type="button"
+            id="snapshotTypeFilter"
+            class="snap-type-btn"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            title="Show one kind of note"
+          >
+            <svg
+              class="snap-type-ico"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M4 6h16"></path>
+              <path d="M7 12h10"></path>
+              <path d="M10 18h4"></path>
+            </svg>
+            <span class="snap-type-label" id="snapshotTypeLabel">All types</span>
+            <svg
+              class="snap-type-chev"
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          <div id="snapshotTypeMenu" class="snap-type-menu" role="menu" hidden>
+            <!-- Options render on open: All types, then each type present, with counts -->
+          </div>
+        </div>
+        <button
+          id="createSnapshotBtn"
+          class="snap-take"
+          type="button"
+          title="Take snapshot"
+          data-shortcut-title="mod+u"
+        >
           <svg
             width="14"
             height="14"
@@ -97,7 +149,6 @@
             />
           </svg>
           Take snapshot
-          <span class="snap-kbd"><kbd data-mod-key>Ctrl</kbd><kbd>U</kbd></span>
         </button>
       </div>
 

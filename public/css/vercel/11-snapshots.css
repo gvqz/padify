@@ -28,6 +28,15 @@
        click (the pre-restore safety copy is the undo path); delete is
        a two-step arm on the button itself.
 
+     • THE TOOLBAR — two filters and one action. The text field reads
+       as a field (quiet fill, border on touch); the type filter is a
+       popover that narrows the timeline to one note kind WITHOUT
+       reordering it (time stays the only axis); Take snapshot is the
+       sheet's single primary button, its shortcut in the tooltip.
+       Current is unique by fiat: only the newest row identical to the
+       open note wears the chip — a restore chain can produce older
+       twins, and they stay plain history.
+
    Every color comes from the token aliases — dark mode needs no rules
    of its own here. */
 /* --------------------------------------------------------------------------
@@ -110,21 +119,51 @@
   color: var(--vz-fg-muted);
 }
 
+/* The sheet's close button — the global dialog rule sizes
+   .modal-header .close svg, but this sheet's header is .snap-head, and
+   an unsized SVG collapses the button to zero width: an invisible,
+   unclickable ×. Same real target here. */
 .snap-head .close {
   flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  margin: -4px -6px 0 0;
+  padding: 0;
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg-muted);
+  opacity: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 100ms ease, color 100ms ease;
 }
 
-/* ---- toolbar: filter + the one primary action ------------------------------ */
+.snap-head .close svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+}
+
+.snap-head .close:hover,
+.snap-head .close:focus {
+  color: var(--vz-fg);
+  background: var(--vz-bg-hover);
+  opacity: 1;
+}
+
+/* ---- toolbar: two filters + the one primary action ----------------------- */
 
 .snap-toolbar {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   padding: 0 20px 12px 22px;
   border-bottom: 1px solid var(--vz-border);
 }
 
+/* The text filter reads as a field, not a third button: a quiet fill
+   that grows a border only when hovered or focused. */
 .snap-search {
   flex: 1 1 auto;
   min-width: 0;
@@ -133,13 +172,19 @@
   gap: 7px;
   height: 32px;
   padding: 0 8px;
-  background: var(--vz-bg-elevated);
-  border: 1px solid var(--vz-border);
+  background: var(--vz-bg-subtle);
+  border: 1px solid transparent;
   border-radius: var(--vz-radius);
-  transition: border-color var(--vz-dur) ease, box-shadow var(--vz-dur) ease;
+  transition: border-color var(--vz-dur) ease, background-color var(--vz-dur) ease,
+    box-shadow var(--vz-dur) ease;
+}
+
+.snap-search:hover {
+  border-color: var(--vz-border);
 }
 
 .snap-search:focus-within {
+  background: var(--vz-bg-elevated);
   border-color: var(--vz-border-strong);
   box-shadow: 0 0 0 3px var(--vz-bg-hover);
 }
@@ -211,7 +256,6 @@
   display: none;
 }
 
-.snap-kbd kbd,
 .snap-search-slash kbd,
 .snap-kbd-inline kbd {
   display: inline-flex;
@@ -230,12 +274,158 @@
   border-radius: 4px;
 }
 
-.snap-kbd {
+/* ---- the type filter — trigger + popover menu ----------------------------- */
+
+/* The wrap owns the popover's anchor; the menu hangs under the button,
+   right-aligned, over the scroll area. */
+.snap-type-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.snap-type-btn {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  margin-left: 3px;
-  opacity: 0.72;
+  gap: 6px;
+  height: 32px;
+  padding: 0 9px;
+  background: var(--vz-bg-subtle);
+  border: 1px solid transparent;
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--vz-dur) ease, color var(--vz-dur) ease,
+    background-color var(--vz-dur) ease;
+}
+
+.snap-type-btn:hover:not(:disabled),
+.snap-type-btn:focus-visible {
+  color: var(--vz-fg);
+  border-color: var(--vz-border);
+}
+
+.snap-type-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* A filter in force is dressed in the accent — the label says what is
+   shown, the color says it is not the whole story. */
+.snap-type-btn.is-active {
+  color: var(--vz-primary);
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-primary);
+}
+
+.snap-type-ico {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+}
+
+.snap-type-chev {
+  flex: 0 0 auto;
+  opacity: 0.7;
+  transition: transform var(--vz-dur) ease;
+}
+
+.snap-type-btn[aria-expanded='true'] .snap-type-chev {
+  transform: rotate(180deg);
+}
+
+.snap-type-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  box-shadow: var(--vz-shadow-dialog);
+  animation: snap-menu-in 120ms var(--vz-ease);
+}
+
+.snap-type-menu[hidden] {
+  display: none;
+}
+
+@keyframes snap-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.snap-type-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 100ms ease;
+}
+
+.snap-type-opt:hover,
+.snap-type-opt:focus-visible {
+  background: var(--vz-bg-hover);
+  outline: none;
+}
+
+.snap-type-opt-ico {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--vz-fg-muted);
+}
+
+.snap-type-opt.is-selected .snap-type-opt-ico {
+  color: var(--vz-primary);
+}
+
+.snap-type-opt-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snap-type-opt.is-selected .snap-type-opt-label {
+  font-weight: 600;
+}
+
+.snap-type-opt-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--vz-fg-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The check only exists on the selected row — its slot holds the count
+   line honest (count right-aligned against the check column). */
+.snap-type-opt-check {
+  flex: 0 0 auto;
+  display: none;
+  color: var(--vz-primary);
+}
+
+.snap-type-opt.is-selected .snap-type-opt-check {
+  display: inline-flex;
 }
 
 .snap-take {
@@ -816,12 +1006,21 @@
     margin-right: 2px;
   }
 
-  .snap-kbd {
+  .snap-take {
+    padding: 0 10px;
+  }
+}
+
+/* Narrow phones: the type filter sheds its label and reads as an icon
+   button — the title and the menu carry the words. */
+@media (max-width: 400px) {
+  .snap-type-label,
+  .snap-type-chev {
     display: none;
   }
 
-  .snap-take {
-    padding: 0 10px;
+  .snap-type-btn {
+    padding: 0 8px;
   }
 }
 
@@ -853,5 +1052,9 @@
   .snap-item.is-new .snap-row {
     animation: none;
     background: var(--vz-bg-chip);
+  }
+
+  .snap-type-menu {
+    animation: none;
   }
 }

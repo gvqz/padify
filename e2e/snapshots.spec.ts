@@ -520,13 +520,16 @@ test.describe('note types — consistent behavior', () => {
     await page.goto('/');
     await openSnapshots(page);
 
-    // The take button and the empty-state hint both spell the device's
-    // modifier — never the Ctrl/Cmd hedge (see lib/platform.ts).
-    const buttonKeys = page.locator('#createSnapshotBtn .snap-kbd kbd');
-    await expect(buttonKeys).toHaveCount(2);
-    await expect(buttonKeys.first()).toHaveText('Ctrl');
-    await expect(buttonKeys.nth(1)).toHaveText('U');
+    // The empty-state hint spells the device's modifier — never the
+    // Ctrl/Cmd hedge (see lib/platform.ts). The take button keeps its
+    // shortcut OUT of the label (chips inside a primary button are
+    // noise); the tooltip carries it, hydrated platform-correct by
+    // data-shortcut-title.
     await expect(page.locator('#noSnapshotsHint kbd').first()).toHaveText('Ctrl');
+    await expect(page.locator('#createSnapshotBtn')).toHaveAttribute(
+      'title',
+      'Take snapshot [Ctrl + U]',
+    );
   });
 
   test('restoring a plain snapshot while editing a markdown note leaves yours alone', async ({
@@ -789,6 +792,57 @@ test.describe('the day-anchored timeline', () => {
     await page.keyboard.type(' changed after the fact');
     await openSnapshots(page);
     await expect(snapshotRows(page).first()).not.toHaveClass(/is-current/);
+  });
+
+  test('two snapshots holding the note’s bytes still show ONE Current', async ({ page }) => {
+    // The user's exact state: a real capture of the open note, PLUS an
+    // older row from another note's chain holding the same bytes (what
+    // a restore's safety copy produces). The old chip logic green-lit
+    // BOTH — which answers "which version am I in?" twice, no answer.
+    // The chip belongs to the newest identical row alone.
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+    await toastSays(page, 'Snapshot created!');
+
+    // Seed the older twin: identical content, another chain, an older
+    // clock — the shape a pre-restore copy lands in.
+    await page.evaluate(() => {
+      const active = document.getElementById('note')?.textContent ?? '';
+      return new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open('NotepadSnapshotsDB');
+        open.onsuccess = () => {
+          const db = open.result;
+          const tx = db.transaction(['snapshots'], 'readwrite');
+          tx.objectStore('snapshots').add({
+            noteId: 'note-twin-chain',
+            noteName: 'Welcome!',
+            title: 'Before closing "Welcome!"',
+            content: active,
+            preview: active.slice(0, 100),
+            noteType: 'standard',
+            timestamp: Date.now() - 60_000,
+            formattedDate: '',
+          });
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+        open.onerror = () => reject(open.error);
+      });
+    });
+
+    await openSnapshots(page);
+    await expect(snapshotRows(page)).toHaveCount(2);
+    const currents = page.locator('#snapshotsList .snap-item.is-current');
+    await expect(currents).toHaveCount(1);
+    await expect(currents.locator('.snap-current')).toContainText('Current');
+    // The wearer is the newest of the twins — the row on top.
+    await expect(snapshotRows(page).first()).toHaveClass(/is-current/);
+    // Its older twin wears nothing.
+    await expect(snapshotRows(page).nth(1)).not.toHaveClass(/is-current/);
   });
 
   test('a just-taken row arrives flashing', async ({ page }) => {
@@ -1067,6 +1121,164 @@ test.describe('the search and the footer', () => {
     await clearMiss.click();
     await expect(page.locator('#searchSnapshots')).toHaveValue('');
     await expect(snapshotRows(page)).toHaveCount(1);
+    await expect(page.locator('#noSnapshotsMiss')).toBeHidden();
+  });
+});
+
+test.describe('the type filter', () => {
+  /** A store with two kinds in it: the welcome note's plain snapshot
+   *  and a markdown note's snapshot. The one way to see a filter work
+   *  against a mixed history. */
+  async function seedPlainAndMarkdown(page: Page): Promise<void> {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+    await toastSays(page, 'Snapshot created!');
+
+    await newTypedNote(page, 'Markdown note');
+    const editor = page.locator('#note .ProseMirror');
+    await editor.click();
+    await page.keyboard.type('# Trail log today');
+    await page.keyboard.press('Control+U');
+    await toastSays(page, 'Snapshot created!');
+  }
+
+  test('narrows the timeline to one kind — the footer tells the truth', async ({ page }) => {
+    await seedPlainAndMarkdown(page);
+    await openSnapshots(page);
+    await expect(snapshotRows(page)).toHaveCount(2);
+
+    const trigger = page.locator('#snapshotTypeFilter');
+    await expect(trigger).toContainText('All types');
+
+    await trigger.click();
+    const menu = page.locator('#snapshotTypeMenu');
+    await expect(menu).toBeVisible();
+    // "All types" plus each kind PRESENT — no dead-end options — each
+    // with its live count.
+    await expect(menu.locator('.snap-type-opt')).toHaveCount(3);
+    await expect(menu.locator('.snap-type-opt', { hasText: 'Notes' })).toContainText('1');
+    await expect(menu.locator('.snap-type-opt', { hasText: 'Markdown' })).toContainText('1');
+
+    await menu.locator('.snap-type-opt', { hasText: 'Markdown' }).click();
+    await expect(menu).toBeHidden();
+    await expect(snapshotRows(page)).toHaveCount(1);
+    await expect(snapshotRows(page).first().locator('.snap-name')).toContainText('Trail log');
+    // The trigger says what is shown and dresses the part; the footer
+    // counts the narrowed list against the whole store.
+    await expect(trigger).toContainText('Markdown');
+    await expect(trigger).toHaveClass(/is-active/);
+    await expect(page.locator('#snapshotsCount')).toHaveText('1 of 2');
+
+    // Back to everything.
+    await trigger.click();
+    await menu.locator('.snap-type-opt', { hasText: 'All types' }).click();
+    await expect(snapshotRows(page)).toHaveCount(2);
+    await expect(trigger).toContainText('All types');
+    await expect(trigger).not.toHaveClass(/is-active/);
+    await expect(page.locator('#snapshotsCount')).toHaveText('2 of 200');
+  });
+
+  test('a capture the type filter would HIDE clears the filter so the flash is visible', async ({
+    page,
+  }) => {
+    await seedPlainAndMarkdown(page);
+    await openSnapshots(page);
+
+    // Filter to Markdown.
+    await page.locator('#snapshotTypeFilter').click();
+    await page.locator('#snapshotTypeMenu .snap-type-opt', { hasText: 'Markdown' }).click();
+    await expect(snapshotRows(page)).toHaveCount(1);
+
+    // The PLAIN note takes a new snapshot — the filter would hide it.
+    // Close the sheet with the header × (Escape is the filter's reset
+    // now, and this test is about the CAPTURE clearing the filter).
+    await page.locator('.snap-head .close').click();
+    await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
+    await expect(page.locator('#snapshotTypeFilter')).toContainText('Markdown');
+    await page.locator('#tabStripTabs .tab-strip-tab').first().click();
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' grocery run');
+    await openSnapshots(page);
+    await expect(snapshotRows(page)).toHaveCount(1);
+    await page.locator('#createSnapshotBtn').click();
+    await toastSays(page, 'Snapshot created!');
+
+    // The filter gave way: the fresh plain row leads the WHOLE list,
+    // flash and all, and the trigger says so.
+    await expect(snapshotRows(page)).toHaveCount(3);
+    await expect(page.locator('#snapshotTypeFilter')).toContainText('All types');
+    await expect(snapshotRows(page).first()).toHaveClass(/is-new/);
+  });
+
+  test('Escape clears the type filter first; the sheet closes on the next press', async ({
+    page,
+  }) => {
+    await seedPlainAndMarkdown(page);
+    await openSnapshots(page);
+
+    await page.locator('#snapshotTypeFilter').click();
+    await page.locator('#snapshotTypeMenu .snap-type-opt', { hasText: 'Markdown' }).click();
+    await expect(snapshotRows(page)).toHaveCount(1);
+
+    // Escape (focus on the body, not the search field) clears the
+    // filter — the sheet stays.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#snapshotTypeFilter')).toContainText('All types');
+    await expect(snapshotRows(page)).toHaveCount(2);
+    await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
+
+    // The next Escape is the sheet's.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
+  });
+
+  test('Escape with the menu open closes THE MENU, not the sheet', async ({ page }) => {
+    await seedPlainAndMarkdown(page);
+    await openSnapshots(page);
+
+    await page.locator('#snapshotTypeFilter').click();
+    await expect(page.locator('#snapshotTypeMenu')).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#snapshotTypeMenu')).toBeHidden();
+    await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
+  });
+
+  test('a click outside the menu closes it without choosing', async ({ page }) => {
+    await seedPlainAndMarkdown(page);
+    await openSnapshots(page);
+
+    await page.locator('#snapshotTypeFilter').click();
+    await expect(page.locator('#snapshotTypeMenu')).toBeVisible();
+
+    await page.locator('.snap-head').click();
+    await expect(page.locator('#snapshotTypeMenu')).toBeHidden();
+    // Nothing was chosen — the whole history still shows.
+    await expect(snapshotRows(page)).toHaveCount(2);
+    await expect(page.locator('#snapshotTypeFilter')).toContainText('All types');
+  });
+
+  test('combined filters miss honestly, and the way out clears BOTH', async ({ page }) => {
+    await seedPlainAndMarkdown(page);
+    await openSnapshots(page);
+
+    // Markdown rows only…
+    await page.locator('#snapshotTypeFilter').click();
+    await page.locator('#snapshotTypeMenu .snap-type-opt', { hasText: 'Markdown' }).click();
+    await expect(snapshotRows(page)).toHaveCount(1);
+
+    // …then a query only the plain row could answer: a dead end two
+    // filters built. The recovery button clears the pair of them.
+    await page.locator('#searchSnapshots').fill('Welcome');
+    await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
+    await expect(page.locator('#clearSearchFromEmpty')).toBeVisible();
+
+    await page.locator('#clearSearchFromEmpty').click();
+    await expect(page.locator('#searchSnapshots')).toHaveValue('');
+    await expect(page.locator('#snapshotTypeFilter')).toContainText('All types');
+    await expect(snapshotRows(page)).toHaveCount(2);
     await expect(page.locator('#noSnapshotsMiss')).toBeHidden();
   });
 });

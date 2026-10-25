@@ -27,9 +27,17 @@
  *    thousand characters — never raw markup or JSON braces. The field
  *    carries its own trailing chrome: a live result count, a clear
  *    button (Escape works too), a "/" focus shortcut, and highlighted
- *    matches in the rows.
+ *    matches in the rows. A capture that lands while ANY filter (text
+ *    or type) would hide it clears that filter, so the flash the user
+ *    is promised is a flash they can see.
  *  • DATES — formatted at render time from the timestamp; the stored
  *    formattedDate field is written for older builds only.
+ *  • THE TYPE FILTER — the toolbar's way to see ONE kind's history
+ *    (Notes / Markdown / Drawings …) without breaking chronology: it
+ *    narrows the timeline, it never reorders it. The Current chip is
+ *    also unique by fiat — several snapshots can hold the same bytes
+ *    as the open note (a restore chain guarantees it), but only the
+ *    NEWEST of them wears the chip; an older twin is just history.
  *  • THE MENU — a right-side History sheet, NOT a centered dialog, and
  *    ONE continuous timeline: time is the only axis, day runs anchor
  *    the rail (Today / Yesterday / the date), and note type organizes
@@ -511,6 +519,22 @@ export function snapshotReadableText(content: string, noteType?: string): string
 }
 
 /**
+ * Whether a row survives the toolbar's note-type filter. null means no
+ * filter — every row survives. Types normalize 'standard' and absent to
+ * the same thing (a legacy snapshot without a type IS a plain note), the
+ * same rule the Current chip and the type sections apply.
+ */
+export function snapshotMatchesTypeFilter(
+  snapshot: { noteType?: string },
+  type: string | null,
+): boolean {
+  if (type === null) {
+    return true;
+  }
+  return (normalizeNoteType(snapshot.noteType) ?? 'standard') === type;
+}
+
+/**
  * Whether a snapshot is byte-identical to a note's current state — the
  * 'Current' chip. Types normalize 'standard' and absent to the same
  * thing: a legacy snapshot without a type and a plain note are the same
@@ -604,6 +628,10 @@ const SNAPSHOT_TYPE_ICONS: Record<string, string> = {
 function snapshotTypeIcon(noteType?: string): string {
   return SNAPSHOT_TYPE_ICONS[noteType ?? 'standard'] ?? SNAPSHOT_TYPE_ICONS.standard;
 }
+
+/** The type menu's "All types" row — a stack, the whole store. */
+const SNAPSHOT_ALL_TYPES_ICON =
+  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 2 9 4.9-9 4.9-9-4.9L12 2z"/><path d="m3 11.9 9 4.9 9-4.9"/><path d="m3 16.9 9 4.9 9-4.9"/></svg>';
 
 /** How much of the readable text the expand panel shows. */
 const SNAPSHOT_EXPAND_CAP = 2000;
@@ -733,6 +761,15 @@ export class SnapshotsManager {
   private deleteAllArmed = false;
   private deleteAllTimer: number | null = null;
 
+  /** The toolbar's note-type filter — a normalized type id ('markdown',
+   *  'drawing' …) or null for all types. Narrows the timeline, never
+   *  reorders it; persists across close/open like the search query. */
+  private typeFilter: string | null = null;
+
+  /** Whether the type menu hangs open (drives aria-expanded and the
+   *  outside-click close). */
+  private typeMenuOpen = false;
+
   constructor() {
     this.dbName = 'NotepadSnapshotsDB';
     this.storeName = 'snapshots';
@@ -826,6 +863,59 @@ export class SnapshotsManager {
       }
     });
 
+    // The type filter's trigger — a toggle: open rebuilds the menu (its
+    // counts must read the store as it is now), open again closes it.
+    document.getElementById('snapshotTypeFilter')?.addEventListener('click', () => {
+      if (this.typeMenuOpen) {
+        this.closeTypeMenu();
+      } else {
+        this.openTypeMenu();
+      }
+    });
+
+    // A click anywhere else closes the type menu — same gesture rule the
+    // armed deletes follow. Runs in the bubble phase alongside them.
+    document.addEventListener('click', (event) => {
+      if (this.typeMenuOpen && !(event.target as HTMLElement | null)?.closest('.snap-type-wrap')) {
+        this.closeTypeMenu();
+      }
+    });
+
+    // Escape with the menu open closes THE MENU, not the sheet — the
+    // capture phase outruns the modal layer's document listener, so the
+    // first press is the menu's, and only a second press (menu already
+    // shut) reaches the sheet. With the menu shut but a TYPE filter in
+    // force (and no text query — the field owns that case), Escape
+    // clears the filter first, by the same muscle memory: the narrowest
+    // state gives way before the sheet itself closes.
+    document.addEventListener(
+      'keydown',
+      (e) => {
+        if (e.key !== 'Escape') {
+          return;
+        }
+        if (this.typeMenuOpen) {
+          e.stopPropagation();
+          e.preventDefault();
+          this.closeTypeMenu();
+          (document.getElementById('snapshotTypeFilter') as HTMLButtonElement | null)?.focus();
+          return;
+        }
+        const modal = document.getElementById('snapshotsModal');
+        const search = document.getElementById('searchSnapshots') as HTMLInputElement | null;
+        if (
+          this.typeFilter !== null &&
+          modal?.classList.contains('in') &&
+          (search?.value.trim() ?? '') === ''
+        ) {
+          e.stopPropagation();
+          e.preventDefault();
+          this.setTypeFilter(null);
+        }
+      },
+      true,
+    );
+
     // Search snapshots — filters the cached rows; no store read per keystroke.
     document.getElementById('searchSnapshots')?.addEventListener('input', (e) => {
       this.renderRows((e.target as HTMLInputElement).value);
@@ -844,16 +934,21 @@ export class SnapshotsManager {
       input.focus();
     });
 
-    // Escape in the search field clears the query first — the input has a
+    // Escape in the search field clears the filters first — the input has a
     // clear button now, but the reset muscle memory from every other search
-    // box still applies. stopPropagation keeps the document-level Escape
-    // handler from closing the modal under the same press.
+    // box still applies. A text query goes first; an empty field with a
+    // type filter active clears THAT. stopPropagation keeps the
+    // document-level Escape handler from closing the modal under the same
+    // press (the type menu's capture listener has already had its turn).
     document.getElementById('searchSnapshots')?.addEventListener('keydown', (e) => {
       const input = e.target as HTMLInputElement;
       if (e.key === 'Escape' && input.value !== '') {
         e.stopPropagation();
         input.value = '';
         this.renderRows('');
+      } else if (e.key === 'Escape' && this.typeFilter !== null) {
+        e.stopPropagation();
+        this.setTypeFilter(null);
       }
     });
 
@@ -881,14 +976,16 @@ export class SnapshotsManager {
       }
     });
 
-    // The no-match empty state's recovery action — clears the query that
-    // emptied the list without making the user find the tiny ×.
+    // The no-match empty state's recovery action — clears whatever
+    // filtered the list into that dead end (the query, the type
+    // filter, or both) without making the user find the tiny ×.
     document.getElementById('clearSearchFromEmpty')?.addEventListener('click', () => {
       const input = document.getElementById('searchSnapshots') as HTMLInputElement | null;
       if (input) {
         input.value = '';
-        this.renderRows('');
       }
+      this.setTypeFilter(null);
+      this.renderRows('');
     });
 
     // Keyboard shortcut: the platform's primary modifier + U
@@ -1098,15 +1195,19 @@ export class SnapshotsManager {
 
         // A filter that would hide the row the user JUST created is a
         // trap — the flash would land on a row the list refuses to show.
-        // Clearing the query is the least-surprise move: the new snapshot
-        // is the thing the user asked for, the query was yesterday's
-        // context. (The check reuses the row's own searchable text.)
+        // Clearing it is the least-surprise move: the new snapshot is the
+        // thing the user asked for, the filter was yesterday's context.
+        // (The text check reuses the row's own searchable text; the type
+        // check the same normalization every comparison here applies.)
         const term = this.currentSearchTerm().trim().toLowerCase();
         if (term !== '' && !snapshotSearchText(snapshot).includes(term)) {
           const input = document.getElementById('searchSnapshots') as HTMLInputElement | null;
           if (input) {
             input.value = '';
           }
+        }
+        if (this.typeFilter !== null && !snapshotMatchesTypeFilter(snapshot, this.typeFilter)) {
+          this.typeFilter = null;
         }
 
         // A store that only ever grows is a slow leak: retire the oldest
@@ -1225,15 +1326,25 @@ export class SnapshotsManager {
 
     const term = searchTerm.trim().toLowerCase();
     const filtering = term !== '';
-    const rows: Snapshot[] = filtering
-      ? this.cache.filter((row) => row.searchText.includes(term)).map((row) => row.snapshot)
-      : this.cache.map((row) => row.snapshot);
+    const typeFiltering = this.typeFilter !== null;
+    const rows: Snapshot[] = this.cache
+      .filter((row) => !filtering || row.searchText.includes(term))
+      .filter((row) => snapshotMatchesTypeFilter(row.snapshot, this.typeFilter))
+      .map((row) => row.snapshot);
 
     // The 'Current' chip answers one question — is this row the note I
     // have open, byte for byte? Read once per render; typing can't race
     // it (the sheet covers the editor).
     const active = getActiveNoteContent();
     const badges = this.computeChangeBadges();
+
+    // ONE Current, ever. Several snapshots can hold the note's exact
+    // bytes — a restore chain (restore → safety copy → capture) sees to
+    // it — but a chip on each of them answers "which version am I in?"
+    // twice, which is no answer. The newest identical row wears the
+    // chip; its older twins stay plain history. Rows are newest-first,
+    // so the first match IS the newest.
+    const currentRowId = rows.find((row) => isCurrentSnapshotState(row, active))?.id;
 
     // Day runs — the pure helper suppresses itself when every row is
     // from today (a behavior pinned to the old sectioned menu); the
@@ -1259,7 +1370,10 @@ export class SnapshotsManager {
           badges.get(snapshot.id ?? -1),
           filtering ? term : '',
         );
-        li.classList.toggle('is-current', isCurrentSnapshotState(snapshot, active));
+        li.classList.toggle(
+          'is-current',
+          snapshot.id !== undefined && snapshot.id === currentRowId,
+        );
         if (index === 0) {
           li.classList.add('group-start');
         }
@@ -1316,14 +1430,126 @@ export class SnapshotsManager {
     document.querySelector('.snap-search')?.classList.toggle('has-query', filtering);
 
     // The footer tells the truth about what is on stage: the filtered
-    // count against the whole store while a query runs, the store's size
-    // against its cap otherwise.
+    // count against the whole store while any filter runs (query or
+    // type), the store's size against its cap otherwise.
     const countElement = document.getElementById('snapshotsCount');
     if (countElement) {
-      countElement.textContent = filtering
-        ? `${rows.length} of ${this.cache.length}`
-        : `${this.cache.length} of ${MAX_SNAPSHOTS}`;
+      countElement.textContent =
+        filtering || typeFiltering
+          ? `${rows.length} of ${this.cache.length}`
+          : `${this.cache.length} of ${MAX_SNAPSHOTS}`;
     }
+
+    // The type button mirrors the state it owns: its label, its active
+    // dress, and whether there is anything to filter at all.
+    this.renderTypeButton();
+  }
+
+  /** The type filter's trigger button — label, active dress, and
+   *  disabled while the store is empty (a menu of one empty row is not
+   *  a control). */
+  private renderTypeButton(): void {
+    const button = document.getElementById('snapshotTypeFilter') as HTMLButtonElement | null;
+    const label = document.getElementById('snapshotTypeLabel');
+    if (!button || !label) {
+      return;
+    }
+    label.textContent =
+      this.typeFilter === null
+        ? 'All types'
+        : (SNAPSHOT_SECTION_LABELS[this.typeFilter] ?? noteTypeLabel(this.typeFilter as NoteType));
+    button.classList.toggle('is-active', this.typeFilter !== null);
+    button.disabled = this.cache.length === 0;
+  }
+
+  /** The type menu, rebuilt on every open so its counts read the store
+   *  as it is NOW. "All types" leads; then each type PRESENT in the
+   *  store, in the registry's order (unknown ids trailing), each with
+   *  its live count and the check on the active one. Types the store
+   *  has never heard of get no rows — a filter that matches nothing is
+   *  a dead end the menu should not offer. */
+  private renderTypeMenu(): void {
+    const menu = document.getElementById('snapshotTypeMenu');
+    if (!menu) {
+      return;
+    }
+    const counts = new Map<string, number>();
+    for (const row of this.cache) {
+      const key = normalizeNoteType(row.snapshot.noteType) ?? 'standard';
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const orderOf = (key: string): number => {
+      const index = NOTE_TYPES.findIndex((def) => def.id === key);
+      return index === -1 ? NOTE_TYPES.length : index;
+    };
+    const present = [...counts.keys()].sort(
+      (a, b) => orderOf(a) - orderOf(b) || a.localeCompare(b),
+    );
+
+    const option = (key: string, labelText: string, icon: string, count: number): string => {
+      const value = key === '' ? '' : key;
+      const selected = (key === '' && this.typeFilter === null) || this.typeFilter === key;
+      return `
+                <button type="button" class="snap-type-opt${selected ? ' is-selected' : ''}" role="menuitemradio" aria-checked="${selected}" data-type="${value}">
+                    <span class="snap-type-opt-ico" aria-hidden="true">${icon}</span>
+                    <span class="snap-type-opt-label">${this.escapeHtml(labelText)}</span>
+                    <span class="snap-type-opt-count">${count}</span>
+                    <span class="snap-type-opt-check" aria-hidden="true">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                    </span>
+                </button>`;
+    };
+
+    const rowsHtml = [
+      option('', 'All types', SNAPSHOT_ALL_TYPES_ICON, this.cache.length),
+      ...present.map((key) =>
+        option(
+          key,
+          SNAPSHOT_SECTION_LABELS[key] ?? noteTypeLabel(key as NoteType),
+          snapshotTypeIcon(key === 'standard' ? undefined : key),
+          counts.get(key) ?? 0,
+        ),
+      ),
+    ].join('');
+
+    menu.innerHTML = rowsHtml;
+    menu.querySelectorAll('.snap-type-opt').forEach((el) => {
+      el.addEventListener('click', () => {
+        const value = (el as HTMLElement).dataset.type || null;
+        this.setTypeFilter(value);
+        this.closeTypeMenu();
+      });
+    });
+  }
+
+  /** Applies a type choice and re-renders. null is "all types". */
+  private setTypeFilter(type: string | null): void {
+    this.typeFilter = type;
+    this.renderRows(this.currentSearchTerm());
+  }
+
+  private openTypeMenu(): void {
+    const menu = document.getElementById('snapshotTypeMenu');
+    const button = document.getElementById('snapshotTypeFilter');
+    if (!menu || !button) {
+      return;
+    }
+    this.renderTypeMenu();
+    menu.removeAttribute('hidden');
+    button.setAttribute('aria-expanded', 'true');
+    this.typeMenuOpen = true;
+  }
+
+  private closeTypeMenu(): void {
+    const menu = document.getElementById('snapshotTypeMenu');
+    const button = document.getElementById('snapshotTypeFilter');
+    if (menu) {
+      menu.setAttribute('hidden', '');
+    }
+    if (button) {
+      button.setAttribute('aria-expanded', 'false');
+    }
+    this.typeMenuOpen = false;
   }
 
   // Build one timeline entry — a button row (clock + rail dot + the
@@ -1414,7 +1640,7 @@ export class SnapshotsManager {
                     <span class="snap-line">
                         <span class="snap-name" title="${this.escapeHtml(snapshot.title)}">${titleHtml}</span>
                         ${noteChip}
-                        <span class="snap-current" title="Identical to the note you have open"><span class="snap-current-dot" aria-hidden="true"></span>Current</span>
+                        <span class="snap-current" title="This version is what the note holds right now"><span class="snap-current-dot" aria-hidden="true"></span>Current</span>
                     </span>
                     <span class="snap-preview" title="${this.escapeHtml(previewForDisplay)}">${previewHtml}</span>
                     ${delta}

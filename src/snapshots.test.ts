@@ -17,6 +17,7 @@ import {
   snapshotDayGroups,
   snapshotDayKey,
   snapshotHasContent,
+  snapshotMatchesTypeFilter,
   snapshotReadableText,
   snapshotSearchText,
   snapshotTypeBadgeLabel,
@@ -934,6 +935,28 @@ describe('snapshotReadableText — per-kind projections', () => {
     const text = snapshotReadableText(list, 'tasks');
     expect(text).toContain('call the dentist');
     expect(text).not.toContain('"tasks"');
+  });
+});
+
+describe('snapshotMatchesTypeFilter — the toolbar’s type narrowing', () => {
+  it('null means no filter — everything survives', () => {
+    expect(snapshotMatchesTypeFilter({ noteType: 'markdown' }, null)).toBe(true);
+    expect(snapshotMatchesTypeFilter({ noteType: 'drawing' }, null)).toBe(true);
+    expect(snapshotMatchesTypeFilter({}, null)).toBe(true);
+  });
+
+  it('a filter keeps only its own kind', () => {
+    expect(snapshotMatchesTypeFilter({ noteType: 'markdown' }, 'markdown')).toBe(true);
+    expect(snapshotMatchesTypeFilter({ noteType: 'markdown' }, 'drawing')).toBe(false);
+  });
+
+  it('absent, standard and MALFORMED ids all read as the classic note', () => {
+    expect(snapshotMatchesTypeFilter({}, 'standard')).toBe(true);
+    expect(snapshotMatchesTypeFilter({ noteType: 'standard' }, 'standard')).toBe(true);
+    // A malformed id is junk, not a kind — normalizeNoteType folds it
+    // into the default, the same rule every type comparison here applies.
+    expect(snapshotMatchesTypeFilter({ noteType: 'Not A Type!' }, 'standard')).toBe(true);
+    expect(snapshotMatchesTypeFilter({ noteType: 'standard' }, 'markdown')).toBe(false);
   });
 });
 
