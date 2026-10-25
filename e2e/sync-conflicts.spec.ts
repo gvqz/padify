@@ -46,7 +46,9 @@ async function signUp(page: Page, account: { email: string; password: string }):
   await page.locator('#cloudAuthEmail').fill(account.email);
   await page.locator('#cloudAuthPassword').fill(account.password);
   await page.locator('#cloudAuthSubmit').click();
-  await expect(page.locator('#cloudSignedInPane')).toBeVisible();
+  // The auth POST is a network round trip — on a loaded CI box five
+  // seconds of default headroom lost the race twice.
+  await expect(page.locator('#cloudSignedInPane')).toBeVisible({ timeout: 15_000 });
   await page.keyboard.press('Escape');
   await expect(page.locator('#cloudModal')).toBeHidden();
 }
@@ -56,7 +58,15 @@ async function forceSync(page: Page): Promise<void> {
   await page.locator('#cloudNavContainer').click();
   await expect(page.locator('#cloudModal')).toBeVisible();
   await page.locator('#cloudSyncNow').click();
-  await page.waitForTimeout(1_200);
+  // The cycle must actually LAND — a fixed sleep raced under CI load and
+  // the next device pulled the pre-sync state. The navbar title carries
+  // the live phase; "up to date" is the idle-after-sync signature.
+  await expect
+    .poll(async () => page.locator('#cloudNavContainer').getAttribute('title'), {
+      timeout: 20_000,
+      message: 'the manual sync cycle to land',
+    })
+    .toContain('up to date');
   await page.keyboard.press('Escape');
   await expect(page.locator('#cloudModal')).toBeHidden();
 }
@@ -135,7 +145,7 @@ test.describe('conflicted copies (real API)', () => {
       await pageB.locator('#cloudAuthEmail').fill(account.email);
       await pageB.locator('#cloudAuthPassword').fill(account.password);
       await pageB.locator('#cloudAuthSubmit').click();
-      await expect(pageB.locator('#cloudSignedInPane')).toBeVisible();
+      await expect(pageB.locator('#cloudSignedInPane')).toBeVisible({ timeout: 15_000 });
       await pageB.keyboard.press('Escape');
 
       // B holds the note (arrives by pull).

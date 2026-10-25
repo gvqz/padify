@@ -61,8 +61,10 @@ async function submitAuth(
   await page.locator('#cloudAuthSubmit').click();
 
   // Signed in: the auth pane swaps for the account pane, and the app
-  // toasts. The sign-in itself fires an immediate sync cycle.
-  await expect(page.locator('#cloudSignedInPane')).toBeVisible();
+  // toasts. The sign-in itself fires an immediate sync cycle. The POST
+  // is a network round trip — on a loaded CI box five seconds of default
+  // headroom lost the race.
+  await expect(page.locator('#cloudSignedInPane')).toBeVisible({ timeout: 15_000 });
   await expect(page.locator('#cloudAccountEmail')).toHaveText(email);
 }
 
@@ -88,11 +90,17 @@ test.describe('cloud round trip (real API)', () => {
     await editor.click();
     await page.keyboard.type(marker);
 
-    // Force the push now instead of waiting out the push debounce, then
-    // wait one round trip for the cycle to land it on the server.
+    // Force the push now instead of waiting out the push debounce — and
+    // wait until the cycle actually lands (the navbar title carries the
+    // live phase), or device B pulls the pre-sync state.
     await openCloudModal(page);
     await page.locator('#cloudSyncNow').click();
-    await page.waitForTimeout(1_500);
+    await expect
+      .poll(async () => page.locator('#cloudNavContainer').getAttribute('title'), {
+        timeout: 20_000,
+        message: 'the manual sync cycle to land',
+      })
+      .toContain('up to date');
     await page.keyboard.press('Escape');
 
     // ---- device B: clean context, sign in, pull ------------------------
