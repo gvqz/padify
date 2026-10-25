@@ -13,6 +13,8 @@ import {
   openSnapshotsDatabase,
   pruneSnapshots,
   readSnapshotsForNote,
+  snapshotChangeBadge,
+  snapshotDayGroups,
   snapshotDayKey,
   snapshotHasContent,
   snapshotReadableText,
@@ -327,6 +329,45 @@ describe('snapshotHasContent — emptiness per note kind', () => {
     expect(snapshotHasContent('', 'markdown')).toBe(false);
     expect(snapshotHasContent('{"board":[]}', 'some-future-json-type')).toBe(true);
   });
+
+  it('drawings judge their ELEMENTS — an undone-away scene is empty', () => {
+    // A scene's JSON bytes are never empty; its meaning is its elements.
+    // A stroke drawn then undone leaves an empty scene — nothing a
+    // safety copy adds.
+    expect(snapshotHasContent('{"version":1,"elements":[],"appState":{}}', 'drawing')).toBe(false);
+    expect(snapshotHasContent('', 'drawing')).toBe(false);
+    expect(
+      snapshotHasContent(
+        '{"version":1,"elements":[{"id":"a","type":"rectangle"}],"appState":{}}',
+        'drawing',
+      ),
+    ).toBe(true);
+    // The undo ghost trail is not content either.
+    expect(
+      snapshotHasContent(
+        '{"version":1,"elements":[{"id":"g","type":"rectangle","isDeleted":true}],"appState":{}}',
+        'drawing',
+      ),
+    ).toBe(false);
+  });
+
+  it('unparseable drawing bytes stay real content — the safety copy is the point', () => {
+    // A newer build's scene: this build refuses to edit it but keeps the
+    // bytes; a snapshot of exactly those bytes is what safety means.
+    expect(snapshotHasContent('{"version":9,"elements":[/* opaque */]}', 'drawing')).toBe(true);
+    expect(snapshotHasContent('junk bytes', 'drawing')).toBe(true);
+  });
+
+  it('task lists judge their rows — an emptied list is empty', () => {
+    expect(snapshotHasContent('{"version":1,"color":"default","tasks":[]}', 'tasks')).toBe(false);
+    expect(snapshotHasContent('', 'tasks')).toBe(false);
+    expect(
+      snapshotHasContent(
+        '{"version":1,"color":"default","tasks":[{"id":"t1","title":"one thing","done":false,"sortOrder":0}]}',
+        'tasks',
+      ),
+    ).toBe(true);
+  });
 });
 
 describe('isSameSnapshotState — duplicate detection', () => {
@@ -370,6 +411,88 @@ describe('isSameSnapshotState — duplicate detection', () => {
       true,
     );
   });
+
+  it('drawings compare CONTENT, not bytes — savedAt never makes a new version', () => {
+    // The scene envelope re-stamps savedAt on every save. The undo loop
+    // (draw → snapshot → undo → redo → snapshot) used to file the same
+    // drawing twice, because the second save's bytes differed by the
+    // stamp alone. Identity canonicalizes through the scene module.
+    const scene = (savedAt: number) =>
+      JSON.stringify({
+        version: 1,
+        savedAt,
+        elements: [
+          { id: 'a', type: 'rectangle' },
+          { id: 'b', type: 'text', text: 'architecture sketch' },
+        ],
+        appState: { viewBackgroundColor: '#ffffff' },
+      });
+    expect(
+      isSameSnapshotState(
+        { content: scene(1700000000000), noteType: 'drawing' },
+        { content: scene(1790000000000), noteType: 'drawing' },
+      ),
+    ).toBe(true);
+    // A real change — one more element — is a new version.
+    const bigger = JSON.stringify({
+      version: 1,
+      savedAt: 1790000000000,
+      elements: [
+        { id: 'a', type: 'rectangle' },
+        { id: 'b', type: 'text', text: 'architecture sketch' },
+        { id: 'c', type: 'ellipse' },
+      ],
+      appState: { viewBackgroundColor: '#ffffff' },
+    });
+    expect(
+      isSameSnapshotState(
+        { content: scene(1700000000000), noteType: 'drawing' },
+        {
+          content: bigger,
+          noteType: 'drawing',
+        },
+      ),
+    ).toBe(false);
+  });
+
+  it('the undo ghost trail never counts — deleted elements are not content', () => {
+    const withGhost = JSON.stringify({
+      version: 1,
+      savedAt: 1700000000000,
+      elements: [
+        { id: 'a', type: 'rectangle' },
+        { id: 'ghost', type: 'ellipse', isDeleted: true },
+      ],
+      appState: {},
+    });
+    const withoutGhost = JSON.stringify({
+      version: 1,
+      savedAt: 1790000000000,
+      elements: [{ id: 'a', type: 'rectangle' }],
+      appState: {},
+    });
+    expect(
+      isSameSnapshotState(
+        { content: withGhost, noteType: 'drawing' },
+        { content: withoutGhost, noteType: 'drawing' },
+      ),
+    ).toBe(true);
+  });
+
+  it('unparseable drawing bytes stay opaque — only byte-equal junk matches', () => {
+    expect(
+      isSameSnapshotState(
+        { content: 'not json at all', noteType: 'drawing' },
+        { content: 'not json at all', noteType: 'drawing' },
+      ),
+    ).toBe(true);
+    expect(
+      isSameSnapshotState(
+        { content: 'not json at all', noteType: 'drawing' },
+        { content: 'other junk', noteType: 'drawing' },
+      ),
+    ).toBe(false);
+  });
 });
 
 const row = (overrides: Record<string, unknown> = {}) =>
@@ -408,6 +531,16 @@ describe('groupSnapshotsByType — the menu\u2019s sections', () => {
       row({ id: 3, timestamp: 200 }),
     ]);
     expect(sections[0].rows.map((entry) => entry.id)).toEqual([2, 3, 1]);
+  });
+
+  it('a timestamp tie breaks by id — the later write leads', () => {
+    // Legacy stores could land two captures in one millisecond; the
+    // higher store id is the later write and must not sort below its twin.
+    const sections = groupSnapshotsByType([
+      row({ id: 1, timestamp: 500 }),
+      row({ id: 2, timestamp: 500 }),
+    ]);
+    expect(sections[0].rows.map((entry) => entry.id)).toEqual([2, 1]);
   });
 
   it('legacy rows, junk ids and explicit standard all read as Notes', () => {
@@ -538,8 +671,54 @@ describe('deriveSnapshotTitle / deriveSnapshotPreview — per-kind copy', () => 
     expect(title.endsWith('...')).toBe(true);
   });
 
-  it('non-html kinds title from their type label, not a guess at the bytes', () => {
-    expect(deriveSnapshotTitle('# not a title', 'markdown')).toBe('Markdown note');
+  it('non-html kinds title from their readable first line — a section of type labels is a section of twins', () => {
+    // Markdown: the source is the text; the leading hashes render away.
+    expect(deriveSnapshotTitle('# Trail log', 'markdown')).toBe('Trail log');
+    expect(deriveSnapshotTitle('## deep heading', 'markdown')).toBe('deep heading');
+    expect(deriveSnapshotTitle('plain first line\nsecond', 'markdown')).toBe('plain first line');
+    // Task lists: the checkbox is chrome, not the task's name.
+    expect(
+      deriveSnapshotTitle(
+        JSON.stringify({
+          version: 1,
+          color: 'default',
+          tasks: [{ id: 't1', title: 'call the dentist', done: false, sortOrder: 0 }],
+        }),
+        'tasks',
+      ),
+    ).toBe('call the dentist');
+    // Drawings: a text element is the drawing's name; a shapes-only
+    // scene answers its element count; an empty scene falls back to the
+    // type's label.
+    expect(
+      deriveSnapshotTitle(
+        JSON.stringify({
+          version: 1,
+          elements: [
+            { id: 'a', type: 'text', text: 'architecture sketch' },
+            { id: 'b', type: 'rectangle' },
+          ],
+          appState: {},
+        }),
+        'drawing',
+      ),
+    ).toBe('architecture sketch');
+    expect(
+      deriveSnapshotTitle(
+        JSON.stringify({ version: 1, elements: [{ id: 'a' }, { id: 'b' }], appState: {} }),
+        'drawing',
+      ),
+    ).toBe('Drawing — 2 elements');
+    expect(deriveSnapshotTitle('{"version":1,"elements":[],"appState":{}}', 'drawing')).toBe(
+      'Drawing',
+    );
+  });
+
+  it('a kind whose projection is only syntax falls back to its type label', () => {
+    // '- [ ]' alone grooms to nothing — the label names the row.
+    expect(
+      deriveSnapshotTitle(JSON.stringify({ version: 1, color: 'default', tasks: [] }), 'tasks'),
+    ).toBe('Task list');
   });
 
   it('empty notes fall back to the untitled default', () => {
@@ -605,6 +784,113 @@ describe('the timeline helpers — day groups, clocks, readable text', () => {
   it('the clock is a short time string with digits', () => {
     const clock = formatSnapshotClock(now);
     expect(clock).toMatch(/^\d{1,2}:\d{2}/);
+  });
+
+  it('day groups are suppressed when every row is from today', () => {
+    // Five of-today rows under a 'TODAY' bar is a stutter — the section
+    // header plus the clocks already say it.
+    const todayRows = [sameDay(1), sameDay(2), sameDay(3)].map((timestamp, i) =>
+      row({ id: i + 1, timestamp }),
+    );
+    expect(snapshotDayGroups(todayRows, now)).toEqual([]);
+  });
+
+  it('day groups return the moment a section spans beyond today', () => {
+    const rows = [
+      row({ id: 1, timestamp: sameDay(1) }),
+      row({ id: 2, timestamp: sameDay(20) }), // yesterday
+    ];
+    const groups = snapshotDayGroups(rows, now);
+    expect(groups.map((group) => group.label)).toEqual(['Today', 'Yesterday']);
+    expect(groups[0].rows).toHaveLength(1);
+    expect(groups[1].rows).toHaveLength(1);
+  });
+
+  it('a section of only-yesterday rows keeps its day label', () => {
+    // Not today — the label is real information, not a stutter.
+    const rows = [row({ id: 1, timestamp: sameDay(20) }), row({ id: 2, timestamp: sameDay(21) })];
+    const groups = snapshotDayGroups(rows, now);
+    expect(groups.map((group) => group.label)).toEqual(['Yesterday']);
+    expect(groups[0].rows).toHaveLength(2);
+  });
+
+  it('empty rows answer no groups', () => {
+    expect(snapshotDayGroups([], now)).toEqual([]);
+  });
+});
+
+describe('snapshotChangeBadge — the version\u2019s diffstat', () => {
+  it('text kinds count words — signed, pluralized', () => {
+    expect(snapshotChangeBadge({ content: 'one two three four' }, { content: 'one two' })).toEqual({
+      delta: 2,
+      unit: 'words',
+    });
+    expect(snapshotChangeBadge({ content: 'one' }, { content: 'one two three' })).toEqual({
+      delta: -2,
+      unit: 'words',
+    });
+    // A rewording that keeps the count is an honest zero, not a pass.
+    expect(
+      snapshotChangeBadge({ content: 'swap the words' }, { content: 'the words swap' }),
+    ).toEqual({ delta: 0, unit: 'words' });
+    // Singular when the magnitude is one.
+    expect(snapshotChangeBadge({ content: 'one two' }, { content: 'one' })).toEqual({
+      delta: 1,
+      unit: 'word',
+    });
+  });
+
+  it('html kinds count the words of their text projection', () => {
+    expect(
+      snapshotChangeBadge(
+        { content: '<div>alpha beta gamma</div>', noteType: 'rich' },
+        { content: '<div>alpha</div>', noteType: 'rich' },
+      ),
+    ).toEqual({ delta: 2, unit: 'words' });
+  });
+
+  it('task lists count tasks', () => {
+    const list = (n: number) =>
+      JSON.stringify({
+        version: 1,
+        color: 'default',
+        tasks: Array.from({ length: n }, (_, i) => ({
+          id: `t${i}`,
+          title: `task ${i}`,
+          done: false,
+          sortOrder: i,
+        })),
+      });
+    expect(
+      snapshotChangeBadge(
+        { content: list(3), noteType: 'tasks' },
+        { content: list(5), noteType: 'tasks' },
+      ),
+    ).toEqual({
+      delta: -2,
+      unit: 'tasks',
+    });
+  });
+
+  it('drawings count shapes, ghosts and all', () => {
+    const scene = (elements: unknown[]) =>
+      JSON.stringify({ version: 1, savedAt: 0, elements, appState: {} });
+    expect(
+      snapshotChangeBadge(
+        { content: scene([{ id: 'a' }, { id: 'b', isDeleted: true }]), noteType: 'drawing' },
+        { content: scene([{ id: 'a' }]), noteType: 'drawing' },
+      ),
+    ).toEqual({ delta: 0, unit: 'shapes' });
+    expect(
+      snapshotChangeBadge(
+        { content: scene([{ id: 'a' }, { id: 'b' }, { id: 'c' }]), noteType: 'drawing' },
+        { content: scene([{ id: 'a' }]), noteType: 'drawing' },
+      ),
+    ).toEqual({ delta: 2, unit: 'shapes' });
+  });
+
+  it('the baseline — a note\u2019s first snapshot — carries no badge', () => {
+    expect(snapshotChangeBadge({ content: 'anything' }, null)).toBeNull();
   });
 });
 
@@ -676,5 +962,24 @@ describe('isCurrentSnapshotState — the Current chip', () => {
 
   it('no active note answers false', () => {
     expect(isCurrentSnapshotState({ content: 'abc' }, null)).toBe(false);
+  });
+
+  it('a drawing row wears the chip across a savedAt re-stamp', () => {
+    // The note's bytes carry the stamp of their last save; the snapshot's
+    // carry the stamp of ITS capture. Same drawing, different stamps —
+    // the chip must still say Current (same rule as duplicate detection).
+    const scene = (savedAt: number) =>
+      JSON.stringify({
+        version: 1,
+        savedAt,
+        elements: [{ id: 'a', type: 'text', text: 'architecture sketch' }],
+        appState: {},
+      });
+    expect(
+      isCurrentSnapshotState(
+        { content: scene(1700000000000), noteType: 'drawing' },
+        { content: scene(1790000000000), noteType: 'drawing' },
+      ),
+    ).toBe(true);
   });
 });

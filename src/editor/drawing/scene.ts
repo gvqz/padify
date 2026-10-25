@@ -224,3 +224,32 @@ export function drawingScenePlainText(content: string): string {
 export function drawingSceneByteSize(content: string): number {
   return new TextEncoder().encode(content).length;
 }
+
+/**
+ * The CONTENT identity of scene bytes — the "is this the same drawing?"
+ * answer for snapshot duplicate detection and the snapshots menu's
+ * Current chip. The stored envelope carries a volatile `savedAt` stamp
+ * that refreshes on every save (the surface's "stamp at save" rule), so
+ * two byte strings of the SAME drawing differ whenever their last saves
+ * happened at different moments — undo back to a snapshotted state and
+ * the re-stamped bytes would sail past a byte comparison. Identity
+ * therefore compares the scene the way a person sees it: the elements
+ * (with the undo trail's deleted ghosts filtered, exactly like the
+ * surface's capture) and the whitelisted appState, with the stamp and
+ * the serialization order normalized away. Content this build cannot
+ * parse (a newer build's scene, junk) keeps its raw bytes — opaque stays
+ * opaque, and two unparseable strings are only "the same" byte for byte.
+ */
+export function drawingSceneContentIdentity(content: string): string {
+  const scene = parseDrawingScene(content);
+  if (scene === null) {
+    return content;
+  }
+  return JSON.stringify({
+    version: scene.version,
+    elements: scene.elements.filter(
+      (element) => (element as { isDeleted?: boolean } | null)?.isDeleted !== true,
+    ),
+    appState: scene.appState,
+  });
+}

@@ -31,6 +31,38 @@ function snapshotRows(page: Page) {
   return page.locator('#snapshotsList .snapshot-item');
 }
 
+/** Seeds a snapshot row with an arbitrary timestamp, straight into the
+ *  store — the one way to test a menu whose history spans days without
+ *  waiting for midnight. Attributed to a note that does not exist, the
+ *  same shape a deleted note's rows keep. */
+async function seedSnapshotDaysAgo(page: Page, daysAgo: number): Promise<void> {
+  await page.evaluate((ago) => {
+    const timestamp = Date.now() - ago * 24 * 60 * 60 * 1000;
+    return new Promise<void>((resolve, reject) => {
+      const open = indexedDB.open('NotepadSnapshotsDB');
+      open.onsuccess = () => {
+        const db = open.result;
+        const tx = db.transaction(['snapshots'], 'readwrite');
+        tx.objectStore('snapshots').add({
+          noteId: 'seed-old-note',
+          noteName: 'Old days',
+          title: 'an entry from days ago',
+          content: '<div>an entry from days ago</div>',
+          preview: 'an entry from days ago',
+          timestamp,
+          formattedDate: '',
+        });
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => reject(tx.error);
+      };
+      open.onerror = () => reject(open.error);
+    });
+  }, daysAgo);
+}
+
 async function toastSays(page: Page, text: string): Promise<void> {
   await expect(page.locator('#toast')).toHaveText(text, { timeout: 5_000 });
 }
@@ -552,7 +584,7 @@ test.describe('deleting', () => {
 });
 
 test.describe('the typed timeline', () => {
-  test('rows group under one Notes section and one Today header', async ({ page }) => {
+  test('rows group under one Notes section; same-day rows skip the day bar', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
     await page.keyboard.press('Control+U');
@@ -564,13 +596,27 @@ test.describe('the typed timeline', () => {
     await expect(sections).toHaveCount(1);
     await expect(sections.first().locator('.snapshots-type-label')).toHaveText('Notes');
     await expect(sections.first().locator('.snapshots-type-count')).toHaveText('2');
-    const days = page.locator('#snapshotsList .snapshots-day');
-    await expect(days).toHaveCount(1);
-    await expect(days.first()).toHaveText('Today');
+    // Every row is from today — a 'TODAY' bar under the section header
+    // would only stutter what the header and the clocks already say.
+    await expect(page.locator('#snapshotsList .snapshots-day')).toHaveCount(0);
     await expect(snapshotRows(page)).toHaveCount(2);
     // The headers are not rows.
     await expect(sections.first()).not.toHaveClass(/snapshot-item/);
-    await expect(days.first()).not.toHaveClass(/snapshot-item/);
+  });
+
+  test('day bars return the moment a section spans beyond today', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+    await seedSnapshotDaysAgo(page, 2);
+
+    await openSnapshots(page);
+    const days = page.locator('#snapshotsList .snapshots-day');
+    await expect(days).toHaveCount(2);
+    await expect(days.first()).toHaveText('Today');
+    // The older row groups under its own calendar label.
+    await expect(days.nth(1).textContent()).not.toBe('Today');
+    await expect(snapshotRows(page)).toHaveCount(2);
   });
 
   test('a row expands to its readable text and collapses again', async ({ page }) => {
@@ -672,6 +718,8 @@ test.describe('the typed timeline', () => {
       await page.keyboard.type(` row number ${i}`);
       await page.keyboard.press('Control+U');
     }
+    // One row from another day, so the section's day bars exist to stack.
+    await seedSnapshotDaysAgo(page, 2);
     await openSnapshots(page);
 
     const container = page.locator('.snapshots-list-container');
@@ -722,7 +770,8 @@ test.describe('the typed timeline', () => {
     await openSnapshots(page);
 
     await expect(page.locator('#snapshotsList .snapshots-type')).toHaveText(/Notes/);
-    await expect(page.locator('#snapshotsList .snapshots-day')).toHaveText('Today');
+    // Same-day rows: no day bar, the section header carries the grouping.
+    await expect(page.locator('#snapshotsList .snapshots-day')).toHaveCount(0);
     const row = snapshotRows(page).first();
     await expect(row.locator('.snapshot-main')).toBeVisible();
     await expect(row.locator('.restore')).toBeVisible();
@@ -734,5 +783,185 @@ test.describe('the typed timeline', () => {
     expect(side).not.toBeNull();
     expect(main).not.toBeNull();
     expect(side!.y).toBeGreaterThan(main!.y);
+  });
+});
+
+test.describe('the version diffstat', () => {
+  test('a row carries its change against the previous snapshot of its note', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U'); // the baseline — no badge
+
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' two new words'); // +3 words: "two new words"
+    await page.keyboard.press('Control+U');
+
+    await openSnapshots(page);
+    const rows = snapshotRows(page);
+    await expect(rows).toHaveCount(2);
+    // The newest row answers 'what changed here?' — the edit the badge
+    // reports is exactly what separates the twins.
+    await expect(rows.first().locator('.snapshot-delta')).toHaveText('+3 words');
+    // The baseline carries nothing.
+    await expect(rows.nth(1).locator('.snapshot-delta')).toHaveCount(0);
+  });
+});
+
+test.describe('folding the sections', () => {
+  test('a type header folds and unfolds its rows, count intact', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+    await page.keyboard.type(' more words');
+    await page.keyboard.press('Control+U');
+
+    await openSnapshots(page);
+    const header = page.locator('#snapshotsList .snapshots-type').first();
+    await expect(header).toHaveAttribute('aria-expanded', 'true');
+    await expect(snapshotRows(page).first()).toBeVisible();
+
+    await header.click();
+    await expect(header).toHaveAttribute('aria-expanded', 'false');
+    // The rows exist but stand down; the count keeps telling their size.
+    await expect(snapshotRows(page).first()).toBeHidden();
+    await expect(header.locator('.snapshots-type-count')).toHaveText('2');
+
+    await header.click();
+    await expect(header).toHaveAttribute('aria-expanded', 'true');
+    await expect(snapshotRows(page).first()).toBeVisible();
+  });
+
+  test('a search ignores folds — a folded section must never hide a match', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+
+    await openSnapshots(page);
+    const header = page.locator('#snapshotsList .snapshots-type').first();
+    await header.click();
+    await expect(snapshotRows(page).first()).toBeHidden();
+
+    // The query matches the folded section's row — the fold gives way.
+    await page.locator('#searchSnapshots').fill('welcome');
+    await expect(snapshotRows(page).first()).toBeVisible();
+
+    // Clearing the query restores the user's fold.
+    await page.locator('#searchSnapshots').fill('');
+    await expect(snapshotRows(page).first()).toBeHidden();
+  });
+
+  test('a snapshot taken into a folded section unfolds it for the flash', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+
+    await openSnapshots(page);
+    const header = page.locator('#snapshotsList .snapshots-type').first();
+    await header.click();
+    await expect(snapshotRows(page).first()).toBeHidden();
+
+    // The fold survives a close and reopen (in-memory, per session)…
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' unfolded words');
+    await openSnapshots(page);
+    await expect(snapshotRows(page).first()).toBeHidden();
+
+    // …but a NEW row taken from the open menu opens its section — the
+    // flash and scroll must land on a row the user can see.
+    await page.locator('#createSnapshotBtn').click();
+    await toastSays(page, 'Snapshot created!');
+    await expect(header).toHaveAttribute('aria-expanded', 'true');
+    await expect(snapshotRows(page).first()).toBeVisible();
+    await expect(snapshotRows(page).first()).toHaveClass(/is-new/);
+  });
+});
+
+test.describe('the search and the footer', () => {
+  test('Escape clears the query first; the second Escape closes the modal', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+    await openSnapshots(page);
+
+    const search = page.locator('#searchSnapshots');
+    await search.fill('welcome');
+    await expect(snapshotRows(page)).toHaveCount(1);
+
+    await page.keyboard.press('Escape');
+    // The query cleared, the rows came back — the modal stayed.
+    await expect(search).toHaveValue('');
+    await expect(snapshotRows(page)).toHaveCount(1);
+    await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
+  });
+
+  test('the footer reports results while filtering, the store against its cap otherwise', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' tail copy');
+    await page.keyboard.press('Control+U');
+    await openSnapshots(page);
+
+    await expect(page.locator('#snapshotsCount')).toHaveText('2');
+    await expect(page.locator('#snapshotsModal .snapshots-cap')).toHaveText('of 200');
+
+    await page.locator('#searchSnapshots').fill('tail copy');
+    await expect(page.locator('#snapshotsCount')).toHaveText('1');
+    await expect(page.locator('#snapshotsModal .snapshots-cap')).toHaveText('results');
+
+    await page.locator('#searchSnapshots').fill('zzz-no-match');
+    await expect(page.locator('#snapshotsCount')).toHaveText('0');
+    await expect(page.locator('#snapshotsModal .snapshots-cap')).toHaveText('results');
+    await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
+
+    await page.locator('#searchSnapshots').fill('');
+    await expect(page.locator('#snapshotsCount')).toHaveText('2');
+    await expect(page.locator('#snapshotsModal .snapshots-cap')).toHaveText('of 200');
+  });
+
+  test('a snapshot taken under an active filter honors the query', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' grocery run');
+    await page.keyboard.press('Control+U');
+
+    await openSnapshots(page);
+    // A query that matches nothing, under which a NEW snapshot is taken
+    // — the refresh must keep honoring the query, not flash the
+    // unfiltered list under it.
+    await page.locator('#searchSnapshots').fill('zzz-no-match');
+    await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
+
+    // Close via the Close button — the query STAYS in the field (the
+    // whole point: what the reopen and the capture must both honor).
+    await page.locator('#snapshotsModal .modal-footer [data-dismiss="modal"]').click();
+    await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
+
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' second thought');
+    await openSnapshots(page);
+    // The leftover query still rules the list.
+    await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
+    await page.locator('#createSnapshotBtn').click();
+    await toastSays(page, 'Snapshot created!');
+
+    await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
+    await expect(page.locator('#snapshotsCount')).toHaveText('0');
+    await expect(page.locator('#snapshotsModal .snapshots-cap')).toHaveText('results');
+
+    // Clearing the query shows both rows.
+    await page.locator('#searchSnapshots').fill('');
+    await expect(snapshotRows(page)).toHaveCount(2);
   });
 });

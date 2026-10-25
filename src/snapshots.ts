@@ -11,11 +11,14 @@
  *    unrelated note just because it happened to be open. Rows with no
  *    noteId (records from before attribution) still restore into the
  *    active note — the only target they can name.
- *  • DUPLICATES — an identical (content + type, normalized) capture
- *    against ANY of that note's existing snapshots is declined, not
- *    just the latest: the restore loop (v1 → v2 → restore v1 → capture)
- *    used to file the same bytes twice. Captures serialize through a
- *    queue so two rapid Ctrl+U presses cannot both pass the check.
+ *  • DUPLICATES — an identical capture against ANY of that note's
+ *    existing snapshots is declined, not just the latest: the restore
+ *    loop (v1 → v2 → restore v1 → capture) used to file the same bytes
+ *    twice. Identity is CONTENT identity — drawings compare their
+ *    canonical scene, so the envelope's volatile savedAt stamp never
+ *    makes the same drawing twice (snapshotContentIdentity). Captures
+ *    serialize through a queue so two rapid Ctrl+U presses cannot both
+ *    pass the check.
  *  • EMPTINESS — judged per content kind (see snapshotHasContent), so
  *    an image-bearing note is not "empty" because its text projection
  *    is blank.
@@ -24,8 +27,15 @@
  *    thousand characters — never raw markup or JSON braces.
  *  • DATES — formatted at render time from the timestamp; the stored
  *    formattedDate field is written for older builds only.
- *  • THE MENU — sections by note type (registry order), day groups
- *    inside, the source note's name on the row.
+ *  • THE MENU — sections by note type (registry order), each foldable
+ *    (a search ignores folds — a folded section must never hide a
+ *    match), day groups inside a section only when its history spans
+ *    beyond today, the source note's name on the row, and each row's
+ *    change badge (words / tasks / shapes) against the previous
+ *    snapshot of its note — two snapshots whose difference lives past
+ *    the preview's 100 characters are otherwise twins. The footer
+ *    reports the filtered count while a query runs, the store's size
+ *    against its cap otherwise.
  */
 import { $ } from './lib/q';
 import { openModal, closeModal } from './ui/behavior/modal';
@@ -39,7 +49,11 @@ import {
   noteTypeLabel,
   type NoteType,
 } from './editor/note-types';
-import { drawingScenePlainText } from './editor/drawing/scene';
+import {
+  drawingSceneContentIdentity,
+  drawingScenePlainText,
+  parseDrawingScene,
+} from './editor/drawing/scene';
 import { parseTaskNoteContent, taskNotePlainText } from './editor/tasks/content';
 import { showToast } from './ui/toast';
 import { updateWordCountPill } from './word-count-pill';
@@ -70,6 +84,24 @@ interface Snapshot {
 interface SnapshotState {
   content: string;
   noteType?: string;
+}
+
+/**
+ * The CONTENT identity of a capture — what "the same snapshot twice"
+ * compares. Drawings canonicalize through the scene module (their stored
+ * envelope carries a volatile savedAt stamp that refreshes on every save,
+ * so byte-comparing two saves of the SAME drawing answers "different" —
+ * see drawingSceneContentIdentity); every other kind is its bytes, which
+ * its surface serializes deterministically. Normalizing the note type
+ * here would be wrong — a content/type pair is the identity, and the
+ * callers normalize types themselves (isSameSnapshotState) or specialize
+ * (isCurrentSnapshotState).
+ */
+function snapshotContentIdentity(content: string, noteType?: string): string {
+  if (noteType === 'drawing') {
+    return drawingSceneContentIdentity(content);
+  }
+  return content;
 }
 
 /**
@@ -145,8 +177,9 @@ export function readSnapshotsForNote(
       .getAll(noteId);
     request.onsuccess = () => {
       const rows = (request.result as Snapshot[]).slice();
-      // Index order is storage order; the callers want time order.
-      rows.sort((a, b) => b.timestamp - a.timestamp);
+      // Index order is storage order; the callers want time order — and
+      // on a tie the higher id is the later write and leads.
+      rows.sort((a, b) => b.timestamp - a.timestamp || (b.id ?? 0) - (a.id ?? 0));
       resolve(rows);
     };
     request.onerror = () => reject(request.error);
@@ -206,20 +239,44 @@ export function pruneSnapshots(
  * Html notes read their TEXT PROJECTION — the storage subset holds
  * words and formatting only (images are rendered as chips, never stored
  * as <img> — see editor/markdown/nodes.ts), so an html note without
- * words is empty, full stop. Text/json/opaque kinds are their raw bytes.
+ * words is empty, full stop. Drawings and task lists are JSON envelopes
+ * whose bytes are never empty — their MEANING is: a scene with no
+ * elements (a stroke undone away) and a list with no rows are nothing a
+ * safety copy adds. Drawing bytes this build cannot parse (a newer
+ * build's scene) stay real content — the app refuses to edit them but
+ * keeps them, and a safety copy of exactly those bytes is the point.
+ * Text/json/opaque kinds are their raw bytes.
  */
 export function snapshotHasContent(content: string, noteType?: string): boolean {
   if (isHtmlContent(noteType)) {
     return htmlToText(content).trim() !== '';
   }
+  if (noteType === 'drawing') {
+    const scene = parseDrawingScene(content);
+    if (scene !== null) {
+      return scene.elements.some(
+        (element) => (element as { isDeleted?: boolean } | null)?.isDeleted !== true,
+      );
+    }
+    return content.trim() !== '';
+  }
+  if (noteType === 'tasks') {
+    return parseTaskNoteContent(content).tasks.length > 0;
+  }
   return content.trim() !== '';
 }
 
-/** Two captures are the same snapshot when bytes and note type match —
- *  with the type NORMALIZED: 'standard' and absent are the same note,
- *  the same rule isCurrentSnapshotState applies to the Current chip. */
+/** Two captures are the same snapshot when their CONTENT IDENTITY and
+ *  note type match — with the type NORMALIZED: 'standard' and absent are
+ *  the same note. For drawings the identity is the canonical scene (the
+ *  savedAt stamp never makes a drawing "new"), so the undo loop — draw,
+ *  snapshot, undo, redo, snapshot — still files one row. */
 export function isSameSnapshotState(a: SnapshotState, b: SnapshotState): boolean {
-  return a.content === b.content && normalizeNoteType(a.noteType) === normalizeNoteType(b.noteType);
+  return (
+    snapshotContentIdentity(a.content, a.noteType) ===
+      snapshotContentIdentity(b.content, b.noteType) &&
+    normalizeNoteType(a.noteType) === normalizeNoteType(b.noteType)
+  );
 }
 
 /**
@@ -325,6 +382,93 @@ export function formatSnapshotDayLabel(timestamp: number, now: number = Date.now
 }
 
 /**
+ * The day groups a SECTION renders — the timeline inside one type.
+ * Suppressed entirely when every row is from TODAY: a type header above
+ * five of-today rows followed by a 'TODAY' bar repeats what the clock
+ * and the row order already say, and a menu of five sections each
+ * wearing their own 'TODAY' stuttered (the reskin's own audit). The
+ * moment a section holds anything older, its day headers come back —
+ * 'Yesterday' next to 'Today' is real information a scanner wants, and
+ * a lone old section keeps its calendar label instead of hiding it in
+ * a tooltip. Rows arrive newest-first and leave that way.
+ */
+export interface SnapshotDayGroup {
+  key: string;
+  label: string;
+  rows: Snapshot[];
+}
+
+export function snapshotDayGroups(rows: Snapshot[], now: number = Date.now()): SnapshotDayGroup[] {
+  if (rows.length === 0) {
+    return [];
+  }
+  const todayKey = snapshotDayKey(now);
+  const spansBeyondToday = rows.some((row) => snapshotDayKey(row.timestamp) !== todayKey);
+  if (!spansBeyondToday) {
+    return [];
+  }
+  const groups: SnapshotDayGroup[] = [];
+  for (const row of rows) {
+    const key = snapshotDayKey(row.timestamp);
+    const current = groups[groups.length - 1];
+    if (current && current.key === key) {
+      current.rows.push(row);
+    } else {
+      groups.push({ key, label: formatSnapshotDayLabel(row.timestamp, now), rows: [row] });
+    }
+  }
+  return groups;
+}
+
+/**
+ * What a row says about its version — the signed change against the
+ * PREVIOUS snapshot of the same note (the row below it on the
+ * timeline), the way a commit carries its diffstat. Two snapshots of a
+ * long note whose difference lives past the preview's 100 characters
+ * are otherwise twins: same title, same preview, same clock minute.
+ * Words for text kinds, tasks for task lists, shapes for drawings —
+ * the unit each kind counts, not a byte size a person cannot read.
+ * A note's FIRST snapshot is the baseline and carries no badge.
+ */
+export interface SnapshotChangeBadge {
+  /** Signed change in the unit — +3, -2, 0 (a rewording, same size). */
+  delta: number;
+  /** The unit, already singular/plural: 'word', 'words', 'task', 'tasks', 'shape', 'shapes'. */
+  unit: string;
+}
+
+function snapshotUnitCount(content: string, noteType?: string): { count: number; unit: string } {
+  if (noteType === 'tasks') {
+    return { count: parseTaskNoteContent(content).tasks.length, unit: 'task' };
+  }
+  if (noteType === 'drawing') {
+    const scene = parseDrawingScene(content);
+    const elements = scene?.elements.filter(
+      (element) => (element as { isDeleted?: boolean } | null)?.isDeleted !== true,
+    );
+    return { count: elements?.length ?? 0, unit: 'shape' };
+  }
+  const words = snapshotReadableText(content, noteType).trim();
+  return { count: words === '' ? 0 : words.split(/\s+/).length, unit: 'word' };
+}
+
+export function snapshotChangeBadge(
+  current: { content: string; noteType?: string },
+  previous: { content: string; noteType?: string } | null,
+): SnapshotChangeBadge | null {
+  if (!previous) {
+    return null;
+  }
+  const now = snapshotUnitCount(current.content, current.noteType);
+  const then = snapshotUnitCount(previous.content, previous.noteType);
+  const magnitude = Math.abs(now.count - then.count);
+  return {
+    delta: now.count - then.count,
+    unit: `${now.unit}${magnitude === 1 ? '' : 's'}`,
+  };
+}
+
+/**
  * What a row's expandable panel and the readable previews show: html
  * kinds read their text projection; drawings read their text elements'
  * plain projection; task lists read their rows' titles. Markdown and
@@ -364,21 +508,46 @@ export function isCurrentSnapshotState(
   }
   const normalize = (type: string | undefined) => (type === 'standard' ? undefined : type);
   return (
-    snapshot.content === active.content &&
+    snapshotContentIdentity(snapshot.content, snapshot.noteType) ===
+      snapshotContentIdentity(active.content, active.noteType) &&
     normalize(snapshot.noteType) === normalize(active.noteType)
   );
 }
 
-/** First meaningful line (html) or the type's label, capped at 50 chars. */
+/**
+ * Prefixes a kind's readable first line carries that are NOT part of its
+ * meaning: markdown's leading hashes (the editor renders '# Trail log'
+ * as the words 'Trail log') and a task row's checkbox ('- [x] call the
+ * dentist' is the task 'call the dentist'). Stripped for titles only —
+ * previews keep the syntax, the way the note's source reads.
+ */
+const SNAPSHOT_TITLE_PREFIX: Partial<Record<string, RegExp>> = {
+  markdown: /^#{1,6}\s+/,
+  tasks: /^- \[[ xX]\]\s+/,
+};
+
+/**
+ * The row's title: the first meaningful line of the note's READABLE
+ * projection — every kind, not just html ones. A section where every row
+ * is titled 'Markdown note' or 'Drawing' (the old per-kind label rule)
+ * forces the preview to do all the identifying; a title that quotes the
+ * note names the version at a glance. Kinds whose projection answers
+ * nothing (an empty scene, a blank source) fall back to the type's
+ * label, then to the untitled default. Capped at 50 characters.
+ */
 export function deriveSnapshotTitle(content: string, noteType?: string): string {
-  const firstLine = isHtmlContent(noteType)
-    ? htmlToText(content)
-        .split('\n')
-        .find((line) => line.trim() !== '')
-    : noteType
-      ? noteTypeLabel(noteType as NoteType)
-      : undefined;
-  const title = firstLine || 'Untitled Snapshot';
+  const readable = snapshotReadableText(content, noteType);
+  let firstLine = readable.split('\n').find((line) => line.trim() !== '');
+  if (firstLine) {
+    firstLine = firstLine.trim().replace(SNAPSHOT_TITLE_PREFIX[noteType ?? ''] ?? /^/, '');
+    if (firstLine.trim() === '') {
+      firstLine = undefined;
+    } else {
+      firstLine = firstLine.trim();
+    }
+  }
+  const title =
+    firstLine || (noteType ? noteTypeLabel(noteType as NoteType) : '') || 'Untitled Snapshot';
   return title.length > 50 ? `${title.substring(0, 47)}...` : title;
 }
 
@@ -473,7 +642,9 @@ export function groupSnapshotsByType(snapshots: Snapshot[]): SnapshotTypeSection
       key,
       label: SNAPSHOT_SECTION_LABELS[key] ?? noteTypeLabel(key as NoteType),
       icon: snapshotTypeIcon(key === 'standard' ? undefined : key),
-      rows: (buckets.get(key) ?? []).sort((a, b) => b.timestamp - a.timestamp),
+      rows: (buckets.get(key) ?? []).sort(
+        (a, b) => b.timestamp - a.timestamp || (b.id ?? 0) - (a.id ?? 0),
+      ),
     }));
 }
 
@@ -505,6 +676,12 @@ export class SnapshotsManager {
   private readyPromise: Promise<void>;
   private resolveReady!: () => void;
   private rejectReady!: (err: unknown) => void;
+
+  /** Type sections the user has folded, by section key — in-memory, so a
+   *  reload starts fresh and a session's folds survive every re-render
+   *  (searching, taking, deleting). Ignored while a search is active: a
+   *  folded section must never hide a match. */
+  private collapsedSections = new Set<string>();
 
   constructor() {
     this.dbName = 'NotepadSnapshotsDB';
@@ -541,8 +718,8 @@ export class SnapshotsManager {
     openSnapshotsDatabase(this.dbName, this.storeName).then(
       (db) => {
         this.db = db;
-        this.updateSnapshotsCount();
-        void this.loadSnapshots();
+        void this.updateSnapshotsCount();
+        void this.loadSnapshots(this.currentSearchTerm());
         this.resolveReady();
       },
       (error) => {
@@ -590,6 +767,20 @@ export class SnapshotsManager {
     // Search snapshots — filters the cached rows; no store read per keystroke.
     document.getElementById('searchSnapshots')?.addEventListener('input', (e) => {
       this.renderRows((e.target as HTMLInputElement).value);
+    });
+
+    // Escape in the search field clears the query first — the input has no
+    // clear button, and a field that only clears by hand-selecting its text
+    // ignores the reset muscle memory every other search box taught.
+    // stopPropagation keeps the document-level Escape handler from closing
+    // the modal under the same press.
+    document.getElementById('searchSnapshots')?.addEventListener('keydown', (e) => {
+      const input = e.target as HTMLInputElement;
+      if (e.key === 'Escape' && input.value !== '') {
+        e.stopPropagation();
+        input.value = '';
+        this.renderRows('');
+      }
     });
 
     // Keyboard shortcut: the platform's primary modifier + U
@@ -802,8 +993,8 @@ export class SnapshotsManager {
         pruneSnapshots(database, this.storeName)
           .then((pruned) => {
             if (pruned > 0) {
-              void this.loadSnapshots();
-              this.updateSnapshotsCount();
+              void this.loadSnapshots(this.currentSearchTerm());
+              void this.updateSnapshotsCount();
             }
           })
           .catch((error) => {
@@ -813,8 +1004,8 @@ export class SnapshotsManager {
             );
           });
 
-        void this.loadSnapshots();
-        this.updateSnapshotsCount();
+        void this.loadSnapshots(this.currentSearchTerm());
+        void this.updateSnapshotsCount();
         resolve();
       };
 
@@ -826,8 +1017,19 @@ export class SnapshotsManager {
     });
   }
 
-  /** Every snapshot, newest first (the read order the UI wants). */
-  private readAllSnapshots(): Promise<Snapshot[]> {
+  /** The search field's live value — what any re-render must honor. A
+   *  capture or delete that refreshed the list while a filter was active
+   *  used to re-render unfiltered, leaving rows that defy the query still
+   *  sitting under it. */
+  private currentSearchTerm(): string {
+    return (document.getElementById('searchSnapshots') as HTMLInputElement | null)?.value ?? '';
+  }
+
+  /** Every snapshot, newest first (the read order the UI wants). Waits for
+   *  the database open — a menu opened in the first moments of boot must
+   *  not read a null database and declare an existing store empty. */
+  private async readAllSnapshots(): Promise<Snapshot[]> {
+    await this.ready().catch(() => undefined);
     return new Promise((resolve, reject) => {
       if (!this.db) {
         resolve([]);
@@ -839,8 +1041,10 @@ export class SnapshotsManager {
         .getAll();
       request.onsuccess = () => {
         const rows = (request.result as Snapshot[]).slice();
-        // getAll returns key order (insertion); the UI wants time order.
-        rows.sort((a, b) => b.timestamp - a.timestamp);
+        // getAll returns key order (insertion); the UI wants time order —
+        // and on a timestamp tie (two captures in one millisecond, legacy
+        // stores), the HIGHER id is the later write and leads.
+        rows.sort((a, b) => b.timestamp - a.timestamp || (b.id ?? 0) - (a.id ?? 0));
         resolve(rows);
       };
       request.onerror = () => reject(request.error);
@@ -858,6 +1062,34 @@ export class SnapshotsManager {
     this.renderRows(searchTerm);
   }
 
+  /** The change badge of every row that has one — computed against the
+   *  UNFILTERED timeline, so a search that hides the previous snapshot of
+   *  a note still reports the honest delta against the true previous
+   *  version, not whichever neighbor survived the filter. Keyed by the
+   *  row's store id. */
+  private computeChangeBadges(): Map<number, SnapshotChangeBadge> {
+    const badges = new Map<number, SnapshotChangeBadge>();
+    for (const section of groupSnapshotsByType(this.cache.map((row) => row.snapshot))) {
+      for (let i = 0; i < section.rows.length; i++) {
+        const row = section.rows[i];
+        if (!row.noteId || row.id === undefined) {
+          continue;
+        }
+        const previous = section.rows
+          .slice(i + 1)
+          .find((candidate) => candidate.noteId === row.noteId);
+        if (!previous) {
+          continue; // the note's first snapshot — the baseline, no badge
+        }
+        const badge = snapshotChangeBadge(row, previous);
+        if (badge) {
+          badges.set(row.id, badge);
+        }
+      }
+    }
+    return badges;
+  }
+
   // Render the cached rows through the current search term.
   private renderRows(searchTerm: string = ''): void {
     const snapshotsList = document.getElementById('snapshotsList');
@@ -867,7 +1099,8 @@ export class SnapshotsManager {
     }
 
     const term = searchTerm.trim().toLowerCase();
-    const rows: Snapshot[] = term
+    const filtering = term !== '';
+    const rows: Snapshot[] = filtering
       ? this.cache.filter((row) => row.searchText.includes(term)).map((row) => row.snapshot)
       : this.cache.map((row) => row.snapshot);
 
@@ -875,44 +1108,97 @@ export class SnapshotsManager {
     // have open, byte for byte? Read once per render; typing can't race
     // it (the modal covers the editor).
     const active = getActiveNoteContent();
+    const badges = this.computeChangeBadges();
+
+    // A just-taken snapshot must be SEEN: if its section is folded, the
+    // fold gives way for this render (the flash and scroll would
+    // otherwise point at a hidden row).
+    if (this.pendingHighlightId !== null) {
+      for (const row of rows) {
+        if (row.id === this.pendingHighlightId) {
+          const section = groupSnapshotsByType(rows).find((candidate) =>
+            candidate.rows.some((candidate2) => candidate2.id === row.id),
+          );
+          if (section) {
+            this.collapsedSections.delete(section.key);
+          }
+          break;
+        }
+      }
+    }
 
     snapshotsList.innerHTML = '';
-    // Type sections, registry order: each header carries the kind's icon,
-    // label and row count; the day timeline lives INSIDE the section.
-    // Recency never reorders sections — the menu's shape is stable —
-    // while rows inside stay newest-first.
+    // Type sections, registry order: each header is a real button (the
+    // section folds), the day timeline lives INSIDE the section, and
+    // rows inside stay newest-first. Recency never reorders sections —
+    // the menu's shape is stable. Folds are the user's; a search ignores
+    // them (a folded section must never hide a match).
     let highlighted = false;
+    let sectionIndex = 0;
     for (const section of groupSnapshotsByType(rows)) {
-      const sectionHeader = document.createElement('li');
-      sectionHeader.className = 'snapshots-type';
-      sectionHeader.innerHTML = `
+      const collapsed = !filtering && this.collapsedSections.has(section.key);
+      const rowsId = `snapshots-section-${sectionIndex++}`;
+
+      const sectionWrapper = document.createElement('li');
+      sectionWrapper.className = 'snapshots-section';
+      sectionWrapper.dataset.type = section.key;
+
+      const header = document.createElement('button');
+      header.type = 'button';
+      header.className = 'snapshots-type';
+      header.setAttribute('aria-expanded', String(!collapsed));
+      header.setAttribute('aria-controls', rowsId);
+      header.innerHTML = `
         <span class="snapshots-type-icon" aria-hidden="true">${section.icon}</span>
         <span class="snapshots-type-label">${this.escapeHtml(section.label)}</span>
-        <span class="snapshots-type-count">${section.rows.length}</span>`;
-      snapshotsList.appendChild(sectionHeader);
+        <span class="snapshots-type-count">${section.rows.length}</span>
+        <svg class="snapshots-type-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>`;
+      header.addEventListener('click', () => {
+        if (this.collapsedSections.has(section.key)) {
+          this.collapsedSections.delete(section.key);
+        } else {
+          this.collapsedSections.add(section.key);
+        }
+        this.renderRows(this.currentSearchTerm());
+      });
+      sectionWrapper.appendChild(header);
 
-      // Day grouping inside the section: rows arrive newest-first, so the
-      // day only moves backwards — a header li rides in whenever the
-      // calendar day changes (Today / Yesterday / …).
-      let currentDay = '';
-      for (const snapshot of section.rows) {
-        const dayKey = snapshotDayKey(snapshot.timestamp);
-        if (dayKey !== currentDay) {
-          currentDay = dayKey;
-          const header = document.createElement('li');
-          header.className = 'snapshots-day';
-          header.textContent = formatSnapshotDayLabel(snapshot.timestamp);
-          snapshotsList.appendChild(header);
-        }
-        const li = this.createSnapshotElement(snapshot);
-        li.classList.toggle('is-current', isCurrentSnapshotState(snapshot, active));
-        if (snapshot.id !== undefined && snapshot.id === this.pendingHighlightId) {
-          li.classList.add('is-new');
-          this.pendingHighlightId = null;
-          highlighted = true;
-        }
-        snapshotsList.appendChild(li);
+      const rowsList = document.createElement('ul');
+      rowsList.className = 'snapshots-section-rows';
+      rowsList.id = rowsId;
+      if (collapsed) {
+        rowsList.setAttribute('hidden', '');
       }
+
+      // Day grouping inside the section — suppressed when every row is
+      // from today (the type header already says where a same-day batch
+      // sits; five sections each wearing their own 'TODAY' stuttered).
+      const dayGroups = snapshotDayGroups(section.rows);
+      const appendRows = (groupRows: Snapshot[]) => {
+        for (const snapshot of groupRows) {
+          const li = this.createSnapshotElement(snapshot, badges.get(snapshot.id ?? -1));
+          li.classList.toggle('is-current', isCurrentSnapshotState(snapshot, active));
+          if (snapshot.id !== undefined && snapshot.id === this.pendingHighlightId) {
+            li.classList.add('is-new');
+            this.pendingHighlightId = null;
+            highlighted = true;
+          }
+          rowsList.appendChild(li);
+        }
+      };
+      if (dayGroups.length === 0) {
+        appendRows(section.rows);
+      } else {
+        for (const group of dayGroups) {
+          const dayHeader = document.createElement('li');
+          dayHeader.className = 'snapshots-day';
+          dayHeader.textContent = group.label;
+          rowsList.appendChild(dayHeader);
+          appendRows(group.rows);
+        }
+      }
+      sectionWrapper.appendChild(rowsList);
+      snapshotsList.appendChild(sectionWrapper);
     }
 
     // A just-taken snapshot lands at the top of a long list — bring it
@@ -934,12 +1220,26 @@ export class SnapshotsManager {
     document.getElementById('noSnapshotsEmpty')?.toggleAttribute('hidden', showMiss);
     document.getElementById('noSnapshotsHint')?.toggleAttribute('hidden', showMiss);
     document.getElementById('noSnapshotsMiss')?.toggleAttribute('hidden', !showMiss);
+
+    // The footer tells the truth about what is on stage: the filtered
+    // count while a query runs ('12 results'), the store's size against
+    // its cap otherwise ('7 of 200') — never the total under a query
+    // that hides most of it.
+    const countElement = document.getElementById('snapshotsCount');
+    const capElement = document.querySelector('#snapshotsModal .snapshots-cap');
+    if (countElement) {
+      countElement.textContent = String(filtering ? rows.length : this.cache.length);
+    }
+    if (capElement) {
+      capElement.textContent = filtering ? 'results' : `of ${MAX_SNAPSHOTS}`;
+    }
   }
 
   // Create a snapshot element for the UI — the timeline row. The main
   // area is a real button (expand/collapse), the side column carries the
-  // clock and the three actions; the expand panel spans below both.
-  createSnapshotElement(snapshot: Snapshot): HTMLLIElement {
+  // clock, the version's change badge and the three actions; the expand
+  // panel spans below both.
+  createSnapshotElement(snapshot: Snapshot, change?: SnapshotChangeBadge): HTMLLIElement {
     const li = document.createElement('li');
     li.className = 'snapshot-item';
     li.dataset.snapshotId = String(snapshot.id ?? '');
@@ -947,7 +1247,7 @@ export class SnapshotsManager {
     // The type badge — shown for non-default types only, matching the tab
     // rail's convention: a badge matters when restoring would SWITCH the
     // note's type, which plain notes never do.
-    const badge =
+    const typeBadge =
       snapshot.noteType && snapshot.noteType !== 'standard'
         ? `<span class="snapshot-type-badge">${this.escapeHtml(snapshotTypeBadgeLabel(snapshot.noteType))}</span>`
         : '';
@@ -970,13 +1270,20 @@ export class SnapshotsManager {
         : readable;
     const expandId = `snapshot-expand-${snapshot.id ?? 'x'}`;
 
+    // The version's diffstat — what changed since the previous snapshot
+    // of this note. A note's first snapshot carries nothing (it is the
+    // baseline); a rewording that keeps the count carries an honest ±0.
+    const delta = change
+      ? `<span class="snapshot-delta ${change.delta > 0 ? 'is-up' : change.delta < 0 ? 'is-down' : 'is-flat'}" title="Change since the previous snapshot of this note">${change.delta > 0 ? '+' : change.delta < 0 ? '\u2212' : '\u00b1'}${Math.abs(change.delta)} ${this.escapeHtml(change.unit)}</span>`
+      : '';
+
     li.innerHTML = `
             <button type="button" class="snapshot-main" aria-expanded="false" aria-controls="${expandId}" title="Show this snapshot's text">
                 <span class="snapshot-rail" aria-hidden="true">${snapshotTypeIcon(snapshot.noteType)}</span>
                 <span class="snapshot-body">
                     <span class="snapshot-headline">
                         <span class="snapshot-title" title="${this.escapeHtml(snapshot.title)}">${this.escapeHtml(snapshot.title)}</span>
-                        ${badge}
+                        ${typeBadge}
                         ${noteChip}
                         <span class="snapshot-current" title="Identical to the note you have open"><span class="snapshot-current-dot" aria-hidden="true"></span>Current</span>
                     </span>
@@ -985,7 +1292,10 @@ export class SnapshotsManager {
                 <svg class="snapshot-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
             </button>
             <div class="snapshot-side">
-                <span class="snapshot-date" title="${this.escapeHtml(formatSnapshotTimestamp(snapshot.timestamp))}">${this.escapeHtml(formatSnapshotClock(snapshot.timestamp))}</span>
+                <span class="snapshot-when">
+                    <span class="snapshot-date" title="${this.escapeHtml(formatSnapshotTimestamp(snapshot.timestamp))}">${this.escapeHtml(formatSnapshotClock(snapshot.timestamp))}</span>
+                    ${delta}
+                </span>
                 <span class="snapshot-actions">
                     <button type="button" class="snapshot-btn restore" title="Restore this snapshot" aria-label="Restore this snapshot">Restore</button>
                     <button type="button" class="snapshot-btn copy" title="Copy snapshot content" aria-label="Copy snapshot content">
@@ -1246,8 +1556,8 @@ export class SnapshotsManager {
         const request = store.delete(snapshotId);
 
         request.onsuccess = () => {
-          void this.loadSnapshots();
-          this.updateSnapshotsCount();
+          void this.loadSnapshots(this.currentSearchTerm());
+          void this.updateSnapshotsCount();
         };
 
         request.onerror = (event) => {
@@ -1267,8 +1577,8 @@ export class SnapshotsManager {
     const request = store.clear();
 
     request.onsuccess = () => {
-      void this.loadSnapshots();
-      this.updateSnapshotsCount();
+      void this.loadSnapshots(this.currentSearchTerm());
+      void this.updateSnapshotsCount();
     };
 
     request.onerror = (event) => {
@@ -1277,8 +1587,14 @@ export class SnapshotsManager {
     };
   }
 
-  // Update the snapshots count in the UI
-  updateSnapshotsCount(): void {
+  /** The store's size, against the footer and the delete-all affordance.
+   *  The count TEXT itself is renderRows' to write — it knows whether a
+   *  search is filtering the list ('12 results' vs '7 of 200') — so this
+   *  owns only the button's enabled state. Waits for the database open
+   *  like every read: a boot-moment call must not read a null database
+   *  and leave the button stuck disabled. */
+  async updateSnapshotsCount(): Promise<void> {
+    await this.ready().catch(() => undefined);
     if (!this.db) return;
 
     const transaction = this.db.transaction([this.storeName], 'readonly');
@@ -1286,22 +1602,9 @@ export class SnapshotsManager {
     const countRequest = store.count();
 
     countRequest.onsuccess = () => {
-      const countElement = document.getElementById('snapshotsCount');
       const deleteAllBtn = document.getElementById(
         'deleteAllSnapshotsBtn',
       ) as HTMLButtonElement | null;
-
-      if (countElement) {
-        countElement.textContent = String(countRequest.result);
-      }
-
-      // The cap is part of the story the footer tells — render it from
-      // the constant so the copy can never drift from the behavior.
-      const capElement = document.querySelector('#snapshotsModal .snapshots-cap');
-      if (capElement) {
-        capElement.textContent = `of ${MAX_SNAPSHOTS}`;
-      }
-
       if (deleteAllBtn) {
         deleteAllBtn.disabled = countRequest.result === 0;
       }

@@ -4,12 +4,14 @@
    stylesheet chain, exactly where the monolith sat).
 
    The list is sectioned by note type (registry order, counts in the
-   header); inside a section, rows group under sticky day headers
-   (Today / Yesterday / the date), each row an expandable card — type
-   rail, title + badge + note chip + Current chip, one line of preview,
-   clock and actions on the right. The toolbar stays pinned while only
-   the list scrolls. Every color comes from the token aliases; dark
-   mode needs no rules of its own here. */
+   header, each section folds); inside a section, rows group under
+   sticky day headers (Today / Yesterday / the date) only when the
+   section's history spans beyond today, each row an expandable card —
+   type rail, title + badge + note chip + Current chip, one line of
+   preview, and on the right the clock, the version's change badge and
+   the actions. The toolbar stays pinned while only the list scrolls.
+   Every color comes from the token aliases; dark mode needs no rules
+   of its own here. */
 /* --------------------------------------------------------------------------
    11. Snapshots — the typed timeline menu
    -------------------------------------------------------------------------- */
@@ -143,18 +145,32 @@
   display: none;
 }
 
-/* Type sections — the menu's spine: one header per note kind, registry
-   order, the row count at the right. Sticky so the current kind rides
-   with the scroll; solid background (not translucent) so rows never
-   show through. The fixed 42px height is the offset the day headers
-   stack underneath. */
+/* Type sections — the menu's spine: one foldable header per note kind,
+   registry order, the row count at the right. Each section is its own
+   list item (header button + nested rows list), so a header sticks
+   only while ITS section scrolls past — the next kind's header pushes
+   it away exactly when the rows it labels end. Solid background (not
+   translucent) so rows never show through. The fixed 42px height is
+   the offset the day headers stack underneath. */
+.snapshots-section {
+  display: block;
+}
+
+.snapshots-section:last-child .snapshot-item:last-child,
+.snapshots-section:last-child .snapshot-item:last-child .snapshot-expand {
+  border-bottom: none;
+}
+
 .snapshots-type {
+  all: unset;
+  box-sizing: border-box;
   position: sticky;
   top: 0;
   z-index: 3;
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   height: 42px;
   padding: 0 16px;
   background: var(--vz-bg-subtle);
@@ -163,6 +179,17 @@
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background-color var(--vz-dur) ease, color var(--vz-dur) ease;
+}
+
+.snapshots-type:hover {
+  background: var(--vz-bg-chip);
+}
+
+.snapshots-type:focus-visible {
+  outline: 2px solid var(--vz-fg);
+  outline-offset: -2px;
 }
 
 .snapshots-type-icon {
@@ -182,6 +209,36 @@
   border: 1px solid var(--vz-border);
   border-radius: 999px;
   padding: 1.5px 7px;
+}
+
+/* The fold's chevron — quiet until the header hovers; turns down while
+   the section is open (the row expander's convention, one language). */
+.snapshots-type-chevron {
+  flex: 0 0 auto;
+  color: var(--vz-fg-subtle);
+  transition: transform 160ms var(--vz-ease), color var(--vz-dur) ease;
+}
+
+.snapshots-type:hover .snapshots-type-chevron {
+  color: var(--vz-fg-muted);
+}
+
+.snapshots-type[aria-expanded='true'] .snapshots-type-chevron {
+  transform: rotate(90deg);
+}
+
+/* The section's rows — a nested list, hidden when folded. The explicit
+   [hidden] rule: an author display value would otherwise out-weigh the
+   UA's hidden styling. */
+.snapshots-section-rows {
+  display: block;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.snapshots-section-rows[hidden] {
+  display: none;
 }
 
 /* Day group headers — the timeline inside a section. Sticky BELOW the
@@ -213,11 +270,6 @@
   padding: 0;
   border-bottom: 1px solid var(--vz-border);
   transition: background-color var(--vz-dur) ease;
-}
-
-.snapshot-item:last-child,
-.snapshot-item:last-child .snapshot-expand {
-  border-bottom: none;
 }
 
 .snapshot-item:hover {
@@ -376,7 +428,8 @@
   color: var(--vz-fg);
 }
 
-/* The side column — clock over actions, right-aligned */
+/* The side column — the when line (clock + change badge) over
+   actions, right-aligned */
 .snapshot-side {
   display: flex;
   flex-direction: column;
@@ -385,11 +438,42 @@
   padding: 10px 12px 10px 0;
 }
 
+.snapshot-when {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 7px;
+  white-space: nowrap;
+}
+
 .snapshot-date {
   color: var(--vz-fg-subtle);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
+}
+
+/* The version's diffstat — what changed since the previous snapshot of
+   this note, the row's identity when the difference lives past the
+   preview's truncation. GitHub's diff colors: growth green, loss red,
+   a same-size rewording honestly gray. */
+.snapshot-delta {
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.snapshot-delta.is-up {
+  color: var(--vz-success);
+}
+
+.snapshot-delta.is-down {
+  color: var(--vz-danger);
+}
+
+.snapshot-delta.is-flat {
+  color: var(--vz-fg-subtle);
 }
 
 .snapshot-actions {
@@ -541,7 +625,9 @@
   vertical-align: baseline;
 }
 
-/* Footer stats + actions — the count tells the whole story: N of 200. */
+/* Footer stats + actions — the count tells the whole story: the
+   filtered count while a query runs ('12 results'), the store's size
+   against its cap otherwise ('7 of 200'). */
 .snapshots-stats {
   display: flex;
   align-items: baseline;
