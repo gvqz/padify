@@ -30,25 +30,34 @@
  *    matches in the rows.
  *  • DATES — formatted at render time from the timestamp; the stored
  *    formattedDate field is written for older builds only.
- *  • THE MENU — sections by note type (registry order), each foldable
- *    (a search ignores folds — a folded section must never hide a
- *    match), day groups inside a section only when its history spans
- *    beyond today, the source note's name on the row, and each row's
- *    change badge (words / tasks / shapes) against the previous
- *    snapshot of its note — two snapshots whose difference lives past
- *    the preview's 100 characters are otherwise twins. The row carries
- *    no type chip of its own — it lives inside its type's section, and
- *    the header already says it. The footer reports the filtered count
- *    while a query runs, the store's size against its cap otherwise.
- *  • RESTORE — the menu STAYS OPEN afterwards: the list re-renders,
- *    the restored row picks up the Current chip, and the next version
- *    is right there. Closing is the user's move. A capture taken while
- *    a search filter would hide it clears that filter, so the flash
- *    the user is promised is a flash they can see.
+ *  • THE MENU — a right-side History sheet, NOT a centered dialog, and
+ *    ONE continuous timeline: time is the only axis, day runs anchor
+ *    the rail (Today / Yesterday / the date), and note type organizes
+ *    nothing (it identifies — the detail card says what kind a version
+ *    is). Each entry carries the clock, the source note's name when it
+ *    has one, one line of preview and the version's change badge
+ *    (words / tasks / shapes) against the previous snapshot of its
+ *    note — two snapshots whose difference lives past the preview's
+ *    100 characters are otherwise twins. Clicking an entry expands it
+ *    IN PLACE into a detail card (the readable text, the full date,
+ *    the type, and the actions) — nothing in this menu opens a second
+ *    dialog. The footer reports the filtered count while a query runs,
+ *    the store's size against its cap otherwise.
+ *  • RESTORE — one click, no confirmation dialog: the pre-restore
+ *    safety copy (saved automatically right before the apply) is the
+ *    undo path, so the ask would be theater. The menu STAYS OPEN
+ *    afterwards: the list re-renders, the restored row picks up the
+ *    Current chip, the pre-restore copy lands on top with its flash,
+ *    and the next version is right there. Closing is the user's move.
+ *    A capture taken while a search filter would hide it clears that
+ *    filter, so the flash the user is promised is a flash they can
+ *    see.
+ *  • DELETES — one row or all of them: a two-step INLINE confirm
+ *    (arm, then confirm) on the button itself. The menu never stacks
+ *    a confirmation dialog over itself.
  */
 import { $ } from './lib/q';
 import { openModal } from './ui/behavior/modal';
-import Swal from 'sweetalert2';
 import { getActiveNoteContent, getEditorText, getTabManager, htmlToText } from './tabs';
 import {
   DEFAULT_NOTE_TYPE,
@@ -711,11 +720,18 @@ export class SnapshotsManager {
   private resolveReady!: () => void;
   private rejectReady!: (err: unknown) => void;
 
-  /** Type sections the user has folded, by section key — in-memory, so a
-   *  reload starts fresh and a session's folds survive every re-render
-   *  (searching, taking, deleting). Ignored while a search is active: a
-   *  folded section must never hide a match. */
-  private collapsedSections = new Set<string>();
+  /** The row-delete confirm is a two-step INLINE arm on the button
+   *  itself: the first click arms (the button turns "Confirm"), the
+   *  second commits. This holds the armed row's id so a second armed
+   *  click elsewhere disarms the first, and so a re-render can reset
+   *  the state. Auto-disarms after a few seconds. */
+  private armedDeleteId: number | null = null;
+  private armedDeleteTimer: number | null = null;
+
+  /** Same two-step contract for Delete all — arming lives on the
+   *  footer button (its label swaps to "Really delete all?"). */
+  private deleteAllArmed = false;
+  private deleteAllTimer: number | null = null;
 
   constructor() {
     this.dbName = 'NotepadSnapshotsDB';
@@ -772,6 +788,10 @@ export class SnapshotsManager {
       // unfiltered list under a stale query.
       const query = (document.getElementById('searchSnapshots') as HTMLInputElement | null)?.value;
       void this.loadSnapshots(query ?? '');
+      // The delete-all affordance re-reads the store on every open — its
+      // enabled state was last written at boot (or at the last capture),
+      // and a store that changed underneath must not show a stale gray.
+      void this.updateSnapshotsCount();
     });
 
     // Create snapshot button
@@ -779,23 +799,31 @@ export class SnapshotsManager {
       void this.createSnapshot();
     });
 
-    // Delete all snapshots button
+    // Delete all snapshots — arm on the first press, commit on the
+    // second. The button's own label carries the confirm; no dialog
+    // stacks over the sheet.
     document.getElementById('deleteAllSnapshotsBtn')?.addEventListener('click', () => {
-      Swal.fire({
-        title: 'Want to delete all snapshots?',
-        text: "You won't be able to revert this!",
-        icon: 'warning',
-        showCancelButton: true,
-        customClass: {
-          confirmButton: 'swal-btn-danger',
-        },
-        confirmButtonText: 'Yes, Delete!',
-        cancelButtonText: 'No, keep it.',
-      }).then((result) => {
-        if (result.value) {
-          this.deleteAllSnapshots();
-        }
-      });
+      if (this.deleteAllArmed) {
+        this.disarmDeleteAll();
+        this.deleteAllSnapshots();
+        return;
+      }
+      this.armDeleteAll();
+    });
+
+    // A click anywhere else disarms whatever is armed — the confirm is
+    // a gesture on the button, not a state to wander away from.
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('#deleteAllSnapshotsBtn')) {
+        return;
+      }
+      if (this.deleteAllArmed) {
+        this.disarmDeleteAll();
+      }
+      if (this.armedDeleteId !== null && !target?.closest('.snap-act.delete')) {
+        this.disarmDelete();
+      }
     });
 
     // Search snapshots — filters the cached rows; no store read per keystroke.
@@ -1159,31 +1187,35 @@ export class SnapshotsManager {
    *  UNFILTERED timeline, so a search that hides the previous snapshot of
    *  a note still reports the honest delta against the true previous
    *  version, not whichever neighbor survived the filter. Keyed by the
-   *  row's store id. */
+   *  row's store id. Rows group by their NOTE (the version chain lives
+   *  inside a note, not inside a note type) — cache order is already
+   *  newest-first, so the first earlier row with the same noteId is the
+   *  previous version. */
   private computeChangeBadges(): Map<number, SnapshotChangeBadge> {
     const badges = new Map<number, SnapshotChangeBadge>();
-    for (const section of groupSnapshotsByType(this.cache.map((row) => row.snapshot))) {
-      for (let i = 0; i < section.rows.length; i++) {
-        const row = section.rows[i];
-        if (!row.noteId || row.id === undefined) {
-          continue;
-        }
-        const previous = section.rows
-          .slice(i + 1)
-          .find((candidate) => candidate.noteId === row.noteId);
-        if (!previous) {
-          continue; // the note's first snapshot — the baseline, no badge
-        }
-        const badge = snapshotChangeBadge(row, previous);
-        if (badge) {
-          badges.set(row.id, badge);
-        }
+    const rows = this.cache.map((row) => row.snapshot);
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row.noteId || row.id === undefined) {
+        continue;
+      }
+      const previous = rows.slice(i + 1).find((candidate) => candidate.noteId === row.noteId);
+      if (!previous) {
+        continue; // the note's first snapshot — the baseline, no badge
+      }
+      const badge = snapshotChangeBadge(row, previous);
+      if (badge) {
+        badges.set(row.id, badge);
       }
     }
     return badges;
   }
 
-  // Render the cached rows through the current search term.
+  // Render the cached rows through the current search term — ONE
+  // continuous timeline: day runs anchor the rail (Today / Yesterday /
+  // the date — always present, a run of entries needs its anchor even
+  // when every entry is from today), entries inside a run stay
+  // newest-first, and the rail's line breaks only at day boundaries.
   private renderRows(searchTerm: string = ''): void {
     const snapshotsList = document.getElementById('snapshotsList');
     const noSnapshots = document.getElementById('noSnapshots');
@@ -1199,109 +1231,54 @@ export class SnapshotsManager {
 
     // The 'Current' chip answers one question — is this row the note I
     // have open, byte for byte? Read once per render; typing can't race
-    // it (the modal covers the editor).
+    // it (the sheet covers the editor).
     const active = getActiveNoteContent();
     const badges = this.computeChangeBadges();
 
-    // A just-taken snapshot must be SEEN: if its section is folded, the
-    // fold gives way for this render (the flash and scroll would
-    // otherwise point at a hidden row).
-    if (this.pendingHighlightId !== null) {
-      for (const row of rows) {
-        if (row.id === this.pendingHighlightId) {
-          const section = groupSnapshotsByType(rows).find((candidate) =>
-            candidate.rows.some((candidate2) => candidate2.id === row.id),
-          );
-          if (section) {
-            this.collapsedSections.delete(section.key);
-          }
-          break;
-        }
-      }
+    // Day runs — the pure helper suppresses itself when every row is
+    // from today (a behavior pinned to the old sectioned menu); the
+    // timeline wants its anchor regardless, so a same-day list becomes
+    // one synthesized run.
+    let dayGroups = snapshotDayGroups(rows);
+    if (rows.length > 0 && dayGroups.length === 0) {
+      dayGroups = [{ key: snapshotDayKey(rows[0].timestamp), label: 'Today', rows }];
     }
 
     snapshotsList.innerHTML = '';
-    // Type sections, registry order: each header is a real button (the
-    // section folds), the day timeline lives INSIDE the section, and
-    // rows inside stay newest-first. Recency never reorders sections —
-    // the menu's shape is stable. Folds are the user's; a search ignores
-    // them (a folded section must never hide a match).
     let highlighted = false;
-    let sectionIndex = 0;
-    for (const section of groupSnapshotsByType(rows)) {
-      const collapsed = !filtering && this.collapsedSections.has(section.key);
-      const rowsId = `snapshots-section-${sectionIndex++}`;
+    for (const group of dayGroups) {
+      const dayHeader = document.createElement('li');
+      dayHeader.className = 'snap-day';
+      dayHeader.setAttribute('aria-hidden', 'false');
+      dayHeader.textContent = group.label;
+      snapshotsList.appendChild(dayHeader);
 
-      const sectionWrapper = document.createElement('li');
-      sectionWrapper.className = 'snapshots-section';
-      sectionWrapper.dataset.type = section.key;
-
-      const header = document.createElement('button');
-      header.type = 'button';
-      header.className = 'snapshots-type';
-      header.setAttribute('aria-expanded', String(!collapsed));
-      header.setAttribute('aria-controls', rowsId);
-      header.innerHTML = `
-        <span class="snapshots-type-icon" aria-hidden="true">${section.icon}</span>
-        <span class="snapshots-type-label">${this.escapeHtml(section.label)}</span>
-        <span class="snapshots-type-count">${section.rows.length}</span>
-        <svg class="snapshots-type-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>`;
-      header.addEventListener('click', () => {
-        if (this.collapsedSections.has(section.key)) {
-          this.collapsedSections.delete(section.key);
-        } else {
-          this.collapsedSections.add(section.key);
+      group.rows.forEach((snapshot, index) => {
+        const li = this.createTimelineItem(
+          snapshot,
+          badges.get(snapshot.id ?? -1),
+          filtering ? term : '',
+        );
+        li.classList.toggle('is-current', isCurrentSnapshotState(snapshot, active));
+        if (index === 0) {
+          li.classList.add('group-start');
         }
-        this.renderRows(this.currentSearchTerm());
+        if (index === group.rows.length - 1) {
+          li.classList.add('group-end');
+        }
+        if (snapshot.id !== undefined && snapshot.id === this.pendingHighlightId) {
+          li.classList.add('is-new');
+          this.pendingHighlightId = null;
+          highlighted = true;
+        }
+        snapshotsList.appendChild(li);
       });
-      sectionWrapper.appendChild(header);
-
-      const rowsList = document.createElement('ul');
-      rowsList.className = 'snapshots-section-rows';
-      rowsList.id = rowsId;
-      if (collapsed) {
-        rowsList.setAttribute('hidden', '');
-      }
-
-      // Day grouping inside the section — suppressed when every row is
-      // from today (the type header already says where a same-day batch
-      // sits; five sections each wearing their own 'TODAY' stuttered).
-      const dayGroups = snapshotDayGroups(section.rows);
-      const appendRows = (groupRows: Snapshot[]) => {
-        for (const snapshot of groupRows) {
-          const li = this.createSnapshotElement(
-            snapshot,
-            badges.get(snapshot.id ?? -1),
-            filtering ? term : '',
-          );
-          li.classList.toggle('is-current', isCurrentSnapshotState(snapshot, active));
-          if (snapshot.id !== undefined && snapshot.id === this.pendingHighlightId) {
-            li.classList.add('is-new');
-            this.pendingHighlightId = null;
-            highlighted = true;
-          }
-          rowsList.appendChild(li);
-        }
-      };
-      if (dayGroups.length === 0) {
-        appendRows(section.rows);
-      } else {
-        for (const group of dayGroups) {
-          const dayHeader = document.createElement('li');
-          dayHeader.className = 'snapshots-day';
-          dayHeader.textContent = group.label;
-          rowsList.appendChild(dayHeader);
-          appendRows(group.rows);
-        }
-      }
-      sectionWrapper.appendChild(rowsList);
-      snapshotsList.appendChild(sectionWrapper);
     }
 
     // A just-taken snapshot lands at the top of a long list — bring it
     // into view so the flash is not wasted off-screen.
     if (highlighted) {
-      snapshotsList.querySelector('.snapshot-item.is-new')?.scrollIntoView({
+      snapshotsList.querySelector('.snap-item.is-new')?.scrollIntoView({
         block: 'nearest',
         behavior: 'smooth',
       });
@@ -1328,7 +1305,7 @@ export class SnapshotsManager {
     const searchMeta = document.getElementById('snapshotSearchMeta');
     if (searchMeta) {
       searchMeta.textContent = filtering
-        ? `${rows.length} ${rows.length === 1 ? 'result' : 'results'}`
+        ? `${rows.length} ${rows.length === 1 ? 'hit' : 'hits'}`
         : '';
       searchMeta.toggleAttribute('hidden', !filtering);
     }
@@ -1336,124 +1313,220 @@ export class SnapshotsManager {
     clearBtn?.toggleAttribute('hidden', !filtering);
     // The "/" hint retires while a query runs — the × and the count own
     // the field's trailing edge then.
-    document.querySelector('.snapshots-search-wrap')?.classList.toggle('has-query', filtering);
+    document.querySelector('.snap-search')?.classList.toggle('has-query', filtering);
 
     // The footer tells the truth about what is on stage: the filtered
-    // count while a query runs ('12 results'), the store's size against
-    // its cap otherwise ('7 of 200') — never the total under a query
-    // that hides most of it.
+    // count against the whole store while a query runs, the store's size
+    // against its cap otherwise.
     const countElement = document.getElementById('snapshotsCount');
-    const capElement = document.querySelector('#snapshotsModal .snapshots-cap');
     if (countElement) {
-      countElement.textContent = String(filtering ? rows.length : this.cache.length);
-    }
-    if (capElement) {
-      capElement.textContent = filtering
-        ? rows.length === 1
-          ? 'result'
-          : 'results'
-        : `of ${MAX_SNAPSHOTS}`;
+      countElement.textContent = filtering
+        ? `${rows.length} of ${this.cache.length}`
+        : `${this.cache.length} of ${MAX_SNAPSHOTS}`;
     }
   }
 
-  // Create a snapshot element for the UI — the timeline row. The main
-  // area is a real button (expand/collapse); the side column carries the
-  // clock, the version's change badge and the actions, revealed on hover
-  // (always on touch). The expand panel spans below both. Under an
-  // active query, the title and preview carry the highlighted matches.
-  createSnapshotElement(
+  // Build one timeline entry — a button row (clock + rail dot + the
+  // version's headline) over an in-place detail card. The row expands;
+  // the card owns the actions: Restore (one click), Copy, and Delete
+  // (two-step inline confirm). Under an active query, the title and
+  // preview carry the highlighted matches.
+  createTimelineItem(
     snapshot: Snapshot,
     change?: SnapshotChangeBadge,
     highlightTerm?: string,
   ): HTMLLIElement {
     const li = document.createElement('li');
-    li.className = 'snapshot-item';
+    li.className = 'snap-item';
     li.dataset.snapshotId = String(snapshot.id ?? '');
 
     // The source note's NAME — the identity a mixed timeline owes the
     // reader. Unnamed notes store nothing (their first line IS their
-    // label, which the title already shows); a name that merely repeats
-    // the title adds noise, not identity. (The note TYPE has no row chip:
-    // rows sit inside their type's section, whose header already says it.)
+    // label, which the name line already shows); a name that merely
+    // repeats the title adds noise, not identity.
     const noteChip =
       snapshot.noteName && snapshot.noteName !== snapshot.title
-        ? `<span class="snapshot-note" title="The note this snapshot belongs to">${this.escapeHtml(snapshot.noteName)}</span>`
+        ? `<span class="snap-note" title="From the note \u201c${this.escapeHtml(snapshot.noteName)}\u201d">${this.escapeHtml(snapshot.noteName)}</span>`
         : '';
 
-    // The expandable panel's text — the readable projection, capped so a
-    // giant note cannot turn the row into a wall.
+    // The detail card's text — the readable projection, capped so a
+    // giant note cannot turn the card into a wall.
     const readable = snapshotReadableText(snapshot.content, snapshot.noteType).trim();
     const expandText =
       readable.length > SNAPSHOT_EXPAND_CAP
         ? `${readable.slice(0, SNAPSHOT_EXPAND_CAP)}\u2026`
         : readable;
-    const expandId = `snapshot-expand-${snapshot.id ?? 'x'}`;
+    const detailId = `snapshot-detail-${snapshot.id ?? 'x'}`;
 
     // The version's diffstat — what changed since the previous snapshot
     // of this note. A note's first snapshot carries nothing (it is the
     // baseline); a rewording that keeps the count carries an honest ±0.
     const delta = change
-      ? `<span class="snapshot-delta ${change.delta > 0 ? 'is-up' : change.delta < 0 ? 'is-down' : 'is-flat'}" title="Change since the previous snapshot of this note">${change.delta > 0 ? '+' : change.delta < 0 ? '\u2212' : '\u00b1'}${Math.abs(change.delta)} ${this.escapeHtml(change.unit)}</span>`
+      ? `<span class="snap-delta ${change.delta > 0 ? 'is-up' : change.delta < 0 ? 'is-down' : 'is-flat'}" title="Change since the previous snapshot of this note">${change.delta > 0 ? '+' : change.delta < 0 ? '\u2212' : '\u00b1'}${Math.abs(change.delta)} ${this.escapeHtml(change.unit)}</span>`
       : '';
 
     const titleHtml = highlightTerm
       ? highlightMatches(snapshot.title, highlightTerm)
       : this.escapeHtml(snapshot.title);
+
+    // The preview usually opens with the note's own first line — the
+    // title the row already shows. The echo spends the row's one
+    // preview line saying the same thing twice; strip the title (and
+    // the markup glue before it) so the line starts at NEW text. A
+    // preview that is entirely its title collapses away.
+    const previewForDisplay = ((): string => {
+      const raw = snapshot.preview.trimStart();
+      const cleaned = raw.replace(/^[#>\-*•\s]+/, '');
+      const title = snapshot.title.trim();
+      if (title && cleaned.toLowerCase().startsWith(title.toLowerCase())) {
+        const rest = cleaned
+          .slice(title.length)
+          .replace(/^[\s:：\-–—•*]+/, '')
+          .trimStart();
+        return rest;
+      }
+      return raw;
+    })();
     const previewHtml = highlightTerm
-      ? highlightMatches(snapshot.preview, highlightTerm)
-      : this.escapeHtml(snapshot.preview);
+      ? highlightMatches(previewForDisplay, highlightTerm)
+      : this.escapeHtml(previewForDisplay);
+
+    // Where restore sends this version — the card says the target's
+    // name before the click, not a dialog's after it.
+    const manager = getTabManager();
+    const source = snapshot.noteId
+      ? manager?.allTabs.find((tab) => tab.id === snapshot.noteId)
+      : undefined;
+    const resurrect = !snapshot.noteId ? false : !source;
+    const targetName =
+      snapshot.noteName ||
+      snapshot.title ||
+      deriveSnapshotTitle(snapshot.content, snapshot.noteType);
+    const restoreHint = resurrect
+      ? `Recreates \u201c${this.escapeHtml(targetName)}\u201d as its own note \u2014 your current text is saved first.`
+      : `Restores into \u201c${this.escapeHtml(targetName)}\u201d \u2014 your current text is saved first.`;
 
     li.innerHTML = `
-            <button type="button" class="snapshot-main" aria-expanded="false" aria-controls="${expandId}" title="Show this snapshot's text">
-                <span class="snapshot-body">
-                    <span class="snapshot-headline">
-                        <span class="snapshot-title" title="${this.escapeHtml(snapshot.title)}">${titleHtml}</span>
+            <button type="button" class="snap-row" aria-expanded="false" aria-controls="${detailId}" title="Show this version">
+                <span class="snap-when" title="${this.escapeHtml(formatSnapshotTimestamp(snapshot.timestamp))}">${this.escapeHtml(formatSnapshotClock(snapshot.timestamp))}</span>
+                <span class="snap-rail" aria-hidden="true"></span>
+                <span class="snap-what">
+                    <span class="snap-line">
+                        <span class="snap-name" title="${this.escapeHtml(snapshot.title)}">${titleHtml}</span>
                         ${noteChip}
-                        <span class="snapshot-current" title="Identical to the note you have open"><span class="snapshot-current-dot" aria-hidden="true"></span>Current</span>
+                        <span class="snap-current" title="Identical to the note you have open"><span class="snap-current-dot" aria-hidden="true"></span>Current</span>
                     </span>
-                    <span class="snapshot-preview" title="${this.escapeHtml(snapshot.preview)}">${previewHtml}</span>
-                </span>
-                <svg class="snapshot-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
-            </button>
-            <div class="snapshot-side">
-                <span class="snapshot-when">
-                    <span class="snapshot-date" title="${this.escapeHtml(formatSnapshotTimestamp(snapshot.timestamp))}">${this.escapeHtml(formatSnapshotClock(snapshot.timestamp))}</span>
+                    <span class="snap-preview" title="${this.escapeHtml(previewForDisplay)}">${previewHtml}</span>
                     ${delta}
                 </span>
-                <span class="snapshot-actions">
-                    <button type="button" class="snapshot-btn restore" title="Restore this snapshot" aria-label="Restore this snapshot">Restore</button>
-                    <button type="button" class="snapshot-btn copy" title="Copy snapshot content" aria-label="Copy snapshot content">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            </button>
+            <div class="snap-detail" id="${detailId}" role="region" aria-label="Snapshot details" hidden>
+                <div class="snap-detail-text">${this.escapeHtml(expandText) || 'No content'}</div>
+                <div class="snap-detail-meta">
+                    <span>${this.escapeHtml(formatSnapshotTimestamp(snapshot.timestamp))}</span>
+                    <span class="snap-detail-sep" aria-hidden="true">\u00b7</span>
+                    <span>${this.escapeHtml(snapshotTypeBadgeLabel(snapshot.noteType ?? 'standard'))}</span>
+                </div>
+                <div class="snap-detail-actions">
+                    <button type="button" class="snap-act restore">Restore</button>
+                    <button type="button" class="snap-act copy" title="Copy content" aria-label="Copy snapshot content">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                     </button>
-                    <span class="snapshot-actions-sep" aria-hidden="true"></span>
-                    <button type="button" class="snapshot-btn delete" title="Delete this snapshot" aria-label="Delete this snapshot">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11V17"></path><path d="M14 11V17"></path><path d="M4 7H20"></path><path d="M6 7H12H18V18C18 19.6569 16.6569 21 15 21H9C7.34315 21 6 19.6569 6 18V7Z"></path><path d="M9 5C9 3.89543 9.89543 3 11 3H13C14.1046 3 15 3.89543 15 5V7H9V5Z"></path></svg>
+                    <span class="snap-detail-spacer" aria-hidden="true"></span>
+                    <button type="button" class="snap-act delete" title="Delete this snapshot">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11V17"></path><path d="M14 11V17"></path><path d="M4 7H20"></path><path d="M6 7H12H18V18C18 19.6569 16.6569 21 15 21H9C7.34315 21 6 19.6569 6 18V7Z"></path><path d="M9 5C9 3.89543 9.89543 3 11 3H13C14.1046 3 15 3.89543 15 5V7H9V5Z"></path></svg>
+                        <span class="snap-act-delete-label">Delete</span>
                     </button>
-                </span>
-            </div>
-            <div class="snapshot-expand" id="${expandId}" hidden>
-                <div class="snapshot-expand-text">${this.escapeHtml(expandText) || 'No content'}</div>
+                </div>
+                <p class="snap-detail-hint">${restoreHint}</p>
             </div>
         `;
 
-    // The row's main button expands the readable text.
-    const mainBtn = li.querySelector<HTMLElement>('.snapshot-main')!;
-    mainBtn.addEventListener('click', () => {
-      const open = li.classList.toggle('is-open');
-      mainBtn.setAttribute('aria-expanded', String(open));
-      li.querySelector('.snapshot-expand')?.toggleAttribute('hidden', !open);
+    // The row's button expands the detail card — accordion style: one
+    // open entry at a time keeps the sheet tidy and the rail readable.
+    const rowBtn = li.querySelector<HTMLElement>('.snap-row')!;
+    rowBtn.addEventListener('click', () => {
+      const wasOpen = li.classList.contains('is-open');
+      document
+        .getElementById('snapshotsList')
+        ?.querySelectorAll('.snap-item.is-open')
+        .forEach((other) => {
+          if (other !== li) {
+            other.classList.remove('is-open');
+            other.querySelector('.snap-row')?.setAttribute('aria-expanded', 'false');
+            other.querySelector('.snap-detail')?.setAttribute('hidden', '');
+          }
+        });
+      const open = !wasOpen;
+      li.classList.toggle('is-open', open);
+      rowBtn.setAttribute('aria-expanded', String(open));
+      li.querySelector('.snap-detail')?.toggleAttribute('hidden', !open);
     });
 
-    // Add event listeners
+    // Actions
     const restoreBtn = li.querySelector('.restore')!;
     const copyBtn = li.querySelector('.copy')!;
-    const deleteBtn = li.querySelector('.delete')!;
+    const deleteBtn = li.querySelector<HTMLElement>('.delete')!;
 
+    // Restore needs no dialog: the pre-restore safety copy is the undo
+    // path, so one click applies and the list re-renders with feedback.
     restoreBtn.addEventListener('click', () => this.restoreSnapshot(snapshot.id));
     copyBtn.addEventListener('click', () => this.copySnapshot(snapshot.id, copyBtn));
-    deleteBtn.addEventListener('click', () => this.deleteSnapshot(snapshot.id));
+
+    // Delete — arm, then confirm, on the button itself. A legacy row
+    // with no store id cannot be armed (there is nothing to key the
+    // armed state on) — it deletes on the confirming second press of
+    // the arm path only, so here it goes straight through.
+    deleteBtn.addEventListener('click', () => {
+      if (snapshot.id === undefined) {
+        this.deleteSnapshot(snapshot.id);
+        return;
+      }
+      if (this.armedDeleteId !== null && this.armedDeleteId !== snapshot.id) {
+        this.disarmDelete();
+      }
+      if (this.armedDeleteId === snapshot.id) {
+        this.disarmDelete();
+        this.deleteSnapshot(snapshot.id);
+        return;
+      }
+      this.armDelete(snapshot.id, deleteBtn);
+    });
 
     return li;
+  }
+
+  /** Arms a row-delete button: the label swaps to "Confirm", the button
+   *  turns danger, and a few seconds of silence disarms it. One armed
+   *  delete at a time — arming another row disarms this one. */
+  private armDelete(id: number, button: HTMLElement): void {
+    this.disarmDelete();
+    this.armedDeleteId = id;
+    button.classList.add('is-armed');
+    const label = button.querySelector('.snap-act-delete-label');
+    if (label) {
+      label.textContent = 'Confirm';
+    }
+    this.armedDeleteTimer = window.setTimeout(() => this.disarmDelete(), 4000);
+  }
+
+  /** Returns a delete button to its quiet state (idempotent). */
+  private disarmDelete(): void {
+    if (this.armedDeleteTimer !== null) {
+      window.clearTimeout(this.armedDeleteTimer);
+      this.armedDeleteTimer = null;
+    }
+    if (this.armedDeleteId === null) {
+      return;
+    }
+    this.armedDeleteId = null;
+    document.querySelectorAll('.snap-act.delete.is-armed').forEach((button) => {
+      button.classList.remove('is-armed');
+      const label = button.querySelector('.snap-act-delete-label');
+      if (label) {
+        label.textContent = 'Delete';
+      }
+    });
   }
 
   // Restore a snapshot — into THE NOTE IT CAME FROM.
@@ -1467,6 +1540,11 @@ export class SnapshotsManager {
   // A restore must never overwrite an unrelated note just because it
   // happened to be the one on screen — that was the old behavior, and
   // it ate notes.
+  //
+  // There is NO confirmation dialog: the safety copy taken right before
+  // the apply preserves whatever the target held, so the destructive
+  // part is undoable by construction and the ask would be theater. The
+  // detail card already named the target before the click.
   restoreSnapshot(snapshotId: number | undefined): void {
     if (snapshotId === undefined || !this.db) {
       return;
@@ -1495,53 +1573,11 @@ export class SnapshotsManager {
       const legacy = !snapshot.noteId;
       // A recorded note that no longer exists — restore resurrects it.
       const resurrect = legacy ? false : !source;
-      // What the target holds right now. A background tab's model is the
-      // truth (edits flush to the model when a note leaves the stage);
-      // the live note reads through its surface (keystrokes inside the
-      // debounce window count). A resurrection targets a note that does
-      // not exist yet — there is nothing to ask about.
-      const active = manager.getActive();
-      const targetContent = source
-        ? source.id === active?.id
-          ? getActiveNoteContent()
-          : { content: source.content, noteType: source.noteType }
-        : legacy
-          ? getActiveNoteContent()
-          : null;
-      const replaces =
-        targetContent !== null &&
-        snapshotHasContent(targetContent.content, targetContent.noteType) &&
-        !isSameSnapshotState(targetContent, snapshotState);
 
-      // 2. Ask before overwriting a note that holds something else. A
-      //    declined ask leaves everything exactly as it was — no tab
-      //    switch, no write. The dialog names the TARGET — its recorded
-      //    name when it has one, else the snapshot's own title (the
-      //    note's first line) — never the blank "this note".
-      if (replaces) {
-        const targetName =
-          source?.name ||
-          snapshot.noteName ||
-          active?.name ||
-          deriveSnapshotTitle(snapshot.content, snapshot.noteType) ||
-          'this note';
-        const result = await Swal.fire({
-          title: 'Restore this snapshot?',
-          text: `"${targetName}" will be replaced with this version. Its current text is saved as a snapshot first.`,
-          icon: 'warning',
-          showCancelButton: true,
-          confirmButtonText: 'Yes, Restore!',
-          cancelButtonText: 'No, leave it.',
-        });
-        if (!result.value) {
-          return;
-        }
-      }
-
-      // 3. Bring the target on stage — both restore seams (the safety
+      // 2. Bring the target on stage — both restore seams (the safety
       //    copy and applySnapshotToActive) speak "active note". A
-      //    resurrected note is born empty: nothing to lose, nothing to
-      //    ask.
+      //    resurrected note is born empty: nothing to lose.
+      const active = manager.getActive();
       if (source && source.id !== active?.id) {
         manager.switchTo(source.id, false);
       }
@@ -1558,10 +1594,9 @@ export class SnapshotsManager {
         manager.switchTo(revived.id, false);
       }
 
-      // 4. Safety copy of what the target holds RIGHT NOW (post-switch
-      //    truth), attributed to the target note: restoring is the one
-      //    destructive path whose confirm dialog was the sole
-      //    protection — undo history resets on the wholesale replace.
+      // 3. Safety copy of what the target holds RIGHT NOW (post-switch
+      //    truth), attributed to the target note: this copy IS the undo
+      //    path that makes the restore safe without a confirm dialog.
       //    Declines (empty / identical) are silent — an identical
       //    existing snapshot already satisfies the promise.
       const preRestore = getActiveNoteContent();
@@ -1585,11 +1620,11 @@ export class SnapshotsManager {
             targetTab?.name ?? undefined,
           );
         } catch {
-          /* the restore still proceeds — the confirm already happened */
+          /* the restore still proceeds — the safety copy is best-effort */
         }
       }
 
-      // 5. The one restore path: it moves the note's type with the
+      // 4. The one restore path: it moves the note's type with the
       //    content and re-announces the active note so the chrome
       //    (toolbar, editor port, tab badge) follows the restored kind.
       //    Old snapshots hold plain text on the html path — the editor
@@ -1605,9 +1640,9 @@ export class SnapshotsManager {
 
       // The menu STAYS OPEN — the restore is mid-conversation, not the
       // end of one: the next version to compare (or restore) is right
-      // there, and the row that now matches the note picks up the
-      // Current chip as direct feedback for what just happened. Closing
-      // is the user's move (Escape, the close button, the backdrop).
+      // there, the row that now matches the note picks up the Current
+      // chip as direct feedback, and the pre-restore copy lands on top
+      // with its flash. Closing is the user's move.
       this.pendingHighlightId = null;
       void this.loadSnapshots(this.currentSearchTerm());
     };
@@ -1667,39 +1702,64 @@ export class SnapshotsManager {
     }, 700);
   }
 
-  // Delete a snapshot
+  // Delete a snapshot — the confirm lives on the BUTTON (arm, then
+  // confirm), so this method is only the commit: no dialog stacks over
+  // the sheet.
   deleteSnapshot(snapshotId: number | undefined): void {
-    if (snapshotId === undefined) {
+    if (snapshotId === undefined || !this.db) {
       return;
     }
-    Swal.fire({
-      title: 'Want to delete this snapshot?',
-      text: "You won't be able to revert this!",
-      icon: 'warning',
-      showCancelButton: true,
-      customClass: {
-        confirmButton: 'swal-btn-danger',
-      },
-      confirmButtonText: 'Yes, Delete!',
-      cancelButtonText: 'No, keep it.',
-    }).then((result) => {
-      if (result.value) {
-        if (!this.db) return;
-        const transaction = this.db.transaction([this.storeName], 'readwrite');
-        const store = transaction.objectStore(this.storeName);
-        const request = store.delete(snapshotId);
+    const transaction = this.db.transaction([this.storeName], 'readwrite');
+    const store = transaction.objectStore(this.storeName);
+    const request = store.delete(snapshotId);
 
-        request.onsuccess = () => {
-          void this.loadSnapshots(this.currentSearchTerm());
-          void this.updateSnapshotsCount();
-        };
+    request.onsuccess = () => {
+      void this.loadSnapshots(this.currentSearchTerm());
+      void this.updateSnapshotsCount();
+    };
 
-        request.onerror = (event) => {
-          console.error('Error deleting snapshot', event);
-          showToast('Error deleting snapshot');
-        };
+    request.onerror = (event) => {
+      console.error('Error deleting snapshot', event);
+      showToast('Error deleting snapshot');
+    };
+  }
+
+  /** The footer's Delete all — same two-step contract as the row
+   *  delete: the first click arms the button (its label becomes "Really
+   *  delete all?"), the second commits. Silence or a click elsewhere
+   *  disarms it. */
+  private armDeleteAll(): void {
+    const button = document.getElementById('deleteAllSnapshotsBtn');
+    if (!button) {
+      return;
+    }
+    this.deleteAllArmed = true;
+    button.classList.add('is-armed');
+    const label = button.querySelector('.snap-delete-all-label');
+    if (label) {
+      label.textContent = 'Really delete all?';
+    }
+    this.deleteAllTimer = window.setTimeout(() => this.disarmDeleteAll(), 4000);
+  }
+
+  /** Returns the footer button to its quiet state (idempotent). */
+  private disarmDeleteAll(): void {
+    if (this.deleteAllTimer !== null) {
+      window.clearTimeout(this.deleteAllTimer);
+      this.deleteAllTimer = null;
+    }
+    if (!this.deleteAllArmed) {
+      return;
+    }
+    this.deleteAllArmed = false;
+    const button = document.getElementById('deleteAllSnapshotsBtn');
+    if (button) {
+      button.classList.remove('is-armed');
+      const label = button.querySelector('.snap-delete-all-label');
+      if (label) {
+        label.textContent = 'Delete all';
       }
-    });
+    }
   }
 
   // Delete all snapshots
@@ -1711,12 +1771,14 @@ export class SnapshotsManager {
     const request = store.clear();
 
     request.onsuccess = () => {
+      this.disarmDeleteAll();
       void this.loadSnapshots(this.currentSearchTerm());
       void this.updateSnapshotsCount();
     };
 
     request.onerror = (event) => {
       console.error('Error deleting all snapshots', event);
+      this.disarmDeleteAll();
       showToast('Error deleting snapshots');
     };
   }

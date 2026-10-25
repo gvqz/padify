@@ -1,14 +1,25 @@
-<!-- Snapshots Modal — safety copies of notes; see src/snapshots.ts -->
-<div id="snapshotsModal" class="modal fade" role="dialog" aria-labelledby="snapshotsTitle">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <div class="pref-header-copy">
-          <span class="pref-eyebrow">Padify</span>
-          <h4 class="modal-title custom-modal-title" id="snapshotsTitle">Snapshots</h4>
-          <p class="pref-subtitle">Safety copies of your notes — restore any version.</p>
+<!-- Snapshots — the History sheet. A right-side timeline of safety
+     copies; structure and rendering live in src/snapshots.ts, styles in
+     public/css/vercel/11-snapshots.css.
+
+     One continuous chronology — no type sections, no folding: time is
+     the only axis and each day anchors its own run of the rail. Rows
+     expand in place into a detail card that owns the actions (restore,
+     copy, delete); nothing here opens a second dialog. -->
+<div
+  id="snapshotsModal"
+  class="modal fade snapshots-sheet-host"
+  role="dialog"
+  aria-labelledby="snapshotsTitle"
+>
+  <div class="modal-dialog snapshots-sheet">
+    <div class="modal-content snapshots-content">
+      <header class="snap-head">
+        <div class="snap-head-copy">
+          <h2 class="snap-title" id="snapshotsTitle">History</h2>
+          <p class="snap-subtitle">Safety copies of your notes — restore any version.</p>
         </div>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close snapshots">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close history">
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -21,151 +32,146 @@
             <path d="M6 6l12 12M18 6L6 18" />
           </svg>
         </button>
-      </div>
-      <div class="modal-body snapshots-body">
-        <!-- The toolbar is pinned — only the list below it scrolls. -->
-        <div class="snapshots-toolbar">
-          <button id="createSnapshotBtn" class="btn btn-primary snapshots-take-btn">
+      </header>
+
+      <!-- Pinned toolbar: the filter and the one primary action. -->
+      <div class="snap-toolbar">
+        <div class="snap-search">
+          <svg
+            class="snap-search-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+          </svg>
+          <input
+            type="text"
+            id="searchSnapshots"
+            class="snap-search-input"
+            placeholder="Filter snapshots..."
+            aria-label="Filter snapshots"
+          />
+          <span id="snapshotSearchMeta" class="snap-search-meta" hidden></span>
+          <button
+            type="button"
+            id="clearSnapshotSearch"
+            class="snap-search-clear"
+            aria-label="Clear filter"
+            hidden
+          >
             <svg
-              width="16"
-              height="16"
+              width="12"
+              height="12"
               viewBox="0 0 24 24"
               fill="none"
-              xmlns="http://www.w3.org/2000/svg"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linecap="round"
               aria-hidden="true"
             >
-              <path
-                d="M12 5V19M5 12H19"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-              />
+              <path d="M6 6l12 12M18 6L6 18" />
             </svg>
-            Take snapshot
-            <span class="snapshots-kbd-hint"><kbd data-mod-key>Ctrl</kbd><kbd>U</kbd></span>
           </button>
-          <div class="shortcut-search-wrap snapshots-search-wrap">
-            <svg
-              class="shortcut-search-icon"
-              viewBox="0 0 24 24"
-              fill="none"
+          <span class="snap-search-slash" aria-hidden="true"><kbd>/</kbd></span>
+        </div>
+        <button id="createSnapshotBtn" class="snap-take" type="button">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 5V19M5 12H19"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+          Take snapshot
+          <span class="snap-kbd"><kbd data-mod-key>Ctrl</kbd><kbd>U</kbd></span>
+        </button>
+      </div>
+
+      <!-- The one scroller: day-anchored timeline, or the empty state. -->
+      <div class="snap-scroll">
+        <div id="noSnapshots" class="snap-empty">
+          <svg
+            width="40"
+            height="40"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <path
+              d="M3 12a9 9 0 1 0 3-6.7L3 8"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M3 3v5h5"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M12 7v5l3 2"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <p id="noSnapshotsEmpty">No snapshots yet.</p>
+          <p class="snap-empty-hint" id="noSnapshotsHint">
+            Take one with the button above, or
+            <span class="snap-kbd-inline"><kbd data-mod-key>Ctrl</kbd> + <kbd>U</kbd></span
+            >.
+          </p>
+          <p id="noSnapshotsMiss" hidden>No snapshots match.</p>
+          <button type="button" id="clearSearchFromEmpty" class="snap-clear-miss" hidden>
+            Clear the filter
+          </button>
+        </div>
+        <ol id="snapshotsList" class="snap-timeline">
+          <!-- Day runs of timeline entries render here -->
+        </ol>
+      </div>
+
+      <footer class="snap-foot">
+        <span id="snapshotsCount" class="snap-foot-count">0</span>
+        <button id="deleteAllSnapshotsBtn" class="snap-delete-all" type="button" disabled>
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <path
+              d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94208 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20"
               stroke="currentColor"
               stroke-width="2"
               stroke-linecap="round"
               stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="11" cy="11" r="8"></circle>
-              <path d="m21 21-4.35-4.35"></path>
-            </svg>
-            <input
-              type="text"
-              id="searchSnapshots"
-              class="shortcut-search-input"
-              placeholder="Search snapshots..."
-              aria-label="Search snapshots"
             />
-            <span id="snapshotSearchMeta" class="snapshots-search-meta" hidden></span>
-            <button
-              type="button"
-              id="clearSnapshotSearch"
-              class="snapshots-search-clear"
-              aria-label="Clear search"
-              hidden
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.4"
-                stroke-linecap="round"
-                aria-hidden="true"
-              >
-                <path d="M6 6l12 12M18 6L6 18" />
-              </svg>
-            </button>
-            <span class="snapshots-search-slash" aria-hidden="true"><kbd>/</kbd></span>
-          </div>
-        </div>
-        <!-- The scroll area — day-grouped timeline of snapshot rows. -->
-        <div class="snapshots-list-container">
-          <div id="noSnapshots" class="no-snapshots">
-            <svg
-              width="44"
-              height="44"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              aria-hidden="true"
-            >
-              <path
-                d="M3 12a9 9 0 1 0 3-6.7L3 8"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <path
-                d="M3 3v5h5"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <path
-                d="M12 7v5l3 2"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            <p id="noSnapshotsEmpty">No snapshots yet.</p>
-            <p class="no-snapshots-hint" id="noSnapshotsHint">
-              Take one with the button above, or
-              <span class="snapshots-kbd-inline"><kbd data-mod-key>Ctrl</kbd> + <kbd>U</kbd></span
-              >.
-            </p>
-            <p id="noSnapshotsMiss" hidden>No matching snapshots.</p>
-            <button type="button" id="clearSearchFromEmpty" class="btn snapshots-clear-miss" hidden>
-              Clear search
-            </button>
-          </div>
-          <ul id="snapshotsList" class="snapshots-list">
-            <!-- Snapshots will be populated here -->
-          </ul>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <div class="snapshots-stats">
-          <span id="snapshotsCount">0</span><span class="snapshots-cap">of 200</span>
-        </div>
-        <div class="snapshots-actions delete-all-container">
-          <button id="deleteAllSnapshotsBtn" class="btn snapshots-delete-all" disabled>
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              aria-hidden="true"
-            >
-              <path
-                d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94208 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            Delete all
-          </button>
-          <span class="snapshots-footer-sep" aria-hidden="true"></span>
-          <button type="button" class="btn snapshots-close" data-dismiss="modal">Close</button>
-        </div>
-      </div>
+          </svg>
+          <span class="snap-delete-all-label">Delete all</span>
+        </button>
+      </footer>
     </div>
   </div>
 </div>

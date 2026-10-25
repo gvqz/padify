@@ -1,949 +1,857 @@
-/* vercel design system — part 11/17: Snapshots — the typed timeline.
+/* vercel design system — part 11/17: Snapshots — the History sheet.
    Split from the former vercel.css (cascade order preserved —
    index.html loads these files in numeric order, last in the
    stylesheet chain, exactly where the monolith sat).
 
-   The list is sectioned by note type (registry order, counts in the
-   header, each section folds); inside a section, rows group under
-   quiet day rules (Today / Yesterday / the date) only when the
-   section's history spans beyond today, each row an expandable card —
-   title + note chip + Current chip, one line of preview, and on the
-   right the clock, the version's change badge and the actions (the
-   destructive pair stays hidden until the row is approached — always
-   on touch). The toolbar stays pinned while only the list scrolls,
-   and the list FILLS the dialog instead of guessing its height from
-   the viewport. Every color comes from the token aliases; dark mode
-   needs no rules of its own here. */
+   A COMPLETE restart of the snapshots UI — not a reskin of the old
+   centered dialog:
+
+     • THE CONTAINER — a right-side sheet, edge-attached, full height.
+       A history is something you consult BESIDE your note, not a
+       dialog that blocks it. It slides in from the right (the same
+       .modal lifecycle as every other popup: Escape, backdrop click,
+       focus restore all keep working); on a phone it becomes the
+       whole screen.
+
+     • THE STRUCTURE — one continuous timeline. Note type organizes
+       nothing (the old typed sections made time jump backwards
+       between groups — that is why the menu felt broken). Time is the
+       only axis: a rail with a dot per version, anchored under day
+       labels (Today / Yesterday / the date). The rail's line breaks
+       only at day boundaries.
+
+     • THE ENTRY — clock on the left (the anchor, tabular), the
+       version's name + note chip + Current chip, one line of preview,
+       the change badge. Clicking expands IN PLACE into a detail card
+       holding the readable text, the full date and type, and the
+       actions — nothing here opens a second dialog. Restore is one
+       click (the pre-restore safety copy is the undo path); delete is
+       a two-step arm on the button itself.
+
+   Every color comes from the token aliases — dark mode needs no rules
+   of its own here. */
 /* --------------------------------------------------------------------------
-   11. Snapshots — the typed timeline menu
+   11. Snapshots — the History sheet
    -------------------------------------------------------------------------- */
 
-#snapshotsModal .modal-dialog {
-  max-width: 800px;
+/* ---- the sheet frame ------------------------------------------------------ */
+
+/* The host covers the viewport and catches backdrop clicks; the sheet
+   hangs off its right edge. No host scroll — the sheet owns 100% of
+   the height and scrolls internally. */
+#snapshotsModal {
+  padding: 0 !important;
+  overflow: hidden;
 }
 
-/* The dialog is a flex column with a hard ceiling: the header and the
-   toolbar stay on stage at every height, and the list below is the ONE
-   scroller — sized by the space that is actually left, never by a
-   viewport-height guess that strands dead space under the rows. */
-#snapshotsModal .modal-content {
+#snapshotsModal .modal-dialog.snapshots-sheet {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  width: min(460px, 100vw);
+  max-width: 100vw;
+  height: 100%;
+  height: 100dvh;
+  margin: 0;
+  border-radius: 0;
+}
+
+/* Slide in from the right — the host's other dialogs rise and settle;
+   a sheet that reads as a sheet moves along its edge. */
+.modal.fade#snapshotsModal .modal-dialog.snapshots-sheet {
+  transform: translateX(56px);
+  opacity: 0;
+  transition: transform 240ms var(--vz-ease), opacity 180ms var(--vz-ease);
+}
+
+.modal.in#snapshotsModal .modal-dialog.snapshots-sheet {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+#snapshotsModal .modal-content.snapshots-content {
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 48px);
+  height: 100%;
+  max-height: none;
+  border: none;
+  border-left: 1px solid var(--vz-border);
+  border-radius: 0 !important;
+  box-shadow: var(--vz-shadow-dialog);
+  overflow: hidden;
 }
 
-#snapshotsModal .modal-header {
+/* ---- header ---------------------------------------------------------------- */
+
+.snap-head {
   flex: 0 0 auto;
-  padding: 18px 24px 12px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  padding: 18px 14px 12px 22px;
 }
 
-#snapshotsModal .custom-modal-title {
-  font-size: 20px;
+.snap-title {
+  margin: 0;
+  font-size: 16px;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--vz-fg);
 }
 
-/* Body — a flex column: toolbar pinned on top, the list area below is
-   the ONLY scroller (the old body-level scroll carried the toolbar away
-   with the rows). */
-#snapshotsModal .modal-body {
+.snap-subtitle {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--vz-fg-muted);
+}
+
+.snap-head .close {
+  flex: 0 0 auto;
+}
+
+/* ---- toolbar: filter + the one primary action ------------------------------ */
+
+.snap-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px 12px 22px;
+  border-bottom: 1px solid var(--vz-border);
+}
+
+.snap-search {
   flex: 1 1 auto;
-  min-height: 0;
-  padding: 4px 20px 16px;
-  display: flex;
-  flex-direction: column;
-  max-height: none;
-  overflow: visible;
-}
-
-/* Footer — count at the left, actions at the right */
-#snapshotsModal .modal-footer {
-  flex: 0 0 auto;
-  padding: 12px 24px 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-/* bootstrap 3's footer clearfix would sit inside the flex row */
-#snapshotsModal .modal-footer:before,
-#snapshotsModal .modal-footer:after {
-  content: '';
-  display: none;
-}
-
-/* Toolbar — take button + search side by side, pinned above the scroller */
-.snapshots-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 8px 0 12px;
-  flex: 0 0 auto;
-}
-
-.snapshots-take-btn {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 7px;
-  font-weight: 500;
-  padding: 7px 12px;
+  height: 32px;
+  padding: 0 8px;
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius);
-  flex: 0 0 auto;
+  transition: border-color var(--vz-dur) ease, box-shadow var(--vz-dur) ease;
 }
 
-/* Keycap pair riding inside the take button — same keycap recipe as the
-   shortcuts reference, scoped here because that one is modal-scoped. */
-.snapshots-kbd-hint {
+.snap-search:focus-within {
+  border-color: var(--vz-border-strong);
+  box-shadow: 0 0 0 3px var(--vz-bg-hover);
+}
+
+.snap-search-icon {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  color: var(--vz-fg-subtle);
+}
+
+.snap-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--vz-fg);
+}
+
+.snap-search-input::placeholder {
+  color: var(--vz-fg-subtle);
+}
+
+.snap-search-meta {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  color: var(--vz-fg-subtle);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.snap-search-clear {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vz-fg-muted);
+  cursor: pointer;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+.snap-search-clear:hover,
+.snap-search-clear:focus-visible {
+  color: var(--vz-fg);
+  background: var(--vz-bg-hover);
+}
+
+/* The hidden attribute must always win over this class's display rule
+   — the × only exists while a query does. */
+.snap-search-clear[hidden] {
+  display: none;
+}
+
+.snap-search-slash {
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+
+.snap-search.has-query .snap-search-slash {
+  display: none;
+}
+
+.snap-kbd kbd,
+.snap-search-slash kbd,
+.snap-kbd-inline kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-chip);
+  border: 1px solid var(--vz-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+}
+
+.snap-kbd {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  margin-left: 4px;
-  opacity: 0.75;
+  margin-left: 3px;
+  opacity: 0.72;
 }
 
-.snapshots-kbd-hint kbd,
-.snapshots-kbd-inline kbd,
-.snapshots-search-slash kbd {
+.snap-take {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
-  font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--vz-fg);
-  background: var(--vz-bg-subtle);
-  border: 1px solid var(--vz-border-strong);
-  border-radius: 4px;
-  box-shadow: 0 1.5px 0 var(--vz-border-strong);
-  line-height: 1;
-}
-
-.snapshots-search-wrap {
-  margin-bottom: 0;
-  flex: 1 1 200px;
-  max-width: 360px;
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-}
-
-/* 34px to meet the take button; the shortcuts modal keeps its taller 38px */
-#snapshotsModal .shortcut-search-input {
-  height: 34px;
-  padding-right: 64px;
-}
-
-/* The field's trailing chrome — result count, clear button, and the "/"
-   hint that teaches the shortcut. All three live INSIDE the field so the
-   count sits next to the text it describes. */
-.snapshots-search-meta {
-  position: absolute;
-  right: 58px;
-  font-size: 10.5px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-  color: var(--vz-fg-subtle);
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--vz-primary);
+  border: 1px solid var(--vz-primary);
+  border-radius: var(--vz-radius);
+  color: var(--vz-primary-fg);
+  font-size: 12.5px;
+  font-weight: 500;
   white-space: nowrap;
-  pointer-events: none;
-}
-
-.snapshots-search-clear {
-  all: unset;
-  position: absolute;
-  right: 34px;
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  color: var(--vz-fg-subtle);
   cursor: pointer;
-  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease;
+  transition: background-color var(--vz-dur) ease, transform 100ms ease;
 }
 
-/* The author display value would out-weigh the UA's [hidden] styling —
-   the × must actually disappear on an empty field. */
-.snapshots-search-clear[hidden] {
-  display: none;
+.snap-take:hover,
+.snap-take:focus-visible {
+  background: var(--vz-primary-hover);
 }
 
-.snapshots-search-clear:hover {
-  color: var(--vz-fg);
-  background: var(--vz-bg-chip);
+.snap-take:active {
+  transform: scale(0.98);
 }
 
-.snapshots-search-clear:focus-visible {
-  outline: 2px solid var(--vz-fg);
-  outline-offset: 1px;
-}
+/* ---- the scroll area ------------------------------------------------------- */
 
-.snapshots-search-slash {
-  position: absolute;
-  right: 10px;
-  display: flex;
-  align-items: center;
-  pointer-events: none;
-  color: var(--vz-fg-subtle);
-}
-
-.snapshots-search-slash kbd {
-  min-width: 16px;
-  height: 16px;
-  font-size: 9.5px;
-  box-shadow: none;
-  opacity: 0.75;
-}
-
-/* With a query running, the count and the × take over the trailing edge
-   and the "/" hint retires — two affordances never share the space. */
-.snapshots-search-wrap.has-query .snapshots-search-slash {
-  display: none;
-}
-
-/* The scroll area — one bordered surface, a hairline inset tone away
-   from the dialog so rows sit in a well instead of floating on it. It
-   flexes to the space the dialog actually has. */
-.snapshots-list-container {
-  border: 1px solid var(--vz-border);
-  border-radius: var(--vz-radius-md);
-  background: var(--vz-bg);
+.snap-scroll {
   flex: 1 1 auto;
-  min-height: 180px;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  padding: 2px 18px 18px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vz-border) transparent;
 }
 
-.snapshots-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: none;
-}
-
-/* Type sections — the menu's spine: one foldable header per note kind,
-   registry order, the row count at the right. Each section is its own
-   list item (header button + nested rows list), so a header sticks
-   only while ITS section scrolls past — the next kind's header pushes
-   it away exactly when the rows it labels end. Solid background (not
-   translucent) so rows never show through. The fixed 42px height is
-   the offset the day headers stack underneath. */
-.snapshots-section {
-  display: block;
-}
-
-.snapshots-section:last-child .snapshot-item:last-child,
-.snapshots-section:last-child .snapshot-item:last-child .snapshot-expand {
-  border-bottom: none;
-}
-
-.snapshots-type {
-  all: unset;
-  box-sizing: border-box;
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  height: 42px;
-  padding: 0 16px;
-  background: var(--vz-bg-subtle);
-  border-bottom: 1px solid var(--vz-border);
-  color: var(--vz-fg);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  transition: background-color var(--vz-dur) ease, color var(--vz-dur) ease;
-}
-
-.snapshots-type:hover {
-  background: var(--vz-bg-chip);
-}
-
-.snapshots-type:focus-visible {
-  outline: 2px solid var(--vz-fg);
-  outline-offset: -2px;
-}
-
-.snapshots-type-icon {
-  display: flex;
-  align-items: center;
-  color: var(--vz-fg-muted);
-}
-
-/* The count — bare muted numerals, no pill: a number that follows a
-   label needs no box of its own, and one less border per section is
-   one less line the eye has to cross. */
-.snapshots-type-count {
-  margin-left: auto;
-  flex: 0 0 auto;
-  font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--vz-fg-subtle);
-}
-
-/* The fold's chevron — quiet until the header hovers; turns down while
-   the section is open (the row expander's convention, one language). */
-.snapshots-type-chevron {
-  flex: 0 0 auto;
-  color: var(--vz-fg-subtle);
-  transition: transform 160ms var(--vz-ease), color var(--vz-dur) ease;
-}
-
-.snapshots-type:hover .snapshots-type-chevron {
-  color: var(--vz-fg-muted);
-}
-
-.snapshots-type[aria-expanded='true'] .snapshots-type-chevron {
-  transform: rotate(90deg);
-}
-
-/* The section's rows — a nested list, hidden when folded. The explicit
-   [hidden] rule: an author display value would otherwise out-weigh the
-   UA's hidden styling. */
-.snapshots-section-rows {
-  display: block;
+.snap-timeline {
   list-style: none;
   margin: 0;
   padding: 0;
+  /* The rail's geometry, declared once: time column, rail column,
+     10px gaps — the line runs down the rail column's center. */
+  --snap-time: 48px;
+  --snap-rail: 20px;
+  --snap-gap: 10px;
 }
 
-.snapshots-section-rows[hidden] {
-  display: none;
-}
-
-/* Day group headers — the timeline inside a section. Sticky BELOW the
-   type header (42px, its exact height) so the stack reads kind → day →
-   row while scrolling. Quiet by design: a small uppercase label over a
-   hairline, not another full-width band — the day is a whisper in the
-   margin, not a section of its own. Solid background so rows never
-   show through while it sticks. */
-.snapshots-day {
-  position: sticky;
-  top: 42px;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 30px;
-  padding: 0 16px;
-  background: var(--vz-bg);
-  border-bottom: 1px solid var(--vz-border);
-  color: var(--vz-fg-subtle);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-}
-
-.snapshots-day::after {
-  content: '';
-  display: none;
-}
-
-/* ---- The row: grid of [main button | side column], expand spans both ---- */
-.snapshot-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 8px;
-  padding: 0;
-  border-bottom: 1px solid var(--vz-border);
-  transition: background-color var(--vz-dur) ease;
-}
-
-.snapshot-item:hover {
-  background: var(--vz-bg-subtle);
-}
-
-/* The main area — a real button so the expand toggle is keyboard-native.
-   Resets every UA button style; the row's hover carries the affordance.
-   No per-row type rail: the row already lives inside its type's section,
-   whose header carries the icon — repeating it here doubled every glyph
-   on the menu for no new information. */
-.snapshot-main {
-  all: unset;
-  box-sizing: border-box;
+/* Day anchors — the label with a hairline running to the edge. These
+   are list items (the timeline is one list for assistive tech), quiet
+   by design: caps, muted, no band, no box. */
+.snap-day {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 0;
-  width: 100%;
-  padding: 9px 2px 9px 14px;
-  cursor: pointer;
+  margin: 16px 0 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--vz-fg-subtle);
 }
 
-.snapshot-main:focus-visible {
-  outline: 2px solid var(--vz-fg);
+.snap-timeline > .snap-day:first-child {
+  margin-top: 8px;
+}
+
+.snap-day::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--vz-border);
+}
+
+/* ---- a timeline entry ------------------------------------------------------ */
+
+.snap-item {
+  position: relative;
+}
+
+/* The rail's line — one continuous run through the entry, behind the
+   dot. It breaks at day boundaries via the group-start/group-end
+   trims (a new day is a new run). */
+.snap-item::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--snap-time) + var(--snap-gap) + (var(--snap-rail) / 2) - 1px);
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--vz-border);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.snap-item.group-start::before {
+  top: 21px;
+}
+
+.snap-item.group-end::before {
+  bottom: auto;
+  height: 21px;
+}
+
+/* A run of one: the line has nowhere to go — the dot alone carries it. */
+.snap-item.group-start.group-end::before {
+  display: none;
+}
+
+/* The dot — the version's place on the rail. Open fills it; Current
+   greens it. */
+.snap-item::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--snap-time) + var(--snap-gap) + (var(--snap-rail) / 2) - 5px);
+  top: 17px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--vz-bg-elevated);
+  border: 2px solid var(--vz-border-strong);
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 3;
+  transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease;
+}
+
+.snap-item.is-open::after {
+  background: var(--vz-primary);
+  border-color: var(--vz-primary);
+}
+
+.snap-item.is-current::after {
+  border-color: var(--vz-success);
+}
+
+/* The row — clock | rail | what. The whole row is the affordance. */
+.snap-row {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: var(--snap-time) var(--snap-rail) minmax(0, 1fr);
+  column-gap: var(--snap-gap);
+  align-items: start;
+  width: 100%;
+  padding: 12px 10px 12px 0;
+  margin: 0;
+  border: none;
+  border-radius: var(--vz-radius-md);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--vz-dur) ease;
+}
+
+.snap-row:hover {
+  background: var(--vz-bg-hover);
+}
+
+.snap-row:focus-visible {
+  outline: 2px solid var(--vz-primary);
   outline-offset: -2px;
 }
 
-.snapshot-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1 1 auto;
+.snap-when {
+  padding-top: 2px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--vz-fg-subtle);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
-.snapshot-headline {
+.snap-rail {
+  display: block;
+}
+
+.snap-what {
+  min-width: 0;
+}
+
+.snap-line {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
-.snapshot-title {
-  color: var(--vz-fg);
-  font-weight: 600;
+.snap-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 13px;
+  font-weight: 600;
   letter-spacing: -0.005em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--vz-fg);
 }
 
-/* The source note's NAME — the identity a shared timeline owes the
-   reader. A quiet chip after the title; unnamed notes show nothing
-   (their first line is their label, which the title already carries). */
-.snapshot-note {
+.snap-note {
   flex: 0 0 auto;
-  max-width: 160px;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 7px;
   font-size: 10.5px;
-  font-weight: 500;
+  line-height: 1.5;
   color: var(--vz-fg-muted);
-  background: var(--vz-bg-chip);
+  background: var(--vz-bg-subtle);
   border: 1px solid var(--vz-border);
-  border-radius: 5px;
-  padding: 1.5px 7px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  border-radius: 999px;
 }
 
-/* The Current chip — this row IS the note you have open. A soft
-   success-tinted chip (the flash's tint, at rest) rather than bare
-   green text. Hidden unless the row carries .is-current. */
-.snapshot-current {
-  display: none;
+.snap-current {
   flex: 0 0 auto;
+  display: none;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
+  padding: 1px 7px;
   font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  line-height: 1.5;
   color: var(--vz-success);
-  background: color-mix(in srgb, var(--vz-success) 12%, transparent);
-  padding: 2px 7px;
+  background: var(--vz-bg-subtle);
   border-radius: 999px;
-  white-space: nowrap;
 }
 
-.snapshot-item.is-current .snapshot-current {
+.snap-item.is-current .snap-current {
   display: inline-flex;
 }
 
-.snapshot-current-dot {
+.snap-current-dot {
   width: 5px;
   height: 5px;
   border-radius: 50%;
   background: var(--vz-success);
 }
 
-.snapshot-preview {
-  color: var(--vz-fg-muted);
-  font-size: 12px;
-  line-height: 1.45;
-  white-space: nowrap;
+.snap-preview {
+  display: block;
+  margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* Search highlighting — the reason a row answered the query, tinted
-   with the theme's only loud color and left otherwise untouched. */
-#snapshotsModal .snapshot-title mark,
-#snapshotsModal .snapshot-preview mark {
-  background: color-mix(in srgb, var(--vz-primary) 18%, transparent);
-  color: inherit;
-  border-radius: 2px;
-  padding: 0 1px;
-}
-
-/* The expand affordance — quiet until the row hovers, turns with the open */
-.snapshot-chevron {
-  flex: 0 0 auto;
-  margin-left: 2px;
-  color: var(--vz-fg-subtle);
-  transition: transform 160ms var(--vz-ease), color var(--vz-dur) ease;
-}
-
-.snapshot-item:hover .snapshot-chevron {
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--vz-fg-muted);
 }
 
-.snapshot-item.is-open .snapshot-chevron {
-  transform: rotate(90deg);
-  color: var(--vz-fg);
+/* An entry whose preview is entirely its own title (short notes) shows
+   the text once — the name line. */
+.snap-preview:empty {
+  display: none;
 }
 
-/* The side column — the when line (clock + change badge) over
-   actions, right-aligned */
-.snapshot-side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 5px;
-  padding: 9px 12px 9px 0;
-}
-
-.snapshot-when {
-  display: flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: 7px;
-  white-space: nowrap;
-}
-
-.snapshot-date {
-  color: var(--vz-fg-subtle);
-  font-size: 11px;
+.snap-delta {
+  display: inline-block;
+  margin-top: 5px;
+  padding: 1px 6px;
+  font-size: 10.5px;
+  line-height: 1.5;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-}
-
-/* The version's diffstat — what changed since the previous snapshot of
-   this note, the row's identity when the difference lives past the
-   preview's truncation. A quiet chip now: the count sits in a tinted
-   lozenge instead of bare colored text, so eleven rows of history do
-   not read as eleven success toasts. */
-.snapshot-delta {
-  font-size: 10px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-  padding: 1.5px 6px;
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-chip);
   border-radius: 999px;
 }
 
-.snapshot-delta.is-up {
+.snap-delta.is-up {
   color: var(--vz-success);
-  background: color-mix(in srgb, var(--vz-success) 10%, transparent);
 }
 
-.snapshot-delta.is-down {
+.snap-delta.is-down {
   color: var(--vz-danger);
-  background: color-mix(in srgb, var(--vz-danger) 9%, transparent);
 }
 
-.snapshot-delta.is-flat {
-  color: var(--vz-fg-subtle);
-  background: var(--vz-bg-chip);
+/* Under a query, matches glow the way every list browser teaches. */
+.snap-row mark {
+  background: transparent;
+  color: var(--vz-fg);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: var(--vz-star, var(--vz-fg));
+  text-underline-offset: 2px;
 }
 
-.snapshot-actions {
+/* A just-taken entry arrives loudly, then settles. */
+@keyframes snap-flash {
+  0% {
+    background-color: var(--vz-bg-chip);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.snap-item.is-new .snap-row {
+  animation: snap-flash 1.1s var(--vz-ease) 2;
+  border-radius: var(--vz-radius-md);
+}
+
+/* ---- the detail card ------------------------------------------------------- */
+
+.snap-detail {
+  margin: 2px 0 10px calc(var(--snap-time) + var(--snap-gap) + var(--snap-rail) + var(--snap-gap));
+  padding: 10px 12px 11px;
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+}
+
+.snap-detail[hidden] {
+  display: none;
+}
+
+.snap-detail-text {
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--vz-fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vz-border) transparent;
+}
+
+.snap-detail-meta {
   display: flex;
   align-items: center;
-  gap: 4px;
-  /* The destructive pair waits to be approached: invisible while the row
-     is idle, fading in on hover, keyboard focus, or when the row is
-     open. The buttons stay HIT-TARGETS while invisible — a pointer that
-     arrives (the hover that reveals them) must be able to land, and an
-     automated or assistive click must not fall through to the row. */
-  opacity: 0;
-  transition: opacity 120ms ease;
+  gap: 6px;
+  margin-top: 9px;
+  font-size: 11px;
+  color: var(--vz-fg-subtle);
+  font-variant-numeric: tabular-nums;
 }
 
-.snapshot-item:hover .snapshot-actions,
-.snapshot-item:focus-within .snapshot-actions,
-.snapshot-item.is-open .snapshot-actions {
-  opacity: 1;
-  pointer-events: auto;
+.snap-detail-sep {
+  color: var(--vz-border-strong);
 }
 
-/* Restore — the row's primary action, a real labeled button (quiet,
-   bordered). It reads before it can be misread. */
-.snapshot-btn.restore {
-  font-size: 11.5px;
-  font-weight: 500;
-  line-height: 1;
-  height: 25px;
-  padding: 0 10px;
-  border: 1px solid var(--vz-border-strong);
-  border-radius: var(--vz-radius);
-  background: var(--vz-bg-elevated);
-  color: var(--vz-fg);
-  transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease,
-    transform 100ms ease;
+.snap-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
 }
 
-.snapshot-btn.restore:hover {
+.snap-detail-spacer {
+  flex: 1 1 auto;
+}
+
+.snap-act {
+  font-family: inherit;
+}
+
+.snap-act.restore {
+  padding: 4px 14px;
   background: var(--vz-primary);
-  border-color: var(--vz-primary);
+  border: 1px solid var(--vz-primary);
+  border-radius: var(--vz-radius);
   color: var(--vz-primary-fg);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--vz-dur) ease, transform 100ms ease;
 }
 
-.snapshot-btn.restore:active {
+.snap-act.restore:hover,
+.snap-act.restore:focus-visible {
+  background: var(--vz-primary-hover);
+}
+
+.snap-act.restore:active {
   transform: scale(0.98);
 }
 
-.snapshot-btn.restore:focus-visible,
-.snapshot-btn.copy:focus-visible,
-.snapshot-btn.delete:focus-visible {
-  outline: 2px solid var(--vz-fg);
-  outline-offset: 1px;
-}
-
-/* Ghost icon buttons — mono; the hairline separates delete from the
-   restore/copy pair so a slip cannot land on it. Both share the labeled
-   Restore button's 25px height so the cluster sits on one grid. */
-.snapshot-btn.copy,
-.snapshot-btn.delete {
-  background: none;
-  border: none;
+.snap-act.copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
   padding: 0;
-  width: 25px;
-  height: 25px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--vz-fg-muted);
-  border-radius: var(--vz-radius);
-  transition: background-color var(--vz-dur) ease, color var(--vz-dur) ease;
-}
-
-.snapshot-btn.copy:hover,
-.snapshot-btn.delete:hover {
-  background: var(--vz-bg-chip);
-  color: var(--vz-fg);
-}
-
-.snapshot-btn.delete {
-  color: var(--vz-fg-muted);
-}
-
-.snapshot-btn.delete:hover {
-  background: var(--vz-danger-soft);
-  color: var(--vz-danger);
-}
-
-.snapshot-actions-sep {
-  width: 1px;
-  height: 15px;
-  margin: 0 3px;
-  background: var(--vz-border);
-}
-
-/* The expand panel — a card, not a strip: inset from the row's edges,
-   rounded, hairline-bordered, padded like a paragraph. It is the only
-   place the version can actually be READ, so it reads like text. */
-.snapshot-expand {
-  grid-column: 1 / -1;
-  margin: 0 12px 10px 14px;
-  border: 1px solid var(--vz-border);
-  border-radius: var(--vz-radius-md);
-  background: var(--vz-bg-subtle);
-  padding: 10px 14px 12px;
-}
-
-.snapshot-expand-text {
-  color: var(--vz-fg-muted);
-  font-size: 12.5px;
-  line-height: 1.65;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  max-height: 280px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-/* The just-taken row — one success-tinted flash that fades on its own. */
-.snapshot-item.is-new {
-  animation: snapshot-flash 1100ms var(--vz-ease) 1;
-}
-
-@keyframes snapshot-flash {
-  0% {
-    background: color-mix(in srgb, var(--vz-success) 14%, var(--vz-bg));
-  }
-  100% {
-    background: transparent;
-  }
-}
-
-/* Empty state */
-.no-snapshots {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 48px 20px;
-  text-align: center;
-  color: var(--vz-fg-muted);
-}
-
-.no-snapshots svg {
-  color: var(--vz-border-strong);
-  margin-bottom: 12px;
-}
-
-.no-snapshots p {
-  margin: 0;
-  color: var(--vz-fg-muted);
-  font-size: 13.5px;
-}
-
-.no-snapshots-hint {
-  color: var(--vz-fg-subtle);
-  font-size: 12.5px;
-}
-
-.snapshots-kbd-inline kbd {
-  min-width: 18px;
-  height: 18px;
-  font-size: 9.5px;
-  vertical-align: baseline;
-}
-
-/* The no-match recovery — a quiet bordered button under the miss copy,
-   the one-click way out of a query that emptied the list. */
-.snapshots-clear-miss {
-  margin-top: 12px;
-  font-size: 12.5px;
-  font-weight: 500;
-  padding: 6px 14px;
-  border: 1px solid var(--vz-border-strong);
-  border-radius: var(--vz-radius);
   background: var(--vz-bg-elevated);
-  color: var(--vz-fg);
-  transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease;
-}
-
-.snapshots-clear-miss:hover {
-  background: var(--vz-bg-chip);
-  border-color: var(--vz-border-strong);
-}
-
-.snapshots-clear-miss:focus-visible {
-  outline: 2px solid var(--vz-fg);
-  outline-offset: 1px;
-}
-
-/* Footer stats + actions — the count tells the whole story: the
-   filtered count while a query runs ('12 results'), the store's size
-   against its cap otherwise ('7 of 200'). */
-.snapshots-stats {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  color: var(--vz-fg-muted);
-  font-size: 12.5px;
-}
-
-#snapshotsCount {
-  color: var(--vz-fg);
-  font-weight: 600;
-}
-
-.snapshots-cap {
-  color: var(--vz-fg-subtle);
-  font-size: 11.5px;
-}
-
-.delete-all-container {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* The hairline between the history's destructive bulk action and the
-   way out — two different verbs do not sit shoulder to shoulder. */
-.snapshots-footer-sep {
-  width: 1px;
-  height: 16px;
-  margin: 0 6px;
-  background: var(--vz-border);
-}
-
-/* Delete all — a quiet ghost, danger only on approach. The old solid
-   red button shouted past every safe action in the dialog. */
-.snapshots-delete-all {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  font-weight: 500;
-  padding: 7px 12px;
-  border: 1px solid transparent;
+  border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius);
-  background: transparent;
   color: var(--vz-fg-muted);
+  cursor: pointer;
   transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease,
     border-color var(--vz-dur) ease;
 }
 
-.snapshots-delete-all:hover:not(:disabled),
-.snapshots-delete-all:focus-visible:not(:disabled) {
-  color: var(--vz-danger);
-  background: var(--vz-danger-soft);
-  border-color: transparent;
+.snap-act.copy:hover,
+.snap-act.copy:focus-visible {
+  color: var(--vz-fg);
+  background: var(--vz-bg-hover);
+  border-color: var(--vz-border-strong);
 }
 
-.snapshots-delete-all:disabled {
-  opacity: 0.55;
+.snap-act.delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease;
+}
+
+.snap-act.delete:hover,
+.snap-act.delete:focus-visible {
+  color: var(--vz-danger);
+  background: var(--vz-danger-soft);
+}
+
+/* Armed — the confirm state: filled danger, the label says so. */
+.snap-act.delete.is-armed {
+  background: var(--vz-danger);
+  border-color: var(--vz-danger);
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.snap-detail-hint {
+  margin: 9px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--vz-fg-subtle);
+}
+
+/* ---- footer ----------------------------------------------------------------- */
+
+.snap-foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 20px 12px 22px;
+  border-top: 1px solid var(--vz-border);
+}
+
+.snap-foot-count {
+  font-size: 11.5px;
+  color: var(--vz-fg-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.snap-delete-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease;
+}
+
+.snap-delete-all:hover:not(:disabled),
+.snap-delete-all:focus-visible:not(:disabled) {
+  color: var(--vz-danger);
+  background: var(--vz-danger-soft);
+}
+
+.snap-delete-all:disabled {
+  opacity: 0.45;
   cursor: default;
 }
 
-/* Close — quiet by class now: the dialog's way out is not its primary
-   action, and a filled black button next to Delete all made Close the
-   loudest thing in the footer. */
-#snapshotsModal .snapshots-close {
-  font-size: 12.5px;
+.snap-delete-all.is-armed {
+  background: var(--vz-danger);
+  border-color: var(--vz-danger);
+  color: #ffffff;
   font-weight: 500;
-  padding: 7px 14px;
-  border: 1px solid var(--vz-border-strong);
-  border-radius: var(--vz-radius);
-  background: var(--vz-bg-elevated);
+}
+
+/* ---- empty state ------------------------------------------------------------ */
+
+.snap-empty {
+  min-height: 260px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.snap-empty svg {
+  color: var(--vz-fg-subtle);
+  opacity: 0.75;
+  margin-bottom: 6px;
+}
+
+.snap-empty p {
+  margin: 0;
+}
+
+#noSnapshotsEmpty {
+  font-size: 13.5px;
+  font-weight: 600;
   color: var(--vz-fg);
-  transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease;
 }
 
-#snapshotsModal .snapshots-close:hover {
-  background: var(--vz-bg-chip);
+.snap-empty-hint,
+#noSnapshotsMiss {
+  font-size: 12px;
+  color: var(--vz-fg-muted);
 }
 
-/* Touch has no hover — every action stays on stage, the "/" hint and
-   the kbd pair inside the take button (a keyboard's language) retire. */
-@media (hover: none) {
-  .snapshot-actions {
-    opacity: 1;
+.snap-kbd-inline {
+  white-space: nowrap;
+}
+
+.snap-clear-miss {
+  margin-top: 12px;
+  padding: 5px 14px;
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--vz-dur) ease, background-color var(--vz-dur) ease;
+}
+
+.snap-clear-miss:hover,
+.snap-clear-miss:focus-visible {
+  border-color: var(--vz-border-strong);
+  background: var(--vz-bg-hover);
+}
+
+/* ---- small screens ------------------------------------------------------------ */
+
+@media (max-width: 640px) {
+  #snapshotsModal .modal-dialog.snapshots-sheet {
+    width: 100vw;
   }
 
-  .snapshots-kbd-hint,
-  .snapshots-search-slash {
+  #snapshotsModal .modal-content.snapshots-content {
+    border-left: none;
+  }
+
+  .snap-timeline {
+    --snap-time: 40px;
+    --snap-rail: 16px;
+    --snap-gap: 8px;
+  }
+
+  .snap-when {
+    font-size: 10px;
+  }
+
+  .snap-row {
+    padding: 11px 8px 11px 0;
+  }
+
+  .snap-detail {
+    margin-right: 2px;
+  }
+
+  .snap-kbd {
     display: none;
   }
 
-  #snapshotsModal .shortcut-search-input {
-    padding-right: 52px;
-  }
-
-  .snapshots-search-meta {
-    right: 40px;
-  }
-
-  .snapshots-search-clear {
-    right: 12px;
+  .snap-take {
+    padding: 0 10px;
   }
 }
 
-/* Responsive — the dialog becomes a full-height sheet (the old centered
-   dialog overflowed short viewports and put its own header off-screen),
-   the toolbar stacks, and the row stacks: content on top, clock +
-   actions below. The search wrap drops its row-direction flex-basis —
-   in a column, `flex: 1 1 200px` is 200px of HEIGHT, which left the
-   field stranded above a dead 170px of empty wrap. */
-@media (max-width: 767px) {
-  #snapshotsModal .modal-dialog {
-    max-width: 100%;
-    margin: 0;
-    width: 100%;
-    height: 100%;
-  }
-
-  #snapshotsModal .modal-content {
-    max-height: none;
-    height: 100dvh;
-    border-radius: 0;
-    border: none;
-  }
-
-  #snapshotsModal .modal-header {
-    padding: 14px 16px 8px;
-  }
-
-  #snapshotsModal .modal-body {
-    padding: 2px 12px 12px;
-  }
-
-  #snapshotsModal .modal-footer {
-    padding: 10px 16px 12px;
-  }
-
-  .snapshots-toolbar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .snapshots-take-btn {
-    justify-content: center;
-  }
-
-  .snapshots-search-wrap {
-    flex: 0 0 auto;
-    width: 100%;
-    max-width: none;
-    margin-left: 0;
-  }
-
-  .snapshot-item {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .snapshot-main {
-    padding: 10px 12px 2px;
-  }
-
-  .snapshot-side {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    padding: 2px 12px 10px;
-  }
-
-  .snapshot-expand {
-    margin: 0 12px 10px;
-    padding: 10px 12px 12px;
-  }
-
-  .snapshots-type {
-    padding: 0 12px;
-  }
-
-  .snapshots-day {
-    padding: 0 12px;
-  }
-}
-
-/* Short viewports — the header copy tightens so the list keeps room */
+/* Short viewports: the header folds its subtitle away first — the
+   timeline is the point. */
 @media (max-height: 560px) {
-  #snapshotsModal .modal-content {
-    max-height: calc(100vh - 24px);
-  }
-
-  #snapshotsModal .modal-header {
-    padding: 12px 20px 8px;
-  }
-
-  #snapshotsModal .pref-subtitle {
+  .snap-subtitle {
     display: none;
+  }
+
+  .snap-head {
+    padding-top: 12px;
+    padding-bottom: 8px;
+  }
+
+  .snap-toolbar {
+    padding-bottom: 8px;
+  }
+}
+
+/* ---- motion safety ------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  .modal.fade#snapshotsModal .modal-dialog.snapshots-sheet {
+    transform: none;
+    transition: none;
+  }
+
+  .snap-item.is-new .snap-row {
+    animation: none;
+    background: var(--vz-bg-chip);
   }
 }
