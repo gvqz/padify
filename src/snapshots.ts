@@ -1,33 +1,44 @@
 /**
- * Snapshots — safety copies of notes, one store, deduplicated per note.
+ * Snapshots — safety copies of notes, one store, keyed to their note.
  *
- * The rebuild (see tasks.txt, "Complex") fixed four things the old menu
- * got wrong across note types:
+ * The structural contract (rebuilt after the timeline reskin made it
+ * obvious the wiring underneath was still the old wiring):
  *
- *  • DUPLICATES — every Ctrl+U and every safety capture (tab close,
- *    delete) appended a row even when nothing changed. A snapshot now
- *    records the note it came from, and an identical (content + type)
- *    capture against that note's LATEST snapshot is declined instead of
- *    stored — no point keeping two copies of the same bytes.
- *  • EMPTINESS — the old check read the plain-text projection, so an
- *    image-only rich note (text projection empty, content an <img>)
- *    could not be snapshotted at all. Emptiness is now judged per
- *    content kind (see snapshotHasContent).
- *  • SEARCH — matched the raw stored string, so searching "div" hit
- *    every html snapshot's markup. Search now runs over what the row
- *    shows (title, preview, type label) plus the raw source of the
- *    text kinds, whose bytes ARE their text.
- *  • DATES — were formatted once at capture and frozen; a locale change
- *    left old rows in the old language. Rows format at render time from
- *    the timestamp (every record, legacy included, has one). The stored
- *    formattedDate field is still WRITTEN so an older build reading a
- *    newer store keeps a date — it is never read here.
+ *  • IDENTITY — a snapshot records the note it came from (noteId + the
+ *    note's NAME). Restore uses that identity: it brings the SOURCE
+ *    note on stage and restores THERE — or, when the note is gone,
+ *    resurrects it as its own note. A restore must never overwrite an
+ *    unrelated note just because it happened to be open. Rows with no
+ *    noteId (records from before attribution) still restore into the
+ *    active note — the only target they can name.
+ *  • DUPLICATES — an identical (content + type, normalized) capture
+ *    against ANY of that note's existing snapshots is declined, not
+ *    just the latest: the restore loop (v1 → v2 → restore v1 → capture)
+ *    used to file the same bytes twice. Captures serialize through a
+ *    queue so two rapid Ctrl+U presses cannot both pass the check.
+ *  • EMPTINESS — judged per content kind (see snapshotHasContent), so
+ *    an image-bearing note is not "empty" because its text projection
+ *    is blank.
+ *  • SEARCH — matches what a row shows (title, note name, preview,
+ *    type label) plus the readable projection capped at a few
+ *    thousand characters — never raw markup or JSON braces.
+ *  • DATES — formatted at render time from the timestamp; the stored
+ *    formattedDate field is written for older builds only.
+ *  • THE MENU — sections by note type (registry order), day groups
+ *    inside, the source note's name on the row.
  */
 import { $ } from './lib/q';
 import { openModal, closeModal } from './ui/behavior/modal';
 import Swal from 'sweetalert2';
 import { getActiveNoteContent, getEditorText, getTabManager, htmlToText } from './tabs';
-import { isHtmlContent, noteTypeLabel, type NoteType } from './editor/note-types';
+import {
+  DEFAULT_NOTE_TYPE,
+  NOTE_TYPES,
+  isHtmlContent,
+  normalizeNoteType,
+  noteTypeLabel,
+  type NoteType,
+} from './editor/note-types';
 import { drawingScenePlainText } from './editor/drawing/scene';
 import { parseTaskNoteContent, taskNotePlainText } from './editor/tasks/content';
 import { showToast } from './ui/toast';
@@ -35,9 +46,13 @@ import { updateWordCountPill } from './word-count-pill';
 
 interface Snapshot {
   id?: number;
-  /** The source note's tab id — scopes duplicate detection. Absent on
-   *  records written before the rebuild; those never match a note. */
+  /** The source note's tab id — scopes duplicate detection and targets
+   *  restores. Absent on records written before attribution; those
+   *  restore into the active note. */
   noteId?: string;
+  /** The source note's tab NAME at capture (unnamed notes store nothing).
+   *  The row shows it; a resurrected note is reborn with it. */
+  noteName?: string;
   title: string;
   content: string;
   /** The note's type at capture time; absent = html (the classic note). */
@@ -65,6 +80,78 @@ interface SnapshotState {
  * ascending order is the deletion order).
  */
 export const MAX_SNAPSHOTS = 200;
+
+/** The store's schema version. 1 — the original (timestamp + title
+ *  indexes); 2 adds the noteId index the per-note reads query. */
+const SNAPSHOTS_DB_VERSION = 2;
+
+/**
+ * Opens (creating or upgrading as needed) the snapshots database — the
+ * schema owner, extracted from the manager so the upgrade path is
+ * testable against a raw database without the manager's DOM wiring.
+ *
+ * Upgrading an existing store adds the index IN PLACE: rows are never
+ * touched. Records that predate the noteId field simply stay out of the
+ * index — IndexedDB skips records lacking the key path — which is
+ * exactly the attribution rule the readers want: a legacy row was never
+ * attributed to any note.
+ */
+export function openSnapshotsDatabase(dbName: string, storeName: string): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(dbName, SNAPSHOTS_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(storeName)) {
+        const store = db.createObjectStore(storeName, {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+        // Create indexes for efficient querying
+        store.createIndex('timestamp', 'timestamp', { unique: false });
+        store.createIndex('noteId', 'noteId', { unique: false });
+        return;
+      }
+      const upgrade = request.transaction;
+      if (!upgrade) {
+        return;
+      }
+      const store = upgrade.objectStore(storeName);
+      if (!store.indexNames.contains('noteId')) {
+        store.createIndex('noteId', 'noteId', { unique: false });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * One note's snapshots, NEWEST FIRST — the duplicate check's read.
+ * Queries the noteId index (one note's rows, not the whole store);
+ * legacy records without the field are invisible to it, which is the
+ * attribution rule: they were never this note's. Exported so the
+ * per-note read is pinned against a raw database.
+ */
+export function readSnapshotsForNote(
+  db: IDBDatabase,
+  storeName: string,
+  noteId: string,
+): Promise<Snapshot[]> {
+  return new Promise((resolve, reject) => {
+    const request = db
+      .transaction([storeName], 'readonly')
+      .objectStore(storeName)
+      .index('noteId')
+      .getAll(noteId);
+    request.onsuccess = () => {
+      const rows = (request.result as Snapshot[]).slice();
+      // Index order is storage order; the callers want time order.
+      rows.sort((a, b) => b.timestamp - a.timestamp);
+      resolve(rows);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
 
 /**
  * Deletes the oldest snapshots beyond the cap. Resolves with the number
@@ -128,46 +215,37 @@ export function snapshotHasContent(content: string, noteType?: string): boolean 
   return content.trim() !== '';
 }
 
-/** Two captures are the same snapshot when bytes and note type match. */
+/** Two captures are the same snapshot when bytes and note type match —
+ *  with the type NORMALIZED: 'standard' and absent are the same note,
+ *  the same rule isCurrentSnapshotState applies to the Current chip. */
 export function isSameSnapshotState(a: SnapshotState, b: SnapshotState): boolean {
-  return a.content === b.content && a.noteType === b.noteType;
+  return a.content === b.content && normalizeNoteType(a.noteType) === normalizeNoteType(b.noteType);
 }
 
 /**
- * The newest snapshot that came from the given note. Input order does
- * not matter — the newest timestamp with a matching id wins. Legacy
- * records (no noteId) match only an unattributed query, which in
- * practice never happens — every note has a tab id.
- */
-export function findLatestForNote(
-  snapshots: Snapshot[],
-  noteId: string | undefined,
-): Snapshot | undefined {
-  let latest: Snapshot | undefined;
-  for (const snapshot of snapshots) {
-    if (snapshot.noteId !== noteId) {
-      continue;
-    }
-    if (!latest || snapshot.timestamp > latest.timestamp) {
-      latest = snapshot;
-    }
-  }
-  return latest;
-}
-
-/**
- * What a row is searched by: the copy it shows, plus the FULL readable
- * projection of the note (see snapshotReadableText) — computed once per
- * load and cached on the row, so each keystroke filters strings.
+ * What a row is searched by: the copy it shows — title, the source
+ * note's NAME, preview, type label — plus the readable projection of
+ * the note capped at a few thousand characters (see
+ * snapshotReadableText). Computed once per load and cached on the row,
+ * so each keystroke filters strings.
  */
 export function snapshotSearchText(snapshot: Snapshot): string {
   const label = snapshot.noteType ? snapshotTypeBadgeLabel(snapshot.noteType) : '';
   // The readable projection — searching what a person would read, never
   // the storage bytes (searching 'div' must not answer every html row,
   // and a drawing's JSON braces are not its words).
-  const text = snapshotReadableText(snapshot.content, snapshot.noteType);
-  return `${snapshot.title}\n${snapshot.preview}\n${label}\n${text}`.toLowerCase();
+  const text = snapshotReadableText(snapshot.content, snapshot.noteType).slice(
+    0,
+    SNAPSHOT_SEARCH_CAP,
+  );
+  return `${snapshot.title}\n${snapshot.noteName ?? ''}\n${snapshot.preview}\n${label}\n${text}`.toLowerCase();
 }
+
+/** How much of the readable text is searchable. The cache holds one
+ *  search string per row in memory — a 100KB note must not become a
+ *  100KB lowercase copy of itself. Matches deeper than the cap are a
+ *  fair loss for a menu that previews 100 characters. */
+const SNAPSHOT_SEARCH_CAP = 2000;
 
 /**
  * The short chip a row shows — 'Markdown', 'Rich Text' — matching the
@@ -343,6 +421,62 @@ function snapshotTypeIcon(noteType?: string): string {
 /** How much of the readable text the expand panel shows. */
 const SNAPSHOT_EXPAND_CAP = 2000;
 
+/** A menu section: one note type's snapshots. */
+export interface SnapshotTypeSection {
+  /** The type id; 'standard' also swallows absent (legacy) and junk ids. */
+  key: string;
+  /** The header's label — plural and short ('Notes', 'Drawings'). */
+  label: string;
+  /** The header's rail icon (an inline SVG string). */
+  icon: string;
+  /** The section's rows, NEWEST FIRST. */
+  rows: Snapshot[];
+}
+
+/** Section labels — plurals of the registry's labels. Unknown ids fall
+ *  back to noteTypeLabel (the id itself) at render time. */
+const SNAPSHOT_SECTION_LABELS: Record<string, string> = {
+  standard: 'Notes',
+  rich: 'Rich Text',
+  markdown: 'Markdown',
+  tasks: 'Task Lists',
+  drawing: 'Drawings',
+};
+
+/**
+ * Sections the menu renders, one per note type PRESENT in the rows.
+ * Section order is the registry's menu order — the "sort by note type"
+ * the menu owes — with unknown types trailing alphabetically; recency
+ * never reorders sections, so the menu's shape is stable between visits.
+ * Rows inside a section are newest-first (the timeline within the type).
+ */
+export function groupSnapshotsByType(snapshots: Snapshot[]): SnapshotTypeSection[] {
+  const buckets = new Map<string, Snapshot[]>();
+  for (const snapshot of snapshots) {
+    // 'standard', absent and junk ids all read as the classic note —
+    // the same normalization every type comparison here applies.
+    const key = normalizeNoteType(snapshot.noteType) ?? 'standard';
+    const bucket = buckets.get(key);
+    if (bucket) {
+      bucket.push(snapshot);
+    } else {
+      buckets.set(key, [snapshot]);
+    }
+  }
+  const orderOf = (key: string): number => {
+    const index = NOTE_TYPES.findIndex((def) => def.id === key);
+    return index === -1 ? NOTE_TYPES.length : index;
+  };
+  return [...buckets.keys()]
+    .sort((a, b) => orderOf(a) - orderOf(b) || a.localeCompare(b))
+    .map((key) => ({
+      key,
+      label: SNAPSHOT_SECTION_LABELS[key] ?? noteTypeLabel(key as NoteType),
+      icon: snapshotTypeIcon(key === 'standard' ? undefined : key),
+      rows: (buckets.get(key) ?? []).sort((a, b) => b.timestamp - a.timestamp),
+    }));
+}
+
 export class SnapshotsManager {
   dbName: string;
   storeName: string;
@@ -355,6 +489,12 @@ export class SnapshotsManager {
   /** The just-created snapshot's id — renderRows flashes exactly this
    *  row (and scrolls it into view) once, then clears the flag. */
   private pendingHighlightId: number | null = null;
+
+  /** Captures serialize through here: two rapid Ctrl+U presses must see
+   *  each other's writes, or both pass the duplicate check and both
+   *  land. The chain swallows errors so one failed write cannot wedge
+   *  the next; the caller still observes its own capture's outcome. */
+  private writeQueue: Promise<void> = Promise.resolve();
 
   /**
    * Resolves once the IndexedDB open completes (or rejects if it errors).
@@ -396,39 +536,20 @@ export class SnapshotsManager {
       this.rejectReady(new Error('IndexedDB unavailable in this environment'));
       return;
     }
-    let request: IDBOpenDBRequest;
-    try {
-      request = indexedDB.open(this.dbName, 1);
-    } catch (error) {
-      this.rejectReady(error instanceof Error ? error : new Error(String(error)));
-      return;
-    }
-
-    request.onerror = (event) => {
-      console.error('Error opening database', event);
-      this.rejectReady(event);
-    };
-
-    request.onsuccess = (event) => {
-      this.db = (event.target as IDBRequest).result;
-      this.updateSnapshotsCount();
-      void this.loadSnapshots();
-      this.resolveReady();
-    };
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBRequest).result as IDBDatabase;
-      if (!db.objectStoreNames.contains(this.storeName)) {
-        const store = db.createObjectStore(this.storeName, {
-          keyPath: 'id',
-          autoIncrement: true,
-        });
-
-        // Create indexes for efficient querying
-        store.createIndex('timestamp', 'timestamp', { unique: false });
-        store.createIndex('title', 'title', { unique: false });
-      }
-    };
+    // The schema (version, indexes, upgrade path) lives in
+    // openSnapshotsDatabase — the only place that owns it.
+    openSnapshotsDatabase(this.dbName, this.storeName).then(
+      (db) => {
+        this.db = db;
+        this.updateSnapshotsCount();
+        void this.loadSnapshots();
+        this.resolveReady();
+      },
+      (error) => {
+        console.error('Error opening database', error);
+        this.rejectReady(error);
+      },
+    );
   }
 
   // Setup event listeners
@@ -489,13 +610,15 @@ export class SnapshotsManager {
     if (!captured) {
       return;
     }
+    const activeTab = getTabManager()?.getActive();
     await this.createSnapshotFromCapture(
       captured.content,
       captured.noteType,
-      getTabManager()?.getActive()?.id,
+      activeTab?.id,
       title,
       { emptyToast: true, duplicateToast: true },
-      getTabManager()?.getActive()?.colorTheme,
+      activeTab?.colorTheme,
+      activeTab?.name ?? undefined,
     );
   }
 
@@ -512,6 +635,7 @@ export class SnapshotsManager {
     noteId: string,
     title: string,
     colorTheme?: 'light' | 'dark',
+    noteName?: string,
   ): Promise<void> {
     await this.createSnapshotFromCapture(
       content,
@@ -527,10 +651,12 @@ export class SnapshotsManager {
         successToast: false,
       },
       colorTheme,
+      noteName,
     );
   }
 
-  // The one writer — every path funnels here.
+  // The one writer — every path funnels here, QUEUED so concurrent
+  // captures re-check duplicates against each other's writes.
   private async createSnapshotFromCapture(
     noteContent: string,
     noteType: NoteType | undefined,
@@ -543,6 +669,43 @@ export class SnapshotsManager {
       successToast?: boolean;
     },
     colorTheme?: 'light' | 'dark',
+    noteName?: string,
+  ): Promise<void> {
+    const capture = this.writeQueue.then(() =>
+      this.writeSnapshotFromCapture(
+        noteContent,
+        noteType,
+        noteId,
+        title,
+        options,
+        colorTheme,
+        noteName,
+      ),
+    );
+    // The chain itself never rejects — a failed write must not poison the
+    // next capture. The caller still gets THIS capture's outcome.
+    this.writeQueue = capture.then(
+      () => undefined,
+      () => undefined,
+    );
+    await capture;
+  }
+
+  // The queued capture body — runs strictly after the previous capture
+  // landed, so the duplicate check sees every write before it.
+  private async writeSnapshotFromCapture(
+    noteContent: string,
+    noteType: NoteType | undefined,
+    noteId: string | undefined,
+    title: string | undefined,
+    options: {
+      emptyToast: boolean;
+      duplicateToast: boolean;
+      /** Success toast — silent safety copies opt out (default: show). */
+      successToast?: boolean;
+    },
+    colorTheme?: 'light' | 'dark',
+    noteName?: string,
   ): Promise<void> {
     if (!this.db) {
       // Wait for the IDB open to finish instead of silently dropping the
@@ -569,14 +732,28 @@ export class SnapshotsManager {
       return;
     }
 
-    // The same bytes as this note's newest snapshot add nothing — decline.
-    const existing = await this.readAllSnapshots();
-    const latest = findLatestForNote(existing, noteId);
-    if (latest && isSameSnapshotState(latest, { content: noteContent, noteType })) {
-      if (options.duplicateToast) {
-        showToast('No changes since the last snapshot.');
+    // The same bytes as ANY of this note's snapshots add nothing —
+    // decline. Comparing only the newest used to let the restore loop
+    // (v1 → v2 → restore v1 → capture) file v1 twice; the whole history
+    // of THIS note is the check, read through the noteId index (never
+    // the whole store). Unattributed captures (no noteId — a legacy
+    // caller) cannot be scoped, so they skip the check.
+    if (noteId) {
+      const rows = await readSnapshotsForNote(this.db, this.storeName, noteId);
+      const duplicate = rows.find((row) =>
+        isSameSnapshotState(row, { content: noteContent, noteType }),
+      );
+      if (duplicate) {
+        if (options.duplicateToast) {
+          // Two honest declines: nothing changed since the last one, or
+          // this exact version already exists deeper in the history.
+          const isLatest = rows[0] !== undefined && duplicate.id === rows[0].id;
+          showToast(
+            isLatest ? 'No changes since the last snapshot.' : 'This version is already saved.',
+          );
+        }
+        return;
       }
-      return;
     }
 
     // Generate a title from the first line of the note if not provided
@@ -585,6 +762,7 @@ export class SnapshotsManager {
     const timestamp = Date.now();
     const snapshot: Snapshot = {
       ...(noteId ? { noteId } : {}),
+      ...(noteName ? { noteName } : {}),
       title: noteTitle,
       content: noteContent,
       ...(noteType ? { noteType } : {}),
@@ -699,28 +877,42 @@ export class SnapshotsManager {
     const active = getActiveNoteContent();
 
     snapshotsList.innerHTML = '';
-    // Day grouping: rows arrive newest-first, so the day only moves
-    // backwards — a header li is inserted whenever the calendar day
-    // changes, giving the list a timeline shape (Today / Yesterday / …).
-    let currentDay = '';
+    // Type sections, registry order: each header carries the kind's icon,
+    // label and row count; the day timeline lives INSIDE the section.
+    // Recency never reorders sections — the menu's shape is stable —
+    // while rows inside stay newest-first.
     let highlighted = false;
-    for (const snapshot of rows) {
-      const dayKey = snapshotDayKey(snapshot.timestamp);
-      if (dayKey !== currentDay) {
-        currentDay = dayKey;
-        const header = document.createElement('li');
-        header.className = 'snapshots-day';
-        header.textContent = formatSnapshotDayLabel(snapshot.timestamp);
-        snapshotsList.appendChild(header);
+    for (const section of groupSnapshotsByType(rows)) {
+      const sectionHeader = document.createElement('li');
+      sectionHeader.className = 'snapshots-type';
+      sectionHeader.innerHTML = `
+        <span class="snapshots-type-icon" aria-hidden="true">${section.icon}</span>
+        <span class="snapshots-type-label">${this.escapeHtml(section.label)}</span>
+        <span class="snapshots-type-count">${section.rows.length}</span>`;
+      snapshotsList.appendChild(sectionHeader);
+
+      // Day grouping inside the section: rows arrive newest-first, so the
+      // day only moves backwards — a header li rides in whenever the
+      // calendar day changes (Today / Yesterday / …).
+      let currentDay = '';
+      for (const snapshot of section.rows) {
+        const dayKey = snapshotDayKey(snapshot.timestamp);
+        if (dayKey !== currentDay) {
+          currentDay = dayKey;
+          const header = document.createElement('li');
+          header.className = 'snapshots-day';
+          header.textContent = formatSnapshotDayLabel(snapshot.timestamp);
+          snapshotsList.appendChild(header);
+        }
+        const li = this.createSnapshotElement(snapshot);
+        li.classList.toggle('is-current', isCurrentSnapshotState(snapshot, active));
+        if (snapshot.id !== undefined && snapshot.id === this.pendingHighlightId) {
+          li.classList.add('is-new');
+          this.pendingHighlightId = null;
+          highlighted = true;
+        }
+        snapshotsList.appendChild(li);
       }
-      const li = this.createSnapshotElement(snapshot);
-      li.classList.toggle('is-current', isCurrentSnapshotState(snapshot, active));
-      if (snapshot.id !== undefined && snapshot.id === this.pendingHighlightId) {
-        li.classList.add('is-new');
-        this.pendingHighlightId = null;
-        highlighted = true;
-      }
-      snapshotsList.appendChild(li);
     }
 
     // A just-taken snapshot lands at the top of a long list — bring it
@@ -760,6 +952,15 @@ export class SnapshotsManager {
         ? `<span class="snapshot-type-badge">${this.escapeHtml(snapshotTypeBadgeLabel(snapshot.noteType))}</span>`
         : '';
 
+    // The source note's NAME — the identity a mixed timeline owes the
+    // reader. Unnamed notes store nothing (their first line IS their
+    // label, which the title already shows); a name that merely repeats
+    // the title adds noise, not identity.
+    const noteChip =
+      snapshot.noteName && snapshot.noteName !== snapshot.title
+        ? `<span class="snapshot-note" title="The note this snapshot belongs to">${this.escapeHtml(snapshot.noteName)}</span>`
+        : '';
+
     // The expandable panel's text — the readable projection, capped so a
     // giant note cannot turn the row into a wall.
     const readable = snapshotReadableText(snapshot.content, snapshot.noteType).trim();
@@ -776,6 +977,7 @@ export class SnapshotsManager {
                     <span class="snapshot-headline">
                         <span class="snapshot-title" title="${this.escapeHtml(snapshot.title)}">${this.escapeHtml(snapshot.title)}</span>
                         ${badge}
+                        ${noteChip}
                         <span class="snapshot-current" title="Identical to the note you have open"><span class="snapshot-current-dot" aria-hidden="true"></span>Current</span>
                     </span>
                     <span class="snapshot-preview" title="${this.escapeHtml(snapshot.preview)}">${this.escapeHtml(snapshot.preview)}</span>
@@ -820,84 +1022,150 @@ export class SnapshotsManager {
     return li;
   }
 
-  // Restore a snapshot
+  // Restore a snapshot — into THE NOTE IT CAME FROM.
+  //
+  // A snapshot records its source note; restore honors that identity:
+  //   • the note is open → bring it on stage and restore THERE;
+  //   • the note is gone → resurrect it as its own note (its recorded
+  //     name, the snapshot's type and content);
+  //   • a legacy row with no noteId → the active note, the only target
+  //     it can name.
+  // A restore must never overwrite an unrelated note just because it
+  // happened to be the one on screen — that was the old behavior, and
+  // it ate notes.
   restoreSnapshot(snapshotId: number | undefined): void {
-    if (!this.db) return;
+    if (snapshotId === undefined || !this.db) {
+      return;
+    }
 
     const transaction = this.db.transaction([this.storeName], 'readonly');
     const store = transaction.objectStore(this.storeName);
-    const request = store.get(snapshotId!);
+    const request = store.get(snapshotId);
 
     request.onsuccess = async (event) => {
       const snapshot = (event.target as IDBRequest).result as Snapshot | undefined;
-      if (snapshot) {
-        // Ask for confirmation if there's existing content
-        const noteContent = getEditorText();
+      const manager = getTabManager();
+      if (!snapshot || !manager) {
+        return;
+      }
+      const snapshotState = {
+        content: snapshot.content,
+        noteType: snapshot.noteType as NoteType | undefined,
+      };
 
-        let result: { value?: unknown } = {
-          value: true,
-        };
+      // 1. Resolve the target: the snapshot's source note.
+      const source = snapshot.noteId
+        ? manager.allTabs.find((tab) => tab.id === snapshot.noteId)
+        : undefined;
+      // Rows from before attribution can only name the active note.
+      const legacy = !snapshot.noteId;
+      // A recorded note that no longer exists — restore resurrects it.
+      const resurrect = legacy ? false : !source;
+      // What the target holds right now. A background tab's model is the
+      // truth (edits flush to the model when a note leaves the stage);
+      // the live note reads through its surface (keystrokes inside the
+      // debounce window count). A resurrection targets a note that does
+      // not exist yet — there is nothing to ask about.
+      const active = manager.getActive();
+      const targetContent = source
+        ? source.id === active?.id
+          ? getActiveNoteContent()
+          : { content: source.content, noteType: source.noteType }
+        : legacy
+          ? getActiveNoteContent()
+          : null;
+      const replaces =
+        targetContent !== null &&
+        snapshotHasContent(targetContent.content, targetContent.noteType) &&
+        !isSameSnapshotState(targetContent, snapshotState);
 
-        if (noteContent.trim() != '') {
-          result = await Swal.fire({
-            title: 'Restore this snapshot?',
-            text: 'This will replace your current note. Are you sure?',
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonText: 'Yes, Restore!',
-            cancelButtonText: 'No, leave it.',
-          });
-        }
-
+      // 2. Ask before overwriting a note that holds something else. A
+      //    declined ask leaves everything exactly as it was — no tab
+      //    switch, no write.
+      if (replaces) {
+        const targetName = source?.name || snapshot.noteName || active?.name || 'this note';
+        const result = await Swal.fire({
+          title: 'Restore this snapshot?',
+          text: `This will replace the current contents of "${targetName}". A safety snapshot is taken first.`,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'Yes, Restore!',
+          cancelButtonText: 'No, leave it.',
+        });
         if (!result.value) {
           return;
         }
-
-        // Safety copy FIRST: restoring is the only destructive path whose
-        // confirm dialog was the sole protection — undo history resets on
-        // the wholesale replace, so a wrong-row restore would otherwise be
-        // unrecoverable. Every other destructive flow (tab close, note
-        // delete) keeps a behind-the-scenes snapshot; this matches them.
-        // Declines (empty / identical) are silent — an identical existing
-        // snapshot already satisfies the promise.
-        const preRestore = getActiveNoteContent();
-        if (preRestore && snapshotHasContent(preRestore.content, preRestore.noteType)) {
-          try {
-            await this.createSnapshotFromCapture(
-              preRestore.content,
-              preRestore.noteType,
-              getTabManager()?.getActive()?.id,
-              `Before restoring "${snapshot.title}"`,
-              // Silent: the "Snapshot restored!" toast below is the
-              // user-facing message for this action — the safety copy
-              // is a background detail and must not replace it.
-              { emptyToast: false, duplicateToast: false, successToast: false },
-              getTabManager()?.getActive()?.colorTheme,
-            );
-          } catch {
-            /* the restore still proceeds — the confirm already happened */
-          }
-        }
-
-        // Restore the content through the ONE restore path: it moves the
-        // note's type with the content and re-announces the active note so
-        // the chrome (toolbar, editor port, tab badge) follows the
-        // restored kind. Old snapshots hold plain text on the html path —
-        // the editor renders it faithfully, newlines and all.
-        getTabManager()?.applySnapshotToActive(
-          snapshot.content,
-          snapshot.noteType as NoteType | undefined,
-          snapshot.colorTheme,
-        );
-        updateWordCountPill(getEditorText());
-
-        showToast('Snapshot restored!', 'success');
-
-        // Close the modal after a short delay
-        setTimeout(() => {
-          closeModal($('#snapshotsModal').get(0));
-        }, 150);
       }
+
+      // 3. Bring the target on stage — both restore seams (the safety
+      //    copy and applySnapshotToActive) speak "active note". A
+      //    resurrected note is born empty: nothing to lose, nothing to
+      //    ask.
+      if (source && source.id !== active?.id) {
+        manager.switchTo(source.id, false);
+      }
+      if (resurrect) {
+        const revived = manager.addBackgroundNote(
+          snapshot.noteName ?? '',
+          snapshot.noteType ?? DEFAULT_NOTE_TYPE,
+          '',
+        );
+        if (!revived) {
+          showToast('Cannot restore — the notes list is at its cap.');
+          return;
+        }
+        manager.switchTo(revived.id, false);
+      }
+
+      // 4. Safety copy of what the target holds RIGHT NOW (post-switch
+      //    truth), attributed to the target note: restoring is the one
+      //    destructive path whose confirm dialog was the sole
+      //    protection — undo history resets on the wholesale replace.
+      //    Declines (empty / identical) are silent — an identical
+      //    existing snapshot already satisfies the promise.
+      const preRestore = getActiveNoteContent();
+      if (
+        preRestore &&
+        snapshotHasContent(preRestore.content, preRestore.noteType) &&
+        !isSameSnapshotState(preRestore, snapshotState)
+      ) {
+        const targetTab = manager.getActive();
+        try {
+          await this.createSnapshotFromCapture(
+            preRestore.content,
+            preRestore.noteType,
+            targetTab?.id,
+            `Before restoring "${snapshot.title}"`,
+            // Silent: the "Snapshot restored!" toast below is the
+            // user-facing message for this action — the safety copy
+            // is a background detail and must not replace it.
+            { emptyToast: false, duplicateToast: false, successToast: false },
+            targetTab?.colorTheme,
+            targetTab?.name ?? undefined,
+          );
+        } catch {
+          /* the restore still proceeds — the confirm already happened */
+        }
+      }
+
+      // 5. The one restore path: it moves the note's type with the
+      //    content and re-announces the active note so the chrome
+      //    (toolbar, editor port, tab badge) follows the restored kind.
+      //    Old snapshots hold plain text on the html path — the editor
+      //    renders it faithfully, newlines and all.
+      manager.applySnapshotToActive(
+        snapshot.content,
+        snapshot.noteType as NoteType | undefined,
+        snapshot.colorTheme,
+      );
+      updateWordCountPill(getEditorText());
+
+      showToast('Snapshot restored!', 'success');
+
+      // Close the modal after a short delay
+      setTimeout(() => {
+        closeModal($('#snapshotsModal').get(0));
+      }, 150);
     };
 
     request.onerror = (event) => {
@@ -908,11 +1176,11 @@ export class SnapshotsManager {
 
   // Copy a snapshot content to clipboard
   copySnapshot(snapshotId: number | undefined, buttonElement: Element): void {
-    if (!this.db) return;
+    if (snapshotId === undefined || !this.db) return;
 
     const transaction = this.db.transaction([this.storeName], 'readonly');
     const store = transaction.objectStore(this.storeName);
-    const request = store.get(snapshotId!);
+    const request = store.get(snapshotId);
 
     request.onsuccess = (event) => {
       const snapshot = (event.target as IDBRequest).result as Snapshot | undefined;
@@ -957,6 +1225,9 @@ export class SnapshotsManager {
 
   // Delete a snapshot
   deleteSnapshot(snapshotId: number | undefined): void {
+    if (snapshotId === undefined) {
+      return;
+    }
     Swal.fire({
       title: 'Want to delete this snapshot?',
       text: "You won't be able to revert this!",
@@ -972,7 +1243,7 @@ export class SnapshotsManager {
         if (!this.db) return;
         const transaction = this.db.transaction([this.storeName], 'readwrite');
         const store = transaction.objectStore(this.storeName);
-        const request = store.delete(snapshotId!);
+        const request = store.delete(snapshotId);
 
         request.onsuccess = () => {
           void this.loadSnapshots();
@@ -1004,11 +1275,6 @@ export class SnapshotsManager {
       console.error('Error deleting all snapshots', event);
       showToast('Error deleting snapshots');
     };
-  }
-
-  // Search snapshots by title or content
-  searchSnapshots(searchTerm: string): void {
-    this.renderRows(searchTerm);
   }
 
   // Update the snapshots count in the UI

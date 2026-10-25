@@ -1074,6 +1074,9 @@ export class TabManager {
             tab.id,
             `Before closing "${deriveTabTitle(tab)}"`,
             tab.colorTheme,
+            // The note's name rides along — the row shows it, and a
+            // restore after the close resurrects the note under it.
+            tab.name ?? undefined,
           );
         } catch {
           /* snapshots unavailable — the close still proceeds */

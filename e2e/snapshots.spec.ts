@@ -1,11 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Snapshots e2e — the rebuilt menu, driven the way a person uses it.
+ * Snapshots e2e — the typed timeline, driven the way a person uses it.
  *
- * Coverage deliberately spans the note types (the rebuild's brief: the
- * feature must behave identically on plain, rich and markdown notes),
- * the duplicate prevention, and both faces of the empty state.
+ * Coverage spans the note types (the feature must behave identically on
+ * plain, rich and markdown notes), duplicate prevention (including the
+ * restore loop), the note-identity contract (restores go to the note a
+ * snapshot came from; deleted notes resurrect as their own notes),
+ * type-sectioned sorting, and both faces of the empty state.
  */
 
 const pageErrors = new WeakMap<Page, string[]>();
@@ -127,6 +129,49 @@ test.describe('the rebuilt menu', () => {
     await expect(page.locator('#snapshotsCount')).toHaveText('1');
   });
 
+  test('two rapid captures store one row — the second sees the first', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+
+    // Two presses before either toast settles: captures serialize through
+    // a queue, so the duplicate check re-runs after the first write lands.
+    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+U');
+
+    await expect(page.locator('#toast')).toHaveText('No changes since the last snapshot.', {
+      timeout: 5_000,
+    });
+    await openSnapshots(page);
+    await expect(snapshotRows(page)).toHaveCount(1);
+    await expect(page.locator('#snapshotsCount')).toHaveText('1');
+  });
+
+  test('the restore loop cannot save the same version twice', async ({ page }) => {
+    await page.goto('/');
+    const editor = page.locator('#note');
+    await editor.click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' version one');
+    await page.keyboard.press('Control+U'); // v1
+    await page.keyboard.type(' and version two');
+    await page.keyboard.press('Control+U'); // v2 — the note's latest
+
+    // Restore v1 (the older row). The pre-restore safety copy of v2 is
+    // declined — v2 already IS the latest snapshot.
+    await openSnapshots(page);
+    await expect(snapshotRows(page)).toHaveCount(2);
+    await snapshotRows(page).nth(1).locator('.restore').click();
+    await page.locator('.swal2-confirm').click();
+    await toastSays(page, 'Snapshot restored!');
+
+    // The note is back at v1; capturing it again must NOT file v1 twice.
+    await page.keyboard.press('Control+U');
+    await toastSays(page, 'This version is already saved.');
+
+    await openSnapshots(page);
+    await expect(snapshotRows(page)).toHaveCount(2);
+  });
+
   test('an edited note snapshots again and the newest row comes first', async ({ page }) => {
     await page.goto('/');
     const editor = page.locator('#note');
@@ -198,7 +243,7 @@ test.describe('search', () => {
   });
 });
 
-test.describe('restore', () => {
+test.describe('restore — to the note it came from', () => {
   test('a confirmed restore replaces the note and closes the modal', async ({ page }) => {
     await page.goto('/');
     const editor = page.locator('#note');
@@ -211,7 +256,7 @@ test.describe('restore', () => {
     await openSnapshots(page);
 
     await snapshotRows(page).first().locator('.restore').click();
-    // Swal asks before overwriting a non-empty note.
+    // Swal asks before overwriting a note that holds something else.
     await page.locator('.swal2-confirm').click();
 
     await toastSays(page, 'Snapshot restored!');
@@ -237,19 +282,79 @@ test.describe('restore', () => {
     await expect(editor).toContainText('later additions');
   });
 
-  test('restoring into an empty note skips the confirmation', async ({ page }) => {
+  test('a restore goes to ITS note — the note you are editing is untouched', async ({ page }) => {
     await page.goto('/');
-    await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    const editor = page.locator('#note');
+    await editor.click();
+    await page.keyboard.press('Control+U'); // snapshot the Welcome note
+    await toastSays(page, 'Snapshot created!');
 
-    // A fresh empty note restores without Swal asking.
+    // A second note, being edited, with its own words.
     await page.locator('#addTab').click();
+    await editor.click();
+    await page.keyboard.type('work in progress');
+
+    // Restore the Welcome snapshot from here — no confirm (its note is
+    // unchanged), and the restore must land on the WELCOME note.
     await openSnapshots(page);
     await snapshotRows(page).first().locator('.restore').click();
-
     await toastSays(page, 'Snapshot restored!');
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
-    await expect(page.locator('#note')).toContainText('Welcome');
+
+    // The Welcome note is on stage again...
+    await expect(editor).toContainText('Welcome');
+    // ...and the note being edited keeps its words, untouched.
+    const tabs = page.locator('#tabStripTabs .tab-strip-tab');
+    await expect(tabs).toHaveCount(2);
+    await tabs.nth(1).click();
+    await expect(editor).toContainText('work in progress');
+  });
+
+  test('a snapshot of a deleted note resurrects it as its own note', async ({ page }) => {
+    await page.goto('/');
+    const editor = page.locator('#note');
+
+    // A named note with content, snapshotted.
+    await page.locator('#addTab').click();
+    await editor.click();
+    await page.keyboard.type('Phoenix rises');
+    await page
+      .locator('#tabStripTabs .tab-strip-tab', { hasText: 'Phoenix rises' })
+      .first()
+      .dblclick();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('Phoenix');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Control+U');
+    await toastSays(page, 'Snapshot created!');
+
+    // The row carries the note's name — identity on a shared timeline.
+    await openSnapshots(page);
+    const row = snapshotRows(page).first();
+    await expect(row.locator('.snapshot-note')).toHaveText('Phoenix');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
+
+    // The note is deleted — the safety copy on close declines silently
+    // (nothing changed since the snapshot), so exactly one row remains.
+    await page
+      .locator('#tabStripTabs .tab-strip-tab', { hasText: 'Phoenix' })
+      .first()
+      .locator('.tab-strip-close')
+      .click();
+    await page.locator('.swal2-confirm').click();
+    await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(1);
+
+    // Restore — the note is gone, so it comes back as its OWN note.
+    await openSnapshots(page);
+    await snapshotRows(page).first().locator('.restore').click();
+    await toastSays(page, 'Snapshot restored!');
+    await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
+
+    const tabs = page.locator('#tabStripTabs .tab-strip-tab');
+    await expect(tabs).toHaveCount(2);
+    await expect(page.locator('#tabStripTabs .tab-strip-tab.active')).toContainText('Phoenix');
+    await expect(editor).toContainText('Phoenix rises');
   });
 });
 
@@ -270,7 +375,9 @@ test.describe('note types — consistent behavior', () => {
     await expect(snapshotRows(page)).toHaveCount(1);
     await expect(snapshotRows(page).first().locator('.snapshot-type-badge')).toHaveText('Markdown');
 
-    // Restoring into an empty PLAIN note switches it back to markdown.
+    // Restoring from a DIFFERENT note still lands on the markdown note —
+    // its surface comes back with its content, and the plain note that
+    // was on stage is never touched.
     await page.keyboard.press('Escape');
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
     await page.locator('#addTab').click();
@@ -323,37 +430,85 @@ test.describe('note types — consistent behavior', () => {
     await expect(page.locator('#noSnapshotsHint kbd').first()).toHaveText('Ctrl');
   });
 
-  test('restoring a plain snapshot into a markdown note switches it back', async ({ page }) => {
+  test('restoring a plain snapshot while editing a markdown note leaves yours alone', async ({
+    page,
+  }) => {
     await page.goto('/');
     // Snapshot the welcome note while it is plain.
     await page.locator('#note').click();
     await page.keyboard.press('Control+U');
     await toastSays(page, 'Snapshot created!');
 
-    // A markdown note with its own content and chrome.
+    // A markdown note with its own content and chrome, now on stage.
     await newTypedNote(page, 'Markdown note');
     const editor = page.locator('#note .ProseMirror');
     await editor.click();
     await page.keyboard.type('# Not the welcome note');
     await expect(page.locator('#markdownToolbar')).toBeVisible();
 
-    // Restore the plain snapshot — the row without a type badge.
+    // Restore the plain snapshot — the row without a type badge. No
+    // confirm: ITS note (the Welcome note) is unchanged, and the note
+    // being edited is not the one being written to.
     await openSnapshots(page);
     const plainRow = page
       .locator('#snapshotsList .snapshot-item', { hasNot: page.locator('.snapshot-type-badge') })
       .first();
     await plainRow.locator('.restore').click();
-    await page.locator('.swal2-confirm').click();
     await toastSays(page, 'Snapshot restored!');
+    await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
 
-    // The markdown chrome stands down and the html content paints.
+    // The Welcome note is on stage; the markdown chrome stood down.
     await expect(page.locator('#markdownToolbar')).toBeHidden();
     await expect(page.locator('#note')).toContainText('Welcome');
-    // The switch survives a reload — the note's stored type moved too.
+
+    // The markdown note was never touched — its words and chrome survive,
+    // and the switch survives a reload. (The heading renders without its
+    // literal '#' — the editor shows prose, not source.)
+    await page.locator('#tabStripTabs .tab-strip-tab').nth(1).click();
+    await expect(page.locator('#markdownToolbar')).toBeVisible();
+    await expect(page.locator('#note')).toContainText('Not the welcome note');
     await page.waitForTimeout(700);
     await page.reload();
-    await expect(page.locator('#note')).toContainText('Welcome');
-    await expect(page.locator('#markdownToolbar')).toBeHidden();
+    await expect(page.locator('#note')).toContainText('Not the welcome note');
+    await expect(page.locator('#markdownToolbar')).toBeVisible();
+  });
+
+  test('the menu sorts by note type — sections in registry order, not recency', async ({
+    page,
+  }) => {
+    await page.goto('/');
+
+    // A plain snapshot FIRST, a markdown snapshot LATER — recency would
+    // put markdown on top; the menu's sort must not.
+    await page.locator('#addTab').click();
+    await page.locator('#note').click();
+    await page.keyboard.type('plain words');
+    await page.keyboard.press('Control+U');
+    await toastSays(page, 'Snapshot created!');
+
+    await newTypedNote(page, 'Markdown note');
+    const editor = page.locator('#note .ProseMirror');
+    await editor.click();
+    await page.keyboard.type('# markdown words');
+    await page.keyboard.press('Control+U');
+    await toastSays(page, 'Snapshot created!');
+
+    await openSnapshots(page);
+    const headers = page.locator('#snapshotsList .snapshots-type');
+    await expect(headers).toHaveCount(2);
+    // Registry order: Notes before Markdown, however recent markdown is.
+    await expect(headers.nth(0).locator('.snapshots-type-label')).toHaveText('Notes');
+    await expect(headers.nth(0).locator('.snapshots-type-count')).toHaveText('1');
+    await expect(headers.nth(1).locator('.snapshots-type-label')).toHaveText('Markdown');
+    await expect(headers.nth(1).locator('.snapshots-type-count')).toHaveText('1');
+
+    // Each row sits under its own section — the plain row leads the list.
+    await expect(snapshotRows(page)).toHaveCount(2);
+    await expect(snapshotRows(page).first().locator('.snapshot-preview')).toContainText(
+      'plain words',
+    );
+    await expect(snapshotRows(page).first().locator('.snapshot-type-badge')).toHaveCount(0);
+    await expect(snapshotRows(page).nth(1).locator('.snapshot-type-badge')).toHaveText('Markdown');
   });
 });
 
@@ -396,8 +551,8 @@ test.describe('deleting', () => {
   });
 });
 
-test.describe('the timeline redesign', () => {
-  test('rows group under one Today header', async ({ page }) => {
+test.describe('the typed timeline', () => {
+  test('rows group under one Notes section and one Today header', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
     await page.keyboard.press('Control+U');
@@ -405,11 +560,16 @@ test.describe('the timeline redesign', () => {
     await page.keyboard.press('Control+U');
 
     await openSnapshots(page);
+    const sections = page.locator('#snapshotsList .snapshots-type');
+    await expect(sections).toHaveCount(1);
+    await expect(sections.first().locator('.snapshots-type-label')).toHaveText('Notes');
+    await expect(sections.first().locator('.snapshots-type-count')).toHaveText('2');
     const days = page.locator('#snapshotsList .snapshots-day');
     await expect(days).toHaveCount(1);
     await expect(days.first()).toHaveText('Today');
     await expect(snapshotRows(page)).toHaveCount(2);
-    // The header is not a row.
+    // The headers are not rows.
+    await expect(sections.first()).not.toHaveClass(/snapshot-item/);
     await expect(days.first()).not.toHaveClass(/snapshot-item/);
   });
 
@@ -501,7 +661,7 @@ test.describe('the timeline redesign', () => {
     await expect(page.locator('#snapshotsModal .snapshots-cap')).toHaveText('of 200');
   });
 
-  test('the toolbar stays pinned while the list scrolls, day header rides along', async ({
+  test('the toolbar stays pinned while the list scrolls, headers stack under it', async ({
     page,
   }) => {
     await page.goto('/');
@@ -532,19 +692,26 @@ test.describe('the timeline redesign', () => {
       560,
     );
 
-    // The Today header is sticky — still pinned to the container's top.
+    // The headers are a two-level sticky stack: the TYPE header pins to
+    // the container's top, the day header rides exactly under it (its
+    // 42px reserved lane).
     const offsets = await page.evaluate(() => {
-      const header = document.querySelector('.snapshots-day') as HTMLElement;
+      const typeHeader = document.querySelector('.snapshots-type') as HTMLElement;
+      const dayHeader = document.querySelector('.snapshots-day') as HTMLElement;
       const box = document.querySelector('.snapshots-list-container') as HTMLElement;
       return {
-        headerTop: header.getBoundingClientRect().top,
+        typeTop: typeHeader.getBoundingClientRect().top,
+        dayTop: dayHeader.getBoundingClientRect().top,
         boxTop: box.getBoundingClientRect().top,
       };
     });
-    expect(Math.abs(offsets.headerTop - offsets.boxTop)).toBeLessThan(2);
+    expect(Math.abs(offsets.typeTop - offsets.boxTop)).toBeLessThan(2);
+    expect(Math.abs(offsets.dayTop - (offsets.boxTop + 42))).toBeLessThan(2);
   });
 
-  test('mobile: rows stack and every action stays reachable', async ({ page }) => {
+  test('mobile: rows stack, headers stay pinned, every action stays reachable', async ({
+    page,
+  }) => {
     await page.goto('/');
     await page.setViewportSize({ width: 375, height: 667 });
     await page.locator('#note').click();
@@ -554,6 +721,7 @@ test.describe('the timeline redesign', () => {
     await page.locator('.navbar-toggle').click();
     await openSnapshots(page);
 
+    await expect(page.locator('#snapshotsList .snapshots-type')).toHaveText(/Notes/);
     await expect(page.locator('#snapshotsList .snapshots-day')).toHaveText('Today');
     const row = snapshotRows(page).first();
     await expect(row.locator('.snapshot-main')).toBeVisible();

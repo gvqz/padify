@@ -4,13 +4,15 @@ import {
   MAX_SNAPSHOTS,
   deriveSnapshotPreview,
   deriveSnapshotTitle,
-  findLatestForNote,
   formatSnapshotClock,
   formatSnapshotDayLabel,
   formatSnapshotTimestamp,
+  groupSnapshotsByType,
   isCurrentSnapshotState,
   isSameSnapshotState,
+  openSnapshotsDatabase,
   pruneSnapshots,
+  readSnapshotsForNote,
   snapshotDayKey,
   snapshotHasContent,
   snapshotReadableText,
@@ -19,17 +21,20 @@ import {
 } from './snapshots';
 
 /**
- * Two contracts live here:
+ * Three contracts live here:
  *
- *  • the snapshot CAP, pinned against a raw database with the manager's
- *    exact schema (keyPath id, autoIncrement, timestamp index): the store
- *    keeps its NEWEST entries and retires the oldest ones past the cap.
+ *  • the STORE — the schema (openSnapshotsDatabase owns the version and
+ *    the upgrade path, including pre-attribution databases), the cap
+ *    (pruneSnapshots) and the per-note read (readSnapshotsForNote), all
+ *    pinned against raw databases with fake-indexeddb.
  *
- *  • the rebuild's decision layer — the pure helpers that make snapshots
- *    behave the same across note types: what counts as content, what
- *    counts as a duplicate, what a row is searched by, and how titles and
- *    previews are derived per kind. The manager's DOM wiring is not under
- *    test; e2e/snapshots.spec.ts drives the whole menu instead.
+ *  • the decision layer — the pure helpers that make snapshots behave
+ *    the same across note types: what counts as content, what counts as
+ *    a duplicate, how the menu groups rows by type, and how titles,
+ *    previews and search text are derived per kind.
+ *
+ *  • the manager's DOM wiring is not under test; e2e/snapshots.spec.ts
+ *    drives the whole menu instead.
  */
 
 const DB_NAME = 'padify-snapshots-cap-test';
@@ -138,6 +143,169 @@ describe('pruneSnapshots — the capped history', () => {
   });
 });
 
+describe('openSnapshotsDatabase — the schema owner', () => {
+  const UPGRADE_DB = 'padify-snapshots-upgrade-test';
+
+  /** The version-1 schema the original build shipped: store + timestamp
+   *  index, NO noteId index — what a long-lived install still holds. */
+  function openLegacyDatabase(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(UPGRADE_DB, 1);
+      request.onupgradeneeded = () => {
+        const database = request.result;
+        if (!database.objectStoreNames.contains(STORE)) {
+          const store = database.createObjectStore(STORE, {
+            keyPath: 'id',
+            autoIncrement: true,
+          });
+          store.createIndex('timestamp', 'timestamp', { unique: false });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  function put(db: IDBDatabase, value: Record<string, unknown>): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE], 'readwrite');
+      transaction.objectStore(STORE).add(value);
+      transaction.oncomplete = () => resolve();
+      transaction.onabort = () => reject(transaction.error);
+    });
+  }
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => {
+      const request = indexedDB.deleteDatabase(UPGRADE_DB);
+      request.onsuccess = () => resolve();
+      request.onerror = () => resolve();
+      request.onblocked = () => resolve();
+    });
+  });
+
+  it('a fresh open creates the store with both indexes', async () => {
+    const db = await openSnapshotsDatabase(UPGRADE_DB, STORE);
+    const store = db.transaction([STORE], 'readonly').objectStore(STORE);
+    expect(store.indexNames.contains('timestamp')).toBe(true);
+    expect(store.indexNames.contains('noteId')).toBe(true);
+    db.close();
+  });
+
+  it('a version-1 store upgrades in place — rows survive, the noteId index appears', async () => {
+    const legacy = await openLegacyDatabase();
+    await put(legacy, {
+      noteId: 'tab-1',
+      title: 'attributed',
+      content: 'a',
+      preview: 'a',
+      timestamp: 1,
+      formattedDate: '',
+    });
+    await put(legacy, {
+      title: 'legacy row',
+      content: 'b',
+      preview: 'b',
+      timestamp: 2,
+      formattedDate: '',
+    });
+    legacy.close();
+
+    const db = await openSnapshotsDatabase(UPGRADE_DB, STORE);
+    const store = db.transaction([STORE], 'readonly').objectStore(STORE);
+    expect(store.indexNames.contains('noteId')).toBe(true);
+
+    // The pre-upgrade rows are intact — upgrading never touches data.
+    const allRows = await new Promise<unknown[]>((resolve, reject) => {
+      const request = db.transaction([STORE], 'readonly').objectStore(STORE).getAll();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    expect(allRows).toHaveLength(2);
+    // The per-note read sees the attributed row and only it — the legacy
+    // row was never this note's.
+    const rows = await readSnapshotsForNote(db, STORE, 'tab-1');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].title).toBe('attributed');
+    db.close();
+  });
+});
+
+describe('readSnapshotsForNote — the per-note read', () => {
+  const READ_DB = 'padify-snapshots-read-test';
+  let db: IDBDatabase;
+
+  function add(value: Record<string, unknown>): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE], 'readwrite');
+      transaction.objectStore(STORE).add(value);
+      transaction.oncomplete = () => resolve();
+      transaction.onabort = () => reject(transaction.error);
+    });
+  }
+
+  beforeEach(async () => {
+    db = await openSnapshotsDatabase(READ_DB, STORE);
+  });
+
+  afterEach(async () => {
+    db.close();
+    await new Promise<void>((resolve) => {
+      const request = indexedDB.deleteDatabase(READ_DB);
+      request.onsuccess = () => resolve();
+      request.onerror = () => resolve();
+      request.onblocked = () => resolve();
+    });
+  });
+
+  it("returns only the note's rows, newest first", async () => {
+    await add({
+      noteId: 'tab-a',
+      title: 'older',
+      content: 'x',
+      preview: 'x',
+      timestamp: 100,
+      formattedDate: '',
+    });
+    await add({
+      noteId: 'tab-b',
+      title: 'other',
+      content: 'x',
+      preview: 'x',
+      timestamp: 150,
+      formattedDate: '',
+    });
+    await add({
+      noteId: 'tab-a',
+      title: 'newer',
+      content: 'y',
+      preview: 'y',
+      timestamp: 200,
+      formattedDate: '',
+    });
+
+    const rows = await readSnapshotsForNote(db, STORE, 'tab-a');
+    expect(rows.map((entry) => entry.timestamp)).toEqual([200, 100]);
+  });
+
+  it('a note with no snapshots answers an empty list, never other notes', async () => {
+    await add({
+      noteId: 'tab-b',
+      title: 'other',
+      content: 'x',
+      preview: 'x',
+      timestamp: 150,
+      formattedDate: '',
+    });
+    expect(await readSnapshotsForNote(db, STORE, 'tab-none')).toEqual([]);
+  });
+
+  it('legacy rows (no noteId) are invisible to the per-note read', async () => {
+    await add({ title: 'legacy', content: 'x', preview: 'x', timestamp: 100, formattedDate: '' });
+    expect(await readSnapshotsForNote(db, STORE, 'tab-a')).toEqual([]);
+  });
+});
+
 describe('snapshotHasContent — emptiness per note kind', () => {
   it('html notes count their text', () => {
     expect(snapshotHasContent('<div>hello</div>')).toBe(true);
@@ -189,62 +357,96 @@ describe('isSameSnapshotState — duplicate detection', () => {
       ),
     ).toBe(false);
   });
+
+  it("normalizes the type — 'standard' and absent are the same note", () => {
+    // The capture paths hand 'standard' and undefined around depending on
+    // where the note came from; the duplicate check must not file the
+    // same bytes twice over a spelling difference. Same rule as the
+    // Current chip (isCurrentSnapshotState).
+    expect(isSameSnapshotState({ content: 'a', noteType: 'standard' }, { content: 'a' })).toBe(
+      true,
+    );
+    expect(isSameSnapshotState({ content: 'a' }, { content: 'a', noteType: 'standard' })).toBe(
+      true,
+    );
+  });
 });
 
-describe('findLatestForNote — the dedupe scope', () => {
-  const rows = [
-    {
-      id: 1,
-      noteId: 'tab-a',
-      title: 'older',
-      content: 'v1',
-      preview: 'v1',
-      timestamp: 100,
-      formattedDate: '',
-    },
-    {
-      id: 2,
-      noteId: 'tab-b',
-      title: 'other note',
-      content: 'x',
-      preview: 'x',
-      timestamp: 150,
-      formattedDate: '',
-    },
-    {
-      id: 3,
-      noteId: 'tab-a',
-      title: 'newer',
-      content: 'v2',
-      preview: 'v2',
-      timestamp: 200,
-      formattedDate: '',
-    },
-  ];
+const row = (overrides: Record<string, unknown> = {}) =>
+  ({
+    id: 1,
+    noteId: 'tab-a',
+    title: 'a row',
+    content: 'x',
+    preview: 'x',
+    timestamp: 100,
+    formattedDate: '',
+    ...overrides,
+  }) as Parameters<typeof groupSnapshotsByType>[0][number];
 
-  it('finds the newest snapshot of the note regardless of input order', () => {
-    expect(findLatestForNote(rows, 'tab-a')?.title).toBe('newer');
-    expect(findLatestForNote([...rows].reverse(), 'tab-a')?.title).toBe('newer');
-    expect(findLatestForNote(rows, 'tab-b')?.title).toBe('other note');
+describe('groupSnapshotsByType — the menu\u2019s sections', () => {
+  it('sections follow the registry order, recency be damned', () => {
+    // A markdown snapshot NEWER than every plain one must not float its
+    // section above Notes — the menu\u2019s shape is the sort the user asked
+    // for, and it stays stable between visits.
+    const sections = groupSnapshotsByType([
+      row({ id: 1, noteType: undefined, timestamp: 100 }),
+      row({ id: 2, noteType: 'markdown', timestamp: 300 }),
+      row({ id: 3, noteType: undefined, timestamp: 200 }),
+    ]);
+    expect(sections.map((section) => section.key)).toEqual(['standard', 'markdown']);
+    expect(sections[0].label).toBe('Notes');
+    expect(sections[0].rows).toHaveLength(2);
+    expect(sections[1].label).toBe('Markdown');
+    expect(sections[1].rows).toHaveLength(1);
   });
 
-  it('a note with no snapshots yet answers undefined', () => {
-    expect(findLatestForNote(rows, 'tab-c')).toBeUndefined();
+  it('rows inside a section are newest first', () => {
+    const sections = groupSnapshotsByType([
+      row({ id: 1, timestamp: 100 }),
+      row({ id: 2, timestamp: 300 }),
+      row({ id: 3, timestamp: 200 }),
+    ]);
+    expect(sections[0].rows.map((entry) => entry.id)).toEqual([2, 3, 1]);
   });
 
-  it('legacy records (no noteId) never satisfy an attributed note', () => {
-    const legacy = [
-      {
-        id: 9,
-        title: 'from the old build',
-        content: 'same bytes',
-        preview: '',
-        timestamp: 50,
-        formattedDate: 'old',
-      },
-    ];
-    expect(findLatestForNote(legacy, 'tab-a')).toBeUndefined();
-    expect(findLatestForNote(legacy, undefined)).toBe(legacy[0]);
+  it('legacy rows, junk ids and explicit standard all read as Notes', () => {
+    const sections = groupSnapshotsByType([
+      row({ id: 1, noteType: undefined }),
+      row({ id: 2, noteType: 'standard' }),
+      row({ id: 3, noteType: 'not a real id!' }),
+    ]);
+    expect(sections).toHaveLength(1);
+    expect(sections[0].key).toBe('standard');
+    expect(sections[0].rows).toHaveLength(3);
+  });
+
+  it('unknown future types trail the known ones, alphabetically', () => {
+    const sections = groupSnapshotsByType([
+      row({ id: 1, noteType: 'zeta' }),
+      row({ id: 2, noteType: undefined }),
+      row({ id: 3, noteType: 'alpha' }),
+    ]);
+    expect(sections.map((section) => section.key)).toEqual(['standard', 'alpha', 'zeta']);
+    // Unknown ids fall back to the registry\u2019s label rule: the id itself.
+    expect(sections[1].label).toBe('alpha');
+  });
+
+  it('every kind gets its section label and icon', () => {
+    const sections = groupSnapshotsByType([
+      row({ id: 1, noteType: 'drawing' }),
+      row({ id: 2, noteType: 'tasks' }),
+      row({ id: 3, noteType: 'rich' }),
+    ]);
+    const byKey = Object.fromEntries(sections.map((section) => [section.key, section.label]));
+    expect(byKey).toMatchObject({
+      rich: 'Rich Text',
+      tasks: 'Task Lists',
+      drawing: 'Drawings',
+    });
+    for (const section of sections) {
+      expect(section.icon).toContain('<svg');
+    }
   });
 });
 
@@ -294,6 +496,21 @@ describe('snapshotSearchText — what a row answers to', () => {
 
   it('matching is case-insensitive', () => {
     expect(snapshotSearchText(row({ title: 'GROCERY' })).includes('grocery')).toBe(true);
+  });
+
+  it('the source note\u2019s NAME answers the search', () => {
+    expect(snapshotSearchText(row({ noteName: 'Groceries' }))).toContain('groceries');
+  });
+
+  it('deep text past the search cap is not cached — 2000 characters deep is enough', () => {
+    // The cache holds one search string per row in memory; the readable
+    // projection is capped so a giant note does not become a giant
+    // lowercase copy of itself.
+    const deep = `x`.repeat(2500) + 'needle deep in the note';
+    expect(snapshotSearchText(row({ content: deep })).includes('needle')).toBe(false);
+    // …while anything within the cap is fair game.
+    const near = `${'x'.repeat(1000)}needle closer to the top`;
+    expect(snapshotSearchText(row({ content: near })).includes('needle')).toBe(true);
   });
 });
 

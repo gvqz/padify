@@ -1,16 +1,17 @@
-/* vercel design system — part 11/17: Snapshots — the timeline redesign.
+/* vercel design system — part 11/17: Snapshots — the typed timeline.
    Split from the former vercel.css (cascade order preserved —
    index.html loads these files in numeric order, last in the
    stylesheet chain, exactly where the monolith sat).
 
-   The second rebuild turns the flat list into a timeline: rows group
-   under sticky day headers (Today / Yesterday / the date), each row is
-   an expandable card — type rail, title + badge + Current chip, one
-   line of preview, clock and actions on the right — and the toolbar
-   stays pinned while only the list scrolls. Every color comes from the
-   token aliases; dark mode needs no rules of its own here. */
+   The list is sectioned by note type (registry order, counts in the
+   header); inside a section, rows group under sticky day headers
+   (Today / Yesterday / the date), each row an expandable card — type
+   rail, title + badge + note chip + Current chip, one line of preview,
+   clock and actions on the right. The toolbar stays pinned while only
+   the list scrolls. Every color comes from the token aliases; dark
+   mode needs no rules of its own here. */
 /* --------------------------------------------------------------------------
-   11. Snapshots — the timeline menu
+   11. Snapshots — the typed timeline menu
    -------------------------------------------------------------------------- */
 
 #snapshotsModal .modal-dialog {
@@ -142,17 +143,58 @@
   display: none;
 }
 
-/* Day group headers — the timeline's spine. Sticky so the current day
-   rides with the scroll; solid background (not translucent) so rows
-   never show through. */
-.snapshots-day {
+/* Type sections — the menu's spine: one header per note kind, registry
+   order, the row count at the right. Sticky so the current kind rides
+   with the scroll; solid background (not translucent) so rows never
+   show through. The fixed 42px height is the offset the day headers
+   stack underneath. */
+.snapshots-type {
   position: sticky;
   top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 16px;
+  background: var(--vz-bg-subtle);
+  border-bottom: 1px solid var(--vz-border);
+  color: var(--vz-fg);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.snapshots-type-icon {
+  display: flex;
+  align-items: center;
+  color: var(--vz-fg-muted);
+}
+
+.snapshots-type-count {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-chip);
+  border: 1px solid var(--vz-border);
+  border-radius: 999px;
+  padding: 1.5px 7px;
+}
+
+/* Day group headers — the timeline inside a section. Sticky BELOW the
+   type header (42px, its exact height) so the stack reads kind → day →
+   row while scrolling; solid background so rows never show through. */
+.snapshots-day {
+  position: sticky;
+  top: 42px;
   z-index: 2;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 16px 7px;
+  padding: 7px 16px 6px;
   background: var(--vz-bg);
   border-bottom: 1px solid var(--vz-border);
   color: var(--vz-fg-subtle);
@@ -160,10 +202,6 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-}
-
-.snapshots-day:not(:first-child) {
-  margin-top: 0;
 }
 
 /* ---- The row: grid of [main button | side column], expand spans both ---- */
@@ -263,6 +301,24 @@
   border: 1px solid var(--vz-border);
   line-height: 1.4;
   text-transform: uppercase;
+}
+
+/* The source note's NAME — the identity a shared timeline owes the
+   reader. A quiet chip after the badge; unnamed notes show nothing
+   (their first line is their label, which the title already carries). */
+.snapshot-note {
+  flex: 0 0 auto;
+  max-width: 160px;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-chip);
+  border: 1px solid var(--vz-border);
+  border-radius: 5px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* The Current chip — this row IS the note you have open. A soft

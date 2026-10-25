@@ -30,14 +30,19 @@ async function createRichNote(page: Page): Promise<void> {
 }
 
 /**
- * Drains the app's save pipeline deterministically (capture + immediate
- * persist + idle) so the hand-rewrites below can land in IndexedDB
- * without the page's pagehide flush re-persisting over them.
+ * Drains the app's save pipeline deterministically (capture + the input
+ * debounce + immediate persist + idle) so the hand-rewrites below can land
+ * in IndexedDB without the page's pagehide flush re-persisting over them.
  */
 async function settleSaves(page: Page): Promise<void> {
   await page.evaluate(async () => {
     const tabs = (await import('/src/tabs.ts')) as typeof import('/src/tabs.ts');
     tabs.getTabManager()?.syncAfterExternalEdit();
+    // The editor's input path SCHEDULES a 400ms debounced persist; the
+    // idle check below only awaits in-flight writes, so that timer can
+    // still be pending — and the unload flush fires it during teardown,
+    // re-persisting the live editor over the hand-rewrites. Drain it.
+    tabs.getTabManager()?.flushPendingPersist();
     const storage =
       (await import('/src/storage/index.ts')) as typeof import('/src/storage/index.ts');
     await storage.whenNotesIdle();

@@ -520,12 +520,19 @@ test.describe('the calendar', () => {
     ).toBeVisible();
 
     // …and clicking a chipped future day moves the selection there.
+    // "Next Week" can land in the NEXT month (any date in a month's last
+    // week), and a day only renders inside its own month's grid — walk
+    // the calendar forward until the chip is on stage.
     const chipped = page.locator('.tkcal-day:not(.is-outside) .tkcal-chip').first();
+    for (let hop = 0; hop < 2 && (await chipped.count()) === 0; hop++) {
+      await page.locator('.tkcal-navs [data-cal-next]').click();
+    }
     await chipped.click();
     await expect(pane.locator('.tk-task-wrap', { hasText: 'Future thing' })).toBeVisible();
     // Today's empty copy stays friendly when reselected (the Today
-    // button is always at hand — the cell is the door).
-    await page.locator('.tkcal-day.is-today').click();
+    // button walks the selection home from any month).
+    await page.locator('.tkcal-navs [data-cal-today]').click();
+    await expect(page.locator('.tkcal-day.is-today')).toHaveClass(/is-selected/);
     await expect(pane.locator('.tk-empty-day')).toBeVisible();
   });
 
