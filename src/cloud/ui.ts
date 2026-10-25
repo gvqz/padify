@@ -174,6 +174,9 @@ export function initCloudUI(): void {
       // user sees the account view with the fresh sync state.
     } finally {
       $buttonEl.prop('disabled', false);
+      // The busy label must not outlive the attempt: a failed sign-in
+      // used to leave "Creating account…" on an enabled button.
+      $buttonEl.text(mode === 'sign-in' ? 'Sign in' : 'Create account');
       // Deliberately NOT calling setMode here: it would wipe the error
       // message the failure path above just rendered.
     }
