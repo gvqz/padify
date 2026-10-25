@@ -195,8 +195,10 @@ test.describe('the rebuilt menu', () => {
     await snapshotRows(page).nth(1).locator('.restore').click();
     await page.locator('.swal2-confirm').click();
     await toastSays(page, 'Snapshot restored!');
-
     // The note is back at v1; capturing it again must NOT file v1 twice.
+    // The menu stayed open — close it before driving the editor again.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
     await page.keyboard.press('Control+U');
     await toastSays(page, 'This version is already saved.');
 
@@ -276,7 +278,7 @@ test.describe('search', () => {
 });
 
 test.describe('restore — to the note it came from', () => {
-  test('a confirmed restore replaces the note and closes the modal', async ({ page }) => {
+  test('a confirmed restore replaces the note and the menu stays open', async ({ page }) => {
     await page.goto('/');
     const editor = page.locator('#note');
     await editor.click();
@@ -292,7 +294,17 @@ test.describe('restore — to the note it came from', () => {
     await page.locator('.swal2-confirm').click();
 
     await toastSays(page, 'Snapshot restored!');
-    await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
+    // The menu STAYS open — the next version to compare is right there,
+    // and the row that now matches the note wears the Current chip.
+    await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
+    // The restored row is the one WITHOUT the replaced words — v1 and
+    // the safety copy share their first hundred characters, so the
+    // words that were replaced are the only discriminator.
+    const restoredRow = page
+      .locator('#snapshotsList .snapshot-item')
+      .filter({ hasNotText: 'and then some more words' })
+      .first();
+    await expect(restoredRow).toHaveClass(/is-current/);
     await expect(editor).toContainText('version A');
     await expect(editor).not.toContainText('and then some more words');
   });
@@ -331,6 +343,9 @@ test.describe('restore — to the note it came from', () => {
     await openSnapshots(page);
     await snapshotRows(page).first().locator('.restore').click();
     await toastSays(page, 'Snapshot restored!');
+    // The menu stays open; the tab switch happened underneath. Close it
+    // before driving the tab strip again.
+    await page.keyboard.press('Escape');
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
 
     // The Welcome note is on stage again...
@@ -381,7 +396,7 @@ test.describe('restore — to the note it came from', () => {
     await openSnapshots(page);
     await snapshotRows(page).first().locator('.restore').click();
     await toastSays(page, 'Snapshot restored!');
-    await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
+    await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
 
     const tabs = page.locator('#tabStripTabs .tab-strip-tab');
     await expect(tabs).toHaveCount(2);
@@ -391,9 +406,7 @@ test.describe('restore — to the note it came from', () => {
 });
 
 test.describe('note types — consistent behavior', () => {
-  test('a markdown note snapshots with its type badge and restores its surface', async ({
-    page,
-  }) => {
+  test('a markdown note snapshots under its section and restores its surface', async ({ page }) => {
     await page.goto('/');
     await newTypedNote(page, 'Markdown note');
 
@@ -405,7 +418,12 @@ test.describe('note types — consistent behavior', () => {
 
     await openSnapshots(page);
     await expect(snapshotRows(page)).toHaveCount(1);
-    await expect(snapshotRows(page).first().locator('.snapshot-type-badge')).toHaveText('Markdown');
+    // The row carries no type chip — it lives inside its type's section,
+    // and the section header already says it.
+    await expect(snapshotRows(page).first().locator('.snapshot-type-badge')).toHaveCount(0);
+    await expect(page.locator('#snapshotsList .snapshots-type-label').first()).toHaveText(
+      'Markdown',
+    );
 
     // Restoring from a DIFFERENT note still lands on the markdown note —
     // its surface comes back with its content, and the plain note that
@@ -432,7 +450,8 @@ test.describe('note types — consistent behavior', () => {
 
     await openSnapshots(page);
     await expect(snapshotRows(page)).toHaveCount(1);
-    await expect(snapshotRows(page).first().locator('.snapshot-type-badge')).toHaveText(
+    await expect(snapshotRows(page).first().locator('.snapshot-type-badge')).toHaveCount(0);
+    await expect(page.locator('#snapshotsList .snapshots-type-label').first()).toHaveText(
       'Rich Text',
     );
 
@@ -478,15 +497,20 @@ test.describe('note types — consistent behavior', () => {
     await page.keyboard.type('# Not the welcome note');
     await expect(page.locator('#markdownToolbar')).toBeVisible();
 
-    // Restore the plain snapshot — the row without a type badge. No
-    // confirm: ITS note (the Welcome note) is unchanged, and the note
-    // being edited is not the one being written to.
+    // Restore the plain snapshot — the row whose preview is the Welcome
+    // text. No confirm: ITS note (the Welcome note) is unchanged, and
+    // the note being edited is not the one being written to.
     await openSnapshots(page);
     const plainRow = page
-      .locator('#snapshotsList .snapshot-item', { hasNot: page.locator('.snapshot-type-badge') })
+      .locator('#snapshotsList .snapshot-item', {
+        hasText: 'Welcome! Padify is an offline-capable',
+      })
       .first();
     await plainRow.locator('.restore').click();
     await toastSays(page, 'Snapshot restored!');
+    await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
+    // Close the menu before driving the tab strip again.
+    await page.keyboard.press('Escape');
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
 
     // The Welcome note is on stage; the markdown chrome stood down.
@@ -540,7 +564,10 @@ test.describe('note types — consistent behavior', () => {
       'plain words',
     );
     await expect(snapshotRows(page).first().locator('.snapshot-type-badge')).toHaveCount(0);
-    await expect(snapshotRows(page).nth(1).locator('.snapshot-type-badge')).toHaveText('Markdown');
+    await expect(snapshotRows(page).nth(1).locator('.snapshot-type-badge')).toHaveCount(0);
+    // The kind is the SECTION's to say — twice over, once per header.
+    await expect(headers.nth(0)).toContainText('Notes');
+    await expect(headers.nth(1)).toContainText('Markdown');
   });
 });
 
@@ -916,19 +943,19 @@ test.describe('the search and the footer', () => {
 
     await page.locator('#searchSnapshots').fill('tail copy');
     await expect(page.locator('#snapshotsCount')).toHaveText('1');
-    await expect(page.locator('#snapshotsModal .snapshots-cap')).toHaveText('results');
+    // One match, one singular word — the footer agrees with the count.
+    await expect(page.locator('#snapshotsModal .snapshots-cap')).toHaveText('result');
 
     await page.locator('#searchSnapshots').fill('zzz-no-match');
     await expect(page.locator('#snapshotsCount')).toHaveText('0');
     await expect(page.locator('#snapshotsModal .snapshots-cap')).toHaveText('results');
     await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
-
     await page.locator('#searchSnapshots').fill('');
     await expect(page.locator('#snapshotsCount')).toHaveText('2');
     await expect(page.locator('#snapshotsModal .snapshots-cap')).toHaveText('of 200');
   });
 
-  test('a snapshot taken under an active filter honors the query', async ({ page }) => {
+  test('a capture that MATCHES the active filter keeps the query', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
     await page.keyboard.press('Control+End');
@@ -936,32 +963,120 @@ test.describe('the search and the footer', () => {
     await page.keyboard.press('Control+U');
 
     await openSnapshots(page);
-    // A query that matches nothing, under which a NEW snapshot is taken
-    // — the refresh must keep honoring the query, not flash the
-    // unfiltered list under it.
+    // A query the new snapshot still answers: the refresh honors the
+    // query — the new row sits in the filtered list, still flashing.
+    await page.locator('#searchSnapshots').fill('grocery');
+    await expect(snapshotRows(page)).toHaveCount(1);
+
+    // Change the note so the capture is not declined as a duplicate.
+    // (Focus is in the field: Escape clears the query first, a second
+    // press closes the menu.)
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#searchSnapshots')).toHaveValue('');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' and a snack');
+    await openSnapshots(page);
+    // The query is gone and the list is whole — refill it.
+    await page.locator('#searchSnapshots').fill('grocery');
+    await expect(snapshotRows(page)).toHaveCount(1);
+
+    await page.locator('#createSnapshotBtn').click();
+    await toastSays(page, 'Snapshot created!');
+
+    // The query survives (the capture answered it) and the fresh row
+    // shows through the filter, flash and all.
+    await expect(page.locator('#searchSnapshots')).toHaveValue('grocery');
+    await expect(snapshotRows(page)).toHaveCount(2);
+    await expect(snapshotRows(page).first()).toHaveClass(/is-new/);
+  });
+
+  test('a capture the filter would HIDE clears the filter so the flash is visible', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' grocery run');
+    await page.keyboard.press('Control+U');
+
+    await openSnapshots(page);
+    // A query that matches nothing, under which a NEW snapshot is taken.
+    // The old behavior kept the query and hid the row the user JUST
+    // created — a flash aimed at a row the list refuses to show. The
+    // filter now gives way: the new snapshot is the thing the user
+    // asked for, the query was yesterday's context.
     await page.locator('#searchSnapshots').fill('zzz-no-match');
     await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
 
-    // Close via the Close button — the query STAYS in the field (the
-    // whole point: what the reopen and the capture must both honor).
-    await page.locator('#snapshotsModal .modal-footer [data-dismiss="modal"]').click();
+    // Change the note so the capture is not declined as a duplicate.
+    // (Focus is in the field: Escape clears the dead query first, a
+    // second press closes the menu.)
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#searchSnapshots')).toHaveValue('');
+    await page.keyboard.press('Escape');
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
-
     await page.locator('#note').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' second thought');
     await openSnapshots(page);
-    // The leftover query still rules the list.
+    await page.locator('#searchSnapshots').fill('zzz-no-match');
     await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
+
     await page.locator('#createSnapshotBtn').click();
     await toastSays(page, 'Snapshot created!');
 
-    await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
-    await expect(page.locator('#snapshotsCount')).toHaveText('0');
-    await expect(page.locator('#snapshotsModal .snapshots-cap')).toHaveText('results');
-
-    // Clearing the query shows both rows.
-    await page.locator('#searchSnapshots').fill('');
+    // The query cleared itself; the whole history is on stage again —
+    // the fresh row leads it, still flashing.
+    await expect(page.locator('#searchSnapshots')).toHaveValue('');
     await expect(snapshotRows(page)).toHaveCount(2);
+    await expect(snapshotRows(page).first()).toHaveClass(/is-new/);
+  });
+
+  test('the search field clears itself with the × and focuses from "/"', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+    await openSnapshots(page);
+
+    const search = page.locator('#searchSnapshots');
+    await search.fill('welcome');
+    await expect(snapshotRows(page)).toHaveCount(1);
+    // The clear button is on stage with a query to clear…
+    const clear = page.locator('#clearSnapshotSearch');
+    await expect(clear).toBeVisible();
+    // …and the live count sits beside the query it describes.
+    await expect(page.locator('#snapshotSearchMeta')).toHaveText('1 result');
+
+    // "/" focuses the field without typing a slash into it.
+    await search.blur();
+    await page.keyboard.press('/');
+    await expect(search).toBeFocused();
+    await expect(search).toHaveValue('welcome');
+
+    // The × clears the query and hands the focus back.
+    await clear.click();
+    await expect(search).toHaveValue('');
+    await expect(snapshotRows(page)).toHaveCount(1);
+    await expect(search).toBeFocused();
+  });
+
+  test('the no-match state offers the way out: Clear search', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+    await openSnapshots(page);
+
+    await page.locator('#searchSnapshots').fill('zzz-nothing-matches');
+    await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
+    const clearMiss = page.locator('#clearSearchFromEmpty');
+    await expect(clearMiss).toBeVisible();
+
+    await clearMiss.click();
+    await expect(page.locator('#searchSnapshots')).toHaveValue('');
+    await expect(snapshotRows(page)).toHaveCount(1);
+    await expect(page.locator('#noSnapshotsMiss')).toBeHidden();
   });
 });

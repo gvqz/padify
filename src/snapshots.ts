@@ -24,7 +24,10 @@
  *    is blank.
  *  • SEARCH — matches what a row shows (title, note name, preview,
  *    type label) plus the readable projection capped at a few
- *    thousand characters — never raw markup or JSON braces.
+ *    thousand characters — never raw markup or JSON braces. The field
+ *    carries its own trailing chrome: a live result count, a clear
+ *    button (Escape works too), a "/" focus shortcut, and highlighted
+ *    matches in the rows.
  *  • DATES — formatted at render time from the timestamp; the stored
  *    formattedDate field is written for older builds only.
  *  • THE MENU — sections by note type (registry order), each foldable
@@ -33,12 +36,18 @@
  *    beyond today, the source note's name on the row, and each row's
  *    change badge (words / tasks / shapes) against the previous
  *    snapshot of its note — two snapshots whose difference lives past
- *    the preview's 100 characters are otherwise twins. The footer
- *    reports the filtered count while a query runs, the store's size
- *    against its cap otherwise.
+ *    the preview's 100 characters are otherwise twins. The row carries
+ *    no type chip of its own — it lives inside its type's section, and
+ *    the header already says it. The footer reports the filtered count
+ *    while a query runs, the store's size against its cap otherwise.
+ *  • RESTORE — the menu STAYS OPEN afterwards: the list re-renders,
+ *    the restored row picks up the Current chip, and the next version
+ *    is right there. Closing is the user's move. A capture taken while
+ *    a search filter would hide it clears that filter, so the flash
+ *    the user is promised is a flash they can see.
  */
 import { $ } from './lib/q';
-import { openModal, closeModal } from './ui/behavior/modal';
+import { openModal } from './ui/behavior/modal';
 import Swal from 'sweetalert2';
 import { getActiveNoteContent, getEditorText, getTabManager, htmlToText } from './tabs';
 import {
@@ -648,6 +657,31 @@ export function groupSnapshotsByType(snapshots: Snapshot[]): SnapshotTypeSection
     }));
 }
 
+/**
+ * Escapes text, then wraps every literal match of the search term in a
+ * <mark> — the eye needs to land on WHY a row answered the query. Both
+ * the text and the term are HTML-escaped before matching, so the search
+ * can never inject markup through the query.
+ */
+function highlightMatches(text: string, term: string): string {
+  const escaped = escapeHtmlText(text);
+  const needle = escapeHtmlText(term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (!needle) {
+    return escaped;
+  }
+  return escaped.replace(new RegExp(needle, 'gi'), (m) => `<mark>${m}</mark>`);
+}
+
+/** The escaping half of highlightMatches, shared with plain-HTML callers. */
+function escapeHtmlText(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 export class SnapshotsManager {
   dbName: string;
   storeName: string;
@@ -769,15 +803,61 @@ export class SnapshotsManager {
       this.renderRows((e.target as HTMLInputElement).value);
     });
 
-    // Escape in the search field clears the query first — the input has no
-    // clear button, and a field that only clears by hand-selecting its text
-    // ignores the reset muscle memory every other search box taught.
-    // stopPropagation keeps the document-level Escape handler from closing
-    // the modal under the same press.
+    // The search field's clear button — the visible twin of the Escape
+    // shortcut. Hidden while the field is empty; clicking resets the list
+    // and hands the focus back so typing continues where it left off.
+    document.getElementById('clearSnapshotSearch')?.addEventListener('click', () => {
+      const input = document.getElementById('searchSnapshots') as HTMLInputElement | null;
+      if (!input) {
+        return;
+      }
+      input.value = '';
+      this.renderRows('');
+      input.focus();
+    });
+
+    // Escape in the search field clears the query first — the input has a
+    // clear button now, but the reset muscle memory from every other search
+    // box still applies. stopPropagation keeps the document-level Escape
+    // handler from closing the modal under the same press.
     document.getElementById('searchSnapshots')?.addEventListener('keydown', (e) => {
       const input = e.target as HTMLInputElement;
       if (e.key === 'Escape' && input.value !== '') {
         e.stopPropagation();
+        input.value = '';
+        this.renderRows('');
+      }
+    });
+
+    // "/" focuses the search — the list browsers' convention. The
+    // listener rides on document because focus can sit on the body (the
+    // dialog is open but nothing inside it holds focus); the guard keeps
+    // the shortcut scoped to the open menu, and typing inside any field
+    // must not loop back into the field.
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) {
+        return;
+      }
+      const modal = document.getElementById('snapshotsModal');
+      if (!modal || !modal.classList.contains('in')) {
+        return;
+      }
+      const target = e.target as HTMLElement;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      const input = document.getElementById('searchSnapshots') as HTMLInputElement | null;
+      if (input) {
+        e.preventDefault();
+        input.focus();
+      }
+    });
+
+    // The no-match empty state's recovery action — clears the query that
+    // emptied the list without making the user find the tiny ×.
+    document.getElementById('clearSearchFromEmpty')?.addEventListener('click', () => {
+      const input = document.getElementById('searchSnapshots') as HTMLInputElement | null;
+      if (input) {
         input.value = '';
         this.renderRows('');
       }
@@ -988,6 +1068,19 @@ export class SnapshotsManager {
           showToast('Snapshot created!', 'success');
         }
 
+        // A filter that would hide the row the user JUST created is a
+        // trap — the flash would land on a row the list refuses to show.
+        // Clearing the query is the least-surprise move: the new snapshot
+        // is the thing the user asked for, the query was yesterday's
+        // context. (The check reuses the row's own searchable text.)
+        const term = this.currentSearchTerm().trim().toLowerCase();
+        if (term !== '' && !snapshotSearchText(snapshot).includes(term)) {
+          const input = document.getElementById('searchSnapshots') as HTMLInputElement | null;
+          if (input) {
+            input.value = '';
+          }
+        }
+
         // A store that only ever grows is a slow leak: retire the oldest
         // snapshots beyond the cap so safety copies stay bounded.
         pruneSnapshots(database, this.storeName)
@@ -1176,7 +1269,11 @@ export class SnapshotsManager {
       const dayGroups = snapshotDayGroups(section.rows);
       const appendRows = (groupRows: Snapshot[]) => {
         for (const snapshot of groupRows) {
-          const li = this.createSnapshotElement(snapshot, badges.get(snapshot.id ?? -1));
+          const li = this.createSnapshotElement(
+            snapshot,
+            badges.get(snapshot.id ?? -1),
+            filtering ? term : '',
+          );
           li.classList.toggle('is-current', isCurrentSnapshotState(snapshot, active));
           if (snapshot.id !== undefined && snapshot.id === this.pendingHighlightId) {
             li.classList.add('is-new');
@@ -1211,7 +1308,9 @@ export class SnapshotsManager {
     }
 
     // The empty state has two faces: nothing stored yet, or nothing that
-    // matched the search. They share the icon; the copy must not lie.
+    // matched the search. They share the icon; the copy must not lie —
+    // and the miss face carries a recovery action, a one-click way out of
+    // the dead end the query built.
     const hasAny = this.cache.length > 0;
     const hasRows = rows.length > 0;
     snapshotsList.style.display = hasRows ? 'block' : 'none';
@@ -1220,6 +1319,24 @@ export class SnapshotsManager {
     document.getElementById('noSnapshotsEmpty')?.toggleAttribute('hidden', showMiss);
     document.getElementById('noSnapshotsHint')?.toggleAttribute('hidden', showMiss);
     document.getElementById('noSnapshotsMiss')?.toggleAttribute('hidden', !showMiss);
+    document.getElementById('clearSearchFromEmpty')?.toggleAttribute('hidden', !showMiss);
+
+    // The search field's trailing chrome tracks the query: the live result
+    // count sits beside the text it describes (the footer is a glance
+    // away, the count is not), and the clear button appears only when
+    // there is something to clear.
+    const searchMeta = document.getElementById('snapshotSearchMeta');
+    if (searchMeta) {
+      searchMeta.textContent = filtering
+        ? `${rows.length} ${rows.length === 1 ? 'result' : 'results'}`
+        : '';
+      searchMeta.toggleAttribute('hidden', !filtering);
+    }
+    const clearBtn = document.getElementById('clearSnapshotSearch');
+    clearBtn?.toggleAttribute('hidden', !filtering);
+    // The "/" hint retires while a query runs — the × and the count own
+    // the field's trailing edge then.
+    document.querySelector('.snapshots-search-wrap')?.classList.toggle('has-query', filtering);
 
     // The footer tells the truth about what is on stage: the filtered
     // count while a query runs ('12 results'), the store's size against
@@ -1231,31 +1348,33 @@ export class SnapshotsManager {
       countElement.textContent = String(filtering ? rows.length : this.cache.length);
     }
     if (capElement) {
-      capElement.textContent = filtering ? 'results' : `of ${MAX_SNAPSHOTS}`;
+      capElement.textContent = filtering
+        ? rows.length === 1
+          ? 'result'
+          : 'results'
+        : `of ${MAX_SNAPSHOTS}`;
     }
   }
 
   // Create a snapshot element for the UI — the timeline row. The main
-  // area is a real button (expand/collapse), the side column carries the
-  // clock, the version's change badge and the three actions; the expand
-  // panel spans below both.
-  createSnapshotElement(snapshot: Snapshot, change?: SnapshotChangeBadge): HTMLLIElement {
+  // area is a real button (expand/collapse); the side column carries the
+  // clock, the version's change badge and the actions, revealed on hover
+  // (always on touch). The expand panel spans below both. Under an
+  // active query, the title and preview carry the highlighted matches.
+  createSnapshotElement(
+    snapshot: Snapshot,
+    change?: SnapshotChangeBadge,
+    highlightTerm?: string,
+  ): HTMLLIElement {
     const li = document.createElement('li');
     li.className = 'snapshot-item';
     li.dataset.snapshotId = String(snapshot.id ?? '');
 
-    // The type badge — shown for non-default types only, matching the tab
-    // rail's convention: a badge matters when restoring would SWITCH the
-    // note's type, which plain notes never do.
-    const typeBadge =
-      snapshot.noteType && snapshot.noteType !== 'standard'
-        ? `<span class="snapshot-type-badge">${this.escapeHtml(snapshotTypeBadgeLabel(snapshot.noteType))}</span>`
-        : '';
-
     // The source note's NAME — the identity a mixed timeline owes the
     // reader. Unnamed notes store nothing (their first line IS their
     // label, which the title already shows); a name that merely repeats
-    // the title adds noise, not identity.
+    // the title adds noise, not identity. (The note TYPE has no row chip:
+    // rows sit inside their type's section, whose header already says it.)
     const noteChip =
       snapshot.noteName && snapshot.noteName !== snapshot.title
         ? `<span class="snapshot-note" title="The note this snapshot belongs to">${this.escapeHtml(snapshot.noteName)}</span>`
@@ -1277,17 +1396,22 @@ export class SnapshotsManager {
       ? `<span class="snapshot-delta ${change.delta > 0 ? 'is-up' : change.delta < 0 ? 'is-down' : 'is-flat'}" title="Change since the previous snapshot of this note">${change.delta > 0 ? '+' : change.delta < 0 ? '\u2212' : '\u00b1'}${Math.abs(change.delta)} ${this.escapeHtml(change.unit)}</span>`
       : '';
 
+    const titleHtml = highlightTerm
+      ? highlightMatches(snapshot.title, highlightTerm)
+      : this.escapeHtml(snapshot.title);
+    const previewHtml = highlightTerm
+      ? highlightMatches(snapshot.preview, highlightTerm)
+      : this.escapeHtml(snapshot.preview);
+
     li.innerHTML = `
             <button type="button" class="snapshot-main" aria-expanded="false" aria-controls="${expandId}" title="Show this snapshot's text">
-                <span class="snapshot-rail" aria-hidden="true">${snapshotTypeIcon(snapshot.noteType)}</span>
                 <span class="snapshot-body">
                     <span class="snapshot-headline">
-                        <span class="snapshot-title" title="${this.escapeHtml(snapshot.title)}">${this.escapeHtml(snapshot.title)}</span>
-                        ${typeBadge}
+                        <span class="snapshot-title" title="${this.escapeHtml(snapshot.title)}">${titleHtml}</span>
                         ${noteChip}
                         <span class="snapshot-current" title="Identical to the note you have open"><span class="snapshot-current-dot" aria-hidden="true"></span>Current</span>
                     </span>
-                    <span class="snapshot-preview" title="${this.escapeHtml(snapshot.preview)}">${this.escapeHtml(snapshot.preview)}</span>
+                    <span class="snapshot-preview" title="${this.escapeHtml(snapshot.preview)}">${previewHtml}</span>
                 </span>
                 <svg class="snapshot-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
             </button>
@@ -1299,11 +1423,11 @@ export class SnapshotsManager {
                 <span class="snapshot-actions">
                     <button type="button" class="snapshot-btn restore" title="Restore this snapshot" aria-label="Restore this snapshot">Restore</button>
                     <button type="button" class="snapshot-btn copy" title="Copy snapshot content" aria-label="Copy snapshot content">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                     </button>
                     <span class="snapshot-actions-sep" aria-hidden="true"></span>
                     <button type="button" class="snapshot-btn delete" title="Delete this snapshot" aria-label="Delete this snapshot">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11V17"></path><path d="M14 11V17"></path><path d="M4 7H20"></path><path d="M6 7H12H18V18C18 19.6569 16.6569 21 15 21H9C7.34315 21 6 19.6569 6 18V7Z"></path><path d="M9 5C9 3.89543 9.89543 3 11 3H13C14.1046 3 15 3.89543 15 5V7H9V5Z"></path></svg>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11V17"></path><path d="M14 11V17"></path><path d="M4 7H20"></path><path d="M6 7H12H18V18C18 19.6569 16.6569 21 15 21H9C7.34315 21 6 19.6569 6 18V7Z"></path><path d="M9 5C9 3.89543 9.89543 3 11 3H13C14.1046 3 15 3.89543 15 5V7H9V5Z"></path></svg>
                     </button>
                 </span>
             </div>
@@ -1391,12 +1515,19 @@ export class SnapshotsManager {
 
       // 2. Ask before overwriting a note that holds something else. A
       //    declined ask leaves everything exactly as it was — no tab
-      //    switch, no write.
+      //    switch, no write. The dialog names the TARGET — its recorded
+      //    name when it has one, else the snapshot's own title (the
+      //    note's first line) — never the blank "this note".
       if (replaces) {
-        const targetName = source?.name || snapshot.noteName || active?.name || 'this note';
+        const targetName =
+          source?.name ||
+          snapshot.noteName ||
+          active?.name ||
+          deriveSnapshotTitle(snapshot.content, snapshot.noteType) ||
+          'this note';
         const result = await Swal.fire({
           title: 'Restore this snapshot?',
-          text: `This will replace the current contents of "${targetName}". A safety snapshot is taken first.`,
+          text: `"${targetName}" will be replaced with this version. Its current text is saved as a snapshot first.`,
           icon: 'warning',
           showCancelButton: true,
           confirmButtonText: 'Yes, Restore!',
@@ -1472,10 +1603,13 @@ export class SnapshotsManager {
 
       showToast('Snapshot restored!', 'success');
 
-      // Close the modal after a short delay
-      setTimeout(() => {
-        closeModal($('#snapshotsModal').get(0));
-      }, 150);
+      // The menu STAYS OPEN — the restore is mid-conversation, not the
+      // end of one: the next version to compare (or restore) is right
+      // there, and the row that now matches the note picks up the
+      // Current chip as direct feedback for what just happened. Closing
+      // is the user's move (Escape, the close button, the backdrop).
+      this.pendingHighlightId = null;
+      void this.loadSnapshots(this.currentSearchTerm());
     };
 
     request.onerror = (event) => {
@@ -1614,13 +1748,7 @@ export class SnapshotsManager {
   // Helper to escape HTML
   escapeHtml(unsafe: string | null | undefined): string {
     if (!unsafe) return '';
-    return unsafe
-      .toString()
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
+    return escapeHtmlText(unsafe.toString());
   }
 }
 

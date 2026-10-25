@@ -65,6 +65,28 @@
               placeholder="Search snapshots..."
               aria-label="Search snapshots"
             />
+            <span id="snapshotSearchMeta" class="snapshots-search-meta" hidden></span>
+            <button
+              type="button"
+              id="clearSnapshotSearch"
+              class="snapshots-search-clear"
+              aria-label="Clear search"
+              hidden
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.4"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+            <span class="snapshots-search-slash" aria-hidden="true"><kbd>/</kbd></span>
           </div>
         </div>
         <!-- The scroll area — day-grouped timeline of snapshot rows. -->
@@ -107,6 +129,9 @@
               >.
             </p>
             <p id="noSnapshotsMiss" hidden>No matching snapshots.</p>
+            <button type="button" id="clearSearchFromEmpty" class="btn snapshots-clear-miss" hidden>
+              Clear search
+            </button>
           </div>
           <ul id="snapshotsList" class="snapshots-list">
             <!-- Snapshots will be populated here -->
@@ -137,7 +162,8 @@
             </svg>
             Delete all
           </button>
-          <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
+          <span class="snapshots-footer-sep" aria-hidden="true"></span>
+          <button type="button" class="btn snapshots-close" data-dismiss="modal">Close</button>
         </div>
       </div>
     </div>
