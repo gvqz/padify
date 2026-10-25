@@ -1,188 +1,145 @@
-<div id="cloudModal" class="modal fade" role="dialog" aria-labelledby="cloudModalTitle">
-  <div class="modal-dialog cloud-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <div class="pref-header-copy">
-          <h4 class="modal-title custom-modal-title" id="cloudModalTitle">Cloud sync</h4>
-        </div>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close cloud sync">
+<!-- Cloud sync — a topbar panel that hangs from its own cloud icon.
+     Sync is a STATUS surface, not a document: signed out, it is a compact
+     sign-in; signed in, it is a live status block (state word, last sync,
+     sync-now) over the account row. The panel hovers without a backdrop
+     and closes on outside click or Escape; under 640px it becomes a
+     bottom sheet. Structure and rendering live in src/cloud/ui.ts,
+     styles in public/css/vercel/19-panels.css. -->
+<div
+  id="cloudModal"
+  class="topbar-panel cloud-panel"
+  tabindex="-1"
+  role="dialog"
+  aria-labelledby="cloudPanelTitle"
+>
+  <div class="cloud-panel-body">
+    <!-- Signed in: the live status block IS the headline. The mark's
+         ring carries the state color; the sync-now button spins while a
+         sync is in flight. -->
+    <div id="cloudSignedInPane" hidden>
+      <div class="cloud-hero cloud-hero-status">
+        <span class="cloud-mark is-state" id="cloudModalStatusDot" aria-hidden="true">
           <svg
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            stroke-width="2.2"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"
+            />
+          </svg>
+        </span>
+        <div class="cloud-hero-copy">
+          <h2 class="cloud-hero-title" id="cloudStatusLine">Everything is backed up</h2>
+          <p class="cloud-hero-meta" id="cloudLastSync">Syncing for the first time…</p>
+        </div>
+        <button
+          type="button"
+          class="cloud-sync-btn"
+          id="cloudSyncNow"
+          title="Sync now"
+          aria-label="Sync now"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.9"
             stroke-linecap="round"
             stroke-linejoin="round"
             aria-hidden="true"
           >
-            <path d="M6 6l12 12M18 6L6 18" />
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
           </svg>
         </button>
       </div>
-      <div class="modal-body">
-        <div id="cloudSignedInPane" hidden>
-          <div class="cloud-status-card" id="cloudStatusCard">
-            <span class="cloud-status-dot off" id="cloudModalStatusDot" aria-hidden="true"></span>
-            <div class="cloud-status-copy">
-              <span class="cloud-status-line" id="cloudStatusLine">Everything is backed up</span>
-              <span class="cloud-status-meta" id="cloudLastSync">Syncing for the first time…</span>
-            </div>
-            <button
-              type="button"
-              class="cloud-sync-now-btn"
-              id="cloudSyncNow"
-              title="Sync now"
-              aria-label="Sync now"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.9"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-                <path d="M21 3v6h-6" />
-              </svg>
-            </button>
-          </div>
 
-          <div class="pref-card cloud-account-card">
-            <div class="cloud-account-avatar" id="cloudAccountAvatar" aria-hidden="true"></div>
-            <div class="cloud-account-copy">
-              <span class="cloud-account-email" id="cloudAccountEmail"></span>
-              <span class="cloud-account-hint">Your sync account — notes on every device</span>
-            </div>
-            <button type="button" class="pref-action-btn cloud-sign-out" id="cloudSignOut">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <path d="m16 17 5-5-5-5" />
-                <path d="M21 12H9" />
-              </svg>
-              Sign out
-            </button>
-          </div>
-
-          <div class="cloud-facts">
-            <div class="cloud-fact">
-              <span class="cloud-fact-icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path
-                    d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"
-                  />
-                </svg>
-              </span>
-              <div class="cloud-fact-copy">
-                <span class="cloud-fact-title">Works offline</span>
-                <span class="cloud-fact-hint">Anything you write uploads once you reconnect.</span>
-              </div>
-            </div>
-            <div class="cloud-fact">
-              <span class="cloud-fact-icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path
-                    d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"
-                  />
-                </svg>
-              </span>
-              <div class="cloud-fact-copy">
-                <span class="cloud-fact-title">Nothing is lost</span>
-                <span class="cloud-fact-hint"
-                  >Notes changed on two devices keep both versions — the other becomes a copy.</span
-                >
-              </div>
-            </div>
-            <div class="cloud-fact">
-              <span class="cloud-fact-icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-              </span>
-              <div class="cloud-fact-copy">
-                <span class="cloud-fact-title">Your notes stay yours</span>
-                <span class="cloud-fact-hint"
-                  >Snapshots, settings and drawings stay on this device unless a tool says
-                  otherwise.</span
-                >
-              </div>
-            </div>
-          </div>
+      <div class="cloud-account">
+        <span class="cloud-avatar" id="cloudAccountAvatar" aria-hidden="true"></span>
+        <div class="cloud-account-copy">
+          <span class="cloud-account-email" id="cloudAccountEmail"></span>
+          <span class="cloud-account-hint">Sync account</span>
         </div>
+        <button type="button" class="cloud-quiet-btn" id="cloudSignOut">Sign out</button>
+      </div>
 
-        <div id="cloudAuthPane">
-          <form id="cloudAuthForm" class="cloud-auth-card" novalidate>
-            <div class="cloud-field">
-              <label class="cloud-label" for="cloudAuthEmail">Email</label>
-              <input
-                type="email"
-                class="form-control cloud-input"
-                id="cloudAuthEmail"
-                name="email"
-                autocomplete="email"
-                placeholder="you@example.com"
-                required
-              />
-            </div>
-            <div class="cloud-field">
-              <label class="cloud-label" for="cloudAuthPassword">Password</label>
-              <input
-                type="password"
-                class="form-control cloud-input"
-                id="cloudAuthPassword"
-                name="password"
-                autocomplete="current-password"
-                placeholder="At least 6 characters"
-                required
-                minlength="6"
-              />
-            </div>
-            <p class="cloud-feedback cloud-error hide" id="cloudAuthError" role="alert"></p>
-            <p class="cloud-feedback cloud-notice hide" id="cloudAuthNotice"></p>
-            <button type="submit" class="btn btn-primary cloud-submit" id="cloudAuthSubmit">
-              Sign in
-            </button>
-            <div class="cloud-auth-links">
-              <a href="#cloudAuthSwitch" id="cloudAuthSwitch">New here? Create an account</a>
-            </div>
-          </form>
-          <p class="cloud-hint">
-            Your notes stay on this device until you sign in. After that they sync automatically —
-            and anything you wrote offline uploads as soon as you connect.
+      <p class="cloud-panel-foot">
+        Notes sync automatically — anything you wrote offline uploads once you reconnect. Snapshots,
+        settings and drawings stay on this device.
+      </p>
+    </div>
+
+    <!-- Signed out: the compact sign-in. The form keeps the classic
+         ids — cloudAuthForm / Email / Password / Submit / Switch — the
+         wiring and the e2e contracts ride on them. -->
+    <div id="cloudAuthPane">
+      <div class="cloud-hero">
+        <span class="cloud-mark" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"
+            />
+            <path d="M12 12v6" />
+            <path d="m9.5 15.5 2.5-2.5 2.5 2.5" />
+          </svg>
+        </span>
+        <div class="cloud-hero-copy">
+          <h2 class="cloud-hero-title" id="cloudPanelTitle">Cloud sync</h2>
+          <p class="cloud-hero-meta">
+            Sign in to back up your notes and pick them up on any device.
           </p>
         </div>
       </div>
+
+      <form id="cloudAuthForm" class="cloud-auth" novalidate>
+        <div class="cloud-field">
+          <label class="cloud-label" for="cloudAuthEmail">Email</label>
+          <input
+            type="email"
+            class="cloud-input"
+            id="cloudAuthEmail"
+            name="email"
+            autocomplete="email"
+            placeholder="you@example.com"
+            required
+            data-panel-autofocus
+          />
+        </div>
+        <div class="cloud-field">
+          <label class="cloud-label" for="cloudAuthPassword">Password</label>
+          <input
+            type="password"
+            class="cloud-input"
+            id="cloudAuthPassword"
+            name="password"
+            autocomplete="current-password"
+            placeholder="At least 6 characters"
+            required
+            minlength="6"
+          />
+        </div>
+        <p class="cloud-feedback cloud-error" id="cloudAuthError" role="alert" hidden></p>
+        <p class="cloud-feedback cloud-notice" id="cloudAuthNotice" hidden></p>
+        <button type="submit" class="cloud-submit" id="cloudAuthSubmit">Sign in</button>
+        <div class="cloud-auth-links">
+          <a href="#cloudAuthSwitch" id="cloudAuthSwitch">New here? Create an account</a>
+        </div>
+      </form>
+
+      <p class="cloud-panel-foot">
+        Your notes stay on this device until you sign in — after that they sync automatically.
+      </p>
     </div>
   </div>
 </div>

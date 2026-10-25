@@ -1,14 +1,14 @@
 /**
  * Padify share links — user interface.
  *
- * The share sheet — the History sheet's sibling: a right-side panel that
- * reads top to bottom as WHAT you are sharing (the note card), HOW LONG
- * a new link works (the expiry choice + the one primary action), and
- * WHICH keys are already out there (the links list). The signed-in user
- * picks how many days a read-only link stays live, creates it — the link
- * lands on the clipboard immediately — and manages every link from its
- * own row. Signed-out visitors get a sign-in gate — sharing is a
- * cloud-account feature.
+ * The share panel — a topbar panel hanging from the share icon: it reads
+ * top to bottom as WHAT you are sharing (the note strip, the type's own
+ * glyph up front), HOW LONG a new link works (the expiry choice + the one
+ * primary action), and WHICH keys are already out there (the links list).
+ * The signed-in user picks how many days a read-only link stays live,
+ * creates it — the link lands on the clipboard immediately — and manages
+ * every link from its own row. Signed-out visitors get a sign-in gate —
+ * sharing is a cloud-account feature.
  *
  * Nothing here opens a second dialog: cancelling a link arms the row's
  * own button (the confirm state IS the button), the same two-step
@@ -16,10 +16,15 @@
  */
 
 import { $ } from '../lib/q';
-import { openModal, closeModal } from '../ui/behavior/modal';
+import { closePanel, openPanel } from '../ui/behavior/panel';
 import { showToast } from '../ui/toast';
 import { deriveTabTitle, getActiveNoteContent, getTabManager } from '../tabs';
-import { noteTypeLabel, type NoteType } from '../editor/note-types';
+import {
+  NOTE_TYPE_ICONS,
+  noteTypeLabel,
+  type KnownNoteType,
+  type NoteType,
+} from '../editor/note-types';
 import { getCloudSync } from './sync';
 import {
   createShare,
@@ -50,14 +55,14 @@ export function initShareUI(): void {
 
   $('#shareNotes').on('click', (event) => {
     event.preventDefault();
-    openShareModal();
+    openPanel($('#shareModal').get(0), $('#shareNotes').get(0));
   });
 
   $('#shareSignInCta').on('click', () => {
-    closeModal($('#shareModal').get(0));
+    closePanel($('#shareModal').get(0));
     setTimeout(() => {
-      openModal($('#cloudModal').get(0));
-    }, 200);
+      openPanel($('#cloudModal').get(0), $('#cloudNavContainer').get(0));
+    }, 180);
   });
 
   $('input[name="shareDuration"]').on('change', renderExpiryPreview);
@@ -69,7 +74,7 @@ export function initShareUI(): void {
   // The links scope: this note only, or every link the account owns.
   $('input[name="shareScope"]').on('change', renderLinks);
 
-  $('#shareModal').on('show.bs.modal', () => {
+  $('#shareModal').on('panel:show', () => {
     // A stale armed button from the previous visit must not survive the
     // reopen — the confirm state belongs to this visit's list only.
     disarmCancel();
@@ -91,10 +96,6 @@ export function initShareUI(): void {
   getCloudSync().subscribe(renderPanes);
 }
 
-function openShareModal(): void {
-  openModal($('#shareModal').get(0));
-}
-
 // ---- panes -----------------------------------------------------------------
 
 function signedInNow(): boolean {
@@ -106,9 +107,6 @@ function renderPanes(): void {
   const signedIn = signedInNow();
   $('#shareSignedOutPane').attr('hidden', signedIn ? 'hidden' : null);
   $('#shareSignedInPane').attr('hidden', signedIn ? null : 'hidden');
-  // The footer speaks for the links list; it has nothing to say to a
-  // signed-out visitor.
-  $('#shareFoot').attr('hidden', signedIn ? null : 'hidden');
 }
 
 // ---- note card + expiry preview ----------------------------------------------
@@ -160,6 +158,11 @@ function renderNoteCard(): void {
 
   $('#shareNoteTitle').text(note.title);
   $('#shareNoteMeta').text(`${note.words.toLocaleString()} word${note.words === 1 ? '' : 's'}`);
+
+  // The strip leads with the type's own glyph — the same icon the type
+  // menu and the rail badge use. The default stays the classic page.
+  const kind = (note.noteType ?? 'standard') as KnownNoteType;
+  $('#shareNoteGlyph').html(NOTE_TYPE_ICONS[kind](14));
 
   // The type chip: the default stays quiet, every other kind says its name.
   const $chip = $('#shareNoteTypeChip');
@@ -309,7 +312,7 @@ function renderLinks(): void {
       ? 'No links yet. Create one above — anyone with it sees a read-only copy of the note.'
       : 'No links yet for this note. Create one above — anyone with it sees a read-only copy.';
     $list.append($('<p class="share-links-empty"></p>').text(message));
-    renderFoot(0);
+    renderCount(0);
     return;
   }
 
@@ -366,12 +369,17 @@ function renderLinks(): void {
     $list.append(row);
   });
 
-  renderFoot(visible.length);
+  renderCount(visible.length);
 }
 
-function renderFoot(count: number): void {
-  const noun = count === 1 ? 'link' : 'links';
-  $('#shareFootCount').text(count === 0 ? 'No links yet' : `${count} ${noun}`);
+/** The count chip beside "Your links" — quiet at zero, honest otherwise. */
+function renderCount(count: number): void {
+  const $count = $('#shareLinkCount');
+  if (count === 0) {
+    $count.attr('hidden', 'hidden');
+    return;
+  }
+  $count.text(String(count)).removeAttr('hidden');
 }
 
 // ---- the two-step cancel -------------------------------------------------------

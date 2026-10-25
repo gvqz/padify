@@ -38,6 +38,7 @@ import { initBreakReminder } from './break-reminder';
 import { mountModals } from './ui/modals';
 import { assertMarkupContract } from './ui/contract';
 import { initModalBehavior } from './ui/behavior/modal';
+import { initPanelBehavior } from './ui/behavior/panel';
 import { initCollapseBehavior } from './ui/behavior/collapse';
 import { initSettingsNav } from './ui/settings-nav';
 import { initTooltips } from './ui/behavior/tooltip';
@@ -64,6 +65,7 @@ export async function bootPadify(): Promise<void> {
   //     navbar hamburger collapse and tooltips. Document-level delegated
   //     listeners — installed once, before any feature can open a dialog.
   initModalBehavior();
+  initPanelBehavior();
   initCollapseBehavior();
 
   // Fail here — loudly, naming the missing elements — if the markup the

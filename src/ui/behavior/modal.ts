@@ -22,6 +22,7 @@
  */
 
 import type { ElementOrDocument } from '../../lib/q';
+import { closeAllPanels } from './panel';
 
 const MODAL_TRANSITION_MS = 300;
 const BACKDROP_TRANSITION_MS = 150;
@@ -92,6 +93,9 @@ export function openModal(
   if (state.isShown || el.classList.contains('in')) return;
 
   if (!fire(el, 'show.bs.modal', true)) return;
+
+  // A modal owns the screen — any topbar panel standing goes down first.
+  closeAllPanels('modal');
 
   state.isShown = true;
   state.opener = opener ?? null;

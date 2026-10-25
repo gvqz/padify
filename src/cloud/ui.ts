@@ -3,12 +3,14 @@
  *
  * Three surfaces, all hidden until the owner configures a sync project:
  *  • a navbar cloud icon with a live status dot,
- *  • a Cloud modal (sign-in / sign-up + account view with sync state),
- *  • a "Cloud sync" section inside Settings pointing at the modal.
+ *  • a Cloud panel anchored under that icon (sign-in / sign-up + account
+ *    view with the live sync state),
+ *  • a "Cloud sync" section inside Settings pointing at the panel.
  */
 
 import { $ } from '../lib/q';
-import { openModal, closeModal } from '../ui/behavior/modal';
+import { closeModal } from '../ui/behavior/modal';
+import { openPanel } from '../ui/behavior/panel';
 import { showToast } from '../ui/toast';
 import { getCloudConfig } from './config';
 import { getCloudSync, type CloudStatus } from './sync';
@@ -100,8 +102,11 @@ export function initCloudUI(): void {
 
   // ---- navbar ----------------------------------------------------------------
 
+  // The panel hangs from the cloud icon itself — the anchor is the
+  // button, the panel opens under it and dies on outside click / Escape
+  // (see ui/behavior/panel.ts). The anchor's click toggles.
   $button.on('click', () => {
-    openCloudModal();
+    openPanel($('#cloudModal').get(0), $('#cloudNavContainer').get(0));
   });
 
   // ---- modal ------------------------------------------------------------------
@@ -117,8 +122,8 @@ export function initCloudUI(): void {
 
   const setMode = (next: 'sign-in' | 'sign-up'): void => {
     mode = next;
-    $error.text('').addClass('hide');
-    $notice.text('').addClass('hide');
+    $error.text('').attr('hidden', 'hidden');
+    $notice.text('').attr('hidden', 'hidden');
     $submit.text(next === 'sign-in' ? 'Sign in' : 'Create account');
     $switch.text(
       next === 'sign-in' ? 'New here? Create an account' : 'Already have an account? Sign in',
@@ -136,8 +141,8 @@ export function initCloudUI(): void {
 
     const email = String($email.val() ?? '').trim();
     const password = String($password.val() ?? '');
-    $error.addClass('hide');
-    $notice.addClass('hide');
+    $error.attr('hidden', 'hidden');
+    $notice.attr('hidden', 'hidden');
 
     if (!email || !email.includes('@')) {
       showError('Enter a valid email address.');
@@ -184,23 +189,26 @@ export function initCloudUI(): void {
     setMode('sign-in');
   });
 
-  // Settings → Cloud sync → Manage: leave Settings, open the Cloud modal.
+  // Settings → Cloud sync → Manage: leave Settings, open the Cloud panel
+  // under the topbar's cloud icon.
   $('#cloudSettingsManage').on('click', () => {
     closeModal($('#preferencesModal').get(0));
     setTimeout(() => {
-      openModal($('#cloudModal').get(0));
+      openPanel($('#cloudModal').get(0), $('#cloudNavContainer').get(0));
     }, 200);
   });
 
   function showError(message: string): void {
-    $notice.addClass('hide');
-    $error.text(message).removeClass('hide');
+    $notice.attr('hidden', 'hidden');
+    $error.text(message).removeAttr('hidden');
   }
 
   function renderModal(status: CloudStatus): void {
     const signedIn = status.state === 'signed-in';
     const $paneIn = $('#cloudSignedInPane');
-    $('#cloudModalStatusDot').attr('class', `cloud-status-dot ${dotFor(status)}`);
+    // The hero mark carries the state — the base classes stay, only the
+    // state class flips (wiping them turned the tile into a stray dot).
+    $('#cloudModalStatusDot').attr('class', `cloud-mark is-state ${dotFor(status)}`);
     $pane.attr('hidden', signedIn ? 'hidden' : null);
     $paneIn.attr('hidden', signedIn ? null : 'hidden');
 
@@ -278,10 +286,6 @@ export function initCloudUI(): void {
   // Subscribe last: the listener fires immediately with the current status,
   // so every const above must already be initialized.
   sync.subscribe(renderStatus);
-}
-
-function openCloudModal(): void {
-  openModal($('#cloudModal').get(0));
 }
 
 function formatTime(timestamp: number): string {

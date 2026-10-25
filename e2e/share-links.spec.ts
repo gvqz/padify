@@ -70,20 +70,32 @@ async function typeIntoFreshNote(page: Page, text: string): Promise<void> {
 }
 
 test.describe('share links (real API)', () => {
-  test('the sheet docks to the right edge and the gate points at the cloud modal', async ({
+  test('the panel hangs from the share icon and the gate points at the cloud panel', async ({
     page,
   }) => {
     await page.goto('/');
     await openShareModal(page);
 
-    // The sheet frame: edge-attached host, sheet dialog, gate pane.
-    await expect(page.locator('#shareModal.share-sheet-host')).toBeVisible();
-    await expect(page.locator('#shareModal .modal-dialog.share-sheet')).toBeVisible();
+    // The panel frame: anchored topbar panel, gate pane, no footer bar —
+    // the count chip speaks for the list inside the section head.
+    await expect(page.locator('#shareModal.topbar-panel.share-panel')).toBeVisible();
     await expect(page.locator('#shareSignedOutPane')).toBeVisible();
-    await expect(page.locator('#shareFoot')).toBeHidden();
+    await expect(page.locator('#shareLinkCount')).toBeHidden();
 
+    // Anchored, not a docked sheet: the panel hangs below the topbar's
+    // share icon, inside the viewport, and the page keeps its width.
+    const box = await page.locator('#shareModal').boundingBox();
+    const viewport = page.viewportSize()!;
+    expect(box).not.toBeNull();
+    expect(box!.y).toBeGreaterThan(0);
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
+    expect(box!.width).toBeLessThan(viewport.width);
+
+    // The gate hands off to the cloud panel — the sign-in surface.
     await page.locator('#shareSignInCta').click();
-    await expect(page.locator('#cloudModal')).toBeVisible();
+    await expect(page.locator('#cloudModal.topbar-panel.cloud-panel')).toBeVisible();
+    await expect(page.locator('#shareModal')).toBeHidden();
   });
 
   test('an empty note cannot be shared — the card says why, the button stays dark', async ({
@@ -110,7 +122,7 @@ test.describe('share links (real API)', () => {
     await expect(page.locator('#shareCreateBtn')).toBeDisabled();
   });
 
-  test('a note with words shares: the link lists as Active and the foot counts it', async ({
+  test('a note with words shares: the link lists as Active and the count chip says it', async ({
     page,
   }) => {
     test.setTimeout(60_000);
@@ -122,7 +134,7 @@ test.describe('share links (real API)', () => {
     await page.locator('#shareCreateBtn').click();
     await expect(page.locator('.share-link-row')).toHaveCount(1);
     await expect(page.locator('.share-link-row .share-badge.active')).toBeVisible();
-    await expect(page.locator('#shareFootCount')).toHaveText('1 link');
+    await expect(page.locator('#shareLinkCount')).toHaveText('1');
 
     // The link's URL is on the clipboard-ready row: a real share URL shape.
     await expect(page.locator('.share-link-url')).toContainText('/share/?t=');
@@ -176,19 +188,55 @@ test.describe('share links (real API)', () => {
     await openShareModal(page);
     await page.locator('#shareCreateBtn').click();
     await expect(page.locator('.share-link-row')).toHaveCount(1);
-    await expect(page.locator('#shareFootCount')).toHaveText('1 link');
+    await expect(page.locator('#shareLinkCount')).toHaveText('1');
 
     // "This note" shows only the current note's link; "All notes" shows both,
     // newest first — the link you just made leads. The segmented control
     // hides its radios (labels take the clicks).
     await page.locator('label[for="shareScopeAll"]').click();
     await expect(page.locator('.share-link-row')).toHaveCount(2);
-    await expect(page.locator('#shareFootCount')).toHaveText('2 links');
+    await expect(page.locator('#shareLinkCount')).toHaveText('2');
     await expect(page.locator('.share-link-row .share-link-meta').first()).toContainText(
       'second shared note',
     );
 
     await page.locator('label[for="shareScopeNote"]').click();
     await expect(page.locator('.share-link-row')).toHaveCount(1);
+  });
+
+  test('the panel is a tool, not a room: outside click and Escape both close it', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await openShareModal(page);
+
+    // The trigger toggles: a second click on the share icon closes.
+    await page.locator('#shareNotes').click();
+    await expect(page.locator('#shareModal')).toBeHidden();
+
+    await openShareModal(page);
+    // A click on the page (not the panel, not the trigger) dismisses —
+    // no backdrop exists; the page itself is the dismiss gesture.
+    await page
+      .locator('.editor-shell, #note')
+      .first()
+      .click({ position: { x: 10, y: 10 } });
+    await expect(page.locator('#shareModal')).toBeHidden();
+  });
+
+  test('a modal takes the screen from any standing panel', async ({ page }) => {
+    await page.goto('/');
+    await openShareModal(page);
+
+    // The × is data-dismiss="panel" — the panel's own close.
+    await page.locator('#shareModal .share-close').click();
+    await expect(page.locator('#shareModal')).toBeHidden();
+
+    // A modal owns the screen: standing panels go down when one opens.
+    await page.locator('#cloudNavContainer').click();
+    await expect(page.locator('#cloudModal')).toBeVisible();
+    await page.locator('[data-target="#preferencesModal"]').first().click();
+    await expect(page.locator('#preferencesModal')).toBeVisible();
+    await expect(page.locator('#cloudModal')).toBeHidden();
   });
 });

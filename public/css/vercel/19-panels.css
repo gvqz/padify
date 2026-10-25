@@ -1,0 +1,955 @@
+/* vercel design system — part 19: Topbar panels (cloud sync + share)
+   The cloud sync menu and the share menu are topbar SERVICES: they open
+   from their own icon as anchored panels — no backdrop, no room, no page
+   scroll lock (desktop). One shared base (.topbar-panel) drives the
+   anchor hang, the entry transition and the <640px bottom-sheet shape;
+   the two surfaces dress it in their own blocks. Token-driven throughout,
+   so dark mode needs no extra rules — the aliases invert under body.dark
+   (see 01-tokens.css). */
+
+/* ==========================================================================
+   Panel base — the shape every topbar panel shares
+   ========================================================================== */
+
+:root {
+  /* above the navbar (1030) and the note rail (1040), under modals (1050) */
+  --z-panel: 1045;
+}
+
+.topbar-panel {
+  position: fixed;
+  display: none;
+  z-index: var(--z-panel);
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-lg);
+  box-shadow: var(--vz-shadow-dialog);
+  opacity: 0;
+  transform: scale(0.97);
+  transition: opacity 140ms var(--vz-ease), transform 140ms var(--vz-ease);
+  /* the transform origin is set inline by the engine — it points at the
+     anchor so the panel grows OUT of its icon */
+}
+
+.topbar-panel.in {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.topbar-panel[hidden] {
+  display: none !important;
+}
+
+/* The container takes focus for keyboard users; its own ring is noise —
+   every control inside keeps its focus-visible outline. */
+.topbar-panel:focus,
+.topbar-panel:focus-visible {
+  outline: none;
+}
+
+/* Narrow viewports: the panel becomes a bottom sheet — the touch-native
+   shape. Full width, slides up, body scroll locked while open. */
+.topbar-panel.at-sheet {
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  top: auto !important;
+  width: 100%;
+  max-height: min(86vh, 620px);
+  border-radius: 14px 14px 0 0;
+  border-bottom: none;
+  transform: translateY(24px);
+}
+
+.topbar-panel.at-sheet.in {
+  transform: translateY(0);
+}
+
+/* The sheet's grabber — a quiet affordance that this edge moves. */
+.topbar-panel.at-sheet::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--vz-border-strong);
+  opacity: 0.5;
+  transform: translateX(-50%);
+}
+
+body.panel-sheet-open {
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar-panel {
+    transition: none;
+  }
+}
+
+/* ==========================================================================
+   Cloud sync panel
+   ========================================================================== */
+
+.cloud-panel {
+  width: 340px;
+}
+
+.cloud-panel-body {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 14px 0;
+}
+
+/* ---- hero: the mark + the headline --------------------------------------- */
+
+.cloud-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.cloud-mark {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  color: var(--vz-fg);
+}
+
+.cloud-mark svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* The signed-in mark IS the status: the tile tints with the sync state,
+   the same vocabulary as the navbar dot (ok green, busy amber, error red).
+   The dot element's state classes land on this tile now. */
+.cloud-mark.is-state {
+  border: none;
+}
+
+.cloud-mark.is-state.off {
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg-muted);
+}
+
+.cloud-mark.is-state.ok {
+  background: color-mix(in srgb, var(--vz-success) 14%, transparent);
+  color: var(--vz-success);
+}
+
+.cloud-mark.is-state.busy {
+  background: color-mix(in srgb, var(--vz-star) 16%, transparent);
+  color: var(--vz-star);
+}
+
+.cloud-mark.is-state.busy svg {
+  animation: cloud-dot-pulse 1.4s ease-in-out infinite;
+}
+
+.cloud-mark.is-state.error {
+  background: var(--vz-danger-soft);
+  color: var(--vz-danger);
+}
+
+.cloud-hero-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cloud-hero-title {
+  margin: 1px 0 2px;
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--vz-fg);
+}
+
+.cloud-hero-meta {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--vz-fg-muted);
+}
+
+/* Sync now — a 30px ghost button in the hero's corner; spins while busy. */
+.cloud-sync-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg-muted);
+  cursor: pointer;
+  transition: color var(--vz-dur) ease, border-color var(--vz-dur) ease,
+    background-color var(--vz-dur) ease;
+}
+
+.cloud-sync-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.cloud-sync-btn:hover,
+.cloud-sync-btn:focus-visible {
+  color: var(--vz-fg);
+  border-color: var(--vz-border);
+  background: var(--vz-bg-subtle);
+  outline: none;
+}
+
+.cloud-sync-btn.is-busy svg {
+  animation: cloud-sync-spin 0.9s linear infinite;
+}
+
+@keyframes cloud-sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cloud-sync-btn.is-busy svg,
+  .cloud-mark.is-state.busy svg {
+    animation: none;
+  }
+}
+
+/* ---- account row ----------------------------------------------------------- */
+
+.cloud-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 13px;
+  padding: 10px 11px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  background: var(--vz-bg-subtle);
+}
+
+.cloud-avatar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  color: var(--vz-fg);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.cloud-account-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cloud-account-email {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--vz-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-account-hint {
+  font-size: 11px;
+  color: var(--vz-fg-subtle);
+}
+
+/* Sign out — a quiet text button; danger only when it matters (hover). */
+.cloud-quiet-btn {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  padding: 5px 8px;
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease;
+}
+
+.cloud-quiet-btn:hover,
+.cloud-quiet-btn:focus-visible {
+  color: var(--vz-danger);
+  background: var(--vz-danger-soft);
+  outline: none;
+}
+
+/* ---- the one-line footer --------------------------------------------------- */
+
+.cloud-panel-foot {
+  margin: 0;
+  padding: 11px 2px 13px;
+  border-top: 1px solid var(--vz-border);
+  margin-top: 13px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--vz-fg-subtle);
+}
+
+/* ---- the compact sign-in --------------------------------------------------- */
+
+.cloud-auth {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.cloud-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cloud-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--vz-fg-muted);
+}
+
+.cloud-input {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg);
+  color: var(--vz-fg);
+  font-size: 13px;
+  width: 100%;
+  transition: border-color var(--vz-dur) ease, box-shadow var(--vz-dur) ease;
+}
+
+.cloud-input::placeholder {
+  color: var(--vz-fg-subtle);
+}
+
+.cloud-input:focus {
+  outline: none;
+  border-color: var(--vz-border-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--vz-fg) 8%, transparent);
+}
+
+.cloud-feedback {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.cloud-feedback.cloud-error {
+  color: var(--vz-danger);
+}
+
+.cloud-feedback.cloud-notice {
+  color: var(--vz-success);
+}
+
+.cloud-feedback[hidden] {
+  display: none;
+}
+
+.cloud-submit {
+  height: 34px;
+  border: none;
+  border-radius: var(--vz-radius);
+  background: var(--vz-primary);
+  color: var(--vz-primary-fg);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--vz-dur) ease;
+}
+
+.cloud-submit:hover,
+.cloud-submit:focus-visible {
+  background: var(--vz-primary-hover);
+  outline: none;
+}
+
+.cloud-submit[disabled] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.cloud-auth-links {
+  text-align: center;
+}
+
+.cloud-auth-links a {
+  font-size: 12px;
+  color: var(--vz-fg-muted);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color var(--vz-dur) ease, border-color var(--vz-dur) ease;
+}
+
+.cloud-auth-links a:hover,
+.cloud-auth-links a:focus-visible {
+  color: var(--vz-fg);
+  border-bottom-color: var(--vz-border-strong);
+  outline: none;
+}
+
+/* ==========================================================================
+   Share panel
+   ========================================================================== */
+
+.share-panel {
+  width: 396px;
+}
+
+.share-panel-body {
+  display: flex;
+  flex-direction: column;
+  max-height: min(600px, calc(100vh - 2 * var(--topbar-h, 48px) - 24px));
+}
+
+.topbar-panel.at-sheet .share-panel-body,
+.topbar-panel.at-sheet .cloud-panel-body {
+  max-height: none;
+  min-height: 0;
+}
+
+/* ---- head ------------------------------------------------------------------ */
+
+.share-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 13px 14px 11px;
+  border-bottom: 1px solid var(--vz-border);
+}
+
+.share-head-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.share-title {
+  margin: 0 0 1px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--vz-fg);
+}
+
+.share-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--vz-fg-muted);
+}
+
+.share-close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: -2px -4px 0 0;
+  border: none;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg-muted);
+  cursor: pointer;
+  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease;
+}
+
+.share-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.share-close:hover,
+.share-close:focus-visible {
+  color: var(--vz-fg);
+  background: var(--vz-bg-hover);
+  outline: none;
+}
+
+/* ---- the signed-out gate ---------------------------------------------------- */
+
+.share-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 30px 26px 26px;
+}
+
+.share-gate-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  color: var(--vz-fg-muted);
+}
+
+.share-gate-mark svg {
+  width: 20px;
+  height: 20px;
+}
+
+.share-gate-title {
+  margin: 0 0 5px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--vz-fg);
+}
+
+.share-gate-copy {
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--vz-fg-muted);
+}
+
+.share-gate-cta {
+  height: 32px;
+  padding: 0 18px;
+  border: none;
+  border-radius: var(--vz-radius);
+  background: var(--vz-primary);
+  color: var(--vz-primary-fg);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--vz-dur) ease;
+}
+
+.share-gate-cta:hover,
+.share-gate-cta:focus-visible {
+  background: var(--vz-primary-hover);
+  outline: none;
+}
+
+/* ---- the note strip ---------------------------------------------------------- */
+
+.share-note-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 14px 0;
+  padding: 9px 11px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  background: var(--vz-bg-subtle);
+}
+
+.share-note-glyph {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  color: var(--vz-fg-muted);
+}
+
+.share-note-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.share-note-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vz-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-note-meta-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.share-note-meta {
+  font-size: 11.5px;
+  color: var(--vz-fg-muted);
+}
+
+/* A note with nothing to share refuses honestly — the strip goes dashed
+   and the create button goes dark (the wiring owns the flag). */
+.share-note-strip.is-empty {
+  border-style: dashed;
+  background: transparent;
+}
+
+.share-note-strip.is-empty .share-note-glyph {
+  opacity: 0.55;
+}
+
+/* ---- expiry + create ----------------------------------------------------------- */
+
+.share-new {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 14px 14px;
+}
+
+.share-sec-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--vz-fg-subtle);
+}
+
+.share-dur {
+  display: flex;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  overflow: hidden;
+  background: var(--vz-bg);
+}
+
+.share-dur input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.share-dur label {
+  flex: 1 1 0;
+  padding: 6px 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--vz-fg-muted);
+  cursor: pointer;
+  user-select: none;
+  border-right: 1px solid var(--vz-border);
+  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease;
+}
+
+.share-dur label:last-of-type {
+  border-right: none;
+}
+
+.share-dur label:hover {
+  color: var(--vz-fg);
+  background: var(--vz-bg-hover);
+}
+
+.share-dur input:checked + label {
+  background: var(--vz-bg-chip);
+  border-bottom: 2px solid var(--vz-primary);
+  border-bottom-width: 2px;
+  color: var(--vz-fg);
+  font-weight: 600;
+}
+
+.share-dur input:focus-visible + label {
+  outline: 2px solid var(--vz-primary);
+  outline-offset: -2px;
+}
+
+.share-expiry-preview {
+  font-size: 11.5px;
+  color: var(--vz-fg-muted);
+}
+
+.share-create {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  border: none;
+  border-radius: var(--vz-radius);
+  background: var(--vz-primary);
+  color: var(--vz-primary-fg);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--vz-dur) ease, opacity var(--vz-dur) ease;
+}
+
+.share-create:hover:not(:disabled),
+.share-create:focus-visible {
+  background: var(--vz-primary-hover);
+  outline: none;
+}
+
+.share-create:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ---- links ----------------------------------------------------------------------- */
+
+.share-links {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--vz-border);
+  padding: 11px 14px 13px;
+}
+
+.share-links-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 9px;
+}
+
+.share-links-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--vz-fg-subtle);
+}
+
+.share-links-count {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--vz-bg-chip);
+  border: 1px solid var(--vz-border);
+  color: var(--vz-fg-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.share-links-count[hidden] {
+  display: none;
+}
+
+.share-scope {
+  margin-left: auto;
+  display: flex;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  overflow: hidden;
+  background: var(--vz-bg);
+}
+
+.share-scope input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.share-scope label {
+  padding: 3.5px 9px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--vz-fg-muted);
+  cursor: pointer;
+  user-select: none;
+  border-right: 1px solid var(--vz-border);
+  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease;
+}
+
+.share-scope label:last-of-type {
+  border-right: none;
+}
+
+.share-scope label:hover {
+  color: var(--vz-fg);
+  background: var(--vz-bg-hover);
+}
+
+.share-scope input:checked + label {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg);
+  font-weight: 600;
+}
+
+.share-scope input:focus-visible + label {
+  outline: 2px solid var(--vz-primary);
+  outline-offset: -2px;
+}
+
+.share-links-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.topbar-panel.at-sheet .share-links-list {
+  max-height: none;
+}
+
+/* A link row: url + status on top, the quiet meta line, then its own
+   actions. Rows never open dialogs — cancelling arms the row's button. */
+.share-link-row {
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  padding: 9px 11px;
+  background: var(--vz-bg);
+  transition: border-color var(--vz-dur) ease, background-color var(--vz-dur) ease,
+    opacity var(--vz-dur) ease;
+}
+
+.share-link-row.dim {
+  opacity: 0.62;
+}
+
+.share-link-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.share-link-url {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--vz-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 9px;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.share-badge::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.share-badge.active {
+  background: color-mix(in srgb, var(--vz-success) 12%, transparent);
+  color: var(--vz-success);
+}
+
+.share-badge.expired {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg-muted);
+}
+
+.share-badge.revoked {
+  background: var(--vz-danger-soft);
+  color: var(--vz-danger);
+}
+
+.share-link-meta {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--vz-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-link-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.share-chip-btn {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--vz-dur) ease, border-color var(--vz-dur) ease,
+    background-color var(--vz-dur) ease;
+}
+
+.share-chip-btn:hover,
+.share-chip-btn:focus-visible {
+  color: var(--vz-fg);
+  border-color: var(--vz-border-strong);
+  outline: none;
+}
+
+.share-chip-btn.danger:hover:not(.is-armed),
+.share-chip-btn.danger:focus-visible:not(.is-armed) {
+  color: var(--vz-danger);
+  border-color: var(--vz-danger);
+}
+
+/* The armed confirm IS the button — filled, asking the question. */
+.share-chip-btn.danger.is-armed {
+  background: var(--vz-danger);
+  border-color: var(--vz-danger);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* The empty list says its piece inside a dashed tile. */
+.share-links-empty {
+  margin: 0;
+  padding: 16px 14px;
+  border: 1px dashed var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--vz-fg-muted);
+  text-align: center;
+}
+
+/* Narrow panels lose their side margins in sheet mode — the content
+   breathes the same but the shell goes edge to edge. */
+@media (max-width: 640px) {
+  .cloud-panel,
+  .share-panel {
+    width: 100%;
+  }
+}
