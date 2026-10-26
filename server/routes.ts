@@ -22,6 +22,7 @@
  * still passes the auth gate before its 404.
  */
 
+import { readFileSync } from 'node:fs';
 import { type Db } from './db';
 import { corsHeaders, json } from './http';
 import { rateLimited } from './ratelimit';
@@ -210,11 +211,32 @@ const ROUTES: Route[] = [
   }
 ];
 
-/** Liveness probe: 200 with no body worth reading. For the e2e config
- * (which waits on it before running a spec) and for any uptime monitor —
- * a 404-for-unknown-paths router cannot serve as its own probe. */
+/** Liveness probe: 200 with the running build's identity. For the e2e
+ * config (which waits on it before running a spec), for any uptime
+ * monitor — and for the deploy script, whose restart verification polls
+ * this endpoint until `build` names the commit it just uploaded. A
+ * deploy that "succeeded" while the box kept serving the previous
+ * process is exactly the silent failure this field turns loud.
+ *
+ * The id comes from server/.build-id, a one-line file the deploy writes
+ * next to the source it uploads (absent locally → undefined; the field
+ * is additive so old clients and old probes keep working). Read lazily
+ * and cached per process — a cold boot reads the file the deploy JUST
+ * wrote, so a stale id means a stale process, never a stale file. */
+let cachedBuildId: string | null | undefined;
+function runningBuildId(): string | null {
+  if (cachedBuildId === undefined) {
+    try {
+      cachedBuildId = readFileSync(new URL('./.build-id', import.meta.url), 'utf8').trim() || null;
+    } catch {
+      cachedBuildId = null;
+    }
+  }
+  return cachedBuildId;
+}
+
 function handleHealth(request: Request): Response {
-  return json(request, { ok: true });
+  return json(request, { ok: true, build: runningBuildId() ?? undefined });
 }
 
 // ---------------------------------------------------------------------------

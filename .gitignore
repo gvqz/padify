@@ -23,3 +23,11 @@ server/local-*.db*
 test-results/
 playwright-report/
 vite.log
+
+# deploy-stamped build identity (written on the box by scripts/deploy_box.py;
+# never committed — the file the API reads at boot to name its build)
+server/.build-id
+
+# sandbox-only working directories (screenshots, scratch databases)
+shots/
+.scratch/

@@ -182,6 +182,10 @@ describe('route — dispatch edges', () => {
     const response = await route(db, jsonRequest('GET', undefined), '/api/health');
 
     expect(response.status).toBe(200);
+    // `build` is additive and absent without a deploy-stamped .build-id —
+    // probes written before the field keep working. (The with-stamp path
+    // is the deploy's restart verification: the box must answer health
+    // with the commit it just uploaded, or the deploy fails loudly.)
     expect(await bodyOf(response)).toEqual({ ok: true });
   });
 

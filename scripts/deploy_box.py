@@ -26,10 +26,14 @@ The site must already be built into dist/ with the box recipe
 """
 import hashlib
 import io
+import json
 import os
 import posixpath
 import shlex
+import subprocess
 import sys
+import time
+import urllib.request
 
 import paramiko
 
@@ -39,6 +43,12 @@ REMOTE_ROOT = "/home/functionhost/padify"
 REMOTE_SITE = f"{REMOTE_ROOT}/www/site"
 REMOTE_SERVER = f"{REMOTE_ROOT}/server"
 REMOTE_SHARED = f"{REMOTE_ROOT}/shared"
+
+# The public face of the API — the deploy's restart verification polls it
+# until the RUNNING process reports the build the script just uploaded.
+HEALTH_URL = os.environ.get(
+    "AD_HEALTH_URL", "https://functionhost.alwaysdata.net/padifyapi/api/health"
+)
 
 
 def md5(local):
@@ -104,6 +114,96 @@ def remote_md5s(client, dirs):
     return result
 
 
+def running_build(allow_errors=False):
+    """(build_id, reachable) from the box's public health endpoint.
+    unreachable -> (None, False); a missing/old field -> (None, True).
+    With allow_errors the unreachable case also returns (None, True) —
+    "the API is down" is a legitimate intermediate state while bun is
+    dying or cold-booting, and only the CALLER's deadline decides."""
+    try:
+        with urllib.request.urlopen(HEALTH_URL, timeout=6) as response:
+            body = json.loads(response.read().decode("utf-8"))
+            return body.get("build"), True
+    except Exception:
+        return (None, True if allow_errors else False)
+
+
+def restart_server(client, expected_build):
+    """Kill the running bun and WAIT until the box serves this deploy.
+
+    The old tail just SIGTERMed bun and trusted the supervisor's
+    cold-boot — and one October deploy proved that trust misplaced: the
+    files md5-verified fresh while the box kept answering from the
+    previous process, and the share-expiry PATCH silently hit the legacy
+    revoke branch (the user saw "update link" cancel their link).
+    Kills are now followed by a probe-until-converged loop, escalating
+    TERM -> KILL, and the deploy FAILS if the public health endpoint
+    does not name `expected_build`.
+
+    bun ignores a graceful-shutdown TERM in some idle states, so the
+    escalation is not paranoia — it is the observed failure mode.
+    """
+    deadline = time.time() + 90
+
+    def pids():
+        out = run(client, "pgrep -u functionhost -f 'bun' | head -10 || true")
+        return out.split()
+
+    stage = "TERM"
+    while time.time() < deadline:
+        live = pids()
+        if live:
+            run(client, f"kill -{stage} {' '.join(live)} || true")
+            # Give the signal a beat to act, then look again.
+            for _ in range(10):
+                time.sleep(1.5)
+                build, _reachable = running_build(allow_errors=True)
+                if build == expected_build:
+                    print(f"[server] box serves build {expected_build} (after {stage})")
+                    return
+                if not pids():
+                    break  # process is gone — let the supervisor boot the new code
+        else:
+            # Nothing running: the next request cold-boots the fresh code.
+            for _ in range(8):
+                time.sleep(1.5)
+                build, _reachable = running_build(allow_errors=True)
+                if build == expected_build:
+                    print(f"[server] box serves build {expected_build} (cold boot)")
+                    return
+        if stage == "TERM":
+            stage = "KILL"
+
+    build, reachable = running_build(allow_errors=True)
+    raise SystemExit(
+        "RESTART VERIFICATION FAILED — the box is "
+        + (f"serving build {build!r}" if reachable else "not answering")
+        + f", expected {expected_build}. The API was NOT updated; "
+        "check the supervisor on the box before re-running."
+    )
+
+
+def deployed_sha():
+    """The commit this checkout will deploy — the health endpoint reports
+    it back after the restart. A timestamp stands in when git is not
+    available (running outside a checkout); the verification only needs
+    SOME string that changes with every deploy."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        sha = out.stdout.strip()
+        if sha:
+            return sha
+    except Exception:
+        pass
+    return "local-" + time.strftime("%Y%m%dT%H%M%S")
+
+
 def main():
     site = collect(DIST)
     server = collect(os.path.join(REPO, "server"), only_ts=True)
@@ -158,16 +258,17 @@ def main():
     else:
         print("[clean] no stale files")
 
-    # SIGTERM bun: the supervisor re-spawns it on the next request with
-    # the fresh code (the box's own idle-stop semantics).
-    pids = run(client, "pgrep -u functionhost -f 'bun' | head -5").split()
-    if pids:
-        # || true: bun idles out on its own — a pid may exit between the
-        # pgrep and the kill, which is exactly the state we wanted anyway.
-        run(client, f"kill {' '.join(pids)} || true")
-        print(f"[server] SIGTERM sent to bun pid(s): {', '.join(pids)}")
-    else:
-        print("[server] no bun process running (idle) — next request cold-boots")
+    # Stamp the server tree with THIS deploy's identity. The API reads it
+    # at boot (server/routes.ts handleHealth) so the restart verification
+    # below can tell "the new process" from "the old one still standing".
+    build_id = deployed_sha()
+    run(client, "printf %s\\n " + shlex.quote(build_id) + " > " + shlex.quote(f"{REMOTE_SERVER}/.build-id"))
+    print(f"[server] build id stamped: {build_id[:12]}")
+
+    # Kill the running bun and wait until the PUBLIC health endpoint
+    # answers with this build — see restart_server for the failure story
+    # that made the wait non-negotiable.
+    restart_server(client, build_id)
 
     client.close()
     print("DEPLOY DONE")
