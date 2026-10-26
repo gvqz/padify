@@ -19,6 +19,7 @@ import {
   deriveTabTitle,
   escapeHtml,
   getActiveNoteExportBody,
+  isConflictedCopyTab,
   setTabManager,
   htmlToText,
   legacyTextToHtml,
@@ -1141,4 +1142,124 @@ describe('html export of typed notes (the capture rule)', () => {
     expect(body).toBe(`<pre>${escapeHtml(board)}</pre>`);
     expect(body).toContain('&lt;b&gt;Done&lt;/b&gt;');
   });
+});
+
+// ---------------------------------------------------------------------------
+// TabManager.duplicateNote / changeNoteType — the note context menu's engine
+// ---------------------------------------------------------------------------
+
+describe('TabManager — the note menu actions', () => {
+  const stored = (
+    id: string,
+    content: string,
+    overrides: Partial<StoredNoteTab> = {},
+  ): StoredNoteTab => ({
+    id,
+    name: null,
+    content,
+    createdAt: 0,
+    updatedAt: 0,
+    ...overrides,
+  });
+
+  async function bootedManager(): Promise<TabManager> {
+    const manager = new TabManager($('#note'));
+    await manager.init();
+    return manager;
+  }
+
+  it('duplicateNote clones content, type and name, lands the copy after the source and opens it', async () => {
+    saveNotes(
+      {
+        tabs: [
+          stored('src', '<p>original words</p>', { name: 'Field notes' }),
+          stored('other', '<p>unrelated</p>'),
+        ],
+        tombstones: [],
+      },
+      'src',
+      { immediate: true },
+    );
+    await flushAndReboot();
+
+    const manager = await bootedManager();
+    manager.switchTo('other'); // duplicate a BACKGROUND note
+    manager.duplicateNote('src');
+
+    const ids = manager.getTabs().map((entry) => entry.id);
+    expect(ids[0]).toBe('src');
+    expect(ids).toContain('other');
+    expect(ids).toHaveLength(3);
+    const copy = manager.getTabs()[1];
+    expect(copy.id).not.toBe('src');
+    expect(copy.id).not.toBe('other');
+    expect(copy.copyOf).toBeUndefined(); // a deliberate duplicate, NOT a conflicted copy
+    expect(isConflictedCopyTab(copy)).toBe(false);
+    expect(copy.name).toBe('Copy of Field notes');
+    expect(copy.content).toBe('<p>original words</p>');
+    // The copy is now the active note and its content reached storage.
+    expect(manager.getActive()?.id).toBe(copy.id);
+    await flushAndReboot();
+    const persisted = await loadNotes();
+    expect(persisted.tabs.map((entry) => entry.id)).toContain(copy.id);
+  }, 20000);
+
+  it('duplicateNote of the ACTIVE note captures the unsaved editor state first', async () => {
+    saveNotes({ tabs: [stored('src', '<p>model</p>')], tombstones: [] }, 'src', {
+      immediate: true,
+    });
+    await flushAndReboot();
+
+    const manager = await bootedManager();
+    $('#note').html('<p>typed but not yet committed</p>');
+    manager.duplicateNote('src');
+
+    expect(manager.getTabs()[1].content).toBe('<p>typed but not yet committed</p>');
+    await flushPendingWrites();
+  }, 20000);
+
+  it('changeNoteType re-kinds a note in place — switching to it, content untouched, move persisted', async () => {
+    saveNotes(
+      {
+        tabs: [
+          stored('md1', '# heading', { noteType: 'markdown' }),
+          stored('html1', '<p>rich</p>'),
+        ],
+        tombstones: [],
+      },
+      'md1',
+      { immediate: true },
+    );
+    await flushAndReboot();
+
+    const manager = await bootedManager();
+    expect(manager.getActive()?.id).toBe('md1');
+    manager.changeNoteType('html1', 'markdown');
+
+    expect(manager.getActive()?.id).toBe('html1'); // the switch is part of the deal
+    const changed = manager.getTabs().find((entry) => entry.id === 'html1');
+    expect(changed?.noteType).toBe('markdown');
+    expect(changed?.content).toBe('<p>rich</p>'); // content untouched
+    await flushAndReboot();
+    const persisted = await loadNotes();
+    expect(persisted.tabs.find((entry) => entry.id === 'html1')?.noteType).toBe('markdown');
+  }, 20000);
+
+  it('changeNoteType to the default clears the type field; a same-type call is a no-op', async () => {
+    saveNotes(
+      { tabs: [stored('md1', '# heading', { noteType: 'markdown' })], tombstones: [] },
+      'md1',
+      { immediate: true },
+    );
+    await flushAndReboot();
+
+    const manager = await bootedManager();
+    manager.changeNoteType('md1', 'standard');
+    expect(manager.getTabs().find((entry) => entry.id === 'md1')?.noteType).toBeUndefined();
+
+    // Same type again: nothing moves (no painter swap, no persist churn).
+    const before = manager.getTabs().find((entry) => entry.id === 'md1')?.updatedAt;
+    manager.changeNoteType('md1', 'standard');
+    expect(manager.getTabs().find((entry) => entry.id === 'md1')?.updatedAt).toBe(before);
+  }, 20000);
 });

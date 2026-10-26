@@ -301,3 +301,90 @@ body.recycled-paper {
   }
 }
 
+
+/* --------------------------------------------------------------------------
+   15c. The note rail's right-click menu — the editor menu's sibling.
+   Same .padify-ctx vocabulary; only the note-specific rows differ: the
+   type submenu's icon column and the current-kind check.
+   -------------------------------------------------------------------------- */
+
+.note-ctx .padify-ctx-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: none;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--vz-dur) var(--vz-ease);
+}
+
+.note-ctx .padify-ctx-trigger:hover,
+.note-ctx .padify-ctx-trigger:focus-visible {
+  background: var(--vz-bg-subtle);
+  outline: none;
+}
+
+.note-ctx .padify-ctx-trigger > svg {
+  color: var(--vz-fg-muted);
+}
+
+.note-ctx .padify-ctx-trigger > span {
+  flex: 1;
+}
+
+.note-ctx .padify-ctx-caret {
+  flex: none;
+  opacity: 0.7;
+}
+
+/* The type rows: icon column, label, and the current-kind check. */
+.note-ctx-type .note-ctx-type-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  color: var(--vz-fg-muted);
+}
+
+.note-ctx-type:hover .note-ctx-type-icon,
+.note-ctx-type:focus-visible .note-ctx-type-icon {
+  color: var(--vz-fg);
+}
+
+.note-ctx-check {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  color: var(--vz-primary);
+}
+
+.note-ctx-check[hidden] {
+  display: none !important;
+}
+
+/* The type rows carry label + icon + check — give the flyout room so
+   "Markdown note" never truncates under the check. */
+.note-ctx-submenu {
+  min-width: 242px;
+}
+
+/* The menu's own rows carry icons the editor menu's don't — keep them
+   quiet until hover, then let them join the text. */
+.note-ctx > .padify-ctx-scroll > .padify-ctx-item > svg:first-child {
+  color: var(--vz-fg-muted);
+}
+
+.note-ctx > .padify-ctx-scroll > .padify-ctx-item:hover:not([disabled]) > svg:first-child,
+.note-ctx > .padify-ctx-scroll > .padify-ctx-item:focus-visible > svg:first-child {
+  color: var(--vz-fg);
+}

@@ -80,6 +80,7 @@ import { initTasks } from './features/tasks';
 import { initThemeColors } from './editor/theme-colors';
 import { initRichShortcuts } from './editor/rich-shortcuts';
 import { initNoteTypeMenu } from './ui/note-type-menu';
+import { initNoteContextMenu } from './ui/note-context-menu';
 import { initThemeController } from './theme-controller';
 import { initEditorPreferences } from './editor-preferences';
 import { setBreakRemindersEnabled, trackWritingActivity } from './break-reminder';
@@ -383,6 +384,10 @@ export async function initApp(): Promise<void> {
   // ---- note-type menu — the chevron beside "New note", see
   // ui/note-type-menu.ts ----
   initNoteTypeMenu((type) => tabManager.addTab(true, type));
+
+  // ---- the note rail's right-click menu, see ui/note-context-menu.ts
+  // ----
+  initNoteContextMenu();
 
   notepad.note.keydown(function (e) {
     // Docs parity for the Backspace gesture: at the start of a

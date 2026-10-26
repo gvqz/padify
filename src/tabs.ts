@@ -536,6 +536,12 @@ export class TabManager {
     return this.tabs.find((tab) => tab.id === this.activeId) ?? null;
   }
 
+  /** Read-only view of the rail's notes — the note context menu finds its
+   *  target note (the one under the cursor, not the active one) here. */
+  getTabs(): readonly NoteTab[] {
+    return this.tabs;
+  }
+
   /** Saves the editor's live content into the active tab. */
   saveActiveFromEditor(): void {
     const active = this.getActive();
@@ -1004,6 +1010,64 @@ export class TabManager {
   }
 
   /**
+   * Duplicates a note — the note menu's Duplicate. The copy carries the
+   * source's content, type and ink theme under a "Copy of …" name, lands
+   * right after the source in the rail, and opens (the gesture reads as
+   * "here is my fresh copy"). Deliberately NOT a conflicted copy: the
+   * clone has no copyOf lineage and wears no fork badge — it is a
+   * duplicate the user asked for, not a sync accident.
+   */
+  duplicateNote(tabId: string): void {
+    const source = this.tabs.find((entry) => entry.id === tabId);
+    if (!source) {
+      return;
+    }
+    if (source.id === this.activeId) {
+      this.saveActiveFromEditor();
+    }
+
+    const copy = createTab(
+      source.content,
+      `Copy of ${deriveTabTitle(source)}`,
+      source.noteType ?? DEFAULT_NOTE_TYPE,
+    );
+    if (source.colorTheme) {
+      copy.colorTheme = source.colorTheme;
+    }
+    const index = this.tabs.findIndex((entry) => entry.id === tabId);
+    this.tabs.splice(index + 1, 0, copy);
+    this.dirtyIds.add(copy.id);
+    this.persist();
+
+    this.renderStrip();
+    this.switchTo(copy.id);
+    showToast(`Created "${deriveTabTitle(copy)}".`);
+  }
+
+  /**
+   * Changes a note's type in place — the note menu's Change type submenu.
+   * Switches to the note first (the painter and every chrome that reads
+   * the kind follow the ACTIVE note), then re-lands the SAME content
+   * under the new kind through applySnapshotToActive — the restore path
+   * that already owns the type-move, the html commit and the re-ink.
+   */
+  changeNoteType(tabId: string, noteType: NoteType): void {
+    const target = this.tabs.find((entry) => entry.id === tabId);
+    if (!target || (target.noteType ?? DEFAULT_NOTE_TYPE) === noteType) {
+      return;
+    }
+    if (tabId !== this.activeId) {
+      this.switchTo(tabId);
+    }
+    const active = this.getActive();
+    if (!active || active.id !== tabId) {
+      return;
+    }
+    this.applySnapshotToActive(active.content, noteType, active.colorTheme);
+    showToast(`Note type: ${noteTypeLabel(noteType).toLowerCase()}.`);
+  }
+
+  /**
    * Renames a tab programmatically — the tasks surface's page title and
    * the rail's quick-rename flows. Same rules as the strip's inline
    * rename (blank never wins; the model leads, the label follows), minus
@@ -1043,7 +1107,7 @@ export class TabManager {
     this.persist();
   }
 
-  private requestCloseTab(tabId: string): void {
+  requestCloseTab(tabId: string): void {
     const tab = this.tabs.find((entry) => entry.id === tabId);
     if (!tab) {
       return;
@@ -1136,7 +1200,7 @@ export class TabManager {
     });
   }
 
-  private beginRename(tabId: string): void {
+  beginRename(tabId: string): void {
     const tab = this.tabs.find((entry) => entry.id === tabId);
     const element = this.strip.find(`.tab-strip-tab[data-tab-id="${tabId}"]`);
     if (!tab || element.length === 0 || element.find('.tab-strip-rename').length > 0) {
