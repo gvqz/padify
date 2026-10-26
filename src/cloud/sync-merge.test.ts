@@ -690,7 +690,6 @@ describe('mergeRemote — own echoes', () => {
   });
 });
 
-
 describe('mergeRemote — the untouched welcome seed', () => {
   // Every fresh browser boots with the welcome note as its only tab.
   // Signing in from that browser used to upload it, so a populated
@@ -723,7 +722,7 @@ describe('mergeRemote — the untouched welcome seed', () => {
     expect(merge.changed).toBe(false);
   });
 
-  it('the seed survives when the pull delivered it — it is the account\'s own note', () => {
+  it("the seed survives when the pull delivered it — it is the account's own note", () => {
     // The first device uploaded its seed; on the next cycle the seed
     // comes back as a row. Same id: the normal matched path, not a twin.
     const mine = row('fresh-boot', { content: WELCOME_HTML });
