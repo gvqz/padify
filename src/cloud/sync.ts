@@ -158,6 +158,26 @@ let syncWarning: string | null = null;
 /** Local tab ids that changed and still need a push. */
 const pendingPush = new Set<string>();
 
+/**
+ * What this device pushed and the server may echo back: the (content,
+ * updated_at) each pushed row carried, keyed by note id. Every push —
+ * the pending queue (step 1) and the pull-revealed diff (step 3) — lands
+ * here before it ships; the next cycle's pull hands the rows back with
+ * fresh seqs, and mergeRemote matches them against this map so a device's
+ * own writes never outrank the typing that followed them. One entry per
+ * note: the latest push replaces the last, and a stale entry is harmless
+ * (a row matching it is this device's own bytes no matter when it was
+ * sent).
+ */
+const ownEchoes: OwnEchoMap = new Map();
+
+/** Remembers the bytes a push carried so the echo can be recognized. */
+function rememberEchoes(rows: NoteRow[]): void {
+  for (const row of rows) {
+    ownEchoes.set(row.id, { content: wireRowContent(row), updatedAt: row.updated_at });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // API plumbing
 // ---------------------------------------------------------------------------
@@ -520,6 +540,7 @@ async function runSyncOnce(): Promise<void> {
 
     try {
       for (const batch of batchRowsForPush(shippable)) {
+        rememberEchoes(batch);
         await api('/api/notes', { method: 'PUT', body: { v: 2, rows: batch } });
         batch.forEach((row) => pushed.push(row.id));
       }
@@ -549,7 +570,7 @@ async function runSyncOnce(): Promise<void> {
   manager.saveActiveFromEditor();
 
   const payload = manager.exportForSync();
-  const merge = mergeRemote(remoteRows, payload, { order: pull.order });
+  const merge = mergeRemote(remoteRows, payload, { order: pull.order, ownEchoes });
 
   if (merge.changed) {
     manager.applyExternalMerge(merge.tabs);
@@ -637,6 +658,7 @@ async function runSyncOnce(): Promise<void> {
       syncWarning = syncWarning ? `${syncWarning} ${diffWarning}` : diffWarning;
     }
     for (const batch of batchRowsForPush(shippableDiff)) {
+      rememberEchoes(batch);
       await api('/api/notes', { method: 'PUT', body: { v: 2, rows: batch } });
     }
   }
@@ -711,6 +733,23 @@ interface MergeResult {
 }
 
 /**
+ * What this device pushed most recently for a note: the exact bytes it
+ * sent, keyed by note id. The server stamps every write with a fresh seq
+ * and says nothing back, so the pull delivers the device's OWN writes
+ * again — indistinguishable from another device's work by seq alone. The
+ * fingerprint (content + the updated_at the device sent) is what tells
+ * them apart: a row matching it is an echo, and an echo must never
+ * outrank the typing that came after it.
+ */
+interface OwnEcho {
+  content: string;
+  updatedAt: number;
+}
+
+/** One fingerprint per note id — the latest push wins. */
+export type OwnEchoMap = Map<string, OwnEcho>;
+
+/**
  * Last-write-wins merge of remote rows into the local tab list.
  *
  * Sync v2 orders by the server's sequence: a row that carries one wins
@@ -724,21 +763,32 @@ interface MergeResult {
  * re-pushes it — the edit resurrects the note instead of the delete
  * burying the edit.
  *
- * Nothing is ever silently discarded. When the winner would overwrite
- * words the cloud never confirmed, the loser becomes a conflicted copy —
- * a fresh tab with its own id that rides the next push, so BOTH versions
- * exist everywhere. Three shapes trigger this: a dirty local tab losing
- * an edit race, a dirty local tab losing to a tombstone (the delete still
- * removes the note — the copy keeps the unconfirmed words), and the
- * equal-seq twin the old read-max race could stamp onto two different
- * versions (a clean local meeting its twin lets the remote take the row
- * and keeps the local words in a copy; a dirty local edited FROM that
- * version and simply wins).
+ * Own echoes come first, though. The row this device itself pushed comes
+ * back in the next pull carrying a seq NEWER than the local tab's — the
+ * server stamps writes, the push response does not say with what. A row
+ * whose fingerprint matches what this device sent IS that push: identical
+ * content adopts (the seq gained), content the typist moved past only
+ * advances the local tab's syncSeq — it never wins the row, never reverts
+ * the editor, and never mints a conflicted copy. Without this, every
+ * typing burst that crossed a sync cycle minted one: the echo's fresh seq
+ * beat the stale one, the dirty local "lost" to its own words, and the
+ * strip filled with conflicted copies while a single person was typing.
+ *
+ * Nothing else is ever silently discarded. When the winner would
+ * overwrite words the cloud never confirmed, the loser becomes a
+ * conflicted copy — a fresh tab with its own id that rides the next push,
+ * so BOTH versions exist everywhere. Three shapes trigger this: a dirty
+ * local tab losing an edit race with ANOTHER device's row, a dirty local
+ * tab losing to a tombstone (the delete still removes the note — the copy
+ * keeps the unconfirmed words), and the equal-seq twin the old read-max
+ * race could stamp onto two different versions (a clean local meeting its
+ * twin lets the remote take the row and keeps the local words in a copy;
+ * a dirty local edited FROM that version and simply wins).
  */
 export function mergeRemote(
   remoteRows: NoteRow[],
   payload: TabsSyncPayload,
-  options: { order?: string[] } = {},
+  options: { order?: string[]; ownEchoes?: OwnEchoMap } = {},
 ): MergeResult {
   const tabs: NoteTab[] = payload.tabs.map((tab) => ({ ...tab }));
   const byId = new Map(tabs.map((tab) => [tab.id, tab]));
@@ -761,6 +811,11 @@ export function mergeRemote(
     return local.updatedAt > row.updated_at;
   };
 
+  /** Whether a remote row's (name, content) differs from the local tab's —
+   *  the "did anything actually change" test behind every edit arbitration. */
+  const differsFromRow = (local: NoteTab, row: NoteRow): boolean =>
+    wireRowContent(row) !== local.content || row.name !== local.name;
+
   /** The remote row wins the edit: by seq when both carry one, by clock
    *  otherwise. A local row without a seq takes an identical remote row
    *  wholesale (adoption) and a differing one only on the clock. An equal
@@ -769,7 +824,7 @@ export function mergeRemote(
    *  leave a copy behind), a dirty local is the newer branch and keeps
    *  the note. */
   const remoteWinsEdit = (local: NoteTab, row: NoteRow, localDirty: boolean): boolean => {
-    const differs = wireRowContent(row) !== local.content || row.name !== local.name;
+    const differs = differsFromRow(local, row);
     if (row.seq && local.syncSeq) {
       if (row.seq === local.syncSeq) {
         return !localDirty && differs;
@@ -918,6 +973,32 @@ export function mergeRemote(
         syncSeq: row.seq && row.seq > 0 ? row.seq : undefined,
       });
       touched = true;
+      return;
+    }
+
+    // An echo of this device's own push goes home before any arbitration:
+    // the server stamped it with a seq fresher than the tab's, but the
+    // bytes are the ones THIS device sent, so the row can never carry a
+    // newer version of the note than the typing that followed the push.
+    // Identical content is the plain adoption (the seq gained); content
+    // the typist moved past advances the tab's syncSeq and nothing else —
+    // the editor keeps its words, and no conflicted copy is minted. The
+    // fingerprint is the (content, updated_at) the push itself carried;
+    // another device's write cannot collide with it (the updated_at is
+    // this device's own clock, in milliseconds, read at push time).
+    const echo = options.ownEchoes?.get(row.id);
+    if (echo && echo.updatedAt === row.updated_at && echo.content === wireRowContent(row)) {
+      const identical = !differsFromRow(local, row);
+      if (identical) {
+        local.name = row.name;
+        local.createdAt = typeof row.created_at === 'number' ? row.created_at : local.createdAt;
+        local.updatedAt = row.updated_at;
+        local.noteType = normalizeNoteType(row.note_type) ?? local.noteType;
+      }
+      if (row.seq && row.seq > 0 && row.seq !== local.syncSeq) {
+        local.syncSeq = row.seq;
+        touched = true;
+      }
       return;
     }
 

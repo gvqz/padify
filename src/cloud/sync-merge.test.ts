@@ -560,3 +560,131 @@ describe('mergeRemote — conflict multiplication guard', () => {
     expect(merge.conflicts).toEqual([]);
   });
 });
+
+describe('mergeRemote — own echoes', () => {
+  // The push response never says which seq the server stamped, so the
+  // next pull delivers the device's OWN write back with a fresh seq.
+  // Without echo recognition that echo outranked the typing that followed
+  // it — every burst that crossed a sync cycle minted a conflicted copy
+  // of words the same device had written seconds earlier.
+
+  it('the echo of our own push never outranks typing that followed it', () => {
+    // The tab synced at seq 5, the device pushed '<p>typed more</p>' at
+    // t=3_000, and the user kept typing (dirty, t=4_000). The pull hands
+    // the pushed row back stamped seq 6.
+    const local = tab('a', {
+      syncSeq: 5,
+      updatedAt: 4_000,
+      content: '<p>typed even more</p>',
+    });
+    const echo = row('a', {
+      seq: 6,
+      updated_at: 3_000,
+      content: '<p>typed more</p>',
+    });
+
+    const merge = mergeRemote([echo], payloadOf([local]), {
+      ownEchoes: new Map([['a', { content: '<p>typed more</p>', updatedAt: 3_000 }]]),
+    });
+
+    // The typist's words stay in the note — no revert, no rescue copy.
+    expect(merge.tabs).toHaveLength(1);
+    expect(merge.tabs[0].content).toBe('<p>typed even more</p>');
+    expect(merge.tabs[0].updatedAt).toBe(4_000);
+    expect(merge.conflicts).toEqual([]);
+    // The lineage advances: the tab is now based on the version at seq 6,
+    // so the NEXT echo arbitrates against a meaningful number.
+    expect(merge.tabs[0].syncSeq).toBe(6);
+    expect(merge.changed).toBe(true);
+  });
+
+  it('an echo whose content matches adopts cleanly and stamps the seq', () => {
+    // Typing paused before the pull: the pulled row is byte-identical to
+    // what was pushed. Adoption — the seq gained, nothing else moved.
+    const local = tab('a', {
+      syncSeq: 5,
+      updatedAt: 3_000,
+      content: '<p>paused words</p>',
+    });
+    const echo = row('a', {
+      seq: 6,
+      updated_at: 3_000,
+      content: '<p>paused words</p>',
+    });
+
+    const merge = mergeRemote([echo], payloadOf([local], []), {
+      ownEchoes: new Map([['a', { content: '<p>paused words</p>', updatedAt: 3_000 }]]),
+    });
+
+    expect(merge.tabs[0].content).toBe('<p>paused words</p>');
+    expect(merge.tabs[0].syncSeq).toBe(6);
+    expect(merge.conflicts).toEqual([]);
+  });
+
+  it('an echo still stamps the seq on a tab that never had one', () => {
+    // The rollout path: a locally-created note pushed before any pull
+    // gave it a seq. The echo is its first sight of its own row.
+    const local = tab('a', {
+      updatedAt: 5_000,
+      content: '<p>kept typing</p>',
+    });
+    const echo = row('a', {
+      seq: 6,
+      updated_at: 3_000,
+      content: '<p>pushed words</p>',
+    });
+
+    const merge = mergeRemote([echo], payloadOf([local]), {
+      ownEchoes: new Map([['a', { content: '<p>pushed words</p>', updatedAt: 3_000 }]]),
+    });
+
+    expect(merge.tabs[0].content).toBe('<p>kept typing</p>');
+    expect(merge.tabs[0].syncSeq).toBe(6);
+    expect(merge.conflicts).toEqual([]);
+  });
+
+  it('another device\u2019s write still outranks dirty typing \u2014 both versions kept', () => {
+    // Same local state as the first test, but the row is NOT this
+    // device's push: no echo fingerprint matches. A genuine diverge —
+    // the copy must be minted.
+    const local = tab('a', {
+      syncSeq: 5,
+      updatedAt: 4_000,
+      content: '<p>typed even more</p>',
+    });
+    const remote = row('a', {
+      seq: 6,
+      updated_at: 3_500,
+      content: '<p>from the other device</p>',
+    });
+
+    const merge = mergeRemote([remote], payloadOf([local]));
+
+    expect(merge.conflicts).toHaveLength(1);
+    const survivor = merge.tabs.find((entry) => entry.id === 'a');
+    expect(survivor?.content).toBe('<p>from the other device</p>');
+    const copy = merge.tabs.find((entry) => entry.id !== 'a');
+    expect(copy?.content).toBe('<p>typed even more</p>');
+  });
+
+  it('a row an echo does not recognize arbitrates as before', () => {
+    // The fingerprint covers (content, updated_at): another device's row
+    // with different bytes or a different stamp never masquerades as ours.
+    const local = tab('a', { syncSeq: 5, updatedAt: 4_000, content: '<p>typed</p>' });
+    const echo = row('a', {
+      seq: 6,
+      updated_at: 3_000,
+      content: '<p>typed more</p>',
+    });
+
+    // The map's fingerprint disagrees on content — not our echo.
+    const merge = mergeRemote([echo], payloadOf([local]), {
+      ownEchoes: new Map([['a', { content: '<p>something else</p>', updatedAt: 3_000 }]]),
+    });
+
+    // The clean-ish arbitration: seq 6 beats syncSeq 5, the local is
+    // dirty, so both versions are kept.
+    expect(merge.conflicts).toHaveLength(1);
+    expect(merge.tabs.find((entry) => entry.id === 'a')?.content).toBe('<p>typed more</p>');
+  });
+});
