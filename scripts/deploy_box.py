@@ -313,7 +313,7 @@ def main():
     # at boot (server/routes.ts handleHealth) so the restart verification
     # below can tell "the new process" from "the old one still standing".
     build_id = deployed_sha()
-    run(client, "printf %s\\n " + shlex.quote(build_id) + " > " + shlex.quote(f"{REMOTE_SERVER}/.build-id"))
+    run(client, "printf '%s\\n' " + shlex.quote(build_id) + " > " + shlex.quote(f"{REMOTE_SERVER}/.build-id"))
     print(f"[server] build id stamped: {build_id[:12]}")
 
     # Kill the running bun and wait until the PUBLIC health endpoint
