@@ -140,19 +140,40 @@ def restart_server(client, expected_build):
     TERM -> KILL, and the deploy FAILS if the public health endpoint
     does not name `expected_build`.
 
-    bun ignores a graceful-shutdown TERM in some idle states, so the
-    escalation is not paranoia — it is the observed failure mode.
+    The kill targets `bun ... server/index.ts` specifically — the loose
+    `pgrep -f bun` of the old tail matched anything with "bun" in its
+    command line, and a kill that lands on the wrong pid is exactly the
+    silent no-op this step exists to prevent. Every signal prints the
+    cmdlines it is aimed at, and a failed verification dumps the box's
+    full process table so the NEXT run's log explains itself.
     """
     deadline = time.time() + 90
 
-    def pids():
-        out = run(client, "pgrep -u functionhost -f 'bun' | head -10 || true")
+    def server_pids():
+        out = run(client, "pgrep -u functionhost -f 'bun.*server/index[.]ts' || true")
         return out.split()
+
+    def describe(pids):
+        if not pids:
+            return "(none)"
+        quoted = " ".join(shlex.quote(pid) for pid in pids)
+        return run(client, f"ps -o pid=,args= -p {quoted} || true").strip() or "(gone)"
+
+    def dump_process_table():
+        out = run(
+            client,
+            "ps -u functionhost -o pid,ppid,etime,args | head -40 || true",
+            timeout=60,
+        )
+        print("[server] box process table (functionhost):")
+        for line in out.splitlines():
+            print(f"    {line}")
 
     stage = "TERM"
     while time.time() < deadline:
-        live = pids()
+        live = server_pids()
         if live:
+            print(f"[server] kill -{stage} -> {describe(live)}")
             run(client, f"kill -{stage} {' '.join(live)} || true")
             # Give the signal a beat to act, then look again.
             for _ in range(10):
@@ -161,10 +182,13 @@ def restart_server(client, expected_build):
                 if build == expected_build:
                     print(f"[server] box serves build {expected_build} (after {stage})")
                     return
-                if not pids():
+                if not server_pids():
                     break  # process is gone — let the supervisor boot the new code
         else:
-            # Nothing running: the next request cold-boots the fresh code.
+            # Nothing matching is running: the next request cold-boots the
+            # fresh code. If the endpoint KEEPS answering without ever
+            # naming this build, whatever serves it is not the program we
+            # just stamped — dump the table and say so.
             for _ in range(8):
                 time.sleep(1.5)
                 build, _reachable = running_build(allow_errors=True)
@@ -175,6 +199,9 @@ def restart_server(client, expected_build):
             stage = "KILL"
 
     build, reachable = running_build(allow_errors=True)
+    print(f"[server] verification failed: endpoint answered {build!r}, expected {expected_build!r}")
+    print(f"[server] processes matching server/index.ts now: {describe(server_pids())}")
+    dump_process_table()
     raise SystemExit(
         "RESTART VERIFICATION FAILED — the box is "
         + (f"serving build {build!r}" if reachable else "not answering")
