@@ -57,9 +57,6 @@
           </svg>
         </span>
         <h5 class="share-gate-title">Sign in to share notes</h5>
-        <p class="share-gate-copy">
-          Sharing creates a private read-only link to this note that you can cancel at any time.
-        </p>
         <button type="button" class="share-gate-cta" id="shareSignInCta">Sign in</button>
       </div>
     </div>
@@ -76,7 +73,7 @@
         hidden
       >
         <div class="share-active-top">
-          <span class="share-active-url" id="shareActiveUrl"></span>
+          <span class="share-active-name">Active link</span>
           <span class="share-badge active">Active</span>
         </div>
         <div class="share-active-foot">
@@ -88,16 +85,15 @@
             </button>
           </div>
         </div>
+        <span class="sr-only" id="shareActiveUrl"></span>
       </section>
 
       <!-- The one primary movement: pick how long the link lives, create
            it — or, with a link already out, refresh its window instead
-           (the label follows the state). The preview line says the exact
-           date so the choice is never abstract; the quiet line says why
-           an empty note cannot share. -->
+           (the label follows the state). The quiet line says why an
+           empty note cannot share. -->
       <section class="share-new" aria-label="Create or update the link">
-        <span class="share-sec-label" id="shareDurationLabel">Link expires after</span>
-        <div class="share-dur" role="radiogroup" aria-labelledby="shareDurationLabel">
+        <div class="share-dur" role="radiogroup" aria-label="Link expires after">
           <input type="radio" id="shareDur1" value="1" name="shareDuration" />
           <label for="shareDur1">1 day</label>
           <input type="radio" id="shareDur7" value="7" name="shareDuration" checked />
@@ -107,7 +103,6 @@
           <input type="radio" id="shareDur90" value="90" name="shareDuration" />
           <label for="shareDur90">90 days</label>
         </div>
-        <span class="share-expiry-preview" id="shareExpiryPreview"></span>
         <button type="button" class="share-create" id="shareCreateBtn">
           <svg
             width="14"

@@ -84,8 +84,6 @@ export function initShareUI(): void {
     }, PANEL_SWAP_MS);
   });
 
-  $('input[name="shareDuration"]').on('change', renderExpiryPreview);
-
   $('#shareCreateBtn').on('click', () => {
     void createOrUpdate();
   });
@@ -112,7 +110,6 @@ export function initShareUI(): void {
     // reopen — the confirm state belongs to this visit's list only.
     disarmCancel();
     renderShareState();
-    renderExpiryPreview();
     void refreshShares();
   });
 
@@ -268,14 +265,6 @@ function formatDate(timestamp: number): string {
   });
 }
 
-function renderExpiryPreview(): void {
-  const days = selectedDays();
-  const expiry = Date.now() + days * DAY_MS;
-  $('#shareExpiryPreview').text(
-    `Link valid until ${formatDate(expiry)} — then it stops working on its own.`,
-  );
-}
-
 // ---- link list ---------------------------------------------------------------
 
 async function refreshShares(): Promise<void> {
@@ -324,12 +313,13 @@ function createdAgo(record: ShareRecord): string {
 
 function shortUrl(token: string): string {
   const url = shareUrlFor(token);
-  // The popup has room for the whole typical link; the cap only tames
-  // pathological hosts. The row's own ellipsis handles the rest.
-  if (url.length <= 64) {
+  // The card no longer prints the URL (Copy carries it), so this only
+  // feeds the popup's rows — enough to recognise a link, not a wall of
+  // monospace. The row's own ellipsis handles the rest.
+  if (url.length <= 48) {
     return url;
   }
-  return `${url.slice(0, 60)}…`;
+  return `${url.slice(0, 46)}…`;
 }
 
 /**
@@ -371,8 +361,8 @@ function renderLinks(): void {
 
   if (visible.length === 0) {
     const message = showAll
-      ? 'No active links. Create one from any note — anyone with it sees a read-only copy.'
-      : 'No active link for this note. Create one in the Share panel.';
+      ? 'No active links. Create one from any note.'
+      : 'No active link for this note.';
     $list.append($('<p class="share-links-empty"></p>').text(message));
     return;
   }
@@ -553,10 +543,19 @@ async function createOrUpdate(): Promise<void> {
       renderShareState();
       renderLinks();
     } else {
-      // An older server answered ok without the row — refetch so the
-      // card's countdown tells the truth.
-      showToast('Link updated.');
+      // A server without the expiry branch answered ok without the row —
+      // and the legacy handler it ran may have REVOKED the link instead
+      // of updating it. Refetch and tell the truth about what is out
+      // there now; "Link updated." over a vanished link is a lie.
       await refreshShares();
+      const stillOut = shares.some(
+        (record) => record.token === existing.token && isLinkActive(record),
+      );
+      showToast(
+        stillOut
+          ? 'Link updated.'
+          : 'The server could not update this link — create it again from this panel.',
+      );
     }
     return;
   }
@@ -580,12 +579,9 @@ async function createOrUpdate(): Promise<void> {
   // clipboard immediately saves the one extra click for every share
   // (the card offers Copy for later use).
   if (result.token) {
-    void copyLinkText(
-      shareUrlFor(result.token),
-      'Share link created and copied — anyone with it can read this note.',
-    );
+    void copyLinkText(shareUrlFor(result.token), 'Link created and copied.');
   } else {
-    showToast('Share link created — anyone with it can read this note.');
+    showToast('Link created.');
   }
   await refreshShares();
 }

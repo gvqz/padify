@@ -23,12 +23,27 @@
   background: var(--vz-bg-elevated);
   border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius-lg);
-  box-shadow: var(--vz-shadow-dialog);
+  /* The panel hovers over DENSE editor text — a hairline contact shadow
+     plus a deep throw keeps the sheet off the page. One flat shadow read
+     as a grey smudge; the layered stack reads as height. */
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--vz-border) 55%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.07),
+    0 4px 12px -2px rgba(0, 0, 0, 0.1),
+    0 16px 44px -10px rgba(0, 0, 0, 0.28);
   opacity: 0;
   transform: scale(0.97);
   transition: opacity 140ms var(--vz-ease), transform 140ms var(--vz-ease);
   /* the transform origin is set inline by the engine — it points at the
      anchor so the panel grows OUT of its icon */
+}
+
+body.dark .topbar-panel {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--vz-border) 70%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 4px 12px -2px rgba(0, 0, 0, 0.45),
+    0 16px 48px -10px rgba(0, 0, 0, 0.65);
 }
 
 .topbar-panel.in {
@@ -101,7 +116,7 @@ body.panel-sheet-open {
    ========================================================================== */
 
 .cloud-panel {
-  width: 340px;
+  width: 372px;
 }
 
 .cloud-panel-body {
@@ -265,9 +280,6 @@ body.panel-sheet-open {
 .cloud-account-copy {
   flex: 1 1 auto;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
 }
 
 .cloud-account-email {
@@ -277,11 +289,6 @@ body.panel-sheet-open {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.cloud-account-hint {
-  font-size: 11px;
-  color: var(--vz-fg-subtle);
 }
 
 /* Sign out — a quiet text button; danger only when it matters (hover). */
@@ -413,7 +420,7 @@ body.panel-sheet-open {
    ========================================================================== */
 
 .share-panel {
-  width: 396px;
+  width: 372px;
 }
 
 .share-panel-body {
@@ -485,7 +492,7 @@ body.panel-sheet-open {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 30px 26px 26px;
+  padding: 36px 26px 32px;
 }
 
 .share-gate-mark {
@@ -507,17 +514,10 @@ body.panel-sheet-open {
 }
 
 .share-gate-title {
-  margin: 0 0 5px;
+  margin: 0 0 14px;
   font-size: 13.5px;
   font-weight: 600;
   color: var(--vz-fg);
-}
-
-.share-gate-copy {
-  margin: 0 0 14px;
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--vz-fg-muted);
 }
 
 .share-gate-cta {
@@ -563,11 +563,11 @@ body.panel-sheet-open {
   min-width: 0;
 }
 
-.share-active-url {
+.share-active-name {
   flex: 1 1 auto;
   min-width: 0;
   font-size: 12.5px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 600;
   color: var(--vz-fg);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -611,14 +611,6 @@ body.panel-sheet-open {
   flex-direction: column;
   gap: 7px;
   padding: 12px 14px 14px;
-}
-
-.share-sec-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--vz-fg-subtle);
 }
 
 .share-dur {
@@ -668,11 +660,6 @@ body.panel-sheet-open {
 .share-dur input:focus-visible + label {
   outline: 2px solid var(--vz-primary);
   outline-offset: -2px;
-}
-
-.share-expiry-preview {
-  font-size: 11.5px;
-  color: var(--vz-fg-muted);
 }
 
 .share-create {
@@ -725,9 +712,9 @@ body.panel-sheet-open {
   width: calc(100% - 28px);
   margin: 0 14px 13px;
   padding: 8px 10px;
-  border: 1px solid var(--vz-border);
+  border: 1px solid transparent;
   border-radius: var(--vz-radius);
-  background: var(--vz-bg);
+  background: transparent;
   color: var(--vz-fg-muted);
   font-size: 12px;
   font-weight: 500;
@@ -739,7 +726,7 @@ body.panel-sheet-open {
 .share-all-links:hover,
 .share-all-links:focus-visible {
   color: var(--vz-fg);
-  border-color: var(--vz-border-strong);
+  border-color: var(--vz-border);
   background: var(--vz-bg-hover);
   outline: none;
 }
