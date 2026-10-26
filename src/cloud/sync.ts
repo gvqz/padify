@@ -24,7 +24,11 @@
 import { api as apiCall, ApiError } from './api';
 import { flushAttachmentUploads } from './attachments';
 import { stateGet, stateSet, stateRemove } from '../storage';
-import { normalizeNoteType } from '../editor/note-types';
+import { DEFAULT_NOTE_TYPE, normalizeNoteType } from '../editor/note-types';
+// The welcome seed's exact bytes: the untouched-seed test in mergeRemote
+// compares against them (importing the constant — not a copy — so a
+// future seed edit can never desync the check).
+import { WELCOME_HTML } from '../editor/note-content';
 import type { NoteTab, TabManager, TabTombstone, TabsSyncPayload } from '../tabs';
 // The wire contract both sides of the HTTP boundary share — types below,
 // and the one request-body ceiling the client batches under.
@@ -575,6 +579,12 @@ async function runSyncOnce(): Promise<void> {
   if (merge.changed) {
     manager.applyExternalMerge(merge.tabs);
   }
+  // A dropped seed may sit in the push queue (its boot-time creation
+  // persisted → dirty → pendingPush). Its tab is gone from the model and
+  // it never reached the server, so nothing will ever confirm it — a
+  // queued id with no tab and no tombstone would keep the status pegged
+  // at "pending" forever. Take it out.
+  merge.droppedSeedIds.forEach((id) => pendingPush.delete(id));
   // NOW the cursor may advance: the pulled rows are merged and the
   // persist has been issued. A throw above leaves the cursor where it
   // was, so the next cycle re-pulls instead of skipping.
@@ -730,6 +740,13 @@ interface MergeResult {
    * version needed rescuing.
    */
   conflicts: string[];
+  /**
+   * Local untouched welcome-seed tabs this merge dropped (see
+   * dropSeedTwins). The caller must take them out of pendingPush — a
+   * queued id whose tab and tombstone are both gone would keep the
+   * status pegged at "pending" forever.
+   */
+  droppedSeedIds: string[];
 }
 
 /**
@@ -748,6 +765,22 @@ interface OwnEcho {
 
 /** One fingerprint per note id — the latest push wins. */
 export type OwnEchoMap = Map<string, OwnEcho>;
+
+/**
+ * The brand-new-install tab, byte for byte: the content TabManager.init
+ * seeds, never renamed (name null — the title derives from the content),
+ * still the default note type. Anything the user did to the note — a
+ * rename, a single keystroke, a type switch — breaks one of the three and
+ * the note is theirs forever. Only the pristine boilerplate qualifies for
+ * the seed-twin drop in mergeRemote.
+ */
+function isUntouchedWelcomeSeed(tab: NoteTab): boolean {
+  return (
+    tab.name === null &&
+    tab.content === WELCOME_HTML &&
+    (tab.noteType ?? DEFAULT_NOTE_TYPE) === DEFAULT_NOTE_TYPE
+  );
+}
 
 /**
  * Last-write-wins merge of remote rows into the local tab list.
@@ -774,6 +807,16 @@ export type OwnEchoMap = Map<string, OwnEcho>;
  * beat the stale one, the dirty local "lost" to its own words, and the
  * strip filled with conflicted copies while a single person was typing.
  *
+ * One exception to "the cloud's notes always join the strip": the
+ * untouched welcome seed. Every fresh browser boots with one (see
+ * TabManager.init), and signing in from that browser used to UPLOAD it —
+ * a populated account gained a byte-identical "Welcome!" twin per device,
+ * each twin its own note id, which broke everything keyed by note id
+ * (the share panel's one-active-link-per-note match, for one). When the
+ * pull delivers a live account, a seed this device never typed in and
+ * the pull never delivered is boilerplate, not user data — it is dropped
+ * locally instead of pushed (dropSeedTwins below).
+ *
  * Nothing else is ever silently discarded. When the winner would
  * overwrite words the cloud never confirmed, the loser becomes a
  * conflicted copy — a fresh tab with its own id that rides the next push,
@@ -795,6 +838,7 @@ export function mergeRemote(
   const freshRemote: NoteTab[] = [];
   const conflicts: string[] = [];
   const dirty = new Set(payload.dirty);
+  const droppedSeedIds: string[] = [];
   let touched = false;
 
   /** The local row wins the delete: newer by seq when both carry one,
@@ -1042,6 +1086,29 @@ export function mergeRemote(
   // ordering pass below.
   tabs.push(...freshRemote);
 
+  // The untouched welcome seed never uploads to a populated account (see
+  // the header comment — a per-device "Welcome!" twin broke note-id-keyed
+  // behavior, the share panel's one-link-per-note match for one). A seed
+  // the pull delivered is the account's own note and stays; a seed the
+  // pull never delivered, meeting an account that HAS live notes, is
+  // this boot's boilerplate — dropped from the model, never pushed.
+  // Renamed or edited seeds fail the byte-exact test and always stay.
+  if (remoteRows.some((row) => !row.deleted)) {
+    const remoteIds = new Set(remoteRows.map((row) => row.id));
+    for (let i = tabs.length - 1; i >= 0; i -= 1) {
+      const tab = tabs[i];
+      if (remoteIds.has(tab.id) || !isUntouchedWelcomeSeed(tab)) {
+        continue;
+      }
+      tabs.splice(i, 1);
+      byId.delete(tab.id);
+      droppedSeedIds.push(tab.id);
+    }
+    if (droppedSeedIds.length > 0) {
+      touched = true;
+    }
+  }
+
   // Positions converge instead of ping-ponging. Without this, two devices
   // that merged the same notes in different orders each see
   // remote.position !== localIndex on every cycle and each re-push their
@@ -1072,7 +1139,7 @@ export function mergeRemote(
     }
   }
 
-  return { tabs, changed: touched, conflicts };
+  return { tabs, changed: touched, conflicts, droppedSeedIds };
 }
 
 /** The server rejects request bodies over 2 MB (see shared/wire.ts). */

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { NoteTab, TabsSyncPayload } from '../tabs';
+import { WELCOME_HTML } from '../editor/note-content';
 import { mergeRemote, type NoteRow } from './sync';
 
 // The merge decides what survives a sync cycle. These tests pin its
@@ -686,5 +687,79 @@ describe('mergeRemote — own echoes', () => {
     // dirty, so both versions are kept.
     expect(merge.conflicts).toHaveLength(1);
     expect(merge.tabs.find((entry) => entry.id === 'a')?.content).toBe('<p>typed more</p>');
+  });
+});
+
+
+describe('mergeRemote — the untouched welcome seed', () => {
+  // Every fresh browser boots with the welcome note as its only tab.
+  // Signing in from that browser used to upload it, so a populated
+  // account gained a byte-identical "Welcome!" twin per device — each
+  // twin its own note id, which broke note-id-keyed behavior (the share
+  // panel's one-active-link-per-note match, for one). The merge now
+  // drops the pristine seed when the pull proves the account is alive.
+  const seed = (id: string): NoteTab => tab(id, { content: WELCOME_HTML });
+  const otherNote = row('real', { content: '<p>years of real notes</p>' });
+
+  it('a pristine seed is dropped when the pull delivers a live account', () => {
+    const merge = mergeRemote([otherNote], payloadOf([seed('fresh-boot')]));
+
+    expect(merge.tabs.map((entry) => entry.id)).toEqual(['real']);
+    expect(merge.droppedSeedIds).toEqual(['fresh-boot']);
+    expect(merge.changed).toBe(true);
+  });
+
+  it('the seed survives an account with only tombstones — nothing live to trust yet', () => {
+    // A wiped-everywhere account must still adopt its first device's
+    // seed: the pull delivering no live rows means the seed is the only
+    // copy of the note that exists.
+    const merge = mergeRemote(
+      [row('gone', { deleted: true, updated_at: 3_000 })],
+      payloadOf([seed('fresh-boot')]),
+    );
+
+    expect(merge.tabs.map((entry) => entry.id)).toEqual(['fresh-boot']);
+    expect(merge.droppedSeedIds).toEqual([]);
+    expect(merge.changed).toBe(false);
+  });
+
+  it('the seed survives when the pull delivered it — it is the account\'s own note', () => {
+    // The first device uploaded its seed; on the next cycle the seed
+    // comes back as a row. Same id: the normal matched path, not a twin.
+    const mine = row('fresh-boot', { content: WELCOME_HTML });
+
+    const merge = mergeRemote([mine, otherNote], payloadOf([seed('fresh-boot')], []));
+
+    expect(merge.tabs.map((entry) => entry.id)).toContain('fresh-boot');
+    expect(merge.droppedSeedIds).toEqual([]);
+  });
+
+  it('an edited seed is a real note and always stays', () => {
+    const edited = tab('fresh-boot', {
+      content: `${WELCOME_HTML}\n\nmy own additions now`,
+    });
+
+    const merge = mergeRemote([otherNote], payloadOf([edited]));
+
+    expect(merge.tabs.map((entry) => entry.id)).toEqual(['fresh-boot', 'real']);
+    expect(merge.droppedSeedIds).toEqual([]);
+  });
+
+  it('a renamed seed is a real note and always stays', () => {
+    const renamed = tab('fresh-boot', { content: WELCOME_HTML, name: 'Readme' });
+
+    const merge = mergeRemote([otherNote], payloadOf([renamed]));
+
+    expect(merge.tabs.map((entry) => entry.id)).toEqual(['fresh-boot', 'real']);
+    expect(merge.droppedSeedIds).toEqual([]);
+  });
+
+  it('a seed switched to another note type is a real note and always stays', () => {
+    const switched = tab('fresh-boot', { content: WELCOME_HTML, noteType: 'markdown' });
+
+    const merge = mergeRemote([otherNote], payloadOf([switched]));
+
+    expect(merge.tabs.map((entry) => entry.id)).toEqual(['fresh-boot', 'real']);
+    expect(merge.droppedSeedIds).toEqual([]);
   });
 });

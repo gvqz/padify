@@ -16,8 +16,16 @@
   /* The fixed navbar's painted height is --navbar-h (see tokens.css;
      body padding-top in base.css derives from the same token). Filling
      exactly the remaining viewport keeps the page unscrollable, so
-     focus-scrolling can never slide the note under the navbar. */
+     focus-scrolling can never slide the note under the navbar.
+     dvh, not vh: on mobile browsers 100vh is the LARGE viewport — it
+     includes the strip behind the retracting toolbars — so a vh-only
+     shell painted its whole bottom (rail foot, word-count pill, the
+     editor's own bottom padding) underneath the browser chrome, visibly
+     cut off. dvh tracks the real visible viewport; the vh line above it
+     is the fallback for browsers without dvh (same pattern as
+     unicode-picker.css and the snapshots sheet). */
   height: calc(100vh - var(--navbar-h));
+  height: calc(100dvh - var(--navbar-h));
   min-height: 320px;
 }
 

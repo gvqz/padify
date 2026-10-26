@@ -82,6 +82,10 @@ body.dark .mp-mini {
   }
   #musicPlayerModal .mp-content {
     height: calc(100vh - 16px);
+    /* dvh wins where supported — 100vh on mobile includes the strip
+       behind the browser's retracting toolbars, which cut the player's
+       bottom controls off-screen (same fix as #editorShell). */
+    height: calc(100dvh - 16px);
   }
 }
 
