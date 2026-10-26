@@ -200,6 +200,38 @@ export async function revokeShare(token: string): Promise<ShareActionResult> {
   }
 }
 
+/**
+ * Refreshes one link's expiry window — the dedupe path's "update": a note
+ * keeps ONE active link, so a second share request for the same note
+ * refreshes the first instead of minting a twin. Returns the new expiry
+ * so the caller can update its record without a refetch.
+ */
+export async function updateShareExpiry(
+  token: string,
+  days: number,
+): Promise<ShareActionResult & { expiresAt?: number }> {
+  try {
+    const data = await shareApi<{ ok: true; row?: { expires_at: number } }>('/api/shares', {
+      method: 'PATCH',
+      body: { token, days },
+    });
+    return { ok: true, token, expiresAt: data.row?.expires_at };
+  } catch (error) {
+    console.error('[share] expiry update failed', error);
+    const message = error instanceof Error ? error.message : String(error);
+    if (/failed to fetch|networkerror|load failed/i.test(message)) {
+      return {
+        ok: false,
+        message: 'Could not reach the sync server. Check your connection and try again.',
+      };
+    }
+    if (/no longer active|not available/i.test(message)) {
+      return { ok: false, message: 'This link is no longer active — create a new one instead.' };
+    }
+    return { ok: false, message: 'Could not update the link. Try again.' };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Keep links fresh (called from the tab-manager persist hook)
 // ---------------------------------------------------------------------------

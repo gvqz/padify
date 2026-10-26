@@ -117,6 +117,42 @@ export async function handleSharesPatch(db: Db, request: Request, user: SessionU
 
   // Revoke one link by token.
   const token = asString(body.token);
+
+  // Refresh one link's expiry window by token — the client's dedupe
+  // contract: a note keeps ONE active link, so a second share request
+  // for it updates the first instead of minting a twin. Updating implies
+  // the link is (still) live: revoked links refuse, expired ones come
+  // back — the reader's 404 contract stays untouched.
+  const days = asInt(body.days, 0);
+  if (token && days > 0) {
+    const now = Date.now();
+    const expiresAt = now + Math.min(3650, Math.max(1, days)) * DAY_MS;
+    const updated = await db.all(
+      `update shares set expires_at = ?
+       where token = ? and user_id = ? and revoked = 0
+       returning token, note_id, title, content, created_at, expires_at, revoked`,
+      [expiresAt, token, user.id]
+    );
+    const row = updated[0];
+    if (!row) {
+      return json(request, { error: 'This link is no longer active.' }, 404);
+    }
+    return json(request, {
+      ok: true,
+      row: {
+        token: String(row.token),
+        note_id: row.note_id,
+        title: row.title,
+        content: row.content,
+        html: row.content,
+        note_type: row.note_type ?? null,
+        created_at: Number(row.created_at),
+        expires_at: Number(row.expires_at),
+        revoked: Number(row.revoked) === 1
+      }
+    });
+  }
+
   if (token) {
     await db.run('update shares set revoked = 1 where token = ? and user_id = ?', [token, user.id]);
     return json(request, { ok: true });

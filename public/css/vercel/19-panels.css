@@ -36,6 +36,13 @@
   transform: scale(1);
 }
 
+/* A panel between states — opening (the pre-.in reflow frame) or closing
+   (a sibling panel superseded it and cleared its hide timer) — is
+   invisible but must not intercept clicks. */
+.topbar-panel:not(.in) {
+  pointer-events: none;
+}
+
 .topbar-panel[hidden] {
   display: none !important;
 }
@@ -298,18 +305,6 @@ body.panel-sheet-open {
   outline: none;
 }
 
-/* ---- the one-line footer --------------------------------------------------- */
-
-.cloud-panel-foot {
-  margin: 0;
-  padding: 11px 2px 13px;
-  border-top: 1px solid var(--vz-border);
-  margin-top: 13px;
-  font-size: 11px;
-  line-height: 1.55;
-  color: var(--vz-fg-subtle);
-}
-
 /* ---- the compact sign-in --------------------------------------------------- */
 
 .cloud-auth {
@@ -455,12 +450,6 @@ body.panel-sheet-open {
   color: var(--vz-fg);
 }
 
-.share-subtitle {
-  margin: 0;
-  font-size: 12px;
-  color: var(--vz-fg-muted);
-}
-
 .share-close {
   flex: 0 0 auto;
   display: inline-flex;
@@ -550,70 +539,69 @@ body.panel-sheet-open {
   outline: none;
 }
 
-/* ---- the note strip ---------------------------------------------------------- */
+/* ---- the note's one active link ------------------------------------------------
+   The card IS the dedupe: when the note already has a live link it shows
+   here — Copy and Cancel ride the card, and the button below updates the
+   link instead of minting a twin. */
 
-.share-note-strip {
+.share-active {
+  margin: 12px 14px 0;
+  border: 1px solid color-mix(in srgb, var(--vz-success) 32%, var(--vz-border));
+  border-radius: var(--vz-radius-md);
+  background: color-mix(in srgb, var(--vz-success) 5%, var(--vz-bg));
+}
+
+.share-active[hidden] {
+  display: none !important;
+}
+
+.share-active-top {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 12px 14px 0;
-  padding: 9px 11px;
-  border: 1px solid var(--vz-border);
-  border-radius: var(--vz-radius-md);
-  background: var(--vz-bg-subtle);
+  gap: 8px;
+  padding: 9px 11px 0;
+  min-width: 0;
 }
 
-.share-note-glyph {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--vz-radius);
-  background: var(--vz-bg-elevated);
-  border: 1px solid var(--vz-border);
-  color: var(--vz-fg-muted);
-}
-
-.share-note-copy {
+.share-active-url {
   flex: 1 1 auto;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.share-note-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color: var(--vz-fg);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.share-note-meta-line {
+.share-active-foot {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  padding: 4px 11px 9px;
   min-width: 0;
 }
 
-.share-note-meta {
+.share-active-meta {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 11.5px;
   color: var(--vz-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* A note with nothing to share refuses honestly — the strip goes dashed
-   and the create button goes dark (the wiring owns the flag). */
-.share-note-strip.is-empty {
-  border-style: dashed;
-  background: transparent;
+.share-active-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
-.share-note-strip.is-empty .share-note-glyph {
-  opacity: 0.55;
+.share-active-actions .share-chip-btn {
+  height: 24px;
+  padding: 0 9px;
 }
 
 /* ---- expiry + create ----------------------------------------------------------- */
@@ -714,13 +702,72 @@ body.panel-sheet-open {
   cursor: default;
 }
 
+/* The quiet refusal under the dark button — one line, no dashed card. */
+.share-empty-line {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--vz-fg-muted);
+}
+
+.share-empty-line[hidden] {
+  display: none !important;
+}
+
+/* ---- the door to the links popup --------------------------------------------
+   A quiet nav row, not a section: the whole list lives in its own popup;
+   this row only says how many keys are out and opens the door to them. */
+
+.share-all-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 28px);
+  margin: 0 14px 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg);
+  color: var(--vz-fg-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--vz-dur) ease, border-color var(--vz-dur) ease,
+    background-color var(--vz-dur) ease;
+}
+
+.share-all-links:hover,
+.share-all-links:focus-visible {
+  color: var(--vz-fg);
+  border-color: var(--vz-border-strong);
+  background: var(--vz-bg-hover);
+  outline: none;
+}
+
+.share-all-links-label {
+  flex: 1 1 auto;
+  text-align: left;
+}
+
+.share-all-links .share-links-count {
+  flex: 0 0 auto;
+}
+
+.share-all-links-chevron {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  opacity: 0.7;
+}
+
 /* ---- links ----------------------------------------------------------------------- */
 
 .share-links {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--vz-border);
   padding: 11px 14px 13px;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .share-links-head {
@@ -807,8 +854,10 @@ body.panel-sheet-open {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  max-height: 240px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  max-height: 320px;
 }
 
 .topbar-panel.at-sheet .share-links-list {
@@ -824,10 +873,6 @@ body.panel-sheet-open {
   background: var(--vz-bg);
   transition: border-color var(--vz-dur) ease, background-color var(--vz-dur) ease,
     opacity var(--vz-dur) ease;
-}
-
-.share-link-row.dim {
-  opacity: 0.62;
 }
 
 .share-link-top {
@@ -870,16 +915,6 @@ body.panel-sheet-open {
 .share-badge.active {
   background: color-mix(in srgb, var(--vz-success) 12%, transparent);
   color: var(--vz-success);
-}
-
-.share-badge.expired {
-  background: var(--vz-bg-chip);
-  color: var(--vz-fg-muted);
-}
-
-.share-badge.revoked {
-  background: var(--vz-danger-soft);
-  color: var(--vz-danger);
 }
 
 .share-link-meta {
@@ -943,6 +978,23 @@ body.panel-sheet-open {
   line-height: 1.55;
   color: var(--vz-fg-muted);
   text-align: center;
+}
+
+/* ---- the links popup ----------------------------------------------------------
+   The list's own room: the head carries the count beside the close, the
+   scope seg is the first row of the body, and the list itself fills what
+   is left. Same width as the share panel — they hang from one icon. */
+
+.share-links-panel .share-head {
+  padding-bottom: 9px;
+}
+
+.share-links-panel .share-scope {
+  margin-left: 0;
+}
+
+.share-links-panel .share-links-head {
+  margin-bottom: 9px;
 }
 
 /* Narrow panels lose their side margins in sheet mode — the content
