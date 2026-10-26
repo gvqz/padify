@@ -129,6 +129,52 @@ def running_build(allow_errors=False):
         return (None, False, True if allow_errors else False)
 
 
+def ensure_self_retire(client):
+    """Arm the server's self-retire so future deploys verify green.
+
+    The health handler (server/routes.ts handleHealth) reads the stamp
+    the deploy just wrote; with PADIFY_EXIT_ON_NEW_BUILD=1 in its
+    environment, a RUNNING server that sees a newer stamp answers once
+    more (stale: true) and exits — the supervisor cold-boots the fresh
+    code, and the verification below converges WITHOUT this script
+    having to signal a process it cannot even see (the serving bun has
+    been observed on the platform's web node, outside the SSH user's
+    process table). October's deploys failed exactly there: the files
+    were fresh, the running process was not, and nothing this user
+    could signal was the process that answered.
+
+    Idempotent: patches the site's run.sh once (a timestamped backup
+    rides along), skips silently when the export is already there.
+    """
+    path = f"{REMOTE_SERVER}/run.sh"
+    current = run(client, f"cat {shlex.quote(path)} 2>/dev/null")
+    if not current.strip():
+        print("[retire] run.sh not found — the start command lives elsewhere; skipping")
+        return
+    if "PADIFY_EXIT_ON_NEW_BUILD" in current:
+        print("[retire] run.sh already exports PADIFY_EXIT_ON_NEW_BUILD")
+        return
+    lines = current.splitlines(keepends=True)
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("exec "):
+            lines.insert(i, "export PADIFY_EXIT_ON_NEW_BUILD=1\n")
+            break
+    else:
+        print("[retire] no exec line in run.sh — skipping (unexpected shape)")
+        return
+    run(client, f"cp {shlex.quote(path)} {shlex.quote(path)}.bak-deploy")
+    sftp = client.open_sftp()
+    try:
+        with sftp.open(path, "w") as handle:
+            handle.write("".join(lines))
+    finally:
+        sftp.close()
+    back = run(client, f"cat {shlex.quote(path)}")
+    if "PADIFY_EXIT_ON_NEW_BUILD" not in back:
+        raise SystemExit("run.sh patch did not stick — the self-retire would stay unarmed")
+    print("[retire] run.sh now exports PADIFY_EXIT_ON_NEW_BUILD=1")
+
+
 def restart_server(client, expected_build):
     """Kill the running bun and WAIT until the box serves this deploy.
 
@@ -148,7 +194,7 @@ def restart_server(client, expected_build):
     cmdlines it is aimed at, and a failed verification dumps the box's
     full process table so the NEXT run's log explains itself.
     """
-    deadline = time.time() + 240
+    deadline = time.time() + 480
 
     def server_pids():
         # Every user's match — the serving bun has been observed running
@@ -191,8 +237,8 @@ def restart_server(client, expected_build):
             if result.strip():
                 print(f"[server] kill said: {result.strip()}")
             # Give the signal a beat to act, then look again.
-            for _ in range(10):
-                time.sleep(1.5)
+            for _ in range(20):
+                time.sleep(3)
                 build, stale, _reachable = running_build(allow_errors=True)
                 if build == expected_build:
                     print(f"[server] box serves build {expected_build} (after {stage})")
@@ -207,9 +253,12 @@ def restart_server(client, expected_build):
             # Nothing matching is running: the next request cold-boots the
             # fresh code. If the endpoint KEEPS answering without ever
             # naming this build, whatever serves it is not the program we
-            # just stamped — dump the table and say so.
-            for _ in range(8):
-                time.sleep(1.5)
+            # just stamped — dump the table and say so. The window is a
+            # generous two minutes: the supervisor's boot has been
+            # observed slower than the old 12-second budget while the
+            # platform kept the previous process warm.
+            for _ in range(40):
+                time.sleep(3)
                 build, stale, _reachable = running_build(allow_errors=True)
                 if build == expected_build:
                     print(f"[server] box serves build {expected_build} (cold boot)")
@@ -315,6 +364,11 @@ def main():
     build_id = deployed_sha()
     run(client, "printf '%s\\n' " + shlex.quote(build_id) + " > " + shlex.quote(f"{REMOTE_SERVER}/.build-id"))
     print(f"[server] build id stamped: {build_id[:12]}")
+
+    # Arm the self-retire BEFORE the restart: this boot's server runs the
+    # code just uploaded, so from the next stamp on the process retires
+    # itself instead of depending on signals the SSH side cannot deliver.
+    ensure_self_retire(client)
 
     # Kill the running bun and wait until the PUBLIC health endpoint
     # answers with this build — see restart_server for the failure story
