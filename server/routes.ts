@@ -220,23 +220,51 @@ const ROUTES: Route[] = [
  *
  * The id comes from server/.build-id, a one-line file the deploy writes
  * next to the source it uploads (absent locally → undefined; the field
- * is additive so old clients and old probes keep working). Read lazily
- * and cached per process — a cold boot reads the file the deploy JUST
- * wrote, so a stale id means a stale process, never a stale file. */
-let cachedBuildId: string | null | undefined;
-function runningBuildId(): string | null {
-  if (cachedBuildId === undefined) {
-    try {
-      cachedBuildId = readFileSync(new URL('./.build-id', import.meta.url), 'utf8').trim() || null;
-    } catch {
-      cachedBuildId = null;
-    }
+ * is additive so old clients and old probes keep working).
+ *
+ * The deploy cannot signal this process: the box's program runs on the
+ * platform's web node, invisible to the SSH node the deploy lands on
+ * (proven by an empty process table while health kept answering). So a
+ * deploy finishes its job HERE: with PADIFY_EXIT_ON_NEW_BUILD=1, a
+ * health call that notices a stamp NEWER than the one this process
+ * booted with answers once more — `stale: true` — and then exits, so
+ * the platform's supervisor boots the fresh code the files already
+ * carry. Off by default: the flag belongs in the site's start command
+ * (docs/CLOUD_SETUP.md §2), because a platform that does not restart a
+ * stopped program would trade a stale API for a dead one. */
+let bootBuildId: string | null | undefined;
+let exitScheduled = false;
+
+function readStamp(): string | null {
+  try {
+    return readFileSync(new URL('./.build-id', import.meta.url), 'utf8').trim() || null;
+  } catch {
+    return null;
   }
-  return cachedBuildId;
+}
+
+function bootBuild(): string | null {
+  if (bootBuildId === undefined) {
+    bootBuildId = readStamp();
+  }
+  return bootBuildId;
 }
 
 function handleHealth(request: Request): Response {
-  return json(request, { ok: true, build: runningBuildId() ?? undefined });
+  const boot = bootBuild();
+  const stamped = readStamp();
+  const stale = !!stamped && stamped !== boot;
+  if (stale && !exitScheduled && process.env.PADIFY_EXIT_ON_NEW_BUILD === '1') {
+    // Answer first, die a beat later — the socket flushes, the supervisor
+    // sees a stopped program and starts the one the files describe.
+    exitScheduled = true;
+    setTimeout(() => process.exit(0), 250);
+  }
+  return json(request, {
+    ok: true,
+    build: boot ?? undefined,
+    stale: stale || undefined,
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -79,6 +79,22 @@ a VPS, Fly.io, Railway, a home server).
    naming depends on your plan). AlwaysData fronts sites with HTTPS on
    your account domain, which is what Netlify will proxy to (step 3).
 
+   **Deploys restart the server themselves — if you let them.** The
+   deploy script uploads the source and stamps `server/.build-id`, but
+   the running process lives on alwaysdata's web node, where neither SSH
+   pids nor kills reach (an empty process table over SSH while health
+   keeps answering is the tell). Two ways to close that gap:
+
+   - Add `PADIFY_EXIT_ON_NEW_BUILD=1` to the site's start command (the
+     launch line above). A running server that sees a health call while
+     a NEWER stamp sits on disk answers once with `stale: true` and
+     exits — the supervisor boots the fresh code, and the deploy's
+     verification (which polls `/api/health` until it names the deployed
+     commit) goes green on its own.
+   - Without the flag, a deploy whose server did not change reports it
+     loudly: `RESTART VERIFICATION FAILED …` — restart the site from the
+     panel (Web > Sites > Restart) and re-run the deploy.
+
 ### 2b. Memory footprint (measured, Bun 1.3)
 
 | Stage | RSS |

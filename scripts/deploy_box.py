@@ -115,17 +115,18 @@ def remote_md5s(client, dirs):
 
 
 def running_build(allow_errors=False):
-    """(build_id, reachable) from the box's public health endpoint.
-    unreachable -> (None, False); a missing/old field -> (None, True).
-    With allow_errors the unreachable case also returns (None, True) —
-    "the API is down" is a legitimate intermediate state while bun is
-    dying or cold-booting, and only the CALLER's deadline decides."""
+    """(build_id, stale, reachable) from the box's public health endpoint.
+    unreachable -> (None, False, False); a missing/old field ->
+    (None, False, True). With allow_errors the unreachable case also
+    returns (None, False, True) — "the API is down" is a legitimate
+    intermediate state while bun is dying or cold-booting, and only the
+    CALLER's deadline decides."""
     try:
         with urllib.request.urlopen(HEALTH_URL, timeout=6) as response:
             body = json.loads(response.read().decode("utf-8"))
-            return body.get("build"), True
+            return body.get("build"), bool(body.get("stale")), True
     except Exception:
-        return (None, True if allow_errors else False)
+        return (None, False, True if allow_errors else False)
 
 
 def restart_server(client, expected_build):
@@ -147,7 +148,7 @@ def restart_server(client, expected_build):
     cmdlines it is aimed at, and a failed verification dumps the box's
     full process table so the NEXT run's log explains itself.
     """
-    deadline = time.time() + 90
+    deadline = time.time() + 240
 
     def server_pids():
         # Every user's match — the serving bun has been observed running
@@ -192,10 +193,14 @@ def restart_server(client, expected_build):
             # Give the signal a beat to act, then look again.
             for _ in range(10):
                 time.sleep(1.5)
-                build, _reachable = running_build(allow_errors=True)
+                build, stale, _reachable = running_build(allow_errors=True)
                 if build == expected_build:
                     print(f"[server] box serves build {expected_build} (after {stage})")
                     return
+                if stale:
+                    # The server read the new stamp and is exiting itself
+                    # (PADIFY_EXIT_ON_NEW_BUILD=1) — the next boot is ours.
+                    print("[server] running server saw the new stamp — exiting for the supervisor")
                 if not server_pids():
                     break  # process is gone — let the supervisor boot the new code
         else:
@@ -205,22 +210,27 @@ def restart_server(client, expected_build):
             # just stamped — dump the table and say so.
             for _ in range(8):
                 time.sleep(1.5)
-                build, _reachable = running_build(allow_errors=True)
+                build, stale, _reachable = running_build(allow_errors=True)
                 if build == expected_build:
                     print(f"[server] box serves build {expected_build} (cold boot)")
                     return
         if stage == "TERM":
             stage = "KILL"
 
-    build, reachable = running_build(allow_errors=True)
-    print(f"[server] verification failed: endpoint answered {build!r}, expected {expected_build!r}")
+    build, stale, reachable = running_build(allow_errors=True)
+    print(f"[server] verification failed: endpoint answered build={build!r} stale={stale}, expected {expected_build!r}")
     print(f"[server] processes matching server/index.ts now: {describe(server_pids())}")
     dump_process_table()
     raise SystemExit(
         "RESTART VERIFICATION FAILED — the box is "
         + (f"serving build {build!r}" if reachable else "not answering")
-        + f", expected {expected_build}. The API was NOT updated; "
-        "check the supervisor on the box before re-running."
+        + f", expected {expected_build}. The files ARE fresh; the RUNNING "
+        "process is not, and it runs on the platform's web node where "
+        "neither SSH pids nor kills reach. One-time fix: restart the site "
+        "from the alwaysdata panel (Web > Sites > Restart). For hands-off "
+        "deploys from here on, add PADIFY_EXIT_ON_NEW_BUILD=1 to the "
+        "site's start command — the server then exits itself when a "
+        "deploy stamps a newer build, and this verification goes green."
     )
 
 
