@@ -150,7 +150,12 @@ def restart_server(client, expected_build):
     deadline = time.time() + 90
 
     def server_pids():
-        out = run(client, "pgrep -u functionhost -f 'bun.*server/index[.]ts' || true")
+        # Every user's match — the serving bun has been observed running
+        # OUTSIDE the SSH user (functionhost's own table sat empty while
+        # health answered). The kill below still sends what this user may
+        # lawfully signal; an EPERM shows up in the kill's stderr and the
+        # final dump names the owner for the next run.
+        out = run(client, "pgrep -f 'bun.*server/index[.]ts' || true")
         return out.split()
 
     def describe(pids):
@@ -160,21 +165,30 @@ def restart_server(client, expected_build):
         return run(client, f"ps -o pid=,args= -p {quoted} || true").strip() or "(gone)"
 
     def dump_process_table():
-        out = run(
-            client,
-            "ps -u functionhost -o pid,ppid,etime,args | head -40 || true",
-            timeout=60,
-        )
-        print("[server] box process table (functionhost):")
-        for line in out.splitlines():
-            print(f"    {line}")
+        # The serving process has already been proven to NOT belong to the
+        # SSH user (functionhost's table was empty while health answered)
+        # — dump EVERY user's bun/node/padify processes, then the match
+        # with command lines, so the log names the real owner.
+        for label, cmd in (
+            ("every bun/node/padify process (any user)", "ps -eo user,pid,ppid,etime,args 2>/dev/null | grep -Ei 'bun|node|padify' | grep -v grep | head -30 || true"),
+            ("any process matching server/index (any user)", "pgrep -a -f 'server/index' 2>/dev/null | head -10 || true"),
+        ):
+            out = run(client, cmd, timeout=60)
+            print(f"[server] {label}:")
+            if out.strip():
+                for line in out.splitlines():
+                    print(f"    {line}")
+            else:
+                print("    (none)")
 
     stage = "TERM"
     while time.time() < deadline:
         live = server_pids()
         if live:
             print(f"[server] kill -{stage} -> {describe(live)}")
-            run(client, f"kill -{stage} {' '.join(live)} || true")
+            result = run(client, f"kill -{stage} {' '.join(live)} 2>&1 || true")
+            if result.strip():
+                print(f"[server] kill said: {result.strip()}")
             # Give the signal a beat to act, then look again.
             for _ in range(10):
                 time.sleep(1.5)
