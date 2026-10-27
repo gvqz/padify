@@ -10,6 +10,7 @@ import 'sweetalert2/dist/sweetalert2.min.css';
 
 import { storageReady } from './storage';
 import { bootPadify } from './boot';
+import { installPlaceholderLinkGuard } from './ui/placeholder-links';
 
 // Kick the IndexedDB open + hydration at module evaluation — the earliest
 // possible moment — so it overlaps bundle evaluation and DOM parsing. Every
@@ -17,6 +18,11 @@ import { bootPadify } from './boot';
 // subsystem loads its engines on demand (app.ts's initMusicSubsystem)
 // because their constructors read persisted state after hydration.
 void storageReady();
+
+// Placeholder anchors (href="#" where the behavior lives in delegated
+// handlers) must never navigate — see ui/placeholder-links.ts. Registered
+// first so no shell markup can be activated before the guard exists.
+installPlaceholderLinkGuard();
 
 // Everything else starts through the composition root — boot.ts owns the
 // startup sequence. No feature module may self-initialize on import.
