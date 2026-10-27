@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { generateHeadersFile } from '../scripts/build-headers.mjs';
+import { generateHeadersFile, injectCspMeta } from '../scripts/build-headers.mjs';
 
 // The header generator is build infrastructure that has to keep working
 // across the upcoming rewrites — these tests pin its security contracts:
@@ -148,5 +148,72 @@ describe('API origin (VITE_API_BASE)', () => {
     for (const value of malformed) {
       expect(() => generateHeadersFile(fixtureDir, { apiBase: value })).toThrow(/VITE_API_BASE/);
     }
+  });
+});
+
+describe('the Apache .htaccess twin', () => {
+  it('carries the same baseline rules and the pinned CSP in Apache dialect', () => {
+    const script = "document.body.classList.add('dark');";
+    writeEntry(
+      `<html><head><meta charset="utf-8"></head><body><script>${script}</script></body></html>`,
+    );
+
+    const { htaccessFile, csp } = generateHeadersFile(fixtureDir);
+
+    expect(htaccessFile).toContain('Header always set X-Content-Type-Options "nosniff"');
+    expect(htaccessFile).toContain(
+      'Header always set Referrer-Policy "strict-origin-when-cross-origin"',
+    );
+    expect(htaccessFile).toContain(
+      'Header always set Strict-Transport-Security "max-age=63072000"',
+    );
+    expect(htaccessFile).toContain('Header always set X-Frame-Options "DENY"');
+    expect(htaccessFile).toContain(`Header always set Content-Security-Policy "${csp}"`);
+    // IfModule guards: a host without mod_headers must degrade to
+    // header-less, never 500 the whole tree.
+    expect(htaccessFile).toContain('<IfModule mod_headers.c>');
+    expect(htaccessFile).toContain('</IfModule>');
+    // sw.js revalidation survives the translation too.
+    expect(htaccessFile).toContain('<FilesMatch "sw\\.js$">');
+  });
+});
+
+describe('the CSP meta injection', () => {
+  it('injects the meta right after charset, before any script or link', () => {
+    writeEntry(
+      '<html><head><meta charset="utf-8"><script>theme();</script></head><body></body></html>',
+    );
+
+    const { metaCsp } = generateHeadersFile(fixtureDir);
+    const stamped = injectCspMeta(readFileSync(join(fixtureDir, 'index.html'), 'utf8'), metaCsp);
+
+    const metaEnd = stamped.indexOf('http-equiv="Content-Security-Policy"');
+    const scriptPos = stamped.indexOf('<script>theme();</script>');
+    expect(metaEnd).toBeGreaterThan(-1);
+    expect(scriptPos).toBeGreaterThan(metaEnd);
+    expect(stamped).toContain(`content="${metaCsp}"`);
+  });
+
+  it('keeps frame-ancestors out of the meta policy (spec ignores it there)', () => {
+    writeEntry('<html><head><meta charset="utf-8"></head><body></body></html>');
+
+    const { csp, metaCsp } = generateHeadersFile(fixtureDir);
+
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(metaCsp).not.toContain('frame-ancestors');
+    // …and stays otherwise identical so header and meta intersect to one policy.
+    expect(metaCsp).toBe(csp.replace(/; frame-ancestors 'none'/, ''));
+  });
+
+  it('is idempotent: re-stamping replaces the tag instead of stacking duplicates', () => {
+    writeEntry('<html><head><meta charset="utf-8"></head><body></body></html>');
+
+    const { metaCsp } = generateHeadersFile(fixtureDir);
+    const html = readFileSync(join(fixtureDir, 'index.html'), 'utf8');
+    const once = injectCspMeta(html, metaCsp);
+    const twice = injectCspMeta(once, metaCsp);
+
+    expect(twice).toBe(once);
+    expect((once.match(/Content-Security-Policy/g) ?? []).length).toBe(1);
   });
 });

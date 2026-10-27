@@ -72,6 +72,11 @@ else
   dump_local | gzip -c >"$OUT_FILE"
 fi
 
+# The dump holds every note in the account — group-readable is plenty
+# (the restricted functionhost_3 account can verify backups), world-readable
+# is not. The cron runs with a permissive umask, so set the mode explicitly.
+chmod 640 "$OUT_FILE"
+
 # A dump that failed halfway through is worse than no dump — it looks like
 # a backup. Refuse to keep anything suspiciously small.
 MIN_BYTES=256
