@@ -828,6 +828,60 @@ describe('handleSharesPost — the empty-note refusal', () => {
   });
 });
 
+describe('handleSharesPost — one active link per note', () => {
+  const shareRequest = (): Request =>
+    jsonRequest('POST', { note_id: 'n1', title: 't', content: '<p>x</p>', days: 7 });
+
+  const liveRow = (token: string, createdAt: number): Row => ({
+    token,
+    note_id: 'n1',
+    title: 't',
+    content: '<p>x</p>',
+    note_type: null,
+    created_at: createdAt,
+    expires_at: Date.now() + 60_000,
+    revoked: 0,
+  });
+
+  it('a create for a note with a live link returns that link — no twin is minted', async () => {
+    const db = new ScriptedDb([{ match: 'and note_id = ?', rows: [liveRow('tok-live', 1)] }]);
+    const response = await handleSharesPost(db, shareRequest(), user);
+    expect(response.status).toBe(200);
+    const body = await bodyOf(response);
+    expect(body.existing).toBe(true);
+    expect((body.row as { token: string }).token).toBe('tok-live');
+    // The idempotent answer never touches the write path.
+    expect(db.sqls.some((sql) => sql.includes('insert into shares'))).toBe(false);
+  });
+
+  it('legacy duplicates converge — the older twins are revoked, the newest survives', async () => {
+    const db = new ScriptedDb([
+      {
+        match: 'and note_id = ?',
+        rows: [liveRow('tok-new', 20), liveRow('tok-mid', 10), liveRow('tok-old', 1)],
+      },
+    ]);
+    const response = await handleSharesPost(db, shareRequest(), user);
+    expect(response.status).toBe(200);
+    const body = await bodyOf(response);
+    expect(body.existing).toBe(true);
+    expect((body.row as { token: string }).token).toBe('tok-new');
+
+    const revoke = db.statements.find((statement) =>
+      statement.sql.includes('update shares set revoked = 1 where user_id = ? and token in'),
+    );
+    expect(revoke).toBeTruthy();
+    expect(revoke?.args).toEqual(['user-1', 'tok-mid', 'tok-old']);
+  });
+
+  it('a note without a live link still mints one — the cap tests above stay true', async () => {
+    const db = new ScriptedDb([{ match: 'as live', rows: [{ live: 0 }] }]);
+    const response = await handleSharesPost(db, shareRequest(), user);
+    expect(response.status).toBe(201);
+    expect(db.sqls.some((sql) => sql.includes('insert into shares'))).toBe(true);
+  });
+});
+
 describe('handleAttachmentPost — the round-2 upload guardrails', () => {
   const upload = (): Request =>
     new Request('http://api.test/api/attachments', {

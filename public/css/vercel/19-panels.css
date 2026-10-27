@@ -3,9 +3,10 @@
    from their own icon as anchored panels — no backdrop, no room, no page
    scroll lock (desktop). One shared base (.topbar-panel) drives the
    anchor hang, the entry transition and the <640px bottom-sheet shape;
-   the two surfaces dress it in their own blocks. Token-driven throughout,
-   so dark mode needs no extra rules — the aliases invert under body.dark
-   (see 01-tokens.css). */
+   the two surfaces dress it in their own blocks, and the share links'
+   inventory card rides inside Settings → Cloud sync. Token-driven
+   throughout, so dark mode needs no extra rules — the aliases invert
+   under body.dark (see 01-tokens.css). */
 
 /* ==========================================================================
    Panel base — the shape every topbar panel shares
@@ -119,10 +120,15 @@ body.panel-sheet-open {
   width: 372px;
 }
 
+/* The bottom padding is not decorative: the panel's rounded corners curve
+   exactly where the last block ends, so a 0 bottom padding glues the
+   account row (and, on mobile, the auth switch) to the edge — the grey
+   card reads as spilling out of the sheet. 14px matches the share
+   panel's bottom rhythm. */
 .cloud-panel-body {
   display: flex;
   flex-direction: column;
-  padding: 16px 14px 0;
+  padding: 16px 14px 14px;
 }
 
 /* ---- hero: the mark + the headline --------------------------------------- */
@@ -701,76 +707,27 @@ body.panel-sheet-open {
   display: none !important;
 }
 
-/* ---- the door to the links popup --------------------------------------------
-   A quiet nav row, not a section: the whole list lives in its own popup;
-   this row only says how many keys are out and opens the door to them. */
+/* ---- the settings card ---------------------------------------------------------
+   The inventory lives in Settings → Cloud sync: the share panel is the
+   act of sharing one note, this card is every link the account owns.
+   The head row is a settings row (13-settings.css); the list below it
+   reuses the link-row styles, sized and scrollable like the popup's
+   list was. */
 
-.share-all-links {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: calc(100% - 28px);
-  margin: 0 14px 13px;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: var(--vz-radius);
-  background: transparent;
-  color: var(--vz-fg-muted);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: color var(--vz-dur) ease, border-color var(--vz-dur) ease,
-    background-color var(--vz-dur) ease;
+.share-settings-head {
+  border-bottom: 1px solid var(--vz-border);
 }
 
-.share-all-links:hover,
-.share-all-links:focus-visible {
-  color: var(--vz-fg);
-  border-color: var(--vz-border);
-  background: var(--vz-bg-hover);
-  outline: none;
-}
-
-.share-all-links-label {
-  flex: 1 1 auto;
-  text-align: left;
-}
-
-.share-all-links .share-links-count {
+.share-settings-head .share-links-count {
   flex: 0 0 auto;
 }
 
-.share-all-links-chevron {
-  flex: 0 0 auto;
-  width: 13px;
-  height: 13px;
-  opacity: 0.7;
+.share-settings-list {
+  max-height: 264px;
+  padding: 12px 16px 16px;
 }
 
 /* ---- links ----------------------------------------------------------------------- */
-
-.share-links {
-  display: flex;
-  flex-direction: column;
-  padding: 11px 14px 13px;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.share-links-head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 9px;
-}
-
-.share-links-title {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--vz-fg-subtle);
-}
 
 .share-links-count {
   min-width: 17px;
@@ -789,52 +746,6 @@ body.panel-sheet-open {
 
 .share-links-count[hidden] {
   display: none;
-}
-
-.share-scope {
-  margin-left: auto;
-  display: flex;
-  border: 1px solid var(--vz-border);
-  border-radius: var(--vz-radius);
-  overflow: hidden;
-  background: var(--vz-bg);
-}
-
-.share-scope input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.share-scope label {
-  padding: 3.5px 9px;
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--vz-fg-muted);
-  cursor: pointer;
-  user-select: none;
-  border-right: 1px solid var(--vz-border);
-  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease;
-}
-
-.share-scope label:last-of-type {
-  border-right: none;
-}
-
-.share-scope label:hover {
-  color: var(--vz-fg);
-  background: var(--vz-bg-hover);
-}
-
-.share-scope input:checked + label {
-  background: var(--vz-bg-chip);
-  color: var(--vz-fg);
-  font-weight: 600;
-}
-
-.share-scope input:focus-visible + label {
-  outline: 2px solid var(--vz-primary);
-  outline-offset: -2px;
 }
 
 .share-links-list {
@@ -965,23 +876,6 @@ body.panel-sheet-open {
   line-height: 1.55;
   color: var(--vz-fg-muted);
   text-align: center;
-}
-
-/* ---- the links popup ----------------------------------------------------------
-   The list's own room: the head carries the count beside the close, the
-   scope seg is the first row of the body, and the list itself fills what
-   is left. Same width as the share panel — they hang from one icon. */
-
-.share-links-panel .share-head {
-  padding-bottom: 9px;
-}
-
-.share-links-panel .share-scope {
-  margin-left: 0;
-}
-
-.share-links-panel .share-links-head {
-  margin-bottom: 9px;
 }
 
 /* Narrow panels lose their side margins in sheet mode — the content

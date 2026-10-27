@@ -52,6 +52,12 @@ export interface ShareActionResult {
   token?: string;
   url?: string;
   message?: string;
+  /**
+   * True when the server answered a create with the note's EXISTING
+   * active link — the one-active-link-per-note backstop. Nothing was
+   * minted; the caller should say so instead of claiming a create.
+   */
+  existed?: boolean;
 }
 
 const SHARE_UPDATE_DEBOUNCE_MS = 2_000;
@@ -115,6 +121,8 @@ export function isShareAvailable(): boolean {
 
 interface ShareRowResponse {
   row: ShareRecord;
+  /** The one-active-link backstop: the create returned a live row. */
+  existing?: boolean;
 }
 
 async function shareApi<T>(
@@ -159,7 +167,12 @@ export async function createShare(
         days,
       },
     });
-    return { ok: true, token: data.row.token, url: shareUrlFor(data.row.token) };
+    return {
+      ok: true,
+      token: data.row.token,
+      url: shareUrlFor(data.row.token),
+      existed: !!data.existing,
+    };
   } catch (error) {
     console.error('[share] create failed', error);
     const message = error instanceof Error ? error.message : String(error);

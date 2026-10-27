@@ -69,6 +69,51 @@ export async function handleSharesPost(db: Db, request: Request, user: SessionUs
     );
   }
 
+  // One active link per note — the contract the client's panel already
+  // follows (its create button becomes an expiry update when a link is
+  // out). Enforced here so a stale client, a second tab or a racing
+  // double-click can never mint a twin: a create for a note that has a
+  // live link returns that link unchanged (200, `existing: true`), and
+  // any further duplicates an older build left behind are revoked so
+  // the note converges to exactly one. Checked BEFORE the live cap —
+  // returning an existing row adds no storage, the cap must not block
+  // the idempotent answer.
+  if (noteId) {
+    const now = Date.now();
+    const actives = await db.all(
+      `select token, note_id, title, content, note_type, created_at, expires_at, revoked
+       from shares
+       where user_id = ? and note_id = ? and revoked = 0 and expires_at > ?
+       order by created_at desc`,
+      [user.id, noteId, now]
+    );
+    if (actives.length > 0) {
+      const keeper = actives[0];
+      if (actives.length > 1) {
+        const staleTokens = actives.slice(1).map(row => String(row.token));
+        const placeholders = staleTokens.map(() => '?').join(', ');
+        await db.run(
+          `update shares set revoked = 1 where user_id = ? and token in (${placeholders})`,
+          [user.id, ...staleTokens]
+        );
+      }
+      return json(request, {
+        existing: true,
+        row: {
+          token: String(keeper.token),
+          note_id: keeper.note_id,
+          title: keeper.title,
+          content: keeper.content,
+          html: keeper.content,
+          note_type: keeper.note_type ?? null,
+          created_at: Number(keeper.created_at),
+          expires_at: Number(keeper.expires_at),
+          revoked: false
+        }
+      }, 200);
+    }
+  }
+
   // Per-user cap: shares each carry a full denormalized copy of the note
   // (up to the body limit) — unlimited shares were unlimited storage.
   // Revoked/expired rows still count until pruned; keeping the cap on

@@ -1,15 +1,13 @@
-<!-- Share — a topbar panel that hangs from the share icon, plus its
-     companion popup: the links panel. The share panel is the ACT of
-     sharing one note — a note gets ONE active link (a second create
-     updates or copies the first, never duplicates it), the expiry choice
-     sits above the one primary button, and the active link, when there
-     is one, shows as a card with Copy / Cancel on it. Everything
-     list-shaped lives next door: the "All links" row opens a second
-     popup (anchored to the same icon) with every ACTIVE link across the
-     account — cancelled and expired ones are gone, not dimmed. Both
-     panels hover without a backdrop and close on outside click or
-     Escape; under 640px they become bottom sheets. Structure and
-     rendering live in src/cloud/share-ui.ts, styles in
+<!-- Share — a topbar panel that hangs from the share icon. The panel is
+     the ACT of sharing one note — a note gets ONE active link (a second
+     create updates or copies the first, never duplicates it), the expiry
+     choice sits above the one primary button, and the active link, when
+     there is one, shows as a card with Copy / Cancel on it. There is no
+     list here: every link across the account lives in Settings →
+     Cloud sync (the "Shared links" card), so the panel stays a
+     single-purpose tool. The panel hovers without a backdrop and closes
+     on outside click or Escape; under 640px it becomes a bottom sheet.
+     Structure and rendering live in src/cloud/share-ui.ts, styles in
      public/css/vercel/19-panels.css. Nothing here opens a dialog —
      cancelling a link arms its own button in place. -->
 <div
@@ -124,73 +122,6 @@
           This note is empty — write something first.
         </p>
       </section>
-
-      <!-- The door to the links popup: every active link across the
-           account, each row carrying its own Open / Copy / Cancel. -->
-      <button type="button" class="share-all-links" id="shareAllLinks">
-        <span class="share-all-links-label">All links</span>
-        <span class="share-links-count" id="shareLinkCount" hidden></span>
-        <svg
-          class="share-all-links-chevron"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="m9 18 6-6-6-6" />
-        </svg>
-      </button>
     </div>
-  </div>
-</div>
-
-<!-- The links popup — where the list lives now. Active links only: a
-     cancelled or expired link leaves the list instead of haunting it.
-     The scope narrows it to this note or spans the account; a row never
-     opens a dialog — cancelling arms the row's own button. -->
-<div
-  id="shareLinksPanel"
-  class="topbar-panel share-panel share-links-panel"
-  tabindex="-1"
-  role="dialog"
-  aria-labelledby="shareLinksTitle"
->
-  <div class="share-panel-body">
-    <header class="share-head">
-      <div class="share-head-copy">
-        <h2 class="share-title" id="shareLinksTitle">Your links</h2>
-      </div>
-      <span class="share-links-count share-links-count-head" id="sharePopupCount" hidden></span>
-      <button type="button" class="share-close" data-dismiss="panel" aria-label="Close links">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M6 6l12 12M18 6L6 18" />
-        </svg>
-      </button>
-    </header>
-
-    <section class="share-links" aria-label="Active links">
-      <div class="share-links-head">
-        <div class="share-scope" role="radiogroup" aria-label="Which links to show">
-          <input type="radio" id="shareScopeNote" value="note" name="shareScope" checked />
-          <label for="shareScopeNote">This note</label>
-          <input type="radio" id="shareScopeAll" value="all" name="shareScope" />
-          <label for="shareScopeAll">All notes</label>
-        </div>
-      </div>
-      <div class="share-links-list" id="shareLinksList">
-        <!-- Link rows render here -->
-      </div>
-    </section>
   </div>
 </div>

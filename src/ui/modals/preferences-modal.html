@@ -655,6 +655,30 @@
                   </div>
                 </div>
               </div>
+
+              <!-- Shared links — the account's every ACTIVE link, the list
+                   that used to live in its own popup beside the share
+                   panel. Settings is where management belongs: the share
+                   panel is the act of sharing one note, this card is the
+                   inventory. Rows render in src/cloud/share-ui.ts; a row
+                   never opens a dialog — cancelling arms the row's own
+                   button, the same two-step contract everywhere. -->
+              <div class="pref-card share-settings-card" id="shareLinksCard" hidden>
+                <div class="pref-row share-settings-head">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Shared links</span>
+                    <span class="pref-row-hint">
+                      Active links across your notes. Cancelled or expired ones are gone for good.
+                    </span>
+                  </div>
+                  <div class="pref-row-control">
+                    <span class="share-links-count" id="shareLinkCount" hidden></span>
+                  </div>
+                </div>
+                <div class="share-links-list share-settings-list" id="shareLinksList">
+                  <!-- Link rows render here -->
+                </div>
+              </div>
             </section>
 
             <div class="pref-search-empty" id="prefSearchEmpty" hidden>

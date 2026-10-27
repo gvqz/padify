@@ -1,15 +1,16 @@
 /**
  * Padify share links — user interface.
  *
- * The share panel is the ACT of sharing one note; the list lives next
- * door in its own popup. A note keeps ONE active link: with a link
- * already out, the panel shows it as a card (Copy / Cancel ride the
- * card) and the primary button refreshes its expiry instead of minting
- * a twin — duplication is not a thing the user can do by accident.
- * The "All links" row opens the links popup: every ACTIVE link across
- * the account, this note's or every note's, newest first — cancelled
- * and expired links leave the list instead of haunting it. Signed-out
- * visitors get a sign-in gate — sharing is a cloud-account feature.
+ * The share panel is the ACT of sharing one note. A note keeps ONE
+ * active link: with a link already out, the panel shows it as a card
+ * (Copy / Cancel ride the card) and the primary button refreshes its
+ * expiry instead of minting a twin — duplication is not a thing the
+ * user can do by accident, and the server refuses it even when a stale
+ * client tries. The INVENTORY lives in Settings → Cloud sync: the
+ * "Shared links" card lists every ACTIVE link across the account,
+ * newest first — cancelled and expired links leave the list instead of
+ * haunting it. Signed-out visitors get a sign-in gate — sharing is a
+ * cloud-account feature.
  *
  * Nothing here opens a second dialog: cancelling a link arms the row's
  * own button (the confirm state IS the button), the same two-step
@@ -36,16 +37,16 @@ import {
 const DAY_MS = 86_400_000;
 /** How long a cancel button stays armed before it disarms itself. */
 const ARM_TIMEOUT_MS = 4000;
-/** The panel-to-panel handoff — matches openPanel's own transition. */
-const PANEL_SWAP_MS = 180;
+/** The panel-to-modal handoff — matches the modal's own transition. */
+const PANEL_SWAP_MS = 200;
 
 let shares: ShareRecord[] = [];
 
 /**
- * What the links list was last built from (the visible records' identity
- * — token, revoked, expiry, title — plus the scope). A render whose
- * signature matches keeps the DOM untouched, so a rebuild racing a
- * just-armed cancel button can never clone over the confirm state.
+ * What the links list was last built from (the visible records'
+ * identity — token, revoked, expiry, title). A render whose signature
+ * matches keeps the DOM untouched, so a rebuild racing a just-armed
+ * cancel button can never clone over the confirm state.
  */
 let lastLinksSignature: string | null = null;
 
@@ -54,7 +55,6 @@ let armedToken: string | null = null;
 let armedTimer: number | null = null;
 
 const shareRoot = () => $('#shareModal').get(0);
-const linksRoot = () => $('#shareLinksPanel').get(0);
 const shareAnchor = () => $('#shareNotes').get(0);
 
 export function initShareUI(): void {
@@ -76,14 +76,6 @@ export function initShareUI(): void {
     }, PANEL_SWAP_MS);
   });
 
-  // The links popup: the whole list lives here now, active links only.
-  $('#shareAllLinks').on('click', () => {
-    closePanel(shareRoot());
-    setTimeout(() => {
-      openPanel(linksRoot(), shareAnchor());
-    }, PANEL_SWAP_MS);
-  });
-
   $('#shareCreateBtn').on('click', () => {
     void createOrUpdate();
   });
@@ -102,9 +94,6 @@ export function initShareUI(): void {
     }
   });
 
-  // The links scope: this note only, or every link the account owns.
-  $('input[name="shareScope"]').on('change', renderLinks);
-
   $('#shareModal').on('panel:show', () => {
     // A stale armed button from the previous visit must not survive the
     // reopen — the confirm state belongs to this visit's list only.
@@ -113,8 +102,11 @@ export function initShareUI(): void {
     void refreshShares();
   });
 
-  $('#shareLinksPanel').on('panel:show', () => {
+  // The settings card: the list refreshes whenever Settings opens —
+  // and re-renders from the cache instantly, before the fetch lands.
+  $('#preferencesModal').on('show.bs.modal', () => {
     disarmCancel();
+    renderPanes();
     renderLinks();
     void refreshShares();
   });
@@ -143,6 +135,9 @@ function renderPanes(): void {
   const signedIn = signedInNow();
   $('#shareSignedOutPane').attr('hidden', signedIn ? 'hidden' : null);
   $('#shareSignedInPane').attr('hidden', signedIn ? null : 'hidden');
+  // The settings card is inventory — it only means something once the
+  // user can own links.
+  $('#shareLinksCard').attr('hidden', signedIn ? null : 'hidden');
 }
 
 // ---- the note being shared ---------------------------------------------------
@@ -221,7 +216,9 @@ function renderShareState(): void {
   }
 
   // The button's label follows the state; the busy variant tracks it too.
-  $('.share-create-label').text(record ? 'Update link' : 'Create link');
+  // "Update expiration" — the URL never changes, only the window does;
+  // naming the movement keeps the one-link promise legible.
+  $('.share-create-label').text(record ? 'Update expiration' : 'Create link');
 
   // An empty note cannot be shared (or updated — a link to nothing stays
   // live with its old words, but there is nothing new to refresh toward).
@@ -240,7 +237,7 @@ function renderShareState(): void {
 function renderLinksBusy(busy: boolean): void {
   const record = activeShareRecord();
   $('.share-create-label').text(
-    busy ? (record ? 'Updating…' : 'Creating…') : record ? 'Update link' : 'Create link',
+    busy ? (record ? 'Updating…' : 'Creating…') : record ? 'Update expiration' : 'Create link',
   );
   if (busy) {
     $('#shareCreateBtn').prop('disabled', true);
@@ -314,8 +311,8 @@ function createdAgo(record: ShareRecord): string {
 function shortUrl(token: string): string {
   const url = shareUrlFor(token);
   // The card no longer prints the URL (Copy carries it), so this only
-  // feeds the popup's rows — enough to recognise a link, not a wall of
-  // monospace. The row's own ellipsis handles the rest.
+  // feeds the settings card's rows — enough to recognise a link, not a
+  // wall of monospace. The row's own ellipsis handles the rest.
   if (url.length <= 48) {
     return url;
   }
@@ -323,34 +320,30 @@ function shortUrl(token: string): string {
 }
 
 /**
- * The popup's rows — ACTIVE links only. A cancelled or expired link is
- * not a dimmed memory here; it is gone. The scope narrows the list to
- * this note or spans the account (rows say which note they point at
- * when the list does).
+ * The settings card's rows — ACTIVE links only, newest first, the whole
+ * account. A cancelled or expired link is not a dimmed memory here; it
+ * is gone. Rows say which note they point at — the list is exactly the
+ * account's inventory, not one note's view of it.
  */
 function renderLinks(): void {
   const $list = $('#shareLinksList');
-  const note = activeNote();
-  const showAll = $('#shareScopeAll').is(':checked');
 
   const visible = shares
     .filter((record) => isLinkActive(record))
-    .filter((record) => (showAll ? true : note ? record.note_id === note.id : true))
     .sort((a, b) => b.created_at - a.created_at);
 
   renderCount(visible.length);
 
-  // No change, no churn: the list re-renders on every panel:show AND on
-  // every refresh — and the open path fires both within milliseconds.
+  // No change, no churn: the list re-renders when Settings opens AND on
+  // every refresh — the open path fires both within milliseconds.
   // A rebuild that lands while a cancel button is armed would replace
   // the armed button with a quiet clone mid-gesture (the confirm state
   // IS the button; a clone is a disarm the user never asked for). When
   // the data behind the rows has not moved, keep the DOM — and the
   // armed state — exactly as it is.
-  const signature = JSON.stringify([
-    showAll,
+  const signature = JSON.stringify(
     visible.map((record) => [record.token, record.revoked, record.expires_at, record.title]),
-  ]);
+  );
   if (signature === lastLinksSignature) {
     return;
   }
@@ -360,10 +353,9 @@ function renderLinks(): void {
   disarmCancel();
 
   if (visible.length === 0) {
-    const message = showAll
-      ? 'No active links. Create one from any note.'
-      : 'No active link for this note.';
-    $list.append($('<p class="share-links-empty"></p>').text(message));
+    $list.append(
+      $('<p class="share-links-empty"></p>').text('No active links. Create one from any note.'),
+    );
     return;
   }
 
@@ -375,12 +367,8 @@ function renderLinks(): void {
     top.append('<span class="share-badge active">Active</span>');
 
     const meta = $('<div class="share-link-meta"></div>');
-    const parts = [relativeExpiry(record), createdAgo(record)];
-    // When the list spans notes (or the link points elsewhere), say which.
-    if (showAll || (note && record.note_id !== note.id)) {
-      const title = record.title && record.title.trim() ? record.title : 'Untitled';
-      parts.push(`\u201C${title}\u201D`);
-    }
+    const title = record.title && record.title.trim() ? record.title : 'Untitled';
+    const parts = [relativeExpiry(record), createdAgo(record), `\u201C${title}\u201D`];
     meta.text(parts.join(' · '));
 
     const actions = $('<div class="share-link-actions"></div>');
@@ -416,25 +404,16 @@ function renderLinks(): void {
 }
 
 /**
- * The two count chips: the share panel's "All links" row counts every
- * active link the account owns (the row opens the whole list), the popup
- * head counts what the list actually shows (the scope may narrow it).
- * Quiet at zero, honest otherwise.
+ * The settings card's count chip: the number of ACTIVE links the
+ * account owns. Quiet at zero, honest otherwise.
  */
 function renderCount(visibleCount: number): void {
-  const activeTotal = shares.filter((record) => isLinkActive(record)).length;
   const $total = $('#shareLinkCount');
-  const $popup = $('#sharePopupCount');
-  if (activeTotal === 0) {
-    $total.attr('hidden', 'hidden');
-  } else {
-    $total.text(String(activeTotal)).removeAttr('hidden');
-  }
   if (visibleCount === 0) {
-    $popup.attr('hidden', 'hidden');
+    $total.attr('hidden', 'hidden');
     return;
   }
-  $popup.text(String(visibleCount)).removeAttr('hidden');
+  $total.text(String(visibleCount)).removeAttr('hidden');
 }
 
 // ---- the two-step cancel -------------------------------------------------------
@@ -446,7 +425,7 @@ function renderCount(visibleCount: number): void {
  * at a time. The twin of the History sheet's armed deletes.
  *
  * The button that arms is the button that was CLICKED — the same token
- * can be rendered twice (the share panel's card and the popup's row),
+ * can be rendered twice (the share panel's card and the settings row),
  * and a document-wide lookup would arm the hidden copy while the user
  * watches the visible one stay quiet.
  */
@@ -488,7 +467,7 @@ async function commitCancel(record: ShareRecord): Promise<void> {
   }
 
   // Flag the record the CURRENT array holds — the closure's object may be
-  // from an earlier fetch (the popup refreshes on open, replacing every
+  // from an earlier fetch (the settings list refreshes on open, replacing every
   // record object while the signature guard keeps the rendered rows, so
   // the row's handler can legitimately hold yesterday's object). Mutating
   // the stale twin would flip nothing the render reads.
@@ -498,7 +477,7 @@ async function commitCancel(record: ShareRecord): Promise<void> {
   }
   showToast('Link cancelled — it no longer works for anyone.');
   // The active-only surfaces drop the row everywhere: the card collapses
-  // (the button says Create again), the popup list loses the row.
+  // (the button says Create again), the settings list loses the row.
   renderShareState();
   renderLinks();
 }
@@ -577,11 +556,18 @@ async function createOrUpdate(): Promise<void> {
 
   // The link was created to be handed to someone: putting it on the
   // clipboard immediately saves the one extra click for every share
-  // (the card offers Copy for later use).
+  // (the card offers Copy for later use). The server can answer with
+  // the note's EXISTING link (the one-active-link backstop) — then the
+  // honest toast says so, nothing was minted.
   if (result.token) {
-    void copyLinkText(shareUrlFor(result.token), 'Link created and copied.');
+    void copyLinkText(
+      shareUrlFor(result.token),
+      result.existed
+        ? 'This note already has an active link — copied it.'
+        : 'Link created and copied.',
+    );
   } else {
-    showToast('Link created.');
+    showToast(result.existed ? 'This note already has an active link.' : 'Link created.');
   }
   await refreshShares();
 }

@@ -12,20 +12,23 @@ import { expect, test, type Page } from '@playwright/test';
  *     button goes dark and one quiet line says why.
  *
  *  3. The happy path — a note with words shares: the note's ONE link
- *     shows as an Active card, the button turns into the update action,
- *     and no second link can ever be minted for the same note.
+ *     shows as an Active card, the button turns into the expiration
+ *     update, and no second link can ever be minted for the same note.
  *
  *  4. The dedupe — a note keeps ONE active link: updating refreshes the
- *     window it already has (same URL), it does not create a twin.
+ *     window it already has (same URL), it does not create a twin — and
+ *     the server backstops it: a raw second POST for the same note
+ *     returns the existing row instead of minting another.
  *
- *  5. The links popup — the list lives in its own panel, opened from
- *     the share panel's "All links" row, and it lists ACTIVE links
- *     only: a cancelled link leaves the list instead of haunting it.
+ *  5. The inventory — the links list lives in Settings → Cloud sync
+ *     (there is no second popup anymore): every ACTIVE link across the
+ *     account, newest first, each row naming its note. A cancelled link
+ *     leaves the list instead of haunting it.
  *
  *  6. The two-step cancel — the confirm state IS the button: the first
  *     click arms it ("Really cancel?"), a click anywhere else disarms
  *     it, and the second click revokes the link. No second dialog ever
- *     stacks over a panel.
+ *     stacks over a surface.
  *
  * The e2e config boots the API against a throwaway SQLite file (see
  * playwright.config.ts); nothing here touches a real database.
@@ -67,17 +70,22 @@ async function openSharePanel(page: Page): Promise<void> {
   await expect(page.locator('#shareModal')).toBeVisible();
 }
 
-async function openLinksPanel(page: Page): Promise<void> {
-  // The popup refreshes its list on open — wait for that fetch to land
-  // so the rows the test clicks are the settled ones, not a render about
-  // to be replaced.
+/**
+ * The links inventory: Settings → Cloud sync → Shared links. The modal's
+ * open fires the list's refresh — wait for that fetch to land so the
+ * rows the test clicks are the settled ones, not a render about to be
+ * replaced.
+ */
+async function openSharedLinks(page: Page): Promise<void> {
   const listFetched = page.waitForResponse(
     (response) => response.url().includes('/api/shares') && response.request().method() === 'GET',
   );
-  await page.locator('#shareAllLinks').click();
-  await expect(page.locator('#shareLinksPanel')).toBeVisible();
+  await page.locator('[data-target="#preferencesModal"]').first().click();
+  await expect(page.locator('#preferencesModal')).toBeVisible();
   await listFetched;
-  await expect(page.locator('#shareModal')).toBeHidden();
+  await page.locator('#cloudSettingsNav').click();
+  await expect(page.locator('#shareLinksCard')).toBeVisible();
+  await expect(page.locator('#shareLinksList')).toBeVisible();
 }
 
 async function typeIntoFreshNote(page: Page, text: string): Promise<void> {
@@ -142,7 +150,7 @@ test.describe('share links (real API)', () => {
     await expect(page.locator('#shareCreateBtn')).toBeDisabled();
   });
 
-  test('a note with words shares: one Active card, and the button turns into the update', async ({
+  test('a note with words shares: one Active card, and the button turns into the expiration', async ({
     page,
   }) => {
     test.setTimeout(60_000);
@@ -151,20 +159,18 @@ test.describe('share links (real API)', () => {
     await openSharePanel(page);
 
     // The create fires; the note's ONE link lands as the Active card —
-    // not as a row in this panel (the list lives in the popup).
+    // the list itself lives in Settings now, not in this panel.
     await page.locator('#shareCreateBtn').click();
     await expect(page.locator('#shareActiveCard')).toBeVisible();
     await expect(page.locator('#shareActiveUrl')).toContainText('/share/?t=');
     await expect(page.locator('#shareActiveCard .share-badge.active')).toBeVisible();
-    await expect(page.locator('#shareModal .share-link-row')).toHaveCount(0);
 
     // The dedupe is visible in the language: with a link out, the button
-    // updates it. It never offers a second one.
-    await expect(page.locator('.share-create-label')).toHaveText('Update link');
-    await expect(page.locator('#shareLinkCount')).toHaveText('1');
+    // updates the EXPIRATION. It never offers a second link.
+    await expect(page.locator('.share-create-label')).toHaveText('Update expiration');
   });
 
-  test('updating the link refreshes its window — the URL survives, no twin is made', async ({
+  test('updating the expiration refreshes the window — the URL survives, no twin is made', async ({
     page,
   }) => {
     test.setTimeout(60_000);
@@ -184,13 +190,68 @@ test.describe('share links (real API)', () => {
     await expect(page.locator('#shareActiveMeta')).toContainText(/expires in (29|30) days/i);
     await expect(page.locator('#shareActiveUrl')).toHaveText(urlBefore ?? '');
 
-    // Still exactly one active link in the account.
+    // The inventory (Settings → Cloud sync) still holds exactly one link.
+    await openSharedLinks(page);
     await expect(page.locator('#shareLinkCount')).toHaveText('1');
-    await openLinksPanel(page);
     await expect(page.locator('.share-link-row')).toHaveCount(1);
   });
 
-  test('the popup lists active links only — cancelling removes the row for good', async ({
+  test('a raw second create for the same note returns the existing link — no twin, ever', async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    const account = freshAccount();
+    await signUp(page, account);
+    await typeIntoFreshNote(page, 'the duplicated line');
+    await openSharePanel(page);
+
+    // The UI's create POST carries the minted token — the panel only
+    // ever displays a truncated copy of the URL, so the response is the
+    // honest source.
+    const createdResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/shares') && response.request().method() === 'POST',
+    );
+    await page.locator('#shareCreateBtn').click();
+    await expect(page.locator('#shareActiveCard')).toBeVisible();
+    const created = await (await createdResponse).json();
+    const tokenBefore = created.row.token as string;
+    expect(tokenBefore).toBeTruthy();
+
+    // The stale-client backstop: POST the same note again over the raw
+    // API. Auth is a bearer session token (not a cookie), so the test
+    // signs in over the API with the same account and carries the header
+    // the app itself would send. The server must answer with the LIVE
+    // row and `existing: true` — never a second token.
+    const signin = await page.request.post('/api/auth/signin', {
+      data: { email: account.email, password: account.password },
+    });
+    expect(signin.status()).toBe(200);
+    const bearer = ((await signin.json()) as { token?: string }).token;
+    expect(bearer).toBeTruthy();
+    const listed = await page.request.get('/api/shares', {
+      headers: { authorization: `Bearer ${bearer}` },
+    });
+    expect(listed.status()).toBe(200);
+    const rows = (await listed.json()).rows as Array<{ note_id: string; token: string }>;
+    const noteId = rows[0]?.note_id;
+    expect(noteId).toBeTruthy();
+
+    const second = await page.request.post('/api/shares', {
+      data: { note_id: noteId, title: 'the duplicated line', content: '<p>words</p>', days: 7 },
+      headers: { authorization: `Bearer ${bearer}` },
+    });
+    expect(second.status()).toBe(200);
+    const body = await second.json();
+    expect(body.existing).toBe(true);
+    expect(body.row.token).toBe(tokenBefore);
+
+    // The account still owns exactly one active link.
+    await openSharedLinks(page);
+    await expect(page.locator('.share-link-row')).toHaveCount(1);
+  });
+
+  test('the settings list holds the active links only — cancelling removes the row for good', async ({
     page,
   }) => {
     test.setTimeout(60_000);
@@ -201,13 +262,16 @@ test.describe('share links (real API)', () => {
     await page.locator('#shareCreateBtn').click();
     await expect(page.locator('#shareActiveCard')).toBeVisible();
 
-    // The All-links row swaps the panels — same icon, the list's own room.
-    await openLinksPanel(page);
+    // The inventory: every active link, the row naming its note.
+    await openSharedLinks(page);
     await expect(page.locator('.share-link-row')).toHaveCount(1);
-    await expect(page.locator('#sharePopupCount')).toHaveText('1');
+    await expect(page.locator('#shareLinkCount')).toHaveText('1');
+    await expect(page.locator('.share-link-row .share-link-meta')).toContainText(
+      'the cancellable line',
+    );
 
     // First press: the row's button arms — filled, asking the question.
-    // No Swal, no stacked dialog: the panel's own DOM is all there is.
+    // No Swal, no stacked dialog: the card's own DOM is all there is.
     await page.locator('.share-link-row .share-chip-btn.danger').click();
     await expect(page.locator('.share-link-row .share-chip-btn.danger.is-armed')).toHaveText(
       'Really cancel?',
@@ -216,31 +280,31 @@ test.describe('share links (real API)', () => {
 
     // A click anywhere else disarms — the confirm is a gesture on the
     // button, not a state to wander away from.
-    await page.locator('#shareLinksTitle').click();
+    await page.locator('#cloudSettingsSection .pref-section-title').click();
     await expect(page.locator('.share-chip-btn.danger.is-armed')).toHaveCount(0);
     await expect(page.locator('.share-link-row .share-chip-btn.danger')).toHaveText('Cancel link');
 
     // Arm again; the second press commits — and the row LEAVES. No dimmed
-    // ghost, no cancelled badge: the popup lists active links only.
+    // ghost, no cancelled badge: the list holds active links only.
     await page.locator('.share-link-row .share-chip-btn.danger').click();
     await page.locator('.share-link-row .share-chip-btn.danger.is-armed').click();
     await expect(page.locator('.share-link-row')).toHaveCount(0);
-    await expect(page.locator('#sharePopupCount')).toBeHidden();
+    await expect(page.locator('#shareLinkCount')).toBeHidden();
     await expect(page.locator('.share-links-empty')).toBeVisible();
 
     // Back in the share panel: the card is gone, the button creates again.
-    await page.keyboard.press('Escape');
+    await page.locator('#preferencesModal .pref-done-btn').click();
+    await expect(page.locator('#preferencesModal')).toBeHidden();
     await openSharePanel(page);
     await expect(page.locator('#shareActiveCard')).toBeHidden();
     await expect(page.locator('.share-create-label')).toHaveText('Create link');
-    await expect(page.locator('#shareLinkCount')).toBeHidden();
   });
 
-  test('the scope switch lists other notes\u2019 active links, newest first', async ({ page }) => {
+  test('the inventory spans notes, newest first, each row naming its note', async ({ page }) => {
     test.setTimeout(90_000);
     await signUp(page, freshAccount());
 
-    // Two notes, each with its own link.
+    // Two notes, each with its own link — one link per note holds.
     await typeIntoFreshNote(page, 'first shared note');
     await openSharePanel(page);
     await page.locator('#shareCreateBtn').click();
@@ -252,18 +316,16 @@ test.describe('share links (real API)', () => {
     await page.locator('#shareCreateBtn').click();
     await expect(page.locator('#shareActiveCard')).toBeVisible();
 
-    // The popup: "This note" shows only the current note's link; "All
-    // notes" shows both, newest first — the link you just made leads.
-    await openLinksPanel(page);
-    await expect(page.locator('.share-link-row')).toHaveCount(1);
-    await page.locator('label[for="shareScopeAll"]').click();
+    // The settings card: both links, newest first — the one just made leads.
+    await openSharedLinks(page);
     await expect(page.locator('.share-link-row')).toHaveCount(2);
-    await expect(page.locator('#sharePopupCount')).toHaveText('2');
+    await expect(page.locator('#shareLinkCount')).toHaveText('2');
     await expect(page.locator('.share-link-row .share-link-meta').first()).toContainText(
       'second shared note',
     );
-    await page.locator('label[for="shareScopeNote"]').click();
-    await expect(page.locator('.share-link-row')).toHaveCount(1);
+    await expect(page.locator('.share-link-row .share-link-meta').last()).toContainText(
+      'first shared note',
+    );
   });
 
   test('the panel is a tool, not a room: outside click and Escape both close it', async ({
