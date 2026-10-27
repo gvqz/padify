@@ -571,6 +571,31 @@ describe('rateLimited — buckets key on the account when one is known', () => {
     }
     expect(limited).toBe(true);
   });
+
+  it('RATE_LIMIT_SCALE multiplies every bucket; unset means the reviewed limits', () => {
+    const request = new Request('http://api.test/api/share/token-y');
+    // Scale 1000 (the E2E setting): 121 share reads must NOT exhaust the bucket.
+    process.env.RATE_LIMIT_SCALE = '1000';
+    let limited = false;
+    for (let i = 0; i < 121; i++) {
+      limited = rateLimited(request, 'share');
+    }
+    expect(limited).toBe(false);
+    // Back to unset: the same request pattern exhausts immediately.
+    delete process.env.RATE_LIMIT_SCALE;
+    for (let i = 0; i < 121; i++) {
+      limited = rateLimited(request, 'share');
+    }
+    expect(limited).toBe(true);
+    // Garbage values fall back to scale 1 rather than disabling limits.
+    process.env.RATE_LIMIT_SCALE = 'not-a-number';
+    resetRateLimitsForTests();
+    for (let i = 0; i < 121; i++) {
+      limited = rateLimited(request, 'share');
+    }
+    expect(limited).toBe(true);
+    delete process.env.RATE_LIMIT_SCALE;
+  });
 });
 
 describe('route — the public share endpoint is rate limited', () => {

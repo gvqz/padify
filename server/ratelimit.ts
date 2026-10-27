@@ -82,7 +82,14 @@ export function rateLimited(
     'music-resolve': 60,
     share: 120
   };
-  const limit = limits[bucket] ?? 300;
+  // Deployment-scale knob: RATE_LIMIT_SCALE multiplies every bucket. The
+  // E2E suite drives the whole app through ONE localhost address with many
+  // parallel workers, so the per-address buckets (30 sign-ins/min!) made
+  // the suite flap on whatever spec crossed the line that minute. Tests
+  // set RATE_LIMIT_SCALE=1000; production leaves it unset and every limit
+  // stays exactly as reviewed here.
+  const scale = Math.max(1, Number(process.env.RATE_LIMIT_SCALE ?? '1') || 1);
+  const limit = (limits[bucket] ?? 300) * scale;
   // Authenticated traffic keys its bucket on the account, not the address:
   // a shared or spoofed IP then cannot pace someone else's requests, and
   // a signing-in stranger cannot get fresh buckets by rotating addresses.

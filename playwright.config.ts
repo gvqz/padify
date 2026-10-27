@@ -61,6 +61,12 @@ export default defineConfig({
         // developer's server/local.db, never Turso.
         TURSO_DATABASE_URL: `file:${apiDbPath}`,
         PORT: '3041',
+        // The suite drives the whole app through one localhost address with
+        // many parallel workers — the production per-address buckets
+        // (30 sign-ins/min, 300 api/min) 429'd whichever spec crossed the
+        // line that minute, flaking the run. Scaled up for tests only;
+        // production keeps the reviewed limits (env unset → scale 1).
+        RATE_LIMIT_SCALE: '1000',
       },
     },
   ],
