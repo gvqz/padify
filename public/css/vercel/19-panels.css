@@ -426,7 +426,7 @@ body.panel-sheet-open {
    ========================================================================== */
 
 .share-panel {
-  width: 372px;
+  width: 380px;
 }
 
 .share-panel-body {
@@ -463,6 +463,14 @@ body.panel-sheet-open {
   color: var(--vz-fg);
 }
 
+/* The model in one line — who sees what through a link. */
+.share-head-sub {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--vz-fg-muted);
+}
+
 .share-close {
   flex: 0 0 auto;
   display: inline-flex;
@@ -491,6 +499,50 @@ body.panel-sheet-open {
   outline: none;
 }
 
+/* ---- the note being shared -----------------------------------------------------
+   The signed-in pane opens with its subject: the note-type glyph (the
+   same registry the rail badges draw from) and the note's live title. */
+
+.share-note-strip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 14px 0;
+  min-width: 0;
+}
+
+.share-note-glyph {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--vz-fg-muted);
+}
+
+.share-note-glyph svg {
+  width: 13px;
+  height: 13px;
+}
+
+.share-note-glyph-fallback {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.share-note-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--vz-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---- the signed-out gate ---------------------------------------------------- */
 
 .share-gate {
@@ -498,7 +550,7 @@ body.panel-sheet-open {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 36px 26px 32px;
+  padding: 32px 26px 30px;
 }
 
 .share-gate-mark {
@@ -520,10 +572,20 @@ body.panel-sheet-open {
 }
 
 .share-gate-title {
-  margin: 0 0 14px;
+  margin: 0 0 6px;
   font-size: 13.5px;
   font-weight: 600;
   color: var(--vz-fg);
+}
+
+/* What signing in buys — one quiet sentence between the title and
+   the way forward. */
+.share-gate-line {
+  margin: 0 0 14px;
+  max-width: 260px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--vz-fg-muted);
 }
 
 .share-gate-cta {
@@ -546,45 +608,109 @@ body.panel-sheet-open {
 }
 
 /* ---- the note's one active link ------------------------------------------------
-   The card IS the dedupe: when the note already has a live link it shows
-   here — Copy and Cancel ride the card, and the button below updates the
-   link instead of minting a twin. */
+   The field IS the dedupe made visible: when the note already has a
+   live link it shows here as a URL field (click = select all), the
+   copy button flips to a green check, and the button below updates
+   the link instead of minting a twin. Monochrome card — the green
+   stays where the truth is (the Active badge). */
 
 .share-active {
   margin: 12px 14px 0;
-  border: 1px solid color-mix(in srgb, var(--vz-success) 32%, var(--vz-border));
+  border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius-md);
-  background: color-mix(in srgb, var(--vz-success) 5%, var(--vz-bg));
+  background: var(--vz-bg);
+  padding: 9px;
 }
 
 .share-active[hidden] {
   display: none !important;
 }
 
-.share-active-top {
+/* The URL field: the link itself, selectable text (user-select: all
+   turns a click into select-all), clamped to two lines with the full
+   URL on the title — Copy carries the whole thing regardless. */
+.share-field {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 11px 0;
-  min-width: 0;
+  gap: 4px;
+  padding: 3px 3px 3px 9px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg-subtle);
 }
 
-.share-active-name {
+.share-field-url {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 12.5px;
-  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
   color: var(--vz-fg);
+  word-break: break-all;
+  user-select: all;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.share-active-foot {
+.share-field-copy {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--vz-radius);
+  background: transparent;
+  color: var(--vz-fg-muted);
+  cursor: pointer;
+  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease;
+}
+
+.share-field-copy svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.share-field-copy .share-copy-done {
+  display: none;
+}
+
+.share-field-copy:hover,
+.share-field-copy:focus-visible {
+  color: var(--vz-fg);
+  background: var(--vz-bg-hover);
+  outline: none;
+}
+
+/* Copied — the button IS the receipt: green check, quiet green wash,
+   back to idle after a beat (the timer lives in share-ui.ts). */
+.share-field-copy.is-copied {
+  color: var(--vz-success);
+  background: color-mix(in srgb, var(--vz-success) 10%, transparent);
+}
+
+.share-field-copy.is-copied .share-copy-idle {
+  display: none;
+}
+
+.share-field-copy.is-copied .share-copy-done {
+  display: block;
+}
+
+/* Status line: the badge (the green) + the countdown, inline. */
+.share-status {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 11px 9px;
+  padding: 8px 2px 0;
   min-width: 0;
 }
 
@@ -603,6 +729,7 @@ body.panel-sheet-open {
   display: flex;
   align-items: center;
   gap: 5px;
+  padding: 9px 2px 2px;
 }
 
 .share-active-actions .share-chip-btn {
@@ -610,21 +737,36 @@ body.panel-sheet-open {
   padding: 0 9px;
 }
 
-/* ---- expiry + create ----------------------------------------------------------- */
+.share-active-actions .spacer {
+  flex: 1 1 auto;
+}
+
+/* ---- expiry + create -----------------------------------------------------------
+   The picker is an inset segmented track — the chosen window is a
+   raised chip on it — and the hint line under it names the date the
+   pick actually produces, so expiry reads as a date, never a number. */
 
 .share-new {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   padding: 12px 14px 14px;
+}
+
+.share-expiry-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--vz-fg-muted);
 }
 
 .share-dur {
   display: flex;
+  gap: 2px;
+  padding: 3px;
   border: 1px solid var(--vz-border);
-  border-radius: var(--vz-radius);
-  overflow: hidden;
-  background: var(--vz-bg);
+  border-radius: var(--vz-radius-md);
+  background: var(--vz-bg-subtle);
 }
 
 .share-dur input {
@@ -642,30 +784,41 @@ body.panel-sheet-open {
   color: var(--vz-fg-muted);
   cursor: pointer;
   user-select: none;
-  border-right: 1px solid var(--vz-border);
-  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease;
-}
-
-.share-dur label:last-of-type {
-  border-right: none;
+  border-radius: calc(var(--vz-radius-md) - 3px);
+  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease,
+    box-shadow var(--vz-dur) ease;
 }
 
 .share-dur label:hover {
   color: var(--vz-fg);
-  background: var(--vz-bg-hover);
 }
 
+/* The chosen window: a raised chip on the track — surface, hairline
+   ring, one point of shadow. Reads pressed-in, in both themes. */
 .share-dur input:checked + label {
-  background: var(--vz-bg-chip);
-  border-bottom: 2px solid var(--vz-primary);
-  border-bottom-width: 2px;
+  background: var(--vz-bg-elevated);
   color: var(--vz-fg);
   font-weight: 600;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.09),
+    0 0 0 1px var(--vz-border);
 }
 
 .share-dur input:focus-visible + label {
   outline: 2px solid var(--vz-primary);
   outline-offset: -2px;
+}
+
+/* The pick, as a date — the human translation of "30 days". */
+.share-dur-hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--vz-fg-muted);
+}
+
+.share-dur-hint[hidden] {
+  display: none !important;
 }
 
 .share-create {

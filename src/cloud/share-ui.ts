@@ -1,27 +1,34 @@
 /**
  * Padify share links — user interface.
  *
- * The share panel is the ACT of sharing one note. A note keeps ONE
- * active link: with a link already out, the panel shows it as a card
- * (Copy / Cancel ride the card) and the primary button refreshes its
- * expiry instead of minting a twin — duplication is not a thing the
- * user can do by accident, and the server refuses it even when a stale
- * client tries. The INVENTORY lives in Settings → Cloud sync: the
- * "Shared links" card lists every ACTIVE link across the account,
- * newest first — cancelled and expired links leave the list instead of
- * haunting it. Signed-out visitors get a sign-in gate — sharing is a
+ * The share panel is the ACT of sharing one note, built around the
+ * link itself. A note keeps ONE active link: with a link already out,
+ * the panel shows it as a FIELD — the URL, selectable, with a copy
+ * button that flips to a check — and the primary button refreshes its
+ * expiry instead of minting a twin (duplication is not a thing the
+ * user can do by accident, and the server refuses it even when a
+ * stale client tries). Open previews the page a reader sees; Share
+ * via… hands the URL to the OS share sheet when the browser has one;
+ * cancelling a link arms its own button (the confirm state IS the
+ * button), the same two-step contract the History sheet's deletes
+ * follow. The INVENTORY lives in Settings → Cloud sync: the "Shared
+ * links" card lists every ACTIVE link across the account, newest
+ * first. Signed-out visitors get a sign-in gate — sharing is a
  * cloud-account feature.
  *
- * Nothing here opens a second dialog: cancelling a link arms the row's
- * own button (the confirm state IS the button), the same two-step
- * contract the History sheet's deletes follow.
+ * Nothing here opens a second dialog.
  */
 
 import { $ } from '../lib/q';
 import { closePanel, openPanel } from '../ui/behavior/panel';
 import { showToast } from '../ui/toast';
 import { deriveTabTitle, getActiveNoteContent, getTabManager } from '../tabs';
-import type { NoteType } from '../editor/note-types';
+import {
+  NOTE_TYPE_ICONS,
+  noteTypeLabel,
+  type KnownNoteType,
+  type NoteType,
+} from '../editor/note-types';
 import { getCloudSync } from './sync';
 import {
   createShare,
@@ -37,6 +44,8 @@ import {
 const DAY_MS = 86_400_000;
 /** How long a cancel button stays armed before it disarms itself. */
 const ARM_TIMEOUT_MS = 4000;
+/** How long the field's copy button shows its green check. */
+const COPY_FEEDBACK_MS = 1_600;
 /** The panel-to-modal handoff — matches the modal's own transition. */
 const PANEL_SWAP_MS = 200;
 
@@ -53,6 +62,9 @@ let lastLinksSignature: string | null = null;
 /** The two-step cancel: the armed row's token, and its auto-disarm timer. */
 let armedToken: string | null = null;
 let armedTimer: number | null = null;
+
+/** The copy button's check-mark reset timer (one flash at a time). */
+let copyResetTimer: number | null = null;
 
 const shareRoot = () => $('#shareModal').get(0);
 const shareAnchor = () => $('#shareNotes').get(0);
@@ -83,9 +95,35 @@ export function initShareUI(): void {
   $('#shareActiveCopy').on('click', () => {
     const record = activeShareRecord();
     if (record) {
-      void copyLinkText(shareUrlFor(record.token), 'Link copied to clipboard.');
+      void copyLinkText(shareUrlFor(record.token), 'Link copied to clipboard.').then((copied) => {
+        if (copied) {
+          flashCopied();
+        }
+      });
     }
   });
+
+  // See it the way a reader will: the viewer page, in a new tab.
+  $('#shareActiveOpen').on('click', () => {
+    const record = activeShareRecord();
+    if (record) {
+      window.open(shareUrlFor(record.token), '_blank', 'noopener');
+    }
+  });
+
+  // The OS share sheet, when the platform has one — the natural end of
+  // a share menu. Hidden by default; revealed here only when the API
+  // exists, so desktop Firefox never shows a dead button.
+  if (typeof navigator.share === 'function') {
+    $('#shareActiveNative').removeAttr('hidden');
+  }
+  $('#shareActiveNative').on('click', () => {
+    void nativeShare();
+  });
+
+  // The expiry hint follows the picked window immediately — the date
+  // updates while the segments move, before any button is pressed.
+  $('input[name="shareDuration"]').on('change', renderDurHint);
 
   $('#shareActiveCancel').on('click', (event) => {
     const record = activeShareRecord();
@@ -95,9 +133,11 @@ export function initShareUI(): void {
   });
 
   $('#shareModal').on('panel:show', () => {
-    // A stale armed button from the previous visit must not survive the
-    // reopen — the confirm state belongs to this visit's list only.
+    // A stale armed button or a stale green check from the previous
+    // visit must not survive the reopen — the confirm state belongs to
+    // this visit's list only.
     disarmCancel();
+    resetCopyFlash();
     renderShareState();
     void refreshShares();
   });
@@ -106,6 +146,7 @@ export function initShareUI(): void {
   // and re-renders from the cache instantly, before the fetch lands.
   $('#preferencesModal').on('show.bs.modal', () => {
     disarmCancel();
+    resetCopyFlash();
     renderPanes();
     renderLinks();
     void refreshShares();
@@ -196,18 +237,25 @@ function isLinkActive(record: ShareRecord): boolean {
 
 /**
  * The signed-in pane's whole state, from two facts: does the note have an
- * active link, and does the note have words. Link + words → the card shows
- * and the button says Update. No link + words → the button says Create.
- * No words → the button goes dark and one quiet line says why — the note
- * strip is gone; the refusal is the only thing left to say.
+ * active link, and does the note have words. Link + words → the field
+ * shows and the button says Update. No link + words → the button says
+ * Create. No words → the button goes dark and one quiet line says why.
+ * Either way the note strip names the subject and the expiry hint names
+ * the date the current pick produces.
  */
 function renderShareState(): void {
   const note = activeNote();
   const record = activeShareRecord();
 
+  renderNoteStrip(note);
+
   const $card = $('#shareActiveCard');
   if (record) {
-    $('#shareActiveUrl').text(shortUrl(record.token));
+    // The field shows the link itself — the whole URL, selectable, with
+    // the full text on the title for the clamped tail. Copy carries it
+    // verbatim; seeing it is trusting it.
+    const url = shareUrlFor(record.token);
+    $('#shareActiveUrl').text(url).attr('title', url);
     $('#shareActiveMeta').text(`${relativeExpiry(record)} · ${createdAgo(record)}`);
     $('#shareActiveCancel').attr('data-token', record.token);
     $card.removeAttr('hidden');
@@ -226,6 +274,54 @@ function renderShareState(): void {
   $('#shareCreateBtn').prop('disabled', !shareable);
   $('#shareCreateBtn').removeAttr('title');
   $('#shareEmptyLine').attr('hidden', shareable ? 'hidden' : null);
+
+  // The hint's wording depends on the create/update split, so it
+  // re-renders with the state as well as with the pick itself.
+  renderDurHint();
+}
+
+/**
+ * The note strip: the type glyph (the registry the rail badges draw
+ * from) plus the note's live title. This is WHAT the panel shares —
+ * it renders on every state pass so a tab switch while open re-names
+ * the subject instead of lying about it.
+ */
+function renderNoteStrip(note: ReturnType<typeof activeNote>): void {
+  const $glyph = $('#shareNoteGlyph');
+  if (!note) {
+    $('#shareNoteName').text('No note open');
+    $glyph.empty().removeAttr('title');
+    return;
+  }
+
+  $('#shareNoteName').text(note.title || 'Untitled');
+  const typeId = (note.noteType ?? 'standard') as KnownNoteType;
+  const icon = NOTE_TYPE_ICONS[typeId];
+  if (icon) {
+    $glyph.html(icon(13)).attr('title', noteTypeLabel(typeId));
+  } else {
+    // A type this build does not know yet still names itself — the
+    // registry's plain-text mark, exactly like the rail's badge.
+    $glyph
+      .html(
+        `<span class="share-note-glyph-fallback">${noteTypeLabel(typeId).charAt(0).toLowerCase()}</span>`,
+      )
+      .attr('title', noteTypeLabel(typeId));
+  }
+}
+
+/**
+ * The expiry pick, translated into a date: the one thing a duration
+ * number never says. With a link out, the same pick EXTENDS that
+ * link — the hint says so and keeps the URL constancy front and
+ * center; without one, it previews the window a create would open.
+ */
+function renderDurHint(): void {
+  const until = formatDate(Date.now() + selectedDays() * DAY_MS);
+  const record = activeShareRecord();
+  $('#shareDurHint').text(
+    record ? `Same URL — this link now works until ${until}` : `Readers keep access until ${until}`,
+  );
 }
 
 /**
@@ -565,18 +661,30 @@ async function createOrUpdate(): Promise<void> {
       result.existed
         ? 'This note already has an active link — copied it.'
         : 'Link created and copied.',
-    );
+    ).then((copied) => {
+      // The field's own receipt — same gesture, same flash a manual
+      // copy gets, so the card answers the moment it appears.
+      if (copied) {
+        flashCopied();
+      }
+    });
   } else {
     showToast(result.existed ? 'This note already has an active link.' : 'Link created.');
   }
   await refreshShares();
 }
 
-/** Writes a URL to the clipboard and reports the outcome as a toast. */
-async function copyLinkText(url: string, message: string): Promise<void> {
+/**
+ * Writes a URL to the clipboard and reports the outcome as a toast.
+ * Returns whether the copy actually landed, so a caller that shows its
+ * own receipt (the field's green check) can stay honest — a failed
+ * copy never flashes success.
+ */
+async function copyLinkText(url: string, message: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(url);
     showToast(message);
+    return true;
   } catch {
     // Clipboard API can be unavailable (http origins, older browsers).
     const scratch = document.createElement('textarea');
@@ -588,6 +696,58 @@ async function copyLinkText(url: string, message: string): Promise<void> {
     scratch.select();
     const ok = document.execCommand('copy');
     scratch.remove();
-    showToast(ok ? message : 'Link created — copy it from the card above.');
+    showToast(ok ? message : 'Could not copy — select the link text and copy by hand.');
+    return ok;
+  }
+}
+
+// ---- the field's copy receipt -------------------------------------------------
+
+/** The copy button's receipt: a green check for a beat, then back to idle. */
+function flashCopied(): void {
+  const button = $('#shareActiveCopy').get(0) as HTMLElement | undefined;
+  if (!button) {
+    return;
+  }
+  button.classList.add('is-copied');
+  if (copyResetTimer !== null) {
+    window.clearTimeout(copyResetTimer);
+  }
+  copyResetTimer = window.setTimeout(() => {
+    copyResetTimer = null;
+    button.classList.remove('is-copied');
+  }, COPY_FEEDBACK_MS);
+}
+
+/** Clears any standing flash — a fresh surface never opens mid-check. */
+function resetCopyFlash(): void {
+  if (copyResetTimer !== null) {
+    window.clearTimeout(copyResetTimer);
+    copyResetTimer = null;
+  }
+  ($('#shareActiveCopy').get(0) as HTMLElement | undefined)?.classList.remove('is-copied');
+}
+
+// ---- the OS share sheet ---------------------------------------------------------
+
+/**
+ * Hands the link to the platform's share sheet — the natural end of a
+ * share menu on phones. A dismissed sheet is silence, not an error;
+ * any other failure falls back to the clipboard, which always works.
+ */
+async function nativeShare(): Promise<void> {
+  const record = activeShareRecord();
+  if (!record) {
+    return;
+  }
+  const url = shareUrlFor(record.token);
+  const note = activeNote();
+  try {
+    await navigator.share({ title: note?.title || 'A shared note', url });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return; // the user closed the sheet — nothing to say
+    }
+    await copyLinkText(url, 'Sharing unavailable — the link was copied instead.');
   }
 }

@@ -12,23 +12,28 @@ import { expect, test, type Page } from '@playwright/test';
  *     button goes dark and one quiet line says why.
  *
  *  3. The happy path — a note with words shares: the note's ONE link
- *     shows as an Active card, the button turns into the expiration
- *     update, and no second link can ever be minted for the same note.
+ *     shows as a URL field (the link itself, selectable), the button
+ *     turns into the expiration update, and no second link can ever
+ *     be minted for the same note.
  *
- *  4. The dedupe — a note keeps ONE active link: updating refreshes the
- *     window it already has (same URL), it does not create a twin — and
- *     the server backstops it: a raw second POST for the same note
- *     returns the existing row instead of minting another.
+ *  4. The dedupe — a note keeps ONE active link: updating refreshes
+ *     the window it already has (same URL), it does not create a
+ *     twin — and the server backstops it: a raw second POST for the
+ *     same note returns the existing row instead of minting another.
  *
  *  5. The inventory — the links list lives in Settings → Cloud sync
- *     (there is no second popup anymore): every ACTIVE link across the
- *     account, newest first, each row naming its note. A cancelled link
- *     leaves the list instead of haunting it.
+ *     (there is no second popup anymore): every ACTIVE link across
+ *     the account, newest first, each row naming its note. A
+ *     cancelled link leaves the list instead of haunting it.
  *
- *  6. The two-step cancel — the confirm state IS the button: the first
- *     click arms it ("Really cancel?"), a click anywhere else disarms
- *     it, and the second click revokes the link. No second dialog ever
- *     stacks over a surface.
+ *  6. The two-step cancel — the confirm state IS the button: the
+ *     first click arms it ("Really cancel?"), a click anywhere else
+ *     disarms it, and the second click revokes the link. No second
+ *     dialog ever stacks over a surface.
+ *
+ *  7. The remade anatomy — the note strip names the subject, the
+ *     expiry hint names the DATE the pick produces, and the copy
+ *     button flashes its green check when the copy lands.
  *
  * The e2e config boots the API against a throwaway SQLite file (see
  * playwright.config.ts); nothing here touches a real database.
@@ -103,13 +108,13 @@ test.describe('share links (real API)', () => {
     await page.goto('/');
     await openSharePanel(page);
 
-    // The panel frame: anchored topbar panel, gate pane, no note strip,
-    // no subtitle — the panel is the act of sharing, nothing previews
-    // the note anymore.
+    // The panel frame: anchored topbar panel, gate pane, the model line
+    // in the head ("anyone with the link can view"), and NO note strip
+    // in view — the strip belongs to the signed-in pane, which is hidden.
     await expect(page.locator('#shareModal.topbar-panel.share-panel')).toBeVisible();
     await expect(page.locator('#shareSignedOutPane')).toBeVisible();
-    await expect(page.locator('.share-note-strip')).toHaveCount(0);
-    await expect(page.locator('.share-subtitle')).toHaveCount(0);
+    await expect(page.locator('.share-head-sub')).toContainText('Anyone with the link');
+    await expect(page.locator('.share-note-strip')).toBeHidden();
 
     // Anchored, not a docked sheet: the panel hangs below the topbar's
     // share icon, inside the viewport, and the page keeps its width.
@@ -158,7 +163,7 @@ test.describe('share links (real API)', () => {
     await typeIntoFreshNote(page, 'the shareable line');
     await openSharePanel(page);
 
-    // The create fires; the note's ONE link lands as the Active card —
+    // The create fires; the note's ONE link lands as the URL field —
     // the list itself lives in Settings now, not in this panel.
     await page.locator('#shareCreateBtn').click();
     await expect(page.locator('#shareActiveCard')).toBeVisible();
@@ -168,6 +173,52 @@ test.describe('share links (real API)', () => {
     // The dedupe is visible in the language: with a link out, the button
     // updates the EXPIRATION. It never offers a second link.
     await expect(page.locator('.share-create-label')).toHaveText('Update expiration');
+  });
+
+  test.describe('the remade anatomy', () => {
+    // The copy receipt needs a real clipboard — grant it for this group.
+    test.use({ permissions: ['clipboard-write', 'clipboard-read'] });
+
+    test('note strip names the subject, the hint names the date, copy flashes its check', async ({
+      page,
+    }) => {
+      test.setTimeout(60_000);
+      await signUp(page, freshAccount());
+      await typeIntoFreshNote(page, 'the well-named line');
+      await openSharePanel(page);
+
+      // The note strip: the glyph + the LIVE title of the note being
+      // shared — the panel always says what it is sharing.
+      await expect(page.locator('.share-note-strip')).toBeVisible();
+      await expect(page.locator('#shareNoteName')).toHaveText('the well-named line');
+
+      // The hint previews the window a create would open — a date, not a
+      // number — and it follows the pick: changing the segment changes
+      // the date it names.
+      await expect(page.locator('#shareDurHint')).toContainText('until');
+      const hintBefore = await page.locator('#shareDurHint').textContent();
+      await page.locator('label[for="shareDur90"]').click();
+      const hintAfter = await page.locator('#shareDurHint').textContent();
+      expect(hintAfter).not.toEqual(hintBefore);
+      await page.locator('label[for="shareDur7"]').click();
+
+      // Create; the field shows the link, Open rides the card, and the
+      // native-share chip stays dark on a browser without the API.
+      await page.locator('#shareCreateBtn').click();
+      await expect(page.locator('#shareActiveCard')).toBeVisible();
+      await expect(page.locator('#shareActiveUrl')).toContainText('/share/?t=');
+      await expect(page.locator('#shareActiveOpen')).toBeVisible();
+      if ((await page.evaluate(() => typeof navigator.share)) === 'undefined') {
+        await expect(page.locator('#shareActiveNative')).toBeHidden();
+      }
+
+      // The hint flips to its update wording (the pick now EXTENDS the
+      // link that is out) and Copy flashes its green check on success.
+      await expect(page.locator('#shareDurHint')).toContainText('Same URL');
+      await page.locator('#shareActiveCopy').click();
+      await expect(page.locator('.share-field-copy.is-copied')).toBeVisible();
+      await expect(page.locator('.share-field-copy.is-copied')).toBeHidden({ timeout: 4_000 });
+    });
   });
 
   test('updating the expiration refreshes the window — the URL survives, no twin is made', async ({

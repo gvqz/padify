@@ -1,12 +1,27 @@
 <!-- Share — a topbar panel that hangs from the share icon. The panel is
-     the ACT of sharing one note — a note gets ONE active link (a second
-     create updates or copies the first, never duplicates it), the expiry
-     choice sits above the one primary button, and the active link, when
-     there is one, shows as a card with Copy / Cancel on it. There is no
-     list here: every link across the account lives in Settings →
-     Cloud sync (the "Shared links" card), so the panel stays a
-     single-purpose tool. The panel hovers without a backdrop and closes
-     on outside click or Escape; under 640px it becomes a bottom sheet.
+     the ACT of sharing one note, remade as a link card:
+
+       • the head names the model ("anyone with the link can view");
+       • the signed-in pane opens with a NOTE STRIP — the type glyph and
+         the live title of the note being shared, so the panel always
+         says WHAT it is sharing;
+       • a note with a live link shows it as a FIELD: the URL itself,
+         selectable (click = select all), with a copy button that flips
+         to a green check, a status line (Active badge + countdown) and
+         quiet actions — Open (see the page the reader sees), Share via…
+         (the OS share sheet, when the browser has one) and Cancel link
+         (two-step, the confirm state IS the button);
+       • the expiry picker is a segmented track with a live hint line
+         under it that names the date the link will actually work until
+         ("Same URL — works until Nov 27, 2026" in update mode);
+       • one primary button follows the state: Create link, or Update
+         expiration when the note's one link is already out.
+
+     A note keeps ONE active link — a second create updates or copies
+     the first, never duplicates it. There is no list here: every link
+     across the account lives in Settings → Cloud sync (the "Shared
+     links" card). The panel hovers without a backdrop and closes on
+     outside click or Escape; under 640px it becomes a bottom sheet.
      Structure and rendering live in src/cloud/share-ui.ts, styles in
      public/css/vercel/19-panels.css. Nothing here opens a dialog —
      cancelling a link arms its own button in place. -->
@@ -21,6 +36,7 @@
     <header class="share-head">
       <div class="share-head-copy">
         <h2 class="share-title" id="shareModalTitle">Share</h2>
+        <p class="share-head-sub">Anyone with the link can view this note.</p>
       </div>
       <button type="button" class="share-close" data-dismiss="panel" aria-label="Close share">
         <svg
@@ -55,42 +71,73 @@
           </svg>
         </span>
         <h5 class="share-gate-title">Sign in to share notes</h5>
+        <p class="share-gate-line">
+          Links hand out a read-only copy that follows your edits and expires on its own.
+        </p>
         <button type="button" class="share-gate-cta" id="shareSignInCta">Sign in</button>
       </div>
     </div>
 
     <div id="shareSignedInPane" hidden>
-      <!-- The note's one active link, when it exists — the card IS the
-           dedupe: with a live link on the note, the button below updates
-           its expiry instead of minting a twin, and Copy / Cancel ride
-           the card itself. -->
+      <!-- The note being shared — the type glyph the rail uses, plus the
+           note's live title, so the panel names its subject even before
+           a link exists. -->
+      <div class="share-note-strip">
+        <span class="share-note-glyph" id="shareNoteGlyph" aria-hidden="true"></span>
+        <span class="share-note-name" id="shareNoteName"></span>
+      </div>
+
+      <!-- The note's one active link, when it exists — the field IS the
+           dedupe made visible: with a link out, the button below updates
+           its expiry instead of minting a twin, Copy rides the field,
+           and Open / Share via… / Cancel ride the card. -->
       <section
         class="share-active"
         id="shareActiveCard"
         aria-label="This note's active link"
         hidden
       >
-        <div class="share-active-top">
-          <span class="share-active-name">Active link</span>
+        <div class="share-field">
+          <span class="share-field-url" id="shareActiveUrl"></span>
+          <button
+            type="button"
+            class="share-field-copy"
+            id="shareActiveCopy"
+            aria-label="Copy link"
+            title="Copy link"
+          >
+            <svg class="share-copy-idle" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="9" y="9" width="11" height="11" rx="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            <svg class="share-copy-done" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          </button>
+        </div>
+        <div class="share-status">
           <span class="share-badge active">Active</span>
-        </div>
-        <div class="share-active-foot">
           <span class="share-active-meta" id="shareActiveMeta"></span>
-          <div class="share-active-actions">
-            <button type="button" class="share-chip-btn" id="shareActiveCopy">Copy</button>
-            <button type="button" class="share-chip-btn danger" id="shareActiveCancel">
-              Cancel link
-            </button>
-          </div>
         </div>
-        <span class="sr-only" id="shareActiveUrl"></span>
+        <div class="share-active-actions">
+          <button type="button" class="share-chip-btn" id="shareActiveOpen">Open</button>
+          <button type="button" class="share-chip-btn" id="shareActiveNative" hidden>
+            Share via…
+          </button>
+          <span class="spacer" aria-hidden="true"></span>
+          <button type="button" class="share-chip-btn danger" id="shareActiveCancel">
+            Cancel link
+          </button>
+        </div>
       </section>
 
       <!-- The one primary movement: pick how long the link lives, create
            it — or, with a link already out, refresh its window instead
-           (the label follows the state). The quiet line says why an
-           empty note cannot share. -->
+           (the label follows the state). The hint line names the real
+           date the pick produces, and the quiet refusal under the button
+           says why an empty note cannot share. -->
       <section class="share-new" aria-label="Create or update the link">
+        <div class="share-expiry-label" id="shareExpiryLabel">Expires after</div>
         <div class="share-dur" role="radiogroup" aria-label="Link expires after">
           <input type="radio" id="shareDur1" value="1" name="shareDuration" />
           <label for="shareDur1">1 day</label>
@@ -101,6 +148,7 @@
           <input type="radio" id="shareDur90" value="90" name="shareDuration" />
           <label for="shareDur90">90 days</label>
         </div>
+        <p class="share-dur-hint" id="shareDurHint" aria-live="polite"></p>
         <button type="button" class="share-create" id="shareCreateBtn">
           <svg
             width="14"
