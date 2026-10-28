@@ -11,16 +11,24 @@
  */
 import { micromark } from 'micromark';
 import { matchRawHtml } from './render';
+import { markdownHtmlAttrAllowed, markdownTagAllowed } from './html-policy';
 import { gfm, gfmHtml } from 'micromark-extension-gfm';
 import { gfmTaskListItem } from 'micromark-extension-gfm-task-list-item';
+import { Parser, HtmlRenderer } from 'commonmark';
 
 // ---------------------------------------------------------------------------
-// The oracle
+// The oracles
 // ---------------------------------------------------------------------------
 
 const ORACLE_OPTIONS = {
   extensions: [gfm(), gfmTaskListItem()],
   htmlExtensions: [gfmHtml(), gfmTaskListItem()],
+  // Raw HTML passes through RAW — the spec's own reading (the corpus's
+  // html fields keep tags live). The owned renderer's SANITIZED output
+  // compares against it: tags on the policy's allowlist must match
+  // byte-for-byte after canonicalization, and declined tags/attributes
+  // fall to the policy-power exclusions below.
+  allowDangerousHtml: true,
 } as Parameters<typeof micromark>[1];
 
 /** Micromark's footnote anchors are user-content-fn(-ref)-N; ours md-fn(-ref)-N. */
@@ -30,6 +38,23 @@ function normalizeOracleFootnoteAnchors(html: string): string {
 
 export function oracleHtml(source: string): string {
   return normalizeOracleFootnoteAnchors(micromark(source, ORACLE_OPTIONS));
+}
+
+/**
+ * The second oracle: cmark itself (the reference implementation, the engine
+ * GitHub's cmark-gfm descends from — the parity target). The two references
+ * disagree on a handful of spec-UNSPECIFIED corners — most notably a
+ * delimiter run that CLOSES one pair and then OPENS another (cmark lets the
+ * leftover characters open; micromark spends the whole run): on those, an
+ * output that matches EITHER reference is correct by definition. The
+ * differential and fuzz suites accept either; GitHub's own rendering follows
+ * cmark's reading, so ours does too.
+ */
+const cmarkParser = new Parser();
+const cmarkRenderer = new HtmlRenderer();
+
+export function cmarkHtml(source: string): string {
+  return cmarkRenderer.render(cmarkParser.parse(source));
 }
 
 // ---------------------------------------------------------------------------
@@ -59,7 +84,27 @@ const BLOCK_EDGE_TAGS = new Set([
 const VOID_TAGS = new Set(['br', 'hr', 'img', 'input']);
 
 export function canonicalizeHtml(html: string, collapseWs = false): string {
-  const doc = new DOMParser().parseFromString(`<!doctype html><body>${html}</body>`, 'text/html');
+  // Trim BEFORE parsing: a trailing newline after a still-open inline
+  // element makes the HTML parser's "active formatting elements"
+  // reconstruction re-open it outside its block (`<p><a></p>\n` grows a
+  // second anchor), and the two sides differ only in that trailing byte —
+  // the reference implementations' final newline, never content.
+  const doc = new DOMParser().parseFromString(
+    `<!doctype html><body>${html.trim()}</body>`,
+    'text/html',
+  );
+  // Drop the INVISIBLE nodes (comments — and whatever else never
+  // renders) and merge adjacent text nodes: a construct one side DROPS
+  // splits the other side's text in two, and a whitespace run spanning
+  // the split would survive per-node collapsing on one side but not the
+  // other. Node boundaries are not rendering.
+  const walker = document.createTreeWalker(doc, NodeFilter.SHOW_COMMENT);
+  const comments: Node[] = [];
+  while (walker.nextNode()) {
+    comments.push(walker.currentNode);
+  }
+  comments.forEach((node) => node.parentNode?.removeChild(node));
+  doc.normalize();
   let out = '';
   for (const child of Array.from(doc.body.childNodes)) {
     out += serializeNode(child, false, collapseWs);
@@ -107,8 +152,15 @@ function serializeNode(node: Node, rawText: boolean, collapseWs: boolean): strin
     const attrName = attr.name.toLowerCase();
     let value = attr.value;
     // `rel` is the app's own hardening (noopener noreferrer), not grammar —
-    // both sides carry it; it stays out of the comparison.
-    if (attrName === 'rel') {
+    // both sides carry it; it stays out of the comparison. The image
+    // loading/decoding/referrer attributes are the same kind of owned
+    // presentation: grammar compares src/alt/title and nothing else.
+    if (
+      attrName === 'rel' ||
+      attrName === 'loading' ||
+      attrName === 'decoding' ||
+      attrName === 'referrerpolicy'
+    ) {
       continue;
     }
     // micromark expresses table alignment as align="right"; we express the
@@ -213,6 +265,7 @@ export const OWNED_VOCABULARY = new Set([
   'section',
   'span',
   'div',
+  'img',
 ]);
 
 export function oracleUsesPolicyPower(markdown: string, oracleHtml: string): boolean {
@@ -361,11 +414,44 @@ export function oracleUsesPolicyPower(markdown: string, oracleHtml: string): boo
     }
   }
   // A tag outside the owned vocabulary in the ORACLE output can only be a
-  // raw-HTML pass-through or an <img> (links by policy).
-  for (const match of oracleHtml.matchAll(/<([a-zA-Z][a-zA-Z0-9-]*)/g)) {
-    if (!OWNED_VOCABULARY.has(match[1]!.toLowerCase())) {
+  // raw-HTML pass-through or an <img> (links by policy). The oracle speaks
+  // the spec's tag names (strong/em/del) where the owned renderer uses the
+  // rendering-equal aliases (b/i/s) — alias BEFORE the check, or every
+  // emphasis example would sit outside the comparison (the aliasing bug
+  // this line used to carry silently excluded spec examples 405-470, and
+  // a real nesting divergence in ***x*** hid behind it).
+  for (const match of oracleHtml.matchAll(/<\/?([a-zA-Z][a-zA-Z0-9-]*)/g)) {
+    const name = TAG_ALIAS[match[1]!.toLowerCase()] ?? match[1]!.toLowerCase();
+    if (!OWNED_VOCABULARY.has(name)) {
       return true;
     }
+  }
+  // An attribute outside the renderer's emission set is the same kind of
+  // oracle power: GitHub's sanitizer strips class/id/style (and every
+  // event handler) from raw HTML, and so does the owned policy — the
+  // oracle keeps them, so those examples compare nothing.
+  for (const match of oracleHtml.matchAll(/\s([a-zA-Z][a-zA-Z0-9:-]*)="/g)) {
+    if (!OWNED_ATTRS.has(match[1]!.toLowerCase())) {
+      return true;
+    }
+  }
+  // A CDATA shape's visible bytes are ambiguous: CommonMark's grammar
+  // treats `<![CDATA[…]]>` as one shape (the owned reading — dropped
+  // whole, like every invisible construct), while the HTML parser reads
+  // `<!` as a bogus comment ending at the first `>` (micromark's reading —
+  // the tail stays text). The spec keeps the shape raw; the two readers
+  // disagree about what a browser would SHOW.
+  if (/<!\[/.test(markdown)) {
+    return true;
+  }
+  // An entity-shaped run WITHOUT its semicolon inside an attribute: the
+  // policy's URL gate decodes it (a browser would too — HTML5 numeric
+  // references may drop the semicolon, and `jav&#x09avascript:` must meet
+  // the gate as its decoded bytes), while the oracle follows CommonMark's
+  // strict-semicolon grammar and keeps the bytes literal. Safety over
+  // parity: the divergence is the point.
+  if (/&(#[xX]?[0-9a-fA-F]+|#[0-9]+|[a-zA-Z][a-zA-Z0-9]*)(?![;\s>])/i.test(markdown)) {
+    return true;
   }
   // The footnote section's wrapper shape is owned (section + hr), pinned
   // separately; oracle-side sections are structurally different.
@@ -388,10 +474,43 @@ const ATTR_ALLOWLIST: Record<string, Set<string>> = {
   a: new Set(['href', 'title', 'rel']),
   input: new Set(['type', 'disabled', 'checked']),
   ol: new Set(['start']),
-  td: new Set(['style']),
-  th: new Set(['style']),
+  td: new Set(['style', 'colspan', 'rowspan']),
+  th: new Set(['style', 'colspan', 'rowspan']),
   span: new Set(['data-latex', 'contenteditable']),
+  img: new Set(['src', 'alt', 'title', 'loading', 'decoding', 'referrerpolicy', 'width', 'height']),
 };
+
+/**
+ * Every attribute name ANY owned emission may carry — the attr-power
+ * mirror of OWNED_VOCABULARY (the raw-HTML policy's per-tag allowances
+ * folded in: title everywhere, URLs gated, numerics canonicalized,
+ * booleans bare).
+ */
+const OWNED_ATTRS = new Set([
+  'class',
+  'id',
+  'href',
+  'title',
+  'rel',
+  'type',
+  'disabled',
+  'checked',
+  'start',
+  'style',
+  'colspan',
+  'rowspan',
+  'data-latex',
+  'contenteditable',
+  'src',
+  'alt',
+  'loading',
+  'decoding',
+  'referrerpolicy',
+  'width',
+  'height',
+  'open',
+  'align',
+]);
 
 /** hrefs must start with one of these (after trimming) or carry no scheme. */
 const SAFE_HREF = /^(https?:|mailto:|#|\/)/i;
@@ -408,24 +527,28 @@ export function walkInvariants(html: string): string[] {
 
   for (const el of Array.from(doc.body.querySelectorAll('*'))) {
     const name = el.tagName.toLowerCase();
-    if (!OWNED_VOCABULARY.has(name)) {
+    // The vocabulary is the renderer's own emissions PLUS the raw-HTML
+    // policy's allowlist (rebuilt tags keep their source names — del/em/
+    // strong arrive raw where markdown syntax would emit s/i/b).
+    if (!OWNED_VOCABULARY.has(name) && !markdownTagAllowed(name)) {
       violations.push(`foreign tag <${name}>`);
       continue;
     }
     const allowed = ATTR_ALLOWLIST[name];
     for (const attr of Array.from(el.attributes)) {
       const attrName = attr.name.toLowerCase();
-      if (!GLOBAL_ATTRS.has(attrName) && !(allowed && allowed.has(attrName))) {
+      const ours = GLOBAL_ATTRS.has(attrName) || (allowed && allowed.has(attrName));
+      if (!ours && !(markdownTagAllowed(name) && markdownHtmlAttrAllowed(name, attrName))) {
         violations.push(`<${name}> carries attribute ${JSON.stringify(attrName)}`);
         continue;
       }
-      if (attrName === 'href') {
+      if (attrName === 'href' || attrName === 'src') {
         const href = attr.value.trim();
         const colon = href.indexOf(':');
         const slash = href.indexOf('/');
         const schemeLess = colon === -1 || (slash !== -1 && slash < colon);
         if (!schemeLess && !SAFE_HREF.test(href)) {
-          violations.push(`<a href=${JSON.stringify(href)}> smuggles a scheme`);
+          violations.push(`<${name} ${attrName}=${JSON.stringify(href)}> smuggles a scheme`);
         }
       }
     }

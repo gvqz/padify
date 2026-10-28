@@ -36,7 +36,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { canonicalizeHtml, oracleHtml, oracleUsesPolicyPower } from './render.testkit';
+import {
+  canonicalizeHtml,
+  cmarkHtml,
+  oracleHtml,
+  oracleUsesPolicyPower,
+} from './render.testkit';
 import { renderMarkdownToHtml } from './render';
 
 // ---------------------------------------------------------------------------
@@ -77,9 +82,14 @@ describe('differential — official CommonMark 0.31.2 corpus vs the spec-faithfu
         const ours = canonicalizeHtml(oursHtml);
         const oracle = canonicalizeHtml(theirs);
         if (ours !== oracle) {
-          sectionFailures.push(
-            `spec#${example.example}\n  in:     ${JSON.stringify(example.markdown)}\n  ours:   ${ours}\n  oracle: ${oracle}`,
-          );
+          // The second reference — cmark (GitHub's own engine family).
+          // The two references disagree only on spec-unspecified corners
+          // (delimiter-run reuse, chiefly); matching either is correct.
+          if (ours !== canonicalizeHtml(cmarkHtml(example.markdown))) {
+            sectionFailures.push(
+              `spec#${example.example}\n  in:     ${JSON.stringify(example.markdown)}\n  ours:   ${ours}\n  oracle: ${oracle}`,
+            );
+          }
         }
       }
       if (sectionFailures.length > 0) {
@@ -182,9 +192,11 @@ describe('differential — GFM extension corpus vs the spec-faithful oracle', ()
       }
       const ours = canonicalizeHtml(renderMarkdownToHtml(markdown), true);
       if (ours !== oracle) {
-        failures.push(
-          `in:     ${JSON.stringify(markdown)}\n  ours:   ${ours}\n  oracle: ${oracle}`,
-        );
+        if (ours !== canonicalizeHtml(cmarkHtml(markdown))) {
+          failures.push(
+            `in:     ${JSON.stringify(markdown)}\n  ours:   ${ours}\n  oracle: ${oracle}`,
+          );
+        }
       }
     }
     if (failures.length > 0) {

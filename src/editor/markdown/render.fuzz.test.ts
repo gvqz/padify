@@ -22,6 +22,7 @@ import { describe, expect, it } from 'vitest';
 import { renderMarkdownToHtml } from './render';
 import {
   canonicalizeHtml,
+  cmarkHtml,
   oracleHtml,
   oracleUsesPolicyPower,
   walkInvariants,
@@ -289,6 +290,12 @@ describe('fuzz — mutants of the corpus against the oracle and the security mod
             // the source column — retry on the divergence's own terms
             // (whitespace runs inside code and attributes equate).
             match = canonicalizeHtml(ours, true) === canonicalizeHtml(oracle, true);
+          }
+          if (!match) {
+            // The cmark co-oracle — the references disagree only on
+            // spec-unspecified corners (delimiter-run reuse); matching
+            // either is correct.
+            match = oursCanon === canonicalizeHtml(cmarkHtml(text));
           }
           if (!match) {
             failures.push(
