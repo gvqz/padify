@@ -1,0 +1,120 @@
+/* -------------------------------------------------------------------------
+   The owned confirm/prompt dialog — the sweetalert2 replacement's face,
+   on the same recipe the library's overrides had converged on: elevated
+   surface, border token, radius-lg geometry, 600-weight title, muted
+   body, primary confirm (danger variant for destructive asks), quiet
+   cancel. Native <dialog> supplies the focus trap, Escape and top layer.
+   Imported by its module (src/ui/dialog.ts) so it rides the bundle once.
+   ---------------------------------------------------------------------- */
+
+dialog.vz-dialog {
+  width: min(92vw, 400px);
+  padding: 20px 24px 22px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-lg);
+  background: var(--vz-bg-elevated);
+  box-shadow: var(--vz-shadow-dialog);
+  color: var(--vz-fg);
+  font-family: inherit;
+}
+
+dialog.vz-dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+.vz-dialog-title {
+  margin: 0 0 6px;
+  color: var(--vz-fg);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.vz-dialog-text {
+  margin: 0 0 14px;
+  color: var(--vz-fg-muted);
+  font-size: 13.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.vz-dialog-input-row {
+  display: block;
+  margin: 0 0 14px;
+}
+
+.vz-dialog-input-label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--vz-fg-muted);
+  font-size: 12.5px;
+}
+
+.vz-dialog-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--vz-border-strong);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg);
+  color: var(--vz-fg);
+  font-family: inherit;
+  font-size: 13.5px;
+  outline: none;
+}
+
+.vz-dialog-input:focus-visible {
+  border-color: var(--vz-primary);
+}
+
+.vz-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.vz-dialog-cancel,
+.vz-dialog-confirm {
+  padding: 8px 18px;
+  border-radius: var(--vz-radius);
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease,
+    color var(--vz-dur) ease, transform 100ms ease;
+}
+
+.vz-dialog-cancel {
+  border: 1px solid var(--vz-border-strong);
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+}
+
+.vz-dialog-cancel:hover {
+  background: var(--vz-bg-subtle);
+}
+
+.vz-dialog-confirm {
+  border: 1px solid var(--vz-primary);
+  background: var(--vz-primary);
+  color: var(--vz-primary-fg);
+}
+
+.vz-dialog-confirm:hover {
+  background: var(--vz-primary-hover);
+}
+
+.vz-dialog-confirm:active,
+.vz-dialog-cancel:active {
+  transform: scale(0.98);
+}
+
+.vz-dialog-confirm.vz-dialog-danger {
+  border-color: var(--vz-danger);
+  background: var(--vz-danger);
+  color: #ffffff;
+}
+
+.vz-dialog-confirm.vz-dialog-danger:hover {
+  background: var(--vz-danger-hover);
+}

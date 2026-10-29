@@ -21,8 +21,8 @@ export interface NotepadUI {
   downloadNotesMarkdown: Q;
   downloadNotesPng: Q;
   downloadNotesSvg: Q;
-  splitViewButton: Q;
-  splitViewContainer: Q;
+  previewToggleButton: Q;
+  previewToggleContainer: Q;
   fontSize: Q;
   installApp: Q;
   lineHeight: Q;
@@ -124,8 +124,8 @@ export function selector(): AppSelector {
       downloadNotesMarkdown: selectById('downloadNotesMarkdown'),
       downloadNotesPng: selectById('downloadNotesPng'),
       downloadNotesSvg: selectById('downloadNotesSvg'),
-      splitViewButton: selectById('splitViewButton'),
-      splitViewContainer: selectById('splitViewContainer'),
+      previewToggleButton: selectById('previewToggleButton'),
+      previewToggleContainer: selectById('previewToggleContainer'),
       fontSize: selectById('fontSize'),
       installApp: selectById('installApp'),
       lineHeight: selectById('lineHeight'),

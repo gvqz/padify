@@ -1,8 +1,8 @@
 /**
  * Markdown notes — the SOURCE mode, end-to-end: the raw-markdown textarea
- * (the "normal typing" pane), the mode machine (visual ↔ source ↔ split ↔
- * preview), the source-mode toolbar grammar, keyboard behavior (list
- * continuation, Tab indent, Ctrl+B wrap) and the autosave round trip.
+ * (the note's editor and boot mode), the mode machine (source ↔ preview),
+ * the source-mode toolbar grammar, keyboard behavior (list continuation,
+ * Tab indent, Ctrl+B wrap) and the autosave round trip.
  */
 import { expect, test, type Page } from '@playwright/test';
 
@@ -16,68 +16,45 @@ async function newMarkdownNote(page: Page): Promise<void> {
 }
 
 test.describe('markdown source mode', () => {
-  test('the segmented control flips all four modes; every button agrees', async ({ page }) => {
-    await page.goto('/');
+  test('the segmented control flips both modes; every button agrees', async ({ page }) => {
     await newMarkdownNote(page);
 
-    const editor = page.locator('#note .ProseMirror');
-    await editor.click();
+    const source = page.locator('#note .markdown-source');
+    await source.click();
     await page.keyboard.type('# Modes');
 
-    // Visual is the boot mode.
-    await expect(page.locator('[data-md-view="edit"]')).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('#note .markdown-source')).toBeHidden();
-
-    // Source: the textarea owns the surface.
-    await page.locator('[data-md-view="source"]').click();
-    const source = page.locator('#note .markdown-source');
-    await expect(source).toBeVisible();
-    await expect(editor).toBeHidden();
+    // Source is the boot mode.
     await expect(page.locator('[data-md-view="source"]')).toHaveAttribute('aria-pressed', 'true');
-    await expect(source).toHaveValue(/# Modes/);
+    await expect(source).toBeVisible();
 
-    // Back to visual: the WYSIWYG returns with the same content.
-    await page.locator('[data-md-view="edit"]').click();
-    await expect(source).toBeHidden();
-    await expect(editor.locator('h1')).toHaveText('Modes');
-
-    // Preview: the renderer alone, full width.
+    // Preview: the renderer alone, full width; the command chrome parks.
     await page.locator('[data-md-view="preview"]').click();
     const preview = page.locator('#note .markdown-preview');
     await expect(preview).toBeVisible();
     await expect(source).toBeHidden();
-    await expect(editor).toBeHidden();
     await expect(preview.locator('h1')).toHaveText('Modes');
-    // Command chrome parks while the preview owns the surface.
     await expect(page.locator('#markdownToolbar [data-md-action="bold"]')).toBeDisabled();
+
+    // Back to source: the textarea returns with the same content.
+    await page.locator('[data-md-view="source"]').click();
+    await expect(source).toBeVisible();
+    await expect(preview).toBeHidden();
+    await expect(source).toHaveValue('# Modes');
   });
 
   test('Ctrl+K opens the link popover, not the shortcuts modal (issue #59)', async ({ page }) => {
-    await page.goto('/');
     await newMarkdownNote(page);
-    const editor = page.locator('#note .ProseMirror');
-    await editor.click();
-    await page.keyboard.type('docs link');
-
-    // Visual mode: the link popover, never the shortcuts modal.
-    await page.keyboard.press('Control+k');
-    await expect(page.locator('#markdownLinkPopover')).toBeVisible();
-    await expect(page.locator('#keyboardShortcutsModal')).not.toHaveClass(/in/);
-    await page.keyboard.press('Escape');
-
-    // Source mode: the same shortcut, same popover.
-    await page.locator('[data-md-view="source"]').click();
     const source = page.locator('#note .markdown-source');
     await source.click();
+    await page.keyboard.type('docs link');
+
     await page.keyboard.press('Control+k');
     await expect(page.locator('#markdownLinkPopover')).toBeVisible();
     await expect(page.locator('#keyboardShortcutsModal')).not.toHaveClass(/in/);
   });
 
   test('the toolbar Undo button works in source mode (issue #56)', async ({ page }) => {
-    await page.goto('/');
     await newMarkdownNote(page);
-    await page.locator('[data-md-view="source"]').click();
     const source = page.locator('#note .markdown-source');
     await source.click();
     // One insertText = one native undo transaction (per-key typing would
@@ -91,30 +68,25 @@ test.describe('markdown source mode', () => {
     await expect(source).toHaveValue('');
   });
 
-  test('raw markdown typed in source renders after a mode round trip', async ({ page }) => {
-    await page.goto('/');
+  test('raw markdown typed in source renders in the preview', async ({ page }) => {
     await newMarkdownNote(page);
 
-    await page.locator('[data-md-view="source"]').click();
     const source = page.locator('#note .markdown-source');
     await source.click();
     await page.keyboard.type('# Typed raw\n\nSome **bold** and a `code` span.');
 
-    // Back to visual: the WYSIWYG parses what was typed.
-    await page.locator('[data-md-view="edit"]').click();
-    const editor = page.locator('#note .ProseMirror');
-    await expect(editor.locator('h1')).toHaveText('Typed raw');
-    await expect(editor.locator('strong')).toHaveText('bold');
-    await expect(editor.locator('code')).toHaveText('code');
+    await page.locator('[data-md-view="preview"]').click();
+    const preview = page.locator('#note .markdown-preview');
+    await expect(preview.locator('h1')).toHaveText('Typed raw');
+    await expect(preview.locator('b')).toHaveText('bold');
+    await expect(preview.locator('code')).toHaveText('code');
   });
 
   test('Enter continues lists, Tab indents, and Ctrl+B wraps — GitHub grammar', async ({
     page,
   }) => {
-    await page.goto('/');
     await newMarkdownNote(page);
 
-    await page.locator('[data-md-view="source"]').click();
     const source = page.locator('#note .markdown-source');
     await source.click();
     await page.keyboard.type('- first item');
@@ -144,10 +116,8 @@ test.describe('markdown source mode', () => {
   });
 
   test('the toolbar speaks markdown in source mode', async ({ page }) => {
-    await page.goto('/');
     await newMarkdownNote(page);
 
-    await page.locator('[data-md-view="source"]').click();
     const source = page.locator('#note .markdown-source');
     await source.click();
     await page.keyboard.type('wrap me');
@@ -156,7 +126,6 @@ test.describe('markdown source mode', () => {
     await page.keyboard.press('Control+A');
     await page.locator('#markdownToolbar [data-md-action="bold"]').click();
     await expect(source).toHaveValue('**wrap me**');
-    // The caret returned to the pane (not the toolbar button).
     // Heading 2 prefixes the line through the block dropdown.
     await page.locator('#markdownToolbar [data-md-menu="block"]').click();
     await page.locator('#markdownToolbar [data-md-block="h2"]').click();
@@ -175,16 +144,16 @@ test.describe('markdown source mode', () => {
     await page.locator('#markdownToolbar [data-md-block="p"]').click();
     await page.keyboard.press('End');
     await page.locator('#markdownToolbar [data-md-action="table"]').click();
+    // The blank line is load-bearing: a table after a paragraph over a
+    // single newline is a lazy paragraph continuation and never parses.
     await expect(source).toHaveValue(
-      /\*\*wrap me\*\*\n\| Column 1 \| Column 2 \| Column 3 \|\n\| --- \| --- \| --- \|\n\| \| \| \|/,
+      /\*\*wrap me\*\*\n\n\| Column 1 \| Column 2 \| Column 3 \|\n\| --- \| --- | --- \|\n\| \| \| \|/,
     );
   });
 
   test('the source pane autosaves and reloads (the storage round trip)', async ({ page }) => {
-    await page.goto('/');
     await newMarkdownNote(page);
 
-    await page.locator('[data-md-view="source"]').click();
     const source = page.locator('#note .markdown-source');
     await source.click();
     await page.keyboard.type('# Persisted from source\n\n- typed raw');
@@ -192,25 +161,20 @@ test.describe('markdown source mode', () => {
 
     await page.reload();
     await page.waitForTimeout(1500);
-    // The note opens visual (the boot mode) with the persisted source.
-    const editor = page.locator('#note .ProseMirror');
-    await expect(editor.locator('h1')).toHaveText('Persisted from source');
-    await expect(editor.locator('li')).toHaveCount(1);
+    // The note reopens in the source (the boot mode) with the persisted
+    // words.
+    const reloaded = page.locator('#note .markdown-source');
+    await expect(reloaded).toHaveValue(/# Persisted from source\n\n- typed raw/);
   });
 
   test('double-Enter paragraph breaks stay clean in the preview (no <br /> leak)', async ({
     page,
   }) => {
-    await page.goto('/');
     await newMarkdownNote(page);
 
-    const editor = page.locator('#note .ProseMirror');
-    await editor.click();
-    await page.keyboard.type('# Title');
-    await page.keyboard.press('Enter');
-    await page.keyboard.press('Enter');
-    await page.keyboard.type('Body text');
-    await page.waitForTimeout(600);
+    const source = page.locator('#note .markdown-source');
+    await source.click();
+    await page.keyboard.type('# Title\n\nBody text');
 
     await page.locator('[data-md-view="preview"]').click();
     const preview = page.locator('#note .markdown-preview');
@@ -222,25 +186,33 @@ test.describe('markdown source mode', () => {
     await expect(preview).not.toContainText('<br');
   });
 
-  test('split keeps the source left and a live preview right', async ({ page }) => {
-    await page.goto('/');
+  test('the scroll carries across a source → preview → source round trip', async ({ page }) => {
     await newMarkdownNote(page);
 
-    await page.locator('[data-md-view="source"]').click();
     const source = page.locator('#note .markdown-source');
     await source.click();
-    await page.keyboard.type('# Split shows both');
+    await page.keyboard.insertText(
+      '# Top\n\n' + Array.from({ length: 60 }, (_, i) => `line ${i}`).join('\n\n'),
+    );
 
-    await page.locator('[data-md-view="split"]').click();
+    // Scroll the source near the bottom.
+    await source.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    await page.locator('[data-md-view="preview"]').click();
     const preview = page.locator('#note .markdown-preview');
-    await expect(source).toBeVisible();
-    await expect(preview).toBeVisible();
-    await expect(preview.locator('h1')).toHaveText('Split shows both');
+    await expect(preview.locator('h1')).toHaveText('Top');
+    // The preview opened near ITS bottom (the fraction carried over).
+    const fraction = await preview.evaluate((el) =>
+      el.scrollHeight - el.clientHeight > 0 ? el.scrollTop / (el.scrollHeight - el.clientHeight) : 1,
+    );
+    expect(fraction).toBeGreaterThan(0.5);
 
-    // Typing in the source pane updates the preview a beat later.
-    await source.click();
-    await page.keyboard.press('End');
-    await page.keyboard.type(' — live');
-    await expect(preview.locator('h1')).toHaveText('Split shows both — live', { timeout: 3000 });
+    // And back: the source restores its own position.
+    await page.locator('[data-md-view="source"]').click();
+    const sourceFraction = await source.evaluate(
+      (el) => (el.scrollTop ?? 0) / Math.max(1, el.scrollHeight - el.clientHeight),
+    );
+    expect(sourceFraction).toBeGreaterThan(0.5);
   });
 });

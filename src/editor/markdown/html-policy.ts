@@ -162,7 +162,7 @@ export function sanitizeHtmlTag(raw: string): string | null {
   // The interior: everything between the name and the final bracket —
   // a trailing self-closing slash is decoration HTML ignores for
   // non-void elements, and the rebuild never re-emits it.
-  let rest = match[3]!.slice(0, -1).replace(/\/\s*$/, '');
+  const rest = match[3]!.slice(0, -1).replace(/\/\s*$/, '');
 
   const kept: string[] = [];
   const seen = new Set<string>();

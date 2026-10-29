@@ -3,71 +3,51 @@
  * editor/markdown/surface.ts, toolbar.ts and the ModelPort inert switch
  * they ride on.
  *
- * Everything here runs a REAL Milkdown editor in jsdom (the probe proved
- * create/replaceAll/getMarkdown/dispatch all work headlessly), a real
- * TabManager where noted, and the REAL shell markup for the toolbar
- * (read from disk — markup drift fails here, the rich toolbar suite's
- * discipline). The pins that matter most:
+ * Everything here runs the REAL surface (a textarea + the owned
+ * renderer), a real TabManager against the REAL shell markup (read from
+ * disk — markup drift fails here, the rich toolbar suite's discipline).
+ * The pins that matter most:
  *
  *  • THE CONTRACT — display paints without persisting, capture answers
  *    the markdown source, visibleText answers the RENDERED projection,
  *    commit applies and leaves persistence to the caller, clear empties.
- *  • THE ANNOUNCE DISCIPLINE — opening a note (replaceAll) never fires
- *    the host input event; a USER transaction always does. That signal
- *    is the app's entire autosave chain.
- *  • THE SECURITY MODEL — the note is data, never markup: raw HTML in
- *    the source renders as escaped text, javascript: link hrefs never
- *    reach the DOM, and the only elements under the host are the ones
- *    ProseMirror's schema generated.
+ *  • THE ANNOUNCE DISCIPLINE — opening a note never fires the host
+ *    input event; a USER edit (typing, checkbox toggles) always does.
+ *    That signal is the app's entire autosave chain.
+ *  • THE SECURITY MODEL — the note is data run through the renderer: raw
+ *    HTML meets the policy (benign tags rebuilt, everything else
+ *    escaped), javascript: hrefs never reach the DOM, and the preview's
+ *    only live gestures are the task checkbox and the equation click.
+ *  • THE MODES — source is the working mode; preview renders the owned
+ *    renderer's output; every new display comes back to the source.
  *  • THE SEAMS — surface insertText (the picker's path), the toolbar's
- *    command dispatch and pressed states, the view toggle's owned
- *    renderer preview, and the port parking while the surface owns the
- *    host.
+ *    command dispatch and pressed states, the TabManager autosave chain,
+ *    the HTML export's rendered body, and the port parking.
  */
 import 'fake-indexeddb/auto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-// jsdom's Range lacks geometry — PM's scrollToSelection measures it when
-// a toolbar action hands focus back to the view (same shim the chrome
-// and features suites carry).
-if (typeof Range.prototype.getClientRects !== 'function') {
-  Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
-  Range.prototype.getBoundingClientRect = () =>
-    ({
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      width: 0,
-      height: 0,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    }) as DOMRect;
-}
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   MarkdownNoteSurface,
-  markdownEditorHandle,
+  markdownSelectionStateNow,
+  markdownSourceActive,
+  markdownSourceTextarea,
   markdownViewMode,
   onMarkdownSelection,
   onMarkdownViewMode,
   setMarkdownViewMode,
 } from './surface';
-import { Slice } from '@milkdown/kit/prose/model';
-import { TextSelection } from '@milkdown/kit/prose/state';
-import { undo } from '@milkdown/kit/prose/history';
-import { getMarkdown } from '@milkdown/kit/utils';
 import {
-  runMarkdownToolbarAction,
   initMarkdownToolbar,
   resetMarkdownToolbarForTests,
+  runMarkdownToolbarAction,
 } from './toolbar';
 import { noteSurfaceForKind } from '../surface';
 import {
   getActiveNoteExportBody,
+  getTabManager,
   insertTextIntoActiveNote,
   setTabManager,
   TabManager,
@@ -77,918 +57,348 @@ import { $ } from '../../lib/q';
 import { ModelPort } from '../model-port';
 import { sanitizeNoteHtml } from '../storage-subset';
 
-// Swal is modal UI — mocked so close-with-content paths can be driven.
-vi.mock('sweetalert2', () => ({
-  default: { fire: vi.fn(() => Promise.resolve({ isConfirmed: false })) },
-}));
+const surface = new MarkdownNoteSurface();
+const noteSurface = noteSurfaceForKind('text');
 
-// jsdom lacks scrollIntoView (rendering-dependent); TabManager calls it
-// best-effort after addTab.
+// jsdom lacks scrollIntoView (rendering-dependent); the manager calls it
+// on every tab switch — shim it the tabs suite's way.
 if (typeof Element.prototype.scrollIntoView !== 'function') {
   Object.defineProperty(Element.prototype, 'scrollIntoView', {
-    value: () => {},
     configurable: true,
+    writable: true,
+    value: () => undefined,
   });
 }
 
-const surface = new MarkdownNoteSurface();
-
-/** Lets the listener plugin's 200ms debounce run to completion. */
-async function settled(ms = 300): Promise<void> {
-  await new Promise((resolveTimeout) => setTimeout(resolveTimeout, ms));
+/** The REAL shell markup — TabManager and the toolbar both need it. */
+function mountShell(): void {
+  document.body.innerHTML = readFileSync(
+    resolve(process.cwd(), 'src/ui/editor-shell.html'),
+    'utf-8',
+  );
+  const toast = document.createElement('div');
+  toast.id = 'toast';
+  document.body.append(toast);
 }
 
-function freshHost(): HTMLElement {
-  const host = document.createElement('div');
-  host.id = 'note';
-  host.setAttribute('contenteditable', 'true');
-  document.body.append(host);
-  return host;
+async function bootedManager(): Promise<TabManager> {
+  const hostEl = document.getElementById('note') as HTMLElement;
+  const manager = new TabManager($(hostEl));
+  setTabManager(manager);
+  await manager.init();
+  manager.addTab(true, 'markdown');
+  return manager;
 }
 
-/** The editor's ready promise (mount is async) — awaited per test. */
-async function ready(): Promise<void> {
-  const deadline = Date.now() + 5000;
-  while (!markdownEditorHandle() && Date.now() < deadline) {
-    await new Promise((resolveTimeout) => setTimeout(resolveTimeout, 20));
+function host(): HTMLElement {
+  const el = document.getElementById('note');
+  if (!el) {
+    throw new Error('no #note host');
   }
-  expect(markdownEditorHandle()).not.toBeNull();
+  return el;
 }
 
-/** Types text at the end of the doc the way a keystroke would. */
-async function typeAtEnd(text: string): Promise<void> {
-  const handle = markdownEditorHandle();
-  if (!handle) {
-    throw new Error('no live markdown editor');
+function source(): HTMLTextAreaElement {
+  const ta = host().querySelector<HTMLTextAreaElement>('textarea.markdown-source');
+  if (!ta) {
+    throw new Error('no source pane mounted');
   }
-  const { view } = handle;
-  const pos = view.state.doc.content.size - 1;
-  view.dispatch(view.state.tr.insertText(text, pos));
+  return ta;
 }
 
-beforeEach(() => {
-  document.body.innerHTML = '';
-});
-
-afterEach(() => {
-  // Park the view mode back to edit; the next test's display() wants a
-  // clean slate (display resets it, but capture-only tests may not call
-  // display again).
-  if (markdownViewMode() !== 'edit') {
-    setMarkdownViewMode('edit');
+function preview(): HTMLElement {
+  const el = host().querySelector<HTMLElement>('.markdown-preview');
+  if (!el) {
+    throw new Error('no preview pane mounted');
   }
+  return el;
+}
+
+beforeEach(async () => {
+  resetStorageForTests();
+  resetMarkdownToolbarForTests();
+  document.body.innerHTML = '<div id="note" contenteditable="true"></div>';
+  await new Promise((resolveTimeout) => setTimeout(resolveTimeout, 0));
+  localStorage.clear();
+  await storageReady();
 });
 
 // ---------------------------------------------------------------------------
 // The contract
 // ---------------------------------------------------------------------------
 
-describe('MarkdownNoteSurface — the surface contract', () => {
-  it('is registered for the text kind and is editable', () => {
-    expect(noteSurfaceForKind('text').editable).toBe(true);
-    expect(noteSurfaceForKind('text')).toBeInstanceOf(MarkdownNoteSurface);
+describe('the Markdown surface (characterization)', () => {
+  it('is the registered surface for the text content kind', () => {
+    expect(noteSurface).toBeInstanceOf(MarkdownNoteSurface);
   });
 
-  it('display mounts a wrapper, parks the host editable, and captures back the source', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '# Hello\n\nSome **bold** text.' });
-    await ready();
+  it('display mounts a textarea + preview; capture answers the source; display never announces', () => {
+    const events: string[] = [];
+    host().addEventListener('input', () => events.push('input'));
 
-    expect(host.getAttribute('contenteditable')).toBe('false');
-    const wrapper = host.querySelector('.markdown-surface');
-    expect(wrapper).not.toBeNull();
-    expect(host.querySelector('.ProseMirror')).not.toBeNull();
+    surface.display(host(), { content: '# Hello\n\nworld **bold**' });
+    expect(source().value).toBe('# Hello\n\nworld **bold**');
+    expect(preview().hidden).toBe(true);
+    expect(events).toEqual([]);
 
-    const captured = surface.capture(host);
-    expect(captured).toContain('# Hello');
-    expect(captured).toContain('**bold**');
+    expect(surface.capture(host())).toBe('# Hello\n\nworld **bold**');
   });
 
-  it('a second markdown note reuses the mounted editor (no flicker, content swapped)', async () => {
-    const host = freshHost();
-    surface.display(host, { content: 'first note' });
-    await ready();
-    const wrapper = host.querySelector('.markdown-surface');
+  it('typing announces through the host (the autosave chain)', () => {
+    surface.display(host(), { content: '' });
+    const events: Event[] = [];
+    host().addEventListener('input', (e) => events.push(e));
 
-    surface.display(host, { content: '# second' });
-    await settled();
-    expect(host.querySelector('.markdown-surface')).toBe(wrapper);
-    expect(surface.capture(host)).toContain('# second');
+    source().focus();
+    source().value = 'typed';
+    source().dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(events).toHaveLength(1);
+    expect(surface.capture(host())).toBe('typed');
   });
 
-  it('after the html surface repaints the host, the next display rebuilds', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '# markdown' });
-    await ready();
-
-    // The html surface taking the host back = the port painting over it.
-    const port = new ModelPort(host, { sanitize: sanitizeNoteHtml });
-    port.renderHtml('<p>an html note</p>');
-    expect(host.querySelector('.markdown-surface')).toBeNull();
-
-    surface.display(host, { content: '# back to markdown' });
-    await ready();
-    expect(surface.capture(host)).toContain('# back to markdown');
-  });
-
-  it('capture answers null when the surface is not mounted on that host', async () => {
-    const host = freshHost();
-    surface.display(host, { content: 'x' });
-    await ready();
-
-    const stranger = document.createElement('div');
-    expect(surface.capture(stranger)).toBeNull();
-    expect(surface.capture(null)).toBeNull();
-  });
-
-  it('visibleText answers the RENDERED projection — asterisks never count as words', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '# Title\n\nSome **bold** and *plain* text.' });
-    await ready();
-    await settled();
-
-    const text = surface.visibleText(host, {
-      content: '# Title\n\nSome **bold** and *plain* text.',
+  it('visibleText answers the RENDERED projection', () => {
+    surface.display(host(), { content: '# Heading\n\nsome *emphasis* and `code`' });
+    const text = surface.visibleText(host(), {
+      content: '# Heading\n\nsome *emphasis* and `code`',
     });
-    expect(text).toContain('Title');
-    expect(text).toContain('bold');
-    expect(text).not.toContain('**');
+    expect(text).toContain('Heading');
+    expect(text).toContain('some emphasis and code');
     expect(text).not.toContain('*');
+    expect(text).not.toContain('`');
   });
 
-  it('an empty note projects to empty text (the pill never counts scaffolding)', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '' });
-    await ready();
-    expect(surface.visibleText(host, { content: '' })).toBe('');
+  it('commit applies wholesale and leaves persistence to the caller', () => {
+    surface.display(host(), { content: 'first' });
+    expect(surface.commit(host(), 'second')).toBe(false);
+    expect(surface.capture(host())).toBe('second');
   });
 
-  it('commit applies the content and returns false — the caller owns the persist', async () => {
-    const host = freshHost();
-    surface.display(host, { content: 'before' });
-    await ready();
-
-    expect(surface.commit(host, '# after')).toBe(false);
-    await settled();
-    expect(surface.capture(host)).toContain('# after');
+  it('clear empties the editor; a fresh pane per wholesale change resets undo isolation', () => {
+    surface.display(host(), { content: 'note one words' });
+    const first = source();
+    surface.clear(host());
+    expect(surface.capture(host())).toBe('');
+    expect(source()).not.toBe(first); // fresh textarea, fresh native undo
   });
 
-  it('clear empties the editor while keeping the surface mounted', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '# to be cleared' });
-    await ready();
-
-    surface.clear(host);
-    await settled();
-    expect(host.querySelector('.markdown-surface')).not.toBeNull();
-    const captured = surface.capture(host) ?? '';
-    expect(captured.trim()).toBe('');
+  it('insertText rides the textarea path (the picker / dictation seam)', () => {
+    surface.display(host(), { content: 'hello' });
+    const ta = source();
+    ta.focus();
+    ta.setSelectionRange(5, 5);
+    expect(surface.insertText(host(), ' world')).toBe(true);
+    expect(surface.capture(host())).toBe('hello world');
   });
 
-  it('display with a null note paints an empty editor', async () => {
-    const host = freshHost();
-    surface.display(host, null);
-    await ready();
-    expect((surface.capture(host) ?? '').trim()).toBe('');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// The announce discipline
-// ---------------------------------------------------------------------------
-
-describe('MarkdownNoteSurface — the input announce contract', () => {
-  it('OPENING a note never fires the host input event (display is not an edit)', async () => {
-    const host = freshHost();
-    const inputs: Event[] = [];
-    host.addEventListener('input', (event) => inputs.push(event));
-
-    surface.display(host, { content: '# just opened' });
-    await ready();
-    await settled();
-
-    expect(inputs).toHaveLength(0);
-  });
-
-  it('a USER transaction fires the host input event (the autosave signal)', async () => {
-    const host = freshHost();
-    const inputs: Event[] = [];
-    host.addEventListener('input', (event) => inputs.push(event));
-
-    surface.display(host, { content: 'seed' });
-    await ready();
-    await settled();
-    inputs.length = 0;
-
-    await typeAtEnd(' typed');
-    await settled();
-
-    expect(inputs.length).toBeGreaterThanOrEqual(1);
-    expect(surface.capture(host)).toContain('seed typed');
-  });
-
-  it('clear stays silent too (the manager persists the empty note itself)', async () => {
-    const host = freshHost();
-    const inputs: Event[] = [];
-    host.addEventListener('input', (event) => inputs.push(event));
-
-    surface.display(host, { content: 'will be cleared' });
-    await ready();
-    await settled();
-    inputs.length = 0;
-
-    surface.clear(host);
-    await settled();
-    expect(inputs).toHaveLength(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// The security model — the note is data, never markup
-// ---------------------------------------------------------------------------
-
-describe('MarkdownNoteSurface — the security model', () => {
-  it('raw HTML in the source renders as ESCAPED TEXT, never as live markup', async () => {
-    const host = freshHost();
-    surface.display(host, {
-      content: [
-        '<img src=x onerror=alert(1)>',
-        '<script>alert("xss")</' + 'script>',
-        '<iframe src="javascript:alert(2)"></iframe>',
-        '<b>bold?</b>',
-      ].join('\n\n'),
-    });
-    await ready();
-    await settled();
-
-    expect(host.querySelector('img[src], iframe, script')).toBeNull();
-    expect(host.querySelector('[onerror]')).toBeNull();
-    expect(host.innerHTML).toContain('data-type="html"'); // literal text
-    expect(host.innerHTML).toContain('&lt;img src=x');
-  });
-
-  it('javascript: link hrefs never reach the live DOM (text survives, target drops)', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '[click me](javascript:alert(3))' });
-    await ready();
-    await settled();
-
-    const anchor = host.querySelector('a');
-    expect(anchor?.textContent).toBe('click me');
-    expect(anchor?.getAttribute('href') ?? '').not.toContain('javascript:');
-    expect(host.innerHTML).not.toContain('href="javascript:');
-  });
-
-  it('the source round-trips as data — capture keeps what was typed', async () => {
-    const host = freshHost();
-    const source = '# Title\n\n- one\n- two\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\n~~gone~~';
-    surface.display(host, { content: source });
-    await ready();
-    await settled();
-
-    const captured = surface.capture(host) ?? '';
-    expect(captured).toContain('# Title');
-    // Milkdown's serializer speaks '*' bullets — the retired Markdown
-    // page's own convention. Semantics, not bytes, round-trip.
-    expect(captured).toContain('* one');
-    expect(captured).toContain('~~gone~~');
-    expect(captured).toContain('| a | b |');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// The seams
-// ---------------------------------------------------------------------------
-
-describe('MarkdownNoteSurface — the insertText seam', () => {
-  it('inserts plain text at the caret and announces it as an edit', async () => {
-    const host = freshHost();
-    const inputs: number[] = [];
-    host.addEventListener('input', () => inputs.push(inputs.length));
-
-    surface.display(host, { content: 'base' });
-    await ready();
-    await settled();
-    inputs.length = 0;
-
-    // The wholesale apply parks the caret at the doc's first text position
-    // (the deterministic open contract) — the insertion lands there.
-    expect(surface.insertText(host, ' ☺')).toBe(true);
-    await settled();
-    expect(surface.capture(host)).toContain('☺base');
-    expect(inputs.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('refuses when the surface is not mounted on that host', () => {
-    const stranger = document.createElement('div');
-    expect(surface.insertText(stranger, 'x')).toBe(false);
-    expect(surface.insertText(null, 'x')).toBe(false);
-  });
-
-  it('focusTarget answers the ProseMirror root (the element that can take the caret)', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '# Title' });
-    await ready();
-
-    const target = surface.focusTarget?.(host) ?? null;
-    expect(target).not.toBeNull();
-    expect(target!.classList.contains('ProseMirror')).toBe(true);
-    expect(host.contains(target!)).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// The plain-text paste contract
-// ---------------------------------------------------------------------------
-
-describe('the plain-text paste contract', () => {
-  /**
-   * The harness drives the REAL prop chain via someProp — direct props
-   * first (the surface's plain-text handler), then the clipboard plugin.
-   * That is exactly the order a real paste meets, so the assertions pin
-   * the OBSERVABLE outcome: what landed in the document, and who took it.
-   */
-
-  /** A minimal clipboard event double — the handlers read getData only. */
-  const pasteEvent = (flavors: Record<string, string>): ClipboardEvent =>
-    ({
-      clipboardData: { getData: (type: string) => flavors[type] ?? '' },
-    }) as unknown as ClipboardEvent;
-
-  type View = NonNullable<ReturnType<typeof markdownEditorHandle>>['view'];
-
-  /** Runs the paste chain the way prosemirror-view's doPaste would. */
-  function runPaste(view: View, event: ClipboardEvent): boolean {
-    let handled = false;
-    view.someProp('handlePaste', (f) => {
-      handled = f(view, event, Slice.empty) === true;
-      return handled;
-    });
-    return handled;
-  }
-
-  /** The document's plain text, blocks separated by \n\n. */
-  function docText(view: View): string {
-    return view.state.doc.textBetween(0, view.state.doc.content.size, '\n\n');
-  }
-
-  /** Moves the caret to the very end of the doc (a text position). */
-  function caretAtEnd(view: View): void {
-    const end = view.state.doc.content.size - 1;
-    view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(end), -1)));
-  }
-
-  it('pastes plain text LITERALLY — markdown syntax survives as content', async () => {
-    const host = freshHost();
-    surface.display(host, { content: 'before' });
-    await ready();
-    const { view } = markdownEditorHandle()!;
-    caretAtEnd(view);
-
-    const handled = runPaste(
-      view,
-      pasteEvent({ 'text/plain': '# not a heading\n- not a list\n**not bold**' }),
-    );
-    expect(handled).toBe(true);
-
-    // Parsed markdown would have CONSUMED the markers (a heading, a list,
-    // bold). Literal paste keeps every character the user pasted — the
-    // doc TEXT is the truth (the serialized source additionally escapes).
-    const text = docText(view);
-    expect(text).toContain('# not a heading');
-    expect(text).toContain('- not a list');
-    expect(text).toContain('**not bold**');
-  });
-
-  it('multi-line plain text becomes paragraphs; the first merges with the caret line', async () => {
-    const host = freshHost();
-    surface.display(host, { content: 'first' });
-    await ready();
-    const { view } = markdownEditorHandle()!;
-    caretAtEnd(view);
-
-    expect(runPaste(view, pasteEvent({ 'text/plain': 'second\nthird' }))).toBe(true);
-
-    // The caret sat at the end of `first`, so the first pasted line joins
-    // it (the shape PM's own plain-text path produces); the rest are
-    // paragraphs. One transaction — one undo step.
-    expect(docText(view)).toBe('firstsecond\n\nthird');
-
-    undo(view.state, view.dispatch);
-    expect(docText(view)).toBe('first');
-  });
-
-  it('a rich (text/html) clip falls through — the clipboard plugin keeps its path', async () => {
-    const host = freshHost();
-    surface.display(host, { content: 'target' });
-    await ready();
-    const { view } = markdownEditorHandle()!;
-    caretAtEnd(view);
-
-    // Handled=true downstream is fine — the point is that the PLAIN text
-    // was never inserted literally (the plugin's HTML→markdown path owns
-    // rich clips).
-    runPaste(
-      view,
-      pasteEvent({ 'text/plain': '[x](https://example.com)', 'text/html': '<b>x</b>' }),
-    );
-    expect(docText(view)).not.toContain('[x](https://example.com)');
-  });
-
-  it('a VS Code clip with a language becomes a code block carrying that language', async () => {
-    const host = freshHost();
-    surface.display(host, { content: 'target' });
-    await ready();
-    const { view } = markdownEditorHandle()!;
-    caretAtEnd(view);
-
-    // Milkdown's clipboard plugin only honors Lexical's `l-editor-data`
-    // flavor for its code-block path — a VS Code clip left to it falls
-    // into the markdown parser and mangles code into paragraphs. The
-    // surface owns VS Code clips itself.
-    const handled = runPaste(
-      view,
-      pasteEvent({
-        'text/plain': 'const x = 1;\nconst y = 2;',
-        'vscode-editor-data': JSON.stringify({ mode: 'typescript' }),
-      }),
-    );
-    expect(handled).toBe(true);
-
-    const blocks: { name: string; language?: string; text?: string }[] = [];
-    view.state.doc.forEach((node) => {
-      blocks.push({ name: node.type.name, language: node.attrs.language, text: node.textContent });
-    });
-    const codeBlock = blocks.find((block) => block.name === 'code_block');
-    expect(codeBlock).toEqual({
-      name: 'code_block',
-      language: 'typescript',
-      text: 'const x = 1;\nconst y = 2;',
-    });
-    // Never a paragraph — the paste must not markdown-parse the code.
-    expect(
-      blocks.some((block) => block.name === 'paragraph' && block.text!.includes('const x')),
-    ).toBe(false);
-  });
-
-  it('a language-less VS Code clip (plaintext mode) inserts literally like any plain clip', async () => {
-    const host = freshHost();
-    surface.display(host, { content: 'first' });
-    await ready();
-    const { view } = markdownEditorHandle()!;
-    caretAtEnd(view);
-
-    const handled = runPaste(
-      view,
-      pasteEvent({
-        'text/plain': 'second\nthird',
-        'vscode-editor-data': JSON.stringify({ mode: 'plaintext' }),
-      }),
-    );
-    expect(handled).toBe(true);
-    expect(docText(view)).toBe('firstsecond\n\nthird');
-  });
-
-  it('a Lexical clip (l-editor-data) becomes a code block carrying that language', async () => {
-    const host = freshHost();
-    surface.display(host, { content: 'target' });
-    await ready();
-    const { view } = markdownEditorHandle()!;
-    caretAtEnd(view);
-
-    // The plugin's own l-editor-data path has the same geometry bug (the
-    // block lands empty, the code types into the paragraph) — the surface
-    // owns editor clips of both flavors itself.
-    const handled = runPaste(
-      view,
-      pasteEvent({
-        'text/plain': 'const x = 1;',
-        'l-editor-data': JSON.stringify({ mode: 'typescript' }),
-      }),
-    );
-    expect(handled).toBe(true);
-    const blocks: { name: string; text: string }[] = [];
-    view.state.doc.forEach((node) => {
-      blocks.push({ name: node.type.name, text: node.textContent });
-    });
-    expect(blocks).toContainEqual({ name: 'code_block', text: 'const x = 1;' });
-    expect(
-      blocks.some((block) => block.name === 'paragraph' && block.text.includes('const x')),
-    ).toBe(false);
-  });
-
-  it('a plain clip at a code-block caret falls through — the native path inserts it literally', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '```\n(code)\n```' });
-    await ready();
-    const { view } = markdownEditorHandle()!;
-
-    // Caret inside the code block.
-    let codePos = 0;
-    view.state.doc.descendants((node, p) => {
-      if (node.type.name === 'code_block' && !codePos) {
-        codePos = p + 2;
-      }
-      return true;
-    });
-    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, codePos)));
-    expect(view.state.selection.$from.node().type.spec.code).toBe(true);
-
-    // Nothing claims the paste (handler skips, the plugin defers to the
-    // native path for code) — the doc answers untouched here.
-    const before = docText(view);
-    const handled = runPaste(view, pasteEvent({ 'text/plain': '# pasted' }));
-    expect(handled).toBe(false);
-    expect(docText(view)).toBe(before);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// The per-note undo reset (the rapid-switching corruption guard)
-// ---------------------------------------------------------------------------
-
-describe('the per-note undo reset', () => {
-  it('undo never reaches across notes — switching resets the history', async () => {
-    const host = freshHost();
-    const inputs: number[] = [];
-    host.addEventListener('input', () => inputs.push(inputs.length));
-
-    surface.display(host, { content: 'alpha content' });
-    await ready();
-    await typeAtEnd('-edited');
-    await settled();
-
-    // Switch: the same editor instance re-applies another note's content.
-    surface.display(host, { content: 'beta content' });
-    await settled();
-    inputs.length = 0;
-
-    const { view } = markdownEditorHandle()!;
-    const before = view.state.doc.textBetween(0, view.state.doc.content.size);
-    expect(before).toBe('beta content');
-
-    // The Mod-z a user presses right after switching (the old behaviour
-    // resurrected alpha's content here — then autosaved it).
-    undo(view.state, view.dispatch);
-    expect(view.state.doc.textBetween(0, view.state.doc.content.size)).toBe('beta content');
-    // A wholesale apply (open a note) must not announce an edit either.
-    expect(inputs.length).toBe(0);
-  });
-
-  it('undo still works WITHIN the note after the reset', async () => {
-    const host = freshHost();
-    surface.display(host, { content: 'beta content' });
-    await ready();
-    await settled();
-
-    await typeAtEnd('-more');
-    await settled();
-    expect(surface.capture(host)).toContain('beta content-more');
-
-    const { view } = markdownEditorHandle()!;
-    undo(view.state, view.dispatch);
-    expect(surface.capture(host)).toContain('beta content');
-    expect(surface.capture(host)).not.toContain('-more');
-  });
-});
-
-describe('the view toggle — preview is the owned renderer', () => {
-  it('preview swaps to the renderer output and back to the editor', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '# Read me\n\nSome *emphasis*.' });
-    await ready();
-    await settled();
-
+  it('focusTarget is the textarea in source mode, null in preview', () => {
+    surface.display(host(), { content: 'x' });
+    expect(surface.focusTarget(host())).toBe(source());
     setMarkdownViewMode('preview');
+    expect(surface.focusTarget(host())).toBeNull();
+    setMarkdownViewMode('source');
+  });
+
+  it('dismiss tears the surface down (the next note repaints the host)', () => {
+    surface.display(host(), { content: 'x' });
+    expect(markdownSourceTextarea()).not.toBeNull();
+    surface.dismiss(host());
+    expect(markdownSourceTextarea()).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The modes
+// ---------------------------------------------------------------------------
+
+describe('the source / preview modes', () => {
+  it('preview renders the owned renderer output; the textarea hides but keeps its value', () => {
+    surface.display(host(), { content: '# Title\n\n- [ ] task' });
+    setMarkdownViewMode('preview');
+
     expect(markdownViewMode()).toBe('preview');
+    expect(preview().hidden).toBe(false);
+    expect(source().hidden).toBe(true);
+    expect(preview().innerHTML).toContain('<h1>Title</h1>');
+    expect(preview().innerHTML).toContain('checkbox');
+    // The textarea stays mounted with its value — the flip back is free.
+    expect(source().value).toBe('# Title\n\n- [ ] task');
 
-    const preview = host.querySelector('.markdown-preview') as HTMLElement;
-    expect(preview?.hidden).toBe(false);
-    expect(preview?.querySelector('h1')?.textContent).toBe('Read me');
-    // The editor stands down while the preview owns the surface.
-    expect(
-      host.querySelector('.markdown-surface')?.classList.contains('markdown-preview-mode'),
-    ).toBe(true);
-
-    setMarkdownViewMode('edit');
-    expect(markdownViewMode()).toBe('edit');
-    expect(preview.hidden).toBe(true);
-    expect(
-      host.querySelector('.markdown-surface')?.classList.contains('markdown-preview-mode'),
-    ).toBe(false);
+    setMarkdownViewMode('source');
+    expect(preview().hidden).toBe(true);
+    expect(source().hidden).toBe(false);
+    expect(markdownViewMode()).toBe('source');
   });
 
-  it('preview renders math through the app KaTeX pass', async () => {
-    const host = freshHost();
-    surface.display(host, { content: 'Equation: $x^2$' });
-    await ready();
-    await settled();
-
+  it('every new display comes back to the source (preview is a reading gesture)', () => {
+    surface.display(host(), { content: 'one' });
     setMarkdownViewMode('preview');
-    const preview = host.querySelector('.markdown-preview') as HTMLElement;
-    expect(preview.querySelectorAll('.katex').length).toBeGreaterThanOrEqual(1);
-    setMarkdownViewMode('edit');
-  });
-});
-
-describe('the view toggle — split is the working mode', () => {
-  it('split shows BOTH panes and renders the preview from the live source', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '# Side by side\n\nSome **bold** text.' });
-    await ready();
-    await settled();
-
-    setMarkdownViewMode('split');
-    expect(markdownViewMode()).toBe('split');
-
-    const root = host.querySelector('.markdown-surface') as HTMLElement;
-    const preview = host.querySelector('.markdown-preview') as HTMLElement;
-    // Both panes on screen: the editor stays, the preview joins it.
-    expect(root.classList.contains('markdown-split-mode')).toBe(true);
-    expect(preview.hidden).toBe(false);
-    expect(host.querySelector('.ProseMirror')).not.toBeNull();
-    expect(preview.querySelector('h1')?.textContent).toBe('Side by side');
-    expect(preview.querySelector('b')?.textContent).toBe('bold');
-
-    setMarkdownViewMode('edit');
-    expect(root.classList.contains('markdown-split-mode')).toBe(false);
-    expect(preview.hidden).toBe(true);
+    surface.display(host(), { content: 'two' });
+    expect(markdownViewMode()).toBe('source');
+    expect(source().value).toBe('two');
   });
 
-  it('split re-renders the pane after a SOURCE edit — a beat behind the typing', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '# First' });
-    await ready();
-    await settled();
-
-    setMarkdownViewMode('split');
-    const preview = host.querySelector('.markdown-preview') as HTMLElement;
-    expect(preview.querySelector('h1')?.textContent).toBe('First');
-
-    // A user edit in the source pane (the split's editing pane): value +
-    // the input event (jsdom has no execCommand — the applyEdit fallback
-    // fires the same signal). The 250ms debounce must run before the
-    // pane updates.
-    const source = host.querySelector('.markdown-source') as HTMLTextAreaElement;
-    source.value = '# First and live';
-    source.dispatchEvent(new Event('input', { bubbles: true }));
-    await settled(700);
-    expect(preview.querySelector('h1')?.textContent).toBe('First and live');
-
-    setMarkdownViewMode('edit');
-  });
-
-  it('split SURVIVES note switches; preview still resets (the working/reading split)', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '# Note one' });
-    await ready();
-    await settled();
-
-    setMarkdownViewMode('split');
-    expect(markdownViewMode()).toBe('split');
-
-    // A display with fresh content (the note-switch path) keeps split.
-    surface.display(host, { content: '# Note two' });
-    await settled(500);
-    expect(markdownViewMode()).toBe('split');
-    const preview = host.querySelector('.markdown-preview') as HTMLElement;
-    expect(preview.hidden).toBe(false);
-    expect(preview.querySelector('h1')?.textContent).toBe('Note two');
-
-    // Preview, by contrast, is a reading gesture — display resets it to
-    // the LAST WORKING mode (split, the mode preview interrupted).
-    setMarkdownViewMode('preview');
-    surface.display(host, { content: '# Note three' });
-    await settled(300);
-    expect(markdownViewMode()).toBe('split');
-    const previewThree = host.querySelector('.markdown-preview') as HTMLElement;
-    expect(previewThree.hidden).toBe(false);
-    expect(previewThree.querySelector('h1')?.textContent).toBe('Note three');
-  });
-
-  it('a fresh mount re-applies split (the wrapper starts in the editing layout)', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '# Before the repaint' });
-    await ready();
-    await settled();
-
-    setMarkdownViewMode('split');
-
-    // The html surface repaints the host (evicting the wrapper).
-    const port = new ModelPort(host, { sanitize: sanitizeNoteHtml });
-    port.renderHtml('<p>an html note</p>');
-    expect(host.querySelector('.markdown-surface')).toBeNull();
-
-    surface.display(host, { content: '# Back in split' });
-    await ready();
-    // The split pane renders through the debounce chain (the listener's
-    // 200ms settle + the pane's own 250ms) — give it a full beat.
-    await settled(800);
-    expect(markdownViewMode()).toBe('split');
-    const root = host.querySelector('.markdown-surface') as HTMLElement;
-    expect(root.classList.contains('markdown-split-mode')).toBe(true);
-    const preview = host.querySelector('.markdown-preview') as HTMLElement;
-    expect(preview.hidden).toBe(false);
-    expect(preview.querySelector('h1')?.textContent).toBe('Back in split');
-
-    setMarkdownViewMode('edit');
-  });
-
-  it('view-mode listeners hear every flip (the segmented control and the top bar icon)', async () => {
-    const host = freshHost();
-    surface.display(host, { content: 'modes' });
-    await ready();
-
+  it('the mode listener follows every flip', () => {
     const seen: string[] = [];
     const unlisten = onMarkdownViewMode((mode) => seen.push(mode));
-
-    setMarkdownViewMode('split');
+    surface.display(host(), { content: '' });
     setMarkdownViewMode('preview');
-    setMarkdownViewMode('edit');
-    expect(seen).toEqual(['split', 'preview', 'edit']);
-
+    setMarkdownViewMode('source');
     unlisten();
-    setMarkdownViewMode('split');
-    expect(seen).toEqual(['split', 'preview', 'edit']);
+    setMarkdownViewMode('preview');
+    expect(seen).toEqual(['preview', 'source']);
+    setMarkdownViewMode('source');
+  });
 
-    setMarkdownViewMode('edit');
+  it('markdownSourceActive answers the working mode only', () => {
+    surface.display(host(), { content: '' });
+    expect(markdownSourceActive()).toBe(true);
+    setMarkdownViewMode('preview');
+    expect(markdownSourceActive()).toBe(false);
+    setMarkdownViewMode('source');
   });
 });
 
 // ---------------------------------------------------------------------------
-// The source mode — the raw-markdown textarea pane
+// The security model
 // ---------------------------------------------------------------------------
 
-describe('the source mode — raw markdown typing', () => {
-  it('entering source carries the WYSIWYG markdown into the textarea; capture answers it', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '# Heading\n\nA **bold** word.' });
-    await ready();
-    await settled();
-
-    setMarkdownViewMode('source');
-    const root = host.querySelector('.markdown-surface') as HTMLElement;
-    expect(root.classList.contains('markdown-source-mode')).toBe(true);
-    const source = host.querySelector('.markdown-source') as HTMLTextAreaElement;
-    // The pane carries the WYSIWYG's own serialization — the trailing
-    // newline is what capture() has always answered for the stored note.
-    const carried = '# Heading\n\nA **bold** word.\n';
-    expect(source.value).toBe(carried);
-    // The WYSIWYG stands down (display:none owns the pane, the editor
-    // stays mounted for the flip back).
-    expect(markdownEditorHandle()).not.toBeNull();
-    // The pane that owns the edit answers the capture contract.
-    expect(surface.capture(host)).toBe(carried);
-  });
-
-  it('typing in the source pane announces the host input event (the autosave signal)', async () => {
-    const host = freshHost();
-    surface.display(host, { content: 'seed' });
-    await ready();
-    await settled();
-
-    setMarkdownViewMode('source');
-    const heard: Event[] = [];
-    host.addEventListener('input', (event) => heard.push(event));
-
-    const source = host.querySelector('.markdown-source') as HTMLTextAreaElement;
-    // The execCommand path is jsdom-absent: the applyEdit fallback fires
-    // the SAME bubbling input the browser path would.
-    source.setSelectionRange(4, 4);
-    source.dispatchEvent(new Event('input', { bubbles: true }));
-    expect(heard).toHaveLength(1);
-    expect(surface.capture(host)).toBe('seed\n');
-  });
-
-  it('returning to edit pushes the edited source into the WYSIWYG', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '# Old' });
-    await ready();
-    await settled();
-
-    setMarkdownViewMode('source');
-    const source = host.querySelector('.markdown-source') as HTMLTextAreaElement;
-    source.value = '# New\n\n- edited in source';
-    setMarkdownViewMode('edit');
-
-    const handle = markdownEditorHandle()!;
-    // The push re-serializes through the WYSIWYG: the trailing newline and
-    // the `*` bullet are its own serializer's conventions (what every
-    // visual edit has always stored).
-    expect(handle.editor.action(getMarkdown())).toBe('# New\n\n* edited in source\n');
-    // capture follows the pane again.
-    expect(surface.capture(host)).toBe('# New\n\n* edited in source\n');
-  });
-
-  it('an UNCHANGED source round trip never disturbs the WYSIWYG doc (undo survives)', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '# Stable' });
-    await ready();
-    await settled();
-
-    const handle = markdownEditorHandle()!;
-    const docBefore = handle.view.state.doc;
-    setMarkdownViewMode('source');
-    setMarkdownViewMode('edit');
-    expect(handle.view.state.doc.eq(docBefore)).toBe(true);
-  });
-
-  it('a note switch in source mode rebuilds the pane (undo never crosses notes)', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '# Note one' });
-    await ready();
-    await settled();
-
-    setMarkdownViewMode('source');
-    surface.display(host, { content: '# Note two' });
-    await settled(200);
-
-    const source = host.querySelector('.markdown-source') as HTMLTextAreaElement;
-    expect(source.value).toBe('# Note two');
-    expect(surface.capture(host)).toBe('# Note two');
-    // The hidden WYSIWYG stays in sync for the flip back.
-    setMarkdownViewMode('edit');
-    const handle = markdownEditorHandle()!;
-    // The push re-serializes through the WYSIWYG (the trailing newline
-    // is its own convention, unchanged by the source round trip).
-    expect(handle.editor.action(getMarkdown())).toBe('# Note two\n');
-  });
-
-  it('insertText lands in the source pane (the dictation path)', async () => {
-    const host = freshHost();
-    surface.display(host, { content: 'hello' });
-    await ready();
-    await settled();
-
-    setMarkdownViewMode('source');
-    const source = host.querySelector('.markdown-source') as HTMLTextAreaElement;
-    source.setSelectionRange(5, 5);
-    expect(surface.insertText(host, ' world')).toBe(true);
-    expect(source.value).toBe('hello world\n');
-    expect(surface.capture(host)).toBe('hello world\n');
-  });
-
-  it('focusTarget answers the textarea while source owns the edit', async () => {
-    const host = freshHost();
-    surface.display(host, { content: 'focus me' });
-    await ready();
-    await settled();
-
-    setMarkdownViewMode('source');
-    const source = host.querySelector('.markdown-source') as HTMLTextAreaElement;
-    expect(surface.focusTarget(host)).toBe(source);
-  });
-
-  it('an empty paragraph serializes away — never a <br /> placeholder in the source', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '# A\n\nB' });
-    await ready();
-    await settled();
-
-    // The WYSIWYG's own typing gesture: Enter Enter leaves an empty
-    // paragraph between the blocks.
-    const handle = markdownEditorHandle()!;
-    const { state } = handle.view;
-    const paragraphType = state.schema.nodes.paragraph;
-    const empty = paragraphType.createAndFill();
-    const heading = state.doc.firstChild!;
-    const pos = heading.nodeSize;
-    if (!empty) {
-      throw new Error('the paragraph schema refused an empty paragraph');
-    }
-    handle.view.dispatch(state.tr.insert(pos, empty));
-    expect(handle.view.state.doc.childCount).toBe(3);
-
-    const captured = surface.capture(host)!;
-    // The preset's stock serializer writes a raw `<br />` html node for
-    // the empty paragraph — valid markdown for ITS parser, but the app's
-    // owned renderer escapes raw HTML by security design, so it leaked
-    // as literal text into preview, share links and export.
-    expect(captured).not.toContain('<br');
-    expect(captured).toContain('# A');
-    expect(captured).toContain('B');
-
-    // The preview (the owned renderer) shows the words, nothing else.
+describe('the security model (preview)', () => {
+  it('raw HTML meets the policy: benign tags render rebuilt, declined tags stay text', () => {
+    surface.display(host(), {
+      content: '<ruby>x<rt>y</rt></ruby> and <script>alert(1)</script>',
+    });
     setMarkdownViewMode('preview');
-    const preview = host.querySelector('.markdown-preview') as HTMLElement;
-    expect(preview.textContent).not.toContain('<br');
-    setMarkdownViewMode('edit');
+    expect(preview().innerHTML).toContain('<ruby>x<rt>y</rt></ruby>');
+    expect(preview().innerHTML).not.toContain('<script>');
+    expect(preview().innerHTML).toContain('&lt;script&gt;');
+    setMarkdownViewMode('source');
   });
 
-  it('split puts the textarea left and the live preview right', async () => {
-    const host = freshHost();
-    surface.display(host, { content: '# Split view' });
-    await ready();
-    await settled();
+  it('hostile hrefs never reach the DOM as targets', () => {
+    surface.display(host(), {
+      content: '[x](javascript:alert(1)) <a href="javascript:alert(1)">y</a>',
+    });
+    setMarkdownViewMode('preview');
+    const hrefs = [...preview().querySelectorAll('a')].map((a) => a.getAttribute('href'));
+    expect(hrefs).not.toContain('javascript:alert(1)');
+    setMarkdownViewMode('source');
+  });
 
-    setMarkdownViewMode('split');
-    const source = host.querySelector('.markdown-source') as HTMLTextAreaElement;
-    const preview = host.querySelector('.markdown-preview') as HTMLElement;
-    expect(source.value).toBe('# Split view\n');
-    expect(preview.hidden).toBe(false);
-    expect(preview.querySelector('h1')?.textContent).toBe('Split view');
+  it('the task checkbox toggle writes back into the source and announces', () => {
+    const events: Event[] = [];
+    surface.display(host(), { content: '- [ ] open item' });
+    host().addEventListener('input', (e) => events.push(e));
+    setMarkdownViewMode('preview');
 
-    setMarkdownViewMode('edit');
+    preview().querySelector('li')!.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+
+    expect(surface.capture(host())).toBe('- [x] open item');
+    expect(events).toHaveLength(1);
+    expect(preview().querySelector('input')!.hasAttribute('checked')).toBe(true);
+    setMarkdownViewMode('source');
+  });
+
+  it('an equation click in the preview asks for the math bubble with its source', () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const listener = (event: Event): void => {
+      seen.push((event as CustomEvent).detail);
+    };
+    document.addEventListener('padify:md-math-click', listener);
+    surface.display(host(), { content: '$x^2$ and\n\n$$\\sum$$' });
+    setMarkdownViewMode('preview');
+
+    preview().querySelector('.padify-math')!.dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
+    );
+    expect(seen[0]).toMatchObject({ latex: 'x^2', kind: 'inline' });
+
+    preview().querySelector('.md-math-block .padify-math')!.dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
+    );
+    expect(seen[1]).toMatchObject({ kind: 'block' });
+
+    document.removeEventListener('padify:md-math-click', listener);
+    setMarkdownViewMode('source');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The toolbar + the pressed states (real shell markup)
+// ---------------------------------------------------------------------------
+
+describe('the toolbar (real shell markup)', () => {
+  beforeEach(async () => {
+    mountShell();
+    await bootedManager();
+    surface.display(host(), { content: '' });
+    initMarkdownToolbar(getTabManager()!);
+  });
+
+  it('boots against the real markup and hides for non-markdown notes', () => {
+    const manager = getTabManager()!;
+    expect(document.getElementById('markdownToolbar')!.hidden).toBe(false);
+
+    manager.addTab(true);
+    expect(document.getElementById('markdownToolbar')!.hidden).toBe(true);
+    manager.addTab(true, 'markdown');
+    expect(document.getElementById('markdownToolbar')!.hidden).toBe(false);
+  });
+
+  it('the command buttons dispatch through the source primitives', () => {
+    const ta = source();
+    ta.focus();
+    ta.value = 'plain words';
+    ta.setSelectionRange(6, 11);
+    ta.dispatchEvent(new Event('focus', { bubbles: true }));
+
+    expect(runMarkdownToolbarAction('bold')).toBe(true);
+    expect(surface.capture(host())).toBe('plain **words**');
+    expect(document.activeElement).toBe(ta);
+  });
+
+  it('the pressed states follow the caret through the selection state', () => {
+    const ta = source();
+    ta.value = 'a **bold** run';
+    ta.setSelectionRange(4, 8); // 'bold', inside the ** pair
+    ta.dispatchEvent(new Event('keyup', { bubbles: true }));
+
+    const bold = document.querySelector('[data-md-action="bold"]')!;
+    expect(bold.getAttribute('aria-pressed')).toBe('true');
+    expect(markdownSelectionStateNow()?.bold).toBe(true);
+  });
+
+  it('the view toggle flips the surface; preview parks the command chrome', () => {
+    document.querySelector('[data-md-view="preview"]')!.dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
+    );
+    expect(markdownViewMode()).toBe('preview');
+    expect(preview().hidden).toBe(false);
+    const bold = document.querySelector('[data-md-action="bold"]') as HTMLButtonElement;
+    expect(bold.disabled).toBe(true);
+
+    document.querySelector('[data-md-view="source"]')!.dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
+    );
+    expect(markdownViewMode()).toBe('source');
+    expect(bold.disabled).toBe(false);
+  });
+
+  it('the block dropdown writes heading levels', () => {
+    const ta = source();
+    ta.value = 'a line to headline';
+    ta.setSelectionRange(0, 0);
+    ta.focus();
+
+    document.querySelector('[data-md-menu="block"]')!.dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
+    );
+    document.querySelector('[data-md-block="h2"]')!.dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
+    );
+    expect(surface.capture(host())).toBe('## a line to headline');
   });
 });
 
@@ -997,37 +407,17 @@ describe('the source mode — raw markdown typing', () => {
 // ---------------------------------------------------------------------------
 
 describe('TabManager + markdown notes — the seam end to end', () => {
-  function mountShell(): void {
-    const shell = readFileSync(resolve(process.cwd(), 'src/ui/editor-shell.html'), 'utf-8');
-    document.body.insertAdjacentHTML('afterbegin', shell);
-    const toast = document.createElement('div');
-    toast.id = 'toast';
-    document.body.append(toast);
-  }
-
-  beforeEach(async () => {
-    resetStorageForTests();
-    await new Promise((resolveTimeout) => setTimeout(resolveTimeout, 0));
-    localStorage.clear();
-    await storageReady();
-  });
-
   it('creating a markdown note paints the surface, typing autosaves the SOURCE', async () => {
     mountShell();
-    const host = document.getElementById('note') as HTMLElement;
-    const manager = new TabManager($(host));
-    setTabManager(manager);
-    await manager.init();
+    const manager = await bootedManager();
 
-    manager.addTab(true, 'markdown');
-    await ready();
-    await settled();
+    expect(host().getAttribute('contenteditable')).toBe('false');
+    expect(host().querySelector('.markdown-surface')).not.toBeNull();
 
-    expect(host.getAttribute('contenteditable')).toBe('false');
-    expect(host.querySelector('.markdown-surface')).not.toBeNull();
-
-    await typeAtEnd('# My markdown note');
-    await settled();
+    const ta = source();
+    ta.focus();
+    ta.value = '# My markdown note';
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
 
     // The app's debounced autosave (app.ts binds input → save): driven
     // directly here, exactly what the wiring calls.
@@ -1038,285 +428,59 @@ describe('TabManager + markdown notes — the seam end to end', () => {
     expect(active?.content).not.toContain('<'); // source, never markup
   });
 
-  it('getActiveNoteContent reads the markdown source through the active surface', async () => {
-    mountShell();
-    const host = document.getElementById('note') as HTMLElement;
-    const manager = new TabManager($(host));
-    setTabManager(manager);
-    await manager.init();
-
-    manager.addTab(true, 'markdown');
-    await ready();
-    await settled();
-
-    await typeAtEnd('captured words');
-    await settled();
-
-    // The tabs.ts helper — the snapshots AND share-links capture path.
-    // Dequeued from the module: import it fresh via the tabs module.
-    const { getActiveNoteContent } = await import('../../tabs');
-    const captured = getActiveNoteContent();
-    expect(captured?.noteType).toBe('markdown');
-    expect(captured?.content).toContain('captured words');
-  });
-
   it('HTML export ships the RENDERED body, not the source', async () => {
     mountShell();
-    const host = document.getElementById('note') as HTMLElement;
-    const manager = new TabManager($(host));
-    setTabManager(manager);
-    await manager.init();
+    await bootedManager();
 
-    // Display a heading the way stored content arrives, then edit like a
-    // user would (typing inside the heading).
-    surface.display(host, { content: '# Exported heading' });
-    await settled();
-    await typeAtEnd(' more');
-    await settled();
-    manager.saveActiveFromEditor();
+    surface.display(host(), { content: '# Exported heading' });
+    surface.commit(host(), '# Exported heading');
 
     const body = getActiveNoteExportBody();
-    expect(body).toContain('<h1>Exported heading more</h1>');
+    expect(body).toContain('<h1>Exported heading</h1>');
     expect(body).not.toContain('# Exported heading');
   });
 
   it('insertTextIntoActiveNote routes to the markdown surface', async () => {
     mountShell();
-    const host = document.getElementById('note') as HTMLElement;
-    const manager = new TabManager($(host));
-    setTabManager(manager);
-    await manager.init();
-
-    manager.addTab(true, 'markdown');
-    await ready();
-    await settled();
+    await bootedManager();
 
     expect(insertTextIntoActiveNote('inserted via seam')).toBe(true);
-    await settled();
-    manager.saveActiveFromEditor();
-    expect(manager.getActive()?.content).toContain('inserted via seam');
+    expect(surface.capture(host())).toContain('inserted via seam');
   });
 });
 
 // ---------------------------------------------------------------------------
-// The toolbar
+// The port parking + the selection refresh
 // ---------------------------------------------------------------------------
 
-describe('the markdown toolbar', () => {
-  beforeEach(async () => {
-    resetMarkdownToolbarForTests();
-    // A fresh store: the boot note must be the standard one, not whatever
-    // the previous section persisted.
-    resetStorageForTests();
-    await new Promise((resolveTimeout) => setTimeout(resolveTimeout, 0));
-    localStorage.clear();
-    await storageReady();
-  });
-
-  function mountShell(): HTMLElement {
-    const shell = readFileSync(resolve(process.cwd(), 'src/ui/editor-shell.html'), 'utf-8');
-    document.body.insertAdjacentHTML('afterbegin', shell);
-    const toast = document.createElement('div');
-    toast.id = 'toast';
-    document.body.append(toast);
-    return document.getElementById('markdownToolbar') as HTMLElement;
-  }
-
-  it('shows only for markdown notes — the chrome follows the active kind', async () => {
-    const toolbar = mountShell();
-    const host = document.getElementById('note') as HTMLElement;
-    const manager = new TabManager($(host));
-    setTabManager(manager);
-    await manager.init();
-
-    initMarkdownToolbar(manager);
-
-    // A plain note: the chrome is hidden (driven explicitly — the boot
-    // note's type depends on storage timing, the TOGGLE is the pin).
-    manager.addTab(true, 'standard');
-    expect(toolbar.hidden).toBe(true);
-
-    manager.addTab(true, 'markdown');
-    await ready();
-    expect(toolbar.hidden).toBe(false);
-
-    // Switch back to a plain note: chrome swaps away.
-    manager.addTab(true, 'standard');
-    expect(toolbar.hidden).toBe(true);
-  });
-
-  it('the bold command toggles strong around the selection', async () => {
+describe('the ModelPort inert switch', () => {
+  it('the html engine parks while the markdown surface owns the host', async () => {
     mountShell();
-    const host = document.getElementById('note') as HTMLElement;
-    const manager = new TabManager($(host));
-    setTabManager(manager);
-    await manager.init();
+    await bootedManager();
+    const port = new ModelPort(host(), { sanitize: sanitizeNoteHtml });
+    expect(port.setInert(true)).toBeUndefined();
 
-    manager.addTab(true, 'markdown');
-    await ready();
-    await settled();
-
-    await typeAtEnd('toggle me');
-    await settled();
-
-    // Select the freshly typed text and bold it through the toolbar path.
-    const handle = markdownEditorHandle()!;
-    const { view } = handle;
-    const end = view.state.doc.content.size - 1;
-    const start = end - 'toggle me'.length;
-    const { TextSelection } = await import('@milkdown/kit/prose/state');
-    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, start, end)));
-
-    expect(runMarkdownToolbarAction('bold')).toBe(true);
-    await settled();
-    expect(surface.capture(host)).toContain('**toggle me**');
-
-    // Toggling again unwraps — the ported grammar's discipline.
-    const boldEnd = view.state.doc.content.size - 1;
-    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, start, boldEnd)));
-    expect(runMarkdownToolbarAction('bold')).toBe(true);
-    await settled();
-    expect(surface.capture(host)).not.toContain('**toggle me**');
-  });
-
-  it('the heading command turns the block into a heading', async () => {
-    mountShell();
-    const host = document.getElementById('note') as HTMLElement;
-    const manager = new TabManager($(host));
-    setTabManager(manager);
-    await manager.init();
-
-    manager.addTab(true, 'markdown');
-    await ready();
-    await settled();
-
-    await typeAtEnd('plain line');
-    await settled();
-
-    expect(runMarkdownToolbarAction('bullet')).toBe(true);
-    await settled();
-    // '*' is the serializer's bullet — the retired page's own convention.
-    expect(surface.capture(host)).toContain('* plain line');
-
-    expect(runMarkdownToolbarAction('ordered')).toBe(true);
-    await settled();
-    expect(surface.capture(host)).toContain('1. plain line');
-  });
-
-  it('runMarkdownBlockStyle wraps H1..H6 and returns to text', async () => {
-    const { runMarkdownBlockStyle } = await import('./toolbar');
-    mountShell();
-    const host = document.getElementById('note') as HTMLElement;
-    const manager = new TabManager($(host));
-    setTabManager(manager);
-    await manager.init();
-
-    manager.addTab(true, 'markdown');
-    await ready();
-    await settled();
-    await typeAtEnd('headline');
-    await settled();
-
-    expect(runMarkdownBlockStyle('h2')).toBe(true);
-    await settled();
-    expect(surface.capture(host)).toContain('## headline');
-
-    expect(runMarkdownBlockStyle('p')).toBe(true);
-    await settled();
-    expect(surface.capture(host)).not.toContain('## ');
-  });
-
-  it('commands refuse when no markdown editor is live', () => {
-    expect(runMarkdownToolbarAction('bold')).toBe(false);
-  });
-
-  it('pressed states follow the selection through onMarkdownSelection', async () => {
-    mountShell();
-    const manager = new TabManager($('#note'));
-    setTabManager(manager);
-    await manager.init();
-    initMarkdownToolbar(manager);
-
-    const states: object[] = [];
-    const stop = onMarkdownSelection((state) => states.push({ ...state }));
-
-    manager.addTab(true, 'markdown');
-    await ready();
-    await settled();
-    await typeAtEnd('words');
-    await settled();
-
-    expect(states.length).toBeGreaterThanOrEqual(1);
-
-    // Bold the selection, then move the caret inside: pressed follows.
-    const handle = markdownEditorHandle()!;
-    const { view } = handle;
-    const { TextSelection } = await import('@milkdown/kit/prose/state');
-    const end = view.state.doc.content.size - 1;
-    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, end - 5, end)));
-    runMarkdownToolbarAction('bold');
-    await settled();
-
-    view.dispatch(
-      view.state.tr.setSelection(TextSelection.create(view.state.doc, end - 2, end - 2)),
-    );
-    await settled();
-
-    const last = states.at(-1) as { bold: boolean } | undefined;
-    expect(last?.bold).toBe(true);
-    stop();
+    surface.display(host(), { content: 'md words' });
+    // The parked port's html never absorbs the markdown wrapper:
+    expect(host().querySelector('textarea.markdown-source')).not.toBeNull();
+    expect(sanitizeNoteHtml(port.getHtml())).not.toContain('markdown-source');
   });
 });
 
-// ---------------------------------------------------------------------------
-// The parked html engine — ModelPort.setInert
-// ---------------------------------------------------------------------------
+describe('refreshMarkdownSelectionState', () => {
+  it('notifies the current state to every listener', async () => {
+    surface.display(host(), { content: 'a **bold** run' });
+    const seen: Array<boolean | undefined> = [];
+    const unlisten = onMarkdownSelection((state) => seen.push(state.bold));
 
-describe('ModelPort.setInert — the html engine parks while markdown owns the host', () => {
-  it('inert: insertText refuses, listeners ignore events, getHtml serves the parked model', async () => {
-    const host = freshHost();
-    const port = new ModelPort(host, { sanitize: sanitizeNoteHtml });
-    port.renderHtml('<p>the html note</p>');
-    expect(port.getHtml()).toContain('the html note');
+    const ta = source();
+    ta.focus();
+    ta.setSelectionRange(4, 8); // 'bold', inside the ** pair
+    // Direct call — the toolbar's post-command pass.
+    const mod = await import('./surface');
+    mod.refreshMarkdownSelectionState();
 
-    // A markdown surface takes the host.
-    surface.display(host, { content: '# the markdown note' });
-    await ready();
-    await settled();
-
-    port.setInert(true);
-
-    // Mutations refuse while parked.
-    expect(port.insertText('nope')).toBe(false);
-
-    // The port's input listener stays silent for the markdown editor's
-    // events: a direct input dispatch must not re-announce through the port.
-    const htmlBefore = port.getHtml();
-    host.dispatchEvent(new Event('input', { bubbles: true }));
-    expect(port.getHtml()).toBe(htmlBefore);
-    expect(port.getHtml()).toContain('the html note');
-    expect(port.getHtml()).not.toContain('markdown');
-
-    // And coming home: renderHtml works while inert (that is its whole
-    // job — an html note opening again repaints the host).
-    port.renderHtml('<p>back home</p>');
-    expect(host.innerHTML).toContain('back home');
-    expect(host.querySelector('.markdown-surface')).toBeNull();
-
-    // Unparked: the engine serves live again.
-    port.setInert(false);
-    host.focus();
-    expect(port.insertText(' appended')).toBe(true);
-  });
-
-  it('the app wiring rule: inert whenever the active note is not an html kind', async () => {
-    // Mirrors app.ts: syncPortInert listens to active changes. The rule
-    // itself is one expression; what matters is that setInert exists on
-    // the port and both states behave — pinned above. This test pins the
-    // expression the shell runs.
-    const { isHtmlContent } = await import('../note-types');
-    expect(isHtmlContent('markdown')).toBe(false);
-    expect(isHtmlContent('rich')).toBe(true);
-    expect(isHtmlContent(undefined)).toBe(true);
+    expect(seen).toContain(true);
+    unlisten();
   });
 });

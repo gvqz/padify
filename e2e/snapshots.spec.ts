@@ -161,7 +161,7 @@ test.describe('the rebuilt menu', () => {
       .click();
     // The close takes a safety copy of the CLOSING note (silent — the
     // tab-close toast is the message) and asks about deleting it.
-    await page.locator('.swal2-confirm').click();
+    await page.locator('dialog.vz-dialog .vz-dialog-confirm').click();
     await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(1);
 
     await openSnapshots(page);
@@ -436,7 +436,7 @@ test.describe('restore — to the note it came from', () => {
       .first()
       .locator('.tab-strip-close')
       .click();
-    await page.locator('.swal2-confirm').click();
+    await page.locator('dialog.vz-dialog .vz-dialog-confirm').click();
     await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(1);
 
     // Restore — the note is gone, so it comes back as its OWN note.
@@ -460,7 +460,7 @@ test.describe('note types — consistent behavior', () => {
     await page.goto('/');
     await newTypedNote(page, 'Markdown note');
 
-    const editor = page.locator('#note .ProseMirror');
+    const editor = page.locator('#note .markdown-source');
     await editor.click();
     await page.keyboard.type('# Trail log');
     await page.keyboard.press('Control+U');
@@ -485,7 +485,10 @@ test.describe('note types — consistent behavior', () => {
     await snapshotRows(page).first().locator('.restore').click();
     await toastSays(page, 'Snapshot restored!');
     await expect(page.locator('#markdownToolbar')).toBeVisible();
-    await expect(page.locator('#note')).toContainText('Trail log');
+    // The source pane holds the bytes — a textarea's VALUE is its text.
+    await expect(page.locator('#note .markdown-source')).toHaveValue(
+      '# Trail log',
+    );
   });
 
   test('a rich note snapshots and restores like any other', async ({ page }) => {
@@ -543,7 +546,7 @@ test.describe('note types — consistent behavior', () => {
 
     // A markdown note with its own content and chrome, now on stage.
     await newTypedNote(page, 'Markdown note');
-    const editor = page.locator('#note .ProseMirror');
+    const editor = page.locator('#note .markdown-source');
     await editor.click();
     await page.keyboard.type('# Not the welcome note');
     await expect(page.locator('#markdownToolbar')).toBeVisible();
@@ -570,14 +573,18 @@ test.describe('note types — consistent behavior', () => {
     await expect(page.locator('#note')).toContainText('Welcome');
 
     // The markdown note was never touched — its words and chrome survive,
-    // and the switch survives a reload. (The heading renders without its
-    // literal '#' — the editor shows prose, not source.)
+    // and the switch survives a reload. (The source pane shows the bytes
+    // themselves — the '#' included.)
     await page.locator('#tabStripTabs .tab-strip-tab').nth(1).click();
     await expect(page.locator('#markdownToolbar')).toBeVisible();
-    await expect(page.locator('#note')).toContainText('Not the welcome note');
+    await expect(page.locator('#note .markdown-source')).toHaveValue(
+      '# Not the welcome note',
+    );
     await page.waitForTimeout(700);
     await page.reload();
-    await expect(page.locator('#note')).toContainText('Not the welcome note');
+    await expect(page.locator('#note .markdown-source')).toHaveValue(
+      '# Not the welcome note',
+    );
     await expect(page.locator('#markdownToolbar')).toBeVisible();
   });
 
@@ -590,7 +597,7 @@ test.describe('note types — consistent behavior', () => {
     // type-sectioned menu would group them apart; the timeline keeps
     // recency as the only order.
     await newTypedNote(page, 'Markdown note');
-    const md = page.locator('#note .ProseMirror');
+    const md = page.locator('#note .markdown-source');
     await md.click();
     await page.keyboard.type('# markdown words');
     await page.keyboard.press('Control+U');
@@ -1136,7 +1143,7 @@ test.describe('the type filter', () => {
     await toastSays(page, 'Snapshot created!');
 
     await newTypedNote(page, 'Markdown note');
-    const editor = page.locator('#note .ProseMirror');
+    const editor = page.locator('#note .markdown-source');
     await editor.click();
     await page.keyboard.type('# Trail log today');
     await page.keyboard.press('Control+U');

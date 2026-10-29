@@ -150,10 +150,12 @@ test.describe('markdown torture — the hostile corpus in a real browser', () =>
     });
     expect(badHrefs).toEqual([]);
 
-    // No foreign elements, no inline handlers, no script/img/iframe/svg.
-    // The math pipeline's KaTeX output (its own MathML accessibility tree)
+    // No foreign elements, no inline handlers, no script/iframe/svg. The
+    // math pipeline's KaTeX output (its own MathML accessibility tree)
     // is the app's own rendering, not note markup — anything inside a
-    // .katex subtree is exempt.
+    // .katex subtree is exempt. Markdown images render as real <img>
+    // (the safe-href gate + stripped handlers — the owned vocabulary's
+    // newest member); the hostile-URL ones stay literal text.
     const foreign = await preview.evaluate((el) => {
       const owned = new Set([
         'p',
@@ -186,6 +188,7 @@ test.describe('markdown torture — the hostile corpus in a real browser', () =>
         'section',
         'span',
         'div',
+        'img',
       ]);
       const issues: string[] = [];
       for (const node of Array.from(el.querySelectorAll('*'))) {
@@ -224,19 +227,15 @@ test.describe('markdown torture — the hostile corpus in a real browser', () =>
     await expect(preview.locator('pre code.language-js')).toContainText('</script>');
 
     // The clicking round trip: the deep nested task flips the source.
-    await page.locator('[data-md-view="split"]').click();
     const textarea = page.locator('#note .markdown-source');
     const deepTask = preview.locator('li', { hasText: 'deep task' }).last();
     await deepTask.click();
-    // The click rewrites the source through the WYSIWYG serializer — the
-    // bullet marker may normalize to `*`, the check itself must survive.
-    await expect(textarea).toHaveValue(/[*-] \[x\] deep task/);
+    await expect(textarea).toHaveValue(/[-*] \[x\] deep task/);
     await deepTask.click();
-    await expect(textarea).toHaveValue(/[*-] \[ \] deep task/);
+    await expect(textarea).toHaveValue(/[-*] \[ \] deep task/);
 
-    // The WYSIWYG holds the same truth after the source round trip.
-    await page.locator('[data-md-view="edit"]').click();
-    await expect(page.locator('#note .ProseMirror')).toBeVisible();
+    // The truth holds after a source round trip.
+    await page.locator('[data-md-view="source"]').click();
     await page.locator('[data-md-view="preview"]').click();
     await expect(preview.locator('table')).toHaveCount(1);
     expect(dialogFired).toBeNull();

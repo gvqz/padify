@@ -29,7 +29,17 @@ async function newRichNote(page: Page): Promise<void> {
 async function typeAndRead(page: Page, text: string): Promise<string> {
   await page.keyboard.type(text);
   await page.waitForTimeout(250);
-  return page.evaluate(() => document.querySelector('#note')?.textContent ?? '');
+  // The markdown surface is a textarea — its VALUE is the document (a
+  // textarea's textContent never reflects what it holds); the rich
+  // surface still reads as text.
+  return page.evaluate(() => {
+    const note = document.querySelector('#note');
+    if (!note) {
+      return '';
+    }
+    const source = note.querySelector<HTMLTextAreaElement>('.markdown-source');
+    return source ? source.value : (note.textContent ?? '');
+  });
 }
 
 /** The element that owns focus after a switch (inside #note, or body). */
@@ -45,10 +55,10 @@ test.describe('rapid note switching', () => {
   test('slamming between a markdown and a rich note keeps each note its own', async ({ page }) => {
     await page.goto('/');
     await newMarkdownNote(page);
-    const editor = page.locator('#note .ProseMirror');
+    const editor = page.locator('#note .markdown-source');
     await editor.click();
     await page.keyboard.type('# alpha');
-    await expect(editor.locator('h1')).toHaveText('alpha');
+    await expect(editor).toHaveValue('# alpha');
 
     await newRichNote(page);
     await page.keyboard.type('beta body');
@@ -58,7 +68,7 @@ test.describe('rapid note switching', () => {
     for (let round = 0; round < 3; round += 1) {
       await page.locator('#tabStripTabs .tab-strip-tab').nth(1).click();
       await expect(page.locator('#markdownToolbar')).toBeVisible();
-      await expect(editor.locator('h1')).toHaveText('alpha');
+      await expect(editor).toHaveValue('# alpha');
 
       await page.locator('#tabStripTabs .tab-strip-tab').nth(2).click();
       await expect(page.locator('#richToolbar')).toBeVisible();
@@ -69,7 +79,7 @@ test.describe('rapid note switching', () => {
   test('typing lands in the note immediately after a switch (focus follows)', async ({ page }) => {
     await page.goto('/');
     await newMarkdownNote(page);
-    const editor = page.locator('#note .ProseMirror');
+    const editor = page.locator('#note .markdown-source');
     await editor.click();
     await page.keyboard.type('first note');
 
@@ -97,7 +107,7 @@ test.describe('rapid note switching', () => {
   test('undo after a switch never resurrects the previous note', async ({ page }) => {
     await page.goto('/');
     await newMarkdownNote(page);
-    const editor = page.locator('#note .ProseMirror');
+    const editor = page.locator('#note .markdown-source');
     await editor.click();
     await page.keyboard.type('first note words');
 
@@ -130,68 +140,64 @@ test.describe('rapid note switching', () => {
   }) => {
     await page.goto('/');
     await newMarkdownNote(page);
-    const editor = page.locator('#note .ProseMirror');
+    const editor = page.locator('#note .markdown-source');
     await editor.click();
-    // A table-led note: the old caret mapping dropped the caret into the
-    // LAST cell of it, so typing after a switch typed into the table at a
-    // random spot. Build the note: table first, then a line under it.
+    // A table-led note, built the source way: the template first (the
+    // header lands selected), then a trailing line under it.
     await page.locator('#markdownToolbar [data-md-action="table"]').click();
-    await expect(editor.locator('table')).toHaveCount(1);
-    for (let i = 0; i < 6; i += 1) {
-      await page.keyboard.press('ArrowDown');
-    }
+    await expect(editor).toHaveValue(/\| Column 1 \| Column 2 \| Column 3 \|/);
+    await page.keyboard.press('End');
+    await page.keyboard.press('Control+End');
+    await page.keyboard.press('Enter');
     await page.keyboard.type('trailing line');
 
     await newRichNote(page);
     await page.keyboard.type('other note');
     await page.waitForTimeout(300);
     await page.locator('#tabStripTabs .tab-strip-tab').nth(1).click();
-    await expect(editor.locator('table')).toHaveCount(1);
+    await expect(page.locator('#markdownToolbar')).toBeVisible();
 
-    // Focus lands in the editor and the caret takes the deterministic
-    // start spot (the doc's first text position — the same spot a fresh
-    // table hands the user, and the same place the rich surface parks
-    // the caret): typing prepends into the first cell and touches
-    // nothing else.
+    // The table survived the round trip byte-for-byte, trailing line and all.
+    await expect(editor).toHaveValue(/\| --- \| --- \| --- \|/);
+    await expect(editor).toHaveValue(/trailing line/);
+
+    // Focus lands in the source and the caret takes the deterministic
+    // start spot (position 0 — the same contract the rich surface has):
+    // typing prepends and touches nothing else.
     expect(await focusInsideEditor(page)).toBe(true);
+    const before = await editor.inputValue();
     await page.keyboard.type('X');
     await page.waitForTimeout(250);
-    // The X lands in the doc's FIRST text position and nowhere else —
-    // never the last cell the old mapping favored.
-    const cells = await editor.locator('table th, table td').allTextContents();
-    expect(cells[0]).toBe('X');
-    expect(cells.slice(1).every((cell) => !cell.includes('X'))).toBe(true);
-    await expect(editor).toContainText('trailing line');
+    expect(await editor.inputValue()).toBe(`X${before}`);
   });
 
-  test('the block grip never outlives its note (what one note shows stays in it)', async ({
+  test('no editing chrome outlives its note (the visual editor went whole)', async ({
     page,
   }) => {
     await page.goto('/');
     await newMarkdownNote(page);
-    const editor = page.locator('#note .ProseMirror');
+    const editor = page.locator('#note .markdown-source');
     await editor.click();
     await page.keyboard.type('grip source note');
 
-    // Hover a block: the grip floats in the gutter (it lives in
-    // document.body, outside the surface wrapper).
-    await editor.locator('p').first().hover();
-    const handle = page.locator('.md-block-handle');
-    await expect(handle).toHaveAttribute('data-show', 'true');
+    // The visual editor's floating chrome — the block grip, the bubble
+    // menu, the slash menu — went with the visual editor: none of it
+    // exists for any note, any hover, ever again.
+    await editor.hover();
+    await expect(page.locator('.md-block-handle')).toHaveCount(0);
+    await expect(page.locator('.md-bubble-menu')).toHaveCount(0);
+    await expect(page.locator('.md-slash-menu')).toHaveCount(0);
 
-    // Switch to a rich note: the grip's owner stands down. Before the
-    // dismiss lifecycle the frozen, still-visible grip stayed over the
-    // OTHER note — the "6 dot thing goes to the other note" report.
+    // Switch to a rich note and back: still nothing — what one note
+    // shows stays in it.
     await newRichNote(page);
     await page.keyboard.type('plain body');
     await expect(page.locator('#note')).toContainText('plain body');
     await expect(page.locator('.md-block-handle')).toHaveCount(0);
 
-    // Slam back to the markdown note: the grip returns with ITS editor,
-    // ready for its own note again.
     await page.locator('#tabStripTabs .tab-strip-tab').nth(1).click();
     await expect(page.locator('#markdownToolbar')).toBeVisible();
-    await editor.locator('p').first().hover();
-    await expect(page.locator('.md-block-handle')).toHaveAttribute('data-show', 'true');
+    await expect(page.locator('.md-block-handle')).toHaveCount(0);
+    await expect(editor).toHaveValue('grip source note');
   });
 });

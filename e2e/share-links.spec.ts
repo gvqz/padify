@@ -322,12 +322,12 @@ test.describe('share links (real API)', () => {
     );
 
     // First press: the row's button arms — filled, asking the question.
-    // No Swal, no stacked dialog: the card's own DOM is all there is.
+    // No stacked dialog: the card's own DOM is all there is.
     await page.locator('.share-link-row .share-chip-btn.danger').click();
     await expect(page.locator('.share-link-row .share-chip-btn.danger.is-armed')).toHaveText(
       'Really cancel?',
     );
-    await expect(page.locator('.swal2-container')).toHaveCount(0);
+    await expect(page.locator('dialog.vz-dialog[open]')).toHaveCount(0);
 
     // A click anywhere else disarms — the confirm is a gesture on the
     // button, not a state to wander away from.

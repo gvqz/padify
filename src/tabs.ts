@@ -32,7 +32,7 @@
  */
 
 import { $, type Q } from './lib/q';
-import Swal from 'sweetalert2';
+import { confirmDialog } from './ui/dialog';
 import { showToast } from './ui/toast';
 import {
   ACTIVE_TAB_KEY,
@@ -1186,15 +1186,13 @@ export class TabManager {
       return;
     }
 
-    Swal.fire({
+    void confirmDialog({
       title: 'Close this tab?',
-      text: `"${deriveTabTitle(tab)}" has content. A snapshot is saved before it closes.`,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Close tab',
-      cancelButtonText: 'Keep it',
-    }).then((result) => {
-      if (result.isConfirmed) {
+      text: '"' + deriveTabTitle(tab) + '" has content. A snapshot is saved before it closes.',
+      confirm: 'Close tab',
+      cancel: 'Keep it',
+    }).then((confirmed) => {
+      if (confirmed) {
         void closeNow();
       }
     });

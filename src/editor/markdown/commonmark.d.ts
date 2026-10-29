@@ -15,6 +15,5 @@ declare module 'commonmark' {
 
   // The node type is opaque to the co-oracle — it parses and renders in
   // one breath, and the declaration exists only to keep tsc quiet.
-  // eslint-disable-next-line @typescript-eslint/no-empty-interface
-  interface Node {}
+  type Node = object;
 }

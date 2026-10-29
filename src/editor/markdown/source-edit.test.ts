@@ -14,11 +14,13 @@ import {
   applyEdit,
   clearFormatting,
   continueListOnEnter,
+  dedupeTypedMarkerOverContinuation,
   indentLines,
   insertBlock,
   linkAroundCaret,
   listShapeOfLine,
   removeLink,
+  selectMathSource,
   setHeadingLevel,
   sourceSelectionState,
   tableTemplate,
@@ -257,6 +259,81 @@ describe('continueListOnEnter', () => {
   });
 });
 
+describe('dedupeTypedMarkerOverContinuation — the user\'s own marker wins', () => {
+  it('typing the marker char right after the continuation replaces the auto one', () => {
+    mount('- item one', 10);
+    expect(continueListOnEnter(ta)).toBe(true);
+    expect(ta.value).toBe('- item one\n- ');
+    // The user types their own '-': the auto marker yields, theirs stands.
+    expect(dedupeTypedMarkerOverContinuation(ta, '-')).toBe(true);
+    expect(ta.value).toBe('- item one\n');
+    expect(ta.selectionStart).toBe(ta.value.length);
+  });
+
+  it('a nested continuation keeps its indentation through the dedupe', () => {
+    mount('  - nested', 10);
+    expect(continueListOnEnter(ta)).toBe(true);
+    expect(ta.value).toBe('  - nested\n  - ');
+    expect(dedupeTypedMarkerOverContinuation(ta, '-')).toBe(true);
+    expect(ta.value).toBe('  - nested\n  ');
+  });
+
+  it('a task continuation dedupes on the dash too', () => {
+    mount('- [x] done', 11);
+    expect(continueListOnEnter(ta)).toBe(true);
+    expect(ta.value).toBe('- [x] done\n- [ ] ');
+    expect(dedupeTypedMarkerOverContinuation(ta, '-')).toBe(true);
+    expect(ta.value).toBe('- [x] done\n');
+  });
+
+  it('any other character accepts the auto marker (one-shot)', () => {
+    mount('- one', 5);
+    expect(continueListOnEnter(ta)).toBe(true);
+    expect(dedupeTypedMarkerOverContinuation(ta, 's')).toBe(false);
+    expect(ta.value).toBe('- one\n- ');
+    // The slot is spent — a later dash types as content.
+    expect(dedupeTypedMarkerOverContinuation(ta, '-')).toBe(false);
+    expect(ta.value).toBe('- one\n- ');
+  });
+
+  it('the caret must still sit at the auto marker\'s end', () => {
+    mount('- one', 5);
+    expect(continueListOnEnter(ta)).toBe(true);
+    ta.setSelectionRange(0, 0); // the user navigated away
+    expect(dedupeTypedMarkerOverContinuation(ta, '-')).toBe(false);
+    expect(ta.value).toBe('- one\n- ');
+  });
+
+  it('an ordered continuation dedupes on its leading digit', () => {
+    mount('1. one', 6);
+    expect(continueListOnEnter(ta)).toBe(true);
+    expect(ta.value).toBe('1. one\n2. ');
+    expect(dedupeTypedMarkerOverContinuation(ta, '2')).toBe(true);
+    expect(ta.value).toBe('1. one\n');
+  });
+});
+
+describe('selectMathSource — the equation bubble\'s Apply target', () => {
+  it('selects the inline equation\'s exact span', () => {
+    mount('energy $E=mc^2$ here', 21);
+    expect(selectMathSource(ta, 'E=mc^2', 'inline')).toBe(true);
+    expect(state()).toEqual({ value: 'energy $E=mc^2$ here', from: 7, to: 15 });
+  });
+
+  it('selects a block equation\'s fenced span', () => {
+    mount('intro\n\n$$\n\\\\frac{1}{2}\n$$\n\noutro', 10);
+    expect(selectMathSource(ta, '\\\\frac{1}{2}', 'block')).toBe(true);
+    expect(ta.value.slice(ta.selectionStart, ta.selectionEnd)).toBe('$$\n\\\\frac{1}{2}\n$$');
+  });
+
+  it('false (selection untouched) when the equation is not in the source', () => {
+    mount('no equations', 13);
+    ta.setSelectionRange(3, 3);
+    expect(selectMathSource(ta, 'x^2', 'inline')).toBe(false);
+    expect(ta.selectionStart).toBe(3);
+  });
+});
+
 describe('toggleLinePrefix — checked tasks (issue #55)', () => {
   it('a checked task line disarms the list without resetting to unchecked', () => {
     mount('- [x] done', 10);
@@ -336,22 +413,34 @@ describe('insertBlock + tableTemplate', () => {
     mount('para', 2);
     insertBlock(ta, tableTemplate(), [2, 10]);
     expect(ta.value).toBe(
-      'pa\n| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| | | |\nra',
+      'pa\n\n| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| | | |\nra',
     );
     expect(ta.value.slice(ta.selectionStart, ta.selectionEnd)).toBe('Column 1');
   });
 
-  it('inserts a table template at the line end with the header selected', () => {
+  it('inserts a table template after a paragraph over a blank line (the table must PARSE)', () => {
     mount('para', 4);
     insertBlock(ta, tableTemplate(), [2, 10]);
-    expect(ta.value).toBe('para\n| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| | | |');
+    expect(ta.value).toBe(
+      'para\n\n| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| | | |',
+    );
     expect(ta.value.slice(ta.selectionStart, ta.selectionEnd)).toBe('Column 1');
   });
 
-  it('inserts a divider block', () => {
+  it('inserts a divider block (a blank line above — a setext trap no more)', () => {
     mount('text', 4);
     insertBlock(ta, '---');
-    expect(ta.value).toBe('text\n---');
+    expect(ta.value).toBe('text\n\n---');
+  });
+
+  it('needs no blank line at the document start or after one already', () => {
+    mount('', 0);
+    insertBlock(ta, '---');
+    expect(ta.value).toBe('---');
+    ta.value = 'para\n\n';
+    ta.setSelectionRange(6, 6);
+    insertBlock(ta, '---');
+    expect(ta.value).toBe('para\n\n---');
   });
 });
 

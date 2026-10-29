@@ -169,7 +169,8 @@ test("close tab on a note with content asks first, like the rail's ×", async ({
   await expect(page.locator(MENU)).toBeHidden();
 
   // The guarded close asks before it deletes.
-  await expect(page.locator('.swal2-container')).toBeVisible();
-  await expect(page.locator('.swal2-title')).toContainText('Close this tab?');
+  const ask = page.locator('dialog.vz-dialog');
+  await expect(ask).toBeVisible();
+  await expect(ask.locator('.vz-dialog-title')).toContainText('Close this tab?');
   await page.keyboard.press('Escape');
 });

@@ -31,7 +31,7 @@
  * Ctrl/Cmd + Shift + X while typing in the note.
  */
 
-import Swal from 'sweetalert2';
+import { confirmDialog } from './ui/dialog';
 import { showToast } from './ui/toast';
 import { registerLayer } from './ui/behavior/layers';
 import { CASES } from './case-conversions';
@@ -56,7 +56,6 @@ import {
   mdTableOp,
   mdUndo,
   markdownMenuTarget,
-  markdownViewMode,
 } from './editor/markdown/menu-actions';
 
 // --- Note-level actions -----------------------------------------------
@@ -80,36 +79,32 @@ export function copyNotesToClipboard(note: string): void {
   );
 }
 
-export function deleteNotes(): void {
-  Swal.fire({
+export async function deleteNotes(): Promise<void> {
+  const confirmed = await confirmDialog({
     title: 'Want to delete notes?',
     text: "You won't be able to revert this!",
-    icon: 'warning',
-    showCancelButton: true,
-    customClass: {
-      confirmButton: 'swal-btn-danger',
-    },
-    confirmButtonText: 'Yes, Delete!',
-    cancelButtonText: 'No, keep it.',
-  }).then(async (result) => {
-    if (result.value) {
-      // Save a safety snapshot before deleting — await so the snapshot
-      // actually lands before the note is wiped. Previously the call was
-      // fire-and-forget and could lose the snapshot if the IDB open hadn't
-      // completed yet, or if the page navigated away mid-write.
-      try {
-        await window.snapshotsManager!.createSnapshot();
-      } catch {
-        /* snapshots unavailable — the delete still proceeds */
-      }
-
-      // Clear the active tab (delete-notes only ever deleted the note
-      // that was on screen, so it stays per-tab now that tabs exist).
-      getTabManager()?.clearActiveTab();
-
-      Swal.fire('Deleted!', 'Your notes has been deleted.', 'success');
-    }
+    danger: true,
+    confirm: 'Yes, Delete!',
+    cancel: 'No, keep it.',
   });
+  if (!confirmed) {
+    return;
+  }
+  // Save a safety snapshot before deleting — await so the snapshot
+  // actually lands before the note is wiped. Previously the call was
+  // fire-and-forget and could lose the snapshot if the IDB open hadn't
+  // completed yet, or if the page navigated away mid-write.
+  try {
+    await window.snapshotsManager!.createSnapshot();
+  } catch {
+    /* snapshots unavailable — the delete still proceeds */
+  }
+
+  // Clear the active tab (delete-notes only ever deleted the note
+  // that was on screen, so it stays per-tab now that tabs exist).
+  getTabManager()?.clearActiveTab();
+
+  showToast('Your notes has been deleted.', 'success');
 }
 
 interface FormatDef {
@@ -570,11 +565,11 @@ class ContextMenu {
     if (insertLinkItem) {
       insertLinkItem.hidden = !(isRich || isMd) || inLink;
     }
-    // Table ops only run in the WYSIWYG (runMarkdownTableAction declines
-    // while the source pane is live) — in source/split the rows would render
-    // for any pipe-led line and silently do nothing.
+    // Table ops were the visual editor's grammar (a caret inside a
+    // cell); the source has no cell cursor — the rows never render for
+    // markdown notes now.
     const inTable = isMd
-      ? !!mdCaret?.inTable && markdownViewMode() === 'edit'
+      ? false
       : !!safeQueryPort(() => port?.queryTableContext());
     this.menu.querySelectorAll<HTMLElement>('.padify-ctx-table').forEach((item) => {
       item.hidden = !inTable;

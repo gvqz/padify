@@ -87,9 +87,9 @@ test.describe('markdown notes — GFM rendering in the preview', () => {
     );
   });
 
-  test('clicking a rendered checkbox rewrites the source (split mode)', async ({ page }) => {
+  test('clicking a rendered checkbox rewrites the source (preview mode)', async ({ page }) => {
     await bootSource(page, '- [ ] pack the bag\n- [x] charge the phone');
-    await page.locator('[data-md-view="split"]').click();
+    await page.locator('[data-md-view="preview"]').click();
 
     const textarea = page.locator('#note .markdown-source');
     const preview = page.locator('#note .markdown-preview');
@@ -106,23 +106,6 @@ test.describe('markdown notes — GFM rendering in the preview', () => {
     await expect(textarea).toHaveValue(/- \[ \] pack the bag/);
     // The already-checked one was never touched.
     await expect(textarea).toHaveValue(/- \[x\] charge the phone/);
-  });
-
-  test('clicking a rendered checkbox rewrites the note in preview mode too', async ({ page }) => {
-    await bootSource(page, '- [ ] one task');
-    await page.locator('[data-md-view="preview"]').click();
-
-    const preview = page.locator('#note .markdown-preview');
-    await preview.locator('li', { hasText: 'one task' }).click();
-    await expect(preview.locator('li input')).toBeChecked();
-
-    // Back to visual: the WYSIWYG holds the same truth (the source round-trip;
-    // its task items carry the state as data attributes, not live inputs).
-    await page.locator('[data-md-view="edit"]').click();
-    await expect(page.locator('#note .ProseMirror li[data-item-type="task"]')).toHaveAttribute(
-      'data-checked',
-      'true',
-    );
   });
 
   test('a checked task renders muted, not deleted', async ({ page }) => {

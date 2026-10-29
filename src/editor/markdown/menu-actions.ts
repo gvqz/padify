@@ -3,48 +3,29 @@
  *
  * The menu's vocabulary was the html surface's (every mutation through
  * the EditorPort); Markdown notes get the same rows through THIS module
- * instead — each primitive maps onto the live Milkdown editor or the
- * toolbar's own command dispatch, so the menu never mutates DOM the
- * ProseMirror view owns (the one rule that must not bend: PM's document
- * is the only writer of PM's DOM).
- *
- * Clipboard operations ride the real browser gestures where possible
- * (execCommand on the focused view runs the clipboard plugin's
- * markdown-aware serializer); every path degrades to the async API with
- * the selection deleted by transaction, exactly like the html paths.
+ * instead — each primitive maps onto the live source textarea or the
+ * toolbar's own command dispatch, so the menu never mutates state the
+ * surface does not own. Clipboard operations ride the real browser
+ * gestures where possible (execCommand on the focused textarea); every
+ * path degrades to the async API with the selection rewritten through
+ * the source-edit primitives, exactly like the html paths.
  */
-import { callCommand } from '@milkdown/kit/utils';
-import { redoCommand, undoCommand } from '@milkdown/kit/plugin/history';
-import { AllSelection } from '@milkdown/kit/prose/state';
-import type { EditorState } from '@milkdown/kit/prose/state';
-
 import { getTabManager, insertTextIntoActiveNote } from '../../tabs';
 import { isMarkdownNote } from '../note-types';
 import {
   focusMarkdownPane,
-  markdownEditorHandle,
   markdownSelectionStateNow,
   markdownSourceActive,
   markdownSourceTextarea,
   markdownViewMode,
 } from './surface';
-import { linkRangeAround, runMarkdownTableAction, runMarkdownToolbarAction } from './toolbar';
+import { runMarkdownToolbarAction } from './toolbar';
 import { applyEdit, removeLink as removeSourceLink } from './source-edit';
-
-type Handle = NonNullable<ReturnType<typeof markdownEditorHandle>>;
 
 /** True when the menu should speak Markdown (an editable markdown pane is active). */
 export function markdownMenuTarget(): boolean {
   const active = getTabManager()?.getActive();
-  return (
-    !!active &&
-    isMarkdownNote(active) &&
-    (markdownEditorHandle() !== null || markdownSourceActive())
-  );
-}
-
-function handle(): Handle | null {
-  return markdownEditorHandle();
+  return !!active && isMarkdownNote(active) && markdownSourceActive();
 }
 
 function source(): HTMLTextAreaElement | null {
@@ -62,31 +43,19 @@ function execCommand(command: string): boolean {
 // ---- focus + reads ---------------------------------------------------------
 
 export function mdFocus(): void {
-  if (source()) {
-    source()?.focus();
-    return;
-  }
-  handle()?.view.focus();
+  source()?.focus();
 }
 
-/** The selection's text (markdown source, '\n' between blocks). */
+/** The selection's text (markdown source). */
 export function mdSelectionText(): string {
   const ta = source();
-  if (ta) {
-    return ta.value.slice(ta.selectionStart, ta.selectionEnd);
-  }
-  const live = handle();
-  if (!live) {
+  if (!ta) {
     return '';
   }
-  const { from, to, empty } = live.view.state.selection;
-  if (empty) {
-    return '';
-  }
-  return live.view.state.doc.textBetween(from, to, '\n');
+  return ta.value.slice(ta.selectionStart, ta.selectionEnd);
 }
 
-/** The caret/selection's state snapshot (link/table/format queries). */
+/** The caret/selection's state snapshot (link/format queries). */
 export function mdState(): ReturnType<typeof markdownSelectionStateNow> {
   return markdownSelectionStateNow();
 }
@@ -115,8 +84,7 @@ export async function mdCopy(): Promise<boolean> {
 /** Cuts the selection (execCommand, else async copy + delete). */
 export function mdCut(): boolean {
   const text = mdSelectionText();
-  const live = handle();
-  if (!text || !live) {
+  if (!text) {
     return false;
   }
   mdFocus();
@@ -132,8 +100,7 @@ export function mdCut(): boolean {
 
 /** Pastes the clipboard's text at the selection, as the surface's insert. */
 export async function mdPaste(): Promise<'pasted' | 'empty' | 'blocked'> {
-  const live = handle();
-  if (!live) {
+  if (!source()) {
     return 'blocked';
   }
   let text: string;
@@ -155,95 +122,55 @@ export async function mdPaste(): Promise<'pasted' | 'empty' | 'blocked'> {
 
 export function mdDeleteSelection(): boolean {
   const ta = source();
-  if (ta) {
-    if (ta.selectionStart === ta.selectionEnd) {
-      return false;
-    }
-    applyEdit(ta, ta.selectionStart, ta.selectionEnd, '', ta.selectionStart);
-    return true;
-  }
-  const live = handle();
-  if (!live) {
+  if (!ta || ta.selectionStart === ta.selectionEnd) {
     return false;
   }
-  const { state } = live.view;
-  if (state.selection.empty) {
-    return false;
-  }
-  live.view.dispatch(state.tr.delete(state.selection.from, state.selection.to));
+  applyEdit(ta, ta.selectionStart, ta.selectionEnd, '', ta.selectionStart);
   return true;
 }
 
 /** Replaces the selection with plain text (the case converter's path). */
 export function mdReplaceSelection(text: string): boolean {
   const ta = source();
-  if (ta) {
-    applyEdit(ta, ta.selectionStart, ta.selectionEnd, text, ta.selectionStart + text.length);
-    return true;
-  }
-  const live = handle();
-  if (!live) {
+  if (!ta) {
     return false;
   }
-  const { state } = live.view;
-  const { from, to } = state.selection;
-  if (text === '') {
-    live.view.dispatch(state.tr.delete(from, to));
-    return true;
-  }
-  live.view.dispatch(state.tr.replaceWith(from, to, state.schema.text(text)));
+  applyEdit(ta, ta.selectionStart, ta.selectionEnd, text, ta.selectionStart + text.length);
   return true;
 }
 
 export function mdSelectAll(): boolean {
   const ta = source();
-  if (ta) {
-    ta.focus();
-    ta.select();
-    return true;
-  }
-  const live = handle();
-  if (!live) {
+  if (!ta) {
     return false;
   }
-  const { state } = live.view;
-  live.view.dispatch(state.tr.setSelection(new AllSelection(state.doc)));
-  live.view.focus();
+  ta.focus();
+  ta.select();
   return true;
 }
 
 export function mdUndo(): boolean {
-  const ta = source();
-  if (ta) {
-    focusMarkdownPane();
-    try {
-      return document.execCommand('undo');
-    } catch {
-      return false;
-    }
-  }
-  const live = handle();
-  if (!live) {
+  if (!source()) {
     return false;
   }
-  return live.editor.action(callCommand(undoCommand.key));
+  focusMarkdownPane();
+  try {
+    return document.execCommand('undo');
+  } catch {
+    return false;
+  }
 }
 
 export function mdRedo(): boolean {
-  const ta = source();
-  if (ta) {
-    focusMarkdownPane();
-    try {
-      return document.execCommand('redo');
-    } catch {
-      return false;
-    }
-  }
-  const live = handle();
-  if (!live) {
+  if (!source()) {
     return false;
   }
-  return live.editor.action(callCommand(redoCommand.key));
+  focusMarkdownPane();
+  try {
+    return document.execCommand('redo');
+  } catch {
+    return false;
+  }
 }
 
 /** One of the markdown format row's ids. */
@@ -267,27 +194,19 @@ export function mdClearFormatting(): boolean {
 
 export function mdRemoveLink(): boolean {
   const ta = source();
-  if (ta) {
-    return removeSourceLink(ta);
-  }
-  const live = handle();
-  if (!live) {
+  if (!ta) {
     return false;
   }
-  const range = linkRangeAround(live.view.state as EditorState);
-  if (!range) {
-    return false;
-  }
-  const linkMark = live.view.state.schema.marks.link;
-  if (!linkMark) {
-    return false;
-  }
-  live.view.dispatch(live.view.state.tr.removeMark(range.from, range.to, linkMark));
-  return true;
+  return removeSourceLink(ta);
 }
 
-export function mdTableOp(op: string): boolean {
-  return runMarkdownTableAction(op);
+/**
+ * Table structure operations were the visual editor's grammar (a caret
+ * inside a cell); the source has no cell cursor — the row writes the
+ * template or stays out of the menu's face.
+ */
+export function mdTableOp(_op: string): boolean {
+  return false;
 }
 
 export { markdownViewMode };

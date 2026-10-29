@@ -33,7 +33,6 @@
  */
 import 'fake-indexeddb/auto';
 import { beforeAll, beforeEach, afterEach, describe, expect, it, vi, type Mock } from 'vitest';
-import type { SweetAlertResult } from 'sweetalert2';
 import { $ } from './lib/q';
 import { copyNotesToClipboard, deleteNotes, initContextMenu } from './context-menu';
 import { setTabManager, TabManager } from './tabs';
@@ -47,17 +46,13 @@ import {
 } from './editor/port';
 import { resetStorageForTests, storageReady } from './storage';
 
-// Swal is modal UI — mocked so confirm flows can be driven. isVisible keeps
-// its false answer for the guards that read it.
-vi.mock('sweetalert2', () => ({
-  default: {
-    fire: vi.fn(() => Promise.resolve({ isConfirmed: false } as SweetAlertResult)),
-    isVisible: vi.fn(() => false),
-    getInput: vi.fn(() => null),
-  },
+// The confirm dialog is modal UI — mocked so confirm flows can be driven.
+vi.mock('./ui/dialog', () => ({
+  confirmDialog: vi.fn(() => Promise.resolve(false)),
+  promptDialog: vi.fn(() => Promise.resolve(null)),
 }));
 
-import Swal from 'sweetalert2';
+import { confirmDialog } from './ui/dialog';
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -308,7 +303,7 @@ beforeEach(async () => {
     value: { writeText: clipboardWriteText, readText: clipboardReadText },
     configurable: true,
   });
-  vi.mocked(Swal.fire).mockClear();
+  vi.mocked(confirmDialog).mockClear();
   mountShell();
   window.getSelection()?.removeAllRanges();
   await freshBoot();
@@ -838,16 +833,15 @@ describe('copyNotesToClipboard / deleteNotes', () => {
     manager.saveActiveFromEditor();
     expect(manager.getActive()!.content).not.toBe('');
 
-    vi.mocked(Swal.fire).mockResolvedValueOnce({ value: true } as SweetAlertResult);
-    deleteNotes();
+    vi.mocked(confirmDialog).mockResolvedValueOnce(true);
+    void deleteNotes();
 
     // snapshotsManager is absent in jsdom — the delete proceeds anyway.
-    await vi.waitFor(() => expect(vi.mocked(Swal.fire)).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(manager.getActive()!.content).toBe(''));
     expect(manager.getActive()!.id).toBe(id); // the SAME tab, emptied — not removed
     expect(manager.getActive()!.content).toBe('');
     expect(note().innerHTML).toBe('');
     expect(manager.exportForSync().dirty).toContain(id);
-    expect(vi.mocked(Swal.fire).mock.calls[1]![0]).toBe('Deleted!');
   });
 
   it('deleteNotes (refused) touches nothing', async () => {
@@ -856,11 +850,11 @@ describe('copyNotesToClipboard / deleteNotes', () => {
     note().innerHTML = '<b>precious words</b>';
     manager.saveActiveFromEditor();
 
-    vi.mocked(Swal.fire).mockResolvedValueOnce({ isConfirmed: false } as SweetAlertResult);
-    deleteNotes();
+    vi.mocked(confirmDialog).mockResolvedValueOnce(false);
+    void deleteNotes();
 
     await Promise.resolve();
-    expect(vi.mocked(Swal.fire)).toHaveBeenCalledTimes(1);
+    expect(confirmDialog).toHaveBeenCalledTimes(1);
     expect(manager.getActive()!.content).not.toBe('');
   });
 });

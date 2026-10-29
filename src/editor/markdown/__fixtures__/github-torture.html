@@ -1,0 +1,1083 @@
+<article class="markdown-body entry-content container-lg" itemprop="text"><div class="markdown-heading" dir="auto"><h1 tabindex="-1" class="heading-element" dir="auto">GFM Test Document</h1><a id="user-content-gfm-test-document" class="anchor" aria-label="Permalink: GFM Test Document" href="#gfm-test-document"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">This document contains examples of all GitHub Flavored Markdown (GFM), both code
+snippets and as rendered, and additional data structures (code blocks) rendered
+in various ways.</p>
+<p dir="auto">It serves both as a test on what is supported in the various places, and as a
+reference for how to write GFM.</p>
+<p dir="auto"><a href="https://github.com/giellalt/giellalt.github.io/blob/main/infra/MarkdownTestReference.md">This is how it renders</a>
+by GitHub's own processor. There are differences compared to GitHub pages.</p>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">Headers</h2><a id="user-content-headers" class="anchor" aria-label="Permalink: Headers" href="#headers"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">Start line with 1-6 <code>#</code> characters, then a space, then the header text:</p>
+<div class="highlight highlight-text-md notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="# foo 1
+## foo 2
+### foo 3
+#### foo 4
+##### foo 5
+###### foo 6"><pre><span class="pl-mh"># <span class="pl-en">foo 1</span></span>
+<span class="pl-mh">## <span class="pl-en">foo 2</span></span>
+<span class="pl-mh">### <span class="pl-en">foo 3</span></span>
+<span class="pl-mh">#### <span class="pl-en">foo 4</span></span>
+<span class="pl-mh">##### <span class="pl-en">foo 5</span></span>
+<span class="pl-mh">###### <span class="pl-en">foo 6</span></span></pre></div>
+<p dir="auto">The above will be rendered as:</p>
+<div class="markdown-heading" dir="auto"><h1 tabindex="-1" class="heading-element" dir="auto">foo 1</h1><a id="user-content-foo-1" class="anchor" aria-label="Permalink: foo 1" href="#foo-1"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">foo 2</h2><a id="user-content-foo-2" class="anchor" aria-label="Permalink: foo 2" href="#foo-2"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">foo 3</h3><a id="user-content-foo-3" class="anchor" aria-label="Permalink: foo 3" href="#foo-3"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto">foo 4</h4><a id="user-content-foo-4" class="anchor" aria-label="Permalink: foo 4" href="#foo-4"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h5 tabindex="-1" class="heading-element" dir="auto">foo 5</h5><a id="user-content-foo-5" class="anchor" aria-label="Permalink: foo 5" href="#foo-5"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h6 tabindex="-1" class="heading-element" dir="auto">foo 6</h6><a id="user-content-foo-6" class="anchor" aria-label="Permalink: foo 6" href="#foo-6"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">It is also ok with <code>#</code> symbols after the header text, like this:</p>
+<div class="highlight highlight-text-md notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="# foo 1a           #
+## foo 2a         ##
+### foo 3a       ###
+#### foo 4a     ####
+##### foo 5a   #####
+###### foo 6a ######"><pre><span class="pl-mh"># <span class="pl-en">foo 1a</span>           #</span>
+<span class="pl-mh">## <span class="pl-en">foo 2a</span>         ##</span>
+<span class="pl-mh">### <span class="pl-en">foo 3a</span>       ###</span>
+<span class="pl-mh">#### <span class="pl-en">foo 4a</span>     ####</span>
+<span class="pl-mh">##### <span class="pl-en">foo 5a</span>   #####</span>
+<span class="pl-mh">###### <span class="pl-en">foo 6a</span> ######</span></pre></div>
+<p dir="auto">These will look like the following:</p>
+<div class="markdown-heading" dir="auto"><h1 tabindex="-1" class="heading-element" dir="auto">foo 1a</h1><a id="user-content-foo-1a" class="anchor" aria-label="Permalink: foo 1a" href="#foo-1a"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">foo 2a</h2><a id="user-content-foo-2a" class="anchor" aria-label="Permalink: foo 2a" href="#foo-2a"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">foo 3a</h3><a id="user-content-foo-3a" class="anchor" aria-label="Permalink: foo 3a" href="#foo-3a"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto">foo 4a</h4><a id="user-content-foo-4a" class="anchor" aria-label="Permalink: foo 4a" href="#foo-4a"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h5 tabindex="-1" class="heading-element" dir="auto">foo 5a</h5><a id="user-content-foo-5a" class="anchor" aria-label="Permalink: foo 5a" href="#foo-5a"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h6 tabindex="-1" class="heading-element" dir="auto">foo 6a</h6><a id="user-content-foo-6a" class="anchor" aria-label="Permalink: foo 6a" href="#foo-6a"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">One can also specify the two first header levels using underlines.</p>
+<div class="highlight highlight-text-md notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="Header text
+==========="><pre>Header text
+<span class="pl-mh">===========</span></pre></div>
+<p dir="auto">will show up as:</p>
+<div class="markdown-heading" dir="auto"><h1 tabindex="-1" class="heading-element" dir="auto">Header text</h1><a id="user-content-header-text" class="anchor" aria-label="Permalink: Header text" href="#header-text"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">and:</p>
+<div class="highlight highlight-text-md notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="Another header text
+-------------------"><pre>Another header text
+<span class="pl-ms">-------------------</span></pre></div>
+<p dir="auto">comes out as:</p>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">Another header text</h2><a id="user-content-another-header-text" class="anchor" aria-label="Permalink: Another header text" href="#another-header-text"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">In these cases the header text can span multiple lines, as in:</p>
+<div class="highlight highlight-text-md notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="Header with a
+lot of text
+============="><pre>Header with a
+lot of text
+<span class="pl-mh">=============</span></pre></div>
+<div class="markdown-heading" dir="auto"><h1 tabindex="-1" class="heading-element" dir="auto">Header with a
+lot of text</h1><a id="user-content-header-with-alot-of-text" class="anchor" aria-label="Permalink: Header with a
+lot of text" href="#header-with-alot-of-text"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="highlight highlight-text-md notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="Second header with a
+lot of text
+-------------"><pre>Second header with a
+lot of text
+<span class="pl-ms">-------------</span></pre></div>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">Second header with a
+lot of text</h2><a id="user-content-second-header-with-alot-of-text" class="anchor" aria-label="Permalink: Second header with a
+lot of text" href="#second-header-with-alot-of-text"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">Please note that in the GiellaLT documentation system, only the first header on a page
+can be level 1, it is used as the page title. All subsequent headers must be level 2 or more,
+with level 2 being the top level header for the document content.</p>
+<p dir="auto">This also means that the generated table of content (to the left) only contains level 2
+or more headers.</p>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">Horisontal lines</h2><a id="user-content-horisontal-lines" class="anchor" aria-label="Permalink: Horisontal lines" href="#horisontal-lines"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">One can use one of <code>*</code>, <code>-</code> or <code>_</code>. It must be at least three of them, and there
+can be spaces between. There can be nothing else than whitespace and one of the
+mentioned characters.</p>
+<div class="highlight highlight-text-md notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="---"><pre><span class="pl-s">---</span></pre></div>
+<p dir="auto">renders like:</p>
+<hr>
+<p dir="auto">and:</p>
+<div class="highlight highlight-text-md notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="***"><pre><span class="pl-ms">***</span></pre></div>
+<p dir="auto">also renders like:</p>
+<hr>
+<p dir="auto">and even (at most three initial spaces)</p>
+<div class="highlight highlight-text-md notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="   ___"><pre><span class="pl-ms">   ___</span></pre></div>
+<p dir="auto">renders like:</p>
+<hr>
+<p dir="auto">Enough with horisontal lines.</p>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">Tables</h2><a id="user-content-tables" class="anchor" aria-label="Permalink: Tables" href="#tables"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">This code:</p>
+<div class="highlight highlight-text-md notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="| THead1 | THead2 | THead3 |
+|:------ |:------:| ------:|
+| Cell 1 | _Cell 2_ | **Cell 3** |
+| ***Cell 4*** | Cell 5 | Cell 6 |
+| Cell 7 | `Cell 8` | Cell 9 |"><pre><span class="pl-ml">|</span> THead1 <span class="pl-ml">|</span> THead2 <span class="pl-ml">|</span> THead3 <span class="pl-ml">|</span>
+<span class="pl-ml">|</span>:------ <span class="pl-ml">|</span>:------:<span class="pl-ml">|</span> ------:<span class="pl-ml">|</span>
+<span class="pl-ml">|</span> Cell 1 <span class="pl-ml">|</span> <span class="pl-s">_</span>Cell 2<span class="pl-s">_</span> <span class="pl-ml">|</span> <span class="pl-s">**</span>Cell 3<span class="pl-s">**</span> <span class="pl-ml">|</span>
+<span class="pl-ml">|</span> <span class="pl-s">***</span>Cell 4<span class="pl-s">***</span> <span class="pl-ml">|</span> Cell 5 <span class="pl-ml">|</span> Cell 6 <span class="pl-ml">|</span>
+<span class="pl-ml">|</span> Cell 7 <span class="pl-ml">|</span> <span class="pl-s">`</span><span class="pl-c1">Cell 8</span><span class="pl-s">`</span> <span class="pl-ml">|</span> Cell 9 <span class="pl-ml">|</span></pre></div>
+<p dir="auto">looks like this:</p>
+<markdown-accessiblity-table><table>
+<thead>
+<tr>
+<th align="left">THead1</th>
+<th align="center">THead2</th>
+<th align="right">THead3</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left">Cell 1</td>
+<td align="center"><em>Cell 2</em></td>
+<td align="right"><strong>Cell 3</strong></td>
+</tr>
+<tr>
+<td align="left"><em><strong>Cell 4</strong></em></td>
+<td align="center">Cell 5</td>
+<td align="right">Cell 6</td>
+</tr>
+<tr>
+<td align="left">Cell 7</td>
+<td align="center"><code>Cell 8</code></td>
+<td align="right">Cell 9</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">Emoji</h2><a id="user-content-emoji" class="anchor" aria-label="Permalink: Emoji" href="#emoji"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><a href="https://github.com/ikatyang/emoji-cheat-sheet/blob/master/README.md">GFM emoji</a> rendering has been enabled! 👍</p>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">HTML elements</h2><a id="user-content-html-elements" class="anchor" aria-label="Permalink: HTML elements" href="#html-elements"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">Most elements are passed through and will render as such. The following HTML
+elements <strong>will be encoded using &lt;</strong>, and thus be inactivated in the final html code:</p>
+<ul dir="auto">
+<li><code>&lt;title&gt;    </code></li>
+<li><code>&lt;textarea&gt; </code></li>
+<li><code>&lt;style&gt;    </code></li>
+<li><code>&lt;xmp&gt;      </code></li>
+<li><code>&lt;iframe&gt;   </code></li>
+<li><code>&lt;noembed&gt;  </code></li>
+<li><code>&lt;noframes&gt; </code></li>
+<li><code>&lt;script&gt;   </code></li>
+<li><code>&lt;plaintext&gt;</code></li>
+</ul>
+<p dir="auto">All other html and xml tag lookalikes will be passed through, and either rendered
+as usual, or be available for targeted CSS styling.</p>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">Useful HTML elements</h3><a id="user-content-useful-html-elements" class="anchor" aria-label="Permalink: Useful HTML elements" href="#useful-html-elements"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto">The <code>&lt;ruby&gt;</code> element</h4><a id="user-content-the-ruby-element" class="anchor" aria-label="Permalink: The &lt;ruby&gt; element" href="#the-ruby-element"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="highlight highlight-text-xml notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="&lt;ruby&gt;tekst&lt;rt&gt;ja&lt;/rt&gt;&lt;/ruby&gt;"><pre>&lt;<span class="pl-ent">ruby</span>&gt;tekst&lt;<span class="pl-ent">rt</span>&gt;ja&lt;/<span class="pl-ent">rt</span>&gt;&lt;/<span class="pl-ent">ruby</span>&gt;</pre></div>
+<p dir="auto">will render as:</p>
+<p dir="auto"><ruby>tekst<rt>ja</rt></ruby></p>
+<p dir="auto">This can be used to show pronunciation:</p>
+<div class="highlight highlight-text-xml notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="&lt;ruby&gt;
+	&lt;strong&gt;cromulent&lt;/strong&gt;
+	&lt;rp&gt;(&lt;/rp&gt;
+	&lt;rt&gt;crôm-yü-lənt&lt;/rt&gt;
+	&lt;rp&gt;)&lt;/rp&gt;
+&lt;/ruby&gt;"><pre>&lt;<span class="pl-ent">ruby</span>&gt;
+	&lt;<span class="pl-ent">strong</span>&gt;cromulent&lt;/<span class="pl-ent">strong</span>&gt;
+	&lt;<span class="pl-ent">rp</span>&gt;(&lt;/<span class="pl-ent">rp</span>&gt;
+	&lt;<span class="pl-ent">rt</span>&gt;crôm-yü-lənt&lt;/<span class="pl-ent">rt</span>&gt;
+	&lt;<span class="pl-ent">rp</span>&gt;)&lt;/<span class="pl-ent">rp</span>&gt;
+&lt;/<span class="pl-ent">ruby</span>&gt;</pre></div>
+<p dir="auto"><ruby><strong>cromulent</strong> <rp>(</rp><rt>crôm-yü-lənt</rt><rp>)</rp></ruby></p>
+<p dir="auto">Traditional use is for east asian scripts:</p>
+<p dir="auto"><ruby>한자<rp>(</rp><rt>漢字</rt><rp>)</rp></ruby></p>
+<p dir="auto">Ruby elements can even be nested:</p>
+<p dir="auto"><ruby><ruby>世<rp>（</rp><rt>ㄕ ˋ</rt><rp>）</rp>上<rp>（</rp><rt>ㄕㄤ ˋ</rt><rp>）</rp>無<rp>（</rp><rt>ㄨ ˊ</rt><rp>）</rp>難<rp>（</rp><rt>ㄋㄢ ˊ</rt><rp>）</rp>事<rp>（</rp><rt>ㄕ ˋ</rt><rp>）</rp>只<rp>（</rp><rt>ㄓ ˇ</rt><rp>）</rp>怕<rp>（</rp><rt>ㄆㄚ ˋ</rt><rp>）</rp>有<rp>（</rp><rt>ㄧㄡ ˇ</rt><rp>）</rp>心<rp>（</rp><rt>ㄒㄧㄣ</rt><rp>）</rp>人<rp>（</rp><rt>ㄖㄣ ˊ</rt><rp>）</rp></ruby><rp> （</rp><rt>Anything can be done with enough perseverance</rt><rp>）</rp></ruby></p>
+<p dir="auto">In our context it can be used for simple glossing/text annotation:</p>
+<p dir="auto"><ruby>1800-lågon<rt>1800+Num+Cmp/Hyph+Cmp#låhko+N+Sg+Ine</rt></ruby>
+<ruby>hieredimbargon<rt>hieredit+V+TV+Der/NomAct+N+Cmp/SgNom+Cmp#barggo+N+Sg+Ine</rt></ruby></p>
+<div class="highlight highlight-text-xml notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="&lt;kbd&gt;ᛌᛁᚢᚱ&lt;/kbd&gt;"><pre>&lt;<span class="pl-ent">kbd</span>&gt;ᛌᛁᚢᚱ&lt;/<span class="pl-ent">kbd</span>&gt;</pre></div>
+<p dir="auto"><strong><kbd>ᛌᛁᚢᚱ</kbd></strong></p>
+<p dir="auto"><kbd><kbd>ᛌᛁᚢᚱ</kbd></kbd></p>
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">Simple graphs</h2><a id="user-content-simple-graphs" class="anchor" aria-label="Permalink: Simple graphs" href="#simple-graphs"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="aad82107-4807-4d66-b6c7-8f7436e9c629" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/mermaid?docs_host=https%3A%2F%2Fdocs.github.com" data-type="mermaid" aria-label="mermaid rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;pie showData\n    title Formal languages used in GiellaLT\n    \&quot;LexC\&quot; : 3129\n    \&quot;Xfst regex\&quot; : 2374\n    \&quot;Xfst script\&quot; : 856\n    \&quot;TwolC\&quot; : 125\n    \&quot;YAML\&quot; : 4451\n&quot;}" data-plain="pie showData
+    title Formal languages used in GiellaLT
+    &quot;LexC&quot; : 3129
+    &quot;Xfst regex&quot; : 2374
+    &quot;Xfst script&quot; : 856
+    &quot;TwolC&quot; : 125
+    &quot;YAML&quot; : 4451
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="mermaid" aria-label="Raw mermaid code">pie showData
+    title Formal languages used in GiellaLT
+    "LexC" : 3129
+    "Xfst regex" : 2374
+    "Xfst script" : 856
+    "TwolC" : 125
+    "YAML" : 4451
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<p dir="auto">Based on counts of all files of the various types in all repositories in the
+GiellaLT infra.</p>
+<p dir="auto">Another Mermaid test, this one includes configuration data:</p>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="e81a4ea2-1f13-4bc0-a0ae-f8c2d9ef6890" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/mermaid?docs_host=https%3A%2F%2Fdocs.github.com" data-type="mermaid" aria-label="mermaid rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;%%{init: {\&quot;pie\&quot;: {\&quot;textPosition\&quot;: 0.5}, 'theme':'forest', \&quot;themeVariables\&quot;: {\&quot;pieOuterStrokeWidth\&quot;: \&quot;5px\&quot;}} }%%\npie showData\n    title Key elements in Product X\n    \&quot;Calcium\&quot; : 42.96\n    \&quot;Potassium\&quot; : 50.05\n    \&quot;Magnesium\&quot; : 10.01\n    \&quot;Iron\&quot; :  5\n&quot;}" data-plain="%%{init: {&quot;pie&quot;: {&quot;textPosition&quot;: 0.5}, 'theme':'forest', &quot;themeVariables&quot;: {&quot;pieOuterStrokeWidth&quot;: &quot;5px&quot;}} }%%
+pie showData
+    title Key elements in Product X
+    &quot;Calcium&quot; : 42.96
+    &quot;Potassium&quot; : 50.05
+    &quot;Magnesium&quot; : 10.01
+    &quot;Iron&quot; :  5
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="mermaid" aria-label="Raw mermaid code">%%{init: {"pie": {"textPosition": 0.5}, 'theme':'forest', "themeVariables": {"pieOuterStrokeWidth": "5px"}} }%%
+pie showData
+    title Key elements in Product X
+    "Calcium" : 42.96
+    "Potassium" : 50.05
+    "Magnesium" : 10.01
+    "Iron" :  5
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<p dir="auto">And a third one:</p>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="cc98dfc3-098b-49b9-b331-cf815e1d52ee" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/mermaid?docs_host=https%3A%2F%2Fdocs.github.com" data-type="mermaid" aria-label="mermaid rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;graph TD\n    A[Start] --&gt; B{Er det fint vêr?}\n    B --&gt;|Ja| C[Gå på tur]\n    B --&gt;|Nei| D[Bli heime]\n&quot;}" data-plain="graph TD
+    A[Start] --&gt; B{Er det fint vêr?}
+    B --&gt;|Ja| C[Gå på tur]
+    B --&gt;|Nei| D[Bli heime]
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="mermaid" aria-label="Raw mermaid code">graph TD
+    A[Start] --&gt; B{Er det fint vêr?}
+    B --&gt;|Ja| C[Gå på tur]
+    B --&gt;|Nei| D[Bli heime]
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<p dir="auto">And a fourth one:</p>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="43799e62-9435-4d1c-9df9-928feed81475" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/mermaid?docs_host=https%3A%2F%2Fdocs.github.com" data-type="mermaid" aria-label="mermaid rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;graph TD\n    A[Start] --&gt;|Initialisering| B(Les konfigurasjon)\n    B --&gt; C{Finst fila?}\n    C --&gt;|Ja| D[Les fila]\n    C --&gt;|Nei| E[Opprett ny fil]\n    D --&gt; F[Prosesser data]\n    E --&gt; F\n&quot;}" data-plain="graph TD
+    A[Start] --&gt;|Initialisering| B(Les konfigurasjon)
+    B --&gt; C{Finst fila?}
+    C --&gt;|Ja| D[Les fila]
+    C --&gt;|Nei| E[Opprett ny fil]
+    D --&gt; F[Prosesser data]
+    E --&gt; F
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="mermaid" aria-label="Raw mermaid code">graph TD
+    A[Start] --&gt;|Initialisering| B(Les konfigurasjon)
+    B --&gt; C{Finst fila?}
+    C --&gt;|Ja| D[Les fila]
+    C --&gt;|Nei| E[Opprett ny fil]
+    D --&gt; F[Prosesser data]
+    E --&gt; F
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<div class="markdown-heading" dir="auto"><h2 tabindex="-1" class="heading-element" dir="auto">Mapping</h2><a id="user-content-mapping" class="anchor" aria-label="Permalink: Mapping" href="#mapping"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">topojson</h3><a id="user-content-topojson" class="anchor" aria-label="Permalink: topojson" href="#topojson"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="c4802035-7b5d-43a7-9e46-56a72574f6fb" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/topojson?docs_host=https%3A%2F%2Fdocs.github.com" data-type="topojson" aria-label="topojson rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;{\n  \&quot;type\&quot;: \&quot;Topology\&quot;,\n  \&quot;transform\&quot;: {\n    \&quot;scale\&quot;: [0.0005000500050005, 0.00010001000100010001],\n    \&quot;translate\&quot;: [100, 0]\n  },\n  \&quot;objects\&quot;: {\n    \&quot;example\&quot;: {\n      \&quot;type\&quot;: \&quot;GeometryCollection\&quot;,\n      \&quot;geometries\&quot;: [\n        {\n          \&quot;type\&quot;: \&quot;Point\&quot;,\n          \&quot;properties\&quot;: {\&quot;prop0\&quot;: \&quot;value0\&quot;},\n          \&quot;coordinates\&quot;: [4000, 5000]\n        },\n        {\n          \&quot;type\&quot;: \&quot;LineString\&quot;,\n          \&quot;properties\&quot;: {\&quot;prop0\&quot;: \&quot;value0\&quot;, \&quot;prop1\&quot;: 0},\n          \&quot;arcs\&quot;: [0]\n        },\n        {\n          \&quot;type\&quot;: \&quot;Polygon\&quot;,\n          \&quot;properties\&quot;: {\&quot;prop0\&quot;: \&quot;value0\&quot;,\n            \&quot;prop1\&quot;: {\&quot;this\&quot;: \&quot;that\&quot;}\n          },\n          \&quot;arcs\&quot;: [[1]]\n        }\n      ]\n    }\n  },\n  \&quot;arcs\&quot;: [[[4000, 0], [1999, 9999], [2000, -9999], [2000, 9999]],[[0, 0], [0, 9999], [2000, 0], [0, -9999], [-2000, 0]]]\n}\n&quot;}" data-plain="{
+  &quot;type&quot;: &quot;Topology&quot;,
+  &quot;transform&quot;: {
+    &quot;scale&quot;: [0.0005000500050005, 0.00010001000100010001],
+    &quot;translate&quot;: [100, 0]
+  },
+  &quot;objects&quot;: {
+    &quot;example&quot;: {
+      &quot;type&quot;: &quot;GeometryCollection&quot;,
+      &quot;geometries&quot;: [
+        {
+          &quot;type&quot;: &quot;Point&quot;,
+          &quot;properties&quot;: {&quot;prop0&quot;: &quot;value0&quot;},
+          &quot;coordinates&quot;: [4000, 5000]
+        },
+        {
+          &quot;type&quot;: &quot;LineString&quot;,
+          &quot;properties&quot;: {&quot;prop0&quot;: &quot;value0&quot;, &quot;prop1&quot;: 0},
+          &quot;arcs&quot;: [0]
+        },
+        {
+          &quot;type&quot;: &quot;Polygon&quot;,
+          &quot;properties&quot;: {&quot;prop0&quot;: &quot;value0&quot;,
+            &quot;prop1&quot;: {&quot;this&quot;: &quot;that&quot;}
+          },
+          &quot;arcs&quot;: [[1]]
+        }
+      ]
+    }
+  },
+  &quot;arcs&quot;: [[[4000, 0], [1999, 9999], [2000, -9999], [2000, 9999]],[[0, 0], [0, 9999], [2000, 0], [0, -9999], [-2000, 0]]]
+}
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="topojson" aria-label="Raw topojson code">{
+  "type": "Topology",
+  "transform": {
+    "scale": [0.0005000500050005, 0.00010001000100010001],
+    "translate": [100, 0]
+  },
+  "objects": {
+    "example": {
+      "type": "GeometryCollection",
+      "geometries": [
+        {
+          "type": "Point",
+          "properties": {"prop0": "value0"},
+          "coordinates": [4000, 5000]
+        },
+        {
+          "type": "LineString",
+          "properties": {"prop0": "value0", "prop1": 0},
+          "arcs": [0]
+        },
+        {
+          "type": "Polygon",
+          "properties": {"prop0": "value0",
+            "prop1": {"this": "that"}
+          },
+          "arcs": [[1]]
+        }
+      ]
+    }
+  },
+  "arcs": [[[4000, 0], [1999, 9999], [2000, -9999], [2000, 9999]],[[0, 0], [0, 9999], [2000, 0], [0, -9999], [-2000, 0]]]
+}
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">geojson</h3><a id="user-content-geojson" class="anchor" aria-label="Permalink: geojson" href="#geojson"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="0da93f5c-0ffd-421e-b07b-b378a6d47301" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/geojson?docs_host=https%3A%2F%2Fdocs.github.com" data-type="geojson" aria-label="geojson rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;{\n  \&quot;type\&quot;: \&quot;Polygon\&quot;,\n  \&quot;coordinates\&quot;: [\n      [\n          [-90,30],\n          [-90,35],\n          [-90,35],\n          [-85,35],\n          [-85,30]\n      ]\n  ]\n}\n&quot;}" data-plain="{
+  &quot;type&quot;: &quot;Polygon&quot;,
+  &quot;coordinates&quot;: [
+      [
+          [-90,30],
+          [-90,35],
+          [-90,35],
+          [-85,35],
+          [-85,30]
+      ]
+  ]
+}
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="geojson" aria-label="Raw geojson code">{
+  "type": "Polygon",
+  "coordinates": [
+      [
+          [-90,30],
+          [-90,35],
+          [-90,35],
+          [-85,35],
+          [-85,30]
+      ]
+  ]
+}
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">Some GEOJSON map examples</h3><a id="user-content-some-geojson-map-examples" class="anchor" aria-label="Permalink: Some GEOJSON map examples" href="#some-geojson-map-examples"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto">Oslo (GeoJSON)</h4><a id="user-content-oslo-geojson" class="anchor" aria-label="Permalink: Oslo (GeoJSON)" href="#oslo-geojson"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">Single points can in some cases be rendered fully zoomed in, zoom out to get the right view if that happens.</p>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="dfd6611c-24b5-4bc6-8237-6dd43c810b5d" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/geojson?docs_host=https%3A%2F%2Fdocs.github.com" data-type="geojson" aria-label="geojson rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;{\n  \&quot;type\&quot;: \&quot;Feature\&quot;,\n  \&quot;properties\&quot;: {\n    \&quot;name\&quot;: \&quot;Oslo\&quot;,\n    \&quot;radius\&quot;: 25,\n    \&quot;marker-color\&quot;: \&quot;#ff4444\&quot;,\n    \&quot;marker-size\&quot;: \&quot;medium\&quot;\n  },\n  \&quot;geometry\&quot;: {\n    \&quot;type\&quot;: \&quot;Point\&quot;,\n    \&quot;coordinates\&quot;: [10.7522, 59.9139]\n  }\n}\n&quot;}" data-plain="{
+  &quot;type&quot;: &quot;Feature&quot;,
+  &quot;properties&quot;: {
+    &quot;name&quot;: &quot;Oslo&quot;,
+    &quot;radius&quot;: 25,
+    &quot;marker-color&quot;: &quot;#ff4444&quot;,
+    &quot;marker-size&quot;: &quot;medium&quot;
+  },
+  &quot;geometry&quot;: {
+    &quot;type&quot;: &quot;Point&quot;,
+    &quot;coordinates&quot;: [10.7522, 59.9139]
+  }
+}
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="geojson" aria-label="Raw geojson code">{
+  "type": "Feature",
+  "properties": {
+    "name": "Oslo",
+    "radius": 25,
+    "marker-color": "#ff4444",
+    "marker-size": "medium"
+  },
+  "geometry": {
+    "type": "Point",
+    "coordinates": [10.7522, 59.9139]
+  }
+}
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto">Bergen and Trondheim (GeoJSON)</h4><a id="user-content-bergen-and-trondheim-geojson" class="anchor" aria-label="Permalink: Bergen and Trondheim (GeoJSON)" href="#bergen-and-trondheim-geojson"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="aef27295-cb7a-4ee6-811e-6f16de1bba60" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/geojson?docs_host=https%3A%2F%2Fdocs.github.com" data-type="geojson" aria-label="geojson rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;{\n  \&quot;type\&quot;: \&quot;FeatureCollection\&quot;,\n  \&quot;features\&quot;: [\n    {\n      \&quot;type\&quot;: \&quot;Feature\&quot;,\n      \&quot;properties\&quot;: {\n        \&quot;name\&quot;: \&quot;Bergen\&quot;,\n        \&quot;radius\&quot;: 15,\n        \&quot;marker-color\&quot;: \&quot;#00aaff\&quot;,\n        \&quot;marker-size\&quot;: \&quot;medium\&quot;\n      },\n      \&quot;geometry\&quot;: {\n        \&quot;type\&quot;: \&quot;Point\&quot;,\n        \&quot;coordinates\&quot;: [5.3221, 60.3913]\n      }\n    },\n    {\n      \&quot;type\&quot;: \&quot;Feature\&quot;, \n      \&quot;properties\&quot;: {\n        \&quot;name\&quot;: \&quot;Trondheim\&quot;,\n        \&quot;radius\&quot;: 15,\n        \&quot;marker-color\&quot;: \&quot;#22cc22\&quot;,\n        \&quot;marker-size\&quot;: \&quot;medium\&quot;\n      },\n      \&quot;geometry\&quot;: {\n        \&quot;type\&quot;: \&quot;Point\&quot;,\n        \&quot;coordinates\&quot;: [10.3951, 63.4305]\n      }\n    }\n  ]\n}\n&quot;}" data-plain="{
+  &quot;type&quot;: &quot;FeatureCollection&quot;,
+  &quot;features&quot;: [
+    {
+      &quot;type&quot;: &quot;Feature&quot;,
+      &quot;properties&quot;: {
+        &quot;name&quot;: &quot;Bergen&quot;,
+        &quot;radius&quot;: 15,
+        &quot;marker-color&quot;: &quot;#00aaff&quot;,
+        &quot;marker-size&quot;: &quot;medium&quot;
+      },
+      &quot;geometry&quot;: {
+        &quot;type&quot;: &quot;Point&quot;,
+        &quot;coordinates&quot;: [5.3221, 60.3913]
+      }
+    },
+    {
+      &quot;type&quot;: &quot;Feature&quot;, 
+      &quot;properties&quot;: {
+        &quot;name&quot;: &quot;Trondheim&quot;,
+        &quot;radius&quot;: 15,
+        &quot;marker-color&quot;: &quot;#22cc22&quot;,
+        &quot;marker-size&quot;: &quot;medium&quot;
+      },
+      &quot;geometry&quot;: {
+        &quot;type&quot;: &quot;Point&quot;,
+        &quot;coordinates&quot;: [10.3951, 63.4305]
+      }
+    }
+  ]
+}
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="geojson" aria-label="Raw geojson code">{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Bergen",
+        "radius": 15,
+        "marker-color": "#00aaff",
+        "marker-size": "medium"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [5.3221, 60.3913]
+      }
+    },
+    {
+      "type": "Feature", 
+      "properties": {
+        "name": "Trondheim",
+        "radius": 15,
+        "marker-color": "#22cc22",
+        "marker-size": "medium"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [10.3951, 63.4305]
+      }
+    }
+  ]
+}
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto">South Sámi (GeoJSON)</h4><a id="user-content-south-sámi-geojson" class="anchor" aria-label="Permalink: South Sámi (GeoJSON)" href="#south-sámi-geojson"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">Single points can in some cases be rendered fully zoomed in, zoom out to get the right view if that happens.</p>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="a45e6cba-2b37-40da-a439-aa95caa1f4d7" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/geojson?docs_host=https%3A%2F%2Fdocs.github.com" data-type="geojson" aria-label="geojson rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;{\n  \&quot;type\&quot;: \&quot;Feature\&quot;,\n  \&quot;properties\&quot;: {\n    \&quot;name\&quot;: \&quot;South Sámi\&quot;,\n    \&quot;radius\&quot;: 200,\n    \&quot;marker-color\&quot;: \&quot;#ff4444\&quot;,\n    \&quot;marker-size\&quot;: \&quot;large\&quot;\n  },\n  \&quot;geometry\&quot;: {\n    \&quot;type\&quot;: \&quot;Point\&quot;,\n    \&quot;coordinates\&quot;: [13.15, 63.88]\n  }\n}\n&quot;}" data-plain="{
+  &quot;type&quot;: &quot;Feature&quot;,
+  &quot;properties&quot;: {
+    &quot;name&quot;: &quot;South Sámi&quot;,
+    &quot;radius&quot;: 200,
+    &quot;marker-color&quot;: &quot;#ff4444&quot;,
+    &quot;marker-size&quot;: &quot;large&quot;
+  },
+  &quot;geometry&quot;: {
+    &quot;type&quot;: &quot;Point&quot;,
+    &quot;coordinates&quot;: [13.15, 63.88]
+  }
+}
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="geojson" aria-label="Raw geojson code">{
+  "type": "Feature",
+  "properties": {
+    "name": "South Sámi",
+    "radius": 200,
+    "marker-color": "#ff4444",
+    "marker-size": "large"
+  },
+  "geometry": {
+    "type": "Point",
+    "coordinates": [13.15, 63.88]
+  }
+}
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<p dir="auto">Code:</p>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="```geojson
+{
+  &quot;type&quot;: &quot;Feature&quot;,
+  &quot;properties&quot;: {
+    &quot;name&quot;: &quot;South Sámi&quot;,
+    &quot;radius&quot;: 200,
+    &quot;marker-color&quot;: &quot;#ff4444&quot;,
+    &quot;marker-size&quot;: &quot;large&quot;
+  },
+  &quot;geometry&quot;: {
+    &quot;type&quot;: &quot;Point&quot;,
+    &quot;coordinates&quot;: [13.15, 63.88]
+  }
+}
+```"><pre class="notranslate"><code>```geojson
+{
+  "type": "Feature",
+  "properties": {
+    "name": "South Sámi",
+    "radius": 200,
+    "marker-color": "#ff4444",
+    "marker-size": "large"
+  },
+  "geometry": {
+    "type": "Point",
+    "coordinates": [13.15, 63.88]
+  }
+}
+```
+</code></pre></div>
+<p dir="auto">The <code>radius</code> of the circular gradient is specified in kilometers, and the colour is specified in the <code>marker-color</code> element.</p>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto">SME and SMJ (GeoJSON)</h4><a id="user-content-sme-and-smj-geojson" class="anchor" aria-label="Permalink: SME and SMJ (GeoJSON)" href="#sme-and-smj-geojson"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="10cd8064-0bfb-4135-8b95-1debe201bd9e" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/geojson?docs_host=https%3A%2F%2Fdocs.github.com" data-type="geojson" aria-label="geojson rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;{\n  \&quot;type\&quot;: \&quot;FeatureCollection\&quot;,\n  \&quot;features\&quot;: [\n    {\n      \&quot;type\&quot;: \&quot;Feature\&quot;,\n      \&quot;properties\&quot;: {\n        \&quot;name\&quot;: \&quot;North Sámi\&quot;,\n        \&quot;radius\&quot;: 250,\n        \&quot;marker-color\&quot;: \&quot;#00aaff\&quot;,\n        \&quot;marker-size\&quot;: \&quot;medium\&quot;\n      },\n      \&quot;geometry\&quot;: {\n        \&quot;type\&quot;: \&quot;Point\&quot;,\n        \&quot;coordinates\&quot;: [23.6683, 69.1397]\n      }\n    },\n    {\n      \&quot;type\&quot;: \&quot;Feature\&quot;, \n      \&quot;properties\&quot;: {\n        \&quot;name\&quot;: \&quot;Lule Sámi\&quot;,\n        \&quot;radius\&quot;: 200,\n        \&quot;marker-color\&quot;: \&quot;#22cc22\&quot;,\n        \&quot;marker-size\&quot;: \&quot;medium\&quot;\n      },\n      \&quot;geometry\&quot;: {\n        \&quot;type\&quot;: \&quot;Point\&quot;,\n        \&quot;coordinates\&quot;: [18.6213, 67.4456]\n      }\n    }\n  ]\n}\n&quot;}" data-plain="{
+  &quot;type&quot;: &quot;FeatureCollection&quot;,
+  &quot;features&quot;: [
+    {
+      &quot;type&quot;: &quot;Feature&quot;,
+      &quot;properties&quot;: {
+        &quot;name&quot;: &quot;North Sámi&quot;,
+        &quot;radius&quot;: 250,
+        &quot;marker-color&quot;: &quot;#00aaff&quot;,
+        &quot;marker-size&quot;: &quot;medium&quot;
+      },
+      &quot;geometry&quot;: {
+        &quot;type&quot;: &quot;Point&quot;,
+        &quot;coordinates&quot;: [23.6683, 69.1397]
+      }
+    },
+    {
+      &quot;type&quot;: &quot;Feature&quot;, 
+      &quot;properties&quot;: {
+        &quot;name&quot;: &quot;Lule Sámi&quot;,
+        &quot;radius&quot;: 200,
+        &quot;marker-color&quot;: &quot;#22cc22&quot;,
+        &quot;marker-size&quot;: &quot;medium&quot;
+      },
+      &quot;geometry&quot;: {
+        &quot;type&quot;: &quot;Point&quot;,
+        &quot;coordinates&quot;: [18.6213, 67.4456]
+      }
+    }
+  ]
+}
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="geojson" aria-label="Raw geojson code">{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "North Sámi",
+        "radius": 250,
+        "marker-color": "#00aaff",
+        "marker-size": "medium"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [23.6683, 69.1397]
+      }
+    },
+    {
+      "type": "Feature", 
+      "properties": {
+        "name": "Lule Sámi",
+        "radius": 200,
+        "marker-color": "#22cc22",
+        "marker-size": "medium"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [18.6213, 67.4456]
+      }
+    }
+  ]
+}
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<p dir="auto">Code:</p>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="```geojson
+{
+  &quot;type&quot;: &quot;FeatureCollection&quot;,
+  &quot;features&quot;: [
+    {
+      &quot;type&quot;: &quot;Feature&quot;,
+      &quot;properties&quot;: {
+        &quot;name&quot;: &quot;North Sámi&quot;,
+        &quot;radius&quot;: 250,
+        &quot;marker-color&quot;: &quot;#00aaff&quot;,
+        &quot;marker-size&quot;: &quot;medium&quot;
+      },
+      &quot;geometry&quot;: {
+        &quot;type&quot;: &quot;Point&quot;,
+        &quot;coordinates&quot;: [23.6683, 69.1397]
+      }
+    },
+    {
+      &quot;type&quot;: &quot;Feature&quot;, 
+      &quot;properties&quot;: {
+        &quot;name&quot;: &quot;Lule Sámi&quot;,
+        &quot;radius&quot;: 200,
+        &quot;marker-color&quot;: &quot;#22cc22&quot;,
+        &quot;marker-size&quot;: &quot;medium&quot;
+      },
+      &quot;geometry&quot;: {
+        &quot;type&quot;: &quot;Point&quot;,
+        &quot;coordinates&quot;: [18.6213, 67.4456]
+      }
+    }
+  ]
+}
+```"><pre class="notranslate"><code>```geojson
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "North Sámi",
+        "radius": 250,
+        "marker-color": "#00aaff",
+        "marker-size": "medium"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [23.6683, 69.1397]
+      }
+    },
+    {
+      "type": "Feature", 
+      "properties": {
+        "name": "Lule Sámi",
+        "radius": 200,
+        "marker-color": "#22cc22",
+        "marker-size": "medium"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [18.6213, 67.4456]
+      }
+    }
+  ]
+}
+```
+</code></pre></div>
+<div class="markdown-heading" dir="auto"><h3 tabindex="-1" class="heading-element" dir="auto">Some TopoJSON Examples</h3><a id="user-content-some-topojson-examples" class="anchor" aria-label="Permalink: Some TopoJSON Examples" href="#some-topojson-examples"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto">Oslo (TopoJSON)</h4><a id="user-content-oslo-topojson" class="anchor" aria-label="Permalink: Oslo (TopoJSON)" href="#oslo-topojson"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="c92461ee-9600-4d26-831b-3f245218e20d" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/topojson?docs_host=https%3A%2F%2Fdocs.github.com" data-type="topojson" aria-label="topojson rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;{\n  \&quot;type\&quot;: \&quot;Topology\&quot;,\n  \&quot;objects\&quot;: {\n    \&quot;oslo\&quot;: {\n      \&quot;type\&quot;: \&quot;GeometryCollection\&quot;,\n      \&quot;geometries\&quot;: [\n        {\n          \&quot;type\&quot;: \&quot;Point\&quot;,\n          \&quot;properties\&quot;: {\n            \&quot;name\&quot;: \&quot;Oslo\&quot;,\n            \&quot;radius\&quot;: 25,\n            \&quot;marker-color\&quot;: \&quot;#ff4444\&quot;,\n            \&quot;marker-size\&quot;: \&quot;medium\&quot;\n          },\n          \&quot;coordinates\&quot;: [10.7522, 59.9139]\n        }\n      ]\n    }\n  },\n  \&quot;arcs\&quot;: []\n}\n&quot;}" data-plain="{
+  &quot;type&quot;: &quot;Topology&quot;,
+  &quot;objects&quot;: {
+    &quot;oslo&quot;: {
+      &quot;type&quot;: &quot;GeometryCollection&quot;,
+      &quot;geometries&quot;: [
+        {
+          &quot;type&quot;: &quot;Point&quot;,
+          &quot;properties&quot;: {
+            &quot;name&quot;: &quot;Oslo&quot;,
+            &quot;radius&quot;: 25,
+            &quot;marker-color&quot;: &quot;#ff4444&quot;,
+            &quot;marker-size&quot;: &quot;medium&quot;
+          },
+          &quot;coordinates&quot;: [10.7522, 59.9139]
+        }
+      ]
+    }
+  },
+  &quot;arcs&quot;: []
+}
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="topojson" aria-label="Raw topojson code">{
+  "type": "Topology",
+  "objects": {
+    "oslo": {
+      "type": "GeometryCollection",
+      "geometries": [
+        {
+          "type": "Point",
+          "properties": {
+            "name": "Oslo",
+            "radius": 25,
+            "marker-color": "#ff4444",
+            "marker-size": "medium"
+          },
+          "coordinates": [10.7522, 59.9139]
+        }
+      ]
+    }
+  },
+  "arcs": []
+}
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto">South Sámi (TopoJSON)</h4><a id="user-content-south-sámi-topojson" class="anchor" aria-label="Permalink: South Sámi (TopoJSON)" href="#south-sámi-topojson"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="32fe5238-e3cf-4d9f-8d45-1b59803702b8" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/topojson?docs_host=https%3A%2F%2Fdocs.github.com" data-type="topojson" aria-label="topojson rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;{\n  \&quot;type\&quot;: \&quot;Topology\&quot;,\n  \&quot;objects\&quot;: {\n    \&quot;south_sami\&quot;: {\n      \&quot;type\&quot;: \&quot;GeometryCollection\&quot;,\n      \&quot;geometries\&quot;: [\n        {\n          \&quot;type\&quot;: \&quot;Point\&quot;,\n          \&quot;properties\&quot;: {\n            \&quot;name\&quot;: \&quot;South Sámi\&quot;,\n            \&quot;radius\&quot;: 200,\n            \&quot;marker-color\&quot;: \&quot;#ff4444\&quot;,\n            \&quot;marker-size\&quot;: \&quot;large\&quot;\n          },\n          \&quot;coordinates\&quot;: [13.15, 63.88]\n        }\n      ]\n    }\n  },\n  \&quot;arcs\&quot;: []\n}\n&quot;}" data-plain="{
+  &quot;type&quot;: &quot;Topology&quot;,
+  &quot;objects&quot;: {
+    &quot;south_sami&quot;: {
+      &quot;type&quot;: &quot;GeometryCollection&quot;,
+      &quot;geometries&quot;: [
+        {
+          &quot;type&quot;: &quot;Point&quot;,
+          &quot;properties&quot;: {
+            &quot;name&quot;: &quot;South Sámi&quot;,
+            &quot;radius&quot;: 200,
+            &quot;marker-color&quot;: &quot;#ff4444&quot;,
+            &quot;marker-size&quot;: &quot;large&quot;
+          },
+          &quot;coordinates&quot;: [13.15, 63.88]
+        }
+      ]
+    }
+  },
+  &quot;arcs&quot;: []
+}
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="topojson" aria-label="Raw topojson code">{
+  "type": "Topology",
+  "objects": {
+    "south_sami": {
+      "type": "GeometryCollection",
+      "geometries": [
+        {
+          "type": "Point",
+          "properties": {
+            "name": "South Sámi",
+            "radius": 200,
+            "marker-color": "#ff4444",
+            "marker-size": "large"
+          },
+          "coordinates": [13.15, 63.88]
+        }
+      ]
+    }
+  },
+  "arcs": []
+}
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<p dir="auto">Code:</p>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="```topojson
+{
+  &quot;type&quot;: &quot;Topology&quot;,
+  &quot;objects&quot;: {
+    &quot;south_sami&quot;: {
+      &quot;type&quot;: &quot;GeometryCollection&quot;,
+      &quot;geometries&quot;: [
+        {
+          &quot;type&quot;: &quot;Point&quot;,
+          &quot;properties&quot;: {
+            &quot;name&quot;: &quot;South Sámi&quot;,
+            &quot;radius&quot;: 200,
+            &quot;marker-color&quot;: &quot;#ff4444&quot;,
+            &quot;marker-size&quot;: &quot;large&quot;
+          },
+          &quot;coordinates&quot;: [13.15, 63.88]
+        }
+      ]
+    }
+  },
+  &quot;arcs&quot;: []
+}
+```"><pre class="notranslate"><code>```topojson
+{
+  "type": "Topology",
+  "objects": {
+    "south_sami": {
+      "type": "GeometryCollection",
+      "geometries": [
+        {
+          "type": "Point",
+          "properties": {
+            "name": "South Sámi",
+            "radius": 200,
+            "marker-color": "#ff4444",
+            "marker-size": "large"
+          },
+          "coordinates": [13.15, 63.88]
+        }
+      ]
+    }
+  },
+  "arcs": []
+}
+```
+</code></pre></div>
+<div class="markdown-heading" dir="auto"><h4 tabindex="-1" class="heading-element" dir="auto">SME and SMJ (TopoJSON)</h4><a id="user-content-sme-and-smj-topojson" class="anchor" aria-label="Permalink: SME and SMJ (TopoJSON)" href="#sme-and-smj-topojson"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="a9717f33-ac88-4eb6-8249-ed525d72a8df" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/topojson?docs_host=https%3A%2F%2Fdocs.github.com" data-type="topojson" aria-label="topojson rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;{\n  \&quot;type\&quot;: \&quot;Topology\&quot;,\n  \&quot;objects\&quot;: {\n    \&quot;sami_languages\&quot;: {\n      \&quot;type\&quot;: \&quot;GeometryCollection\&quot;,\n      \&quot;geometries\&quot;: [\n        {\n          \&quot;type\&quot;: \&quot;Point\&quot;,\n          \&quot;properties\&quot;: {\n            \&quot;name\&quot;: \&quot;North Sámi\&quot;,\n            \&quot;radius\&quot;: 250,\n            \&quot;marker-color\&quot;: \&quot;#00aaff\&quot;,\n            \&quot;marker-size\&quot;: \&quot;medium\&quot;\n          },\n          \&quot;coordinates\&quot;: [23.6683, 69.1397]\n        },\n        {\n          \&quot;type\&quot;: \&quot;Point\&quot;,\n          \&quot;properties\&quot;: {\n            \&quot;name\&quot;: \&quot;Lule Sámi\&quot;,\n            \&quot;radius\&quot;: 200,\n            \&quot;marker-color\&quot;: \&quot;#22cc22\&quot;,\n            \&quot;marker-size\&quot;: \&quot;medium\&quot;\n          },\n          \&quot;coordinates\&quot;: [18.6213, 67.4456]\n        }\n      ]\n    }\n  },\n  \&quot;arcs\&quot;: []\n}\n&quot;}" data-plain="{
+  &quot;type&quot;: &quot;Topology&quot;,
+  &quot;objects&quot;: {
+    &quot;sami_languages&quot;: {
+      &quot;type&quot;: &quot;GeometryCollection&quot;,
+      &quot;geometries&quot;: [
+        {
+          &quot;type&quot;: &quot;Point&quot;,
+          &quot;properties&quot;: {
+            &quot;name&quot;: &quot;North Sámi&quot;,
+            &quot;radius&quot;: 250,
+            &quot;marker-color&quot;: &quot;#00aaff&quot;,
+            &quot;marker-size&quot;: &quot;medium&quot;
+          },
+          &quot;coordinates&quot;: [23.6683, 69.1397]
+        },
+        {
+          &quot;type&quot;: &quot;Point&quot;,
+          &quot;properties&quot;: {
+            &quot;name&quot;: &quot;Lule Sámi&quot;,
+            &quot;radius&quot;: 200,
+            &quot;marker-color&quot;: &quot;#22cc22&quot;,
+            &quot;marker-size&quot;: &quot;medium&quot;
+          },
+          &quot;coordinates&quot;: [18.6213, 67.4456]
+        }
+      ]
+    }
+  },
+  &quot;arcs&quot;: []
+}
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="topojson" aria-label="Raw topojson code">{
+  "type": "Topology",
+  "objects": {
+    "sami_languages": {
+      "type": "GeometryCollection",
+      "geometries": [
+        {
+          "type": "Point",
+          "properties": {
+            "name": "North Sámi",
+            "radius": 250,
+            "marker-color": "#00aaff",
+            "marker-size": "medium"
+          },
+          "coordinates": [23.6683, 69.1397]
+        },
+        {
+          "type": "Point",
+          "properties": {
+            "name": "Lule Sámi",
+            "radius": 200,
+            "marker-color": "#22cc22",
+            "marker-size": "medium"
+          },
+          "coordinates": [18.6213, 67.4456]
+        }
+      ]
+    }
+  },
+  "arcs": []
+}
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<p dir="auto">Code:</p>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="```topojson
+{
+  &quot;type&quot;: &quot;Topology&quot;,
+  &quot;objects&quot;: {
+    &quot;sami_languages&quot;: {
+      &quot;type&quot;: &quot;GeometryCollection&quot;,
+      &quot;geometries&quot;: [
+        {
+          &quot;type&quot;: &quot;Point&quot;,
+          &quot;properties&quot;: {
+            &quot;name&quot;: &quot;North Sámi&quot;,
+            &quot;radius&quot;: 250,
+            &quot;marker-color&quot;: &quot;#00aaff&quot;,
+            &quot;marker-size&quot;: &quot;medium&quot;
+          },
+          &quot;coordinates&quot;: [23.6683, 69.1397]
+        },
+        {
+          &quot;type&quot;: &quot;Point&quot;,
+          &quot;properties&quot;: {
+            &quot;name&quot;: &quot;Lule Sámi&quot;,
+            &quot;radius&quot;: 200,
+            &quot;marker-color&quot;: &quot;#22cc22&quot;,
+            &quot;marker-size&quot;: &quot;medium&quot;
+          },
+          &quot;coordinates&quot;: [18.6213, 67.4456]
+        }
+      ]
+    }
+  },
+  &quot;arcs&quot;: []
+}
+```"><pre class="notranslate"><code>```topojson
+{
+  "type": "Topology",
+  "objects": {
+    "sami_languages": {
+      "type": "GeometryCollection",
+      "geometries": [
+        {
+          "type": "Point",
+          "properties": {
+            "name": "North Sámi",
+            "radius": 250,
+            "marker-color": "#00aaff",
+            "marker-size": "medium"
+          },
+          "coordinates": [23.6683, 69.1397]
+        },
+        {
+          "type": "Point",
+          "properties": {
+            "name": "Lule Sámi",
+            "radius": 200,
+            "marker-color": "#22cc22",
+            "marker-size": "medium"
+          },
+          "coordinates": [18.6213, 67.4456]
+        }
+      ]
+    }
+  },
+  "arcs": []
+}
+```
+</code></pre></div>
+</article>

@@ -4169,7 +4169,7 @@ function sanitizeHtmlTag(raw) {
   if (closing) {
     return `</${name}>`;
   }
-  let rest = match[3].slice(0, -1).replace(/\/\s*$/, "");
+  const rest = match[3].slice(0, -1).replace(/\/\s*$/, "");
   const kept = [];
   const seen = /* @__PURE__ */ new Set();
   let at = 0;

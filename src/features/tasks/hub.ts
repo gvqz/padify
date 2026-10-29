@@ -17,6 +17,7 @@
 
 import { registerLayer } from '../../ui/behavior/layers';
 import { getTabManager } from '../../tabs';
+import { confirmDialog } from '../../ui/dialog';
 import { showToast } from '../../ui/toast';
 import { ICONS } from '../../editor/tasks/icons';
 import {
@@ -670,15 +671,13 @@ function deleteTask(id: string): void {
 }
 
 async function clearCompletedFlow(): Promise<void> {
-  const { default: Swal } = await import('sweetalert2');
-  const result = await Swal.fire({
+  const confirmed = await confirmDialog({
     title: 'Clear completed reminders?',
     text: 'Every checked-off reminder, across every list, will be removed.',
-    showCancelButton: true,
-    confirmButtonText: 'Clear',
-    confirmButtonColor: 'var(--vz-danger, #ee0000)',
+    danger: true,
+    confirm: 'Clear',
   });
-  if (!result.isConfirmed) return;
+  if (!confirmed) return;
   const now = new Date();
   for (const row of taskNotes.sectionsFor('completed', now).sections) {
     for (const entry of row.rows) {
