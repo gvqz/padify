@@ -585,6 +585,14 @@ async function runSyncOnce(): Promise<void> {
   // queued id with no tab and no tombstone would keep the status pegged
   // at "pending" forever. Take it out.
   merge.droppedSeedIds.forEach((id) => pendingPush.delete(id));
+  // Tombstones whose delete lost to a strictly newer live row (a real edit
+  // made after the close): off the queue and out of the model. The note is
+  // back — a stale tombstone left behind would re-announce every cycle and
+  // misdate the note's next close (recordTombstone keeps existing entries).
+  if (merge.spentTombstoneIds.length > 0) {
+    merge.spentTombstoneIds.forEach((id) => pendingPush.delete(id));
+    manager.confirmTombstones(merge.spentTombstoneIds);
+  }
   // NOW the cursor may advance: the pulled rows are merged and the
   // persist has been issued. A throw above leaves the cursor where it
   // was, so the next cycle re-pulls instead of skipping.
@@ -678,18 +686,53 @@ async function runSyncOnce(): Promise<void> {
 // The v2 pull
 // ---------------------------------------------------------------------------
 
+/**
+ * The pull cursor is per-WINDOW, never per-account.
+ *
+ * Two same-origin windows (a browser tab plus the app open again, or two
+ * tabs) share the account, the session token and the notes database — but
+ * each window's in-memory tab model is its own. The cursor used to live in
+ * the shared kv store, so one window's pull advanced it for everyone: the
+ * other window's next pull delivered nothing new, and it never learned a
+ * tab had been closed elsewhere. The blind window kept the closed note in
+ * its model and re-published it live every cycle ("this tab is missing
+ * from the pull, it must be new to the server"), un-deleting it in the
+ * cloud — and the device that closed the note watched it reopen, over and
+ * over. sessionStorage gives every window its own cursor: each pulls its
+ * own deltas, each sees every tombstone, and a fresh window (empty
+ * storage) re-pulls everything and self-heals. When sessionStorage is
+ * unavailable the cursor reads 0 — a full pull every cycle, which is the
+ * v1 behaviour and always correct, just heavier.
+ */
+function cursorKey(userId: string): string {
+  return `padifySyncCursor:${userId}`;
+}
+
 /** The stored pull cursor for a user — 0 means “deliver everything”. */
 function loadCursor(userId: string): number {
-  const raw = stateGet(`padifySyncCursor:${userId}`);
-  const parsed = typeof raw === 'string' ? Number(raw) : NaN;
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
+  try {
+    const raw = sessionStorage.getItem(cursorKey(userId));
+    const parsed = typeof raw === 'string' ? Number(raw) : NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
+  } catch {
+    return 0;
+  }
 }
 
 function storeCursor(userId: string, cursor: number): void {
-  if (cursor > 0) {
-    stateSet(`padifySyncCursor:${userId}`, String(cursor));
-  } else {
-    stateRemove(`padifySyncCursor:${userId}`);
+  // The pre-per-window key in the shared kv store is dead weight now —
+  // nothing reads it. Drop it once, opportunistically, on the first store.
+  if (stateGet(cursorKey(userId)) !== null) {
+    stateRemove(cursorKey(userId));
+  }
+  try {
+    if (cursor > 0) {
+      sessionStorage.setItem(cursorKey(userId), String(cursor));
+    } else {
+      sessionStorage.removeItem(cursorKey(userId));
+    }
+  } catch {
+    /* storage unavailable — the next cycle pulls everything again */
   }
 }
 
@@ -747,6 +790,15 @@ interface MergeResult {
    * status pegged at "pending" forever.
    */
   droppedSeedIds: string[];
+  /**
+   * Tombstones whose delete lost this merge to a strictly newer live
+   * row (a real edit made after the close — see the no-local guard in
+   * mergeRemote). The caller prunes them from the model and the push
+   * queue: the cloud has already decided, and a spent tombstone left
+   * behind would misdate the note's NEXT close (recordTombstone keeps
+   * the existing entry).
+   */
+  spentTombstoneIds: string[];
 }
 
 /**
@@ -835,10 +887,14 @@ export function mergeRemote(
 ): MergeResult {
   const tabs: NoteTab[] = payload.tabs.map((tab) => ({ ...tab }));
   const byId = new Map(tabs.map((tab) => [tab.id, tab]));
+  // Closed-here notes, by id: a pending tombstone is the user's own delete
+  // waiting for the cloud to confirm it (see the no-local guard below).
+  const tombstonesById = new Map(payload.tombstones.map((entry) => [entry.id, entry]));
   const freshRemote: NoteTab[] = [];
   const conflicts: string[] = [];
   const dirty = new Set(payload.dirty);
   const droppedSeedIds: string[] = [];
+  const spentTombstoneIds: string[] = [];
   let touched = false;
 
   /** The local row wins the delete: newer by seq when both carry one,
@@ -1007,6 +1063,33 @@ export function mergeRemote(
 
     const local = byId.get(row.id);
     if (!local) {
+      // An echo of this device's own push, arriving for a note the model
+      // no longer holds: the tab was closed here after the push, or an
+      // earlier row of this very pull (a tombstone) deleted it. Our own
+      // bytes are never a reason to reopen a note we no longer have —
+      // the push carried no user intent for the note's life, only its
+      // bytes, and the delete (ours or the cloud's) came after them.
+      const echo = options.ownEchoes?.get(row.id);
+      if (echo && echo.updatedAt === row.updated_at && echo.content === wireRowContent(row)) {
+        return;
+      }
+      // A tombstone this device still holds says the user closed this tab
+      // here and the cloud has not confirmed the delete yet. A live row
+      // for it is a stale re-publish — another window re-pushing pre-close
+      // bytes (the shared-cursor blind spot, a position-drift diff) —
+      // unless it is strictly newer than the close, which is a real edit
+      // made after it and wins exactly like a newer local edit does.
+      // Either way the close sticks where it should: a stale row is
+      // dropped (step 3 of the cycle re-asserts the tombstone against
+      // it), and a genuinely newer one reopens the note — marking the
+      // tombstone spent, since its delete just lost the race.
+      const tombstone = tombstonesById.get(row.id);
+      if (tombstone) {
+        if (row.updated_at <= tombstone.updatedAt) {
+          return;
+        }
+        spentTombstoneIds.push(row.id);
+      }
       freshRemote.push({
         id: row.id,
         name: row.name,
@@ -1139,7 +1222,7 @@ export function mergeRemote(
     }
   }
 
-  return { tabs, changed: touched, conflicts, droppedSeedIds };
+  return { tabs, changed: touched, conflicts, droppedSeedIds, spentTombstoneIds };
 }
 
 /** The server rejects request bodies over 2 MB (see shared/wire.ts). */

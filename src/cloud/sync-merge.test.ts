@@ -33,10 +33,11 @@ const row = (id: string, overrides: Partial<NoteRow> = {}): NoteRow => ({
 const payloadOf = (
   tabs: NoteTab[],
   dirty: string[] = tabs.map((entry) => entry.id),
+  tombstones: TabsSyncPayload['tombstones'] = [],
 ): TabsSyncPayload => ({
   tabs,
   dirty,
-  tombstones: [],
+  tombstones,
 });
 
 describe('mergeRemote — deletes', () => {
@@ -687,6 +688,99 @@ describe('mergeRemote — own echoes', () => {
     // dirty, so both versions are kept.
     expect(merge.conflicts).toHaveLength(1);
     expect(merge.tabs.find((entry) => entry.id === 'a')?.content).toBe('<p>typed more</p>');
+  });
+});
+
+describe('mergeRemote — closed tabs stay closed', () => {
+  // The story the user told: closing an empty tab and watching it reopen.
+  // A closed tab leaves a tombstone behind until the cloud confirms the
+  // delete; while that tombstone is pending, a LIVE row for the same id
+  // is a stale re-publish (another window re-pushing pre-close bytes —
+  // the shared-cursor blind spot, a position-drift diff) unless it is
+  // genuinely newer than the close. The merge used to take ANY live row
+  // for a missing tab wholesale — the closed note rejoined the strip, the
+  // cycle's step 3 re-published it, and the close never stuck.
+
+  it('a live row for a pending tombstone does not reopen the closed tab', () => {
+    // Closed here at t=5_000 (the tombstone); the row carries the note's
+    // pre-close edit time t=2_000 — a re-publish of old bytes.
+    const merge = mergeRemote(
+      [row('a', { seq: 7, updated_at: 2_000, content: '<p>old bytes</p>' })],
+      payloadOf([], [], [{ id: 'a', updatedAt: 5_000 }]),
+    );
+
+    expect(merge.tabs.map((entry) => entry.id)).not.toContain('a');
+    expect(merge.changed).toBe(false);
+    expect(merge.conflicts).toEqual([]);
+  });
+
+  it('a tie goes to the delete — an equal-clock live row stays closed', () => {
+    const merge = mergeRemote(
+      [row('a', { seq: 7, updated_at: 5_000 })],
+      payloadOf([], [], [{ id: 'a', updatedAt: 5_000 }]),
+    );
+
+    expect(merge.tabs.map((entry) => entry.id)).not.toContain('a');
+  });
+
+  it('a row genuinely newer than the close reopens the note — an edit beats the delete', () => {
+    // Closed here at t=5_000; another device EDITED the note at t=9_000
+    // after seeing words worth keeping. The delete may not bury the edit
+    // (the mirror of "a delete may not bury a newer local edit").
+    const merge = mergeRemote(
+      [row('a', { seq: 7, updated_at: 9_000, content: '<p>edited after the close</p>' })],
+      payloadOf([], [], [{ id: 'a', updatedAt: 5_000 }]),
+    );
+
+    expect(merge.tabs.map((entry) => entry.id)).toContain('a');
+    expect(merge.tabs.find((entry) => entry.id === 'a')?.content).toBe(
+      '<p>edited after the close</p>',
+    );
+  });
+
+  it('our own echo never reopens a tab the model no longer holds', () => {
+    // The tab left the model after we pushed it — closed here, or deleted
+    // by an earlier row of this very pull. Our own bytes coming home are
+    // never a reason to reopen a note we no longer have.
+    const echo = row('a', { seq: 6, updated_at: 3_000, content: '<p>pushed words</p>' });
+
+    const merge = mergeRemote([echo], payloadOf([]), {
+      ownEchoes: new Map([['a', { content: '<p>pushed words</p>', updatedAt: 3_000 }]]),
+    });
+
+    expect(merge.tabs.map((entry) => entry.id)).not.toContain('a');
+    expect(merge.changed).toBe(false);
+  });
+
+  it('a tombstone followed by our own live echo in one pull stays deleted', () => {
+    // The flap engine: another window closed the note (tombstone, seq 5)
+    // while THIS device re-published it in the same cycle (live echo,
+    // seq 6 — a position-drift push carrying pre-close bytes). The pull
+    // delivers both, in seq order. The delete must survive our own echo.
+    const local = tab('a', { syncSeq: 4, updatedAt: 2_000, content: '<p>old bytes</p>' });
+    const tombstoneRow = row('a', { seq: 5, deleted: true, updated_at: 5_000 });
+    const echoRow = row('a', { seq: 6, updated_at: 2_000, content: '<p>old bytes</p>' });
+
+    const merge = mergeRemote([tombstoneRow, echoRow], payloadOf([local], []), {
+      ownEchoes: new Map([['a', { content: '<p>old bytes</p>', updatedAt: 2_000 }]]),
+    });
+
+    expect(merge.tabs.map((entry) => entry.id)).not.toContain('a');
+    expect(merge.conflicts).toEqual([]);
+  });
+
+  it('a note the cloud still holds and this device never closed still joins', () => {
+    // The guard is about CLOSED notes: a row with no tombstone behind it
+    // is a note this device simply does not have yet — it joins the strip
+    // exactly as before.
+    const merge = mergeRemote(
+      [row('b', { seq: 7, updated_at: 2_000 })],
+      payloadOf([tab('a')], [], [{ id: 'z', updatedAt: 9_000 }]),
+    );
+
+    // The convergence sort places the remotely-ordered 'b' ahead of the
+    // cloud-unknown 'a' — order is not the point here, membership is.
+    expect(merge.tabs.map((entry) => entry.id).sort()).toEqual(['a', 'b']);
   });
 });
 

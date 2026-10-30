@@ -227,6 +227,19 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
   // clause pins updates to rows the user already owns (no cross-user writes).
   // All rows go out as one batched write (single Turso pipeline request,
   // single local transaction) instead of one round-trip per row.
+  //
+  // The delete-race guard: the upsert used to take ANY incoming row
+  // wholesale, so a live row re-published after a delete (another window's
+  // stale position-drift push, an offline device's wake-up flush)
+  // un-deleted the note — the closing device watched the tab reopen on
+  // every sync cycle. Now a live write may not resurrect a tombstone
+  // unless it is strictly NEWER than the delete (a real edit made after
+  // it — the "a delete may not bury a newer edit" rule, enforced at the
+  // one place every client version passes through), and a tombstone may
+  // not bury a strictly newer live row. Ties go to the delete, exactly as
+  // the client merge already rules. A refused row is a no-op: it still
+  // answers ok (the row exists, the server's state is the truth being
+  // pushed), and its reserved seqs simply leave a gap.
   await db.runMany(
     rows.map((row, index) => ({
       sql: `insert into notes (id, user_id, name, content, position, created_at, updated_at, deleted, note_type, seq)
@@ -240,7 +253,13 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
          deleted = excluded.deleted,
          note_type = excluded.note_type,
          seq = excluded.seq
-       where notes.user_id = excluded.user_id`,
+       where notes.user_id = excluded.user_id
+         and not (
+           (notes.deleted = 1 and excluded.deleted = 0
+             and excluded.updated_at <= notes.updated_at)
+           or (notes.deleted = 0 and excluded.deleted = 1
+             and excluded.updated_at < notes.updated_at)
+         )`,
       args: [
         row.id,
         user.id,
