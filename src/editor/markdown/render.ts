@@ -78,6 +78,16 @@ import { markdownTagAllowed, safeHrefForMarkdown, sanitizeHtmlTag } from './html
 // Public entry
 // ---------------------------------------------------------------------------
 
+// Character codes the hot line scans compare against — named so the
+// backward scans in isBlank / stripTrailingWs / trailingWsRun read as
+// what they decide, not magic 32s and 9s.
+const CHAR_SPACE = 0x20;
+const CHAR_TAB = 0x09;
+
+// The first character that is not a space — indentWidth's whole question,
+// answered by the regex engine's native scan (see its comment).
+const NON_SPACE = /[^ ]/;
+
 /**
  * Renders Markdown source to the preview HTML. Pure: no DOM, no state, no
  * side effects — the caller hands the result to the preview pane's
@@ -134,9 +144,9 @@ function expandTabs(line: string): string {
   // its original bytes: a trailing tab cannot satisfy the hard-break rule
   // (only spaces can — the expanded form would fabricate one), and code
   // interiors preserve tabs byte-exactly, where the expanded form lied.
-  const trail = /[ \t]+$/.exec(line);
-  if (trail && trail[0].includes('\t') && /\S/.test(line)) {
-    return `${expandTabs(line.slice(0, line.length - trail[0].length))}${trail[0]}`;
+  const trail = trailingWsRun(line);
+  if (trail.hasTab && /\S/.test(line)) {
+    return `${expandTabs(line.slice(0, line.length - trail.length))}${line.slice(line.length - trail.length)}`;
   }
   let out = '';
   let column = 0;
@@ -365,11 +375,20 @@ function renderInlineParagraph(lines: string[]): string {
   // before the inline pass); the CONTINUATION lines keep their raw bytes —
   // code spans read them — and the render-time skip drops their leading
   // spaces from the text path only.
+  //
+  // The trailing [ \t] run is stripped from the LAST line before the
+  // join, not from the joined whole: every earlier line ends with \n
+  // (which is neither space nor tab), so the run cannot span the seam —
+  // and one $-anchored regex over an N-line paragraph retries from every
+  // start position inside every leading-space run on its way to failing.
+  // A pathological 900-line outline joins to ~800 KB whose runs are ~2 KB
+  // each — quadratic for a tail trim.
+  const lastIdx = lines.length - 1;
+  const lastLine = stripTrailingWs(lines[lastIdx]!);
+  const first =
+    lastIdx === 0 ? stripTrailingWs(lines[0]!).replace(/^ +/, '') : lines[0]!.replace(/^ +/, '');
   const text =
-    `${lines[0]!.replace(/^ +/, '')}${lines.length > 1 ? `\n${lines.slice(1).join('\n')}` : ''}`.replace(
-      /[ \t]+$/,
-      '',
-    );
+    lastIdx === 0 ? first : `${first}\n${[...lines.slice(1, lastIdx), lastLine].join('\n')}`;
   return renderInline(text);
 }
 
@@ -379,16 +398,69 @@ function renderInlineParagraph(lines: string[]): string {
 
 /** Blank line (only spaces — tabs became spaces at entry). */
 function isBlank(line: string): boolean {
-  return /^ *$/.test(line);
+  // Decided from the END: a blank line is spaces and nothing else, so
+  // the first non-space hit scanning backward settles it — O(1) for the
+  // pathological outlines whose lines carry ~2 KB of leading spaces in
+  // front of their content. `^ *$` walked and backtracked through that
+  // whole prefix, once per line per nesting level.
+  let i = line.length - 1;
+  while (i >= 0 && line.charCodeAt(i) === CHAR_SPACE) {
+    i -= 1;
+  }
+  return i < 0;
+}
+
+/**
+ * The line with its trailing space/tab run removed — backward scan, the
+ * mirror of isBlank's reasoning: the run ends where the first other
+ * character stands.
+ */
+function stripTrailingWs(line: string): string {
+  let end = line.length;
+  while (end > 0) {
+    const code = line.charCodeAt(end - 1);
+    if (code !== CHAR_SPACE && code !== CHAR_TAB) {
+      break;
+    }
+    end -= 1;
+  }
+  return end === line.length ? line : line.slice(0, end);
+}
+
+/**
+ * The length of the line's trailing space/tab run (and whether that run
+ * holds a tab) — the raw bytes expandTabs needs to keep code interiors
+ * byte-exact. Backward scan for the same reason as stripTrailingWs: the
+ * `$`-anchored regex retried from every start position of the long
+ * leading-space runs a pathological line carries.
+ */
+function trailingWsRun(line: string): { length: number; hasTab: boolean } {
+  let end = line.length;
+  let hasTab = false;
+  while (end > 0) {
+    const code = line.charCodeAt(end - 1);
+    if (code === CHAR_TAB) {
+      hasTab = true;
+    } else if (code !== CHAR_SPACE) {
+      break;
+    }
+    end -= 1;
+  }
+  return { length: line.length - end, hasTab };
 }
 
 /** Leading whitespace width — tabs are already spaces, so this is a count. */
 function indentWidth(line: string): number {
-  let width = 0;
-  while (line[width] === ' ') {
-    width += 1;
-  }
-  return width;
+  // The first non-space is found by the regex engine's native scan, not
+  // by a JS loop. This probe runs on every line at every nesting level
+  // of the block walk (twice — the definition-harvest walk and the
+  // render walk), and the pathological outlines hand it ~2 KB space
+  // prefixes: a char loop inlined into the intermittently-deoptimized
+  // recursive walk measured ~40 ns/char and owned 93% of a 610 ms
+  // render (positionTicks put a third of the profile on the loop line
+  // alone). Irregexp's char-class scan is deopt-proof and ~1 ns/char.
+  const firstOther = line.search(NON_SPACE);
+  return firstOther === -1 ? line.length : firstOther;
 }
 
 /** Removes up to `columns` leading spaces (they are all spaces now). */
@@ -1010,8 +1082,8 @@ function matchListItem(line: string): ListItem | null {
 /**
  * Consumes one list (sibling items at a shared base indent). Lines indented
  * past an item's marker become that item's CONTENT — the recursive
- * renderBlocks call inside renderList is what turns them into nested
- * lists, paragraphs and everything else an item can hold.
+ * renderBlocks call at the tail (renderList, inlined there) is what turns
+ * them into nested lists, paragraphs and everything else an item can hold.
  */
 function collectList(
   lines: string[],
@@ -1176,50 +1248,48 @@ function collectList(
     break;
   }
 
-  const listMarkup = renderList(items, loose, depth, collect, interrupted);
-  return { markup: collect ? '' : listMarkup, next: index };
-}
+  // renderList's body lives HERE, inlined at its only call site. The
+  // collectList → renderList → renderBlocks → collectList cycle kept
+  // invalidating its own optimized frames — a pathological render
+  // logged 400+ deopts (each new optimized code for a cycle member
+  // lazily deopts every stacked frame that inlined the old one), so the
+  // walk kept re-entering in degraded code. One fewer code object in
+  // the cycle, one less invalidation cascade; the emitted bytes are
+  // unchanged.
+  let listMarkup = '';
+  if (items.length > 0) {
+    const ordered = items[0]!.number !== null;
+    const tag = ordered ? 'ol' : 'ul';
+    const start = ordered && items[0]!.number !== 1 ? ` start="${items[0]!.number}"` : '';
 
-/** Renders the collected items as `<ul>`/`<ol>` markup. */
-function renderList(
-  items: ListItem[],
-  loose: boolean,
-  depth: number,
-  collect: boolean,
-  interrupted: boolean,
-): string {
-  if (items.length === 0) {
-    return '';
+    const rendered = items
+      .map((item, itemIndex) => {
+        // A list that interrupts a paragraph passes the demand down: the
+        // first item's first line may not grow an empty child list either.
+        let blocks = renderBlocks(item.content, depth + 1, collect, interrupted && itemIndex === 0);
+        // Tight lists unwrap every paragraph — the item's blocks read as
+        // one flow (a heading followed by text stays heading-then-text);
+        // loose lists keep every wrapper.
+        if (!loose) {
+          blocks = blocks.map((block) => block.replace(/^<p>([\s\S]*)<\/p>$/, '$1'));
+        }
+        let inner = blocks.join('\n');
+
+        if (item.task !== null) {
+          const checked = item.task === 'checked' ? ' checked' : '';
+          const box = `<input type="checkbox" disabled${checked}> `;
+          // A loose item's first block is a paragraph — the checkbox rides
+          // inside it, the reference's own shape.
+          inner =
+            loose && inner.startsWith('<p>') ? inner.replace('<p>', `<p>${box}`) : box + inner;
+        }
+        return `<li>${inner}</li>`;
+      })
+      .join('\n');
+
+    listMarkup = `<${tag}${start}>\n${rendered}\n</${tag}>`;
   }
-  const ordered = items[0]!.number !== null;
-  const tag = ordered ? 'ol' : 'ul';
-  const start = ordered && items[0]!.number !== 1 ? ` start="${items[0]!.number}"` : '';
-
-  const rendered = items
-    .map((item, itemIndex) => {
-      // A list that interrupts a paragraph passes the demand down: the
-      // first item's first line may not grow an empty child list either.
-      let blocks = renderBlocks(item.content, depth + 1, collect, interrupted && itemIndex === 0);
-      // Tight lists unwrap every paragraph — the item's blocks read as
-      // one flow (a heading followed by text stays heading-then-text);
-      // loose lists keep every wrapper.
-      if (!loose) {
-        blocks = blocks.map((block) => block.replace(/^<p>([\s\S]*)<\/p>$/, '$1'));
-      }
-      let inner = blocks.join('\n');
-
-      if (item.task !== null) {
-        const checked = item.task === 'checked' ? ' checked' : '';
-        const box = `<input type="checkbox" disabled${checked}> `;
-        // A loose item's first block is a paragraph — the checkbox rides
-        // inside it, the reference's own shape.
-        inner = loose && inner.startsWith('<p>') ? inner.replace('<p>', `<p>${box}`) : box + inner;
-      }
-      return `<li>${inner}</li>`;
-    })
-    .join('\n');
-
-  return `<${tag}${start}>\n${rendered}\n</${tag}>`;
+  return { markup: collect ? '' : listMarkup, next: index };
 }
 
 // ---------------------------------------------------------------------------

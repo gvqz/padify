@@ -4270,6 +4270,9 @@ function decodeEntities(value) {
 }
 
 // src/editor/markdown/render.ts
+var CHAR_SPACE = 32;
+var CHAR_TAB = 9;
+var NON_SPACE = /[^ ]/;
 function renderMarkdownToHtml(source) {
   const lines = source.replace(/\r\n?/g, "\n").split("\n");
   if (lines.length > 1 && lines[lines.length - 1] === "") {
@@ -4295,9 +4298,9 @@ function expandTabs(line) {
   if (!line.includes("	")) {
     return line;
   }
-  const trail = /[ \t]+$/.exec(line);
-  if (trail && trail[0].includes("	") && /\S/.test(line)) {
-    return `${expandTabs(line.slice(0, line.length - trail[0].length))}${trail[0]}`;
+  const trail = trailingWsRun(line);
+  if (trail.hasTab && /\S/.test(line)) {
+    return `${expandTabs(line.slice(0, line.length - trail.length))}${line.slice(line.length - trail.length)}`;
   }
   let out = "";
   let column = 0;
@@ -4425,22 +4428,48 @@ function peelDefinitions(paragraph) {
   return start;
 }
 function renderInlineParagraph(lines) {
-  const text = `${lines[0].replace(/^ +/, "")}${lines.length > 1 ? `
-${lines.slice(1).join("\n")}` : ""}`.replace(
-    /[ \t]+$/,
-    ""
-  );
+  const lastIdx = lines.length - 1;
+  const lastLine = stripTrailingWs(lines[lastIdx]);
+  const first = lastIdx === 0 ? stripTrailingWs(lines[0]).replace(/^ +/, "") : lines[0].replace(/^ +/, "");
+  const text = lastIdx === 0 ? first : `${first}
+${[...lines.slice(1, lastIdx), lastLine].join("\n")}`;
   return renderInline(text);
 }
 function isBlank(line) {
-  return /^ *$/.test(line);
+  let i = line.length - 1;
+  while (i >= 0 && line.charCodeAt(i) === CHAR_SPACE) {
+    i -= 1;
+  }
+  return i < 0;
+}
+function stripTrailingWs(line) {
+  let end = line.length;
+  while (end > 0) {
+    const code = line.charCodeAt(end - 1);
+    if (code !== CHAR_SPACE && code !== CHAR_TAB) {
+      break;
+    }
+    end -= 1;
+  }
+  return end === line.length ? line : line.slice(0, end);
+}
+function trailingWsRun(line) {
+  let end = line.length;
+  let hasTab = false;
+  while (end > 0) {
+    const code = line.charCodeAt(end - 1);
+    if (code === CHAR_TAB) {
+      hasTab = true;
+    } else if (code !== CHAR_SPACE) {
+      break;
+    }
+    end -= 1;
+  }
+  return { length: line.length - end, hasTab };
 }
 function indentWidth(line) {
-  let width = 0;
-  while (line[width] === " ") {
-    width += 1;
-  }
-  return width;
+  const firstOther = line.search(NON_SPACE);
+  return firstOther === -1 ? line.length : firstOther;
 }
 function stripIndent(line, columns) {
   let cut = 0;
@@ -4913,32 +4942,29 @@ ${line}`;
     }
     break;
   }
-  const listMarkup = renderList(items, loose, depth, collect, interrupted);
-  return { markup: collect ? "" : listMarkup, next: index };
-}
-function renderList(items, loose, depth, collect, interrupted) {
-  if (items.length === 0) {
-    return "";
-  }
-  const ordered = items[0].number !== null;
-  const tag = ordered ? "ol" : "ul";
-  const start = ordered && items[0].number !== 1 ? ` start="${items[0].number}"` : "";
-  const rendered = items.map((item, itemIndex) => {
-    let blocks = renderBlocks(item.content, depth + 1, collect, interrupted && itemIndex === 0);
-    if (!loose) {
-      blocks = blocks.map((block) => block.replace(/^<p>([\s\S]*)<\/p>$/, "$1"));
-    }
-    let inner = blocks.join("\n");
-    if (item.task !== null) {
-      const checked = item.task === "checked" ? " checked" : "";
-      const box = `<input type="checkbox" disabled${checked}> `;
-      inner = loose && inner.startsWith("<p>") ? inner.replace("<p>", `<p>${box}`) : box + inner;
-    }
-    return `<li>${inner}</li>`;
-  }).join("\n");
-  return `<${tag}${start}>
+  let listMarkup = "";
+  if (items.length > 0) {
+    const ordered = items[0].number !== null;
+    const tag = ordered ? "ol" : "ul";
+    const start2 = ordered && items[0].number !== 1 ? ` start="${items[0].number}"` : "";
+    const rendered = items.map((item, itemIndex) => {
+      let blocks = renderBlocks(item.content, depth + 1, collect, interrupted && itemIndex === 0);
+      if (!loose) {
+        blocks = blocks.map((block) => block.replace(/^<p>([\s\S]*)<\/p>$/, "$1"));
+      }
+      let inner = blocks.join("\n");
+      if (item.task !== null) {
+        const checked = item.task === "checked" ? " checked" : "";
+        const box = `<input type="checkbox" disabled${checked}> `;
+        inner = loose && inner.startsWith("<p>") ? inner.replace("<p>", `<p>${box}`) : box + inner;
+      }
+      return `<li>${inner}</li>`;
+    }).join("\n");
+    listMarkup = `<${tag}${start2}>
 ${rendered}
 </${tag}>`;
+  }
+  return { markup: collect ? "" : listMarkup, next: index };
 }
 var DELIMITER_CELL = /^:?-+:?$/;
 function collectTable(lines, start) {

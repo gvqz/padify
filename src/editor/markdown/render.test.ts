@@ -696,6 +696,16 @@ describe('renderMarkdownToHtml — pathological nesting', () => {
     // suite's own per-item invariant work is ~40ms locally; the rest is
     // worker contention), stop failing the build on noise (see the
     // worklog's flake notes).
+    //
+    // 2026-10-30: the walk itself was then de-quadratized — isBlank and
+    // indentWidth now decide from the line's END / via Irregexp's native
+    // scan, and renderInlineParagraph trims the tail before the join
+    // (positionTicks put 93% of a 610ms render on indentWidth's forward
+    // space loop alone; a $-anchored tail-trim regex over the joined
+    // ~800KB was the other quadratic). Local went 1088ms -> ~150ms; the
+    // first CI run of the source-view rework had measured 3359ms — RED
+    // on this very assertion. The 3s budget stays: it still separates
+    // noise (~0.5s) from the regression it exists to catch (~7s).
     expect(elapsed).toBeLessThan(3000);
     // The cap means far fewer than 900 nested <ul>s.
     const ulCount = (html.match(/<ul>/g) ?? []).length;
