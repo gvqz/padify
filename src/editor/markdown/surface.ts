@@ -1,23 +1,33 @@
 /**
  * The Markdown surface — the 'text' content kind's editing surface: the
- * note's SOURCE and its PREVIEW, one at a time, nothing else.
+ * note's SOURCE and its PREVIEW, in one column or two.
  *
  * WHAT THE USER SEES. The note's markdown text (stored byte-exact like
  * every 'text' note) edits in the SOURCE mode — a textarea with
  * GitHub-source-editor keyboard behavior (lists continue on Enter, Tab
  * indents, Ctrl+B/I/E wrap, Ctrl+Shift+X strikes; the primitives live in
- * source-edit.ts). The PREVIEW mode swaps to the owned renderer's output
- * full-width — the same pipeline share links and HTML export use, so
- * "preview" always means "the truth". Both panes stay mounted; the mode
- * is a visibility flip, so the textarea's value, selection and native
- * undo stack survive every round trip.
+ * source-edit.ts). The SPLIT mode keeps that textarea on the left and
+ * renders the owned renderer's output beside it on the right, live —
+ * typing settles the render a beat behind. The PREVIEW mode swaps to
+ * the renderer's output alone — the same pipeline share links and HTML
+ * export use, so "preview" always means "the truth". All panes stay
+ * mounted; the mode is a visibility flip, so the textarea's value,
+ * selection and native undo stack survive every round trip.
  *
  * WHY NO VISUAL EDITOR. The WYSIWYG layer (Milkdown over ProseMirror)
  * is gone: what-you-see was a THIRD grammar between the source and the
  * preview, and every divergence between the three was a bug the user
  * paid for. Source is the truth, preview is the truth rendered — the
  * editor is the textarea in between, and its keyboard grammar is
- * GitHub's own source mode.
+ * GitHub's own source mode. Split is not a third grammar: it is the
+ * source and the preview, side by side, both owned by the same truth.
+ *
+ * THE PANE GEOMETRY. The three modes are panes, not pages: the surface
+ * tiles the note host's entire padding box (the host's own padding and
+ * scrollbar stand down) and each pane scrolls its own content the way a
+ * code editor's do — the source fills the box in source mode, the grid
+ * splits it in two in split mode, and the preview fills it in preview
+ * mode (see 18-markdown.css, the full-bleed calc/margin pair).
  *
  * HOW IT OWNS THE HOST. The surface mounts a wrapper inside the #note
  * host and sets the host itself contenteditable=false — the textarea is
@@ -85,19 +95,35 @@ let live: LiveMarkdown | null = null;
 let visibleTextCache: { source: string; text: string } | null = null;
 
 /**
- * The surface's two modes: 'source' (the textarea, the working mode) and
- * 'preview' (the renderer's output — a reading gesture; every new note
- * display comes back to the source).
+ * The surface's three modes: 'source' (the textarea alone, the working
+ * mode), 'split' (the source left, the renderer's live output right —
+ * also a working mode), and 'preview' (the renderer's output alone — a
+ * reading gesture; every new note display comes back to the last
+ * working mode).
  */
-export type MarkdownViewMode = 'source' | 'preview';
+export type MarkdownViewMode = 'source' | 'split' | 'preview';
 let viewMode: MarkdownViewMode = 'source';
+/** The mode preview resets back to (the last working one). */
+let lastWorkingMode: MarkdownViewMode = 'source';
 
-/** True while the source textarea owns the editing. */
-export function markdownSourceActive(): boolean {
-  return !!live && live.root.isConnected && viewMode === 'source';
+/** True when the raw-textarea pane owns the editing (source or split). */
+function usesSourcePane(mode: MarkdownViewMode): boolean {
+  return mode === 'source' || mode === 'split';
 }
 
-/** The live source textarea (the toolbar/context-menu seam); null when absent. */
+/** True while the source textarea is the live editing pane. */
+export function markdownSourceActive(): boolean {
+  return !!live && live.root.isConnected && usesSourcePane(viewMode);
+}
+
+/**
+ * The live source textarea (the toolbar/context-menu seam); null when no
+ * surface is mounted. Deliberately NOT gated on the view mode: the pane
+ * is hidden in preview, not parked — the equation bubble's Apply writes
+ * through this seam from a preview click, and every consumer that must
+ * stand down in preview (the context menu's rows, the command buttons)
+ * gates itself on markdownSourceActive().
+ */
 export function markdownSourceTextarea(): HTMLTextAreaElement | null {
   return live && live.root.isConnected ? live.source : null;
 }
@@ -118,7 +144,7 @@ export function markdownHost(): HTMLElement | null {
  * surface holds no caret.
  */
 export function focusMarkdownPane(): void {
-  if (live && live.root.isConnected && viewMode === 'source') {
+  if (live && live.root.isConnected && usesSourcePane(viewMode)) {
     live.source.focus();
   }
 }
@@ -136,26 +162,42 @@ export function onMarkdownViewMode(fn: (mode: MarkdownViewMode) => void): () => 
 }
 
 /**
- * Flips the view mode (source / preview). Entering the preview renders
- * it from the LIVE markdown and carries the caret's scroll position
- * across proportionally; coming back to the source restores it, so a
- * toggle round trip lands where the reader was looking.
+ * Flips the view mode (source / split / preview). Entering split or
+ * preview renders the read pane from the LIVE markdown; entering
+ * preview carries the caret's scroll position across proportionally
+ * and coming back to the source restores it, so a toggle round trip
+ * lands where the reader was looking. Split's panes ride the same
+ * one-way scroll sync (the source leads, the render follows).
  */
 export function setMarkdownViewMode(mode: MarkdownViewMode): void {
   const previous = viewMode;
   viewMode = mode;
-  if (live && live.root.isConnected && mode !== previous) {
+  if (mode !== 'preview') {
+    lastWorkingMode = mode;
+  }
+  // The fraction rides across while the SOURCE still has geometry — a
+  // pane about to hide (display:none) has no scroll range to read.
+  if (live && live.root.isConnected && mode === 'preview' && mode !== previous) {
+    live.scrollFraction = sourceScrollFraction(live.source);
+  }
+  // Panes take their places BEFORE anything measures them: the render
+  // and the scroll carries below read scrollHeight/clientHeight, and a
+  // hidden pane answers 0 for both.
+  if (live) {
+    live.root.classList.toggle('markdown-split-mode', mode === 'split');
+    live.source.hidden = mode === 'preview';
+    live.preview.hidden = mode !== 'split' && mode !== 'preview';
+  }
+  if (live && live.root.isConnected) {
     if (mode === 'preview') {
-      live.scrollFraction = sourceScrollFraction(live.source);
       renderLivePreview();
-    } else {
+      scrollPreviewToFraction(live.preview, live.scrollFraction);
+    } else if (mode === 'split') {
+      renderLivePreview();
+      syncSplitScroll(live.source, live.preview);
+    } else if (mode !== previous) {
       restoreSourceScroll(live.source, live.scrollFraction);
     }
-  }
-  if (live) {
-    live.root.classList.toggle('markdown-preview-mode', mode === 'preview');
-    live.source.hidden = mode === 'preview';
-    live.preview.hidden = mode !== 'preview';
   }
   viewModeListeners.forEach((fn) => fn(mode));
 }
@@ -163,6 +205,11 @@ export function setMarkdownViewMode(mode: MarkdownViewMode): void {
 /** The current view mode (the toolbar's segmented control reads it). */
 export function markdownViewMode(): MarkdownViewMode {
   return viewMode;
+}
+
+/** The mode preview resets back to — the top bar's eye returns here. */
+export function markdownLastWorkingMode(): MarkdownViewMode {
+  return lastWorkingMode;
 }
 
 /** The scroll fraction of the source pane (0 at top, 1 at bottom). */
@@ -177,6 +224,24 @@ function restoreSourceScroll(source: HTMLTextAreaElement, fraction: number): voi
   if (range > 0) {
     source.scrollTop = fraction * range;
   }
+}
+
+/** Scrolls the preview pane to a fraction of its range (the flip's carry). */
+function scrollPreviewToFraction(preview: HTMLElement, fraction: number): void {
+  const range = preview.scrollHeight - preview.clientHeight;
+  if (range > 0) {
+    preview.scrollTop = fraction * range;
+  }
+}
+
+/** One-way proportional scroll sync: the source pane leads, the preview follows. */
+function syncSplitScroll(source: HTMLTextAreaElement, preview: HTMLElement): void {
+  const sourceRange = source.scrollHeight - source.clientHeight;
+  if (sourceRange <= 0) {
+    return;
+  }
+  const previewRange = preview.scrollHeight - preview.clientHeight;
+  preview.scrollTop = (source.scrollTop / sourceRange) * Math.max(0, previewRange);
 }
 
 /**
@@ -206,10 +271,10 @@ export class MarkdownNoteSurface implements NoteSurface {
     // where typing prepends and touches nothing structural.
     live?.source.setSelectionRange(0, 0);
     // Preview is a reading gesture, not a per-note setting — every
-    // display comes back to the source (the working mode).
-    if (viewMode === 'preview') {
-      setMarkdownViewMode('source');
-    }
+    // display resets it to the last WORKING mode, and a fresh mount
+    // re-applies the current one (the wrapper starts unstyled: the
+    // split's grid and the panes' visibility ride the mode pass).
+    setMarkdownViewMode(viewMode === 'preview' ? lastWorkingMode : viewMode);
     host.scrollTop = 0;
   }
 
@@ -261,11 +326,11 @@ export class MarkdownNoteSurface implements NoteSurface {
     if (!live || live.host !== host || !live.root.isConnected) {
       return null;
     }
-    // The pane that owns the surface: the textarea in source mode; the
-    // preview holds no caret. The host itself is contenteditable=false
+    // The pane that owns the surface: the textarea in source and split;
+    // the preview holds no caret. The host itself is contenteditable=false
     // and cannot take the caret — focusing it landed on <body>, so the
     // first keystrokes after a switch went nowhere until the user clicked.
-    return viewMode === 'source' ? live.source : null;
+    return usesSourcePane(viewMode) ? live.source : null;
   }
 
   /**
@@ -313,6 +378,14 @@ export class MarkdownNoteSurface implements NoteSurface {
       preview,
       scrollFraction: 0,
     };
+
+    // The split preview follows the source pane's scroll, proportionally
+    // (one-way: the pane you type in leads).
+    source.addEventListener('scroll', () => {
+      if (viewMode === 'split' && live?.preview) {
+        syncSplitScroll(source, live.preview);
+      }
+    });
 
     // Ctrl/Cmd+K opens the link popover — the shortcuts reference and
     // the bubble button both advertise it, but the document-level binding
@@ -423,9 +496,9 @@ function wireSourcePane(source: HTMLTextAreaElement): void {
     source.addEventListener(type, () => {
       notify();
       if (type === 'input') {
-        // The preview stays live for the edits that arrive while it is
-        // showing (dictation, the context menu, task toggles) — direct
-        // typing cannot reach it, but the debounce costs nothing.
+        // The read pane stays live for the edits that arrive while it is
+        // showing (typing in split, dictation, the context menu, task
+        // toggles) — direct typing reaches it through the debounce.
         schedulePreviewRender();
       }
     });
@@ -443,12 +516,7 @@ function wireSourcePane(source: HTMLTextAreaElement): void {
   source.addEventListener('keydown', (event) => {
     // The user's own typed marker right after a continuation replaces the
     // auto one (typing stays literal); the native insert then follows.
-    if (
-      event.key.length === 1 &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      !event.altKey
-    ) {
+    if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
       dedupeTypedMarkerOverContinuation(source, event.key);
       return;
     }
@@ -503,18 +571,22 @@ function renderLivePreview(): void {
   }
   live.preview.innerHTML = renderMarkdownToHtml(live.source.value);
   renderMathIn(live.preview);
+  if (viewMode === 'split') {
+    syncSplitScroll(live.source, live.preview);
+  }
 }
 
 /**
- * The preview's re-render debounce — for the edits that land while the
- * preview is showing (dictation, the context menu, checkbox toggles);
- * a beat behind, exactly as the split pane's always was.
+ * The read pane's re-render debounce — for the edits that land while it
+ * is showing beside or instead of the source (typing in split, dictation,
+ * the context menu, checkbox toggles); a beat behind the typing, exactly
+ * as the split pane's always been.
  */
 const PREVIEW_RENDER_DEBOUNCE_MS = 250;
 let previewRenderTimer: ReturnType<typeof setTimeout> | null = null;
 
 function schedulePreviewRender(): void {
-  if (viewMode !== 'preview' || !live) {
+  if (viewMode !== 'split' && viewMode !== 'preview') {
     return;
   }
   if (previewRenderTimer !== null) {
@@ -522,7 +594,7 @@ function schedulePreviewRender(): void {
   }
   previewRenderTimer = setTimeout(() => {
     previewRenderTimer = null;
-    if (viewMode === 'preview' && live) {
+    if (viewMode === 'split' || viewMode === 'preview') {
       renderLivePreview();
     }
   }, PREVIEW_RENDER_DEBOUNCE_MS);

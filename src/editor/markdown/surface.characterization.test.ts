@@ -191,8 +191,10 @@ describe('the Markdown surface (characterization)', () => {
     expect(surface.capture(host())).toBe('hello world');
   });
 
-  it('focusTarget is the textarea in source mode, null in preview', () => {
+  it('focusTarget is the textarea in the working modes, null in preview', () => {
     surface.display(host(), { content: 'x' });
+    expect(surface.focusTarget(host())).toBe(source());
+    setMarkdownViewMode('split');
     expect(surface.focusTarget(host())).toBe(source());
     setMarkdownViewMode('preview');
     expect(surface.focusTarget(host())).toBeNull();
@@ -211,7 +213,7 @@ describe('the Markdown surface (characterization)', () => {
 // The modes
 // ---------------------------------------------------------------------------
 
-describe('the source / preview modes', () => {
+describe('the source / split / preview modes', () => {
   it('preview renders the owned renderer output; the textarea hides but keeps its value', () => {
     surface.display(host(), { content: '# Title\n\n- [ ] task' });
     setMarkdownViewMode('preview');
@@ -230,15 +232,27 @@ describe('the source / preview modes', () => {
     expect(markdownViewMode()).toBe('source');
   });
 
-  it('every new display comes back to the source (preview is a reading gesture)', () => {
+  it('every new display comes back to the last WORKING mode (preview is a reading gesture)', () => {
     surface.display(host(), { content: 'one' });
     setMarkdownViewMode('preview');
     surface.display(host(), { content: 'two' });
     expect(markdownViewMode()).toBe('source');
     expect(source().value).toBe('two');
+
+    // Split is a working mode: it survives note switches, and a preview
+    // detour returns to it.
+    setMarkdownViewMode('split');
+    surface.display(host(), { content: 'three' });
+    expect(markdownViewMode()).toBe('split');
+    expect(source().value).toBe('three');
+    setMarkdownViewMode('preview');
+    surface.display(host(), { content: 'four' });
+    expect(markdownViewMode()).toBe('split');
+    expect(source().value).toBe('four');
+    setMarkdownViewMode('source');
   });
 
-  it('the mode listener follows every flip', () => {
+  it('the mode listener follows every flip (and every display re-applies the mode)', () => {
     const seen: string[] = [];
     const unlisten = onMarkdownViewMode((mode) => seen.push(mode));
     surface.display(host(), { content: '' });
@@ -246,16 +260,57 @@ describe('the source / preview modes', () => {
     setMarkdownViewMode('source');
     unlisten();
     setMarkdownViewMode('preview');
-    expect(seen).toEqual(['preview', 'source']);
+    // The leading 'source' is the fresh mount's own mode pass — a display
+    // always re-applies the working mode (the panes ride it), and the
+    // chrome follows the announcement for free.
+    expect(seen).toEqual(['source', 'preview', 'source']);
     setMarkdownViewMode('source');
   });
 
-  it('markdownSourceActive answers the working mode only', () => {
+  it('markdownSourceActive answers the working modes only', () => {
     surface.display(host(), { content: '' });
+    expect(markdownSourceActive()).toBe(true);
+    setMarkdownViewMode('split');
     expect(markdownSourceActive()).toBe(true);
     setMarkdownViewMode('preview');
     expect(markdownSourceActive()).toBe(false);
     setMarkdownViewMode('source');
+  });
+
+  it('split shows both panes: the textarea edits, the render follows live', async () => {
+    surface.display(host(), { content: '# Title\n\nsome **bold**' });
+    setMarkdownViewMode('split');
+
+    expect(markdownViewMode()).toBe('split');
+    expect(source().hidden).toBe(false);
+    expect(preview().hidden).toBe(false);
+    expect(
+      host().querySelector('.markdown-surface')!.classList.contains('markdown-split-mode'),
+    ).toBe(true);
+    expect(preview().innerHTML).toContain('<h1>Title</h1>');
+    expect(preview().innerHTML).toContain('<b>bold</b>');
+
+    // The render settles a beat behind the typing (the 250ms debounce).
+    source().value = '# Changed';
+    source().dispatchEvent(new Event('input', { bubbles: true }));
+    expect(preview().innerHTML).toContain('<h1>Title</h1>');
+    await new Promise((resolveTimeout) => setTimeout(resolveTimeout, 320));
+    expect(preview().innerHTML).toContain('<h1>Changed</h1>');
+    expect(source().value).toBe('# Changed');
+    setMarkdownViewMode('source');
+  });
+
+  it('the mode machine walks the full ring and the panes agree at every stop', () => {
+    surface.display(host(), { content: 'x' });
+    for (const mode of ['split', 'preview', 'split', 'source'] as const) {
+      setMarkdownViewMode(mode);
+      expect(markdownViewMode()).toBe(mode);
+      expect(source().hidden).toBe(mode === 'preview');
+      expect(preview().hidden).toBe(mode !== 'split' && mode !== 'preview');
+      expect(
+        host().querySelector('.markdown-surface')!.classList.contains('markdown-split-mode'),
+      ).toBe(mode === 'split');
+    }
   });
 });
 
@@ -291,9 +346,9 @@ describe('the security model (preview)', () => {
     host().addEventListener('input', (e) => events.push(e));
     setMarkdownViewMode('preview');
 
-    preview().querySelector('li')!.dispatchEvent(
-      new MouseEvent('click', { bubbles: true, cancelable: true }),
-    );
+    preview()
+      .querySelector('li')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 
     expect(surface.capture(host())).toBe('- [x] open item');
     expect(events).toHaveLength(1);
@@ -310,14 +365,14 @@ describe('the security model (preview)', () => {
     surface.display(host(), { content: '$x^2$ and\n\n$$\\sum$$' });
     setMarkdownViewMode('preview');
 
-    preview().querySelector('.padify-math')!.dispatchEvent(
-      new MouseEvent('click', { bubbles: true }),
-    );
+    preview()
+      .querySelector('.padify-math')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(seen[0]).toMatchObject({ latex: 'x^2', kind: 'inline' });
 
-    preview().querySelector('.md-math-block .padify-math')!.dispatchEvent(
-      new MouseEvent('click', { bubbles: true }),
-    );
+    preview()
+      .querySelector('.md-math-block .padify-math')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(seen[1]).toMatchObject({ kind: 'block' });
 
     document.removeEventListener('padify:md-math-click', listener);
@@ -371,17 +426,17 @@ describe('the toolbar (real shell markup)', () => {
   });
 
   it('the view toggle flips the surface; preview parks the command chrome', () => {
-    document.querySelector('[data-md-view="preview"]')!.dispatchEvent(
-      new MouseEvent('click', { bubbles: true }),
-    );
+    document
+      .querySelector('[data-md-view="preview"]')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(markdownViewMode()).toBe('preview');
     expect(preview().hidden).toBe(false);
     const bold = document.querySelector('[data-md-action="bold"]') as HTMLButtonElement;
     expect(bold.disabled).toBe(true);
 
-    document.querySelector('[data-md-view="source"]')!.dispatchEvent(
-      new MouseEvent('click', { bubbles: true }),
-    );
+    document
+      .querySelector('[data-md-view="source"]')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(markdownViewMode()).toBe('source');
     expect(bold.disabled).toBe(false);
   });
@@ -392,12 +447,12 @@ describe('the toolbar (real shell markup)', () => {
     ta.setSelectionRange(0, 0);
     ta.focus();
 
-    document.querySelector('[data-md-menu="block"]')!.dispatchEvent(
-      new MouseEvent('click', { bubbles: true }),
-    );
-    document.querySelector('[data-md-block="h2"]')!.dispatchEvent(
-      new MouseEvent('click', { bubbles: true }),
-    );
+    document
+      .querySelector('[data-md-menu="block"]')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document
+      .querySelector('[data-md-block="h2"]')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(surface.capture(host())).toBe('## a line to headline');
   });
 });

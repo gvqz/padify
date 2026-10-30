@@ -186,6 +186,86 @@ test.describe('markdown source mode', () => {
     await expect(preview).not.toContainText('<br');
   });
 
+  test('the source pane fills the note card edge to edge (the pane geometry)', async ({ page }) => {
+    await newMarkdownNote(page);
+
+    const source = page.locator('#note .markdown-source');
+    await source.click();
+    await page.keyboard.insertText(Array.from({ length: 80 }, (_, i) => `line ${i}`).join('\n'));
+
+    // The textarea tiles the host's padding box: no dead strip below, no
+    // half-height textarea with a scrollbar inside a half-empty card (the
+    // percentage min-height against the content-sized wrapper used to pin
+    // it at its two-row intrinsic height).
+    const boxes = await page.evaluate(() => {
+      const ta = document.querySelector('#note .markdown-source')!;
+      const host = document.getElementById('note')!;
+      const taBox = ta.getBoundingClientRect();
+      const hostBox = host.getBoundingClientRect();
+      return {
+        taTop: taBox.top,
+        taBottom: taBox.bottom,
+        hostTop: hostBox.top,
+        hostBottom: hostBox.bottom,
+        taScrollsInside: ta.scrollHeight > ta.clientHeight,
+        hostScrolls: host.scrollHeight > host.clientHeight + 1,
+      };
+    });
+    expect(Math.abs(boxes.taTop - (boxes.hostTop + 1))).toBeLessThan(3); // + the host's 1px border
+    expect(Math.abs(boxes.taBottom - (boxes.hostBottom - 1))).toBeLessThan(3);
+    expect(boxes.taScrollsInside).toBe(true); // the pane scrolls its own content
+    expect(boxes.hostScrolls).toBe(false); // ...and the host never does
+  });
+
+  test('split keeps the source left and the live render right', async ({ page }) => {
+    await newMarkdownNote(page);
+
+    const source = page.locator('#note .markdown-source');
+    await source.click();
+    await page.keyboard.type('# Split view\n\nSome **bold** prose.');
+
+    await page.locator('[data-md-view="split"]').click();
+    const preview = page.locator('#note .markdown-preview');
+
+    // Both panes visible, the render already speaks the typed markdown.
+    await expect(source).toBeVisible();
+    await expect(preview).toBeVisible();
+    await expect(preview.locator('h1')).toHaveText('Split view');
+    await expect(preview.locator('b')).toHaveText('bold');
+
+    // The command chrome stays armed in split (a working mode).
+    await expect(page.locator('#markdownToolbar [data-md-action="bold"]')).toBeEnabled();
+
+    // Typing settles into the render a beat behind (the 250ms debounce).
+    await page.keyboard.press('End');
+    await page.keyboard.type('\n\nA late paragraph.');
+    await expect(preview.locator('p').last()).toHaveText('A late paragraph.', { timeout: 4000 });
+
+    // The divider: the source's right edge meets the preview's left edge.
+    const splitBoxes = await page.evaluate(() => {
+      const ta = document.querySelector('#note .markdown-source')!;
+      const pv = document.querySelector('#note .markdown-preview')!;
+      const surface = document.querySelector('#note .markdown-surface')!;
+      return {
+        taRight: ta.getBoundingClientRect().right,
+        pvLeft: pv.getBoundingClientRect().left,
+        pvRight: pv.getBoundingClientRect().right,
+        hostRight: document.getElementById('note')!.getBoundingClientRect().right,
+        stacked: getComputedStyle(surface).gridTemplateColumns.split(' ').length,
+      };
+    });
+    expect(Math.abs(splitBoxes.taRight - splitBoxes.pvLeft)).toBeLessThan(2);
+    expect(Math.abs(splitBoxes.pvRight - (splitBoxes.hostRight - 1))).toBeLessThan(3);
+
+    // The top bar's eye returns to split (the last working mode), not source.
+    await page.locator('#previewToggleButton').click();
+    await expect(page.locator('#note .markdown-preview')).toBeVisible();
+    await expect(source).toBeHidden();
+    await page.locator('#previewToggleButton').click();
+    await expect(source).toBeVisible();
+    await expect(preview).toBeVisible();
+  });
+
   test('the scroll carries across a source → preview → source round trip', async ({ page }) => {
     await newMarkdownNote(page);
 
@@ -204,7 +284,9 @@ test.describe('markdown source mode', () => {
     await expect(preview.locator('h1')).toHaveText('Top');
     // The preview opened near ITS bottom (the fraction carried over).
     const fraction = await preview.evaluate((el) =>
-      el.scrollHeight - el.clientHeight > 0 ? el.scrollTop / (el.scrollHeight - el.clientHeight) : 1,
+      el.scrollHeight - el.clientHeight > 0
+        ? el.scrollTop / (el.scrollHeight - el.clientHeight)
+        : 1,
     );
     expect(fraction).toBeGreaterThan(0.5);
 

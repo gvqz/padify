@@ -56,7 +56,12 @@ import './editor/tasks/surface';
 // this import also brings the image-export seam for the download menu.
 import { exportActiveDrawingImage } from './editor/drawing/surface';
 import { drawingSceneHasContent } from './editor/drawing/scene';
-import { markdownViewMode, onMarkdownViewMode, setMarkdownViewMode } from './editor/markdown/surface';
+import {
+  markdownLastWorkingMode,
+  markdownViewMode,
+  onMarkdownViewMode,
+  setMarkdownViewMode,
+} from './editor/markdown/surface';
 import { isHtmlContent, isMarkdownNote, isRichNote } from './editor/note-types';
 // The tasks feature composes statically now (rail + hub + sweep are
 // small; the heavy markdown engine stays lazy but tasks pages ride the
@@ -552,13 +557,14 @@ export async function initApp(): Promise<void> {
   syncDrawingExportRows();
 
   // ---- preview toggle — the top bar's Markdown-only button. The eye
-  // flips the surface between the source and the owned renderer's
-  // output; the toolbar's segmented control follows through the same
-  // surface listener, so there is exactly one source of truth for the
-  // mode (see editor/markdown/surface.ts). ----
+  // flips the surface to the owned renderer's output and back to the
+  // last WORKING mode (source or split — wherever the user was editing);
+  // the toolbar's segmented control follows through the same surface
+  // listener, so there is exactly one source of truth for the mode (see
+  // editor/markdown/surface.ts). ----
   const previewToggleButton = notepad.previewToggleButton;
   previewToggleButton.on('click', () => {
-    setMarkdownViewMode(markdownViewMode() === 'preview' ? 'source' : 'preview');
+    setMarkdownViewMode(markdownViewMode() === 'preview' ? markdownLastWorkingMode() : 'preview');
   });
   const syncPreviewToggleChrome = (): void => {
     previewToggleButton.attr('aria-pressed', markdownViewMode() === 'preview' ? 'true' : 'false');

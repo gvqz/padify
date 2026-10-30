@@ -25,8 +25,9 @@
  *    bubble with its source filled in (padify:md-math-click);
  *  • the task-list button — the Docs grammar over GFM checkboxes
  *    (arm a plain list's items, lift back out);
- *  • the Source/Preview segmented control — the surface's view toggle
- *    (see surface.ts: source is the raw markdown, preview is the owned
+ *  • the Source/Split/Preview segmented control — the surface's view
+ *    toggle (see surface.ts: source is the raw markdown, split is the
+ *    source with the renderer's output beside it, preview is the owned
  *    renderer's full-width output — the same truth share links and HTML
  *    export show). While the preview owns the surface the command
  *    buttons stand down: formatting an invisible document is a no-op.
@@ -649,7 +650,12 @@ export function openMarkdownEquationBubble(options?: {
   closeLinkPopover();
   mountMathPaletteOnce();
 
-  mathKind = options?.latex !== undefined && options.kind === 'block' ? 'block' : options?.kind === 'block' ? 'block' : 'inline';
+  mathKind =
+    options?.latex !== undefined && options.kind === 'block'
+      ? 'block'
+      : options?.kind === 'block'
+        ? 'block'
+        : 'inline';
   const editing = options?.latex !== undefined && options.latex !== '';
   elements.mathInput.value = editing ? options!.latex! : '';
   renderMathPreview(elements.mathPreview, elements.mathInput.value);
@@ -782,7 +788,8 @@ function wireViewToggle(): void {
   for (const button of elements.viewButtons) {
     button.addEventListener('click', () => {
       const requested = button.dataset.mdView;
-      const mode: MarkdownViewMode = requested === 'preview' ? 'preview' : 'source';
+      const mode: MarkdownViewMode =
+        requested === 'preview' ? 'preview' : requested === 'split' ? 'split' : 'source';
       setMarkdownViewMode(mode);
       // A click parks focus on the button — hand it to the pane that now
       // owns the edit (preview keeps it nowhere: a reading gesture).
@@ -801,7 +808,8 @@ function syncViewToggle(): void {
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
   }
   // Formatting an invisible document is a no-op at best — park the
-  // command chrome while the preview owns the surface.
+  // command chrome while the preview alone owns the surface (split is
+  // a working mode: the textarea is live, the buttons stay armed).
   const editing = mode !== 'preview';
   for (const button of elements.buttons) {
     (button as HTMLButtonElement).disabled = !editing;
