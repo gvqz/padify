@@ -797,6 +797,12 @@ export class SnapshotsManager {
     // whole boot into a dead shell. Rejecting ready() is the tolerated
     // failure: every caller catches and the app boots without snapshots.
     if (typeof indexedDB === 'undefined') {
+      // Mark the rejection handled BEFORE issuing it: until some caller
+      // attaches .ready(), a rejected promise with no handler surfaces as
+      // an uncaught page error — noise in exactly the degraded environments
+      // (private mode, hardened browsers) this path exists for. Later
+      // .ready() callers still receive the rejection.
+      this.readyPromise.catch(() => undefined);
       this.rejectReady(new Error('IndexedDB unavailable in this environment'));
       return;
     }
@@ -811,6 +817,8 @@ export class SnapshotsManager {
       },
       (error) => {
         console.error('Error opening database', error);
+        // Same unhandled-rejection guard as the unavailable path above.
+        this.readyPromise.catch(() => undefined);
         this.rejectReady(error);
       },
     );
