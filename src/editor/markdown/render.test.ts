@@ -1,14 +1,16 @@
 /**
  * The Markdown renderer's contract — every construct of the documented
  * subset, pinned to its exact HTML, plus the security invariants that make
- * the preview safe to innerHTML: raw HTML never survives as markup, link
- * hrefs only ever pass the safe-href gate, and there are no images.
+ * the preview safe to innerHTML: raw HTML never survives as markup the
+ * policy did not allowlist, link hrefs and image srcs only ever pass the
+ * safe-href gate.
  *
  * The math assertions pin the `padify-math` shells (the storage container,
  * not KaTeX's rendering) — the surface layer runs renderMathIn over them.
  */
 import { describe, expect, it } from 'vitest';
 import { renderMarkdownToHtml } from './render';
+import { walkInvariants } from './render.testkit';
 
 describe('renderMarkdownToHtml — headings', () => {
   it('renders ATX headings level 1 through 6', () => {
@@ -106,12 +108,14 @@ describe('renderMarkdownToHtml — paragraphs & text', () => {
     );
   });
 
-  it('raw HTML is escaped as text, never markup', () => {
+  it('raw HTML: declined tags escape as text, allowlisted tags are rebuilt sanitized', () => {
     expect(renderMarkdownToHtml('<script>alert(1)</script>')).toBe(
       '<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>',
     );
+    // img is allowlisted — the REBUILD keeps the (relative, schemeless)
+    // src, drops onerror, and adds the lazy/no-referrer hardening.
     expect(renderMarkdownToHtml('<img src=x onerror=alert(1)>')).toBe(
-      '<p>&lt;img src=x onerror=alert(1)&gt;</p>',
+      '<img src="x" loading="lazy" decoding="async" referrerpolicy="no-referrer">',
     );
   });
 
@@ -157,7 +161,7 @@ describe('renderMarkdownToHtml — emphasis', () => {
   it('bold, italic, and both', () => {
     expect(renderMarkdownToHtml('**bold**')).toBe('<p><b>bold</b></p>');
     expect(renderMarkdownToHtml('*em*')).toBe('<p><i>em</i></p>');
-    expect(renderMarkdownToHtml('***both***')).toBe('<p><b><i>both</i></b></p>');
+    expect(renderMarkdownToHtml('***both***')).toBe('<p><i><b>both</b></i></p>');
   });
 
   it('underscore flavors match asterisk flavors', () => {
@@ -191,9 +195,9 @@ describe('renderMarkdownToHtml — emphasis', () => {
     expect(renderMarkdownToHtml('**just text')).toBe('<p>**just text</p>');
   });
 
-  it('leftover delimiters sit beside the emphasis they helped (documented)', () => {
-    expect(renderMarkdownToHtml('***x**')).toBe('<p><b>*x</b></p>');
-    expect(renderMarkdownToHtml('**x***')).toBe('<p><b>x*</b></p>');
+  it('leftover delimiters sit beside the emphasis they helped (the reference side)', () => {
+    expect(renderMarkdownToHtml('***x**')).toBe('<p>*<b>x</b></p>');
+    expect(renderMarkdownToHtml('**x***')).toBe('<p><b>x</b>*</p>');
   });
 
   it('emphasis wraps code spans and links', () => {
@@ -231,9 +235,9 @@ describe('renderMarkdownToHtml — links & images', () => {
     );
   });
 
-  it('data: URLs are refused the same way', () => {
+  it('data: URLs are refused the same way (the link dies; inline HTML still resolves)', () => {
     expect(renderMarkdownToHtml('[x](data:text/html,<b>hi</b>)')).toBe(
-      '<p>[x](data:text/html,&lt;b&gt;hi&lt;/b&gt;)</p>',
+      '<p>[x](data:text/html,<b>hi</b>)</p>',
     );
   });
 
@@ -247,12 +251,28 @@ describe('renderMarkdownToHtml — links & images', () => {
     expect(renderMarkdownToHtml('[a [b] c](https://example.com)')).toContain('>a [b] c</a>');
   });
 
-  it('images render as links with the alt text — nothing loads remotely', () => {
+  it('images render as real <img> tags — lazy, async, referrer-stripped', () => {
     expect(renderMarkdownToHtml('![alt text](https://example.com/i.png)')).toBe(
-      '<p><a href="https://example.com/i.png" class="md-image-link">alt text</a></p>',
+      '<p><img src="https://example.com/i.png" alt="alt text" loading="lazy" decoding="async" referrerpolicy="no-referrer"></p>',
     );
-    const html = renderMarkdownToHtml('![x](https://example.com/i.png)');
-    expect(html).not.toContain('<img');
+  });
+
+  it('an image title rides along as the tooltip; a linked image nests inside the anchor', () => {
+    expect(renderMarkdownToHtml('![alt](https://example.com/i.png "T")')).toContain(
+      'title="T"',
+    );
+    expect(renderMarkdownToHtml('[![badge](https://example.com/b.png)](https://example.com/)')).toBe(
+      '<p><a href="https://example.com/" rel="noopener noreferrer"><img src="https://example.com/b.png" alt="badge" loading="lazy" decoding="async" referrerpolicy="no-referrer"></a></p>',
+    );
+  });
+
+  it('an unsafe image URL keeps the whole construct as literal text', () => {
+    expect(renderMarkdownToHtml('![x](javascript:alert(1))')).toBe(
+      '<p>![x](javascript:alert(1))</p>',
+    );
+    expect(renderMarkdownToHtml('![y](data:image/svg+xml,<svg>)')).toBe(
+      '<p>![y](data:image/svg+xml,&lt;svg&gt;)</p>',
+    );
   });
 
   it('an href percent-encodes for the attribute context', () => {
@@ -351,7 +371,7 @@ describe('renderMarkdownToHtml — lists', () => {
   });
 
   it('a marker glued to text is not a list (*emphasis* and -5 stay text)', () => {
-    expect(renderMarkdownToHtml('***bold***')).toBe('<p><b><i>bold</i></b></p>');
+    expect(renderMarkdownToHtml('***bold***')).toBe('<p><i><b>bold</b></i></p>');
     expect(renderMarkdownToHtml('-5 degrees')).toBe('<p>-5 degrees</p>');
   });
 
@@ -495,7 +515,7 @@ describe('renderMarkdownToHtml — tables', () => {
 });
 
 describe('renderMarkdownToHtml — security invariants', () => {
-  it('no tag in the output ever came from the source (all escaped)', () => {
+  it('no tag in the output ever came from the source unexamined (walked invariants)', () => {
     const attacks = [
       '<script>alert(1)</script>',
       '<img src=x onerror=alert(1)>',
@@ -508,10 +528,20 @@ describe('renderMarkdownToHtml — security invariants', () => {
       '![y](data:image/svg+xml,<svg onload=alert(1)>)',
       '<b onmouseover=alert(1)>hover</b>',
       '```\n</code></pre><script>alert(1)</script>\n```',
+      '<a href="jav&#x09;ascript:alert(1)">x</a>',
+      '<a href="jav&#x09avascript:alert(1)">x</a>',
+      '<div style="background:url(javascript:alert(1))">x</div>',
+      '<svg onload=alert(1)>',
     ];
     for (const attack of attacks) {
       const html = renderMarkdownToHtml(attack);
-      expect(html).not.toMatch(/<(script|img|iframe|style|b|a)\b/i);
+      // The invariant walk is the judge: only allowlisted tags with
+      // allowlisted attributes, no smuggled scheme, no event handler.
+      expect(walkInvariants(html), attack).toEqual([]);
+      expect(html).not.toMatch(/<(script|iframe|style|svg)\b/i);
+      // Live tags only — escaped text may show the payload verbatim.
+      expect(html).not.toMatch(/<[a-z][^>]*\son(error|mouseover|load)=/i);
+      expect(html.toLowerCase()).not.toMatch(/(href|src)="\s*javascript:/i);
     }
   });
 
@@ -529,7 +559,21 @@ describe('renderMarkdownToHtml — security invariants', () => {
     );
     const attributes = [...html.matchAll(/([\w-]+)="([^"]*)"/g)].map((match) => match[1]);
     expect(new Set(attributes)).toEqual(
-      new Set(['href', 'rel', 'class', 'data-latex', 'contenteditable', 'type', 'style', 'id']),
+      new Set([
+        'href',
+        'rel',
+        'class',
+        'data-latex',
+        'contenteditable',
+        'type',
+        'style',
+        'id',
+        'src',
+        'alt',
+        'loading',
+        'decoding',
+        'referrerpolicy',
+      ]),
     );
   });
 });
@@ -557,12 +601,12 @@ describe('renderMarkdownToHtml — footnotes', () => {
     expect(html).not.toContain('md-fn-2');
   });
 
-  it('definition text renders through the block pass (markup resolves, HTML escapes)', () => {
+  it('definition text renders through the block pass (markup resolves, HTML sanitizes)', () => {
     const html = renderMarkdownToHtml(
       'A[^1].\n\n[^1]: **Bold** and <img src=x> and [a link](https://x.com)',
     );
     expect(html).toContain(
-      '<li id="md-fn-1" class="md-footnote-item"><p><b>Bold</b> and &lt;img src=x&gt; and <a href="https://x.com" rel="noopener noreferrer">a link</a></p>',
+      '<li id="md-fn-1" class="md-footnote-item"><p><b>Bold</b> and <img src="x" loading="lazy" decoding="async" referrerpolicy="no-referrer"> and <a href="https://x.com" rel="noopener noreferrer">a link</a></p>',
     );
   });
 

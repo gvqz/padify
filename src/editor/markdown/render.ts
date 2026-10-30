@@ -10,18 +10,20 @@
  * and a renderer that NEVER emits a tag it did not itself generate cannot
  * smuggle markup in through a note.
  *
- * SECURITY MODEL. Raw HTML in the source is NOT rendered — it is escaped
- * and shown as text, exactly like the app's sanitizer strips unknown tags
- * from rich notes: the note is data, never markup. Every literal character
- * passes through escapeHtml at emission; the only tags in the output are
- * the ones this file writes; the only attributes are hrefs that passed the
- * storage subset's SAFE_HREF gate (javascript:/data: URLs render as their
- * literal text). There are no images: a remote image URL would make the
- * note phone home on every preview, and `![alt](url)` renders as a plain
- * link with the alt text instead — the same trade the sanitizer makes when
- * it strips `img` from rich notes. The renderer is pure (string in, string
- * out) and DOM-free, so it runs identically in the app, in jsdom tests and
- * in any future server-side consumer.
+ * SECURITY MODEL. Raw HTML in the source is SANITIZED, not trusted — a
+ * strict allowlist rewrites every tag (the markdown HTML policy below):
+ * benign tags survive with a per-tag attribute allowlist, everything
+ * else stays the escaped text it was. The note is data, never markup;
+ * every literal character passes through escapeHtml at emission; the
+ * only tags in the output are the ones this file (or the policy's
+ * allowlist) wrote; the only URLs are hrefs/srcs that passed the storage
+ * subset's SAFE_HREF gate (javascript:/data: URLs render as their
+ * literal text). Images load for real — GitHub parity — through the same
+ * gate, lazily, with the referrer stripped: `![alt](url)` is an <img>
+ * whose src is http(s)/relative, and an unsafe URL keeps the whole
+ * construct as literal text. The renderer is pure (string in, string
+ * out) and DOM-free, so it runs identically in the app, in jsdom tests
+ * and in any future server-side consumer.
  *
  * THE GRAMMAR (CommonMark 0.31.2 + the GFM extensions, verified example by
  * example against the spec-faithful oracle in render.differential.test.ts —
@@ -69,6 +71,8 @@ import { escapeHtml, escapeHtmlAttr } from '../../lib/escape';
 import { buildMathShell } from '../math-shell';
 import { sanitizeHref } from '../storage-subset';
 import { NAMED_ENTITIES } from './entities.generated';
+import { GEMOJI } from './emoji.generated';
+import { markdownTagAllowed, safeHrefForMarkdown, sanitizeHtmlTag } from './html-policy';
 
 // ---------------------------------------------------------------------------
 // Public entry
@@ -595,6 +599,26 @@ function renderBlocks(
           out.push(table.markup);
         }
         index = table.next;
+        continue;
+      }
+    }
+
+    // Raw HTML blocks — CommonMark's types 6 and 7, gated to the policy's
+    // allowlist (a declined tag never opens a block; its line stays
+    // paragraph text, the pre-policy behavior). Type 6 (the known block
+    // tags) may interrupt a paragraph; type 7 (any other tag ALONE on its
+    // line) may not. Both run to the next BLANK line, and the whole chunk
+    // renders through renderRawHtmlChunk — allowlisted tags rebuilt,
+    // everything else escaped, in-between text escaped except its
+    // already-encoded entities.
+    {
+      const html = collectHtmlBlock(lines, index, paragraph.length > 0);
+      if (html) {
+        flushParagraph();
+        if (!collect) {
+          out.push(html.markup);
+        }
+        index = html.next;
         continue;
       }
     }
@@ -1270,6 +1294,169 @@ function collectTable(lines: string[], start: number): { markup: string; next: n
   return { markup: `<table>\n<thead>\n<tr>${head}</tr>\n</thead>${body}\n</table>`, next: index };
 }
 
+// ---------------------------------------------------------------------------
+// Raw HTML blocks — CommonMark types 6/7, the policy-allowlisted reading
+// ---------------------------------------------------------------------------
+
+/**
+ * CommonMark's type-6 tag list (the known block-level tag names that open
+ * an HTML block wherever they stand, paragraph or not). Type 1's four
+ * (script/pre/style/textarea) are deliberately absent: their end
+ * conditions differ, none is allowlisted, and they stay paragraph text.
+ */
+const HTML_BLOCK_TAGS = new Set([
+  'address',
+  'article',
+  'aside',
+  'base',
+  'basefont',
+  'blockquote',
+  'body',
+  'caption',
+  'center',
+  'col',
+  'colgroup',
+  'dd',
+  'details',
+  'dialog',
+  'dir',
+  'div',
+  'dl',
+  'dt',
+  'fieldset',
+  'figcaption',
+  'figure',
+  'footer',
+  'form',
+  'frame',
+  'frameset',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'head',
+  'header',
+  'hr',
+  'html',
+  'iframe',
+  'legend',
+  'li',
+  'link',
+  'main',
+  'menu',
+  'menuitem',
+  'nav',
+  'noframes',
+  'ol',
+  'optgroup',
+  'option',
+  'p',
+  'param',
+  'section',
+  'source',
+  'summary',
+  'table',
+  'tbody',
+  'td',
+  'tfoot',
+  'th',
+  'thead',
+  'title',
+  'tr',
+  'track',
+  'ul',
+]);
+
+/**
+ * The html-block start condition on one line: 6 (a listed tag name,
+ * attributes may follow), 7 (an unlisted tag that is the WHOLE line), or
+ * null. The tag must also pass the policy's allowlist for the block to
+ * claim the line — a declined tag's line stays paragraph text.
+ */
+function htmlBlockKind(line: string): { kind: 6 | 7; name: string } | null {
+  const probe = /^ {0,3}<(\/?)([a-zA-Z][a-zA-Z0-9-]*)/.exec(line);
+  if (!probe) {
+    return null;
+  }
+  const name = probe[2]!.toLowerCase();
+  if (name === 'script' || name === 'pre' || name === 'style' || name === 'textarea') {
+    return null; // type 1 — different end condition, never allowlisted
+  }
+  if (!markdownTagAllowed(name)) {
+    return null; // the policy declines it — paragraph text, as before
+  }
+  if (HTML_BLOCK_TAGS.has(name)) {
+    return { kind: 6, name };
+  }
+  // Type 7: a complete tag followed by ONLY whitespace to the line's end.
+  const lt = line.indexOf('<');
+  const end = matchRawHtml(line, lt);
+  if (end !== -1 && line.slice(end).trim() === '') {
+    return { kind: 7, name };
+  }
+  return null;
+}
+
+/**
+ * Collects one raw HTML block: from `start` to the next blank line (both
+ * types 6 and 7 end there), the chunk rendered through the policy. Null
+ * when the line does not open one — a type-7 tag may NOT interrupt a
+ * paragraph (CommonMark's own rule), and a declined tag never claims the
+ * line at all.
+ */
+function collectHtmlBlock(
+  lines: string[],
+  start: number,
+  paragraphOpen: boolean,
+): { markup: string; next: number } | null {
+  const shape = htmlBlockKind(lines[start]!);
+  if (!shape || (shape.kind === 7 && paragraphOpen)) {
+    return null;
+  }
+  let end = start + 1;
+  while (end < lines.length && !isBlank(lines[end]!)) {
+    end += 1;
+  }
+  return { markup: renderRawHtmlChunk(lines.slice(start, end).join('\n')), next: end };
+}
+
+/**
+ * Renders a raw-HTML chunk (an html block's lines, joined) through the
+ * policy: every tag shape the grammar recognizes is either REBUILT (the
+ * allowlist's own markup — only its attributes, every URL gated) or
+ * escaped; a `<` that forms no shape is escaped alone; and the text
+ * between tags rides through with its entities intact (`&amp;` shows as
+ * `&`, the browser's own reading of html-block bytes).
+ */
+function renderRawHtmlChunk(raw: string): string {
+  let out = '';
+  let i = 0;
+  while (i < raw.length) {
+    if (raw[i] === '<') {
+      const end = matchRawHtml(raw, i);
+      if (end !== -1) {
+        const shape = raw.slice(i, end);
+        if (shape[1] === '!' || shape[1] === '?') {
+          // Comment / PI / declaration / CDATA — invisible in a browser.
+        } else {
+          const rebuilt = sanitizeHtmlTag(shape);
+          out += rebuilt !== null ? rebuilt : escapeHtml(shape);
+        }
+        i = end;
+        continue;
+      }
+      out += '&lt;';
+      i += 1;
+      continue;
+    }
+    out += raw[i]!;
+    i += 1;
+  }
+  return out;
+}
+
 /** True when the line opens a block that would end a table's body. */
 function startsBlock(line: string): boolean {
   return (
@@ -1407,29 +1594,51 @@ type InlineToken =
       seq: number;
       canOpen: boolean;
       canClose: boolean;
-      /** Tags assigned during pairing; unpaired runs fall back to literal. */
+      /**
+       * Tags assigned during pairing, in render order: the CLOSE group
+       * [0, openStart) (pairs this run closed, innermost first), then the
+       * OPEN group (pairs it opened, outermost first) — the leftover
+       * literal folds between them. A run that closes one pair and opens
+       * another (`b***foo*` after an open em) renders close-tag, leftover,
+       * open-tag, exactly where its characters stand.
+       */
       tags: string[];
+      openStart: number;
     };
 
 /**
  * A span the main scan must not re-interpret: code spans, math and
- * autolinks, whose interiors are literal. A span starting inside a link's
- * LABEL vetoes the link — its content already consumed the closing
- * bracket (code spans take precedence over links).
+ * autolinks, whose interiors are literal. Brackets inside a span never
+ * count toward the label scan (code spans take precedence over links);
+ * an AUTOlink span inside a link's LABEL vetoes the link itself — an
+ * autolink is a link, and links may not nest.
  */
-type ProtectedSpan = { start: number; end: number; html: string };
+type ProtectedSpan = {
+  start: number;
+  end: number;
+  html: string;
+  /** The span's plain-text rendering — the alt-text mode's emission. */
+  text: string;
+  kind: 'code' | 'math' | 'autolink';
+};
 
 /**
  * Renders one text run (a paragraph, a heading, a table cell) to inline
- * HTML. A pre-pass pins code spans, math and autolinks left to right —
- * the earliest construct wins, exactly like the reference scan — then the
- * main scan recognises escapes, links and emphasis runs around them.
- * Everything else is escaped literal text — the tags in the output are
- * only ever ours. `inLink` suppresses constructs that cannot nest inside
- * a link (links, autolinks; images degrade to a marked span).
+ * HTML — or, with asText, to the run's PLAIN TEXT (the image alt-text
+ * projection: emphasis markers drop, nested links and images contribute
+ * their own label text, code spans their interior, everything else its
+ * literal characters). A pre-pass pins code spans, math and autolinks
+ * left to right — the earliest construct wins, exactly like the reference
+ * scan — then the main scan recognises escapes, links and emphasis runs
+ * around them. Everything else is escaped literal text — the tags in the
+ * output are only ever ours. `inLink` suppresses constructs that cannot
+ * nest inside a link (links, autolinks; images degrade to a marked span).
  */
-function renderInline(text: string, inLink = false): string {
-  const spans = protectedSpans(text, inLink);
+function renderInline(text: string, inLink = false, asText = false): string {
+  // The text projection claims autolinks even inside link labels — an
+  // autolink in an alt text contributes its URL, and the anchor-suppression
+  // rule has no text-mode meaning.
+  const spans = protectedSpans(text, inLink && !asText);
   const tokens: InlineToken[] = [];
   let buffer = '';
 
@@ -1456,7 +1665,7 @@ function renderInline(text: string, inLink = false): string {
     }
     if (spanIndex < spans.length && spans[spanIndex]!.start === i) {
       flushBuffer();
-      tokens.push({ kind: 'html', html: spans[spanIndex]!.html });
+      tokens.push({ kind: 'html', html: asText ? spans[spanIndex]!.text : spans[spanIndex]!.html });
       i = spans[spanIndex]!.end;
       spanIndex += 1;
       continue;
@@ -1482,22 +1691,36 @@ function renderInline(text: string, inLink = false): string {
     }
 
     // Inline raw HTML — a tag, comment, PI, declaration or CDATA the
-    // grammar recognizes. It is escaped verbatim (a rawText token): the
-    // reference keeps html-token bytes undecoded and escapes them at
-    // compile, so `<!ELEMENT x&amp;y>` shows its `&amp;` literally.
+    // grammar recognizes. A TAG on the policy's allowlist is REBUILT
+    // (sanitizeHtmlTag: only its allowed attributes survive, every URL
+    // gated — GitHub's sanitize-then-render reading of raw HTML); a
+    // non-listed tag is escaped verbatim (a rawText token: the reference
+    // keeps html-token bytes undecoded, so `<!ELEMENT x&amp;y>` shows its
+    // `&amp;` literally); and COMMENTS, PIs, declarations and CDATA drop
+    // ENTIRELY — a browser renders them as nothing (bogus comments),
+    // which is what GitHub's visible output does too.
     if (ch === '<') {
       const end = matchRawHtml(text, i);
       if (end !== -1) {
-        flushBuffer();
-        tokens.push({ kind: 'rawText', raw: text.slice(i, end) });
+        const shape = text.slice(i, end);
+        if (shape[1] === '!' || shape[1] === '?') {
+          flushBuffer(); // comment / PI / declaration / CDATA — invisible
+        } else {
+          const rebuilt = sanitizeHtmlTag(shape);
+          flushBuffer();
+          tokens.push(
+            rebuilt !== null ? { kind: 'html', html: rebuilt } : { kind: 'rawText', raw: shape },
+          );
+        }
         i = end;
         continue;
       }
     }
 
     // Footnote references — `[^label]` shares the opening bracket but is
-    // not a link construct.
-    if (ch === '[') {
+    // not a link construct. Alt text keeps them as literal bytes (the
+    // text projection has no superscripts).
+    if (ch === '[' && !asText) {
       const ref = matchFootnoteRef(text, i);
       if (ref && !spanCrosses(spans, i, ref.next)) {
         flushBuffer();
@@ -1509,11 +1732,27 @@ function renderInline(text: string, inLink = false): string {
 
     // Links and images.
     if (ch === '[' || (ch === '!' && text[i + 1] === '[')) {
-      const link = matchLink(text, i, spans, inLink);
+      const link = matchLink(text, i, spans, inLink, asText);
       if (link) {
         flushBuffer();
         tokens.push({ kind: 'html', html: link.markup });
         i = link.next;
+        continue;
+      }
+    }
+
+    // Emoji shortcodes — `:+1:`, `:tada:`, the GitHub pipeline's own
+    // gemoji table (emoji.generated.ts). Text positions only: code spans,
+    // autolinks and math ride the protected pre-pass, link destinations
+    // and raw-HTML bytes never pass through here, and an unknown or
+    // unclosed name stays the literal text it was. The emoji character is
+    // both the markup and the text — the alt projection needs no case.
+    if (ch === ':') {
+      const emoji = matchEmojiShortcode(text, i);
+      if (emoji !== null) {
+        flushBuffer();
+        tokens.push({ kind: 'html', html: emoji.markup });
+        i = emoji.next;
         continue;
       }
     }
@@ -1561,6 +1800,7 @@ function renderInline(text: string, inLink = false): string {
         canOpen,
         canClose,
         tags: [],
+        openStart: 0,
       });
       i += run;
       continue;
@@ -1585,7 +1825,7 @@ function renderInline(text: string, inLink = false): string {
       if (!sawTab && spaces >= 2) {
         buffer = buffer.slice(0, -spaces);
         flushBuffer();
-        tokens.push({ kind: 'html', html: '<br>' });
+        tokens.push({ kind: 'html', html: asText ? '\n' : '<br>' });
       } else {
         buffer += '\n';
       }
@@ -1601,8 +1841,8 @@ function renderInline(text: string, inLink = false): string {
   }
 
   flushBuffer();
-  pairDelimiters(tokens);
-  return tokens.map(renderToken).join('');
+  pairDelimiters(tokens, asText);
+  return tokens.map((token) => renderToken(token, asText)).join('');
 }
 
 /** Unicode punctuation or symbol — flanking's widened 0.31 definition. */
@@ -1633,7 +1873,15 @@ function protectedSpans(text: string, inLink = false): ProtectedSpan[] {
     // skips it only when math does not claim the position).
     const math = matchMath(text, i);
     if (math) {
-      spans.push({ start: i, end: math.next, html: math.markup });
+      // The text projection shows the equation's source — a reader
+      // without rendering still reads the math.
+      spans.push({
+        start: i,
+        end: math.next,
+        html: math.markup,
+        text: text.slice(i, math.next),
+        kind: 'math',
+      });
       i = math.next;
       continue;
     }
@@ -1644,7 +1892,14 @@ function protectedSpans(text: string, inLink = false): ProtectedSpan[] {
     if (ch === '<' && !inLink) {
       const angle = matchAngleAutolink(text, i);
       if (angle) {
-        spans.push({ start: i, end: angle.next, html: angle.markup });
+        // Autolink interiors are literal — the text is the body as written.
+        spans.push({
+          start: i,
+          end: angle.next,
+          html: angle.markup,
+          text: text.slice(i + 1, angle.next - 1),
+          kind: 'autolink',
+        });
         i = angle.next;
         continue;
       }
@@ -1652,7 +1907,13 @@ function protectedSpans(text: string, inLink = false): ProtectedSpan[] {
     if (!inLink && /[a-zA-Z0-9._+-]/.test(ch)) {
       const literal = matchLiteralAutolink(text, i, depths);
       if (literal) {
-        spans.push({ start: i, end: literal.next, html: literal.markup });
+        spans.push({
+          start: i,
+          end: literal.next,
+          html: literal.markup,
+          text: text.slice(i, literal.next),
+          kind: 'autolink',
+        });
         i = literal.next;
         continue;
       }
@@ -1674,6 +1935,8 @@ function protectedSpans(text: string, inLink = false): ProtectedSpan[] {
           start: i,
           end: closing + run,
           html: `<code>${escapeHtml(code.replace(/\n/g, ' '))}</code>`,
+          text: code.replace(/\n/g, ' '),
+          kind: 'code',
         });
         i = closing + run;
         continue;
@@ -1687,15 +1950,17 @@ function protectedSpans(text: string, inLink = false): ProtectedSpan[] {
 }
 
 /** One token's final HTML (literal text escapes, delimiters resolve). */
-function renderToken(token: InlineToken): string {
+function renderToken(token: InlineToken, asText = false): string {
   if (token.kind === 'text') {
-    return escapeHtml(decodeEntities(token.raw));
+    // The text projection decodes entities but never escapes — the caller
+    // (an attribute emission) escapes the whole result itself.
+    return asText ? decodeEntities(token.raw) : escapeHtml(decodeEntities(token.raw));
   }
   // A raw-HTML shape (tag, comment, PI, declaration, CDATA): escaped
   // VERBATIM — the bytes pass through undecoded, exactly like the
   // reference compiler's own escaping of its html tokens.
   if (token.kind === 'rawText') {
-    return escapeHtml(token.raw);
+    return asText ? token.raw : escapeHtml(token.raw);
   }
   if (token.kind === 'html') {
     return token.html;
@@ -1705,7 +1970,31 @@ function renderToken(token: InlineToken): string {
   if (token.tags.length > 0) {
     return token.tags.join('');
   }
-  return escapeHtml(decodeEntities(token.char.repeat(token.run)));
+  return asText
+    ? decodeEntities(token.char.repeat(token.run))
+    : escapeHtml(decodeEntities(token.char.repeat(token.run)));
+}
+
+/**
+ * An emoji shortcode at position `i` — `:name:` with name drawn from the
+ * gemoji table's own charset (lowercase letters, digits, underscore, plus,
+ * hyphen). Null when the name is unknown, empty, unclosed or carries a
+ * character the table never uses (the shortcode grammar stays as narrow
+ * as the table, so `12:30:45` and `::` never look up).
+ */
+function matchEmojiShortcode(text: string, i: number): { markup: string; next: number } | null {
+  let end = i + 1;
+  while (end < text.length && /[a-z0-9_+-]/.test(text[end]!)) {
+    end += 1;
+  }
+  if (end === i + 1 || text[end] !== ':') {
+    return null;
+  }
+  const emoji = GEMOJI.get(text.slice(i + 1, end));
+  if (emoji === undefined) {
+    return null;
+  }
+  return { markup: emoji, next: end + 1 };
 }
 
 /** Index of the next backtick run of exactly `length` (or -1). */
@@ -1803,14 +2092,6 @@ function matchFootnoteRef(text: string, i: number): { markup: string; next: numb
  * carries no scheme (a scheme needs its colon before any slash), cannot
  * smuggle javascript:, and the reference implementation links it.
  */
-function safeHrefForMarkdown(dest: string): string | null {
-  const colon = dest.indexOf(':');
-  const slash = dest.indexOf('/');
-  if (colon === -1 || (slash !== -1 && slash < colon)) {
-    return dest; // scheme-less relative — no scheme, no danger
-  }
-  return sanitizeHref(dest);
-}
 
 /**
  * A link `[text](url)` or image `![alt](url)` at position `i` — plus the
@@ -1829,6 +2110,7 @@ function matchLink(
   i: number,
   spans: ProtectedSpan[],
   inLink: boolean,
+  asText = false,
 ): { markup: string; next: number } | null {
   const image = text[i] === '!';
   const open = i + (image ? 1 : 0);
@@ -1836,10 +2118,28 @@ function matchLink(
     return null;
   }
 
-  // Find the matching ] — one level of bracket nesting is honoured.
+  // Find the matching ] — one level of bracket nesting is honoured, and
+  // brackets inside a PROTECTED span never count (a code span's brackets
+  // are its literal content: `[a `]` b](/uri)` closes at the real one).
+  // The spans are sorted by start, and j only moves forward — one cursor
+  // skips their interiors in linear time.
   let depth = 1;
   let j = open + 1;
+  let si = spans.findIndex((s) => s.end > open);
+  if (si === -1) {
+    si = spans.length;
+  }
   while (j < text.length) {
+    const span = spans[si];
+    if (span && span.start <= j) {
+      // j sits inside this span (its end is past j by the cursor's own
+      // advance condition) — its bytes are literal, jump past them.
+      j = span.end;
+      while (si < spans.length && spans[si]!.end <= j) {
+        si += 1;
+      }
+      continue;
+    }
     if (text[j] === '\\' && j + 1 < text.length) {
       j += 2;
       continue;
@@ -1860,10 +2160,20 @@ function matchLink(
   }
 
   const label = text.slice(open + 1, j);
+  // The label's own protected spans, in label coordinates — code and
+  // math inside a label are legal content, an autolink is not.
+  const labelSpans: Array<{ start: number; end: number; kind: ProtectedSpan['kind'] }> = [];
+  for (const span of spans) {
+    if (span.start >= open + 1 && span.end <= j) {
+      labelSpans.push({ start: span.start - open - 1, end: span.end - open - 1, kind: span.kind });
+    }
+  }
 
   // Links may not nest: a completed link construct inside the label (an
-  // image does not count) means this bracket loses to the inner one.
-  if (!image && labelContainsLink(label)) {
+  // image does not count) means this bracket loses to the inner one. An
+  // AUTOlink span in the label is the same verdict by construction — an
+  // autolink IS a link, and the outer bracket must give way to it.
+  if (!image && (labelContainsLink(label, labelSpans) || labelSpans.some((s) => s.kind === 'autolink'))) {
     return null;
   }
 
@@ -1872,10 +2182,13 @@ function matchLink(
   let title: string | null = null;
 
   // Inline destination: (url "title") — pointy destinations may carry
-  // spaces; bare ones may not, but their parens may balance. A span
-  // starting inside the label means its content already ate this link's
-  // closing bracket — the link is dead (code spans win).
-  if (text[j + 1] === '(' && !inLink && !spanCrosses(spans, i, j)) {
+  // spaces; bare ones may not, but their parens may balance. Images keep
+  // the right inside link labels (an image is not an anchor — the badge
+  // shape `[![x](y)](z)` is a link whose content is an image); LINKS
+  // lose it (links never nest) — except in the TEXT projection, where a
+  // link inside an image label contributes its label text (spec#575) and
+  // nothing is ever an anchor.
+  if (text[j + 1] === '(' && (!inLink || image || asText)) {
     const inline = parseInlineDestination(text, j + 1);
     if (inline) {
       href = inline.dest === '' ? '' : safeHrefForMarkdown(decodeEntities(inline.dest));
@@ -1884,11 +2197,11 @@ function matchLink(
     }
   }
 
-  // Reference forms: full [label][ref] and collapsed [label][] — a span
-  // inside the label kills it (its content claimed the closing bracket).
+  // Reference forms: full [label][ref] and collapsed [label][] — the
+  // same image/text exemptions as the inline destination.
   if (href === null && text[j + 1] === '[') {
     const close = matchBracket(text, j + 1);
-    if (close !== -1 && !spanCrosses(spans, i, j) && !inLink) {
+    if (close !== -1 && (!inLink || image || asText)) {
       const refText = text.slice(j + 2, close);
       const ref = linkRefs!.get(normalizeRefLabel(refText === '' ? label : refText));
       if (ref) {
@@ -1903,8 +2216,8 @@ function matchLink(
   // only when the closing bracket is NOT followed by '[' (the full-
   // reference form owns that, even when its reference is missing — a
   // failed inline '(' dest, though, falls through to the shortcut), and
-  // never inside link labels (links never nest).
-  if (href === null && !inLink && !spanCrosses(spans, i, j) && text[j + 1] !== '[') {
+  // never inside link labels (links never nest — images and text exempt).
+  if (href === null && (!inLink || image || asText) && text[j + 1] !== '[') {
     const ref = linkRefs!.get(normalizeRefLabel(label));
     if (ref) {
       href = ref.href;
@@ -1918,34 +2231,56 @@ function matchLink(
   }
 
   if (image) {
-    if (inLink) {
-      return {
-        markup: `<span class="md-image-ref">${renderInline(label, true)}</span>`,
-        next,
-      };
-    }
+    // A real <img> — GitHub parity: the picture is the point of the
+    // syntax. The src passed the same safe-href gate the anchor hrefs
+    // pass (javascript:/data: never got here — the construct stayed
+    // literal text), the fetch rides lazy/async decoding with the
+    // referrer stripped, and the alt text is the label's PLAIN-TEXT
+    // projection (the reference's own rule: emphasis drops, nested
+    // links and images contribute their label text, code spans their
+    // interior — spec examples 573-589). Inside a link the image is the
+    // link's content (the classic badge shape) — an image is not an
+    // anchor, so no nesting rule fires.
     const titleAttr = title ? ` title="${escapeHtmlAttr(decodeEntities(title))}"` : '';
+    if (asText) {
+      return { markup: renderInline(label, true, true), next };
+    }
     return {
-      markup: `<a href="${escapeHtmlAttr(encodeHref(href))}" class="md-image-link"${titleAttr}>${escapeHtml(label)}</a>`,
+      markup: `<img src="${escapeHtmlAttr(encodeHref(href))}" alt="${escapeHtmlAttr(renderInline(label, true, true))}"${titleAttr} loading="lazy" decoding="async" referrerpolicy="no-referrer">`,
       next,
     };
   }
 
   const titleAttr = title ? ` title="${escapeHtmlAttr(decodeEntities(title))}"` : '';
+  if (asText) {
+    return { markup: renderInline(label, true, true), next };
+  }
   return {
     markup: `<a href="${escapeHtmlAttr(encodeHref(href))}"${titleAttr} rel="noopener noreferrer">${renderInline(label, true)}</a>`,
     next,
   };
 }
 
+/** A label-local protected span (see matchLink). */
+type LabelSpan = { start: number; end: number; kind: ProtectedSpan['kind'] };
+
 /**
  * True when the label hides a completed link construct — `[…](…)`,
  * `[…][…]`, `[…][]` or a shortcut whose definition exists. An escaped
  * bracket never opens one, and `![…](…)` is an image (images nest in
- * links; links do not).
+ * links; links do not). Brackets inside the label's protected spans are
+ * literal content, not link syntax.
  */
-function labelContainsLink(label: string): boolean {
+function labelContainsLink(label: string, spans: LabelSpan[] = []): boolean {
   for (let k = 0; k < label.length; k += 1) {
+    // Brackets inside a protected span are literal — a code span or a
+    // math shell in the label does NOT nest a link (`[a `[b](c)` d](/uri)`
+    // is one link with a code span inside it).
+    const claimed = spans.find((s) => s.start <= k && k < s.end);
+    if (claimed) {
+      k = claimed.end - 1;
+      continue;
+    }
     if (label[k] === '\\') {
       k += 1;
       continue;
@@ -2555,6 +2890,15 @@ function matchHtmlBang(text: string, at: number): number {
     return close === -1 ? -1 : close + 3;
   }
   if (text[at] === '-' && text[at + 1] === '-') {
+    // The spec's two EMPTY comments close the shape themselves: `<!-->`
+    // and `<!--->` (CommonMark's own grammar — anything longer runs the
+    // comment FSM).
+    if (text[at + 2] === '>') {
+      return at + 3;
+    }
+    if (text[at + 2] === '-' && text[at + 3] === '>') {
+      return at + 4;
+    }
     // The comment FSM: `--` runs close only in even pairs, `>` right
     // after an even pair — `<!--a--->` keeps going, `<!--a-->` ends.
     let k = at + 2;
@@ -2694,11 +3038,20 @@ function isAsciiAlpha(ch: string | undefined): boolean {
  * character, original length mod 3, can-open) bounds the backward search —
  * the algorithm's own guard against quadratic rescans.
  */
-function pairDelimiters(tokens: InlineToken[]): void {
+function pairDelimiters(tokens: InlineToken[], asText = false): void {
   type Delim = Extract<InlineToken, { kind: 'delimiter' }>;
   const stack: Delim[] = [];
   /** key → the walk-order bound future searches must not go below. */
   const bottoms = new Map<string, number>();
+  /** A close tag joins the close group's end (innermost pair first). */
+  const addCloseTag = (token: Delim, tag: string): void => {
+    token.tags.splice(token.openStart, 0, asText ? '' : tag);
+    token.openStart += 1;
+  };
+  /** An open tag joins the open group's front (outermost pair first). */
+  const addOpenTag = (token: Delim, tag: string): void => {
+    token.tags.splice(token.openStart, 0, asText ? '' : tag);
+  };
 
   for (const token of tokens) {
     if (token.kind !== 'delimiter') {
@@ -2739,16 +3092,16 @@ function pairDelimiters(tokens: InlineToken[]): void {
       }
 
       if (closer.char === '~') {
-        opener.tags.push('<s>');
-        closer.tags.unshift('</s>');
+        addOpenTag(opener, '<s>');
+        addCloseTag(closer, '</s>');
         opener.run = 0;
         closer.run = 0;
       } else {
         const strong = closer.run >= 2 && opener.run >= 2;
         const use = strong ? 2 : 1;
         const [openTag, closeTag] = strong ? ['<b>', '</b>'] : ['<i>', '</i>'];
-        opener.tags.push(openTag);
-        closer.tags.unshift(closeTag);
+        addOpenTag(opener, openTag);
+        addCloseTag(closer, closeTag);
         opener.run -= use;
         closer.run -= use;
       }
@@ -2766,17 +3119,19 @@ function pairDelimiters(tokens: InlineToken[]): void {
     }
   }
 
-  // Leftovers fold into the tags they helped (closer-side before, opener
-  // side after) so the literal characters render in place.
+  // Leftovers fold BETWEEN the groups, on the side the reference puts
+  // them: cmark trims an opener's inl_text from its content-facing end,
+  // so the surviving literal sits after any close tags and before the
+  // opening ones (`***foo**` is `*<strong>foo</strong>`, `**foo***` is
+  // `<strong>foo</strong>*`, and a run that closed then opened renders
+  // close-tag, leftover, open-tag).
   for (const token of tokens) {
     if (token.kind === 'delimiter' && token.run > 0 && token.tags.length > 0) {
-      const literal = escapeHtml(decodeEntities(token.char.repeat(token.run)));
+      const literal = asText
+        ? decodeEntities(token.char.repeat(token.run))
+        : escapeHtml(decodeEntities(token.char.repeat(token.run)));
       token.run = 0;
-      if (token.tags[0] === '<s>' || token.tags[0] === '<b>' || token.tags[0] === '<i>') {
-        token.tags.push(literal);
-      } else {
-        token.tags.unshift(literal);
-      }
+      token.tags.splice(token.openStart, 0, literal);
     }
   }
 }

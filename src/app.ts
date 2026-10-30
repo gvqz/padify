@@ -40,15 +40,7 @@ import { registerLayer } from './ui/behavior/layers';
 import { initSaveIndicator } from './save-indicator';
 import { initTabRailDrawer } from './tab-rail-drawer';
 import { initRichToolbar } from './editor/rich-toolbar';
-import {
-  initMarkdownToolbar,
-  openMarkdownEquationBubble,
-  openMarkdownLinkPopover,
-  runMarkdownBlockStyle,
-  runMarkdownToolbarAction,
-} from './editor/markdown/toolbar';
-import { initMarkdownSlash } from './editor/markdown/slash';
-import { initMarkdownBubble } from './editor/markdown/bubble';
+import { initMarkdownToolbar } from './editor/markdown/toolbar';
 // The Markdown surface registers itself for the 'text' content kind at
 // import time (editor/markdown/surface.ts) — one import, and every
 // NoteSurface consumer (tabs, snapshots, share) can open markdown notes.
@@ -65,8 +57,7 @@ import './editor/tasks/surface';
 import { exportActiveDrawingImage } from './editor/drawing/surface';
 import { drawingSceneHasContent } from './editor/drawing/scene';
 import {
-  focusMarkdownPane,
-  markdownSelectionStateNow,
+  markdownLastWorkingMode,
   markdownViewMode,
   onMarkdownViewMode,
   setMarkdownViewMode,
@@ -356,27 +347,6 @@ export async function initApp(): Promise<void> {
   // editor/markdown/toolbar.ts ----
   initMarkdownToolbar(tabManager);
 
-  // ---- markdown slash menu ("/" inserts blocks) — the panel + provider;
-  // the insert actions are the toolbar's own commands, injected here so
-  // slash.ts imports none of its siblings (architecture.test.ts pins the
-  // acyclic graph), see editor/markdown/slash.ts ----
-  initMarkdownSlash({
-    runToolbarAction: runMarkdownToolbarAction,
-    runBlockStyle: runMarkdownBlockStyle,
-    openEquation: openMarkdownEquationBubble,
-  });
-
-  // ---- markdown selection bubble (the floating format toolbar over a
-  // text selection) — same injection discipline as the slash menu: the
-  // actions are the toolbar's own commands, see
-  // editor/markdown/bubble.ts ----
-  initMarkdownBubble({
-    runToolbarAction: runMarkdownToolbarAction,
-    openLink: openMarkdownLinkPopover,
-    openEquation: openMarkdownEquationBubble,
-    selectionState: markdownSelectionStateNow,
-  });
-
   // Docs-style shortcuts for rich notes — registered BEFORE the legacy Tab
   // handler below so lists can claim Tab/Shift+Tab first.
   initRichShortcuts(tabManager);
@@ -586,30 +556,29 @@ export async function initApp(): Promise<void> {
   tabManager.addActiveListener(syncDrawingExportRows);
   syncDrawingExportRows();
 
-  // ---- split view — the top bar's Markdown-only toggle. The icon flips
-  // the surface between the last working mode and the side-by-side
-  // (source + owned-renderer live preview); the toolbar's segmented
-  // control follows through the same surface listener, so there is
-  // exactly one source of truth for the mode (see
+  // ---- preview toggle — the top bar's Markdown-only button. The eye
+  // flips the surface to the owned renderer's output and back to the
+  // last WORKING mode (source or split — wherever the user was editing);
+  // the toolbar's segmented control follows through the same surface
+  // listener, so there is exactly one source of truth for the mode (see
   // editor/markdown/surface.ts). ----
-  const splitViewButton = notepad.splitViewButton;
-  splitViewButton.on('click', () => {
-    setMarkdownViewMode(markdownViewMode() === 'split' ? 'edit' : 'split');
-    focusMarkdownPane();
+  const previewToggleButton = notepad.previewToggleButton;
+  previewToggleButton.on('click', () => {
+    setMarkdownViewMode(markdownViewMode() === 'preview' ? markdownLastWorkingMode() : 'preview');
   });
-  const syncSplitViewChrome = (): void => {
-    splitViewButton.attr('aria-pressed', markdownViewMode() === 'split' ? 'true' : 'false');
+  const syncPreviewToggleChrome = (): void => {
+    previewToggleButton.attr('aria-pressed', markdownViewMode() === 'preview' ? 'true' : 'false');
   };
-  onMarkdownViewMode(syncSplitViewChrome);
-  const syncSplitViewVisibility = (): void => {
+  onMarkdownViewMode(syncPreviewToggleChrome);
+  const syncPreviewToggleVisibility = (): void => {
     if (isMarkdownNote(tabManager.getActive())) {
-      notepad.splitViewContainer.removeAttr('hidden');
+      notepad.previewToggleContainer.removeAttr('hidden');
     } else {
-      notepad.splitViewContainer.attr('hidden', 'hidden');
+      notepad.previewToggleContainer.attr('hidden', 'hidden');
     }
   };
-  tabManager.addActiveListener(syncSplitViewVisibility);
-  syncSplitViewVisibility();
+  tabManager.addActiveListener(syncPreviewToggleVisibility);
+  syncPreviewToggleVisibility();
 
   // Dropdown dismissal (outside clicks, other menus, Escape) is the
   // dismissable-layer registry's job — see ui/behavior/layers.ts. The old
@@ -859,7 +828,7 @@ export async function initApp(): Promise<void> {
       (event.metaKey && event.shiftKey && event.code === 'Backspace')
     ) {
       event.preventDefault();
-      deleteNotes();
+      void deleteNotes();
     }
 
     // Alt/option + v toggles voice typing.

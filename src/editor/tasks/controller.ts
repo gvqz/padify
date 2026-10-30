@@ -43,6 +43,7 @@ import {
   quickPresetIso,
 } from './dates';
 import { buildTask, sanitizeTask, type Task, type TaskNoteContent } from './content';
+import { confirmDialog } from '../../ui/dialog';
 import { showToast } from '../../ui/toast';
 
 /** What the page asks the world around it to do. */
@@ -944,15 +945,13 @@ export class TaskListPageController {
   private async clearCompletedFlow(): Promise<void> {
     const count = this.completedTasks().length;
     if (count === 0) return;
-    const { default: Swal } = await import('sweetalert2');
-    const result = await Swal.fire({
+    const confirmed = await confirmDialog({
       title: 'Clear completed reminders?',
       text: 'Every checked-off reminder will be removed from this list.',
-      showCancelButton: true,
-      confirmButtonText: 'Clear',
-      confirmButtonColor: 'var(--vz-danger, #ee0000)',
+      danger: true,
+      confirm: 'Clear',
     });
-    if (!result.isConfirmed) return;
+    if (!confirmed) return;
     this.mutate(() => {
       this.model.tasks = this.model.tasks.filter((task) => !task.completed);
     });

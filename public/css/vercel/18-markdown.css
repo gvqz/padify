@@ -1,10 +1,10 @@
 /* -------------------------------------------------------------------------
    18 — Markdown surface
-   The Markdown note's editor chrome: the headless Milkdown root (the
-   WYSIWYG the surface mounts inside #note), the preview pane (the owned
-   renderer's output — the same truth share links and HTML export show),
-   and the few pieces the markdown toolbar adds beyond the rich-toolbar
-   vocabulary it already reuses.
+   The Markdown note's editor: the SOURCE textarea (the note's own text,
+   the working mode) and the PREVIEW pane (the owned renderer's output —
+   the same truth share links and HTML export show), plus the few pieces
+   the markdown toolbar adds beyond the rich-toolbar vocabulary it
+   already reuses.
 
    Typography deliberately MIRRORS the note content vocabulary in
    16-editor-shell.css (#note h1..h3, blockquote, pre, a, table): a
@@ -15,9 +15,35 @@
    under body.dark).
    ---------------------------------------------------------------------- */
 
-/* The wrapper fills the note host like the contenteditable does. */
+/* The wrapper fills the note host like the contenteditable does — but
+   as a PANE, not a page: the surface tiles the host's entire padding
+   box, and the panes scroll their own content the way a code editor's
+   do. The host's padding (15px 24px 80px — declared once for every
+   note type in components.css) and its own scrollbar stand down: the
+   calc/margin pair below counters that padding exactly, so the source
+   textarea fills the note card edge to edge (its own 24px gutter is
+   THE gutter — the old layout stacked the host's padding on the pane's
+   and sat markdown text 48px in where every other note sits 24px, and
+   a percentage min-height against the content-sized wrapper pinned the
+   textarea at its two-row intrinsic height with a scrollbar inside a
+   half-empty card). */
 .markdown-surface {
-  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  height: calc(100% + 95px); /* the host's content box + 15 top + 80 bottom */
+  margin: -15px -24px -80px; /* tile the host's padding box exactly */
+  overflow: hidden;
+}
+
+/* editor.css pins scrollbar-gutter: stable on #note for the reading
+   column's scroll; the markdown panes scroll THEMSELVES (the host never
+   scrolls for them), so the reserved gutter would burn 10px of the
+   source pane's right edge — the same stand-down the drawing canvas
+   takes (16-editor-shell.css, #note.drawing-canvas-open). :has rides
+   the wrapper's own presence: no mount/teardown bookkeeping, the rule
+   holds exactly while the surface owns the host. */
+#note:has(> .markdown-surface) {
+  scrollbar-gutter: auto;
 }
 
 /* The preview renders the OWNED renderer's HTML — real block markup, so
@@ -30,34 +56,120 @@
   white-space: normal;
 }
 
-/* Milkdown's container + the ProseMirror editable root. The base PM
-   stylesheet (imported from the kit) provides pre-wrap, the gap cursor
-   and table editing chrome; the outline discipline matches #note.
-   The left padding reserves the block handle's gutter — the drag grip
-   the kit's BlockService parks there (see the handle section at the
-   bottom of this file and editor/markdown/block-handle.ts). */
-.markdown-surface .milkdown {
-  min-height: 100%;
-  padding-left: 24px;
-}
+/* ---- The source pane (the working mode) ----
+   The raw-markdown textarea — the note's editor. Typography is the code
+   vocabulary (the mono stack, one size step below the note body), the
+   resize/outline discipline matches #note's (no chrome of its own — the
+   host's focus treatment carries it), and the generous bottom padding
+   keeps the caret's last lines above the fold the way every serious
+   code editor scrolls past its end. It inherits #note's spellcheck
+   state, so the Settings > Text toggle reaches it live. The [hidden]
+   attribute is the pane-visibility contract — guard it the way the
+   chime-picker lesson taught (an author display rule anywhere beats
+   the UA's hidden). */
 
-.markdown-surface .ProseMirror {
-  min-height: 100%;
+.markdown-surface .markdown-source {
+  display: block;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 15px 24px 40vh;
+  border: none;
   outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--vz-fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14.5px;
+  line-height: 1.7;
+  tab-size: 2;
   cursor: text;
 }
 
-/* ProseMirror's default selected-cell wash is blue — the design system
-   is monochrome, so table selection reads through the hover surface. */
-.markdown-surface .ProseMirror .selectedCell {
-  background: var(--vz-bg-hover);
+.markdown-surface .markdown-source[hidden] {
+  display: none;
 }
 
-/* ---- Content vocabulary (mirrors #note's, all six heading levels) ---- */
+/* The empty pane's placeholder carries the app's own copy. */
+.markdown-surface .markdown-source::placeholder {
+  color: var(--vz-fg-muted);
+  opacity: 0.7;
+}
 
-.markdown-surface .padify-markdown h1,
-.markdown-surface .padify-markdown h2,
-.markdown-surface .padify-markdown h3,
+/* ---- The preview pane ----
+   The owned renderer's output — the exact markup a share link or the
+   HTML export ships. A pane like the source: it fills the surface and
+   scrolls its own content, so the flip into preview carries the reading
+   position across as a pane fraction (the extra right padding keeps the
+   pane's scrollbar off the text). Every editing affordance stands down
+   except the live gestures the surface owns (task checkboxes, equation
+   clicks). */
+
+.markdown-surface .markdown-preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 15px 24px 80px;
+  padding-right: 28px;
+  cursor: default;
+}
+
+.markdown-surface .markdown-preview[hidden] {
+  display: none;
+}
+
+/* ---- The split mode ----
+   The working split: the SOURCE left, the owned renderer's live output
+   right — the same preview vocabulary, refreshed a beat behind the
+   typing (surface.ts's 250ms debounce and one-way scroll sync). The
+   grid takes the surface's full-bleed box and halves it; each pane
+   scrolls its own content, and the divider is the source pane's right
+   border on the border token. grid-row is load-bearing: the
+   auto-placement cursor starts at column 1, the preview takes column 2,
+   and the source pane's explicit column 1 then sits BEHIND the cursor —
+   sparse packing pushes it to a second row, which halved both panes and
+   stacked them diagonally. */
+
+.markdown-surface.markdown-split-mode {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.markdown-surface.markdown-split-mode .markdown-source {
+  grid-column: 1;
+  grid-row: 1;
+  padding-bottom: 24px; /* tight — the pane pair owns the viewport */
+  border-right: 1px solid var(--vz-border);
+}
+
+.markdown-surface.markdown-split-mode .markdown-preview {
+  grid-column: 2;
+  grid-row: 1;
+  padding: 15px 24px 24px;
+  padding-right: 28px;
+}
+
+/* Narrow screens stack the panes — the source keeps the top, the
+   preview follows beneath it. */
+@media (max-width: 720px) {
+  .markdown-surface.markdown-split-mode {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .markdown-surface.markdown-split-mode .markdown-source {
+    border-right: none;
+    border-bottom: 1px solid var(--vz-border);
+  }
+
+  .markdown-surface.markdown-split-mode .markdown-preview {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
+
+/* ---- Preview vocabulary (mirrors #note's, all six heading levels) ---- */
+
 .markdown-preview h1,
 .markdown-preview h2,
 .markdown-preview h3 {
@@ -67,25 +179,19 @@
   color: var(--vz-fg);
 }
 
-.markdown-surface .padify-markdown h1,
 .markdown-preview h1 {
   font-size: 1.55em;
   letter-spacing: -0.01em;
 }
 
-.markdown-surface .padify-markdown h2,
 .markdown-preview h2 {
   font-size: 1.3em;
 }
 
-.markdown-surface .padify-markdown h3,
 .markdown-preview h3 {
   font-size: 1.13em;
 }
 
-.markdown-surface .padify-markdown h4,
-.markdown-surface .padify-markdown h5,
-.markdown-surface .padify-markdown h6,
 .markdown-preview h4,
 .markdown-preview h5,
 .markdown-preview h6 {
@@ -95,75 +201,58 @@
   color: var(--vz-fg);
 }
 
-.markdown-surface .padify-markdown h4,
 .markdown-preview h4 {
   font-size: 1.05em;
 }
 
-.markdown-surface .padify-markdown h5,
 .markdown-preview h5 {
   font-size: 1em;
 }
 
-.markdown-surface .padify-markdown h6,
 .markdown-preview h6 {
   font-size: 0.95em;
   color: var(--vz-fg-muted);
 }
 
-.markdown-surface .padify-markdown > :first-child,
 .markdown-preview > :first-child {
   margin-top: 0;
 }
 
-.markdown-surface .padify-markdown p,
 .markdown-preview p {
   margin: 0.35em 0;
 }
 
-.markdown-surface .padify-markdown ul,
-.markdown-surface .padify-markdown ol,
 .markdown-preview ul,
 .markdown-preview ol {
   margin: 0.35em 0;
   padding-left: 1.5em;
 }
 
-.markdown-surface .padify-markdown li,
 .markdown-preview li {
   margin: 0.15em 0;
 }
 
 /* Task list checkboxes answer the monochrome primary, like the app's
    switches; the browser's default blue would be the only hue on the
-   page. In the PREVIEW they are also live: the rendered input is
-   disabled (a reading surface), so pointer-events hands its clicks to
-   the list item and the surface writes the toggle back into the source
-   — the whole row is the hit target, cursor included. */
-.markdown-surface .padify-markdown li:has(> input[type='checkbox']),
+   page. They are also LIVE: the rendered input is disabled (a reading
+   surface), so pointer-events hands its clicks to the list item and the
+   surface writes the toggle back into the source — the whole row is the
+   hit target, cursor included. */
 .markdown-preview li:has(> input[type='checkbox']) {
   list-style: none;
+  cursor: pointer;
 }
 
-.markdown-surface .padify-markdown input[type='checkbox'],
 .markdown-preview input[type='checkbox'] {
   accent-color: var(--vz-primary);
   margin-right: 0.35em;
-}
-
-.markdown-preview input[type='checkbox'] {
   pointer-events: none;
-}
-
-.markdown-preview li:has(> input[type='checkbox']) {
-  cursor: pointer;
 }
 
 .markdown-preview li:has(> input[type='checkbox']:checked) {
   color: var(--vz-fg-muted);
 }
 
-.markdown-surface .padify-markdown blockquote,
 .markdown-preview blockquote {
   margin: 0.5em 0;
   padding: 0.15em 0 0.15em 0.9em;
@@ -171,7 +260,6 @@
   color: var(--vz-fg-muted);
 }
 
-.markdown-surface .padify-markdown pre,
 .markdown-preview pre {
   margin: 0.5em 0;
   padding: 0.6em 0.8em;
@@ -185,7 +273,6 @@
   overflow-wrap: break-word;
 }
 
-.markdown-surface .padify-markdown code,
 .markdown-preview code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.9em;
@@ -198,14 +285,12 @@
   padding: 0.08em 0.3em;
 }
 
-.markdown-surface .padify-markdown pre code,
 .markdown-preview pre code {
   background: none;
   border: none;
   padding: 0;
 }
 
-.markdown-surface .padify-markdown a,
 .markdown-preview a {
   /* Monochrome: links read through the underline, like every link in
      the app — never through a new hue. font-weight: inherit keeps the
@@ -217,47 +302,19 @@
   text-underline-offset: 2px;
 }
 
-.markdown-surface .padify-markdown hr,
 .markdown-preview hr {
   border: none;
   border-top: 1px solid var(--vz-border);
   margin: 1.2em 0;
 }
 
-.markdown-surface .padify-markdown table,
 .markdown-preview table {
   border-collapse: collapse;
   margin: 0.5em 0;
-}
-
-/* The preview's tables answer the editor's geometry: prosemirror-tables
-   ships `.ProseMirror table { width: 100%; table-layout: fixed }`, so
-   the preview states the same rule or the two views disagree on every
-   table (the editor stretched, the preview hugged its content). */
-.markdown-preview table {
   width: 100%;
   table-layout: fixed;
 }
 
-/* ProseMirror's table chrome expects the host to define its default
-   column width; unstated, the var is invalid and min-width collapses. */
-.markdown-surface .ProseMirror {
-  --default-cell-min-width: 36px;
-}
-
-/* The kit's table chrome is blue (the selection wash rides a ::after
-   overlay, the column-resize handle its own blue) — the design system
-   is monochrome, so both restate on the tokens. */
-.markdown-surface .ProseMirror .selectedCell::after {
-  background-color: var(--vz-bg-hover);
-}
-
-.markdown-surface .ProseMirror .column-resize-handle {
-  background-color: var(--vz-border-strong);
-}
-
-.markdown-surface .padify-markdown td,
-.markdown-surface .padify-markdown th,
 .markdown-preview td,
 .markdown-preview th {
   border: 1px solid var(--vz-border-strong);
@@ -268,261 +325,154 @@
   position: relative;
 }
 
-.markdown-surface .padify-markdown th,
 .markdown-preview th {
   background: var(--vz-bg-subtle);
   font-weight: 650;
 }
 
-/* Raw HTML the source contains renders as literal text (the security
-   model); showing it on the code surface keeps the "this is data" cue. */
-.markdown-surface [data-type='html'] {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.9em;
-  color: var(--vz-fg-muted);
+/* ---- Images (GitHub parity: the picture is the point) ----
+   Lazy, async-decoded, referrer-stripped by the renderer; the geometry
+   stays ours — never wider than the note, corners on the radius token,
+   quiet border that reads in both modes. */
+
+.markdown-preview img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--vz-radius);
 }
 
-/* Display math centers like the app's equation chips; the preview runs
-   the same KaTeX pass the html surface does. */
-.markdown-surface .katex-display,
-.markdown-preview .katex-display {
-  margin: 0.75em 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 2px 0;
-}
-
-/* ---- The source pane ----
-   The raw-markdown textarea — the SOURCE mode's editing surface and the
-   left half of the SPLIT. Hidden until one of those modes owns it (the
-   mount builds it up front so the flip needs no DOM work). Typography
-   mirrors the code vocabulary the WYSIWYG's own code blocks use (the
-   mono stack, one size step below the note body), the padding mirrors
-   the .milkdown container's (24px left gutter parity with the block
-   handle), and the resize/outline discipline matches #note's (no chrome
-   of its own — the host's focus treatment carries it). It inherits
-   #note's spellcheck state, so the Settings > Text toggle reaches it
-   live. */
-
-.markdown-surface .markdown-source {
+.markdown-preview img[src=''] {
   display: none;
-  width: 100%;
-  min-height: 100%;
-  padding: 14px 24px 40vh;
-  border: none;
-  outline: none;
-  resize: none;
-  background: transparent;
+}
+
+/* ---- The raw-HTML vocabulary (the policy's rebuilt tags) ----
+   GitHub's own reading: benign tags render, everything else stays
+   escaped text. The shapes below are the extras the note vocabulary
+   never needed before — the torture document's own showcase. */
+
+.markdown-preview kbd {
+  display: inline-block;
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--vz-border-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--vz-bg-subtle);
   color: var(--vz-fg);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 14.5px;
-  line-height: 1.7;
-  tab-size: 2;
-  cursor: text;
-}
-
-/* The empty pane's placeholder carries the app's own copy. */
-.markdown-surface .markdown-source::placeholder {
-  color: var(--vz-fg-muted);
-  opacity: 0.7;
-}
-
-/* ---- Preview mode ----
-   The preview pane is the owned renderer's output — the exact markup a
-   share link or the HTML export ships. Same vocabulary as above; every
-   editing pane stands down. */
-
-.markdown-surface .markdown-preview {
-  min-height: 100%;
-  cursor: default;
-}
-
-.markdown-surface.markdown-preview-mode .milkdown,
-.markdown-surface.markdown-preview-mode .markdown-source {
-  display: none;
-}
-
-/* The [hidden] attribute is the pane-visibility contract — guard it the
-   way the chime-picker lesson taught (an author display rule anywhere
-   beats the UA's hidden). */
-.markdown-surface .markdown-preview[hidden] {
-  display: none;
-}
-
-.markdown-surface.markdown-source-mode .milkdown,
-.markdown-surface.markdown-source-mode .markdown-preview {
-  display: none;
-}
-
-/* ---- Source mode ----
-   The raw markdown alone, full width. The WYSIWYG stays mounted (hidden)
-   so a flip back is instant — the surface keeps it in sync (see
-   surface.ts: pushSourceIntoEditor). */
-
-.markdown-surface.markdown-source-mode .markdown-source {
-  display: block;
-}
-
-/* ---- Split mode ----
-   The working split: the SOURCE left, the owned renderer's live output
-   right — the same preview vocabulary, refreshed a beat behind the
-   typing. The surface fills the host's height exactly (the host is the
-   flex-bounded scroll container) and each pane scrolls its own content;
-   the divider is the source pane's right border on the border token. */
-
-.markdown-surface.markdown-split-mode {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-}
-
-/* The split edits the SOURCE — the WYSIWYG (still mounted, still synced)
-   stands down entirely while the textarea owns the left half and the
-   rendered output the right. grid-row is load-bearing: the
-   auto-placement cursor starts at column 1, the preview takes column 2,
-   and the source pane's explicit column 1 then sits BEHIND the cursor —
-   sparse packing pushes it to a second row, which halved both panes and
-   stacked them diagonally. */
-.markdown-surface.markdown-split-mode .markdown-source {
-  display: block;
-  grid-column: 1;
-  grid-row: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding-bottom: 24px;
-  border-right: 1px solid var(--vz-border);
-}
-
-.markdown-surface.markdown-split-mode .milkdown {
-  display: none;
-}
-
-.markdown-surface.markdown-split-mode .markdown-preview {
-  grid-column: 2;
-  grid-row: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 14px 24px;
-}
-
-/* Narrow screens stack the panes — the source keeps the top, the
-   preview follows beneath it. */
-@media (max-width: 720px) {
-  .markdown-surface.markdown-split-mode {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-  }
-
-  .markdown-surface.markdown-split-mode .markdown-source {
-    grid-column: 1;
-    grid-row: 1;
-    border-right: none;
-    border-bottom: 1px solid var(--vz-border);
-  }
-
-  .markdown-surface.markdown-split-mode .markdown-preview {
-    grid-column: 1;
-    grid-row: 2;
-  }
-}
-
-/* ---- The view toggle ----
-   The segmented Visual/Source/Split/Preview control rides the shared
-   rich-btn styles; the active mode reads pressed exactly like Bold does
-   when the caret sits in bold text. The labels are part of the control
-   (an icon-only control hid the split from its own users) — they fold
-   away on narrow screens where the titles carry the meaning. */
-
-.markdown-toolbar .markdown-view-toggle {
-  margin-left: auto;
-}
-
-.markdown-view-btn .markdown-view-label {
-  font-size: 12px;
-  font-weight: 550;
-  line-height: 1;
-}
-
-@media (max-width: 720px) {
-  .markdown-view-btn .markdown-view-label {
-    display: none;
-  }
-}
-
-/* ---- Task lists (the GFM preset's editing face) ----
-   The preset renders task items as li[data-item-type=task]; the marker
-   is painted here — a monochrome checkbox on the primary, like the
-   preview's disabled inputs. Clicking the marker zone toggles (the
-   surface's click plugin; the zone width matches TASK_MARKER_EM in
-   editor/markdown/nodes.ts).
-
-   Geometry: the preset wraps an item's content in a block <p>, so an
-   in-flow inline marker would sit on its OWN line above the text (the
-   two-stack bug). The marker hangs in the list's gutter instead —
-   absolute against the li, aligned with the sibling bullets' marker
-   column — and the item's first block gives back its top margin so the
-   box rides the text's first line. */
-
-.markdown-surface .padify-markdown li[data-item-type='task'] {
-  list-style: none;
-  position: relative;
-}
-
-.markdown-surface .padify-markdown li[data-item-type='task']::before {
-  content: '';
-  position: absolute;
-  left: -1.5em;
-  top: 0.45em;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1em;
-  height: 1em;
-  border: 1.5px solid var(--vz-border-strong);
-  border-radius: 3px;
-  background: var(--vz-bg);
-  color: var(--vz-bg);
   font-size: 0.85em;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+
+.markdown-preview mark {
+  background: color-mix(in srgb, var(--vz-primary) 22%, transparent);
+  color: var(--vz-fg);
+  border-radius: 2px;
+  padding: 0 0.15em;
+}
+
+.markdown-preview abbr[title] {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: help;
+}
+
+.markdown-preview ruby {
+  ruby-align: center;
+}
+
+.markdown-preview rt {
+  font-size: 0.62em;
+  color: var(--vz-fg-muted);
+  line-height: 1.1;
+}
+
+.markdown-preview rp {
+  font-size: 0.62em;
+  color: var(--vz-fg-subtle);
+}
+
+.markdown-preview dl {
+  margin: 0.5em 0;
+}
+
+.markdown-preview dt {
   font-weight: 650;
-  line-height: 1;
+  margin-top: 0.4em;
+}
+
+.markdown-preview dd {
+  margin: 0.1em 0 0.2em 1.4em;
+}
+
+.markdown-preview details {
+  margin: 0.5em 0;
+  padding: 0.35em 0.8em;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg-subtle);
+}
+
+.markdown-preview details[open] > summary {
+  margin-bottom: 0.3em;
+}
+
+.markdown-preview summary {
   cursor: pointer;
+  font-weight: 550;
 }
 
-.markdown-surface .padify-markdown li[data-item-type='task'] > p:first-child {
-  margin-top: 0;
+.markdown-preview figure {
+  margin: 0.75em 0;
+  text-align: center;
 }
 
-.markdown-surface .padify-markdown li[data-item-type='task'] > p:last-child {
-  margin-bottom: 0;
+.markdown-preview figcaption {
+  margin-top: 0.35em;
+  font-size: 0.86em;
+  color: var(--vz-fg-muted);
 }
 
-.markdown-surface .padify-markdown li[data-item-type='task'][data-checked='true']::before {
-  content: '✓';
-  background: var(--vz-primary);
-  border-color: var(--vz-primary);
+.markdown-preview var {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-style: italic;
 }
 
-body.dark .markdown-surface .padify-markdown li[data-item-type='task']::before {
-  color: var(--vz-bg);
+.markdown-preview samp {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.markdown-preview small {
+  font-size: 0.86em;
+}
+
+.markdown-preview q {
+  font-style: italic;
+}
+
+.markdown-preview del,
+.markdown-preview s {
+  color: var(--vz-fg-muted);
+}
+
+.markdown-preview ins,
+.markdown-preview u {
+  text-underline-offset: 2px;
 }
 
 /* ---- Live equations ----
-   The math nodes render through the app's one KaTeX pipeline; the
-   wrapper just places them (inline flows, block centers like the
-   app's equation chips) and paints the empty block's affordance. */
+   The math shells render through the app's one KaTeX pipeline; the
+   wrapper places them (inline flows, block centers like the app's
+   equation chips). A click opens the equation bubble with the source
+   filled in — the preview's editing affordance. */
 
-.markdown-surface .md-math-inline .padify-math {
-  padding: 0 2px;
-}
-
-.markdown-surface .md-math-block {
+.markdown-preview .md-math-block {
   text-align: center;
   margin: 0.75em 0;
 }
 
-.markdown-surface .md-math-block .padify-math {
+.markdown-preview .md-math-block .padify-math {
   display: inline-block;
   max-width: 100%;
   overflow-x: auto;
@@ -530,61 +480,15 @@ body.dark .markdown-surface .padify-markdown li[data-item-type='task']::before {
   padding: 2px 0;
 }
 
-.markdown-surface .md-math-block.md-math-empty {
-  display: flex;
-  width: fit-content;
-  margin: 0.75em auto;
-  padding: 0.4em 1em;
-  border: 1px dashed var(--vz-border-strong);
-  border-radius: var(--vz-radius);
-  color: var(--vz-fg-muted);
-  font-size: 0.9em;
+.markdown-preview .padify-math {
   cursor: pointer;
 }
 
-.markdown-surface .md-math-block.md-math-empty::after {
-  content: 'Add equation — click to edit';
-}
-
-.markdown-surface .md-math-block.md-math-empty:hover {
-  border-color: var(--vz-primary);
-  color: var(--vz-fg);
-}
-
-/* ---- Image chips ----
-   The owned renderer renders images as links (a remote src would make
-   the app fetch it); the edit view answers the same policy with a chip
-   — NEVER an <img> (pinned by the characterization suite). */
-
-.markdown-surface .md-image-chip {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  padding: 0.06em 0.55em 0.06em 0.2em;
-  border: 1px solid var(--vz-border-strong);
-  border-radius: 999px;
-  background: var(--vz-bg-subtle);
-  color: var(--vz-fg);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.88em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: baseline;
-  cursor: default;
-}
-
-.markdown-surface .md-image-chip::before {
-  content: '';
-  flex: none;
-  width: 16px;
-  height: 16px;
-  margin-right: 0.35em;
-  background: var(--vz-fg-muted) center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2'/%3E%3Ccircle cx='9' cy='9' r='2'/%3E%3Cpath d='m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21'/%3E%3C/svg%3E");
-  mask-size: contain;
-  mask-repeat: no-repeat;
-  mask-position: center;
+.markdown-preview .katex-display {
+  margin: 0.75em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
 }
 
 /* ---- Footnotes (the renderer's document-scoped section) ----
@@ -630,86 +534,26 @@ body.dark .markdown-surface .padify-markdown li[data-item-type='task']::before {
   scroll-margin-top: 2em;
 }
 
-/* ---- Footnotes, the WYSIWYG's own face ----
-   The GFM preset parses `[^1]` into real footnote nodes; these are their
-   editing shapes. The reference matches the preview's superscript; the
-   definition list reads as the appendix row (number, then text inline),
-   and consecutive definitions share one rule instead of stacking them. */
+/* ---- The view toggle ----
+   The segmented Source/Split/Preview control rides the shared rich-btn
+   styles; the active mode reads pressed exactly like Bold does when the
+   caret sits in bold text. The labels are part of the control — they
+   fold away on narrow screens where the titles carry the meaning. */
 
-.markdown-surface sup[data-type='footnote_reference'] {
-  font-size: 0.72em;
-  vertical-align: super;
-  line-height: 0;
-  color: var(--vz-primary);
+.markdown-toolbar .markdown-view-toggle {
+  margin-left: auto;
 }
 
-.markdown-surface dl[data-type='footnote_definition'] {
-  margin: 1.2em 0 0;
-  padding: 0.5em 0 0;
-  border-top: 1px solid var(--vz-border);
-  font-size: 0.86em;
-  color: var(--vz-fg-muted);
+.markdown-view-btn .markdown-view-label {
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1;
 }
 
-.markdown-surface dl[data-type='footnote_definition'] + dl[data-type='footnote_definition'] {
-  margin-top: 0.2em;
-  padding-top: 0;
-  border-top: none;
-}
-
-.markdown-surface dl[data-type='footnote_definition'] dt {
-  display: inline;
-  margin-right: 0.45em;
-  color: var(--vz-fg);
-  font-weight: 600;
-}
-
-.markdown-surface dl[data-type='footnote_definition'] dt::after {
-  content: '.';
-}
-
-.markdown-surface dl[data-type='footnote_definition'] dd {
-  display: inline;
-  margin: 0;
-}
-
-.markdown-surface dl[data-type='footnote_definition'] dd p {
-  display: inline;
-  margin: 0;
-}
-
-/* ---- The empty editor's placeholder ----
-   Same copy and tone as #note's own (16-editor-shell.css); the PM root
-   carries data-placeholder, and :has() only lights it for a truly empty
-   document (one empty paragraph). */
-
-.markdown-surface .padify-markdown {
-  position: relative;
-}
-
-.markdown-surface
-  .padify-markdown:has(> p:first-child:last-child > br:only-child)::before {
-  content: attr(data-placeholder);
-  position: absolute;
-  top: 0;
-  left: 0;
-  color: var(--vz-fg-subtle);
-  pointer-events: none;
-}
-
-body.dark
-  .markdown-surface
-  .padify-markdown:has(> p:first-child:last-child > br:only-child)::before {
-  color: var(--vz-fg-subtle);
-}
-
-/* ---- The table-ops menu ----
-   Rides the shared rich-menu-host/panel vocabulary; only its placement
-   in the insert group needs a word (the host is display-contents-free,
-   the rich-menu-panel positions against it). */
-
-.markdown-toolbar .markdown-table-ops {
-  display: inline-flex;
+@media (max-width: 720px) {
+  .markdown-view-btn .markdown-view-label {
+    display: none;
+  }
 }
 
 /* ---- The link chip row ----
@@ -755,55 +599,6 @@ body.dark
   color: var(--vz-fg);
 }
 
-/* ---- The slash menu ----
-   "/" at a block's start floats the insert menu under the caret. Same
-   tokens as the rich-menu-panel family; body-level (the provider
-   positions it absolutely against the caret's rect). */
-
-.markdown-slash {
-  position: absolute;
-  z-index: 70;
-  display: none;
-  min-width: 230px;
-  max-width: 300px;
-  max-height: min(340px, 48vh);
-  overflow-y: auto;
-  padding: 4px;
-  border: 1px solid var(--vz-border);
-  border-radius: var(--vz-radius-md);
-  background: var(--vz-bg-elevated);
-  box-shadow: var(--vz-shadow-menu);
-}
-
-.markdown-slash[data-show='true'] {
-  display: block;
-}
-
-.markdown-slash-item {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 6px 8px;
-  border: none;
-  border-radius: var(--vz-radius);
-  background: none;
-  color: var(--vz-fg);
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.markdown-slash-item.active,
-.markdown-slash-item:hover {
-  background: var(--vz-bg-hover);
-}
-
-.markdown-slash-empty {
-  padding: 8px;
-  color: var(--vz-fg-muted);
-  font-size: 12px;
-}
-
 /* ---- The markdown context-menu rows ----
    The md format row rides the shared padify-ctx-fmt vocabulary; the
    </> glyph is wider than a letter, so it settles on its own metric. */
@@ -811,186 +606,4 @@ body.dark
 .padify-ctx-fmt[data-format='code'] > span {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
-}
-
-/* ---- The selection bubble ----
-   Selecting text floats the format toolbar above the selection — the
-   Crepe playground's signature affordance on the app's own toolbar
-   bones: the same elevated panel the slash menu uses, the same button
-   faces the rich toolbar shows (pressed = chip surface), one row of
-   six. Body-level (the provider positions it absolutely against the
-   selection's rect). */
-
-.markdown-bubble {
-  position: absolute;
-  z-index: 70;
-  display: none;
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--vz-border);
-  border-radius: var(--vz-radius-md);
-  background: var(--vz-bg-elevated);
-  box-shadow: var(--vz-shadow-menu);
-}
-
-.markdown-bubble[data-show='true'] {
-  display: flex;
-}
-
-.markdown-bubble-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 26px;
-  height: 26px;
-  padding: 0 4px;
-  border: none;
-  border-radius: var(--vz-radius);
-  background: none;
-  color: var(--vz-fg);
-  cursor: pointer;
-}
-
-.markdown-bubble-btn:hover {
-  background: var(--vz-bg-hover);
-}
-
-.markdown-bubble-btn:focus-visible {
-  outline: 2px solid var(--vz-fg-subtle);
-  outline-offset: -2px;
-}
-
-.markdown-bubble-btn[aria-pressed='true'] {
-  background: var(--vz-bg-chip);
-  color: var(--vz-fg);
-}
-
-.markdown-bubble-glyph {
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1;
-}
-
-.markdown-bubble-btn[data-bubble-id='code'] .markdown-bubble-glyph {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-/* ---- The block handle's gutter ----
-   The drag grip lives in the reserved left margin above (the .milkdown
-   rule near the top of this file): content never sits under it, and
-   the grip never pushes the caret line. The preview pane keeps the
-   plain measure. */
-
-.markdown-preview {
-  padding-right: 4px;
-}
-
-/* ---- The block handle (drag to reorder) ----
-   A quiet grip: monochrome, muted, grab cursor. data-show flips with
-   the kit's BlockService (hover the editor); the provider positions it
-   absolutely against the active block. Visibility (not display) keeps
-   the grip measurable — floating-ui sizes it while placing, and a
-   display:none grip measures zero wide. */
-
-.md-block-handle {
-  position: absolute;
-  z-index: 60;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 24px;
-  border: none;
-  border-radius: var(--vz-radius);
-  color: var(--vz-fg-muted);
-  opacity: 0.66;
-  visibility: hidden;
-  cursor: grab;
-  transition: opacity var(--vz-dur) ease, background-color var(--vz-dur) ease,
-    color var(--vz-dur) ease;
-}
-
-.md-block-handle[data-show='true'] {
-  visibility: visible;
-}
-
-.md-block-handle:hover {
-  opacity: 1;
-  background: var(--vz-bg-hover);
-  color: var(--vz-fg);
-}
-
-.md-block-handle:active {
-  cursor: grabbing;
-}
-
-/* The drag line — where the block will land (class-driven, so it reads
-   the theme token; the plugin paints the geometry). */
-
-.markdown-surface .md-drop-cursor {
-  background-color: var(--vz-border-strong);
-}
-
-/* ---- The code block's language row ----
-   The ``` fence's info string, in place: a quiet chip above the code
-   (muted while unset, full ink once a language names the block). The
-   chip swaps to a free-text input with the shared datalist's
-   suggestions; the code itself is the contentDOM underneath. */
-
-.markdown-surface .md-code-block {
-  position: relative;
-}
-
-.markdown-surface .md-code-lang-row {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-height: 20px;
-  margin-bottom: -4px;
-  padding-right: 10px;
-  user-select: none;
-}
-
-.markdown-surface .md-code-lang-chip {
-  padding: 1px 8px;
-  border: 1px solid transparent;
-  border-radius: 99px;
-  background: none;
-  color: var(--vz-fg-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 10.5px;
-  letter-spacing: 0.02em;
-  line-height: 1.5;
-  cursor: pointer;
-  transition: color var(--vz-dur) ease, border-color var(--vz-dur) ease,
-    background-color var(--vz-dur) ease;
-}
-
-.markdown-surface .md-code-lang-chip:hover {
-  color: var(--vz-fg);
-  border-color: var(--vz-border);
-  background: var(--vz-bg-hover);
-}
-
-.markdown-surface .md-code-lang-chip.md-code-lang-empty {
-  opacity: 0;
-}
-
-.markdown-surface .md-code-block:hover .md-code-lang-chip.md-code-lang-empty {
-  opacity: 1;
-}
-
-.markdown-surface .md-code-lang-input {
-  width: 130px;
-  padding: 2px 8px;
-  border: 1px solid var(--vz-border-strong);
-  border-radius: 99px;
-  background: var(--vz-bg-elevated);
-  color: var(--vz-fg);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
-  text-align: center;
-  outline: none;
 }

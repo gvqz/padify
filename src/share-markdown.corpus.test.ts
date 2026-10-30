@@ -66,30 +66,33 @@ describe('generated markdown renderer ≡ canonical renderer', () => {
   it('the shared invariants hold in the generated copy too', async () => {
     const generated = await loadGeneratedRenderer();
 
-    // Raw HTML never survives as markup (escaped TEXT only — the literal
-    // characters of course appear in that text); hostile hrefs never
-    // survive as targets. Structural pins, the probe's lesson: check what
-    // the markup CAN DO, not which substrings its escaped text shows.
+    // Raw HTML meets the POLICY: benign tags are rebuilt (no event
+    // handlers, no hostile hrefs — the img keeps its schemeless src and
+    // gains the lazy/no-referrer hardening), declined tags are escaped
+    // text. Structural pins, the probe's lesson: check what the markup
+    // CAN DO, not which substrings its escaped text shows.
     const hostile = generated(
       '<img src=x onerror=alert(1)>\n\n[evil](javascript:alert(1))\n\n<b>bold?</b>',
     );
-    expect(hostile).not.toContain('<img');
-    expect(hostile).not.toContain('<b>');
+    expect(hostile).not.toContain('onerror');
     expect(hostile).not.toContain('href="javascript:');
-    expect(hostile).toContain('&lt;img');
-    expect(hostile).toContain('&lt;b&gt;');
+    expect(hostile).toContain('<img src="x" loading="lazy" decoding="async" referrerpolicy="no-referrer">');
+    expect(hostile).toContain('<b>bold?</b>');
+    // Declined tags still escape: script never renders.
+    expect(generated('<script>alert(1)</scr' + 'ipt>')).toContain('&lt;script&gt;');
   });
 
   it('the footnote machinery holds in the generated copy too', async () => {
     const generated = await loadGeneratedRenderer();
 
     // Definitions render through the inline pass — hostile markup in a
-    // footnote is escaped text, exactly as in a body paragraph.
+    // footnote meets the same policy as a body paragraph (handlers
+    // stripped, benign tags rebuilt).
     const hostile = generated('Ref[^1].\n\n[^1]: <img src=x onerror=alert(1)> and <b>bold?</b>');
     expect(hostile).toContain('class="md-footnote-ref"');
     expect(hostile).toContain('<section class="md-footnotes">');
-    expect(hostile).not.toContain('<img');
-    expect(hostile).not.toContain('<b>');
-    expect(hostile).toContain('&lt;img');
+    expect(hostile).not.toContain('onerror');
+    expect(hostile).toContain('<img src="x" loading="lazy" decoding="async" referrerpolicy="no-referrer">');
+    expect(hostile).toContain('<b>bold?</b>');
   });
 });

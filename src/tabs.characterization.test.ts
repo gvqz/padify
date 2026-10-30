@@ -37,12 +37,13 @@ import {
   type StoredNoteTab,
 } from './storage';
 
-// Swal is modal UI — mocked so close-with-content paths can be driven.
-vi.mock('sweetalert2', () => ({
-  default: { fire: vi.fn(() => Promise.resolve({ isConfirmed: false })) },
+// The confirm dialog is modal UI — mocked so close-with-content paths
+// can be driven.
+vi.mock('./ui/dialog', () => ({
+  confirmDialog: vi.fn(() => Promise.resolve(false)),
 }));
 
-import Swal from 'sweetalert2';
+import { confirmDialog } from './ui/dialog';
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -464,7 +465,7 @@ describe('TabManager (characterization)', () => {
     // (fire the close through the public path via strip click simulation)
     $(`#tabStripTabs .tab-strip-tab[data-tab-id="${emptyId}"] .tab-strip-close`).trigger('click');
 
-    expect(Swal.fire).not.toHaveBeenCalled();
+    expect(confirmDialog).not.toHaveBeenCalled();
     expect(manager.exportForSync().tabs.some((t) => t.id === emptyId)).toBe(false);
   });
 
@@ -475,7 +476,7 @@ describe('TabManager (characterization)', () => {
 
     $(`#tabStripTabs .tab-strip-tab[data-tab-id="${contentId}"] .tab-strip-close`).trigger('click');
 
-    expect(Swal.fire).toHaveBeenCalledTimes(1);
+    expect(confirmDialog).toHaveBeenCalledTimes(1);
     // mock resolves isConfirmed:false — the tab must still be there
     await Promise.resolve();
     expect(manager.exportForSync().tabs.some((t) => t.id === contentId)).toBe(true);

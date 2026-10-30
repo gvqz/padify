@@ -22,8 +22,7 @@
 
 import { $ } from '../../lib/q';
 import { openModal, closeModal } from '../../ui/behavior/modal';
-import Swal from 'sweetalert2';
-import type { SweetAlertResult } from 'sweetalert2';
+import { promptDialog } from '../../ui/dialog';
 import { showToast } from '../../ui/toast';
 import { LocalMusicLibrary } from './music/library';
 import {
@@ -811,17 +810,13 @@ class MusicPlayerApp {
   private async renameLocalPlaylist(): Promise<void> {
     const playlist = this.library.playlist;
     if (!playlist) return;
-    const result = (await Swal.fire({
+    const name = await promptDialog({
       title: 'Rename playlist',
-      input: 'text',
-      inputValue: playlist.name,
-      showCancelButton: true,
-      confirmButtonText: 'Rename',
-      confirmButtonColor: 'var(--vz-primary, #0070f3)',
-      inputValidator: (value: string) => (value.trim() ? null : 'Enter a name.'),
-    })) as SweetAlertResult<string>;
-    if (result.isConfirmed && typeof result.value === 'string') {
-      this.library.renamePlaylist(result.value);
+      value: playlist.name,
+      confirm: 'Rename',
+    });
+    if (name) {
+      this.library.renamePlaylist(name);
       this.renderLibrary();
     }
   }

@@ -20,7 +20,10 @@ import { showToast } from './ui/toast';
 import { getEditorPort } from './editor/port';
 import { getTabManager, insertTextIntoActiveNote } from './tabs';
 import { isHtmlContent, isMarkdownNote } from './editor/note-types';
-import { markdownCharBeforeCaret, markdownEditorHandle } from './editor/markdown/surface';
+import {
+  markdownCharBeforeCaret,
+  markdownSourceTextarea,
+} from './editor/markdown/surface';
 
 // ---------------------------------------------------------------------------
 // Minimal typings for the Web Speech API (not in the default DOM lib)
@@ -175,12 +178,12 @@ interface DictationTarget {
 function dictationTarget(): DictationTarget | null {
   const active = getTabManager()?.getActive();
   if (active && isMarkdownNote(active)) {
-    const handle = markdownEditorHandle();
-    if (!handle) {
+    const source = markdownSourceTextarea();
+    if (!source) {
       return null;
     }
     return {
-      focus: () => handle.view.focus(),
+      focus: () => source.focus(),
       charBefore: () => markdownCharBeforeCaret(),
       insert: (text) => {
         insertTextIntoActiveNote(text);
@@ -504,8 +507,8 @@ export function toggleVoiceTyping(): void {
     showToast('Voice typing works in plain, rich and Markdown notes.');
     return;
   }
-  if (active && isMarkdownNote(active) && !markdownEditorHandle()) {
-    showToast('The Markdown editor is still opening — try again in a moment.');
+  if (active && isMarkdownNote(active) && !markdownSourceTextarea()) {
+    showToast('Open the note\u2019s source to dictate into.');
     return;
   }
   if (listening) {

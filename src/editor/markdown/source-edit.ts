@@ -424,6 +424,7 @@ export function continueListOnEnter(ta: HTMLTextAreaElement): boolean {
     // Marker-only line — Enter lifts the list: clear it, stay at the end.
     const nextMarkerOnly = marker.lead;
     applyEdit(ta, lineStart, lineEndIndex, nextMarkerOnly, lineStart + nextMarkerOnly.length);
+    autoContinuedMarker = null;
     return true;
   }
   const insertion = `\n${marker.lead}${marker.marker}`;
@@ -431,7 +432,78 @@ export function continueListOnEnter(ta: HTMLTextAreaElement): boolean {
   // contract — the old empty-range insert left the selected words behind).
   const at = ta.selectionStart;
   applyEdit(ta, at, ta.selectionEnd, insertion, at + insertion.length);
+  // Typora/Obsidian's grace note: if the user's very next input is their
+  // OWN marker character, the auto one yields (typing stays literal).
+  autoContinuedMarker = {
+    lineFrom: at + 1,
+    markerFrom: at + 1 + marker.lead.length,
+    prefix: `${marker.lead}${marker.marker}`,
+  };
   return true;
+}
+
+/** The auto-inserted continuation the next typed character may replace. */
+let autoContinuedMarker: {
+  lineFrom: number;
+  markerFrom: number;
+  prefix: string;
+} | null = null;
+
+/**
+ * The continuation dedupe — the user's own typed marker wins. Typing the
+ * character that STARTS a marker (“-”, “*”, “+”, a digit) immediately
+ * after Enter just inserted one removes the AUTO marker first, so
+ * “- item” + Enter + “- item two” types as “- item two”, never
+ * “- - item two”. One-shot: the very next input either dedupes or
+ * accepts the auto marker; anything else (navigation, other characters,
+ * a second Enter) settles it as-is.
+ */
+export function dedupeTypedMarkerOverContinuation(
+  ta: HTMLTextAreaElement,
+  typed: string | null,
+): boolean {
+  const pending = autoContinuedMarker;
+  if (!pending) {
+    return false;
+  }
+  autoContinuedMarker = null;
+  if (typed === null || typed.length !== 1) {
+    return false;
+  }
+  const end = pending.lineFrom + pending.prefix.length;
+  if (
+    ta.selectionStart !== ta.selectionEnd ||
+    ta.selectionStart !== end ||
+    typed !== pending.prefix.trimStart().charAt(0) ||
+    ta.value.slice(pending.lineFrom, end) !== pending.prefix
+  ) {
+    return false;
+  }
+  // The INDENTATION stays (a nested item keeps its level); only the
+  // auto marker itself yields to the user's own.
+  deleteRange(ta, pending.markerFrom, end, pending.markerFrom);
+  return true;
+}
+
+/** Deletes [from, to) as one native undo step (applyEdit's deletion twin). */
+function deleteRange(
+  ta: HTMLTextAreaElement,
+  from: number,
+  to: number,
+  selection: number,
+): void {
+  ta.focus();
+  ta.setSelectionRange(from, to);
+  try {
+    if (!document.execCommand('delete')) {
+      throw new Error('delete refused');
+    }
+  } catch {
+    // setRangeText never fires input — the announce contract must hear it.
+    ta.setRangeText('', from, to, 'end');
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  ta.setSelectionRange(selection, selection);
 }
 
 // ---------------------------------------------------------------------------
@@ -531,9 +603,17 @@ export function insertBlock(
   const afterTo = value.indexOf('\n', to);
   const lineEnd = afterTo === -1 ? value.length : afterTo;
   const restOfLine = value.slice(to, lineEnd);
-  // Mid-line carets split their line: the block gets its own lines, the
-  // tail keeps the user's text on the line after it.
-  const lead = atLineStart ? '' : '\n';
+  // A block construct (fence, table, $$…$$) only PARSES after a blank
+  // line — a single newline leaves it a lazy paragraph continuation that
+  // renders as plain text. So the lead is a full blank line whenever any
+  // content precedes the caret: mid-line carets split their line and the
+  // tail keeps the user's text on the line after the block.
+  const lineStart = value.lastIndexOf('\n', from - 1) + 1;
+  const prevLineStart = lineStart > 0 ? value.lastIndexOf('\n', lineStart - 2) + 1 : 0;
+  const contentBefore = atLineStart
+    ? lineStart > 0 && value.slice(prevLineStart, lineStart - 1).trim() !== ''
+    : value.slice(lineStart, from).trim() !== '';
+  const lead = contentBefore ? '\n\n' : '';
   const trail = restOfLine !== '' ? '\n' : '';
   const text = lead + block + trail;
   const [selStart, selEnd] = selectOffset ?? [block.length, block.length];
@@ -543,6 +623,34 @@ export function insertBlock(
 /** The GitHub-shaped 2x3 table template (with the header row selected). */
 export function tableTemplate(): string {
   return '| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| | | |';
+}
+
+// ---------------------------------------------------------------------------
+// Equations (the math bubble's Apply target)
+// ---------------------------------------------------------------------------
+
+/**
+ * Selects the source span of an equation so the math bubble's Apply
+ * REPLACES it — the preview's click-on-an-equation affordance has no caret
+ * of its own to offer, so the old span becomes the selection. First
+ * textual match wins (a note with the same equation twice edits the
+ * first); false leaves the selection untouched.
+ */
+export function selectMathSource(
+  ta: HTMLTextAreaElement,
+  latex: string,
+  kind: 'inline' | 'block',
+): boolean {
+  const candidates =
+    kind === 'block' ? [`$$\n${latex}\n$$`, `$$${latex}$$`] : [`$${latex}$`];
+  for (const candidate of candidates) {
+    const at = ta.value.indexOf(candidate);
+    if (at !== -1) {
+      ta.setSelectionRange(at, at + candidate.length);
+      return true;
+    }
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -637,7 +745,7 @@ export function clearFormatting(ta: HTMLTextAreaElement): void {
     toggleLinePrefix(ta, null);
   }
   for (const marker of ['**', '~~', '*', '`']) {
-    // Unwrap when the markers hug the selection (or it carries them).
+    // Unwrap when the markers hug the selection (just outside it).
     const value = ta.value;
     const from = ta.selectionStart;
     const to = ta.selectionEnd;
@@ -646,14 +754,13 @@ export function clearFormatting(ta: HTMLTextAreaElement): void {
       replaceWhole(ta, unwrapped.value, unwrapped.selectionStart, unwrapped.selectionEnd);
       continue;
     }
+    // Markers INSIDE the selection clear with it — the pair around the
+    // selected words, or any pair the range happens to cover mid-line
+    // (GitHub's clear strips every bold in the range, alignment or not).
     const selected = value.slice(from, to);
-    if (
-      selected.startsWith(marker) &&
-      selected.endsWith(marker) &&
-      selected.length > marker.length * 2
-    ) {
-      const inner = selected.slice(marker.length, selected.length - marker.length);
-      applyEdit(ta, from, to, inner, from, from + inner.length);
+    if (selected.includes(marker)) {
+      const stripped = selected.split(marker).join('');
+      applyEdit(ta, from, to, stripped, from, from + stripped.length);
     }
   }
 }

@@ -108,33 +108,27 @@ test.describe('the Tab key', () => {
     await expect(editor.locator('ul > li')).toHaveCount(2);
   });
 
-  test('markdown paragraphs keep the caret and type two spaces', async ({ page }) => {
+  test('markdown source keeps the caret and indents the line', async ({ page }) => {
     await page.goto('/');
     await page.locator('#addTabTypeMenu').click();
     await page.locator('#addTabTypeMenuPopover [data-note-type="markdown"]').click();
 
-    const surface = page.locator('.ProseMirror');
+    const surface = page.locator('#note .markdown-source');
     await expect(surface).toBeVisible();
     await surface.click();
     await page.keyboard.type('prose line');
     await page.keyboard.press('Tab');
 
-    // Exact textContent — the trailing spaces are the gesture's
-    // fingerprint (toHaveText would collapse them away).
-    const paragraphText = () =>
-      page.evaluate(() => {
-        const p = document.querySelector('.ProseMirror p');
-        return p ? (p.textContent ?? '') : '';
-      });
-    expect(await paragraphText()).toBe('prose line  ');
+    // The line indented two spaces (the source grammar's marker width).
+    expect(await surface.inputValue()).toBe('  prose line');
     // The gesture must not hand focus to the topbar (the old behavior
     // ejected the author from the note mid-sentence).
     const focusInEditor = () =>
-      page.evaluate(() => !!document.activeElement?.closest('.ProseMirror'));
+      page.evaluate(() => document.activeElement?.classList.contains('markdown-source'));
     expect(await focusInEditor()).toBe(true);
 
     await page.keyboard.press('Shift+Tab');
-    expect(await paragraphText()).toBe('prose line');
+    expect(await surface.inputValue()).toBe('prose line');
     expect(await focusInEditor()).toBe(true);
   });
 });

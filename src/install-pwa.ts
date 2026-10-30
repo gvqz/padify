@@ -1,4 +1,4 @@
-import Swal from 'sweetalert2';
+import { confirmDialog } from './ui/dialog';
 import { showToast } from './ui/toast';
 import { selector } from './selector';
 
@@ -138,15 +138,13 @@ function promptUpdate(waiting: ServiceWorker): void {
   }
   updatePrompted = true;
 
-  void Swal.fire({
+  void confirmDialog({
     title: 'Update available',
     text: 'A new version of Padify is ready. Reload to pick it up?',
-    icon: 'info',
-    showCancelButton: true,
-    confirmButtonText: 'Reload now',
-    cancelButtonText: 'Later',
-  }).then((result) => {
-    if (!result.value) {
+    confirm: 'Reload now',
+    cancel: 'Later',
+  }).then((confirmed) => {
+    if (!confirmed) {
       // A later deploy is a different worker and may prompt again; this
       // one stays silently waiting until the next fresh load.
       updatePrompted = false;
