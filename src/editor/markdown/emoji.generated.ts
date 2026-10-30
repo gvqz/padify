@@ -1922,5 +1922,5 @@ export const GEMOJI: ReadonlyMap<string, string> = new Map([
   ['zombie', '\u{1f9df}'],
   ['zombie_man', '\u{1f9df}\u{200d}\u{2642}\u{fe0f}'],
   ['zombie_woman', '\u{1f9df}\u{200d}\u{2640}\u{fe0f}'],
-  ['zzz', '\u{1f4a4}']
+  ['zzz', '\u{1f4a4}'],
 ]);

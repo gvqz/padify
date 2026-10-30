@@ -76,7 +76,9 @@ describe('generated markdown renderer ≡ canonical renderer', () => {
     );
     expect(hostile).not.toContain('onerror');
     expect(hostile).not.toContain('href="javascript:');
-    expect(hostile).toContain('<img src="x" loading="lazy" decoding="async" referrerpolicy="no-referrer">');
+    expect(hostile).toContain(
+      '<img src="x" loading="lazy" decoding="async" referrerpolicy="no-referrer">',
+    );
     expect(hostile).toContain('<b>bold?</b>');
     // Declined tags still escape: script never renders.
     expect(generated('<script>alert(1)</scr' + 'ipt>')).toContain('&lt;script&gt;');
@@ -92,7 +94,9 @@ describe('generated markdown renderer ≡ canonical renderer', () => {
     expect(hostile).toContain('class="md-footnote-ref"');
     expect(hostile).toContain('<section class="md-footnotes">');
     expect(hostile).not.toContain('onerror');
-    expect(hostile).toContain('<img src="x" loading="lazy" decoding="async" referrerpolicy="no-referrer">');
+    expect(hostile).toContain(
+      '<img src="x" loading="lazy" decoding="async" referrerpolicy="no-referrer">',
+    );
     expect(hostile).toContain('<b>bold?</b>');
   });
 });

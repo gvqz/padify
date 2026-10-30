@@ -258,10 +258,10 @@ describe('renderMarkdownToHtml — links & images', () => {
   });
 
   it('an image title rides along as the tooltip; a linked image nests inside the anchor', () => {
-    expect(renderMarkdownToHtml('![alt](https://example.com/i.png "T")')).toContain(
-      'title="T"',
-    );
-    expect(renderMarkdownToHtml('[![badge](https://example.com/b.png)](https://example.com/)')).toBe(
+    expect(renderMarkdownToHtml('![alt](https://example.com/i.png "T")')).toContain('title="T"');
+    expect(
+      renderMarkdownToHtml('[![badge](https://example.com/b.png)](https://example.com/)'),
+    ).toBe(
       '<p><a href="https://example.com/" rel="noopener noreferrer"><img src="https://example.com/b.png" alt="badge" loading="lazy" decoding="async" referrerpolicy="no-referrer"></a></p>',
     );
   });

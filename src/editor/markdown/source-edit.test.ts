@@ -259,7 +259,7 @@ describe('continueListOnEnter', () => {
   });
 });
 
-describe('dedupeTypedMarkerOverContinuation — the user\'s own marker wins', () => {
+describe("dedupeTypedMarkerOverContinuation — the user's own marker wins", () => {
   it('typing the marker char right after the continuation replaces the auto one', () => {
     mount('- item one', 10);
     expect(continueListOnEnter(ta)).toBe(true);
@@ -296,7 +296,7 @@ describe('dedupeTypedMarkerOverContinuation — the user\'s own marker wins', ()
     expect(ta.value).toBe('- one\n- ');
   });
 
-  it('the caret must still sit at the auto marker\'s end', () => {
+  it("the caret must still sit at the auto marker's end", () => {
     mount('- one', 5);
     expect(continueListOnEnter(ta)).toBe(true);
     ta.setSelectionRange(0, 0); // the user navigated away
@@ -313,14 +313,14 @@ describe('dedupeTypedMarkerOverContinuation — the user\'s own marker wins', ()
   });
 });
 
-describe('selectMathSource — the equation bubble\'s Apply target', () => {
-  it('selects the inline equation\'s exact span', () => {
+describe("selectMathSource — the equation bubble's Apply target", () => {
+  it("selects the inline equation's exact span", () => {
     mount('energy $E=mc^2$ here', 21);
     expect(selectMathSource(ta, 'E=mc^2', 'inline')).toBe(true);
     expect(state()).toEqual({ value: 'energy $E=mc^2$ here', from: 7, to: 15 });
   });
 
-  it('selects a block equation\'s fenced span', () => {
+  it("selects a block equation's fenced span", () => {
     mount('intro\n\n$$\n\\\\frac{1}{2}\n$$\n\noutro', 10);
     expect(selectMathSource(ta, '\\\\frac{1}{2}', 'block')).toBe(true);
     expect(ta.value.slice(ta.selectionStart, ta.selectionEnd)).toBe('$$\n\\\\frac{1}{2}\n$$');

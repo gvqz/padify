@@ -20,10 +20,7 @@ import { showToast } from './ui/toast';
 import { getEditorPort } from './editor/port';
 import { getTabManager, insertTextIntoActiveNote } from './tabs';
 import { isHtmlContent, isMarkdownNote } from './editor/note-types';
-import {
-  markdownCharBeforeCaret,
-  markdownSourceTextarea,
-} from './editor/markdown/surface';
+import { markdownCharBeforeCaret, markdownSourceTextarea } from './editor/markdown/surface';
 
 // ---------------------------------------------------------------------------
 // Minimal typings for the Web Speech API (not in the default DOM lib)

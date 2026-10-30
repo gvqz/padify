@@ -115,9 +115,7 @@ test.describe('markdown notes — the feature act', () => {
 
     // And the round-trip keeps the compact form the user typed.
     await page.locator('#markdownToolbar [data-md-view="source"]').click();
-    expect(await page.locator('#note .markdown-source').inputValue()).toContain(
-      '$$\\frac{1}{2}$$',
-    );
+    expect(await page.locator('#note .markdown-source').inputValue()).toContain('$$\\frac{1}{2}$$');
   });
 
   test('task lists: the button arms items and the PREVIEW checkboxes toggle the source', async ({

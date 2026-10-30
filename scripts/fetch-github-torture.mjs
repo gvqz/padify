@@ -74,7 +74,9 @@ const api = await fetch('https://api.github.com/markdown', {
 if (api.ok) {
   const apiHtml = await api.text();
   writeFileSync(new URL('github-comment-mode-torture.html', OUT_DIR), apiHtml);
-  console.log(`saved ${apiHtml.length} bytes of comment-mode HTML -> github-comment-mode-torture.html`);
+  console.log(
+    `saved ${apiHtml.length} bytes of comment-mode HTML -> github-comment-mode-torture.html`,
+  );
 } else {
   console.warn(`comment-mode API ${api.status} — kept going, blob fixture is the parity target`);
 }

@@ -120,9 +120,7 @@ export function promptDialog(options: PromptOptions): Promise<string | null> {
   face.confirm.textContent = options.confirm ?? 'OK';
   face.cancel.textContent = options.cancel ?? 'Cancel';
   face.confirm.classList.remove('vz-dialog-danger');
-  return ask(face, true).then((answer) =>
-    answer === 'confirm' ? face.input.value.trim() : null,
-  );
+  return ask(face, true).then((answer) => (answer === 'confirm' ? face.input.value.trim() : null));
 }
 
 /**

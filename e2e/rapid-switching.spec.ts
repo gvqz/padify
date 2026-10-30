@@ -171,9 +171,7 @@ test.describe('rapid note switching', () => {
     expect(await editor.inputValue()).toBe(`X${before}`);
   });
 
-  test('no editing chrome outlives its note (the visual editor went whole)', async ({
-    page,
-  }) => {
+  test('no editing chrome outlives its note (the visual editor went whole)', async ({ page }) => {
     await page.goto('/');
     await newMarkdownNote(page);
     const editor = page.locator('#note .markdown-source');

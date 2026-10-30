@@ -568,9 +568,7 @@ class ContextMenu {
     // Table ops were the visual editor's grammar (a caret inside a
     // cell); the source has no cell cursor — the rows never render for
     // markdown notes now.
-    const inTable = isMd
-      ? false
-      : !!safeQueryPort(() => port?.queryTableContext());
+    const inTable = isMd ? false : !!safeQueryPort(() => port?.queryTableContext());
     this.menu.querySelectorAll<HTMLElement>('.padify-ctx-table').forEach((item) => {
       item.hidden = !inTable;
     });

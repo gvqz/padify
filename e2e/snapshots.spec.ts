@@ -486,9 +486,7 @@ test.describe('note types — consistent behavior', () => {
     await toastSays(page, 'Snapshot restored!');
     await expect(page.locator('#markdownToolbar')).toBeVisible();
     // The source pane holds the bytes — a textarea's VALUE is its text.
-    await expect(page.locator('#note .markdown-source')).toHaveValue(
-      '# Trail log',
-    );
+    await expect(page.locator('#note .markdown-source')).toHaveValue('# Trail log');
   });
 
   test('a rich note snapshots and restores like any other', async ({ page }) => {
@@ -577,14 +575,10 @@ test.describe('note types — consistent behavior', () => {
     // themselves — the '#' included.)
     await page.locator('#tabStripTabs .tab-strip-tab').nth(1).click();
     await expect(page.locator('#markdownToolbar')).toBeVisible();
-    await expect(page.locator('#note .markdown-source')).toHaveValue(
-      '# Not the welcome note',
-    );
+    await expect(page.locator('#note .markdown-source')).toHaveValue('# Not the welcome note');
     await page.waitForTimeout(700);
     await page.reload();
-    await expect(page.locator('#note .markdown-source')).toHaveValue(
-      '# Not the welcome note',
-    );
+    await expect(page.locator('#note .markdown-source')).toHaveValue('# Not the welcome note');
     await expect(page.locator('#markdownToolbar')).toBeVisible();
   });
 

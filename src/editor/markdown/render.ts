@@ -2173,7 +2173,10 @@ function matchLink(
   // image does not count) means this bracket loses to the inner one. An
   // AUTOlink span in the label is the same verdict by construction — an
   // autolink IS a link, and the outer bracket must give way to it.
-  if (!image && (labelContainsLink(label, labelSpans) || labelSpans.some((s) => s.kind === 'autolink'))) {
+  if (
+    !image &&
+    (labelContainsLink(label, labelSpans) || labelSpans.some((s) => s.kind === 'autolink'))
+  ) {
     return null;
   }
 

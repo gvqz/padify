@@ -13,6 +13,12 @@ server
 src/unicode/symbols-data.ts
 bun.lock
 
+# Fetched oracle data — byte-exact copies of github.com's rendered pages
+# and the cmark spec corpus. Prettier collapses multi-space runs inside
+# inline <code> (it only preserves <pre> interiors), which silently
+# corrupts the parity fixtures; they must stay exactly as fetched.
+src/editor/markdown/__fixtures__
+
 # Prose stays as authored
 *.md
 docs

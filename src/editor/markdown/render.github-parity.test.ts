@@ -133,7 +133,7 @@ function codeBlock(lang: string, text: string): HTMLElement {
   return pre;
 }
 
-describe('GitHub parity — the torture corpus vs github.com\'s own renderer', () => {
+describe("GitHub parity — the torture corpus vs github.com's own renderer", () => {
   const owned = renderMarkdownToHtml(doc);
   const github = normalizeGithubHtml(githubRaw);
   const ownedCanon = canonicalizeHtml(owned);
@@ -144,7 +144,7 @@ describe('GitHub parity — the torture corpus vs github.com\'s own renderer', (
     expect(githubCanon.length).toBeGreaterThan(10_000);
   });
 
-  it('the block-grammar tag sequence matches GitHub\'s exactly', () => {
+  it("the block-grammar tag sequence matches GitHub's exactly", () => {
     const tags = (html: string): string[] =>
       Array.from(html.matchAll(/<(\/?)([a-zA-Z][a-zA-Z0-9-]*)(?:\s[^>]*)?(\/?)>/g))
         .map((m) => (m[1] ? `</${m[2]}>` : `<${m[2]}>`))
@@ -193,8 +193,9 @@ describe('GitHub parity — the torture corpus vs github.com\'s own renderer', (
       const out: Array<[string, string]> = [];
       for (const code of Array.from(root.querySelectorAll('pre > code'))) {
         const lang =
-          Array.from(code.classList).find((c: string) => c.startsWith('language-'))?.slice(9) ??
-          '';
+          Array.from(code.classList)
+            .find((c: string) => c.startsWith('language-'))
+            ?.slice(9) ?? '';
         out.push([lang, code.textContent ?? '']);
       }
       return out;

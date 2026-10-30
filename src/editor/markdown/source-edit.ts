@@ -486,12 +486,7 @@ export function dedupeTypedMarkerOverContinuation(
 }
 
 /** Deletes [from, to) as one native undo step (applyEdit's deletion twin). */
-function deleteRange(
-  ta: HTMLTextAreaElement,
-  from: number,
-  to: number,
-  selection: number,
-): void {
+function deleteRange(ta: HTMLTextAreaElement, from: number, to: number, selection: number): void {
   ta.focus();
   ta.setSelectionRange(from, to);
   try {
@@ -641,8 +636,7 @@ export function selectMathSource(
   latex: string,
   kind: 'inline' | 'block',
 ): boolean {
-  const candidates =
-    kind === 'block' ? [`$$\n${latex}\n$$`, `$$${latex}$$`] : [`$${latex}$`];
+  const candidates = kind === 'block' ? [`$$\n${latex}\n$$`, `$$${latex}$$`] : [`$${latex}$`];
   for (const candidate of candidates) {
     const at = ta.value.indexOf(candidate);
     if (at !== -1) {

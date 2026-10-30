@@ -80,8 +80,11 @@ dialog.vz-dialog::backdrop {
   font-weight: 500;
   font-size: 13px;
   cursor: pointer;
-  transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease,
-    color var(--vz-dur) ease, transform 100ms ease;
+  transition:
+    background-color var(--vz-dur) ease,
+    border-color var(--vz-dur) ease,
+    color var(--vz-dur) ease,
+    transform 100ms ease;
 }
 
 .vz-dialog-cancel {
