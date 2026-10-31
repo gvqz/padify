@@ -239,8 +239,12 @@ export function initTypingEffects(
   function spawnParticle(layer: HTMLElement, spec: ParticleSpec): void {
     const particle = document.createElement('span');
     particle.className = spec.className;
-    particle.style.left = `${baseX}px`;
-    particle.style.top = `${baseY - (spec.liftY ?? 0)}px`;
+    // A little spawn scatter keeps the burst from stacking every particle
+    // into one bright clump on a single pixel at the keystroke moment.
+    const scatterX = Math.random() * 6 - 3;
+    const scatterY = Math.random() * 4 - 2;
+    particle.style.left = `${baseX + scatterX}px`;
+    particle.style.top = `${baseY - (spec.liftY ?? 0) + scatterY}px`;
     particle.style.width = `${spec.width}px`;
     particle.style.height = `${spec.height}px`;
     if (spec.text) {
@@ -268,7 +272,7 @@ export function initTypingEffects(
   function spawnClassic(layer: HTMLElement): void {
     for (let i = 0; i < 8; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const distance = 12 + Math.random() * 22;
+      const distance = 14 + Math.random() * 24;
       const size = 3 + Math.random() * 4;
       spawnParticle(layer, {
         className: 'keyburst-particle',
@@ -277,14 +281,14 @@ export function initTypingEffects(
         color: randomFrom(keyburstColors),
         burstX: Math.cos(angle) * distance,
         // Upward bias — the dots leave the text line immediately.
-        burstY: Math.sin(angle) * distance - 6,
+        burstY: Math.sin(angle) * distance - 12,
         rotate: 0,
       });
     }
   }
 
   function spawnConfetti(layer: HTMLElement): void {
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 12; i++) {
       const angle = Math.PI * (0.1 + 0.8 * Math.random());
       const distance = 14 + Math.random() * 26;
       const width = 4 + Math.random() * 5;
@@ -299,6 +303,8 @@ export function initTypingEffects(
         // so the pieces never sit on the fresh text at full opacity.
         burstY: -(16 + Math.random() * 30),
         rotate: (Math.random() < 0.5 ? -1 : 1) * (180 + Math.random() * 540),
+        // Born just clear of the line box, never on the glyphs.
+        liftY: 2,
       });
     }
   }
@@ -309,17 +315,18 @@ export function initTypingEffects(
     const flash = document.createElement('span');
     flash.className = 'keyburst-flash';
     flash.style.left = `${baseX}px`;
-    flash.style.top = `${baseY - 12}px`;
+    flash.style.top = `${baseY - 14}px`;
     flash.style.width = '14px';
     flash.style.height = '14px';
     flash.style.setProperty('--burst-color', randomFrom(['#ffd166', '#ff9f6b', '#fff3b0']));
     layer.appendChild(flash);
     flash.addEventListener('animationend', () => flash.remove());
 
-    // …then the sparks fly up and out, dropping back only as they fade.
-    for (let i = 0; i < 16; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const distance = 10 + Math.random() * 38;
+    // …then the sparks fly UP AND OUT ONLY — the old full-circle fan let
+    // half the sparks arc down onto the fresh glyphs at full opacity.
+    for (let i = 0; i < 12; i++) {
+      const angle = Math.PI * (0.08 + 0.84 * Math.random());
+      const distance = 12 + Math.random() * 36;
       const size = 2.5 + Math.random() * 3.5;
       spawnParticle(layer, {
         className: 'keyburst-firework',
@@ -327,7 +334,7 @@ export function initTypingEffects(
         height: size,
         color: randomFrom(keyburstColors),
         burstX: Math.cos(angle) * distance,
-        burstY: Math.sin(angle) * distance - 12,
+        burstY: -Math.sin(angle) * distance - 10,
         rotate: 0,
       });
     }
@@ -353,10 +360,12 @@ export function initTypingEffects(
   }
 
   function spawnNeon(layer: HTMLElement): void {
-    for (let i = 0; i < 10; i++) {
+    // Few, small and spread: ten 8px glowing squares packed into a 16px
+    // radius merged into one opaque blob that hid the typed characters.
+    for (let i = 0; i < 6; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const distance = 8 + Math.random() * 14;
-      const size = 4 + Math.random() * 4;
+      const distance = 10 + Math.random() * 16;
+      const size = 3 + Math.random() * 3;
       spawnParticle(layer, {
         className: 'keyburst-neon',
         width: size,
@@ -364,7 +373,7 @@ export function initTypingEffects(
         color: randomFrom(neonColors),
         burstX: Math.cos(angle) * distance,
         // Clear the line fast — the glow is at full strength on arrival.
-        burstY: Math.sin(angle) * distance - 12,
+        burstY: Math.sin(angle) * distance - 16,
         rotate: 45,
       });
     }
@@ -381,12 +390,12 @@ export function initTypingEffects(
         height: 14,
         color: '#ffffff',
         burstX: Math.cos(angle) * distance,
-        burstY: -(24 + Math.random() * 32),
+        burstY: -(26 + Math.random() * 26),
         rotate: (Math.random() < 0.5 ? -1 : 1) * (40 + Math.random() * 120),
         text: randomFrom(emojiPool),
         fontSize: 10 + Math.random() * 4,
-        // Glyphs are big — spawn them clear of the glyphs of the line.
-        liftY: 8,
+        // Glyphs are big — spawn them well clear of the glyphs of the line.
+        liftY: 16,
       });
     }
   }
@@ -416,11 +425,12 @@ export function initTypingEffects(
     }
 
     baseX = caret.left;
-    // Slightly above the text's midline: bursts read as coming off the
-    // keystroke but their bright first frames start above the glyphs and
-    // the upward biases below carry them clear of the line quickly — the
-    // just-typed word stays readable under every style.
-    baseY = caret.top + caret.height * 0.45;
+    // The TOP of the line box, not its middle: the old 0.45 factor put the
+    // origin mid-glyph, so every style was born sitting on the character
+    // that was just typed. From the top edge the bright first frames are
+    // already clear of the text and the upward biases below carry them
+    // higher — the just-typed word stays readable under every style.
+    baseY = caret.top + caret.height * 0.12;
     const layer = keyburstLayer.get(0) as HTMLElement | null;
     if (!layer) {
       return;
