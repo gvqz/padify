@@ -38,10 +38,108 @@ function isExplosionStyle(value: string | null): value is ExplosionStyle {
   return (EXPLOSION_STYLES as readonly string[]).includes(value ?? '');
 }
 
+interface CaretPosition {
+  left: number;
+  top: number;
+  height: number;
+}
+
+/**
+ * Caret rect for a textarea/input — form fields the document Selection
+ * cannot see. Reflects the text up to the caret in a hidden mirror styled
+ * exactly like the field, then reads back the position of a zero-width
+ * mark riding at the caret edge; the field's scroll offsets convert it to
+ * viewport coordinates. (The contenteditable surface keeps using the
+ * Selection API — see getCaretClientPosition.)
+ */
+export function getFieldCaretPosition(
+  field: HTMLTextAreaElement | HTMLInputElement,
+): CaretPosition | null {
+  const doc = field.ownerDocument;
+  if (!doc) return null;
+
+  const caretIndex = field.selectionStart ?? field.value.length;
+  const cs = window.getComputedStyle(field);
+
+  const mirror = doc.createElement('div');
+  // Text geometry — copy everything that moves a glyph.
+  for (const prop of [
+    'boxSizing',
+    'fontFamily',
+    'fontSize',
+    'fontWeight',
+    'fontStyle',
+    'fontVariantLigatures',
+    'letterSpacing',
+    'wordSpacing',
+    'textIndent',
+    'textTransform',
+    'tabSize',
+    'lineHeight',
+    'paddingTop',
+    'paddingRight',
+    'paddingBottom',
+    'paddingLeft',
+  ] as const) {
+    mirror.style[prop] = cs[prop];
+  }
+  // Reserve the field's real border box (transparent) so the padding box —
+  // and with it the text's wrap width — matches the field exactly.
+  mirror.style.borderStyle = 'solid';
+  mirror.style.borderColor = 'transparent';
+  mirror.style.borderWidth = `${cs.borderTopWidth} ${cs.borderRightWidth} ${cs.borderBottomWidth} ${cs.borderLeftWidth}`;
+  // clientWidth is the field's padding box with the scrollbar already
+  // deducted — exactly the wrap width the text sees.
+  mirror.style.width = `${
+    field.clientWidth + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth)
+  }px`;
+  mirror.style.whiteSpace = cs.whiteSpace === 'pre' ? 'pre' : 'pre-wrap';
+  mirror.style.overflowWrap = cs.overflowWrap;
+  mirror.style.wordWrap = cs.wordWrap;
+  mirror.style.position = 'absolute';
+  mirror.style.top = '0';
+  mirror.style.left = '-9999px';
+  mirror.style.visibility = 'hidden';
+
+  mirror.appendChild(doc.createTextNode(field.value.slice(0, caretIndex)));
+  // The zero-width mark rides at the caret edge — reading its rect reads
+  // the caret's position. (A plain empty span would collapse.)
+  const mark = doc.createElement('span');
+  mark.textContent = '\u200b';
+  mirror.appendChild(mark);
+  doc.body.appendChild(mirror);
+
+  const mirrorRect = mirror.getBoundingClientRect();
+  const markRect = mark.getBoundingClientRect();
+  mirror.remove();
+
+  if (!markRect || Number.isNaN(markRect.top) || !mirrorRect) return null;
+
+  const fieldRect = field.getBoundingClientRect();
+  return {
+    left:
+      fieldRect.left +
+      parseFloat(cs.borderLeftWidth) +
+      (markRect.left - mirrorRect.left) -
+      field.scrollLeft,
+    top:
+      fieldRect.top +
+      parseFloat(cs.borderTopWidth) +
+      (markRect.top - mirrorRect.top) -
+      field.scrollTop,
+    height: markRect.height || parseFloat(cs.lineHeight) || 16,
+  };
+}
+
 export function initTypingEffects(
   notepad: NotepadUI,
   editorConfig: EditorConfig,
 ): { reset: (config: EditorConfig) => void } {
+  // Decorative by definition: when the OS asks for reduced motion the
+  // bursts simply don't spawn (the CSS hides the layer as well — but a
+  // display:none layer would still collect never-animated particles that
+  // only animationend could remove, so the gate lives here too).
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   const userChosenExplodingEffect = stateGet('userChosenExplodingEffect');
   const storedStyle = stateGet('userChosenExplodingEffectStyle');
 
@@ -70,10 +168,26 @@ export function initTypingEffects(
   const randomFrom = <T>(pool: readonly T[]): T => pool[Math.floor(Math.random() * pool.length)];
 
   /**
-   * Where is the caret on screen? The contenteditable Selection gives
-   * us a client rect directly — no textarea mirror needed.
+   * Where is the caret on screen?
+   *
+   * Two regimes:
+   *  - The HTML surface (contenteditable #note): the Selection API gives a
+   *    client rect directly — no textarea mirror needed.
+   *  - The markdown surface (a <textarea> inside #note): form fields keep
+   *    their caret OUT of the document Selection, so getSelection() reports
+   *    whatever stale selection the last click left behind (or nothing at
+   *    all) and bursts fire far from the real caret. For fields the caret
+   *    is measured with the mirror-div technique instead (see
+   *    getFieldCaretPosition).
    */
-  function getCaretClientPosition(): { left: number; top: number; height: number } | null {
+  function getCaretClientPosition(target?: EventTarget | null): {
+    left: number;
+    top: number;
+    height: number;
+  } | null {
+    if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
+      return getFieldCaretPosition(target);
+    }
     const selection = window.getSelection();
 
     if (!selection || selection.rangeCount === 0) {
@@ -118,13 +232,15 @@ export function initTypingEffects(
     rotate: number;
     text?: string;
     fontSize?: number;
+    /** Extra upward offset from the caret line the particle spawns at. */
+    liftY?: number;
   }
 
   function spawnParticle(layer: HTMLElement, spec: ParticleSpec): void {
     const particle = document.createElement('span');
     particle.className = spec.className;
     particle.style.left = `${baseX}px`;
-    particle.style.top = `${baseY}px`;
+    particle.style.top = `${baseY - (spec.liftY ?? 0)}px`;
     particle.style.width = `${spec.width}px`;
     particle.style.height = `${spec.height}px`;
     if (spec.text) {
@@ -140,6 +256,10 @@ export function initTypingEffects(
     particle.addEventListener('animationend', () => {
       particle.remove();
     });
+    // Failsafe: animationend never fires if the animation is disabled
+    // mid-flight (reduced motion flipping on, the tab hidden) — the
+    // longest burst runs 900ms, so 2s is safely past every animation.
+    setTimeout(() => particle.remove(), 2_000);
   }
 
   let baseX = 0;
@@ -156,7 +276,8 @@ export function initTypingEffects(
         height: size,
         color: randomFrom(keyburstColors),
         burstX: Math.cos(angle) * distance,
-        burstY: Math.sin(angle) * distance,
+        // Upward bias — the dots leave the text line immediately.
+        burstY: Math.sin(angle) * distance - 6,
         rotate: 0,
       });
     }
@@ -164,8 +285,8 @@ export function initTypingEffects(
 
   function spawnConfetti(layer: HTMLElement): void {
     for (let i = 0; i < 14; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const distance = 10 + Math.random() * 34;
+      const angle = Math.PI * (0.1 + 0.8 * Math.random());
+      const distance = 14 + Math.random() * 26;
       const width = 4 + Math.random() * 5;
       spawnParticle(layer, {
         className: 'keyburst-confetti',
@@ -173,26 +294,29 @@ export function initTypingEffects(
         height: width * (Math.random() < 0.5 ? 0.55 : 1.1),
         color: randomFrom(confettiColors),
         burstX: Math.cos(angle) * distance,
-        // Downward bias — confetti flutters out, then falls.
-        burstY: Math.sin(angle) * distance + 14 + Math.random() * 26,
+        // Confetti-pop arc: the apex (--burst-y) sits ABOVE the text line
+        // and the keyframe's second half flutters back down while fading,
+        // so the pieces never sit on the fresh text at full opacity.
+        burstY: -(16 + Math.random() * 30),
         rotate: (Math.random() < 0.5 ? -1 : 1) * (180 + Math.random() * 540),
       });
     }
   }
 
   function spawnFireworks(layer: HTMLElement): void {
-    // A bright core flash…
+    // A bright core flash — spawned just ABOVE the text line so the white
+    // core never sits on the character being typed…
     const flash = document.createElement('span');
     flash.className = 'keyburst-flash';
     flash.style.left = `${baseX}px`;
-    flash.style.top = `${baseY}px`;
+    flash.style.top = `${baseY - 12}px`;
     flash.style.width = '14px';
     flash.style.height = '14px';
     flash.style.setProperty('--burst-color', randomFrom(['#ffd166', '#ff9f6b', '#fff3b0']));
     layer.appendChild(flash);
     flash.addEventListener('animationend', () => flash.remove());
 
-    // …then the sparks fly out and drop back down.
+    // …then the sparks fly up and out, dropping back only as they fade.
     for (let i = 0; i < 16; i++) {
       const angle = Math.random() * Math.PI * 2;
       const distance = 10 + Math.random() * 38;
@@ -203,7 +327,7 @@ export function initTypingEffects(
         height: size,
         color: randomFrom(keyburstColors),
         burstX: Math.cos(angle) * distance,
-        burstY: Math.sin(angle) * distance - 6,
+        burstY: Math.sin(angle) * distance - 12,
         rotate: 0,
       });
     }
@@ -239,7 +363,8 @@ export function initTypingEffects(
         height: size,
         color: randomFrom(neonColors),
         burstX: Math.cos(angle) * distance,
-        burstY: Math.sin(angle) * distance - 4,
+        // Clear the line fast — the glow is at full strength on arrival.
+        burstY: Math.sin(angle) * distance - 12,
         rotate: 45,
       });
     }
@@ -256,10 +381,12 @@ export function initTypingEffects(
         height: 14,
         color: '#ffffff',
         burstX: Math.cos(angle) * distance,
-        burstY: -(18 + Math.random() * 30),
+        burstY: -(24 + Math.random() * 32),
         rotate: (Math.random() < 0.5 ? -1 : 1) * (40 + Math.random() * 120),
         text: randomFrom(emojiPool),
-        fontSize: 10 + Math.random() * 6,
+        fontSize: 10 + Math.random() * 4,
+        // Glyphs are big — spawn them clear of the glyphs of the line.
+        liftY: 8,
       });
     }
   }
@@ -273,19 +400,27 @@ export function initTypingEffects(
     emoji: spawnEmoji,
   };
 
-  function triggerKeyburst(): void {
+  function triggerKeyburst(target?: EventTarget | null): void {
     if (!keyburstLayer.length) {
       return;
     }
 
-    const caret = getCaretClientPosition();
+    if (reducedMotion?.matches) {
+      return;
+    }
+
+    const caret = getCaretClientPosition(target);
 
     if (!caret) {
       return;
     }
 
     baseX = caret.left;
-    baseY = caret.top + caret.height * 0.6;
+    // Slightly above the text's midline: bursts read as coming off the
+    // keystroke but their bright first frames start above the glyphs and
+    // the upward biases below carry them clear of the line quickly — the
+    // just-typed word stays readable under every style.
+    baseY = caret.top + caret.height * 0.45;
     const layer = keyburstLayer.get(0) as HTMLElement | null;
     if (!layer) {
       return;
@@ -343,8 +478,9 @@ export function initTypingEffects(
 
     pendingKeyburst = false;
 
+    const burstTarget = e.target;
     requestAnimationFrame(() => {
-      triggerKeyburst();
+      triggerKeyburst(burstTarget);
     });
   });
 

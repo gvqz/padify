@@ -167,7 +167,8 @@
   }
 }
 
-/* Confetti pop — rectangles flutter out, spin, and fall */
+/* Confetti pop — pieces pop UP above the text line, flutter, and only
+   drift back down as they fade, so the fresh text is never covered */
 .keyburst-confetti {
   position: absolute;
   border-radius: 1px;
@@ -183,32 +184,39 @@
     opacity: 1;
     transform: translate(0, 0) rotate(0deg);
   }
+  55% {
+    opacity: 0.95;
+    transform: translate(calc(var(--burst-x, 0) * 0.75), var(--burst-y, -24px))
+      rotate(calc(var(--burst-rotate, 360deg) * 0.55));
+  }
   100% {
     opacity: 0;
-    transform: translate(var(--burst-x, 0), var(--burst-y, 20px))
+    transform: translate(var(--burst-x, 0), calc(var(--burst-y, -24px) + 30px))
       rotate(var(--burst-rotate, 360deg));
   }
 }
 
-/* Fireworks — a core flash, then sparks fly out and drop back down */
+/* Fireworks — a core flash just above the line, then sparks fly up and
+   drop back down only as they fade. The core is deliberately compact: a
+   full-size flash sitting on the caret washed out the typed text. */
 .keyburst-flash {
   position: absolute;
   border-radius: 999px;
   background: #fff;
-  box-shadow: 0 0 18px 6px var(--burst-color, #ffd166);
+  box-shadow: 0 0 10px 2px var(--burst-color, #ffd166);
   transform: translate(-50%, -50%) scale(0.3);
-  animation: keyburst-flash 420ms ease-out forwards;
+  animation: keyburst-flash 380ms ease-out forwards;
   will-change: transform, opacity;
 }
 
 @keyframes keyburst-flash {
   0% {
-    opacity: 0.95;
+    opacity: 0.8;
     transform: translate(-50%, -50%) scale(0.3);
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(1.6);
+    transform: translate(-50%, -50%) scale(1.1);
   }
 }
 
@@ -262,14 +270,13 @@
   }
 }
 
-/* Neon sparks — glowing squares pulse out and blink off */
+/* Neon sparks — one restrained glow per spark: the old double glow
+   (8px + 18px shadows) merged into a cloud that hid the text under it. */
 .keyburst-neon {
   position: absolute;
   border-radius: 2px;
   background: var(--burst-color, #00f5d4);
-  box-shadow:
-    0 0 8px 1px var(--burst-color, #00f5d4),
-    0 0 18px 4px var(--burst-color, #00f5d4);
+  box-shadow: 0 0 6px 1px var(--burst-color, #00f5d4);
   opacity: 1;
   transform: translate(0, 0) rotate(45deg) scale(0.7);
   animation: keyburst-neon 550ms ease-out forwards;
@@ -285,7 +292,7 @@
     opacity: 1;
     transform:
       translate(calc(var(--burst-x, 0) * 0.6), calc(var(--burst-y, 0) * 0.6))
-      rotate(45deg) scale(1.35);
+      rotate(45deg) scale(1.1);
   }
   100% {
     opacity: 0;
@@ -312,12 +319,20 @@
     opacity: 1;
     transform:
       translate(calc(var(--burst-x, 0) * 0.4), calc(var(--burst-y, -30px) * 0.6))
-      rotate(var(--burst-rotate, 30deg)) scale(1.25);
+      rotate(var(--burst-rotate, 30deg)) scale(1.15);
   }
   100% {
     opacity: 0;
     transform: translate(var(--burst-x, 0), var(--burst-y, -36px))
       rotate(calc(var(--burst-rotate, 30deg) * 2)) scale(0.9);
+  }
+}
+
+/* The bursts are decorative by definition — users who ask the OS for
+   reduced motion get a calm editor instead of a firework show. */
+@media (prefers-reduced-motion: reduce) {
+  #keyburstLayer {
+    display: none;
   }
 }
 
