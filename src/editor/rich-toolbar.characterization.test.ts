@@ -46,7 +46,7 @@
 import 'fake-indexeddb/auto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { $ } from '../lib/q';
 import { initRichToolbar } from './rich-toolbar';
 import {
@@ -114,7 +114,7 @@ beforeAll(async () => {
   bootPort = createFakePort();
   setEditorPort(bootPort);
 
-  manager = new TabManager($('#note'));
+  manager = trackManager(new TabManager($('#note')));
   await manager.init();
   setTabManager(manager);
 
@@ -133,6 +133,20 @@ let manager: TabManager;
 let bootPort: EditorPort;
 let standardTabId: string;
 let richTabId: string;
+
+// Same cross-test hazard as tabs.characterization.test.ts: a manager left
+// behind with an armed 400ms debounced persist lets the stale save fire
+// inside the next test's boot window and resurrect old rows. Track and
+// cancel in afterEach.
+const liveManagers: TabManager[] = [];
+function trackManager(instance: TabManager): TabManager {
+  liveManagers.push(instance);
+  return instance;
+}
+
+afterEach(() => {
+  liveManagers.splice(0).forEach((instance) => instance.cancelPendingPersist());
+});
 
 // ---------------------------------------------------------------------------
 // Helpers

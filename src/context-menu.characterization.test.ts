@@ -54,6 +54,17 @@ vi.mock('./ui/dialog', () => ({
 
 import { confirmDialog } from './ui/dialog';
 
+// Same cross-test hazard as tabs.characterization.test.ts: a booted manager
+// can leave a 400ms debounced persist armed when its test ends, and that
+// trailing save fires inside the NEXT test's boot window — where the wiped
+// diff index makes it re-write every row it holds, resurrecting stale tabs.
+// Track every manager and cancel the pending write in the afterEach below.
+const liveManagers: TabManager[] = [];
+function trackManager(manager: TabManager): TabManager {
+  liveManagers.push(manager);
+  return manager;
+}
+
 // ---------------------------------------------------------------------------
 // Environment
 // ---------------------------------------------------------------------------
@@ -194,7 +205,7 @@ function createFakePort(): EditorPort {
 
 /** Boots a real TabManager over the mounted shell and installs it. */
 async function bootedManager(): Promise<TabManager> {
-  const manager = new TabManager($('#note'));
+  const manager = trackManager(new TabManager($('#note')));
   await manager.init();
   setTabManager(manager);
   return manager;
@@ -310,6 +321,8 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  // A debounced persist must never outlive its test — see liveManagers.
+  liveManagers.splice(0).forEach((manager) => manager.cancelPendingPersist());
   vi.restoreAllMocks();
 });
 

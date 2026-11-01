@@ -34,6 +34,7 @@ import {
   resetStorageForTests,
   saveNotes,
   storageReady,
+  whenNotesIdle,
   type StoredNoteTab,
 } from './storage';
 
@@ -44,6 +45,19 @@ vi.mock('./ui/dialog', () => ({
 }));
 
 import { confirmDialog } from './ui/dialog';
+
+// A booted manager can leave a 400ms debounced persist (schedulePersist)
+// armed when its test ends. That trailing save can fire inside the NEXT
+// test's boot window, where resetNotesForTests has just wiped the diff
+// index — the stale snapshot then re-writes every row it holds as if new,
+// resurrecting the previous test's tabs into the fresh store (the CI
+// duplicateNote flake: 4 tabs instead of 3). Track every manager here and
+// cancel the pending write in the afterEach below.
+const liveManagers: TabManager[] = [];
+function trackManager(manager: TabManager): TabManager {
+  liveManagers.push(manager);
+  return manager;
+}
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -111,6 +125,10 @@ async function freshBoot(): Promise<void> {
  */
 async function flushAndReboot(): Promise<void> {
   flushPendingWrites();
+  // Settle every in-flight IndexedDB write BEFORE the reset drops the
+  // await-handles — a transaction still committing at hydrate time is
+  // indistinguishable from a stale cross-test write.
+  await whenNotesIdle();
   resetStorageForTests();
   await new Promise((resolve) => setTimeout(resolve, 0));
   await storageReady();
@@ -123,6 +141,8 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  // A debounced persist must never outlive its test — see liveManagers.
+  liveManagers.splice(0).forEach((manager) => manager.cancelPendingPersist());
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
@@ -374,7 +394,7 @@ describe('TabManager (characterization)', () => {
   });
 
   async function bootedManager(): Promise<TabManager> {
-    const manager = new TabManager($('#note'));
+    const manager = trackManager(new TabManager($('#note')));
     await manager.init();
     return manager;
   }
@@ -785,7 +805,7 @@ describe('note types (characterization)', () => {
   });
 
   async function bootedManager(): Promise<TabManager> {
-    const manager = new TabManager($('#note'));
+    const manager = trackManager(new TabManager($('#note')));
     await manager.init();
     return manager;
   }
@@ -889,7 +909,7 @@ describe('non-html content (the typed content model)', () => {
   });
 
   async function bootedManager(): Promise<TabManager> {
-    const manager = new TabManager($('#note'));
+    const manager = trackManager(new TabManager($('#note')));
     await manager.init();
     return manager;
   }
@@ -993,7 +1013,7 @@ describe('non-html content (the typed content model)', () => {
 
 describe('snapshots of typed notes', () => {
   async function bootedManager(): Promise<TabManager> {
-    const manager = new TabManager($('#note'));
+    const manager = trackManager(new TabManager($('#note')));
     await manager.init();
     return manager;
   }
@@ -1028,7 +1048,7 @@ describe('snapshots of typed notes', () => {
 
 describe('dirty lifecycle (the sync handshake)', () => {
   async function bootedManager(): Promise<TabManager> {
-    const manager = new TabManager($('#note'));
+    const manager = trackManager(new TabManager($('#note')));
     await manager.init();
     return manager;
   }
@@ -1085,7 +1105,7 @@ describe('html export of typed notes (the capture rule)', () => {
   });
 
   async function bootedManager(): Promise<TabManager> {
-    const manager = new TabManager($('#note'));
+    const manager = trackManager(new TabManager($('#note')));
     await manager.init();
     // The export body is a module-level function routed through the
     // singleton, exactly like the app wires it (app.ts calls setTabManager
@@ -1164,7 +1184,7 @@ describe('TabManager — the note menu actions', () => {
   });
 
   async function bootedManager(): Promise<TabManager> {
-    const manager = new TabManager($('#note'));
+    const manager = trackManager(new TabManager($('#note')));
     await manager.init();
     return manager;
   }
@@ -1203,6 +1223,43 @@ describe('TabManager — the note menu actions', () => {
     await flushAndReboot();
     const persisted = await loadNotes();
     expect(persisted.tabs.map((entry) => entry.id)).toContain(copy.id);
+  }, 20000);
+
+  it('a debounced persist fires on its own — its model lands in storage after the window', async () => {
+    saveNotes(
+      { tabs: [stored('src', '<p>one</p>'), stored('other', '<p>two</p>')], tombstones: [] },
+      'src',
+      { immediate: true },
+    );
+    await flushAndReboot();
+
+    const manager = await bootedManager();
+    manager.getTabs()[0].name = 'renamed late'; // dirty the model WITHOUT persisting
+    manager.schedulePersist();
+    await new Promise((resolve) => setTimeout(resolve, 450)); // the debounce window
+
+    await flushAndReboot();
+    const snapshot = await loadNotes();
+    expect(snapshot.tabs.find((tab) => tab.id === 'src')?.name).toBe('renamed late');
+  }, 20000);
+
+  it('cancelPendingPersist drops that write — a stale save cannot cross a test boundary', async () => {
+    saveNotes(
+      { tabs: [stored('src', '<p>one</p>'), stored('other', '<p>two</p>')], tombstones: [] },
+      'src',
+      { immediate: true },
+    );
+    await flushAndReboot();
+
+    const manager = await bootedManager();
+    manager.getTabs()[0].name = 'renamed late';
+    manager.schedulePersist();
+    manager.cancelPendingPersist(); // what the afterEach now guarantees
+    await new Promise((resolve) => setTimeout(resolve, 450)); // the debounce window
+
+    await flushAndReboot();
+    const snapshot = await loadNotes();
+    expect(snapshot.tabs.find((tab) => tab.id === 'src')?.name).toBeNull();
   }, 20000);
 
   it('duplicateNote of the ACTIVE note captures the unsaved editor state first', async () => {

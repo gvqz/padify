@@ -161,6 +161,16 @@ function mountPickerDom(): void {
   );
 }
 
+// Same cross-test hazard as tabs.characterization.test.ts: a manager left
+// behind with an armed 400ms debounced persist lets the stale save fire
+// inside the next test's boot window and resurrect old rows. Track and
+// cancel in afterEach.
+const liveManagers: TabManager[] = [];
+function trackManager(manager: TabManager): TabManager {
+  liveManagers.push(manager);
+  return manager;
+}
+
 beforeEach(async () => {
   mountPickerDom();
   resetStorageForTests();
@@ -177,7 +187,7 @@ beforeEach(async () => {
   port = fakePort();
   setEditorPort(port);
 
-  manager = new TabManager($('#note'));
+  manager = trackManager(new TabManager($('#note')));
   await manager.init();
   setTabManager(manager);
   standardTabId = manager.getActive()!.id;
@@ -186,6 +196,10 @@ beforeEach(async () => {
   picker.open();
   // The dataset load rides a promise (lazy import of symbols-data).
   await new Promise((resolvePromise) => setTimeout(resolvePromise, 80));
+});
+
+afterEach(() => {
+  liveManagers.splice(0).forEach((manager) => manager.cancelPendingPersist());
 });
 
 afterEach(async () => {

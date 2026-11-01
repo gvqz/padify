@@ -27,7 +27,7 @@
 import 'fake-indexeddb/auto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   MarkdownNoteSurface,
@@ -81,9 +81,19 @@ function mountShell(): void {
   document.body.append(toast);
 }
 
+// Same cross-test hazard as tabs.characterization.test.ts: a manager left
+// behind with an armed 400ms debounced persist lets the stale save fire
+// inside the next test's boot window and resurrect old rows. Track and
+// cancel in afterEach.
+const liveManagers: TabManager[] = [];
+function trackManager(manager: TabManager): TabManager {
+  liveManagers.push(manager);
+  return manager;
+}
+
 async function bootedManager(): Promise<TabManager> {
   const hostEl = document.getElementById('note') as HTMLElement;
-  const manager = new TabManager($(hostEl));
+  const manager = trackManager(new TabManager($(hostEl)));
   setTabManager(manager);
   await manager.init();
   manager.addTab(true, 'markdown');
@@ -121,6 +131,10 @@ beforeEach(async () => {
   await new Promise((resolveTimeout) => setTimeout(resolveTimeout, 0));
   localStorage.clear();
   await storageReady();
+});
+
+afterEach(() => {
+  liveManagers.splice(0).forEach((manager) => manager.cancelPendingPersist());
 });
 
 // ---------------------------------------------------------------------------

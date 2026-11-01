@@ -532,6 +532,22 @@ export class TabManager {
     this.persist();
   }
 
+  /**
+   * Drops a pending debounced persist WITHOUT writing — the teardown
+   * counterpart of schedulePersist. A 400ms trailing save that fires after
+   * its owner's context is gone (a test boundary, a discarded surface)
+   * resurrects rows the next boot just reseeded: the storage diff index is
+   * wiped on reset, so the stale snapshot re-writes every row it holds as
+   * if new. Tests call this in their teardown; production teardown paths
+   * (a future PiP window close) are the natural next callers.
+   */
+  cancelPendingPersist(): void {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+  }
+
   getActive(): NoteTab | null {
     return this.tabs.find((tab) => tab.id === this.activeId) ?? null;
   }
