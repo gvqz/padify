@@ -816,14 +816,18 @@ describe('copyNotesToClipboard / deleteNotes', () => {
     return manager;
   }
 
-  it('copyNotesToClipboard writes the text and fires the success toast', async () => {
+  it('copyNotesToClipboard writes the text and fires a plain (no-glyph) toast', async () => {
     ensureContextMenuMounted();
 
     copyNotesToClipboard('the whole note');
 
     expect(clipboardWriteText).toHaveBeenCalledWith('the whole note');
     await vi.waitFor(() => expect(toastText()).toBe('Notes copied to clipboard.'));
-    expect(toastTone()).toBe('success');
+    // The copy confirmation deliberately carries NO success tone: the
+    // success tone paints a checkmark glyph next to the text, and a
+    // message that already says what happened reads cleaner without it.
+    // 'neutral' is the glyph-less tone (see 08-toasts.css).
+    expect(toastTone()).toBe('neutral');
   });
 
   it('copyNotesToClipboard failure fires the permissions toast', async () => {

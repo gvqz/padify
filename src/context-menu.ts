@@ -68,10 +68,13 @@ import {
 export function copyNotesToClipboard(note: string): void {
   // The app's one toast (see ui/toast.ts) — the SweetAlert2 bottom-toast
   // this used to fire was a second notification system with its own
-  // position, animation and off-palette icon.
+  // position, animation and off-palette icon. Neutral tone on purpose:
+  // the copy confirmation reads as plain text — the success tone's
+  // checkmark glyph (see 08-toasts.css) is noise next to a message that
+  // already says exactly what happened.
   navigator.clipboard.writeText(note).then(
     function () {
-      showToast('Notes copied to clipboard.', 'success');
+      showToast('Notes copied to clipboard.');
     },
     function () {
       showToast('Fail to copy. Check permissions for clipboard.', 'error');
