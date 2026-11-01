@@ -66,7 +66,7 @@ describe('resolveKeyburstLayer', () => {
 });
 
 describe('getFieldCaretPosition', () => {
-  it('measures into the field\'s own document and leaves no mirror behind', () => {
+  it("measures into the field's own document and leaves no mirror behind", () => {
     // A second document stands in for the PiP window's document: the
     // mirror div must be built and measured THERE, then removed.
     const pipDoc = document.implementation.createHTMLDocument('floating');
