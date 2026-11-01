@@ -59,7 +59,9 @@ export function getFieldCaretPosition(
   if (!doc) return null;
 
   const caretIndex = field.selectionStart ?? field.value.length;
-  const cs = window.getComputedStyle(field);
+  // Style is read from the field's OWN window: the editor can live in the
+  // floating (PiP) window, another document from this one.
+  const cs = (field.ownerDocument.defaultView ?? window).getComputedStyle(field);
 
   const mirror = doc.createElement('div');
   // Text geometry — copy everything that moves a glyph.
@@ -131,6 +133,31 @@ export function getFieldCaretPosition(
   };
 }
 
+/**
+ * The layer a burst spawns into — resolved in the document that owns the
+ * editor.
+ *
+ * When the note is open in the floating (PiP) window, the editor is a
+ * node of ANOTHER document: coordinates there are that window's viewport
+ * coordinates, and the main window's layer would paint the burst over
+ * the main window's UI (or nowhere at all) instead of over the caret the
+ * user is typing at. Each document gets its own lazily-created layer.
+ */
+export function resolveKeyburstLayer(
+  target: EventTarget | null,
+  fallbackDoc: Document,
+): HTMLElement | null {
+  const doc = target instanceof Node ? (target.ownerDocument ?? fallbackDoc) : fallbackDoc;
+  let layer = doc.getElementById('keyburstLayer');
+  if (!layer && doc.body) {
+    layer = doc.createElement('div');
+    layer.id = 'keyburstLayer';
+    layer.setAttribute('aria-hidden', 'true');
+    doc.body.append(layer);
+  }
+  return layer;
+}
+
 export function initTypingEffects(
   notepad: NotepadUI,
   editorConfig: EditorConfig,
@@ -188,7 +215,14 @@ export function initTypingEffects(
     if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
       return getFieldCaretPosition(target);
     }
-    const selection = window.getSelection();
+    // The selection must come from the editor's OWN window: when the note
+    // lives in the floating (PiP) window, the main window's Selection is a
+    // stale leftover (or empty) and bursts fire at the wrong place — or at
+    // the fallback box. target IS the editor surface in practice, so its
+    // document's view is the authoritative one.
+    const targetDoc = target instanceof Node ? target.ownerDocument : null;
+    const view = targetDoc?.defaultView ?? window;
+    const selection = view.getSelection();
 
     if (!selection || selection.rangeCount === 0) {
       return null;
@@ -198,21 +232,42 @@ export function initTypingEffects(
     let rect = range.getBoundingClientRect();
 
     // Collapsed ranges at line ends can report an empty rect;
-    // fall back to the last client rect or the editor's box.
+    // fall back to the last client rect, the caret's own block, or the
+    // editor's box (offset by its padding so the burst lands where the
+    // caret actually sits, not at the box's bare corner).
     if ((rect.width === 0 && rect.height === 0) || Number.isNaN(rect.top)) {
       const rects = range.getClientRects();
       if (rects.length > 0) {
         rect = rects[rects.length - 1];
       } else {
-        const editorRect = (
-          notepad.note.get(0) as HTMLElement | undefined
-        )?.getBoundingClientRect();
-        if (!editorRect) return null;
-        rect = editorRect;
+        // An empty paragraph or an untouched empty note: the caret's block
+        // (the collapsed range's container) carries the line box position.
+        const startEl =
+          range.startContainer instanceof HTMLElement
+            ? range.startContainer
+            : range.startContainer.parentElement;
+        const blockRect = startEl?.getBoundingClientRect();
+        const editorEl = notepad.note.get(0) as HTMLElement | undefined;
+        const editorRect = editorEl?.getBoundingClientRect();
+        if (blockRect && blockRect.height > 0) {
+          rect = blockRect;
+        } else if (editorRect && editorEl) {
+          // Last resort — the editor's text origin: box corner plus its
+          // padding, which is where the caret sits in a bare empty note.
+          const ecs = view.getComputedStyle(editorEl);
+          const lineHeight = parseFloat(ecs.lineHeight) || parseFloat(ecs.fontSize) || 16;
+          return {
+            left: editorRect.left + (parseFloat(ecs.paddingLeft) || 0),
+            top: editorRect.top + (parseFloat(ecs.paddingTop) || 0),
+            height: lineHeight,
+          };
+        } else {
+          return null;
+        }
       }
     }
 
-    const computed = window.getComputedStyle(notepad.note.get(0) as HTMLElement);
+    const computed = view.getComputedStyle(notepad.note.get(0) as HTMLElement);
     const lineHeight = parseFloat(computed.lineHeight) || parseFloat(computed.fontSize) || 16;
 
     return {
@@ -237,7 +292,11 @@ export function initTypingEffects(
   }
 
   function spawnParticle(layer: HTMLElement, spec: ParticleSpec): void {
-    const particle = document.createElement('span');
+    // Particles are created in the LAYER's document: when the editor lives
+    // in the floating (PiP) window, that is another document from this one,
+    // and a main-document node appended cross-document (or positioned with
+    // another window's viewport coordinates) lands in the wrong window.
+    const particle = layer.ownerDocument.createElement('span');
     particle.className = spec.className;
     // A little spawn scatter keeps the burst from stacking every particle
     // into one bright clump on a single pixel at the keystroke moment.
@@ -312,7 +371,7 @@ export function initTypingEffects(
   function spawnFireworks(layer: HTMLElement): void {
     // A bright core flash — spawned just ABOVE the text line so the white
     // core never sits on the character being typed…
-    const flash = document.createElement('span');
+    const flash = layer.ownerDocument.createElement('span');
     flash.className = 'keyburst-flash';
     flash.style.left = `${baseX}px`;
     flash.style.top = `${baseY - 14}px`;
@@ -431,7 +490,7 @@ export function initTypingEffects(
     // already clear of the text and the upward biases below carry them
     // higher — the just-typed word stays readable under every style.
     baseY = caret.top + caret.height * 0.12;
-    const layer = keyburstLayer.get(0) as HTMLElement | null;
+    const layer = resolveKeyburstLayer(target ?? null, document);
     if (!layer) {
       return;
     }
