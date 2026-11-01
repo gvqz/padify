@@ -265,6 +265,13 @@
     opacity: 1;
     transform: translate(0, 0) rotate(0deg) scale(0.8);
   }
+  55% {
+    /* Hold nearly opaque through the flight: a plain 1→0 ease-out fade
+       fell to ~30% opacity within 200ms and the stars vanished mid-air. */
+    opacity: 0.95;
+    transform: translate(calc(var(--burst-x, 0) * 0.7), calc(var(--burst-y, -40px) * 0.7))
+      rotate(calc(var(--burst-rotate, 90deg) * 0.6)) scale(1);
+  }
   100% {
     opacity: 0;
     transform: translate(var(--burst-x, 0), var(--burst-y, -40px))
@@ -318,11 +325,13 @@
     opacity: 1;
     transform: translate(0, 0) rotate(0deg) scale(0.6);
   }
-  30% {
+  45% {
+    /* Opaque through the spread-out half of the flight; the old curve
+       started fading at 30% and the glyphs were gone mid-spread. */
     opacity: 1;
     transform:
-      translate(calc(var(--burst-x, 0) * 0.4), calc(var(--burst-y, -30px) * 0.6))
-      rotate(var(--burst-rotate, 30deg)) scale(1.05);
+      translate(calc(var(--burst-x, 0) * 0.55), calc(var(--burst-y, -30px) * 0.7))
+      rotate(calc(var(--burst-rotate, 30deg) * 0.6)) scale(1.1);
   }
   100% {
     opacity: 0;

@@ -187,9 +187,14 @@ export function initTypingEffects(
   }
 
   const keyburstColors = ['#ff4d6d', '#ffe66d', '#6bffb4', '#6bb7ff', '#d06bff', '#ff9f6b'];
-  const confettiColors = ['#ff595e', '#ffca3a', '#8ac926', '#1982c4', '#6a4c93', '#ffffff'];
+  // No white pieces: the editor surface is white, so white confetti simply
+  // vanished — a burst of twelve that read as ten.
+  const confettiColors = ['#ff595e', '#ffca3a', '#8ac926', '#1982c4', '#6a4c93', '#ff9f1c'];
   const neonColors = ['#00f5d4', '#00bbf9', '#f15bb5', '#fee440', '#9b5de5'];
-  const starColors = ['#ffd166', '#fff3b0', '#ffea00', '#ffffff'];
+  // Deep ambers/oranges only: pale gold, cream and WHITE stars on the white
+  // page made the shooting style invisible — five stars spawned and the user
+  // saw nothing.
+  const starColors = ['#ffb703', '#ffd60a', '#fb8500', '#ff9e00'];
   const emojiPool = ['🎉', '✨', '💥', '🔥', '⭐', '💫', '🎊', '💜'];
 
   const randomFrom = <T>(pool: readonly T[]): T => pool[Math.floor(Math.random() * pool.length)];
@@ -289,6 +294,9 @@ export function initTypingEffects(
     fontSize?: number;
     /** Extra upward offset from the caret line the particle spawns at. */
     liftY?: number;
+    /** Extra random spread at spawn, so glyphs don't stack on one pixel. */
+    jitterX?: number;
+    jitterY?: number;
   }
 
   function spawnParticle(layer: HTMLElement, spec: ParticleSpec): void {
@@ -302,8 +310,10 @@ export function initTypingEffects(
     // into one bright clump on a single pixel at the keystroke moment.
     const scatterX = Math.random() * 6 - 3;
     const scatterY = Math.random() * 4 - 2;
-    particle.style.left = `${baseX + scatterX}px`;
-    particle.style.top = `${baseY - (spec.liftY ?? 0) + scatterY}px`;
+    const jitterX = spec.jitterX ? Math.random() * spec.jitterX * 2 - spec.jitterX : 0;
+    const jitterY = spec.jitterY ? Math.random() * spec.jitterY * 2 - spec.jitterY : 0;
+    particle.style.left = `${baseX + scatterX + jitterX}px`;
+    particle.style.top = `${baseY - (spec.liftY ?? 0) + scatterY + jitterY}px`;
     particle.style.width = `${spec.width}px`;
     particle.style.height = `${spec.height}px`;
     if (spec.text) {
@@ -360,10 +370,13 @@ export function initTypingEffects(
         // Confetti-pop arc: the apex (--burst-y) sits ABOVE the text line
         // and the keyframe's second half flutters back down while fading,
         // so the pieces never sit on the fresh text at full opacity.
-        burstY: -(16 + Math.random() * 30),
+        burstY: -(14 + Math.random() * 22),
         rotate: (Math.random() < 0.5 ? -1 : 1) * (180 + Math.random() * 540),
-        // Born just clear of the line box, never on the glyphs.
+        // Born just clear of the line box, never on the glyphs — and
+        // pre-spread so twelve pieces don't stack into one blob at spawn.
         liftY: 2,
+        jitterX: 8,
+        jitterY: 5,
       });
     }
   }
@@ -382,10 +395,11 @@ export function initTypingEffects(
     flash.addEventListener('animationend', () => flash.remove());
 
     // …then the sparks fly UP AND OUT ONLY — the old full-circle fan let
-    // half the sparks arc down onto the fresh glyphs at full opacity.
+    // half the sparks arc down onto the fresh glyphs at full opacity. The
+    // rise is capped so first-line bursts stay under the toolbar.
     for (let i = 0; i < 12; i++) {
       const angle = Math.PI * (0.08 + 0.84 * Math.random());
-      const distance = 12 + Math.random() * 36;
+      const distance = 10 + Math.random() * 30;
       const size = 2.5 + Math.random() * 3.5;
       spawnParticle(layer, {
         className: 'keyburst-firework',
@@ -393,7 +407,7 @@ export function initTypingEffects(
         height: size,
         color: randomFrom(keyburstColors),
         burstX: Math.cos(angle) * distance,
-        burstY: -Math.sin(angle) * distance - 10,
+        burstY: -Math.sin(angle) * distance - 6,
         rotate: 0,
       });
     }
@@ -403,7 +417,7 @@ export function initTypingEffects(
     for (let i = 0; i < 5; i++) {
       // Fan upward: -30° to -150° from the caret.
       const angle = -Math.PI * (0.17 + 0.66 * (i / 4) + (Math.random() - 0.5) * 0.12);
-      const distance = 26 + Math.random() * 30;
+      const distance = 24 + Math.random() * 22;
       spawnParticle(layer, {
         className: 'keyburst-star',
         width: 12,
@@ -412,8 +426,12 @@ export function initTypingEffects(
         burstX: Math.cos(angle) * distance,
         burstY: Math.sin(angle) * distance,
         rotate: (Math.random() < 0.5 ? -1 : 1) * (60 + Math.random() * 200),
-        text: '✦',
-        fontSize: 9 + Math.random() * 5,
+        // '★' is a dense filled glyph; the old thin '✦' at 9-14px in pale
+        // gold read as nothing at all on the white page.
+        text: '★',
+        fontSize: 12 + Math.random() * 6,
+        jitterX: 7,
+        jitterY: 5,
       });
     }
   }
@@ -442,19 +460,23 @@ export function initTypingEffects(
     const count = 7 + Math.floor(Math.random() * 2);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const distance = 8 + Math.random() * 26;
+      const distance = 12 + Math.random() * 30;
       spawnParticle(layer, {
         className: 'keyburst-emoji',
         width: 14,
         height: 14,
         color: '#ffffff',
         burstX: Math.cos(angle) * distance,
-        burstY: -(26 + Math.random() * 26),
+        burstY: -(20 + Math.random() * 20),
         rotate: (Math.random() < 0.5 ? -1 : 1) * (40 + Math.random() * 120),
         text: randomFrom(emojiPool),
-        fontSize: 10 + Math.random() * 4,
-        // Glyphs are big — spawn them well clear of the glyphs of the line.
-        liftY: 16,
+        fontSize: 11 + Math.random() * 5,
+        // Glyphs are big — spawn them clear of the line AND of each other:
+        // with no per-particle spread all eight stacked into one blob that
+        // read as a single orange smudge.
+        liftY: 8,
+        jitterX: 12,
+        jitterY: 8,
       });
     }
   }
