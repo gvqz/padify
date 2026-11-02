@@ -10,11 +10,14 @@
    Word count pill — the note's vitals in one quiet capsule.
 
    The whole pill is a <button class="wc-pill"> that opens the statistics
-   modal (the old layout buried a 10px icon at the end of a text sentence).
-   Two segments share the capsule on a hairline divider: WORDS lead (the
-   headline metric), CHARACTERS follow. Numbers are tabular — a pill whose
-   width jitters on every keystroke reads broken; units are quiet lowercase
-   echoes of the statistics board's label typography.
+   modal. Anatomy, left to right: a mini bar-chart glyph (the affordance
+   that says "this opens data"), then two segments on a tapered hairline:
+   WORDS lead (the headline metric), CHARACTERS follow. Numbers are
+   tabular — a pill whose width jitters on every keystroke reads broken;
+   units are quiet lowercase echoes of the statistics board's label
+   typography. The capsule carries a hairline top highlight (light mode)
+   so it reads as a raised object, and lifts 1px on hover — the button
+   answer to the app's menu rows.
    -------------------------------------------------------------------------- */
 
 body .bottom-line .word-count-container {
@@ -23,20 +26,34 @@ body .bottom-line .word-count-container {
   background: var(--vz-bg-elevated) !important;
   border: 1px solid var(--vz-border);
   border-radius: 999px;
-  box-shadow: var(--vz-shadow-pill) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    var(--vz-shadow-pill) !important;
   color: var(--vz-fg-muted);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   overflow: hidden;
   transition:
     border-color var(--vz-dur) ease,
-    box-shadow var(--vz-dur) ease;
+    box-shadow var(--vz-dur) ease,
+    transform var(--vz-dur) var(--vz-ease);
 }
 
 body.dark .bottom-line .word-count-container {
   background: var(--vz-bg-elevated) !important;
   border-color: var(--vz-border);
   box-shadow: var(--vz-shadow-pill) !important;
+}
+
+/* Hover — the capsule answers: hairline sharpens, the shadow deepens a
+   touch and the whole thing lifts 1px. Small, physical, reversible. */
+body .bottom-line .word-count-container:hover {
+  border-color: var(--vz-border-strong);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    0 2px 4px rgba(0, 0, 0, 0.06),
+    0 4px 12px rgba(0, 0, 0, 0.08) !important;
+  transform: translateY(-1px);
 }
 
 /* The button fills the capsule; the container owns the frame so the
@@ -78,6 +95,19 @@ body .bottom-line .word-count-container .wc-pill:focus-visible {
   outline-offset: 2px;
 }
 
+/* The leading glyph — three ascending bars. Subtle at rest, it darkens
+   with the hover so the affordance brightens exactly when it matters. */
+body .bottom-line .word-count-container .wc-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--vz-fg-subtle);
+  transition: color var(--vz-dur) ease;
+}
+
+body .bottom-line .word-count-container .wc-pill:hover .wc-icon {
+  color: var(--vz-fg);
+}
+
 /* Segments — number leads, unit follows. Tabular numerals keep every
    digit (and the whole capsule) steady while counting. */
 body .bottom-line .word-count-container .wc-seg {
@@ -101,11 +131,18 @@ body .bottom-line .word-count-container .wc-unit {
   font-size: 11px;
 }
 
-/* The hairline between the two counts. */
+/* The hairline between the two counts — tapered at both ends so it
+   reads as a separator, not a strut. */
 body .bottom-line .word-count-container .wc-divider {
   width: 1px;
-  height: 11px;
-  background: var(--vz-border);
+  height: 12px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--vz-border) 30%,
+    var(--vz-border) 70%,
+    transparent
+  );
 }
 
 /* Empty note — "0 words" alone, stood down. A double zero reads as
@@ -125,6 +162,11 @@ body .bottom-line .word-count-container[data-wc-empty] .wc-num {
   font-weight: 500;
 }
 
+/* The glyph stands down with the rest of the capsule. */
+body .bottom-line .word-count-container[data-wc-empty] .wc-icon {
+  opacity: 0.6;
+}
+
 /* Value change — a small rise-and-settle tick, the statistics board's
    statFlip language scaled down to pill size. */
 @keyframes wc-tick {
@@ -140,11 +182,6 @@ body .bottom-line .word-count-container[data-wc-empty] .wc-num {
 
 body .bottom-line .word-count-container .wc-num.wc-tick {
   animation: wc-tick 200ms var(--vz-ease);
-}
-
-/* Hover lifts the capsule's hairline; the tick stays subtle. */
-body .bottom-line .word-count-container:hover {
-  border-color: var(--vz-border-strong);
 }
 
 /* Timer pill — same capsule */

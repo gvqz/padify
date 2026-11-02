@@ -644,93 +644,54 @@ export async function initApp(): Promise<void> {
     }
   });
 
-  // ---- statistics modal — click-to-cycle cards ------------------------------
-  // One card per stat FAMILY; clicking a card advances it to the next stat
-  // in that family (characters → words → sentences → …), the rotation the
-  // tasks list asked for ("it says 1961 characters but when I click that
-  // text it switches to 340 words"). The chosen slot per family sticks
-  // across shows so the modal reopens the way you left it.
-  type StatEntry = { label: string; value: string | number };
-  let currentStatFamilies: Record<string, StatEntry[]> = {};
-  const statIndexes: Record<string, number> = {};
-
-  const renderStatCard = (card: HTMLElement): void => {
-    const family = card.dataset.statFamily ?? '';
-    const entries = currentStatFamilies[family] ?? [];
-    if (entries.length === 0) {
-      return;
-    }
-    const entry = entries[(statIndexes[family] ?? 0) % entries.length];
-    const label = card.querySelector('[data-stat-label]');
-    const value = card.querySelector('[data-stat-value]');
-    if (label) {
-      label.textContent = entry.label;
-    }
-    if (value) {
-      value.textContent = String(entry.value);
-    }
-  };
-
+  // ---- statistics modal — the note report ----------------------------------
+  // The board is static structure with data-stat keys on every value slot;
+  // each show recomputes the numbers and fills the slots in one pass. The
+  // old click-to-cycle card shuffle hid sixteen of seventeen stats behind
+  // an undiscoverable rotation — everything is on the board now.
   notepad.statisticsModal.on('show.bs.modal', function () {
     const stats = calculateNoteStatistics(getEditorText());
-    // An empty note gets an honest empty state instead of a board of
-    // zeros and N/A cards under a "click a card" hint.
     const statHint = document.querySelector<HTMLElement>('[data-stat-hint]');
     const statBoard = document.getElementById('statisticsBoard');
-    if (statHint && statBoard) {
-      const empty = stats.words === 0 && stats.characters === 0;
-      statHint.textContent = empty
-        ? 'This note is empty — type something and the numbers will follow.'
-        : 'Click a card to cycle through its statistics.';
-      statBoard.classList.toggle('is-empty', empty);
+    // An empty note gets an honest empty state instead of a board of
+    // zeros and N/A rows.
+    const empty = stats.words === 0 && stats.characters === 0;
+    if (statHint) {
+      statHint.hidden = !empty;
     }
-    currentStatFamilies = {
-      count: [
-        { label: 'Characters', value: stats.characters },
-        { label: 'Characters (no spaces)', value: stats.charactersNoSpaces },
-        { label: 'Words', value: stats.words },
-        { label: 'Sentences', value: stats.sentences },
-        { label: 'Paragraphs', value: stats.paragraphs },
-      ],
-      vocabulary: [
-        { label: 'Unique words', value: stats.uniqueWords },
-        { label: 'Most common word', value: stats.mostCommonWord },
-        { label: 'Avg word length', value: stats.averageWordLength },
-        { label: 'Words per sentence', value: stats.wordsPerSentence },
-      ],
-      time: [
-        { label: 'Reading time', value: stats.readingTime },
-        { label: 'Speaking time', value: stats.estimatedSpeakingTime },
-        { label: 'Writing time', value: stats.writingTime },
-      ],
-      records: [
-        { label: 'Longest word', value: stats.longestWord },
-        { label: 'Longest sentence', value: stats.longestSentence },
-      ],
-      quality: [
-        { label: 'Readability score', value: stats.readabilityScore },
-        { label: 'Lexical density', value: stats.lexicalDensity },
-        { label: 'Estimated pages', value: stats.estimatedPages },
-      ],
+    if (statBoard) {
+      statBoard.hidden = empty;
+    }
+
+    // Grouped digits ("2,055") match the pill; every other value arrives
+    // pre-formatted from text-stats ("2 mins", "80.5", "3.9 pages").
+    const grouped = new Intl.NumberFormat('en-US');
+    const values: Record<string, string> = {
+      words: grouped.format(stats.words),
+      characters: grouped.format(stats.characters),
+      charactersNoSpaces: `${grouped.format(stats.charactersNoSpaces)} without spaces`,
+      sentences: grouped.format(stats.sentences),
+      paragraphs: grouped.format(stats.paragraphs),
+      uniqueWords: grouped.format(stats.uniqueWords),
+      mostCommonWord: stats.mostCommonWord,
+      averageWordLength: String(stats.averageWordLength),
+      wordsPerSentence: String(stats.wordsPerSentence),
+      readingTime: stats.readingTime,
+      estimatedSpeakingTime: stats.estimatedSpeakingTime,
+      writingTime: stats.writingTime,
+      longestWord: stats.longestWord,
+      longestSentence: stats.longestSentence,
+      readabilityScore: String(stats.readabilityScore),
+      lexicalDensity: stats.lexicalDensity,
+      estimatedPages: stats.estimatedPages,
     };
 
-    document
-      .querySelectorAll<HTMLElement>('#statisticsBoard .stat-card[data-stat-family]')
-      .forEach(renderStatCard);
-  });
-
-  $('#statisticsBoard').on('click', '.stat-card', function () {
-    const card = this as HTMLElement;
-    const family = card.dataset.statFamily ?? '';
-    const entries = currentStatFamilies[family] ?? [];
-    if (entries.length === 0) {
-      return;
-    }
-    statIndexes[family] = ((statIndexes[family] ?? 0) + 1) % entries.length;
-    card.classList.remove('stat-flip');
-    void card.offsetWidth; // restart the value-swap animation
-    card.classList.add('stat-flip');
-    renderStatCard(card);
+    document.querySelectorAll<HTMLElement>('#statisticsBoard [data-stat]').forEach((el) => {
+      const key = el.dataset.stat ?? '';
+      if (key in values) {
+        el.textContent = values[key];
+      }
+    });
   });
 
   notepad.breakReminders.on('change', function () {

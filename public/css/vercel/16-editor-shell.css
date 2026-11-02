@@ -1917,6 +1917,12 @@ body.pip-host .bottom-line .word-count-container .wc-divider {
   height: 10px;
 }
 
+/* The affordance glyph is a main-window luxury — the popup's slim
+   status line is text-only, as it has always been. */
+body.pip-host .bottom-line .word-count-container .wc-icon {
+  display: none;
+}
+
 /* Save chip, scaled to the slim line. */
 body.pip-host .bottom-line .save-state {
   font-size: 10.5px;

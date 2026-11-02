@@ -1,4 +1,10 @@
-<!-- Stats modal -->
+<!-- Stats modal — a note report, not a card shuffle.
+     One glanceable overview strip (the four length counts) plus four
+     labelled sections that list every stat they own. Nothing hides
+     behind a click-to-cycle rotation: all seventeen numbers are on the
+     board the moment the modal opens. Each value slot carries a
+     data-stat key; app.ts fills them all from calculateNoteStatistics
+     on every show. -->
 <div id="statisticsModal" class="modal fade" role="dialog">
   <div class="modal-dialog modal-lg">
     <!-- Modal content-->
@@ -20,53 +26,123 @@
         <h4 class="modal-title custom-modal-title">Statistics</h4>
       </div>
       <div class="modal-body modal-container">
-        <p class="statistics-hint" data-stat-hint>Click a card to cycle through its statistics.</p>
+        <!-- Spoken only when there is nothing to report (empty note): the
+             board hides and this becomes a small centered empty state. -->
+        <p class="statistics-hint" data-stat-hint hidden>
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <path d="M14 2v6h6" />
+            <path d="M8 13h8" />
+            <path d="M8 17h5" />
+          </svg>
+          This note is empty — type something and the numbers will follow.
+        </p>
         <div class="statistics-board" id="statisticsBoard">
-          <button
-            type="button"
-            class="stat-card stat-card-hero"
-            data-stat-family="count"
-            title="Click to cycle: characters, words, sentences, paragraphs"
-          >
-            <span class="stat-label" data-stat-label>Characters</span>
-            <span class="stat-value" data-stat-value>0</span>
-          </button>
-          <button
-            type="button"
-            class="stat-card"
-            data-stat-family="vocabulary"
-            title="Click to cycle: unique words, most common word, average word length, words per sentence"
-          >
-            <span class="stat-label" data-stat-label>Unique words</span>
-            <span class="stat-value" data-stat-value>0</span>
-          </button>
-          <button
-            type="button"
-            class="stat-card"
-            data-stat-family="time"
-            title="Click to cycle: reading time, speaking time, writing time"
-          >
-            <span class="stat-label" data-stat-label>Reading time</span>
-            <span class="stat-value" data-stat-value>0 min</span>
-          </button>
-          <button
-            type="button"
-            class="stat-card"
-            data-stat-family="records"
-            title="Click to cycle: longest word, longest sentence"
-          >
-            <span class="stat-label" data-stat-label>Longest word</span>
-            <span class="stat-value" data-stat-value>N/A</span>
-          </button>
-          <button
-            type="button"
-            class="stat-card"
-            data-stat-family="quality"
-            title="Click to cycle: readability score, lexical density, estimated pages"
-          >
-            <span class="stat-label" data-stat-label>Readability score</span>
-            <span class="stat-value" data-stat-value>0.0</span>
-          </button>
+          <!-- Overview — the length family at headline size, hairline
+              -separated cells, "Characters" carrying the no-spaces count
+               as a quiet subline. -->
+          <div class="stats-overview" role="group" aria-label="Note length">
+            <div class="stats-overview-cell">
+              <span class="stat-label">Words</span>
+              <span class="stat-value" data-stat="words">0</span>
+            </div>
+            <div class="stats-overview-cell">
+              <span class="stat-label">Characters</span>
+              <span class="stat-value" data-stat="characters">0</span>
+              <span class="stat-sub" data-stat="charactersNoSpaces">0 without spaces</span>
+            </div>
+            <div class="stats-overview-cell">
+              <span class="stat-label">Sentences</span>
+              <span class="stat-value" data-stat="sentences">0</span>
+            </div>
+            <div class="stats-overview-cell">
+              <span class="stat-label">Paragraphs</span>
+              <span class="stat-value" data-stat="paragraphs">0</span>
+            </div>
+          </div>
+
+          <!-- The four sections — every remaining stat, one labelled row
+               each, so nothing needs discovering. -->
+          <div class="stats-sections">
+            <section class="stat-section">
+              <h5 class="stat-section-title">Vocabulary</h5>
+              <dl class="stat-rows">
+                <div class="stat-row">
+                  <dt class="stat-row-label">Unique words</dt>
+                  <dd class="stat-row-value" data-stat="uniqueWords">0</dd>
+                </div>
+                <div class="stat-row">
+                  <dt class="stat-row-label">Most common word</dt>
+                  <dd class="stat-row-value" data-stat="mostCommonWord">N/A</dd>
+                </div>
+                <div class="stat-row">
+                  <dt class="stat-row-label">Average word length</dt>
+                  <dd class="stat-row-value" data-stat="averageWordLength">0</dd>
+                </div>
+                <div class="stat-row">
+                  <dt class="stat-row-label">Words per sentence</dt>
+                  <dd class="stat-row-value" data-stat="wordsPerSentence">0.0</dd>
+                </div>
+              </dl>
+            </section>
+            <section class="stat-section">
+              <h5 class="stat-section-title">Time</h5>
+              <dl class="stat-rows">
+                <div class="stat-row">
+                  <dt class="stat-row-label">Reading time</dt>
+                  <dd class="stat-row-value" data-stat="readingTime">0 min</dd>
+                </div>
+                <div class="stat-row">
+                  <dt class="stat-row-label">Speaking time</dt>
+                  <dd class="stat-row-value" data-stat="estimatedSpeakingTime">0 min</dd>
+                </div>
+                <div class="stat-row">
+                  <dt class="stat-row-label">Writing time</dt>
+                  <dd class="stat-row-value" data-stat="writingTime">0 min</dd>
+                </div>
+              </dl>
+            </section>
+            <section class="stat-section">
+              <h5 class="stat-section-title">Records</h5>
+              <dl class="stat-rows">
+                <div class="stat-row">
+                  <dt class="stat-row-label">Longest word</dt>
+                  <dd class="stat-row-value" data-stat="longestWord">N/A</dd>
+                </div>
+                <div class="stat-row">
+                  <dt class="stat-row-label">Longest sentence</dt>
+                  <dd class="stat-row-value" data-stat="longestSentence">0 words</dd>
+                </div>
+              </dl>
+            </section>
+            <section class="stat-section">
+              <h5 class="stat-section-title">Quality</h5>
+              <dl class="stat-rows">
+                <div class="stat-row">
+                  <dt class="stat-row-label">Readability score</dt>
+                  <dd class="stat-row-value" data-stat="readabilityScore">0.0</dd>
+                </div>
+                <div class="stat-row">
+                  <dt class="stat-row-label">Lexical density</dt>
+                  <dd class="stat-row-value" data-stat="lexicalDensity">0%</dd>
+                </div>
+                <div class="stat-row">
+                  <dt class="stat-row-label">Estimated pages</dt>
+                  <dd class="stat-row-value" data-stat="estimatedPages">0.0 pages</dd>
+                </div>
+              </dl>
+            </section>
+          </div>
         </div>
       </div>
       <div class="modal-footer">

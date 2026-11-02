@@ -142,11 +142,3 @@ td,
 th {
   line-height: normal;
 }
-
-/* 3. The statistics labels carry an inline tooltip icon; in quirks the
-      baseline sat at the icon's bottom edge, in standards the strut lifts
-      the line 0.59px. Nudge the icon back onto the quirks position. */
-.stat-label img {
-  position: relative;
-  top: -0.59px;
-}

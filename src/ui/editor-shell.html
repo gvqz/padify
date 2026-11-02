@@ -1795,11 +1795,12 @@
         </div>
         <!-- The word-count pill — the note's vitals in one quiet capsule.
              The whole pill is the statistics button (a bigger target than
-             the old 10px icon orphan); two segments sit on a hairline
-             divider: words lead, characters follow. #wordCount is the
-             render root the pill module writes into — also while the
-             editor floats in the Picture-in-Picture window, because the
-             node travels with the editor shell. -->
+             the old 10px icon orphan); a mini bar-chart glyph leads (the
+             affordance that says "this opens data"), then two segments on
+             a tapered hairline divider: words lead, characters follow.
+             #wordCount is the render root the pill module writes into —
+             also while the editor floats in the Picture-in-Picture window,
+             because the node travels with the editor shell. -->
         <div class="word-count-container">
           <button
             type="button"
@@ -1810,6 +1811,22 @@
             title="View note statistics"
             aria-label="0 words, 0 characters. View note statistics"
           >
+            <span class="wc-icon" aria-hidden="true">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.4"
+                stroke-linecap="round"
+              >
+                <path d="M5 20v-6" />
+                <path d="M12 20V9" />
+                <path d="M19 20V4" />
+              </svg>
+            </span>
             <span class="wc-seg wc-seg-words">
               <span class="wc-num" data-wc="words">0</span>
               <span class="wc-unit" data-wc-unit="words">words</span>

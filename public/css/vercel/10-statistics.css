@@ -1,70 +1,66 @@
-/* vercel design system — part 10/17: Statistics — click-to-cycle cards
-   The old grid spread twelve static cards over three columns — twelve
-   numbers nobody read past the first row. The board is five cards, one
-   per stat FAMILY, and clicking a card cycles it to the next stat in
-   that family (characters → words → sentences → …), so every number the
-   note has is one click away from the hero card. */
+/* vercel design system — part 10/17: Statistics — the note report
+   The old board shuffled five click-to-cycle cards; sixteen of seventeen
+   stats hid behind a rotation nobody would find. The rebuild is a report:
+   one overview strip (Words / Characters / Sentences / Paragraphs at
+   headline size, hairline-separated cells) and four labelled sections —
+   Vocabulary, Time, Records, Quality — whose rows list every number the
+   note has, label left, value right, Geist definition-list style. */
 /* --------------------------------------------------------------------------
-   10. Statistics — click-to-cycle cards
+   10. Statistics — overview strip + section rows
    -------------------------------------------------------------------------- */
 
+/* The empty-note voice: the board stands down entirely and the hint
+   becomes a small centered empty state — an intentional quiet room, not
+   a stub. The document glyph is inline in the modal markup so no script
+   has to toggle it separately. */
 body .statistics-hint {
   font-size: 12px;
   color: var(--vz-fg-subtle);
   margin: 2px 0 0;
 }
 
-body .statistics-board {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin: 14px 0 4px;
-}
-
-body .stat-card {
-  appearance: none;
-  text-align: left;
+body .statistics-hint:not([hidden]) {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  align-items: center;
   gap: 10px;
-  min-height: 96px;
+  text-align: center;
+  padding: 44px 20px 48px;
+  margin: 0;
+}
+
+body .statistics-hint svg {
+  color: var(--vz-border-strong);
+  opacity: 0.9;
+}
+
+/* ---- Overview strip ------------------------------------------------------
+   Four cells on one hairline frame. "Characters" carries the no-spaces
+   count as a quiet subline — a secondary fact without a fifth cell. */
+body .stats-overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   background: var(--vz-bg-elevated);
   border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius-md);
   box-shadow: var(--vz-shadow-card);
-  padding: 14px 16px;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
-  transition: border-color var(--vz-dur) ease, background-color var(--vz-dur) ease,
-    transform 100ms ease;
+  overflow: hidden;
 }
 
-body .stat-card:hover {
-  border-color: var(--vz-border-strong);
-  background: var(--vz-bg-hover);
+body .stats-overview-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px 18px;
+  min-width: 0;
 }
 
-body .stat-card:active {
-  transform: scale(0.99);
+body .stats-overview-cell + .stats-overview-cell {
+  border-left: 1px solid var(--vz-border);
 }
 
-body .stat-card:focus-visible {
-  outline: 2px solid var(--vz-fg);
-  outline-offset: 2px;
-}
-
-/* The hero card carries the length family — the numbers people open the
-   modal for — at the size the old grid gave every one of its twelve
-   cards. */
-body .stat-card-hero {
-  grid-column: 1 / -1;
-  min-height: 0;
-  padding: 20px 22px;
-}
-
-body .stat-card .stat-label {
+body .stats-overview .stat-label {
   font-size: 11px;
   font-weight: 500;
   color: var(--vz-fg-muted);
@@ -72,50 +68,107 @@ body .stat-card .stat-label {
   letter-spacing: 0.06em;
 }
 
-body .stat-card .stat-value {
-  font-size: 24px;
+body .stats-overview .stat-value {
+  font-size: 28px;
   font-weight: 600;
   letter-spacing: -0.02em;
+  line-height: 1.1;
   color: var(--vz-fg);
   font-variant-numeric: tabular-nums;
-  line-height: 1.2;
-  /* An unbreakable value (the records family shows the note's longest
-     word — a 200-char URL with no hyphens) must wrap inside its card
-     instead of painting past the rounded corner. */
+}
+
+body .stats-overview .stat-sub {
+  font-size: 11px;
+  color: var(--vz-fg-subtle);
+  margin-top: -2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* ---- Sections -------------------------------------------------------------
+   Two columns of framed cards; each row is a quiet definition pair. */
+body .stats-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+body .stat-section {
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  box-shadow: var(--vz-shadow-card);
+  padding: 14px 16px 8px;
+  min-width: 0;
+}
+
+body .stat-section-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--vz-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 6px;
+}
+
+body .stat-rows {
+  margin: 0;
+}
+
+body .stat-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+body .stat-row + .stat-row {
+  border-top: 1px solid var(--vz-border);
+}
+
+body .stat-row-label {
+  font-size: 13px;
+  color: var(--vz-fg-muted);
+  /* The label holds its width and the value wraps — a label breaking
+     into "Longe / st / word" beside a monster URL read as broken. */
+  flex-shrink: 0;
+}
+
+body .stat-row-value {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vz-fg);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  /* An unbreakable value (the longest word can be a 200-char URL) wraps
+     inside its row instead of painting past the rounded corner. */
   overflow-wrap: anywhere;
 }
 
-body .stat-card-hero .stat-value {
-  font-size: 40px;
-}
-
-/* The empty-note state: the hint carries the message; the zeros-and-N/A
-   board stands down instead of pretending to describe an empty note. */
-body .statistics-board.is-empty {
-  opacity: 0.45;
-  pointer-events: none;
-}
-
-/* The value swap on click — a quick rise-and-settle, so the change reads
-   as "same card, next stat" rather than a blink. */
-@keyframes statFlip {
-  0% {
-    opacity: 0.2;
-    transform: translateY(4px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-body .stat-card.stat-flip .stat-value {
-  animation: statFlip 160ms ease;
-}
-
-/* One column on phones. */
+/* Phones: the overview folds to 2×2 (hairlines follow), sections stack. */
 @media (max-width: 640px) {
-  body .statistics-board {
+  body .stats-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body .stats-overview-cell + .stats-overview-cell {
+    border-left: 0;
+  }
+
+  body .stats-overview-cell:nth-child(even) {
+    border-left: 1px solid var(--vz-border);
+  }
+
+  body .stats-overview-cell:nth-child(n + 3) {
+    border-top: 1px solid var(--vz-border);
+  }
+
+  body .stats-sections {
     grid-template-columns: minmax(0, 1fr);
   }
 }
