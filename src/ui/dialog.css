@@ -44,6 +44,15 @@ dialog.vz-dialog::backdrop {
   margin: 0 0 14px;
 }
 
+/* The display:block above is an author rule, and any author rule beats
+   the UA sheet's [hidden] { display: none } — so confirmDialog's
+   inputRow.hidden = true had no visual effect and every confirm face
+   (the update popup, the delete asks) carried a dead prompt input.
+   Spell the hidden state out. */
+.vz-dialog-input-row[hidden] {
+  display: none;
+}
+
 .vz-dialog-input-label {
   display: block;
   margin-bottom: 5px;
