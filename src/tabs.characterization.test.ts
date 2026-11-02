@@ -1276,7 +1276,7 @@ describe('TabManager — the note menu actions', () => {
     await flushPendingWrites();
   }, 20000);
 
-  it('changeNoteType re-kinds a note in place — switching to it, content untouched, move persisted', async () => {
+  it('changeNoteType re-kinds a note in place — switching to it, content converted, move persisted', async () => {
     saveNotes(
       {
         tabs: [
@@ -1297,7 +1297,9 @@ describe('TabManager — the note menu actions', () => {
     expect(manager.getActive()?.id).toBe('html1'); // the switch is part of the deal
     const changed = manager.getTabs().find((entry) => entry.id === 'html1');
     expect(changed?.noteType).toBe('markdown');
-    expect(changed?.content).toBe('<p>rich</p>'); // content untouched
+    // The html walked out as markdown — NOT the verbatim `<p>rich</p>`
+    // soup the old re-land dropped into the markdown source.
+    expect(changed?.content).toBe('rich');
     await flushAndReboot();
     const persisted = await loadNotes();
     expect(persisted.tabs.find((entry) => entry.id === 'html1')?.noteType).toBe('markdown');
@@ -1314,6 +1316,10 @@ describe('TabManager — the note menu actions', () => {
     const manager = await bootedManager();
     manager.changeNoteType('md1', 'standard');
     expect(manager.getTabs().find((entry) => entry.id === 'md1')?.noteType).toBeUndefined();
+    // The markdown source rendered INTO the note subset — `#` furniture
+    // becomes the heading it always meant to be.
+    const landed = manager.getTabs().find((entry) => entry.id === 'md1');
+    expect(landed?.content).toContain('<h1>heading</h1>');
 
     // Same type again: nothing moves (no painter swap, no persist churn).
     const before = manager.getTabs().find((entry) => entry.id === 'md1')?.updatedAt;

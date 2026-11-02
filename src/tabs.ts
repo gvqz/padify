@@ -53,6 +53,7 @@ import {
   type NoteSurface,
 } from './editor/surface';
 import { renderMarkdownToHtml } from './editor/markdown/render';
+import { convertNoteContent } from './editor/note-convert';
 import {
   deriveTabTitle,
   escapeHtml,
@@ -1063,24 +1064,90 @@ export class TabManager {
   /**
    * Changes a note's type in place — the note menu's Change type submenu.
    * Switches to the note first (the painter and every chrome that reads
-   * the kind follow the ACTIVE note), then re-lands the SAME content
-   * under the new kind through applySnapshotToActive — the restore path
-   * that already owns the type-move, the html commit and the re-ink.
+   * the kind follow the ACTIVE note), then converts the content through
+   * the pair matrix (editor/note-convert.ts) instead of re-landing the
+   * old bytes under the new kind — the verbatim move was how a rich note
+   * turned into HTML soup in the markdown source and a task list read as
+   * wiped. A lossy conversion asks first: the original rides into a
+   * snapshot, the same deal closing a tab offers.
    */
   changeNoteType(tabId: string, noteType: NoteType): void {
     const target = this.tabs.find((entry) => entry.id === tabId);
     if (!target || (target.noteType ?? DEFAULT_NOTE_TYPE) === noteType) {
       return;
     }
-    if (tabId !== this.activeId) {
+    // The active note's newest words still live in the editor — capture
+    // them so the conversion reads what the user sees (duplicateNote's deal).
+    if (tabId === this.activeId) {
+      this.saveActiveFromEditor();
+    }
+    const from = target.noteType ?? DEFAULT_NOTE_TYPE;
+    const conversion = convertNoteContent(target.content, from, noteType);
+    if (!conversion.convertible) {
+      showToast(
+        `"${deriveTabTitle(target)}" is a note type this Padify doesn't know — it can't be converted here.`,
+      );
+      return;
+    }
+    if (conversion.lossy) {
+      void confirmDialog({
+        title: `Convert to ${noteTypeLabel(noteType)}?`,
+        text: `${conversion.lossNote ?? 'Some content cannot carry over.'} A snapshot of the note is saved first.`,
+        confirm: 'Convert',
+        cancel: 'Keep it',
+      }).then((confirmed) => {
+        if (confirmed) {
+          void this.convertAfterSnapshot(target.id, noteType, conversion.content);
+        }
+      });
+      return;
+    }
+    this.applyTypeConversion(tabId, noteType, conversion.content);
+    showToast(`Note type: ${noteTypeLabel(noteType).toLowerCase()}.`);
+  }
+
+  /** The lossy arm: the confirmed conversion snapshots the original
+   *  first (best effort — a snapshots outage must not block the move),
+   *  then lands the converted content. */
+  private async convertAfterSnapshot(
+    tabId: string,
+    noteType: NoteType,
+    content: string,
+  ): Promise<void> {
+    const tab = this.tabs.find((entry) => entry.id === tabId);
+    if (tab && window.snapshotsManager) {
+      try {
+        await window.snapshotsManager.createSnapshotFromNote(
+          tab.content,
+          tab.noteType,
+          tab.id,
+          `Before converting "${deriveTabTitle(tab)}" to ${noteTypeLabel(noteType).toLowerCase()}`,
+          tab.colorTheme,
+          tab.name ?? undefined,
+        );
+      } catch {
+        /* snapshots unavailable — the conversion still proceeds */
+      }
+    }
+    this.applyTypeConversion(tabId, noteType, content);
+    showToast(`Note type: ${noteTypeLabel(noteType).toLowerCase()}.`);
+  }
+
+  /** Lands converted content under the new kind — switch-to-first, then
+   *  the restore path applySnapshotToActive owns (painter swap, the html
+   *  commit, the re-ink). The strip re-renders so the type badge follows:
+   *  a task list's dot, a markdown note's icon — the label refresh alone
+   *  left a stale badge behind. */
+  private applyTypeConversion(tabId: string, noteType: NoteType, content: string): void {
+    if (this.getActive()?.id !== tabId) {
       this.switchTo(tabId);
     }
     const active = this.getActive();
     if (!active || active.id !== tabId) {
       return;
     }
-    this.applySnapshotToActive(active.content, noteType, active.colorTheme);
-    showToast(`Note type: ${noteTypeLabel(noteType).toLowerCase()}.`);
+    this.applySnapshotToActive(content, noteType, active.colorTheme);
+    this.renderStrip();
   }
 
   /**
