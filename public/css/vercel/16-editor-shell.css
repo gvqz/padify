@@ -1890,15 +1890,31 @@ body.pip-host .bottom-line .word-count-container.transparency {
   font-size: 10.5px;
 }
 
-body.pip-host .bottom-line .word-count-container p {
-  color: inherit;
-  font-size: inherit;
+/* The button fills the capsule on the page; here it flattens to quiet
+   text — and goes inert: the statistics modal lives in the main
+   document, so a click inside the popup could never open it (the old
+   anchor was display:none'd for exactly that reason). */
+body.pip-host .bottom-line .word-count-container .wc-pill {
+  padding: 0;
+  gap: 5px;
+  font-size: 10.5px;
+  cursor: default;
+  pointer-events: none;
+  transform: none;
 }
 
-/* The statistics anchor opens a main-window modal — dead weight in the
-   popup, so it is not painted at all (pointer-dead was not enough). */
-body.pip-host .word-count-container a {
-  display: none;
+body.pip-host .bottom-line .word-count-container .wc-num {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--vz-fg-muted);
+}
+
+body.pip-host .bottom-line .word-count-container .wc-unit {
+  font-size: 10px;
+}
+
+body.pip-host .bottom-line .word-count-container .wc-divider {
+  height: 10px;
 }
 
 /* Save chip, scaled to the slim line. */

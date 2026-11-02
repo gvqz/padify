@@ -6,60 +6,145 @@
    9. Bottom pills — quiet bordered capsules
    -------------------------------------------------------------------------- */
 
-body .bottom-line .transparency.word-count-container {
+/* --------------------------------------------------------------------------
+   Word count pill — the note's vitals in one quiet capsule.
+
+   The whole pill is a <button class="wc-pill"> that opens the statistics
+   modal (the old layout buried a 10px icon at the end of a text sentence).
+   Two segments share the capsule on a hairline divider: WORDS lead (the
+   headline metric), CHARACTERS follow. Numbers are tabular — a pill whose
+   width jitters on every keystroke reads broken; units are quiet lowercase
+   echoes of the statistics board's label typography.
+   -------------------------------------------------------------------------- */
+
+body .bottom-line .word-count-container {
+  margin-left: auto;
+  padding: 0;
   background: var(--vz-bg-elevated) !important;
   border: 1px solid var(--vz-border);
   border-radius: 999px;
   box-shadow: var(--vz-shadow-pill) !important;
   color: var(--vz-fg-muted);
-  font-weight: 500;
-  font-size: 12px;
-  padding: 6px 14px;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  transition: border-color var(--vz-dur) ease, color var(--vz-dur) ease;
+  overflow: hidden;
+  transition:
+    border-color var(--vz-dur) ease,
+    box-shadow var(--vz-dur) ease;
 }
 
-body .bottom-line .transparency.word-count-container:hover {
-  border-color: var(--vz-border-strong);
-  color: var(--vz-fg);
-}
-
-body .bottom-line .transparency.word-count-container p {
-  color: inherit;
-}
-
-body .bottom-line .transparency.word-count-container a,
-body .bottom-line .transparency.word-count-container a svg {
-  color: var(--vz-fg-subtle);
-  transition: color var(--vz-dur) ease;
-}
-
-body .bottom-line .transparency.word-count-container a:hover,
-body .bottom-line .transparency.word-count-container a:focus {
-  color: var(--vz-fg);
-}
-
-body.dark .bottom-line .transparency.word-count-container {
+body.dark .bottom-line .word-count-container {
   background: var(--vz-bg-elevated) !important;
   border-color: var(--vz-border);
   box-shadow: var(--vz-shadow-pill) !important;
+}
+
+/* The button fills the capsule; the container owns the frame so the
+   press feedback (scale on the button) never distorts the border. */
+body .bottom-line .word-count-container .wc-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border: 0;
+  margin: 0;
+  background: transparent;
+  border-radius: inherit;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1;
   color: var(--vz-fg-muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--vz-dur) ease,
+    color var(--vz-dur) ease,
+    transform var(--vz-dur) var(--vz-spring);
 }
 
-body.dark .bottom-line .transparency.word-count-container:hover {
-  border-color: var(--vz-border-strong);
+body .bottom-line .word-count-container .wc-pill:hover {
+  /* --vz-bg-subtle (#fafafa) reads as nothing on the white capsule;
+     the chip tone gives a quiet but visible answer under the cursor. */
+  background: var(--vz-bg-chip);
   color: var(--vz-fg);
 }
 
-body.dark .bottom-line .transparency.word-count-container a,
-body.dark .bottom-line .transparency.word-count-container a svg {
+body .bottom-line .word-count-container .wc-pill:active {
+  transform: scale(0.97);
+}
+
+body .bottom-line .word-count-container .wc-pill:focus-visible {
+  outline: 2px solid var(--vz-fg);
+  outline-offset: 2px;
+}
+
+/* Segments — number leads, unit follows. Tabular numerals keep every
+   digit (and the whole capsule) steady while counting. */
+body .bottom-line .word-count-container .wc-seg {
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+body .bottom-line .word-count-container .wc-num {
+  color: var(--vz-fg);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+body .bottom-line .word-count-container .wc-unit {
+  margin-left: 4px;
   color: var(--vz-fg-subtle);
+  font-weight: 500;
+  font-size: 11px;
 }
 
-body.dark .bottom-line .transparency.word-count-container a:hover,
-body.dark .bottom-line .transparency.word-count-container a:focus {
-  color: var(--vz-fg);
+/* The hairline between the two counts. */
+body .bottom-line .word-count-container .wc-divider {
+  width: 1px;
+  height: 11px;
+  background: var(--vz-border);
+}
+
+/* Empty note — "0 words" alone, stood down. A double zero reads as
+   noise; the characters segment (provably 0 too) hides until it has
+   something to say. */
+body .bottom-line .word-count-container[data-wc-empty] .wc-seg-chars,
+body .bottom-line .word-count-container[data-wc-empty] .wc-divider {
+  display: none;
+}
+
+body .bottom-line .word-count-container[data-wc-empty] .wc-pill {
+  cursor: default;
+}
+
+body .bottom-line .word-count-container[data-wc-empty] .wc-num {
+  color: var(--vz-fg-subtle);
+  font-weight: 500;
+}
+
+/* Value change — a small rise-and-settle tick, the statistics board's
+   statFlip language scaled down to pill size. */
+@keyframes wc-tick {
+  from {
+    opacity: 0.3;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+body .bottom-line .word-count-container .wc-num.wc-tick {
+  animation: wc-tick 200ms var(--vz-ease);
+}
+
+/* Hover lifts the capsule's hairline; the tick stays subtle. */
+body .bottom-line .word-count-container:hover {
+  border-color: var(--vz-border-strong);
 }
 
 /* Timer pill — same capsule */

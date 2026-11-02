@@ -34,4 +34,18 @@
   body.dark .timer-pill.timer-ending {
     animation: none;
   }
+
+  /* The word-count pill: no rise-and-settle on new values, and the
+     press scale goes flat. */
+  body .bottom-line .word-count-container .wc-num.wc-tick {
+    animation: none;
+  }
+
+  body .bottom-line .word-count-container .wc-pill {
+    transition: none;
+  }
+
+  body .bottom-line .word-count-container .wc-pill:active {
+    transform: none;
+  }
 }

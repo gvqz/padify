@@ -3,7 +3,6 @@ import {
   countWords,
   extractWordTokens,
   countSyllables,
-  calculateCharactersAndWords,
   calculateNoteStatistics,
   STOP_WORDS,
 } from './text-stats';
@@ -53,17 +52,6 @@ describe('countSyllables', () => {
     expect(countSyllables('make')).toBe(1);
     // 'l' is excluded from the strip set, so 'table' keeps its final e → 2.
     expect(countSyllables('table')).toBe(2);
-  });
-});
-
-describe('calculateCharactersAndWords', () => {
-  it('formats counts with pluralisation', () => {
-    expect(calculateCharactersAndWords('hello world')).toBe('11 characters • 2 words');
-    expect(calculateCharactersAndWords('a')).toBe('1 character • 1 word');
-  });
-
-  it('formats zero counts as plural', () => {
-    expect(calculateCharactersAndWords('')).toBe('0 characters • 0 words');
   });
 });
 

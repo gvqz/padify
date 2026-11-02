@@ -28,8 +28,12 @@ test.describe('editor core', () => {
     const editor = page.locator('#note');
     await expect(editor).toContainText('Welcome! Padify is an offline-capable notepad');
 
+    // The pill's two segments both carry the welcome note's counts and
+    // the button describes them (words lead, characters follow).
     const pill = page.locator('#wordCount');
-    await expect(pill).toContainText(/characters? • \d+ words?/);
+    await expect(pill.locator('[data-wc="words"]')).toHaveText(/\d/);
+    await expect(pill.locator('[data-wc="chars"]')).toHaveText(/\d/);
+    await expect(pill).toHaveAttribute('aria-label', /\d+ words?, \d+ characters/);
   });
 
   test('typing updates the pill and survives a reload (IndexedDB autosave)', async ({ page }) => {
@@ -90,7 +94,9 @@ test.describe('navbar & chrome', () => {
 test.describe('modals', () => {
   test('statistics modal opens with real numbers', async ({ page }) => {
     await page.goto('/');
-    await page.locator('a[data-target="#statisticsModal"]').click();
+    // The whole pill is the statistics button now (the old layout buried
+    // a 10px icon link at the end of the count sentence).
+    await page.locator('#wordCount').click();
     const modal = page.locator('#statisticsModal');
     await expect(modal).toHaveClass(/in/);
     await expect(modal).toContainText(/word/i);

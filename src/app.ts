@@ -1,6 +1,6 @@
 import { $ } from './lib/q';
 import { selector } from './selector';
-import { calculateCharactersAndWords, calculateNoteStatistics } from './lib/text-stats';
+import { calculateNoteStatistics } from './lib/text-stats';
 import { debounce } from './lib/debounce';
 import { shortcutLabel } from './lib/platform';
 import { copyNotesToClipboard, deleteNotes } from './context-menu';
@@ -186,8 +186,6 @@ export async function initApp(): Promise<void> {
     initCloudUI();
     initShareUI();
   });
-  const characterAndWordCountText = calculateCharactersAndWords(tabManager.getActiveText());
-
   // Typing explosion effects (see typing-effects.ts).
   const typingEffects = initTypingEffects(notepad, editorConfig);
 
@@ -228,7 +226,9 @@ export async function initApp(): Promise<void> {
     trackWritingActivity();
   });
 
-  notepad.wordCount.text(characterAndWordCountText);
+  // Boot the pill from the restored note — the structured renderer fills
+  // the two segments, the empty state and the aria-label in one pass.
+  updateWordCountPill(tabManager.getActiveText());
 
   // Paste keeps the note's own formatting subset: a styled clipboard
   // (text/html — copied from this note, another note, or any web page)

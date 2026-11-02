@@ -125,18 +125,20 @@ test.describe('floating window', () => {
     // A fresh note side-steps the welcome note's async storage restore
     // entirely — the count starts at a known zero.
     await page.locator('#addTab').click();
-    await expect(page.locator('#wordCount')).toHaveText('0 characters • 0 words', {
+    await expect(page.locator('#wordCount [data-wc="words"]')).toHaveText('0', {
       timeout: 10_000,
     });
+    await expect(page.locator('.word-count-container')).toHaveAttribute('data-wc-empty', '');
 
     const popup = await openFloatingWindow(page);
 
     await popup.locator('#note').click();
     await popup.keyboard.type('Typed in the floating window.');
     // The app's input wiring debounces 500ms; the pill follows.
-    await expect(popup.locator('#wordCount')).toHaveText('29 characters • 5 words', {
+    await expect(popup.locator('#wordCount [data-wc="words"]')).toHaveText('5', {
       timeout: 5_000,
     });
+    await expect(popup.locator('#wordCount [data-wc="chars"]')).toHaveText('29');
 
     // Escape closes the window and returns the editor to the main shell.
     // The settle mirrors the other close-path tests: the module's pagehide
@@ -226,9 +228,10 @@ test.describe('floating window', () => {
     await page.locator('#addTab').click();
     await page.locator('#note').click();
     await page.keyboard.type('Grocery list');
-    await expect(page.locator('#wordCount')).toHaveText('12 characters • 2 words', {
+    await expect(page.locator('#wordCount [data-wc="chars"]')).toHaveText('12', {
       timeout: 10_000,
     });
+    await expect(page.locator('#wordCount [data-wc="words"]')).toHaveText('2');
 
     const popup = await openFloatingWindow(page);
     await expect(popup.locator('#pipHeaderTitle')).toHaveText('Grocery list');
@@ -249,16 +252,16 @@ test.describe('floating window', () => {
     await expect(popup.locator('.pip-notes')).toBeHidden();
     await expect(popup.locator('#pipHeaderTitle')).toHaveText(/Welcome.*Padify/);
     await expect(popup.locator('#note')).toContainText('offline-capable notepad');
-    await expect(popup.locator('#wordCount')).not.toHaveText('12 characters • 2 words');
+    await expect(popup.locator('#wordCount [data-wc="chars"]')).not.toHaveText('12');
 
     // A new note started from the browser is a plain, empty one.
     await popup.locator('.pip-notes-btn').click();
     await popup.locator('.pip-note-new').click();
     await expect(popup.locator('#pipHeaderTitle')).toHaveText('Untitled');
-    await expect(popup.locator('#wordCount')).toHaveText('0 characters • 0 words');
+    await expect(popup.locator('#wordCount [data-wc="words"]')).toHaveText('0');
     await popup.locator('#note').click();
     await popup.keyboard.type('From the floating window');
-    await expect(popup.locator('#wordCount')).not.toHaveText('0 characters • 0 words');
+    await expect(popup.locator('#wordCount [data-wc="words"]')).not.toHaveText('0');
 
     // Escape peels the browser back before it ever reaches the window.
     await popup.locator('.pip-notes-btn').click();

@@ -54,16 +54,6 @@ export function countSyllables(word: string): number {
   return syllableMatches ? syllableMatches.length : 1;
 }
 
-export function calculateCharactersAndWords(str: string): string {
-  const characterCount = str.length;
-  const wordCount = str !== '' ? countWords(str) : 0;
-  const characterString = characterCount === 1 ? 'character' : 'characters';
-  const wordString = wordCount === 1 ? 'word' : 'words';
-  const wordCountText = `${characterCount} ${characterString} • ${wordCount} ${wordString}`;
-
-  return wordCountText;
-}
-
 export interface NoteStatistics {
   characters: number;
   charactersNoSpaces: number;
