@@ -106,17 +106,21 @@ export function registerServiceWorker(): void {
         // Deploys otherwise wait for a fresh tab. Re-check when the page
         // returns to the foreground (cheap: one conditional request per
         // focus against a byte-compared sw.js) and once an hour.
+        const checkForDeploy = (): void => {
+          void registration.update();
+        };
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'visible') {
-            void registration.update();
+            checkForDeploy();
           }
         });
-        setInterval(
-          () => {
-            void registration.update();
-          },
-          60 * 60 * 1000,
-        );
+        // A refocus that never flips visibility: an installed window (and
+        // a fully covered desktop window) stays 'visible' while unfocused,
+        // so coming back to it fires 'focus' but no visibilitychange —
+        // without this listener such a window only notices a deploy when
+        // the hourly check happens to land.
+        window.addEventListener('focus', checkForDeploy);
+        setInterval(checkForDeploy, 60 * 60 * 1000);
       })
       .catch((err: unknown) => {
         // Registration failed — warn (not log) so it shows in the console
