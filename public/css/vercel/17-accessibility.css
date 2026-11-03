@@ -41,6 +41,17 @@
     animation: none;
   }
 
+  /* The live speed segment: the dot holds still (it keeps its color,
+     which is signal enough) and the entrance stops animating in. */
+  body .bottom-line .word-count-container .wc-seg-wpm {
+    animation: none;
+  }
+
+  body .bottom-line .word-count-container .wc-live-dot::after {
+    animation: none;
+    opacity: 0.32;
+  }
+
   body .bottom-line .word-count-container .wc-pill {
     transition: none;
   }

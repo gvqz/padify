@@ -150,13 +150,17 @@ function renderPill(doc: Document, { words, chars }: PillCounts): void {
   const wpm = currentSpeed();
   renderSpeed(doc, wpm);
 
-  let label = `${words} ${plural(words, 'word', 'words')}, ${chars} ${plural(chars, 'character', 'characters')}`;
-  if (wpm !== null) {
-    label += `, about ${wpm} ${plural(wpm, 'word', 'words')} per minute`;
-  }
-  label += '. View note statistics';
+  // The accessible name mirrors what is on screen: a segment the
+  // content mode stands down stays out of the label (its count is kept
+  // written for the PiP mirror and the mode-flip reveal, but it is not
+  // this capsule's story in the current mode). At least one segment is
+  // always visible, so the label never comes out empty.
+  const parts: string[] = [];
+  if (wordsVisible) parts.push(`${words} ${plural(words, 'word', 'words')}`);
+  if (charsVisible) parts.push(`${chars} ${plural(chars, 'character', 'characters')}`);
+  if (wpm !== null) parts.push(`about ${wpm} ${plural(wpm, 'word', 'words')} per minute`);
+  pill.setAttribute('aria-label', `${parts.join(', ')}. View note statistics`);
   pill.title = `${readingTimeHint(words)}View note statistics`;
-  pill.setAttribute('aria-label', label);
 }
 
 /** Renders into every document that carries a pill — the main window and,
@@ -186,9 +190,14 @@ export function updateWordCountPill(note: string = ''): void {
 /**
  * Applies the pill preferences (content mode, typing speed) and re-renders.
  * Called on boot restore, preference changes and the reset-to-defaults flow.
+ * Entries the caller leaves undefined are ignored rather than copied — a
+ * spread would otherwise blank a field the caller merely failed to pass.
  */
 export function configureWordCountPill(config: Partial<PillConfig>): void {
-  pillConfig = { ...pillConfig, ...config };
+  const patch = Object.fromEntries(
+    Object.entries(config).filter(([, value]) => value !== undefined),
+  ) as Partial<PillConfig>;
+  pillConfig = { ...pillConfig, ...patch };
   if (!pillConfig.typingSpeed) {
     cancelIdleHide();
   }

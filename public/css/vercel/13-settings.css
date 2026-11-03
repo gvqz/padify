@@ -416,6 +416,24 @@ body.dark .pref-row:hover {
   text-transform: uppercase;
 }
 
+/* Dependent rows — a sub-setting that only means something while its
+   master switch is on (the counter-pill card's two follow-ups) stands
+   down with the master: dimmed, controls inert. The controls carry the
+   native `disabled` attribute; this class is the visual half. */
+.pref-row.is-disabled {
+  opacity: 0.45;
+}
+
+.pref-row.is-disabled:hover {
+  background-color: transparent;
+}
+
+.pref-row.is-disabled .form-control:disabled {
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg-muted);
+  opacity: 1;
+}
+
 /* Segmented theme control */
 .pref-theme-seg {
   display: flex;

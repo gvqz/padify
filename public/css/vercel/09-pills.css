@@ -155,6 +155,63 @@ body .bottom-line .word-count-container .wc-divider[hidden] {
   display: none;
 }
 
+/* The live speed segment — same skeleton as its siblings, plus the two
+   things the static counts don't have: a presence dot and an entrance.
+   The animation plays whenever the segment un-hides (display flips
+   from none back to inline-flex), so the speed feels summoned rather
+   than popped; it does NOT replay on the per-keystroke re-renders,
+   which only flip `hidden` when standing up from nothing. */
+body .bottom-line .word-count-container .wc-seg-wpm {
+  gap: 2px;
+  animation: wc-seg-in 180ms var(--vz-ease);
+}
+
+@keyframes wc-seg-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Presence dot — the universal live signal, in the success green the
+   rest of the app saves for exactly this meaning. The halo breathes
+   for as long as the reading is fresh. */
+body .bottom-line .word-count-container .wc-live-dot {
+  position: relative;
+  align-self: center;
+  width: 5px;
+  height: 5px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--vz-success);
+  flex: 0 0 auto;
+}
+
+body .bottom-line .word-count-container .wc-live-dot::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background: var(--vz-success);
+  animation: wc-live-pulse 2.2s var(--vz-ease) infinite;
+}
+
+@keyframes wc-live-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.32;
+  }
+  55% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
 /* Empty note — "0 words" alone, stood down. A double zero reads as
    noise; the dimming here, the segment hiding in the renderer (which
    keeps "0 characters" alive in characters-only mode). */

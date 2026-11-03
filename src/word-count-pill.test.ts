@@ -27,6 +27,7 @@ function mountPill(): void {
           </span>
           <span class="wc-divider wc-divider-wpm" aria-hidden="true" hidden></span>
           <span class="wc-seg wc-seg-wpm" hidden>
+            <span class="wc-live-dot" aria-hidden="true"></span>
             <span class="wc-num" data-wc="wpm">0</span>
             <span class="wc-unit" data-wc-unit="wpm">wpm</span>
           </span>
@@ -125,6 +126,24 @@ describe('updateWordCountPill', () => {
     expect(pill().getAttribute('aria-label')).toBe('2 words, 11 characters. View note statistics');
   });
 
+  it('the aria-label mirrors only the segments the mode keeps visible', () => {
+    updateWordCountPill('');
+    // Empty note in the mixed mode: the characters segment is stood down.
+    expect(pill().getAttribute('aria-label')).toBe('0 words. View note statistics');
+
+    configureWordCountPill({ content: 'words' });
+    updateWordCountPill('hello world');
+    expect(pill().getAttribute('aria-label')).toBe('2 words. View note statistics');
+
+    configureWordCountPill({ content: 'characters' });
+    updateWordCountPill('hello world');
+    expect(pill().getAttribute('aria-label')).toBe('11 characters. View note statistics');
+
+    // The characters-only mode keeps its zero on an empty note.
+    updateWordCountPill('');
+    expect(pill().getAttribute('aria-label')).toBe('0 characters. View note statistics');
+  });
+
   it('surfaces reading time in the tooltip', () => {
     updateWordCountPill('');
     expect(pill().title).toBe('View note statistics');
@@ -180,6 +199,16 @@ describe('pill content modes', () => {
     expect(charsSeg().hidden).toBe(false);
     expect(charsNum()).toBe('11');
   });
+
+  it('a patch entry left undefined cannot blank its field', () => {
+    updateWordCountPill('hello world');
+    configureWordCountPill({ content: 'words' });
+    // A caller passing { content: undefined } means "no opinion" — the
+    // spread would otherwise copy the key and blank the mode.
+    configureWordCountPill({ content: undefined });
+    expect(wordsSeg().hidden).toBe(false);
+    expect(charsSeg().hidden).toBe(true);
+  });
 });
 
 describe('live typing speed segment', () => {
@@ -207,7 +236,23 @@ describe('live typing speed segment', () => {
     expect(wpmDivider().hidden).toBe(false);
     expect(wpmNum()).toBe('24');
     // The aria-label mentions the speed while it is live.
-    expect(pill().getAttribute('aria-label')).toContain('per minute');
+    expect(pill().getAttribute('aria-label')).toContain('about 24 words per minute');
+  });
+
+  it('the live dot rides the segment and survives every re-render', () => {
+    configureWordCountPill({ typingSpeed: true });
+    for (let i = 0; i < 30; i++) {
+      pulseWordCountPill();
+    }
+    const dot = () => wpmSeg().querySelector('.wc-live-dot');
+    expect(dot()).not.toBeNull();
+
+    // The stand-down and revival do not consume the dot — it is part
+    // of the segment's markup, not something the renderer mints.
+    vi.advanceTimersByTime(7_000);
+    expect(wpmSeg().hidden).toBe(true);
+    pulseWordCountPill();
+    expect(dot()).not.toBeNull();
   });
 
   it('stands down after the live deadline instead of freezing', () => {

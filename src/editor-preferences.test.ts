@@ -1,9 +1,10 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { $ } from './lib/q';
+import { $, type Q } from './lib/q';
 import type { EditorConfig, NotepadUI } from './selector';
 import { initEditorPreferences } from './editor-preferences';
 import { resetStorageForTests, storageReady } from './storage';
+import { setSetting } from './state/settings';
 
 /**
  * The spell-check toggle's live-apply contract (issue #116): the Markdown
@@ -23,6 +24,8 @@ const editorConfig: EditorConfig = {
   defaultOptimalLineLengthPadding: '0px',
   defaultOptimalLineLength: false,
   defaultShowWordCountPill: 'Yes',
+  defaultPillContent: 'both',
+  defaultTypingSpeed: false,
   defaultSpellCheck: true,
   defaultWriteDirection: 'ltr',
   defaultTexture: 'normal',
@@ -109,5 +112,74 @@ describe('the spell-check toggle applies live to the mounted Markdown WYSIWYG (i
     $('#spellCheck').prop('checked', false).trigger('change');
 
     expect(document.getElementById('note')!.getAttribute('spellcheck')).toBe('false');
+  });
+});
+
+describe('the counter-pill sub-settings follow the master switch', () => {
+  // The preferences modal wraps every control in a .pref-row — the
+  // disable wiring dims exactly that ancestor.
+  const wrapRows = (): void => {
+    const wrap = (selector: string): void => {
+      const el = document.querySelector(selector)!;
+      const row = document.createElement('div');
+      row.className = 'pref-row';
+      el.replaceWith(row);
+      row.appendChild(el);
+    };
+    wrap('#pillContent');
+    wrap('#typingSpeed');
+  };
+
+  const pillRow = (): Q => $('#pillContent').closest('.pref-row');
+  const speedRow = (): Q => $('#typingSpeed').closest('.pref-row');
+  const ctrl = (id: string): HTMLInputElement | HTMLSelectElement =>
+    document.getElementById(id) as HTMLInputElement | HTMLSelectElement;
+
+  beforeEach(async () => {
+    resetStorageForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    localStorage.clear();
+    await storageReady();
+    mountShell();
+    wrapRows();
+    wirePreferences();
+  });
+
+  it('the master defaults ON, so the sub-settings start enabled', () => {
+    expect(ctrl('pillContent').disabled).toBe(false);
+    expect(ctrl('typingSpeed').disabled).toBe(false);
+    expect(pillRow().hasClass('is-disabled')).toBe(false);
+    expect(speedRow().hasClass('is-disabled')).toBe(false);
+  });
+
+  it('turning the master OFF disables and dims both sub-settings', () => {
+    $('#showWordCountPill').prop('checked', false).trigger('change');
+
+    expect(ctrl('pillContent').disabled).toBe(true);
+    expect(ctrl('typingSpeed').disabled).toBe(true);
+    expect(pillRow().hasClass('is-disabled')).toBe(true);
+    expect(speedRow().hasClass('is-disabled')).toBe(true);
+  });
+
+  it('turning the master back ON restores them', () => {
+    $('#showWordCountPill').prop('checked', false).trigger('change');
+    $('#showWordCountPill').prop('checked', true).trigger('change');
+
+    expect(ctrl('pillContent').disabled).toBe(false);
+    expect(pillRow().hasClass('is-disabled')).toBe(false);
+    expect(speedRow().hasClass('is-disabled')).toBe(false);
+  });
+
+  it('a boot restore with the master stored OFF lands the sub-settings disabled', () => {
+    setSetting('userChosenWordCountPillSelected', 'No');
+
+    // Re-mount with the stored state in place.
+    mountShell();
+    wrapRows();
+    wirePreferences();
+
+    expect(ctrl('pillContent').disabled).toBe(true);
+    expect(speedRow().hasClass('is-disabled')).toBe(true);
+    expect(ctrl('typingSpeed').disabled).toBe(true);
   });
 });

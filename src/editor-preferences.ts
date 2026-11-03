@@ -27,6 +27,18 @@ function resetShowWordCountPill(defaultShowWordCountPill: string): void {
     $('.word-count-container').hide();
   }
   $('#showWordCountPill').prop('checked', defaultShowWordCountPill === 'Yes');
+  setPillSubrowsEnabled(defaultShowWordCountPill === 'Yes');
+}
+
+// The counter-pill card's two follow-ups (content mode, live typing
+// speed) only mean something while the pill itself is shown — they
+// stand down with the master switch: controls carry the native
+// `disabled`, the rows get the dimming half from 13-settings.css.
+function setPillSubrowsEnabled(enabled: boolean): void {
+  $('#pillContent').prop('disabled', !enabled);
+  $('#typingSpeed').prop('disabled', !enabled);
+  $('#pillContent').closest('.pref-row').toggleClass('is-disabled', !enabled);
+  $('#typingSpeed').closest('.pref-row').toggleClass('is-disabled', !enabled);
 }
 
 function resetPillContent(defaultPillContent: string): void {
@@ -167,6 +179,9 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
 
   configureWordCountPill({ content: pillContent, typingSpeed: typingSpeedEnabled });
 
+  // The sub-settings inherit the master switch's restored state.
+  setPillSubrowsEnabled(notepad.showWordCountPill.is(':checked'));
+
   const userChosenWriteDirection = getSetting('userChosenWriteDirection');
   if (userChosenWriteDirection) {
     notepad.note.css('direction', userChosenWriteDirection);
@@ -253,6 +268,7 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
       notepad.wordCountContainer.hide();
       setState('userChosenWordCountPillSelected', 'No');
     }
+    setPillSubrowsEnabled($(this).is(':checked'));
   });
 
   notepad.pillContent.on('change', function () {
