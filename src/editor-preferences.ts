@@ -2,6 +2,7 @@ import { $ } from './lib/q';
 import type { EditorConfig, NotepadUI, StateKey } from './selector';
 import { stateGet } from './storage';
 import { getSetting, removeSetting, setSetting } from './state/settings';
+import { configureWordCountPill, type PillContent } from './word-count-pill';
 
 // --- "Reset to defaults" primitives ---------------------------------
 // Every editor preference has a reset that returns the surface AND its
@@ -26,6 +27,16 @@ function resetShowWordCountPill(defaultShowWordCountPill: string): void {
     $('.word-count-container').hide();
   }
   $('#showWordCountPill').prop('checked', defaultShowWordCountPill === 'Yes');
+}
+
+function resetPillContent(defaultPillContent: string): void {
+  $('#pillContent').val(defaultPillContent);
+  configureWordCountPill({ content: defaultPillContent as PillContent });
+}
+
+function resetTypingSpeed(defaultTypingSpeed: boolean): void {
+  $('#typingSpeed').prop('checked', defaultTypingSpeed);
+  configureWordCountPill({ typingSpeed: defaultTypingSpeed });
 }
 
 function resetWriteDirection(defaultWriteDirection: string): void {
@@ -137,6 +148,25 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
   // The word count pill always uses the counter pill style.
   notepad.wordCountContainer.addClass('transparency');
 
+  // What the capsule carries: the content mode and the live typing
+  // speed. Unknown stored modes (an old build, a hand-edited store)
+  // land on the default instead of blanking the pill.
+  const userChosenPillContent = getSetting('userChosenPillContent');
+  const pillContent: PillContent =
+    userChosenPillContent === 'words' || userChosenPillContent === 'characters'
+      ? userChosenPillContent
+      : (editorConfig.defaultPillContent as PillContent);
+  notepad.pillContent.val(pillContent);
+
+  const userChosenTypingSpeed = getSetting('userChosenTypingSpeed');
+  const typingSpeedEnabled =
+    userChosenTypingSpeed !== null
+      ? userChosenTypingSpeed === 'Yes'
+      : editorConfig.defaultTypingSpeed;
+  notepad.typingSpeed.prop('checked', typingSpeedEnabled);
+
+  configureWordCountPill({ content: pillContent, typingSpeed: typingSpeedEnabled });
+
   const userChosenWriteDirection = getSetting('userChosenWriteDirection');
   if (userChosenWriteDirection) {
     notepad.note.css('direction', userChosenWriteDirection);
@@ -223,6 +253,20 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
       notepad.wordCountContainer.hide();
       setState('userChosenWordCountPillSelected', 'No');
     }
+  });
+
+  notepad.pillContent.on('change', function () {
+    const contentSelected = (this as HTMLSelectElement).value as PillContent;
+
+    configureWordCountPill({ content: contentSelected });
+    setState('userChosenPillContent', contentSelected);
+  });
+
+  notepad.typingSpeed.on('change', function () {
+    const enabled = $(this).is(':checked');
+
+    configureWordCountPill({ typingSpeed: enabled });
+    setState('userChosenTypingSpeed', enabled ? 'Yes' : 'No');
   });
 
   notepad.optimalLineLength.on('change', function () {
@@ -366,6 +410,16 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
       if (getSetting('userChosenWordCountPillSelected')) {
         removeState('userChosenWordCountPillSelected');
         resetShowWordCountPill(editorConfig.defaultShowWordCountPill);
+      }
+
+      if (getSetting('userChosenPillContent')) {
+        removeState('userChosenPillContent');
+        resetPillContent(editorConfig.defaultPillContent);
+      }
+
+      if (getSetting('userChosenTypingSpeed')) {
+        removeState('userChosenTypingSpeed');
+        resetTypingSpeed(editorConfig.defaultTypingSpeed);
       }
 
       const userChosenWriteDirection = getSetting('userChosenWriteDirection');

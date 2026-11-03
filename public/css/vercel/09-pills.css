@@ -145,14 +145,19 @@ body .bottom-line .word-count-container .wc-divider {
   );
 }
 
-/* Empty note — "0 words" alone, stood down. A double zero reads as
-   noise; the characters segment (provably 0 too) hides until it has
-   something to say. */
-body .bottom-line .word-count-container[data-wc-empty] .wc-seg-chars,
-body .bottom-line .word-count-container[data-wc-empty] .wc-divider {
+/* Hidden segments — the renderer (content mode, empty state, speed
+   stand-down) owns visibility through the [hidden] attribute. These
+   rules exist because .wc-seg's display:inline-flex would otherwise
+   outrank the UA sheet's [hidden] { display: none } (the same cascade
+   trap the confirm dialog's dead input hit). */
+body .bottom-line .word-count-container .wc-seg[hidden],
+body .bottom-line .word-count-container .wc-divider[hidden] {
   display: none;
 }
 
+/* Empty note — "0 words" alone, stood down. A double zero reads as
+   noise; the dimming here, the segment hiding in the renderer (which
+   keeps "0 characters" alive in characters-only mode). */
 body .bottom-line .word-count-container[data-wc-empty] .wc-pill {
   cursor: default;
 }

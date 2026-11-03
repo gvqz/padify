@@ -15,7 +15,7 @@ import {
   getHtmlFileName,
   getMarkdownFileName,
 } from './exports';
-import { updateWordCountPill } from './word-count-pill';
+import { pulseWordCountPill, updateWordCountPill } from './word-count-pill';
 import { initUnicodePicker } from './unicode/picker';
 import {
   TabManager,
@@ -224,6 +224,13 @@ export async function initApp(): Promise<void> {
 
   notepad.note.on('input', () => {
     trackWritingActivity();
+  });
+
+  // The live typing-speed segment rides the same input stream — one
+  // pulse per event, rendered straight into the pill (no debounce: a
+  // speed read that lags half a second reads as broken).
+  notepad.note.on('input', () => {
+    pulseWordCountPill();
   });
 
   // Boot the pill from the restored note — the structured renderer fills

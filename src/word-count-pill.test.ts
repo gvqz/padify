@@ -1,11 +1,13 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { updateWordCountPill } from './word-count-pill';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { configureWordCountPill, pulseWordCountPill, updateWordCountPill } from './word-count-pill';
+import { resetTypingPulses } from './typing-speed';
 
 /**
- * The word-count pill's render contract. The pill is a button holding two
- * labeled segments (words lead, characters follow) plus an empty-note
- * state on the container — the shell's exact markup, mirrored here so the
- * renderer is pinned against the structure 09-pills.css styles.
+ * The word-count pill's render contract. The pill is a button holding
+ * labeled segments (words lead, characters follow, optional live wpm)
+ * plus an empty-note state on the container — the shell's exact markup,
+ * mirrored here so the renderer is pinned against the structure
+ * 09-pills.css styles.
  */
 
 function mountPill(): void {
@@ -23,6 +25,11 @@ function mountPill(): void {
             <span class="wc-num" data-wc="chars">0</span>
             <span class="wc-unit" data-wc-unit="chars">characters</span>
           </span>
+          <span class="wc-divider wc-divider-wpm" aria-hidden="true" hidden></span>
+          <span class="wc-seg wc-seg-wpm" hidden>
+            <span class="wc-num" data-wc="wpm">0</span>
+            <span class="wc-unit" data-wc-unit="wpm">wpm</span>
+          </span>
         </button>
       </div>
     </div>`;
@@ -30,13 +37,25 @@ function mountPill(): void {
 
 const wordsNum = () => document.querySelector('[data-wc="words"]')?.textContent;
 const charsNum = () => document.querySelector('[data-wc="chars"]')?.textContent;
+const wpmNum = () => document.querySelector('[data-wc="wpm"]')?.textContent;
 const wordsUnit = () => document.querySelector('[data-wc-unit="words"]')?.textContent;
 const charsUnit = () => document.querySelector('[data-wc-unit="chars"]')?.textContent;
 const container = () => document.querySelector('.word-count-container')!;
 const pill = () => document.getElementById('wordCount')!;
+const wordsSeg = () => document.querySelector<HTMLElement>('.wc-seg-words')!;
+const charsSeg = () => document.querySelector<HTMLElement>('.wc-seg-chars')!;
+const wpmSeg = () => document.querySelector<HTMLElement>('.wc-seg-wpm')!;
+const wpmDivider = () => document.querySelector<HTMLElement>('.wc-divider-wpm')!;
+const mainDivider = () => document.querySelector<HTMLElement>('.wc-divider:not(.wc-divider-wpm)')!;
 
 beforeEach(() => {
   mountPill();
+  resetTypingPulses();
+  configureWordCountPill({ content: 'both', typingSpeed: false });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('updateWordCountPill', () => {
@@ -69,6 +88,9 @@ describe('updateWordCountPill', () => {
     expect(wordsUnit()).toBe('words');
     // The character segment keeps its (hidden) count for the reveal.
     expect(charsNum()).toBe('0');
+    expect(wordsSeg().hidden).toBe(false);
+    expect(charsSeg().hidden).toBe(true);
+    expect(mainDivider().hidden).toBe(true);
   });
 
   it('clears the empty state as soon as text exists', () => {
@@ -110,5 +132,123 @@ describe('updateWordCountPill', () => {
     // 400 words at the 200 wpm pace → 2 minutes.
     updateWordCountPill('word '.repeat(400));
     expect(pill().title).toBe('About 2 min read. View note statistics');
+  });
+});
+
+describe('pill content modes', () => {
+  it("content 'words' hides the characters segment but keeps writing its count", () => {
+    configureWordCountPill({ content: 'words' });
+    updateWordCountPill('hello world');
+    expect(wordsSeg().hidden).toBe(false);
+    expect(charsSeg().hidden).toBe(true);
+    expect(mainDivider().hidden).toBe(true);
+    // Hidden ≠ blank: the value stays for the mode flip.
+    expect(charsNum()).toBe('11');
+  });
+
+  it("content 'characters' hides the words segment", () => {
+    configureWordCountPill({ content: 'characters' });
+    updateWordCountPill('hello world');
+    expect(wordsSeg().hidden).toBe(true);
+    expect(charsSeg().hidden).toBe(false);
+    expect(mainDivider().hidden).toBe(true);
+    expect(wordsNum()).toBe('2');
+  });
+
+  it("content 'characters' keeps its '0 characters' on an empty note", () => {
+    configureWordCountPill({ content: 'characters' });
+    updateWordCountPill('');
+    // In this mode the count IS the pill's whole story — it stays.
+    expect(wordsSeg().hidden).toBe(true);
+    expect(charsSeg().hidden).toBe(false);
+    expect(charsNum()).toBe('0');
+    expect(container().hasAttribute('data-wc-empty')).toBe(true);
+  });
+
+  it('an unknown stored mode cannot happen — configure narrows the union', () => {
+    // The type system carries this; the render just mirrors it.
+    configureWordCountPill({ content: 'words' });
+    updateWordCountPill('hello');
+    expect(wordsSeg().hidden).toBe(false);
+    expect(charsSeg().hidden).toBe(true);
+  });
+
+  it('a mode switch re-renders the last counts without new input', () => {
+    updateWordCountPill('hello world');
+    configureWordCountPill({ content: 'characters' });
+    expect(wordsSeg().hidden).toBe(true);
+    expect(charsSeg().hidden).toBe(false);
+    expect(charsNum()).toBe('11');
+  });
+});
+
+describe('live typing speed segment', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+  });
+
+  it('stays hidden while the preference is off', () => {
+    for (let i = 0; i < 20; i++) {
+      pulseWordCountPill();
+    }
+    expect(wpmSeg().hidden).toBe(true);
+    expect(wpmDivider().hidden).toBe(true);
+    expect(wpmNum()).toBe('0');
+  });
+
+  it('appears while typing and shows the rolling words-per-minute', () => {
+    configureWordCountPill({ typingSpeed: true });
+    // 30 pulses in-window: 30/5 words over 0.25 min → 24 wpm.
+    for (let i = 0; i < 30; i++) {
+      pulseWordCountPill();
+    }
+    expect(wpmSeg().hidden).toBe(false);
+    expect(wpmDivider().hidden).toBe(false);
+    expect(wpmNum()).toBe('24');
+    // The aria-label mentions the speed while it is live.
+    expect(pill().getAttribute('aria-label')).toContain('per minute');
+  });
+
+  it('stands down after the live deadline instead of freezing', () => {
+    configureWordCountPill({ typingSpeed: true });
+    for (let i = 0; i < 30; i++) {
+      pulseWordCountPill();
+    }
+    expect(wpmSeg().hidden).toBe(false);
+
+    // Just inside the deadline the segment is still up.
+    vi.advanceTimersByTime(5_000);
+    expect(wpmSeg().hidden).toBe(false);
+
+    // The stand-down timer re-renders past it.
+    vi.advanceTimersByTime(1_500);
+    expect(wpmSeg().hidden).toBe(true);
+    expect(wpmDivider().hidden).toBe(true);
+    // And the aria-label drops the speed mention again.
+    expect(pill().getAttribute('aria-label')).not.toContain('per minute');
+  });
+
+  it('a fresh pulse revives the segment after the stand-down', () => {
+    configureWordCountPill({ typingSpeed: true });
+    for (let i = 0; i < 30; i++) {
+      pulseWordCountPill();
+    }
+    vi.advanceTimersByTime(7_000);
+    expect(wpmSeg().hidden).toBe(true);
+
+    pulseWordCountPill();
+    expect(wpmSeg().hidden).toBe(false);
+  });
+
+  it('turning the preference off mid-session hides the segment at once', () => {
+    configureWordCountPill({ typingSpeed: true });
+    for (let i = 0; i < 30; i++) {
+      pulseWordCountPill();
+    }
+    expect(wpmSeg().hidden).toBe(false);
+
+    configureWordCountPill({ typingSpeed: false });
+    expect(wpmSeg().hidden).toBe(true);
   });
 });

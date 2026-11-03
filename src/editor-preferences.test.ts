@@ -42,6 +42,8 @@ function mountShell(): void {
     <input type="checkbox" id="optimalLineLength" />
     <input type="checkbox" id="spellCheck" checked />
     <input type="checkbox" id="showWordCountPill" checked />
+    <select id="pillContent"><option value="both">both</option></select>
+    <input type="checkbox" id="typingSpeed" />
     <div class="word-count-container"></div>
     <button id="resetPreferences"></button>
   `;
@@ -57,6 +59,8 @@ function wirePreferences(): void {
     optimalLineLength: $('#optimalLineLength'),
     spellCheck: $('#spellCheck'),
     showWordCountPill: $('#showWordCountPill'),
+    pillContent: $('#pillContent'),
+    typingSpeed: $('#typingSpeed'),
     wordCountContainer: $('.word-count-container'),
   } as unknown as NotepadUI;
 

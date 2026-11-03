@@ -10,11 +10,32 @@
  * empty-note state and a descriptive aria-label — not one text blob like
  * the old `<p>`. Numbers are grouped ("1,963") and tabular, and a changed
  * value gets the small rise-and-settle tick from wc-tick in 09-pills.css.
+ *
+ * Two preferences shape the capsule (see editor-preferences.ts):
+ *  - content — 'both' (words lead, characters follow), 'words' or
+ *    'characters'. Hidden segments KEEP their counts written: the PiP
+ *    mirror and the reveal-on-type flows depend on the values being
+ *    present even when a mode stands them down.
+ *  - typingSpeed — the live WPM segment: a third segment that appears
+ *    while the user is actually typing (see typing-speed.ts) and stands
+ *    down when the typing goes stale.
  */
 
 import { countWords } from './lib/text-stats';
+import { recordTypingPulse, TYPING_LIVE_MS, typingWpm } from './typing-speed';
 
 const numberFormat = new Intl.NumberFormat('en-US');
+
+export type PillContent = 'both' | 'words' | 'characters';
+
+interface PillConfig {
+  content: PillContent;
+  typingSpeed: boolean;
+}
+
+let pillConfig: PillConfig = { content: 'both', typingSpeed: false };
+let lastCounts: PillCounts = { words: 0, chars: 0 };
+let idleHideTimer: ReturnType<typeof setTimeout> | null = null;
 
 interface PillCounts {
   words: number;
@@ -53,8 +74,37 @@ function setSegment(
   unitEl.textContent = plural(value, singular, pluralForm);
 }
 
-/** Renders the pill inside one document; the main window and the
- * Picture-in-Picture window each carry their own #wordCount node. */
+/** The live speed read for the segment: null when the feature is off or
+ * the typing went stale — the segment's cue to stand down. */
+function currentSpeed(): number | null {
+  return pillConfig.typingSpeed ? typingWpm(Date.now()) : null;
+}
+
+/** Renders the speed segment (or its absence) inside one document. */
+function renderSpeed(doc: Document, wpm: number | null): void {
+  const pill = doc.getElementById('wordCount');
+  if (!pill) return;
+
+  const seg = pill.querySelector<HTMLElement>('.wc-seg-wpm');
+  const divider = pill.querySelector<HTMLElement>('.wc-divider-wpm');
+  const num = pill.querySelector<HTMLElement>('[data-wc="wpm"]');
+  if (!seg || !divider || !num) return;
+
+  if (wpm === null) {
+    seg.hidden = true;
+    divider.hidden = true;
+    return;
+  }
+
+  const text = numberFormat.format(wpm);
+  if (num.textContent !== text) {
+    num.textContent = text;
+    tick(num);
+  }
+  seg.hidden = false;
+  divider.hidden = false;
+}
+
 function renderPill(doc: Document, { words, chars }: PillCounts): void {
   const pill = doc.getElementById('wordCount');
   if (!pill) return;
@@ -65,11 +115,28 @@ function renderPill(doc: Document, { words, chars }: PillCounts): void {
   const charsUnit = pill.querySelector<HTMLElement>('[data-wc-unit="chars"]');
   if (!wordsEl || !charsEl || !wordsUnit || !charsUnit) return;
 
+  // Counts are written even into segments a mode hides — the PiP mirror
+  // and the reveal-on-type flows need the values in place.
   setSegment(wordsEl, wordsUnit, words, 'word', 'words');
   setSegment(charsEl, charsUnit, chars, 'character', 'characters');
 
-  // An empty note collapses to "0 words" alone (both counts are zero,
-  // a double zero is noise) and stands down visually via the CSS hook.
+  // Visibility — the content preference decides which counts carry the
+  // capsule; an empty note still collapses (a double zero is noise).
+  // In characters-only mode "0 characters" IS the pill's whole story,
+  // so it stays visible where the mixed mode would hide it.
+  const wordsSeg = pill.querySelector<HTMLElement>('.wc-seg-words');
+  const charsSeg = pill.querySelector<HTMLElement>('.wc-seg-chars');
+  const divider = pill.querySelector<HTMLElement>('.wc-divider');
+  const wordsVisible = pillConfig.content !== 'characters';
+  const charsVisible =
+    pillConfig.content === 'characters' || (pillConfig.content === 'both' && chars !== 0);
+  if (wordsSeg) wordsSeg.hidden = !wordsVisible;
+  if (charsSeg) charsSeg.hidden = !charsVisible;
+  // The hairline only separates two counts.
+  if (divider) divider.hidden = !wordsVisible || !charsVisible;
+
+  // The empty-note hook stands the capsule down visually (dimmed ink via
+  // the CSS side; visibility itself is handled above).
   const container = pill.closest('.word-count-container');
   if (container) {
     if (chars === 0) {
@@ -79,33 +146,77 @@ function renderPill(doc: Document, { words, chars }: PillCounts): void {
     }
   }
 
+  // The speed segment — only while the user is actually typing.
+  const wpm = currentSpeed();
+  renderSpeed(doc, wpm);
+
+  let label = `${words} ${plural(words, 'word', 'words')}, ${chars} ${plural(chars, 'character', 'characters')}`;
+  if (wpm !== null) {
+    label += `, about ${wpm} ${plural(wpm, 'word', 'words')} per minute`;
+  }
+  label += '. View note statistics';
   pill.title = `${readingTimeHint(words)}View note statistics`;
-  pill.setAttribute(
-    'aria-label',
-    `${words} ${plural(words, 'word', 'words')}, ${chars} ${plural(chars, 'character', 'characters')}. View note statistics`,
-  );
+  pill.setAttribute('aria-label', label);
 }
 
-export function updateWordCountPill(note: string = ''): void {
-  const counts: PillCounts = {
-    words: note !== '' ? countWords(note) : 0,
-    chars: note.length,
-  };
+/** Renders into every document that carries a pill — the main window and,
+ * while the editor floats (Document Picture-in-Picture), the floating
+ * window whose #wordCount the main-document query can't see. */
+function renderEverywhere(): void {
+  renderPill(document, lastCounts);
 
-  renderPill(document, counts);
-
-  // While the editor floats (Document Picture-in-Picture), #wordCount
-  // moved with the editor into the floating window — the main-document
-  // query above no longer finds it. The API exposes the open window;
-  // mirror the render there so the floating window's status bar stays
-  // honest too (before this, typing in the floating window saved the
-  // note but left the pill frozen at its pre-float value).
   // Read off `window`, never the bare identifier: where the API is
   // missing (Firefox, tests) the bare name is an undeclared global and
   // optional-chaining does not save it — the ReferenceError used to kill
   // the update on every keystroke.
   const floatingWindow = window.documentPictureInPicture?.window;
   if (floatingWindow && floatingWindow.document !== document) {
-    renderPill(floatingWindow.document, counts);
+    renderPill(floatingWindow.document, lastCounts);
   }
+}
+
+export function updateWordCountPill(note: string = ''): void {
+  lastCounts = {
+    words: note !== '' ? countWords(note) : 0,
+    chars: note.length,
+  };
+  renderEverywhere();
+}
+
+/**
+ * Applies the pill preferences (content mode, typing speed) and re-renders.
+ * Called on boot restore, preference changes and the reset-to-defaults flow.
+ */
+export function configureWordCountPill(config: Partial<PillConfig>): void {
+  pillConfig = { ...pillConfig, ...config };
+  if (!pillConfig.typingSpeed) {
+    cancelIdleHide();
+  }
+  renderEverywhere();
+}
+
+function cancelIdleHide(): void {
+  if (idleHideTimer !== null) {
+    clearTimeout(idleHideTimer);
+    idleHideTimer = null;
+  }
+}
+
+/**
+ * One editor input event, on the pill's behalf: records the pulse and
+ * re-renders the live segment. A stand-down timer re-renders after the
+ * live deadline so the speed segment hides itself when the typing stops
+ * instead of freezing at its last value.
+ */
+export function pulseWordCountPill(): void {
+  if (!pillConfig.typingSpeed) {
+    return;
+  }
+  recordTypingPulse(Date.now());
+  cancelIdleHide();
+  idleHideTimer = setTimeout(() => {
+    idleHideTimer = null;
+    renderEverywhere();
+  }, TYPING_LIVE_MS + 250);
+  renderEverywhere();
 }
