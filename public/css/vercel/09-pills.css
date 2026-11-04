@@ -10,9 +10,9 @@
    Word count pill — the note's vitals in one quiet capsule.
 
    The whole pill is a <button class="wc-pill"> that opens the statistics
-   modal. Anatomy, left to right: a mini bar-chart glyph (the affordance
-   that says "this opens data"), then two segments on a tapered hairline:
-   WORDS lead (the headline metric), CHARACTERS follow. Numbers are
+   modal. Anatomy, left to right: two segments on a tapered hairline —
+   WORDS lead (the headline metric), CHARACTERS follow. Text only, no
+   glyph: the counts are the capsule's whole story. Numbers are
    tabular — a pill whose width jitters on every keystroke reads broken;
    units are quiet lowercase echoes of the statistics board's label
    typography. The capsule carries a hairline top highlight (light mode)
@@ -93,19 +93,6 @@ body .bottom-line .word-count-container .wc-pill:active {
 body .bottom-line .word-count-container .wc-pill:focus-visible {
   outline: 2px solid var(--vz-fg);
   outline-offset: 2px;
-}
-
-/* The leading glyph — three ascending bars. Subtle at rest, it darkens
-   with the hover so the affordance brightens exactly when it matters. */
-body .bottom-line .word-count-container .wc-icon {
-  display: inline-flex;
-  align-items: center;
-  color: var(--vz-fg-subtle);
-  transition: color var(--vz-dur) ease;
-}
-
-body .bottom-line .word-count-container .wc-pill:hover .wc-icon {
-  color: var(--vz-fg);
 }
 
 /* Segments — number leads, unit follows. Tabular numerals keep every
@@ -222,11 +209,6 @@ body .bottom-line .word-count-container[data-wc-empty] .wc-pill {
 body .bottom-line .word-count-container[data-wc-empty] .wc-num {
   color: var(--vz-fg-subtle);
   font-weight: 500;
-}
-
-/* The glyph stands down with the rest of the capsule. */
-body .bottom-line .word-count-container[data-wc-empty] .wc-icon {
-  opacity: 0.6;
 }
 
 /* Value change — a small rise-and-settle tick, the statistics board's

@@ -15,7 +15,6 @@ function mountPill(): void {
     <div class="bottom-line">
       <div class="word-count-container">
         <button type="button" id="wordCount" class="wc-pill">
-          <span class="wc-icon" aria-hidden="true"></span>
           <span class="wc-seg wc-seg-words">
             <span class="wc-num" data-wc="words">0</span>
             <span class="wc-unit" data-wc-unit="words">words</span>

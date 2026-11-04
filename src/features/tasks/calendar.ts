@@ -517,7 +517,7 @@ export function renderTasksCalendar(quickAdd?: (title: string, iso: string) => v
       row.hidden = false;
       if (quickAddText) input.value = quickAddText;
       if (quickAddSlot) applySlotPlaceholder(input);
-      if (quickAddHadFocus) input.focus();
+      if (quickAddHadFocus) focusQuickAddInput(row, input);
     }
   }
 }
@@ -532,6 +532,27 @@ function defaultTimedScroll(box: HTMLElement, showsToday: boolean): number {
   const max = box.scrollHeight - box.clientHeight;
   const top = mark ? mark.offsetTop - 8 : 0;
   return Math.max(0, Math.min(max, top));
+}
+
+/**
+ * Focus that sticks: applies focus now and re-asserts it across the next
+ * two animation frames. The quick-add row opens synchronously inside a
+ * click handler, but a focus steal that arrives with the frames just
+ * after — a queued re-render replacing the row, a window-focus flap on
+ * a loaded machine — used to leave the row open with no caret anywhere
+ * (a CI e2e run once polled the input inactive for five straight
+ * seconds). Re-asserting is a no-op when focus already sits on the
+ * input, so the quiet path costs nothing.
+ */
+function focusQuickAddInput(row: HTMLElement, input: HTMLInputElement): void {
+  input.focus();
+  let attempts = 0;
+  const reassert = (): void => {
+    if (row.hidden || !row.isConnected) return;
+    if (document.activeElement !== input) input.focus();
+    if (++attempts < 2) requestAnimationFrame(reassert);
+  };
+  requestAnimationFrame(reassert);
 }
 
 /**
@@ -552,7 +573,7 @@ function wireQuickAdd(sections: HTMLElement, quickAdd: (title: string, iso: stri
     quickAddSlot = null;
     input.placeholder = 'New Reminder';
     row.hidden = false;
-    input.focus();
+    focusQuickAddInput(row, input);
   };
 
   sections.querySelector('[data-cal-add]')?.addEventListener('click', openRow);
@@ -590,7 +611,7 @@ function wireQuickAdd(sections: HTMLElement, quickAdd: (title: string, iso: stri
     if (fresh && freshInput && hubLive) {
       fresh.hidden = false;
       if (quickAddSlot) applySlotPlaceholder(freshInput);
-      freshInput.focus();
+      focusQuickAddInput(fresh, freshInput);
     }
   });
 
@@ -879,7 +900,7 @@ function openQuickAddForSlot(sections: HTMLElement, slot: HTMLElement): void {
   quickAddSlot = { day, hour };
   applySlotPlaceholder(input);
   row.hidden = false;
-  input.focus();
+  focusQuickAddInput(row, input);
 }
 
 /** The placeholder while the row aims at a slot — the exact hour spelled out. */
