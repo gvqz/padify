@@ -20,8 +20,8 @@ import { expect, test, type Page } from '@playwright/test';
  *
  *  5. Copy note text lands the note's text on the clipboard.
  *
- *  6. Close tab goes through the same guarded flow as the rail's ×:
- *     a note with content asks first.
+ *  6. Move to trash goes through the same flow as the rail's ×: the
+ *     note's words live in the trash, restorable for 30 days.
  */
 
 const pageErrors = new WeakMap<Page, string[]>();
@@ -60,7 +60,7 @@ test('right-click opens the note menu; Escape, outside click and empty space beh
   await expect(page.locator(`${MENU} [data-action="share"]`)).toContainText('Share note');
   await expect(page.locator(`${MENU} [data-action="copy-text"]`)).toContainText('Copy note text');
   await expect(page.locator(`${MENU} [data-action="stats"]`)).toContainText('Statistics');
-  await expect(page.locator(`${MENU} [data-action="close"]`)).toContainText('Close tab');
+  await expect(page.locator(`${MENU} [data-action="close"]`)).toContainText('Move to trash');
 
   // Escape closes.
   await page.keyboard.press('Escape');

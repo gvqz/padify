@@ -316,11 +316,17 @@ Behaviour reference:
 - **Local-first.** The on-device IndexedDB store stays the source of
   truth; the app never waits on the network. Signed-out installs behave
   exactly like before.
-- **Last-write-wins** per note using padify's existing `updatedAt` stamp.
-  Editing the same note on two devices offline keeps the most recent edit.
-  Snapshots (local) preserve every prior version either way.
-- **Deletions are tombstoned** (`deleted = true`), so closing a tab on one
-  device removes it everywhere — including devices that were offline.
+- **Three-way merge.** Two devices editing the same note usually touch
+  different spots, which is complementary, not conflicting: the client
+  diffs both sides against the last version the cloud agreed to and
+  splices the edits together. Only genuinely overlapping edits park the
+  losing words on the note itself — a badge in the rail opens a review
+  sheet (restore my version / keep the current one / keep both).
+- **Deletions are trash.** A deleted note's row keeps its content and a
+  `deleted_at` stamp, restorable for 30 days from any device under the
+  same id (share links survive the round trip); the server and every
+  client sweep expired rows on boot. "Delete forever" pushes a sweeper
+  row that retires everywhere on the next sync.
 - **Sync triggers:** debounced after every change (1.2s), on sign-in, on
   returning to the tab, on network reconnect, and every 30s while visible.
 - **Scope:** note tabs on the main page. Snapshots, settings and the mini

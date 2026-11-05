@@ -141,17 +141,13 @@ test.describe('the rebuilt menu', () => {
     await expect(snapshotRows(page)).toHaveCount(1);
   });
 
-  test('closing a background tab snapshots THE CLOSING note, not the active one', async ({
-    page,
-  }) => {
+  test('closing a background tab trashes it — no snapshot, no dialog', async ({ page }) => {
     await page.goto('/');
     const editor = page.locator('#note');
 
     await page.locator('#addTab').click();
     await editor.click();
     await page.keyboard.type('background note body');
-    await page.keyboard.press('Control+U');
-    await toastSays(page, 'Snapshot created!');
 
     // Switch to the Welcome note, then close the background one.
     await page.locator('#tabStripTabs .tab-strip-tab').first().click();
@@ -159,16 +155,18 @@ test.describe('the rebuilt menu', () => {
       .locator('#tabStripTabs .tab-strip-tab', { hasText: 'background note body' })
       .locator('.tab-strip-close')
       .click();
-    // The close takes a safety copy of the CLOSING note (silent — the
-    // tab-close toast is the message) and asks about deleting it.
-    await page.locator('dialog.vz-dialog .vz-dialog-confirm').click();
+    // The trash IS the undo path: no confirm dialog, no safety snapshot —
+    // the words live in the trash, restorable under the same id.
     await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(1);
+    await toastSays(page, 'moved to trash');
 
-    await openSnapshots(page);
-    await expect(snapshotRows(page)).toHaveCount(1);
-    await expect(snapshotRows(page).first().locator('.snap-name')).toContainText(
-      'background note body',
-    );
+    // The trash sheet holds the note, one click from restored.
+    await page.locator('#tabRailTrash').click();
+    await expect(page.locator('#trashModal')).toHaveClass(/in/);
+    const trashRow = page.locator('#trashList .trash-item', { hasText: 'background note body' });
+    await expect(trashRow).toHaveCount(1);
+    await trashRow.locator('[data-trash-action="restore"]').click();
+    await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(2);
   });
 
   test('an unchanged note is declined — no duplicate rows', async ({ page }) => {
@@ -429,14 +427,13 @@ test.describe('restore — to the note it came from', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
 
-    // The note is deleted — the safety copy on close declines silently
-    // (nothing changed since the snapshot), so exactly one row remains.
+    // The note is trashed — no snapshot on close anymore (the trash keeps
+    // the words), so exactly one row remains.
     await page
       .locator('#tabStripTabs .tab-strip-tab', { hasText: 'Phoenix' })
       .first()
       .locator('.tab-strip-close')
       .click();
-    await page.locator('dialog.vz-dialog .vz-dialog-confirm').click();
     await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(1);
 
     // Restore — the note is gone, so it comes back as its OWN note.

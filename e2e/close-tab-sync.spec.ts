@@ -7,13 +7,13 @@ import { expect, test, type Page } from '@playwright/test';
  * reopening." Two windows of the same account and one closed note — the
  * loop needs every layer to hold:
  *
- *   • the closing window's tombstone must reach the OTHER window (its pull
+ *   • the closing window's trash row must reach the OTHER window (its pull
  *     cursor is its own — a shared cursor let one window's pull starve the
  *     other's, and the blind window re-published the closed note live on
  *     every cycle, un-deleting it in the cloud);
  *   • the merge must not take a live row back for a note this device
- *     closed (a pending tombstone outranks a stale re-publish);
- *   • the server must refuse a live write that would un-delete a tombstone
+ *     closed (a pending trash row outranks a stale re-publish);
+ *   • the server must refuse a live write that would un-delete a trash row
  *     it isn't strictly newer than.
  *
  * The race is staged in the localStorage fallback backend (private-mode
@@ -128,14 +128,15 @@ test.describe('closing a tab (real API)', () => {
         })
         .toContain('Scratch');
 
-      // The close: an empty tab closes with no dialog. The tombstone
-      // rides the manual cycle and lands in the cloud.
+      // The close: an empty tab closes with no dialog. The trash row
+      // rides the manual cycle and lands in the cloud (content kept,
+      // deleted_at stamped — restorable for the retention window).
       await tabWithTitle(pageA, 'Scratch').locator('.tab-strip-close').click();
       await expect(tabWithTitle(pageA, 'Scratch')).toHaveCount(0);
       await forceSync(pageA);
 
       // The second window syncs. Its own cursor is still behind the
-      // tombstone, so its pull must deliver it: the note leaves this
+      // trash row, so its pull must deliver it: the note leaves this
       // window too, and nothing re-publishes it to the cloud.
       await forceSync(pageB);
       await expect

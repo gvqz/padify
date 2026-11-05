@@ -17,7 +17,9 @@ Built as a Progressive Web App using the [Service Worker API](https://developer.
 - Dark mode
 - Writing timer
 - Word and character count with note statistics
-- Snapshots — restore notes from previously saved versions
+- **Trash** — deleted notes wait 30 days, restorable from any synced device under the same id (share links survive); "delete forever" propagates everywhere
+- **Snapshots** — restore notes from previously saved versions
+- **Conflict review** — a note edited on two devices merges automatically when the edits don't overlap; when they do, a badge opens a tracked-changes review (restore my version / keep the current one / keep both)
 - Keyboard shortcuts for common actions
 - Full-screen mode for distraction-free writing
 - Optimal line length for a better reading experience
