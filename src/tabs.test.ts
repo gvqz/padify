@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   escapeHtml,
-  isConflictedCopyTab,
   legacyTextToHtml,
   sanitizeNoteHtml,
   htmlToText,
@@ -306,19 +305,20 @@ describe('WELCOME_HTML', () => {
   });
 });
 
-describe('isConflictedCopyTab — the strip\u2019s fork badge', () => {
-  it('flags a tab minted on this device by its copyOf lineage', () => {
-    expect(isConflictedCopyTab(tab({ copyOf: 'base-note' }))).toBe(true);
+describe('the parked-conflict badge — a reviewable note flags itself', () => {
+  it('a note with a parked conflict record is reviewable', () => {
+    const record = {
+      kind: 'edit' as const,
+      detectedAt: 1,
+      mine: { name: null, content: 'my words' },
+      theirs: { name: null, content: 'their words', updatedAt: 2 },
+    };
+    expect(tab({ conflict: record }).conflict?.kind).toBe('edit');
   });
 
-  it('flags a copy that arrived from another device by its telltale name', () => {
-    expect(isConflictedCopyTab(tab({ name: 'Groceries — conflicted copy' }))).toBe(true);
-    expect(isConflictedCopyTab(tab({ name: 'Draft — copy (deleted elsewhere)' }))).toBe(true);
-  });
-
-  it('never flags an ordinary note — even one mentioning copies mid-name', () => {
-    expect(isConflictedCopyTab(tab({ name: 'conflicted copy notes I keep' }))).toBe(false);
-    expect(isConflictedCopyTab(tab({ name: 'Groceries — shopping list' }))).toBe(false);
-    expect(isConflictedCopyTab(tab())).toBe(false);
+  it('an ordinary note — even one mentioning copies mid-name — carries no record', () => {
+    expect(tab({ name: 'conflicted copy notes I keep' }).conflict).toBeUndefined();
+    expect(tab({ name: 'Groceries — conflicted copy' }).conflict).toBeUndefined();
+    expect(tab().conflict).toBeUndefined();
   });
 });

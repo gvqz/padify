@@ -41,6 +41,8 @@ import {
   saveNotes,
   stateGet,
   stateRemove,
+  readNoteConflict,
+  type NoteConflictRecord,
   type StoredNoteTab,
   type TrashedNote,
 } from './storage';
@@ -131,17 +133,24 @@ export interface NoteTab {
    */
   syncBase?: { content: string; name: string | null };
   /**
-   * Conflicted-copy lineage: this tab was minted (or last updated) as the
-   * unmerged branch of the note with this id (see cloud/sync.ts — the
-   * merge's rescueLosingWords). Local-only metadata like syncSeq: it rides
-   * storage and the in-memory model, never the wire — a branch arriving
-   * from ANOTHER device is just a note with a telling name. A tab whose
-   * content a merge replaces drops the marker (it no longer preserves
-   * divergent words); deleting the tab ends the lineage, so a genuinely
-   * new conflict may mint a fresh branch.
+   * An unresolved divergence awaiting review: the note was changed on
+   * two devices at once, their version took the canonical row, and THIS
+   * device's unpushed words wait in `mine` (see cloud/sync.ts — the merge
+   * parks instead of minting a "conflicted copy" twin). The strip badges
+   * it; the review sheet resolves it; editing the note does not clear it
+   * (only a resolution or the note's death does).
+   */
+  conflict?: NoteConflict;
+  /**
+   * Conflicted-copy lineage (LEGACY — pre-review builds minted twin notes
+   * and marked them; nothing writes it anymore, existing values ride
+   * storage untouched and unread).
    */
   copyOf?: string;
 }
+
+/** One parked version conflict — see NoteTab.conflict. */
+export type NoteConflict = NoteConflictRecord;
 
 const LEGACY_NOTE_KEY = 'note';
 
@@ -168,20 +177,6 @@ export interface TabsSyncPayload {
 
 function createTabId(): string {
   return `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-/**
- * True when a tab is a conflicted-copy branch: minted on this device (the
- * copyOf lineage the sync merge sets) or arrived from another device wearing
- * the merge's telltale name. Used for the strip's fork badge — a strip that
- * gathered several of these explains itself at a glance instead of looking
- * like accidental duplicates.
- */
-export function isConflictedCopyTab(tab: NoteTab): boolean {
-  if (tab.copyOf) {
-    return true;
-  }
-  return / — (?:conflicted copy|copy \(deleted elsewhere\))$/.test(tab.name ?? '');
 }
 
 /**
@@ -305,6 +300,7 @@ export class TabManager {
           syncSeq:
             typeof entry.syncSeq === 'number' && entry.syncSeq > 0 ? entry.syncSeq : undefined,
           syncBase: entry.syncBase,
+          conflict: readNoteConflict(entry.conflict),
           copyOf: typeof entry.copyOf === 'string' && entry.copyOf ? entry.copyOf : undefined,
         };
       });
@@ -873,17 +869,17 @@ export class TabManager {
     button.dataset.tabId = tab.id;
     button.title = tab.name ? tab.name : 'Double-click to rename';
 
-    // A conflicted copy (this device's mint — copyOf — or one that arrived
-    // from another device wearing the name) gets the fork badge, so a strip
-    // that gathered a few of them during a two-device race explains itself.
-    if (isConflictedCopyTab(tab)) {
-      const copyBadge = document.createElement('span');
-      copyBadge.className = 'tab-strip-type tab-strip-copy';
-      copyBadge.title = 'Conflicted copy — kept when this note changed on two devices';
-      copyBadge.setAttribute('aria-hidden', 'true');
-      copyBadge.innerHTML =
-        '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><circle cx="18" cy="12" r="2.6"/><path d="M8.2 7.4 15.5 11M8.2 16.6 15.5 13"/></svg>';
-      button.appendChild(copyBadge);
+    // A parked version conflict gets the review badge. Its click is
+    // DELEGATED through the strip (the single listener bindStripEvents
+    // owns), per the listener-lifecycle rules — nothing per-node.
+    if (tab.conflict) {
+      const conflictBadge = document.createElement('span');
+      conflictBadge.className = 'tab-strip-type tab-strip-conflict';
+      conflictBadge.title = 'Changed on two devices — review the versions';
+      conflictBadge.setAttribute('role', 'button');
+      conflictBadge.innerHTML =
+        '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><circle cx="18" cy="12" r="2.6"/><path d="M8.2 7.4 15.5 11M8.2 16.6 15.5 13"/></svg>';
+      button.appendChild(conflictBadge);
     }
 
     if (tab.noteType === 'tasks') {
@@ -981,6 +977,14 @@ export class TabManager {
       }
 
       const tabId = tabElement.dataset.tabId!;
+
+      if (target.closest('.tab-strip-conflict')) {
+        // The review badge is its own gesture — opening the review sheet
+        // must not also switch notes under it.
+        event.stopPropagation();
+        this.onConflictReview?.(tabId);
+        return;
+      }
 
       if (target.closest('.tab-strip-close')) {
         event.stopPropagation();
@@ -1529,6 +1533,82 @@ export class TabManager {
 
   /** Hook for the cloud sync layer — fires after every model persist. */
   onPersist: ((payload: TabsSyncPayload) => void) | null = null;
+
+  /**
+   * Hook for the review sheet — fires when a strip conflict badge is
+   * clicked. The sheet owns the gesture; the manager only knows the note.
+   */
+  onConflictReview: ((tabId: string) => void) | null = null;
+
+  /** The note a parked conflict belongs to (the sheet's read). */
+  getConflictedNote(tabId: string): NoteTab | null {
+    const tab = this.tabs.find((entry) => entry.id === tabId);
+    return tab?.conflict ? tab : null;
+  }
+
+  /** Every note carrying an unresolved review (badge state, counts). */
+  getConflictedIds(): string[] {
+    return this.tabs.filter((tab) => tab.conflict).map((tab) => tab.id);
+  }
+
+  /**
+   * Resolves a parked version conflict — the review sheet's three buttons.
+   *
+   *  • 'theirs' (the note already holds their version) just clears the
+   *    record: the row was always theirs, nothing moves.
+   *  • 'mine' applies this device's parked words as a new edit (dirty,
+   *    re-pushed; the next cycle makes them canonical everywhere).
+   *  • 'both' restores the parked words AND keeps their version as an
+   *    explicit copy — the pre-review "conflicted copy" behavior, but as
+   *    a user decision instead of an accident, landing beside its source
+   *    and opening like a duplicate.
+   */
+  resolveConflict(tabId: string, resolution: 'mine' | 'theirs' | 'both'): boolean {
+    const tab = this.tabs.find((entry) => entry.id === tabId);
+    if (!tab || !tab.conflict) {
+      return false;
+    }
+    const record = tab.conflict;
+    delete tab.conflict;
+
+    const applyMine = (): void => {
+      tab.name = record.mine.name;
+      tab.content = record.mine.content;
+      tab.updatedAt = nextUpdatedAt(tab.updatedAt);
+      this.dirtyIds.add(tab.id);
+      if (tab.id === this.activeId) {
+        // The active note repaints through the restore seam — the same
+        // path a snapshot restore owns (painter swap, html commit).
+        this.applySnapshotToActive(record.mine.content, tab.noteType, tab.colorTheme);
+        tab.name = record.mine.name;
+      }
+    };
+
+    if (resolution === 'mine') {
+      applyMine();
+    } else if (resolution === 'both') {
+      // Their version (the current bytes) becomes the copy; the note goes
+      // back to this device's words.
+      const copy = createTab(
+        tab.content,
+        `${deriveTabTitle({ ...tab, name: record.theirs.name ?? tab.name })} (other version)`,
+        tab.noteType ?? DEFAULT_NOTE_TYPE,
+      );
+      if (tab.colorTheme) {
+        copy.colorTheme = tab.colorTheme;
+      }
+      const index = this.tabs.findIndex((entry) => entry.id === tabId);
+      this.tabs.splice(index + 1, 0, copy);
+      this.dirtyIds.add(copy.id);
+      applyMine();
+    }
+    // 'theirs': the note already holds their version — nothing but the
+    // record ever needed to move.
+
+    this.persist();
+    this.renderStrip();
+    return true;
+  }
 
   private notifyActiveChanged(): void {
     const active = this.getActive();

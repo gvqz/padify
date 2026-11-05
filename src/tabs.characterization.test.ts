@@ -19,7 +19,6 @@ import {
   deriveTabTitle,
   escapeHtml,
   getActiveNoteExportBody,
-  isConflictedCopyTab,
   setTabManager,
   htmlToText,
   legacyTextToHtml,
@@ -749,50 +748,77 @@ describe('TabManager (characterization)', () => {
     expect(manager.exportForSync().dirty).not.toContain(first.id);
   });
 
-  it('a conflicted copy\u2019s lineage (copyOf) survives a reload', async () => {
-    // The multiplication guard keys on copyOf: if the field fell out of
-    // the storage round trip, every reload would forget the branch and a
-    // repeated race could mint a second copy again.
+  it('a parked conflict record survives a reload', async () => {
+    // The review's payload is the record: if it fell out of the storage
+    // round trip, every reload would forget the divergence and the badge
+    // (and the review sheet's version of events) with it.
     const manager = await bootedManager();
     const base = manager.getActive()!;
-    const branch: StoredNoteTab = {
-      id: 'branch-tab',
-      name: 'The plan — conflicted copy',
-      content: '<p>the losing words</p>',
-      createdAt: 1,
-      updatedAt: 2,
-      copyOf: base.id,
+    const conflicted: NoteTab = {
+      ...base,
+      conflict: {
+        kind: 'edit',
+        detectedAt: 3,
+        mine: { name: 'The plan', content: '<p>the losing words</p>' },
+        theirs: { name: null, content: '<p>the winning words</p>', updatedAt: 2 },
+      },
     };
-    manager.applyExternalMerge([branch]);
+    manager.applyExternalMerge([conflicted]);
 
     await flushAndReboot();
     const persisted = await loadNotes();
-    const restored = persisted.tabs.find((entry) => entry.id === 'branch-tab');
-    expect(restored?.copyOf).toBe(base.id);
+    const restored = persisted.tabs.find((entry) => entry.id === base.id);
+    expect(restored?.conflict?.mine.content).toBe('<p>the losing words</p>');
+    expect(restored?.conflict?.theirs.content).toBe('<p>the winning words</p>');
   });
 
-  it('the strip badges a conflicted copy with the fork mark', async () => {
+  it('the strip badges a note with a parked conflict — and only that note', async () => {
     const manager = await bootedManager();
     const base = manager.getActive()!;
-    const branch: StoredNoteTab = {
-      id: 'branch-tab',
-      name: 'The plan — conflicted copy',
-      content: '<p>the losing words</p>',
-      createdAt: 1,
-      updatedAt: 2,
-      copyOf: base.id,
+    const conflicted: NoteTab = {
+      ...base,
+      conflict: {
+        kind: 'edit',
+        detectedAt: 3,
+        mine: { name: 'The plan', content: '<p>the losing words</p>' },
+        theirs: { name: null, content: '<p>the winning words</p>', updatedAt: 2 },
+      },
     };
 
-    manager.applyExternalMerge([branch]);
+    manager.applyExternalMerge([conflicted]);
 
     const badge = document.querySelector(
-      '.tab-strip-tab[data-tab-id="branch-tab"] .tab-strip-copy',
+      '.tab-strip-tab[data-tab-id="' + base.id + '"] .tab-strip-conflict',
     );
     expect(badge).not.toBeNull();
-    // An ordinary note carries no fork.
+    // Resolving the review (keeping the current version) retires the badge.
+    expect(manager.resolveConflict(base.id, 'theirs')).toBe(true);
     expect(
-      document.querySelector(`.tab-strip-tab[data-tab-id="${base.id}"] .tab-strip-copy`),
+      document.querySelector('.tab-strip-tab[data-tab-id="' + base.id + '"] .tab-strip-conflict'),
     ).toBeNull();
+  });
+
+  it('resolveConflict — restoring my version re-applies the parked words', async () => {
+    const manager = await bootedManager();
+    const base = manager.getActive()!;
+    const conflicted: NoteTab = {
+      ...base,
+      content: '<p>their words</p>',
+      conflict: {
+        kind: 'edit',
+        detectedAt: 3,
+        mine: { name: 'Mine', content: '<p>my words</p>' },
+        theirs: { name: null, content: '<p>their words</p>', updatedAt: 2 },
+      },
+    };
+    manager.applyExternalMerge([conflicted]);
+
+    expect(manager.resolveConflict(base.id, 'mine')).toBe(true);
+    const after = manager.getTabs().find((entry) => entry.id === base.id)!;
+    expect(after.content).toBe('<p>my words</p>');
+    expect(after.name).toBe('Mine');
+    expect(after.conflict).toBeUndefined();
+    expect(manager.exportForSync().dirty).toContain(base.id); // re-pushes
   });
 });
 
@@ -1224,8 +1250,8 @@ describe('TabManager — the note menu actions', () => {
     const copy = manager.getTabs()[1];
     expect(copy.id).not.toBe('src');
     expect(copy.id).not.toBe('other');
-    expect(copy.copyOf).toBeUndefined(); // a deliberate duplicate, NOT a conflicted copy
-    expect(isConflictedCopyTab(copy)).toBe(false);
+    expect(copy.copyOf).toBeUndefined(); // a deliberate duplicate, never a conflict branch
+    expect(copy.conflict).toBeUndefined();
     expect(copy.name).toBe('Copy of Field notes');
     expect(copy.content).toBe('<p>original words</p>');
     // The copy is now the active note and its content reached storage.

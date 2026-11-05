@@ -1032,78 +1032,40 @@ export function mergeRemote(
   const hasWords = (content: string): boolean => content.replace(/<[^>]*>/g, '').trim() !== '';
 
   /**
-   * The suffix a minted branch carries. Stripped (repeatedly — legacy
-   * branches could nest it) before naming a new copy, so a branch losing
-   * its own race names after the BASE note instead of stacking suffixes
-   * into "X — conflicted copy — conflicted copy".
+   * Parks a losing version on its own note — the successor of the minted
+   * "conflicted copy" twin. The remote row takes the canonical note (the
+   * words it holds are everywhere already); THIS device's unpushed words
+   * wait in the note's conflict record, badged in the strip until the
+   * review sheet resolves them (keep mine / keep theirs / keep both as an
+   * explicit copy). A record already parked on the note KEEPS ITS mine —
+   * those are the original lost words — and only refreshes theirs to the
+   * row that just won; nothing multiplies, nothing stacks names.
    */
-  const stripBranchSuffix = (name: string): string => {
-    let stripped = name;
-    for (let i = 0; i < 5; i += 1) {
-      const next = stripped.replace(/ — (?:conflicted copy|copy \(deleted elsewhere\))$/, '');
-      if (next === stripped) {
-        break;
-      }
-      stripped = next;
+  const parkLosingVersion = (local: NoteTab, row: NoteRow): void => {
+    const mine = local.conflict?.mine ?? { name: local.name, content: local.content };
+    const theirs = {
+      name: row.name,
+      content: wireRowContent(row),
+      updatedAt: row.updated_at,
+    };
+    const existing = local.conflict;
+    if (
+      existing &&
+      existing.mine.content === mine.content &&
+      existing.mine.name === mine.name &&
+      existing.theirs.content === theirs.content &&
+      existing.theirs.name === theirs.name &&
+      existing.theirs.updatedAt === theirs.updatedAt
+    ) {
+      // An identical park (the capture raced the persist, the row was
+      // redelivered) is pure churn — the record stands as it is.
+      return;
     }
-    return stripped;
-  };
-
-  /**
-   * The losing side of a race, kept as its own note — exactly once per
-   * note per device. A conflicted copy is the note's unmerged BRANCH: the
-   * first loss mints a fresh tab (own id, no syncSeq) whose content is the
-   * exact words about to be overwritten, and the cycle's step 3 pushes
-   * every local tab the pull did not deliver, so the branch rides the very
-   * next push and the losing words land on every device. Later losses of
-   * the same lineage UPDATE the branch's words in place — the old
-   * mint-per-cycle behavior filled the strip with near-identical
-   * "X — conflicted copy" tabs, one per 30-second sync, whenever two
-   * devices kept the note open. A copy that loses its own race chains back
-   * to the base note's lineage (the loser's marker drops: it now carries
-   * the winner's content for its own row). Tag-stripped emptiness
-   * (<p></p>, <br>) does not deserve a branch; blank losers vanish
-   * quietly.
-   */
-  const rescueLosingWords = (
-    local: NoteTab,
-    deletedElsewhere: boolean,
-  ): { tab: NoteTab; outcome: 'minted' | 'updated' | 'preserved' } => {
-    // The lineage this branch belongs to: a copy's own conflicts belong to
-    // the base note it was minted from, not to the copy's row.
-    const lineage = local.copyOf ?? local.id;
-    const existing = tabs.find((entry) => entry.copyOf === lineage && entry.id !== local.id);
-
-    if (existing) {
-      if (existing.content === local.content) {
-        // The words are already preserved verbatim — a second copy (or even
-        // an updatedAt bump) would be pure churn re-pushed every cycle.
-        return { tab: existing, outcome: 'preserved' };
-      }
-      existing.content = local.content;
-      existing.updatedAt = Date.now();
-      if (local.noteType) {
-        existing.noteType = local.noteType;
-      } else {
-        delete existing.noteType;
-      }
-      touched = true;
-      return { tab: existing, outcome: 'updated' };
-    }
-
-    const base = stripBranchSuffix(local.name ?? 'Note').slice(0, 40);
-    return {
-      tab: {
-        id: crypto.randomUUID(),
-        name: deletedElsewhere ? `${base} — copy (deleted elsewhere)` : `${base} — conflicted copy`,
-        content: local.content,
-        createdAt: local.createdAt,
-        updatedAt: Date.now(),
-        noteType: local.noteType,
-        colorTheme: local.colorTheme,
-        copyOf: lineage,
-      },
-      outcome: 'minted',
+    local.conflict = {
+      kind: 'edit',
+      detectedAt: Date.now(),
+      mine,
+      theirs,
     };
   };
 
@@ -1318,14 +1280,11 @@ export function mergeRemote(
           }
         }
         // Genuine overlap (or no base to merge over): the remote takes the
-        // canonical row, the branch takes the words.
-        const rescue = rescueLosingWords(local, false);
-        if (rescue.outcome === 'minted') {
-          freshRemote.push(rescue.tab);
-          conflicts.push(
-            `"${rescue.tab.name}" was changed on two devices — both versions were kept`,
-          );
-        }
+        // canonical note, this device's words park on it for review.
+        parkLosingVersion(local, row);
+        conflicts.push(
+          `"${local.name ?? 'A note'}" was changed on two devices — both versions are kept for review`,
+        );
       }
       local.name = row.name;
       local.content = wireRowContent(row);
@@ -1337,13 +1296,6 @@ export function mergeRemote(
       local.syncSeq = row.seq && row.seq > 0 ? row.seq : local.syncSeq;
       // Adopting their version makes it the new merge base.
       local.syncBase = { content: wireRowContent(row), name: row.name };
-      // A branch whose row was replaced by the winner no longer preserves
-      // divergent words — its lineage marker goes, so the branch slot is
-      // free for the next genuinely new conflict. A byte-identical
-      // re-adoption keeps it (that is just the branch syncing normally).
-      if (contentDiffers && local.copyOf) {
-        delete local.copyOf;
-      }
       touched = true;
     }
   });

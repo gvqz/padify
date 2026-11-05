@@ -108,6 +108,9 @@ function buildMenuMarkup(): string {
         </div>
       </div>
       <div class="padify-ctx-sep" role="separator"></div>
+      <button type="button" class="padify-ctx-item note-ctx-review" role="menuitem" data-action="review" hidden>
+        ${ICONS.duplicate}<span>Review versions…</span>
+      </button>
       <button type="button" class="padify-ctx-item" role="menuitem" data-action="snapshot">
         ${ICONS.snapshot}<span>Take snapshot</span>
       </button>
@@ -183,6 +186,17 @@ export function initNoteContextMenu(): void {
     sub.querySelectorAll<HTMLElement>('[data-type-check]').forEach((chip) => {
       chip.hidden = chip.getAttribute('data-type-check') !== current;
     });
+  }
+
+  /** The review entry shows only for a note carrying a parked version
+   *  conflict — hidden otherwise, so the menu never explains itself. */
+  function markReviewable(): void {
+    const tabs = getTabManager();
+    const tab = tabs?.getTabs().find((entry) => entry.id === targetTabId);
+    const item = root.querySelector<HTMLElement>('.note-ctx-review');
+    if (item) {
+      item.hidden = !tab?.conflict;
+    }
   }
 
   /** Fresh content for the note: the ACTIVE note's editor may hold words
@@ -290,6 +304,11 @@ export function initNoteContextMenu(): void {
         tabs.switchTo(tabId);
         openModal($('#statisticsModal').get(0));
         break;
+      case 'review':
+        // The strip badge's own gesture, through the same hook the sheet
+        // owns — the menu never learns how the review renders.
+        tabs.onConflictReview?.(tabId);
+        break;
       case 'close':
         tabs.requestCloseTab(tabId);
         break;
@@ -306,6 +325,7 @@ export function initNoteContextMenu(): void {
     // flip math (the editor menu's lesson, kept).
     root.hidden = false;
     closeSubmenu();
+    markReviewable();
     const width = root.offsetWidth || 232;
     const height = root.offsetHeight || 360;
     const margin = 8;

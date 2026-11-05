@@ -60,9 +60,50 @@ export interface StoredNoteTab {
    * absent on signed-out installs, so it costs nothing there.
    */
   syncBase?: { content: string; name: string | null };
-  /** Conflicted-copy lineage (local-only sync metadata; see
-   *  tabs.ts NoteTab.copyOf). */
+  /**
+   * An unresolved version conflict parked on this note (see tabs.ts —
+   * NoteTab.conflict). Rides storage so a review survives a reload; never
+   * crosses the wire.
+   */
+  conflict?: NoteConflictRecord;
+  /** Conflicted-copy lineage (LEGACY — pre-review builds minted twin notes
+   *  and marked them; nothing writes it anymore, values ride unread). */
   copyOf?: string;
+}
+
+/** An unresolved version conflict parked on a note — see tabs.ts. */
+export interface NoteConflictRecord {
+  kind: 'edit';
+  /** When this device detected the divergence (epoch ms). */
+  detectedAt: number;
+  /** The words THIS device held when the row was lost. */
+  mine: { name: string | null; content: string };
+  /** The version that took the row. */
+  theirs: { name: string | null; content: string; updatedAt: number };
+}
+
+/** Reads a stored conflict record back — junk reads as absent. */
+export function readNoteConflict(value: unknown): NoteConflictRecord | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const record = value as Partial<NoteConflictRecord>;
+  if (record.kind !== 'edit' || typeof record.mine?.content !== 'string') {
+    return undefined;
+  }
+  return {
+    kind: 'edit',
+    detectedAt: typeof record.detectedAt === 'number' ? record.detectedAt : Date.now(),
+    mine: {
+      name: typeof record.mine.name === 'string' ? record.mine.name : null,
+      content: record.mine.content,
+    },
+    theirs: {
+      name: typeof record.theirs?.name === 'string' ? record.theirs.name : null,
+      content: typeof record.theirs?.content === 'string' ? record.theirs.content : '',
+      updatedAt: typeof record.theirs?.updatedAt === 'number' ? record.theirs.updatedAt : 0,
+    },
+  };
 }
 
 /**
@@ -273,6 +314,12 @@ const lastWritten = new Map<
     noteType: NoteType | undefined;
     swept: boolean;
     syncBase: { content: string; name: string | null } | undefined;
+    conflict:
+      | {
+          mine: { content: string; name: string | null };
+          theirs: { content: string; updatedAt: number };
+        }
+      | undefined;
   }
 >();
 
@@ -329,6 +376,7 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
             ? (record as { syncSeq: number }).syncSeq
             : undefined,
         syncBase: readSyncBase((record as { syncBase?: unknown }).syncBase),
+        conflict: readNoteConflict((record as { conflict?: unknown }).conflict),
         // Round-trip the conflicted-copy lineage so the multiplication
         // guard survives reloads (see NoteTab.copyOf).
         copyOf:
@@ -392,6 +440,15 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
       noteType: tab.noteType,
       swept: false,
       syncBase: tab.syncBase,
+      conflict: tab.conflict
+        ? {
+            mine: tab.conflict.mine,
+            theirs: {
+              content: tab.conflict.theirs.content,
+              updatedAt: tab.conflict.theirs.updatedAt,
+            },
+          }
+        : undefined,
     });
   });
   valid
@@ -410,6 +467,7 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
         deletedAt: 0,
         swept,
         syncBase: undefined,
+        conflict: undefined,
       });
     });
 
@@ -505,6 +563,7 @@ function loadLegacySnapshot(): NotesSnapshot {
             syncSeq:
               typeof entry.syncSeq === 'number' && entry.syncSeq > 0 ? entry.syncSeq : undefined,
             syncBase: readSyncBase(entry.syncBase),
+            conflict: readNoteConflict(entry.conflict),
             copyOf: typeof entry.copyOf === 'string' && entry.copyOf ? entry.copyOf : undefined,
           });
         }
@@ -771,10 +830,24 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
       noteType: tab.noteType,
       swept: false,
       syncBase: tab.syncBase,
+      conflict: tab.conflict
+        ? {
+            mine: tab.conflict.mine,
+            theirs: {
+              content: tab.conflict.theirs.content,
+              updatedAt: tab.conflict.theirs.updatedAt,
+            },
+          }
+        : undefined,
     };
     const sameSyncBase =
       previous?.syncBase?.content === tab.syncBase?.content &&
       previous?.syncBase?.name === tab.syncBase?.name;
+    const sameConflict =
+      previous?.conflict?.mine.content === tab.conflict?.mine.content &&
+      previous?.conflict?.mine.name === tab.conflict?.mine.name &&
+      previous?.conflict?.theirs.content === tab.conflict?.theirs.content &&
+      previous?.conflict?.theirs.updatedAt === tab.conflict?.theirs.updatedAt;
     if (
       !previous ||
       previous.name !== signature.name ||
@@ -782,7 +855,8 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
       previous.updatedAt !== tab.updatedAt ||
       previous.noteType !== signature.noteType ||
       previous.deleted ||
-      !sameSyncBase
+      !sameSyncBase ||
+      !sameConflict
     ) {
       // Every writer stamps the current schema version (see
       // NOTE_RECORD_VERSION); v is local-only and never crosses the wire.
@@ -825,6 +899,7 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
         noteType: grave.noteType,
         swept: false,
         syncBase: undefined,
+        conflict: undefined,
       });
     }
   });

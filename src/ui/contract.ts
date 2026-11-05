@@ -88,6 +88,7 @@ export const MARKUP_CONTRACT: MarkupContractGroup[] = [
       'aboutModal',
       'snapshotsModal',
       'trashModal',
+      'conflictModal',
       'keyboardShortcutsModal',
       'unicodePickerModal',
       'cloudModal',

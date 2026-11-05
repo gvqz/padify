@@ -32,6 +32,7 @@ import { initCloudSync } from './cloud/sync';
 import { initCloudUI } from './cloud/ui';
 import { initCloudShare } from './cloud/share';
 import { initShareUI } from './cloud/share-ui';
+import { initConflictReview } from './conflicts';
 import { initVoiceTyping, toggleVoiceTyping, handleTabSwitchedWhileListening } from './voice';
 import { initTypingEffects } from './typing-effects';
 import { initPipWindow } from './pip-window';
@@ -130,6 +131,9 @@ export async function initApp(): Promise<void> {
   // on the left of the page (see tabs.ts).
   const tabManager = new TabManager(notepad.note);
   setTabManager(tabManager);
+  // The version-review sheet wires onto the manager's badge hook (the
+  // strip's delegated conflict-badge click opens it).
+  initConflictReview();
 
   // The editor seam — every reader/writer of the note surface goes through
   // this port (see editor/port.ts). The document-model engine is installed

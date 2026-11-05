@@ -339,7 +339,7 @@ describe('mergeRemote — the three-way auto-merge', () => {
     expect(merge.tabs[0].content).toBe('<p>one</p><p>three</p><p>four</p>');
   });
 
-  it('true overlap still mints the conflicted copy — the merge is not a lie', () => {
+  it('true overlap parks the losing words for review — the merge is not a lie', () => {
     const local = tab('a', {
       syncSeq: 5,
       updatedAt: 4_000,
@@ -354,12 +354,13 @@ describe('mergeRemote — the three-way auto-merge', () => {
 
     const merge = mergeRemote([remote], payloadOf([local], ['a']));
 
-    expect(merge.tabs).toHaveLength(2); // theirs + the copy
+    expect(merge.tabs).toHaveLength(1); // no twin — the record parks
     expect(merge.mergedIds).toEqual([]);
-    expect(merge.conflicts[0]).toContain('both versions');
+    expect(merge.tabs[0].conflict?.mine.content).toBe('<p>buy red milk</p>');
+    expect(merge.conflicts[0]).toContain('review');
   });
 
-  it('no syncBase (a fresh install, a v1 server) falls back to the copy', () => {
+  it('no syncBase (a fresh install, a v1 server) parks without merging', () => {
     const local = tab('a', {
       syncSeq: 5,
       updatedAt: 4_000,
@@ -369,7 +370,8 @@ describe('mergeRemote — the three-way auto-merge', () => {
 
     const merge = mergeRemote([remote], payloadOf([local], ['a']));
 
-    expect(merge.tabs).toHaveLength(2);
+    expect(merge.tabs).toHaveLength(1);
+    expect(merge.tabs[0].conflict?.mine.content).toBe('<p>different words entirely</p>');
     expect(merge.mergedIds).toEqual([]);
   });
 
@@ -387,16 +389,18 @@ describe('mergeRemote — the three-way auto-merge', () => {
 
 // ---------------------------------------------------------------------------
 // Conflict preservation — the contract that nothing is silently discarded.
-// A version about to be overwritten (or buried) that the cloud never
-// confirmed becomes a conflicted copy: a fresh tab that rides the next
-// push, so both versions exist on every device.
+// A version about to be overwritten that the cloud never confirmed parks on
+// its own note (NoteTab.conflict): the strip badges it, the review sheet
+// resolves it, and the strip never again fills with "— conflicted copy"
+// twins (the pre-review mechanism, kept working for years by a lineage
+// system that is gone with it).
 // ---------------------------------------------------------------------------
 
 describe('mergeRemote — conflict preservation', () => {
-  it('a dirty local losing an edit race keeps its words as a copy', () => {
+  it('a dirty local losing an edit race parks its words on the note', () => {
     // The two-device story: this device edited offline (dirty, never
     // pushed); the other device pushed first. The remote takes the note;
-    // the local words take a copy.
+    // the local words park for review — no twin minted.
     const local = tab('a', {
       name: 'Groceries',
       syncSeq: 5,
@@ -411,23 +415,22 @@ describe('mergeRemote — conflict preservation', () => {
 
     const merge = mergeRemote([remote], payloadOf([local], ['a']));
 
-    // The canonical note holds the remote version.
+    // The canonical note holds the remote version — ONE note, no twin.
+    expect(merge.tabs).toHaveLength(1);
     expect(merge.tabs[0]).toMatchObject({
       id: 'a',
       content: '<p>flour and sugar</p>',
       syncSeq: 9,
     });
-    // The losing words survive as a fresh tab.
-    expect(merge.tabs).toHaveLength(2);
-    const copy = merge.tabs[1];
-    expect(copy.id).not.toBe('a');
-    expect(copy.content).toBe('<p>milk and eggs</p>');
-    expect(copy.name).toBe('Groceries — conflicted copy');
-    expect(copy.syncSeq).toBeUndefined(); // brand new: nothing synced yet
+    // The losing words wait in the parked record.
+    expect(merge.tabs[0].conflict).toMatchObject({
+      kind: 'edit',
+      mine: { name: 'Groceries', content: '<p>milk and eggs</p>' },
+      theirs: { content: '<p>flour and sugar</p>', updatedAt: 9_000 },
+    });
     expect(merge.changed).toBe(true);
     expect(merge.conflicts).toHaveLength(1);
-    expect(merge.conflicts[0]).toContain('Groceries — conflicted copy');
-    expect(merge.conflicts[0]).toContain('both versions');
+    expect(merge.conflicts[0]).toContain('kept for review');
   });
 
   it('a clean local losing an edit race is overwritten with no copy', () => {
@@ -443,13 +446,15 @@ describe('mergeRemote — conflict preservation', () => {
     expect(merge.conflicts).toEqual([]);
   });
 
-  it('the copy preserves the note type exactly', () => {
+  it('the note keeps its type; the record keeps the words', () => {
     const local = tab('a', { noteType: 'markdown', content: '# kept', updatedAt: 4_000 });
     const remote = row('a', { updated_at: 9_000, content: '# winner' });
 
     const merge = mergeRemote([remote], payloadOf([local], ['a']));
 
-    expect(merge.tabs[1]).toMatchObject({ noteType: 'markdown', content: '# kept' });
+    expect(merge.tabs[0].noteType).toBe('markdown');
+    expect(merge.tabs[0].content).toBe('# winner');
+    expect(merge.tabs[0].conflict?.mine.content).toBe('# kept');
   });
 
   it('a dirty local losing to a delete keeps its words IN THE TRASH, loses the strip', () => {
@@ -492,18 +497,18 @@ describe('mergeRemote — conflict preservation', () => {
     expect(merge.conflicts).toEqual([]);
   });
 
-  it('the read-max race\u2019s equal-seq twin heals: clean local defers, copy keeps its words', () => {
+  it('the read-max race\u2019s equal-seq twin heals: clean local defers, its words park', () => {
     // Two different versions stamped with the same seq by the old racy
     // base read. A clean local is one of the twins: the remote takes the
-    // canonical row, the local twin\u2019s words leave a copy. Both survive.
+    // canonical row, the local twin\u2019s words park. Both survive.
     const local = tab('a', { syncSeq: 4, content: '<p>mine</p>' });
     const remote = row('a', { seq: 4, content: '<p>theirs</p>' });
 
     const merge = mergeRemote([remote], payloadOf([local], []));
 
-    expect(merge.tabs).toHaveLength(2);
+    expect(merge.tabs).toHaveLength(1);
     expect(merge.tabs[0].content).toBe('<p>theirs</p>');
-    expect(merge.tabs[1].content).toBe('<p>mine</p>');
+    expect(merge.tabs[0].conflict?.mine.content).toBe('<p>mine</p>');
     expect(merge.conflicts).toHaveLength(1);
   });
 
@@ -520,34 +525,32 @@ describe('mergeRemote — conflict preservation', () => {
     expect(merge.conflicts).toEqual([]);
   });
 
-  it('both devices dirty: the loser keeps a copy, the winner takes the note', () => {
+  it('both devices dirty: the loser parks, the winner takes the note', () => {
     // D2 pushed first (seq 9); D1 pulls it while holding its own unsynced
-    // edit from seq 5. One copy, both versions alive.
+    // edit from seq 5. One note, both versions alive.
     const local = tab('a', { syncSeq: 5, updatedAt: 4_000, content: '<p>device one words</p>' });
     const remote = row('a', { seq: 9, updated_at: 9_000, content: '<p>device two words</p>' });
 
     const merge = mergeRemote([remote], payloadOf([local], ['a']));
 
-    expect(merge.tabs.map((entry) => entry.content)).toEqual([
-      '<p>device two words</p>',
-      '<p>device one words</p>',
-    ]);
+    expect(merge.tabs).toHaveLength(1);
+    expect(merge.tabs[0].content).toBe('<p>device two words</p>');
+    expect(merge.tabs[0].conflict?.mine.content).toBe('<p>device one words</p>');
   });
 });
 
 // ---------------------------------------------------------------------------
-// Multiplication — one conflicted copy per note per device, ever. The old
-// merge minted a fresh copy on EVERY losing cycle, so a note edited while
-// two devices held it open accumulated a strip full of near-identical
-// "X — conflicted copy" tabs, one per 30-second sync. The copy is now the
-// note's unmerged BRANCH: the first mint creates it, later losses update
-// its words in place, and a copy that loses its own race chains back to
-// the base note's lineage instead of nesting names.
+// Multiplication — one parked record per note, ever. The pre-review merge
+// minted a fresh "conflicted copy" tab on EVERY losing cycle, so a note
+// edited while two devices held it open accumulated a strip full of
+// near-identical twins, one per 30-second sync. The record keeps the
+// ORIGINAL lost words (mine) and only refreshes theirs — nothing mints,
+// nothing stacks names, the strip never grows.
 // ---------------------------------------------------------------------------
 
 describe('mergeRemote — conflict multiplication guard', () => {
-  it('a repeated edit race updates the existing copy in place, not a second copy', () => {
-    // Cycle 1: the dirty local loses to D2's push. A copy is minted.
+  it('a repeated edit race refreshes theirs, keeps mine — still one note', () => {
+    // Cycle 1: the dirty local loses to D2's push. A record parks.
     const first = mergeRemote(
       [row('a', { seq: 9, updated_at: 9_000, content: '<p>v2 from device two</p>' })],
       payloadOf(
@@ -562,16 +565,13 @@ describe('mergeRemote — conflict multiplication guard', () => {
         ['a'],
       ),
     );
-    expect(first.tabs).toHaveLength(2);
-    const copy = first.tabs[1];
-    expect(copy.name).toBe('Plan — conflicted copy');
+    expect(first.tabs).toHaveLength(1);
+    expect(first.tabs[0].conflict?.mine.content).toBe('<p>my words</p>');
 
-    // Cycle 2: the canonical took the remote words in cycle 1, but the
-    // user's editor kept the local branch alive and kept typing (the
-    // focused-editor capture), so the local is dirty again with evolved
-    // words while D2 pushed ANOTHER version. The old merge minted a SECOND
-    // copy here — and a third on the next cycle, and so on. The branch is
-    // updated in place instead.
+    // Cycle 2: the user kept typing on the adopted version while D2
+    // pushed ANOTHER version. The pre-review merge minted a SECOND copy
+    // here — and a third on the next cycle. The record keeps the ORIGINAL
+    // lost words and only refreshes theirs.
     const second = mergeRemote(
       [row('a', { seq: 11, updated_at: 11_000, content: '<p>v3 from device two</p>' })],
       payloadOf(
@@ -581,42 +581,48 @@ describe('mergeRemote — conflict multiplication guard', () => {
             syncSeq: 9,
             updatedAt: 10_000,
             content: '<p>my words, still typing</p>',
+            conflict: first.tabs[0].conflict,
           }),
-          ...first.tabs.filter((entry) => entry.id !== 'a'),
         ],
         ['a'],
       ),
     );
 
-    expect(second.tabs).toHaveLength(2); // not 3 — no second copy
-    const updatedCopy = second.tabs.find((entry) => entry.id === copy.id);
-    expect(updatedCopy?.content).toBe('<p>my words, still typing</p>');
-    expect(second.conflicts).toEqual([]); // silent: the branch just moved
+    expect(second.tabs).toHaveLength(1); // still one note
+    expect(second.tabs[0].conflict?.mine.content).toBe('<p>my words</p>'); // ORIGINAL words
+    expect(second.tabs[0].conflict?.theirs.content).toBe('<p>v3 from device two</p>');
   });
 
-  it('an identical repeated race is a no-op — the branch does not churn', () => {
+  it('an identical repeated race is a no-op — the record does not churn', () => {
     const first = mergeRemote(
       [row('a', { seq: 9, updated_at: 9_000, content: '<p>remote</p>' })],
       payloadOf([tab('a', { syncSeq: 5, updatedAt: 4_000, content: '<p>mine</p>' })], ['a']),
     );
-    const copy = first.tabs[1];
+    const parked = first.tabs[0].conflict!;
 
-    // Same losing words again (the capture raced the persist): the copy's
-    // content and updatedAt must not move, or every cycle re-pushes it.
+    // Same losing words and the same row again (the capture raced the
+    // persist, the pull redelivered): the record's bytes must not move.
     const second = mergeRemote(
       [row('a', { seq: 9, updated_at: 9_000, content: '<p>remote</p>' })],
       payloadOf(
-        [tab('a', { syncSeq: 9, updatedAt: 4_000, content: '<p>remote</p>' }), copy],
+        [
+          tab('a', {
+            syncSeq: 9,
+            updatedAt: 4_000,
+            content: '<p>remote</p>',
+            conflict: parked,
+          }),
+        ],
         ['a'],
       ),
     );
 
-    const after = second.tabs.find((entry) => entry.id === copy.id);
-    expect(after?.updatedAt).toBe(copy.updatedAt);
-    expect(second.conflicts).toEqual([]);
+    // mine outlived the adoption — the original words are still parked.
+    expect(second.tabs[0].conflict?.mine.content).toBe('<p>mine</p>');
+    expect(second.tabs[0].conflict?.theirs.content).toBe('<p>remote</p>');
   });
 
-  it('the read-max twin arriving twice mints one copy, then updates it', () => {
+  it('the read-max twin arriving twice parks once, then refreshes', () => {
     // The pre-fix server could stamp two different versions with the same
     // seq; the pull can redeliver the row when the cursor never advanced
     // past it (a crash between merge and cursor store, or a seq-0 row —
@@ -626,29 +632,34 @@ describe('mergeRemote — conflict multiplication guard', () => {
       [row('a', { seq: 4, content: '<p>theirs</p>' })],
       payloadOf([local], []),
     );
-    expect(first.tabs).toHaveLength(2);
-    const copy = first.tabs[1];
-    expect(copy.content).toBe('<p>mine</p>');
+    expect(first.tabs).toHaveLength(1);
+    expect(first.tabs[0].conflict?.mine.content).toBe('<p>mine</p>');
 
     // The row is redelivered with a DIFFERENT same-seq twin (the other
-    // racing write finally observed): the canonical moves again, the copy
-    // — not a second one — takes the local twin's words.
+    // racing write finally observed): theirs moves, mine does not.
     const second = mergeRemote(
       [row('a', { seq: 4, content: '<p>the third version</p>' })],
-      payloadOf([tab('a', { syncSeq: 4, content: '<p>theirs</p>' }), copy], []),
+      payloadOf(
+        [
+          tab('a', {
+            syncSeq: 4,
+            content: '<p>theirs</p>',
+            conflict: first.tabs[0].conflict,
+          }),
+        ],
+        [],
+      ),
     );
 
-    expect(second.tabs).toHaveLength(2);
-    expect(second.tabs.find((entry) => entry.id === 'a')?.content).toBe('<p>the third version</p>');
-    expect(second.tabs.find((entry) => entry.id === copy.id)?.content).toBe('<p>theirs</p>');
+    expect(second.tabs).toHaveLength(1);
+    expect(second.tabs[0].content).toBe('<p>the third version</p>');
+    expect(second.tabs[0].conflict?.mine.content).toBe('<p>mine</p>');
   });
 
-  it('a copy losing its own race chains to the base lineage, never a nested name', () => {
-    // The copy itself was edited here (dirty) and lost to a remote edit of
-    // its own row. The mint names after the BASE note and reuses the same
-    // lineage — the losing tab drops its branch marker (it now carries the
-    // winner's content for its own row).
-    const base = tab('a', { name: 'Recipe', content: '<p>base</p>' });
+  it('a legacy conflicted-copy tab losing its own race parks on itself — no nesting, no mint', () => {
+    // A "X — conflicted copy" tab from a pre-review build is just a note
+    // now: when it loses its own edit race, ITS words park on IT. No new
+    // tab, no lineage chaining, no "— conflicted copy — conflicted copy".
     const copy = tab('branch', {
       name: 'Recipe — conflicted copy',
       copyOf: 'a',
@@ -656,23 +667,17 @@ describe('mergeRemote — conflict multiplication guard', () => {
     });
     const remote = row('branch', { seq: 20, updated_at: 9_000, content: '<p>winner</p>' });
 
-    const merge = mergeRemote([remote], payloadOf([base, copy], ['branch']));
+    const merge = mergeRemote([remote], payloadOf([copy], ['branch']));
 
-    // The losing copy takes the winner's content and stops being a branch…
     const loser = merge.tabs.find((entry) => entry.id === 'branch');
     expect(loser?.content).toBe('<p>winner</p>');
-    expect(loser?.copyOf).toBeUndefined();
-    // …and the losing words joined the base's existing lineage tab, or
-    // minted one named after the BASE — never "— conflicted copy — conflicted copy".
-    const rescued = merge.tabs.find((entry) => entry.content === '<p>branch words</p>');
-    expect(rescued).toBeDefined();
-    expect(rescued?.name).not.toContain('conflicted copy — conflicted copy');
-    expect(rescued?.name).toContain('Recipe');
+    expect(loser?.conflict?.mine.content).toBe('<p>branch words</p>');
+    expect(merge.tabs).toHaveLength(1);
   });
 
-  it('a copyOf tab whose content matches the loser does not mint at all', () => {
-    // The words are already preserved verbatim in the branch tab: a
-    // second copy would be a pure duplicate.
+  it('a base note with a legacy branch tab still parks its own words', () => {
+    // The branch tab is irrelevant to the base's race: the base's words
+    // park on the base, one record, nothing duplicated.
     const base = tab('a', { name: 'Plan', syncSeq: 5, content: '<p>the words</p>' });
     const branch = tab('branch', {
       copyOf: 'a',
@@ -683,9 +688,10 @@ describe('mergeRemote — conflict multiplication guard', () => {
 
     const merge = mergeRemote([remote], payloadOf([base, branch], ['a']));
 
-    expect(merge.tabs).toHaveLength(2);
-    expect(merge.tabs.find((entry) => entry.id === 'branch')?.content).toBe('<p>the words</p>');
-    expect(merge.conflicts).toEqual([]);
+    expect(merge.tabs).toHaveLength(2); // the base and the untouched branch
+    expect(merge.tabs.find((entry) => entry.id === 'a')?.conflict?.mine.content).toBe(
+      '<p>the words</p>',
+    );
   });
 });
 
@@ -774,7 +780,7 @@ describe('mergeRemote — own echoes', () => {
   it('another device\u2019s write still outranks dirty typing \u2014 both versions kept', () => {
     // Same local state as the first test, but the row is NOT this
     // device's push: no echo fingerprint matches. A genuine diverge —
-    // the copy must be minted.
+    // the words park for review.
     const local = tab('a', {
       syncSeq: 5,
       updatedAt: 4_000,
@@ -791,8 +797,7 @@ describe('mergeRemote — own echoes', () => {
     expect(merge.conflicts).toHaveLength(1);
     const survivor = merge.tabs.find((entry) => entry.id === 'a');
     expect(survivor?.content).toBe('<p>from the other device</p>');
-    const copy = merge.tabs.find((entry) => entry.id !== 'a');
-    expect(copy?.content).toBe('<p>typed even more</p>');
+    expect(survivor?.conflict?.mine.content).toBe('<p>typed even more</p>');
   });
 
   it('a row an echo does not recognize arbitrates as before', () => {
