@@ -205,3 +205,9 @@ body.dark .tab-strip-conflict:hover {
 .conflict-actions .snap-act {
   flex: 0 1 auto;
 }
+
+/* The preview is a fact, not a target — nothing in it is clickable, and
+   it must never eat a click aimed at the actions beside it. */
+.trash-item .snap-preview {
+  pointer-events: none;
+}

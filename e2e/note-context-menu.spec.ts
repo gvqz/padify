@@ -160,7 +160,9 @@ test("copy note text puts the note's text on the clipboard", async ({ page }) =>
   expect(clipboard).toBe('Clipboard catch phrase.');
 });
 
-test("close tab on a note with content asks first, like the rail's ×", async ({ page }) => {
+test('move to trash on a note with content needs no ask — the trash is the ask', async ({
+  page,
+}) => {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
 
@@ -168,9 +170,11 @@ test("close tab on a note with content asks first, like the rail's ×", async ({
   await page.locator(`${MENU} [data-action="close"]`).click();
   await expect(page.locator(MENU)).toBeHidden();
 
-  // The guarded close asks before it deletes.
-  const ask = page.locator('dialog.vz-dialog');
-  await expect(ask).toBeVisible();
-  await expect(ask.locator('.vz-dialog-title')).toContainText('Close this tab?');
-  await page.keyboard.press('Escape');
+  // The trash IS the undo path: no confirm dialog, the words restorable
+  // from the trash sheet for the retention window.
+  await expect(page.locator('dialog.vz-dialog')).toBeHidden();
+  await expect(page.locator('#tabRailTrashCount')).toBeVisible();
+  await page.locator('#tabRailTrash').click();
+  await expect(page.locator('#trashModal')).toHaveClass(/in/);
+  await expect(page.locator('#trashList .trash-item')).toHaveCount(1);
 });

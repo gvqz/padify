@@ -158,7 +158,7 @@ test.describe('the rebuilt menu', () => {
     // The trash IS the undo path: no confirm dialog, no safety snapshot —
     // the words live in the trash, restorable under the same id.
     await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(1);
-    await toastSays(page, 'moved to trash');
+    await expect(page.locator('#toast')).toContainText('moved to trash');
 
     // The trash sheet holds the note, one click from restored.
     await page.locator('#tabRailTrash').click();
@@ -654,7 +654,7 @@ test.describe('deleting', () => {
     await expect(del).toHaveClass(/is-armed/);
 
     // A click anywhere else is not a confirmation.
-    await page.locator('.snap-head').click();
+    await page.locator('#snapshotsModal .snap-head').click();
     await expect(del).not.toHaveClass(/is-armed/);
     await expect(del).toContainText('Delete');
     await expect(snapshotRows(page)).toHaveCount(1);
@@ -1191,7 +1191,7 @@ test.describe('the type filter', () => {
     // The PLAIN note takes a new snapshot — the filter would hide it.
     // Close the sheet with the header × (Escape is the filter's reset
     // now, and this test is about the CAPTURE clearing the filter).
-    await page.locator('.snap-head .close').click();
+    await page.locator('#snapshotsModal .snap-head .close').click();
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
     await expect(page.locator('#snapshotTypeFilter')).toContainText('Markdown');
     await page.locator('#tabStripTabs .tab-strip-tab').first().click();
@@ -1251,7 +1251,7 @@ test.describe('the type filter', () => {
     await page.locator('#snapshotTypeFilter').click();
     await expect(page.locator('#snapshotTypeMenu')).toBeVisible();
 
-    await page.locator('.snap-head').click();
+    await page.locator('#snapshotsModal .snap-head').click();
     await expect(page.locator('#snapshotTypeMenu')).toBeHidden();
     // Nothing was chosen — the whole history still shows.
     await expect(snapshotRows(page)).toHaveCount(2);

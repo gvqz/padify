@@ -98,21 +98,26 @@ function buildRow(grave: TrashedNote, now: number): HTMLLIElement {
   li.dataset.trashId = grave.id;
   const preview = trashPreview(grave);
   const title = escapeHtml(trashTitle(grave));
+  // Same skeleton the History sheet's rows use: [when][rail][content] —
+  // the content wrapper keeps the grid placement (and the preview below
+  // the action line, never over it).
   li.innerHTML = `
     <div class="snap-row" role="group" aria-label="${title}">
       <span class="snap-when">${clock(grave.deletedAt)}</span>
-      <div class="snap-line">
-        <span class="snap-name">${title}</span>
-        <span class="snap-note">${escapeHtml(typeLabel(grave))}</span>
-        ${retentionChip(grave.deletedAt, now)}
-        <span class="trash-row-actions">
-          <button type="button" class="snap-act restore" data-trash-action="restore">Restore</button>
-          <button type="button" class="trash-purge" data-trash-action="purge" title="Delete forever" aria-label="Delete ${title} forever">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-          </button>
-        </span>
+      <div class="snap-content">
+        <div class="snap-line">
+          <span class="snap-name">${title}</span>
+          <span class="snap-note">${escapeHtml(typeLabel(grave))}</span>
+          ${retentionChip(grave.deletedAt, now)}
+          <span class="trash-row-actions">
+            <button type="button" class="snap-act restore" data-trash-action="restore">Restore</button>
+            <button type="button" class="trash-purge" data-trash-action="purge" title="Delete forever" aria-label="Delete ${title} forever">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+          </span>
+        </div>
+        ${preview ? `<p class="snap-preview">${preview}</p>` : ''}
       </div>
-      ${preview ? `<p class="snap-preview">${preview}</p>` : ''}
     </div>`;
   return li;
 }
