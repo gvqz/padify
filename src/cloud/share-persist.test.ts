@@ -15,12 +15,19 @@ vi.mock('./api', () => ({ api: vi.fn(async () => ({})) }));
 
 import type { TabsSyncPayload } from '../tabs';
 
-const payloadWith = (tombstoneIds: string[]): TabsSyncPayload => ({
+const payloadWith = (trashIds: string[]): TabsSyncPayload => ({
   tabs: [],
   dirty: [],
-  // The model's tombstone list is CUMULATIVE — a payload after ANY later
-  // edit still carries every not-yet-confirmed deletion.
-  tombstones: tombstoneIds.map((id) => ({ id, updatedAt: 1 })),
+  // The model's trash list rides every payload — a payload after ANY
+  // later edit still carries every restorable deletion.
+  trashed: trashIds.map((id) => ({
+    id,
+    name: null,
+    content: '',
+    createdAt: 1,
+    updatedAt: 1,
+    deletedAt: 1,
+  })),
 });
 
 interface Hook {

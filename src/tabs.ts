@@ -7,9 +7,10 @@
  * autosaved per-record into the padify IndexedDB store (see src/storage/):
  *
  *   notes store    → one row per note: { id, name, html, createdAt,
- *                    updatedAt, position } — deletions are rows with
- *                    deleted=true (tombstones), exactly like the cloud
- *                    schema; a save writes only the changed rows
+ *                    updatedAt, position } — deletions are TRASH rows
+ *                    (deleted=true, deletedAt stamped, content kept),
+ *                    exactly like the cloud schema; a save writes only
+ *                    the changed rows
  *   kv store       → padifyActiveTab holds the id of the tab in the editor
  *
  * A legacy blob mirror keeps the old `padifyTabs` localStorage key fresh for
@@ -41,6 +42,7 @@ import {
   stateGet,
   stateRemove,
   type StoredNoteTab,
+  type TrashedNote,
 } from './storage';
 import { sanitizeNoteHtml } from './editor/storage-subset';
 import { currentThemeMode, transformNoteColors } from './editor/theme-colors';
@@ -54,13 +56,7 @@ import {
 } from './editor/surface';
 import { renderMarkdownToHtml } from './editor/markdown/render';
 import { convertNoteContent } from './editor/note-convert';
-import {
-  deriveTabTitle,
-  escapeHtml,
-  htmlToText,
-  legacyTextToHtml,
-  WELCOME_HTML,
-} from './editor/note-content';
+import { deriveTabTitle, escapeHtml, legacyTextToHtml, WELCOME_HTML } from './editor/note-content';
 import {
   DEFAULT_NOTE_TYPE,
   isHtmlContent,
@@ -141,27 +137,25 @@ export interface NoteTab {
 
 const LEGACY_NOTE_KEY = 'note';
 
-/**
- * Tabs closed on this device whose deletion has not been confirmed by the
- * cloud yet. Persisted so closing a tab offline still deletes it remotely
- * after the next sync.
- */
-export interface TabTombstone {
-  id: string;
-  updatedAt: number;
-}
-
 /** Notifies the rail's count badge (and any other listener) about tab count. */
 const RAIL_COUNT_ID = 'tabRailCount';
 
-/** Everything the cloud sync layer needs after the model changed. */
+/** The rail's trash-entry badge — mirrors the trash count beside the sheet. */
+const RAIL_TRASH_ID = 'tabRailTrashCount';
+
+/**
+ * Everything the cloud sync layer needs after the model changed. The
+ * `trashed` list rides along so the sync layer can push trash rows (and
+ * the share layer can revoke links) — entries stay in the model until
+ * retention retires them, unlike the tombstones they replaced.
+ */
 export interface TabsSyncPayload {
   /** Current tab list (already persisted to localStorage). */
   tabs: NoteTab[];
   /** Tab ids whose content/name changed since the last persist. */
   dirty: string[];
-  /** Full tombstone list (pending deletions, some possibly old news). */
-  tombstones: TabTombstone[];
+  /** The trash: deleted notes kept restorable for the retention window. */
+  trashed: TrashedNote[];
 }
 
 function createTabId(): string {
@@ -223,7 +217,9 @@ export class TabManager {
   private readonly editor: Q;
   private readonly strip: Q;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
-  private tombstones: TabTombstone[] = [];
+  /** The trash — deleted notes kept restorable for the retention window
+   *  (content included). Lives beside the tabs, syncs as deleted rows. */
+  private trashed: TrashedNote[] = [];
   private dirtyIds: Set<string> = new Set();
   private persistListeners: Set<(payload: TabsSyncPayload) => void> = new Set();
   private activeListeners: Set<(tab: NoteTab) => void> = new Set();
@@ -243,8 +239,8 @@ export class TabManager {
   async init(): Promise<void> {
     const snapshot = await loadNotes();
     this.tabs = this.loadModel(snapshot.tabs);
-    this.tombstones = snapshot.tombstones.filter(
-      (entry) => entry && typeof entry.id === 'string' && typeof entry.updatedAt === 'number',
+    this.trashed = snapshot.trashed.filter(
+      (entry) => entry && typeof entry.id === 'string' && typeof entry.deletedAt === 'number',
     );
     this.migrateLegacyNote();
 
@@ -333,7 +329,7 @@ export class TabManager {
    * throttled.
    */
   private persist(immediate = true): void {
-    saveNotes({ tabs: this.tabs, tombstones: this.tombstones }, this.activeId, { immediate });
+    saveNotes({ tabs: this.tabs, trashed: this.trashed }, this.activeId, { immediate });
 
     const payload = this.exportForSync();
     if (this.onPersist) {
@@ -369,43 +365,32 @@ export class TabManager {
 
   // ---- sync support ---------------------------------------------------------
 
-  /**
-   * Persists the tombstone list (they live as deleted rows in the notes
-   * store — see storage/notes.ts).
-   */
-  private persistTombstones(): void {
-    saveNotes({ tabs: this.tabs, tombstones: this.tombstones }, this.activeId, { immediate: true });
-  }
-
-  /** Records a tab deletion so the cloud can mirror it (tombstone). */
-  private recordTombstone(tabId: string): void {
-    if (this.tombstones.some((entry) => entry.id === tabId)) {
-      return;
-    }
-    this.tombstones.push({ id: tabId, updatedAt: Date.now() });
-    this.persistTombstones();
-  }
-
   /** Snapshot of the model for the cloud sync layer. */
   exportForSync(): TabsSyncPayload {
     return {
       tabs: this.tabs.map((tab) => ({ ...tab })),
       dirty: [...this.dirtyIds],
-      tombstones: this.tombstones.map((entry) => ({ ...entry })),
+      trashed: this.trashed.map((entry) => ({ ...entry })),
     };
   }
 
   /**
-   * Called by the cloud sync layer after a pull confirmed a tombstone is
-   * stored remotely — the local record is no longer needed.
+   * Replaces the trash list after a sync merge. Called only when the merge
+   * actually changed it — the strip never depends on trash rows, so this
+   * is a silent model+persist swap (the rail badge refresh is the UI's to
+   * own through its persist listener).
    */
-  confirmTombstones(ids: string[]): void {
-    if (ids.length === 0) {
-      return;
-    }
-    const confirmed = new Set(ids);
-    this.tombstones = this.tombstones.filter((entry) => !confirmed.has(entry.id));
-    this.persistTombstones();
+  applyExternalTrash(trashed: TrashedNote[]): void {
+    this.trashed = trashed.map((entry) => ({ ...entry }));
+    this.persist();
+    this.renderRailCount();
+  }
+
+  /** The trash, newest first — the trash sheet's read. */
+  getTrashed(): readonly TrashedNote[] {
+    return [...this.trashed]
+      .filter((entry) => !entry.purged)
+      .sort((a, b) => b.deletedAt - a.deletedAt);
   }
 
   /**
@@ -414,6 +399,10 @@ export class TabManager {
    * set grew monotonically — every persist notification re-added every
    * historical dirty id to the pendingPush set, so the same rows were
    * pushed on every 30 s sync cycle forever, byte-for-byte identical.
+   *
+   * A confirmed push also retires PURGED placeholders (trash rows emptied
+   * for a delete-forever whose sweeper row just landed — see purgeNote):
+   * their job is done the moment the cloud accepted them.
    *
    * Only entries that the server actually acknowledged are dropped. Any id
    * marked dirty after the push snapshot was taken stays dirty for the
@@ -425,6 +414,14 @@ export class TabManager {
     }
     for (const id of ids) {
       this.dirtyIds.delete(id);
+    }
+    // Purged placeholders leave once their sweeper row is stored — there is
+    // nothing left to show, restore or push for them.
+    const confirmed = new Set(ids);
+    if (this.trashed.some((entry) => entry.purged && confirmed.has(entry.id))) {
+      this.trashed = this.trashed.filter((entry) => !(entry.purged && confirmed.has(entry.id)));
+      this.persist();
+      this.renderRailCount();
     }
   }
 
@@ -802,6 +799,14 @@ export class TabManager {
     if (count) {
       count.textContent = String(this.tabs.length);
     }
+    // The trash badge mirrors the VISIBLE trash (purged placeholders are
+    // gone in spirit already); hidden when empty so the rail stays quiet.
+    const trashCount = document.getElementById(RAIL_TRASH_ID);
+    if (trashCount) {
+      const visible = this.trashed.filter((entry) => !entry.purged).length;
+      trashCount.textContent = String(visible);
+      trashCount.toggleAttribute('hidden', visible === 0);
+    }
   }
 
   private buildTabElement(tab: NoteTab): HTMLElement {
@@ -856,8 +861,8 @@ export class TabManager {
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'tab-strip-close';
-    close.setAttribute('aria-label', `Close tab ${deriveTabTitle(tab)}`);
-    close.title = 'Close tab';
+    close.setAttribute('aria-label', `Move ${deriveTabTitle(tab)} to trash`);
+    close.title = 'Move to trash';
     close.innerHTML =
       '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
     button.appendChild(close);
@@ -1190,6 +1195,19 @@ export class TabManager {
     this.persist();
   }
 
+  /**
+   * Moves a note to the trash — the strip's ×, the middle-click and the note
+   * menu's "Move to trash".
+   *
+   * The trash IS the undo path, so there is no confirmation dialog and no
+   * safety snapshot: the note's full record (content, name, type, ink theme)
+   * moves to the trashed list with a fresh deletedAt stamp, restorable for
+   * the retention window, and the move rides the next cloud push as a
+   * deleted row that keeps its bytes. The pre-trash flow asked "Close this
+   * tab?" and fired a snapshot behind the user's back because closing was
+   * DESTRUCTIVE — recoverable deletes make both the ask and the snapshot
+   * theater (the same rule the snapshot restore already follows).
+   */
   requestCloseTab(tabId: string): void {
     const tab = this.tabs.find((entry) => entry.id === tabId);
     if (!tab) {
@@ -1197,88 +1215,160 @@ export class TabManager {
     }
 
     const isActive = tabId === this.activeId;
-    // Capture the live editor FIRST when closing the active tab: the
-    // emptiness gate below reads the surface, but the snapshot argument
-    // reads the model — inside the input debounce window those disagree,
-    // so a close could skip the safety snapshot (or store it missing the
-    // last words) for exactly the content the user is trying to keep.
+    // Capture the live editor FIRST when trashing the active tab: the model
+    // is what moves to the trash, and inside the input debounce window it
+    // can lag the surface — the trashed entry must carry the last words.
     if (isActive) {
       this.saveActiveFromEditor();
     }
-    const text = isActive ? this.getActiveText() : htmlToText(tab.content);
 
-    const closeNow = async (): Promise<void> => {
-      // Keep a safety snapshot behind the user's back, like delete-notes does.
-      // Await so the snapshot actually lands before the tab is removed.
-      // The snapshot must capture THE CLOSING TAB — createSnapshot() reads
-      // the ACTIVE note, so closing a background tab stored the wrong
-      // note (or none, when the active note declined as empty/duplicate).
-      if (text.trim() && window.snapshotsManager) {
-        try {
-          await window.snapshotsManager.createSnapshotFromNote(
-            tab.content,
-            tab.noteType,
-            tab.id,
-            `Before closing "${deriveTabTitle(tab)}"`,
-            tab.colorTheme,
-            // The note's name rides along — the row shows it, and a
-            // restore after the close resurrects the note under it.
-            tab.name ?? undefined,
-          );
-        } catch {
-          /* snapshots unavailable — the close still proceeds */
-        }
-      }
+    const title = deriveTabTitle(tab);
+    const index = this.tabs.findIndex((entry) => entry.id === tabId);
+    this.tabs = this.tabs.filter((entry) => entry.id !== tabId);
+    this.dirtyIds.delete(tabId);
+    // A trashed note replaces any stale entry (re-trash after a restore
+    // keeps the newest stamp; the entry never survives a live row).
+    this.trashed = this.trashed.filter((entry) => entry.id !== tabId);
+    this.trashed.push({
+      id: tab.id,
+      name: tab.name,
+      content: tab.content,
+      createdAt: tab.createdAt,
+      updatedAt: nextUpdatedAt(tab.updatedAt),
+      noteType: tab.noteType,
+      colorTheme: tab.colorTheme,
+      syncSeq: tab.syncSeq,
+      copyOf: tab.copyOf,
+      deletedAt: Date.now(),
+    });
+    // The trash row rides the next push — the same dirty set the tabs use
+    // (the sync layer resolves pending ids against tabs FIRST, trash second).
+    this.dirtyIds.add(tab.id);
 
-      const index = this.tabs.findIndex((entry) => entry.id === tabId);
-      this.tabs = this.tabs.filter((entry) => entry.id !== tabId);
-      this.dirtyIds.delete(tabId);
-      this.recordTombstone(tabId);
-
-      if (this.tabs.length === 0) {
-        const fresh = createTab('');
-        this.tabs.push(fresh);
-        this.activeId = fresh.id;
-        this.persist();
-        this.renderStrip();
-        this.loadActiveIntoEditor();
-        this.focusEditor();
-        this.notifyActiveChanged();
-        showToast('Tab closed. A fresh tab is ready.');
-        return;
-      }
-
-      if (isActive) {
-        const neighbour = this.tabs[Math.max(0, index - 1)] ?? this.tabs[0];
-        this.activeId = neighbour.id;
-        this.persist();
-        this.renderStrip();
-        this.loadActiveIntoEditor();
-        this.focusEditor();
-        this.notifyActiveChanged();
-      } else {
-        this.persist();
-        this.renderStrip();
-      }
-
-      showToast('Tab closed.');
-    };
-
-    if (!text.trim()) {
-      void closeNow();
+    if (this.tabs.length === 0) {
+      const fresh = createTab('');
+      this.tabs.push(fresh);
+      this.activeId = fresh.id;
+      this.persist();
+      this.renderStrip();
+      this.loadActiveIntoEditor();
+      this.focusEditor();
+      this.notifyActiveChanged();
+      showToast(`"${title}" moved to trash. A fresh tab is ready.`);
       return;
     }
 
-    void confirmDialog({
-      title: 'Close this tab?',
-      text: '"' + deriveTabTitle(tab) + '" has content. A snapshot is saved before it closes.',
-      confirm: 'Close tab',
-      cancel: 'Keep it',
-    }).then((confirmed) => {
-      if (confirmed) {
-        void closeNow();
-      }
+    if (isActive) {
+      const neighbour = this.tabs[Math.max(0, index - 1)] ?? this.tabs[0];
+      this.activeId = neighbour.id;
+      this.persist();
+      this.renderStrip();
+      this.loadActiveIntoEditor();
+      this.focusEditor();
+      this.notifyActiveChanged();
+    } else {
+      this.persist();
+      this.renderStrip();
+    }
+
+    showToast(`"${title}" moved to trash.`);
+  }
+
+  /**
+   * Restores a trashed note — the trash sheet's Restore. The note comes back
+   * to the END of the strip (its old neighbors have moved on) under its own
+   * id, so share links and everything else keyed to the id keep working; the
+   * restore rides the next push as a live row, and the server's delete-race
+   * guard accepts it because it carries a strictly newer updated_at than the
+   * trash it reverses.
+   */
+  restoreNote(noteId: string): boolean {
+    const grave = this.trashed.find((entry) => entry.id === noteId);
+    if (!grave || grave.purged) {
+      return false;
+    }
+    this.trashed = this.trashed.filter((entry) => entry.id !== noteId);
+    const restored: NoteTab = {
+      id: grave.id,
+      name: grave.name,
+      content: grave.content,
+      createdAt: grave.createdAt,
+      updatedAt: nextUpdatedAt(grave.updatedAt),
+      noteType: normalizeNoteType(grave.noteType),
+      colorTheme: grave.colorTheme,
+      syncSeq: grave.syncSeq,
+    };
+    if (grave.copyOf) {
+      restored.copyOf = grave.copyOf;
+    }
+    this.tabs.push(restored);
+    this.dirtyIds.add(restored.id);
+    this.persist();
+    this.renderStrip();
+    return true;
+  }
+
+  /**
+   * Deletes a trashed note forever — the trash sheet's "Delete forever".
+   *
+   * The local row is hard-deleted, and a sweeper row rides the next push:
+   * deleted, content emptied, deleted_at backdated past the retention
+   * window. The server's boot sweep retires it, every other device's hydrate
+   * sweep drops it on sight (a trash row past cutoff never joins the model)
+   * — "delete forever" propagates everywhere without a second protocol.
+   * The placeholder itself (purged, invisible) exists only until the push
+   * confirms, then confirmPushed retires it.
+   */
+  purgeNote(noteId: string): boolean {
+    const grave = this.trashed.find((entry) => entry.id === noteId);
+    if (!grave) {
+      return false;
+    }
+    this.trashed = this.trashed.filter((entry) => entry.id !== noteId);
+    const purgedAt = nextUpdatedAt(grave.updatedAt);
+    this.trashed.push({
+      id: grave.id,
+      name: null,
+      content: '',
+      createdAt: grave.createdAt,
+      updatedAt: purgedAt,
+      deletedAt: 1,
+      purged: true,
     });
+    this.dirtyIds.add(grave.id);
+    this.persist();
+    this.renderRailCount();
+    return true;
+  }
+
+  /**
+   * Empties the whole trash in one move — every visible entry purged by the
+   * same sweeper-row mechanism (see purgeNote). Returns how many went.
+   */
+  emptyTrash(): number {
+    const visible = this.trashed.filter((entry) => !entry.purged);
+    if (visible.length === 0) {
+      return 0;
+    }
+    const visibleIds = new Set(visible.map((entry) => entry.id));
+    const now = Date.now();
+    this.trashed = this.trashed
+      .filter((entry) => !visibleIds.has(entry.id))
+      .concat(
+        visible.map((grave) => ({
+          id: grave.id,
+          name: null,
+          content: '',
+          createdAt: grave.createdAt,
+          updatedAt: Math.max(now, grave.updatedAt + 1),
+          deletedAt: 1,
+          purged: true,
+        })),
+      );
+    visible.forEach((grave) => this.dirtyIds.add(grave.id));
+    this.persist();
+    this.renderRailCount();
+    return visible.length;
   }
 
   beginRename(tabId: string): void {

@@ -33,22 +33,41 @@ const row = (id: string, overrides: Partial<NoteRow> = {}): NoteRow => ({
 const payloadOf = (
   tabs: NoteTab[],
   dirty: string[] = tabs.map((entry) => entry.id),
-  tombstones: TabsSyncPayload['tombstones'] = [],
+  trashed: TabsSyncPayload['trashed'] = [],
 ): TabsSyncPayload => ({
   tabs,
   dirty,
-  tombstones,
+  trashed,
 });
 
+/** A trashed entry — the model's trash shape, minimal but complete. */
+const grave = (id: string, deletedAt: number): TabsSyncPayload['trashed'][number] => ({
+  id,
+  name: null,
+  content: '',
+  createdAt: deletedAt,
+  updatedAt: deletedAt,
+  deletedAt,
+});
+
+/** A fresh, in-window trash clock — pulled delete rows must read as
+ *  restorable trash, not as retention-expired sweepers (ancient stamps
+ *  would sweep on sight — that is a different test's job). */
+const TRASHED_AT = Date.now();
+
 describe('mergeRemote — deletes', () => {
-  it('a remote tombstone removes the local note when nothing newer is here', () => {
+  it('a remote delete moves the local note into the trash when nothing newer is here', () => {
     const merge = mergeRemote(
-      [row('a', { deleted: true, updated_at: 3_000 })],
+      [row('a', { deleted: true, updated_at: TRASHED_AT, deleted_at: TRASHED_AT })],
       payloadOf([tab('a')], []), // clean: the local copy never changed
     );
 
     expect(merge.tabs).toEqual([]);
     expect(merge.changed).toBe(true);
+    expect(merge.trashChanged).toBe(true);
+    expect(merge.trashed).toEqual([
+      expect.objectContaining({ id: 'a', deletedAt: TRASHED_AT, content: '<p>a</p>' }),
+    ]);
     expect(merge.conflicts).toEqual([]);
   });
 
@@ -69,8 +88,8 @@ describe('mergeRemote — deletes', () => {
 
   it('a tie goes to the delete — the common case, no surprise resurrects', () => {
     const merge = mergeRemote(
-      [row('a', { deleted: true, updated_at: 2_000 })],
-      payloadOf([tab('a', { updatedAt: 2_000 })], []),
+      [row('a', { deleted: true, updated_at: TRASHED_AT, deleted_at: TRASHED_AT })],
+      payloadOf([tab('a', { updatedAt: TRASHED_AT })], []),
     );
 
     expect(merge.tabs).toEqual([]);
@@ -124,7 +143,7 @@ describe('mergeRemote — ordering convergence', () => {
   const payloadOf = (tabs: NoteTab[], dirty: string[] = []): TabsSyncPayload => ({
     tabs,
     dirty,
-    tombstones: [],
+    trashed: [],
   });
 
   it('a clean device adopts the remote ordering', () => {
@@ -248,11 +267,7 @@ describe('mergeRemote — v2 seq ordering', () => {
     const local = [tab('a', { syncSeq: 1 }), tab('b', { syncSeq: 2 })];
     // A clean device (nothing dirty): the order array alone reorders —
     // unchanged rows are not in the changed set, their place still rules.
-    const merge = mergeRemote(
-      [],
-      { tabs: local, dirty: [], tombstones: [] },
-      { order: ['b', 'a'] },
-    );
+    const merge = mergeRemote([], { tabs: local, dirty: [], trashed: [] }, { order: ['b', 'a'] });
 
     expect(merge.tabs.map((entry) => entry.id)).toEqual(['b', 'a']);
     expect(merge.changed).toBe(true);
@@ -335,34 +350,43 @@ describe('mergeRemote — conflict preservation', () => {
     expect(merge.tabs[1]).toMatchObject({ noteType: 'markdown', content: '# kept' });
   });
 
-  it('a dirty local losing to a tombstone keeps its words, loses the note', () => {
+  it('a dirty local losing to a delete keeps its words IN THE TRASH, loses the strip', () => {
     // Deleted on the phone while this device held unpushed edits: the
     // delete still takes the note (the strip removes it), but the
-    // unconfirmed words leave as a copy instead of dying with the tab.
+    // unconfirmed words ride the trash entry — restorable, same id, for
+    // the whole retention window. The pre-trash flow minted a copy note
+    // for exactly these bytes; the trash IS that copy now.
     const local = tab('a', {
       name: 'Draft',
       updatedAt: 5_000,
       content: '<p>the unsynced edit</p>',
     });
-    const remote = row('a', { deleted: true, updated_at: 9_000 });
-
-    const merge = mergeRemote([remote], payloadOf([local], ['a']));
-
-    expect(merge.tabs).toHaveLength(1);
-    expect(merge.tabs[0].id).not.toBe('a');
-    expect(merge.tabs[0].content).toBe('<p>the unsynced edit</p>');
-    expect(merge.tabs[0].name).toBe('Draft — copy (deleted elsewhere)');
-    expect(merge.conflicts[0]).toContain('deleted on another device');
-  });
-
-  it('a blank dirty local losing to a tombstone leaves no copy', () => {
-    // Tag-stripped emptiness does not deserve a rescue.
-    const local = tab('a', { updatedAt: 5_000, content: '<p></p>' });
-    const remote = row('a', { deleted: true, updated_at: 9_000 });
+    const remote = row('a', { deleted: true, updated_at: TRASHED_AT, deleted_at: TRASHED_AT });
 
     const merge = mergeRemote([remote], payloadOf([local], ['a']));
 
     expect(merge.tabs).toEqual([]);
+    expect(merge.trashChanged).toBe(true);
+    const graveEntry = merge.trashed.find((entry) => entry.id === 'a');
+    expect(graveEntry).toMatchObject({
+      id: 'a',
+      name: 'Draft',
+      content: '<p>the unsynced edit</p>',
+      deletedAt: TRASHED_AT,
+    });
+    expect(merge.conflicts[0]).toContain('deleted on another device');
+    expect(merge.conflicts[0]).toContain('trash');
+  });
+
+  it('a blank dirty local losing to a delete trashes quietly', () => {
+    // Tag-stripped emptiness does not deserve a rescue toast.
+    const local = tab('a', { updatedAt: 5_000, content: '<p></p>' });
+    const remote = row('a', { deleted: true, updated_at: TRASHED_AT, deleted_at: TRASHED_AT });
+
+    const merge = mergeRemote([remote], payloadOf([local], ['a']));
+
+    expect(merge.tabs).toEqual([]);
+    expect(merge.trashed.some((entry) => entry.id === 'a')).toBe(true);
     expect(merge.conflicts).toEqual([]);
   });
 
@@ -706,7 +730,7 @@ describe('mergeRemote — closed tabs stay closed', () => {
     // pre-close edit time t=2_000 — a re-publish of old bytes.
     const merge = mergeRemote(
       [row('a', { seq: 7, updated_at: 2_000, content: '<p>old bytes</p>' })],
-      payloadOf([], [], [{ id: 'a', updatedAt: 5_000 }]),
+      payloadOf([], [], [grave('a', 5_000)]),
     );
 
     expect(merge.tabs.map((entry) => entry.id)).not.toContain('a');
@@ -717,7 +741,7 @@ describe('mergeRemote — closed tabs stay closed', () => {
   it('a tie goes to the delete — an equal-clock live row stays closed', () => {
     const merge = mergeRemote(
       [row('a', { seq: 7, updated_at: 5_000 })],
-      payloadOf([], [], [{ id: 'a', updatedAt: 5_000 }]),
+      payloadOf([], [], [grave('a', 5_000)]),
     );
 
     expect(merge.tabs.map((entry) => entry.id)).not.toContain('a');
@@ -729,7 +753,7 @@ describe('mergeRemote — closed tabs stay closed', () => {
     // (the mirror of "a delete may not bury a newer local edit").
     const merge = mergeRemote(
       [row('a', { seq: 7, updated_at: 9_000, content: '<p>edited after the close</p>' })],
-      payloadOf([], [], [{ id: 'a', updatedAt: 5_000 }]),
+      payloadOf([], [], [grave('a', 5_000)]),
     );
 
     expect(merge.tabs.map((entry) => entry.id)).toContain('a');
@@ -758,7 +782,12 @@ describe('mergeRemote — closed tabs stay closed', () => {
     // seq 6 — a position-drift push carrying pre-close bytes). The pull
     // delivers both, in seq order. The delete must survive our own echo.
     const local = tab('a', { syncSeq: 4, updatedAt: 2_000, content: '<p>old bytes</p>' });
-    const tombstoneRow = row('a', { seq: 5, deleted: true, updated_at: 5_000 });
+    const tombstoneRow = row('a', {
+      seq: 5,
+      deleted: true,
+      updated_at: TRASHED_AT,
+      deleted_at: TRASHED_AT,
+    });
     const echoRow = row('a', { seq: 6, updated_at: 2_000, content: '<p>old bytes</p>' });
 
     const merge = mergeRemote([tombstoneRow, echoRow], payloadOf([local], []), {
@@ -775,7 +804,7 @@ describe('mergeRemote — closed tabs stay closed', () => {
     // exactly as before.
     const merge = mergeRemote(
       [row('b', { seq: 7, updated_at: 2_000 })],
-      payloadOf([tab('a')], [], [{ id: 'z', updatedAt: 9_000 }]),
+      payloadOf([tab('a')], [], [grave('z', 9_000)]),
     );
 
     // The convergence sort places the remotely-ordered 'b' ahead of the

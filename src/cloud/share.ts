@@ -321,19 +321,22 @@ function onModelPersisted(payload: TabsSyncPayload): void {
 
   lastPayload = payload;
 
-  // Settle the confirmed set against the model: tombstone ids the sync
-  // layer confirmed away are gone from the payload, so they leave the
-  // confirmed set too (bounded memory, no cross-session leakage).
-  const modelTombstones = new Set(payload.tombstones.map((entry) => entry.id));
+  // Settle the confirmed set against the model: trash entries the retention
+  // clock (or a sweeper) retired are gone from the payload, so they leave
+  // the confirmed set too (bounded memory, no cross-session leakage).
+  const modelTrash = new Set(payload.trashed.map((entry) => entry.id));
   for (const id of confirmedTombstoneIds) {
-    if (!modelTombstones.has(id)) {
+    if (!modelTrash.has(id)) {
       confirmedTombstoneIds.delete(id);
     }
   }
 
   payload.dirty.forEach((id) => pendingNoteIds.add(id));
-  payload.tombstones.forEach((entry) => {
-    // Already revoked server-side — re-sending it is the issue #118 churn.
+  payload.trashed.forEach((entry) => {
+    // Trashing a note pulls its public links — the trash is recoverable,
+    // but a deleted note's content must not keep serving at a public URL
+    // while it sits there. Already revoked server-side — re-sending it is
+    // the issue #118 churn.
     if (!confirmedTombstoneIds.has(entry.id)) {
       pendingTombstoneIds.add(entry.id);
     }

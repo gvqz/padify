@@ -416,7 +416,7 @@ describe('TabManager (characterization)', () => {
     saveNotes(
       {
         tabs: [stored('t1', '<b>clean</b>'), stored('t2', '<script>bad()</script><i>ok</i>')],
-        tombstones: [],
+        trashed: [],
       },
       't1',
       { immediate: true },
@@ -435,7 +435,7 @@ describe('TabManager (characterization)', () => {
 
   it('falls back to the first tab when the saved active id is unknown', async () => {
     saveNotes(
-      { tabs: [stored('t1', '<b>one</b>'), stored('t2', '<b>two</b>')], tombstones: [] },
+      { tabs: [stored('t1', '<b>one</b>'), stored('t2', '<b>two</b>')], trashed: [] },
       'gone',
       { immediate: true },
     );
@@ -447,7 +447,7 @@ describe('TabManager (characterization)', () => {
 
   it('switchTo writes the outgoing editor content back into its tab', async () => {
     saveNotes(
-      { tabs: [stored('t1', '<b>one</b>'), stored('t2', '<b>two</b>')], tombstones: [] },
+      { tabs: [stored('t1', '<b>one</b>'), stored('t2', '<b>two</b>')], trashed: [] },
       't1',
       { immediate: true },
     );
@@ -487,19 +487,25 @@ describe('TabManager (characterization)', () => {
 
     expect(confirmDialog).not.toHaveBeenCalled();
     expect(manager.exportForSync().tabs.some((t) => t.id === emptyId)).toBe(false);
+    // An empty note still leaves a (wordless) trash entry — the delete
+    // must reach every device.
+    expect(manager.getTrashed().some((entry) => entry.id === emptyId)).toBe(true);
   });
 
-  it('asks for confirmation before closing a tab that has content', async () => {
+  it('trashes a content tab with NO confirm — the trash is the undo path', async () => {
     const manager = await bootedManager();
     const contentId = manager.getActive()!.id;
     $('#note').html('<b>precious words</b>');
 
     $(`#tabStripTabs .tab-strip-tab[data-tab-id="${contentId}"] .tab-strip-close`).trigger('click');
 
-    expect(confirmDialog).toHaveBeenCalledTimes(1);
-    // mock resolves isConfirmed:false — the tab must still be there
-    await Promise.resolve();
-    expect(manager.exportForSync().tabs.some((t) => t.id === contentId)).toBe(true);
+    // The pre-trash flow asked "Close this tab?" because closing was
+    // destructive; a restorable delete makes the ask theater.
+    expect(confirmDialog).not.toHaveBeenCalled();
+    expect(manager.exportForSync().tabs.some((t) => t.id === contentId)).toBe(false);
+    const grave = manager.getTrashed().find((entry) => entry.id === contentId);
+    expect(grave).toBeDefined();
+    expect(grave?.content).toContain('precious words');
   });
 
   it('closing the last tab leaves a fresh empty one active', async () => {
@@ -515,17 +521,21 @@ describe('TabManager (characterization)', () => {
     expect(manager.getActive()!.content).toBe('');
   });
 
-  it('records a tombstone on close and clears it once confirmed', async () => {
+  it('records a trash entry on close and restores it under the same id', async () => {
     const manager = await bootedManager();
     manager.addTab(false);
     const extraId = manager.getActive()!.id;
     manager.switchTo(manager.exportForSync().tabs[0].id, false);
 
     $(`#tabStripTabs .tab-strip-tab[data-tab-id="${extraId}"] .tab-strip-close`).trigger('click');
-    expect(manager.exportForSync().tombstones.some((t) => t.id === extraId)).toBe(true);
+    const grave = manager.exportForSync().trashed.find((entry) => entry.id === extraId);
+    expect(grave).toBeDefined();
+    expect(typeof grave!.deletedAt).toBe('number');
 
-    manager.confirmTombstones([extraId]);
-    expect(manager.exportForSync().tombstones.some((t) => t.id === extraId)).toBe(false);
+    // The restore round trip: same id back in the strip, trash entry gone.
+    expect(manager.restoreNote(extraId)).toBe(true);
+    expect(manager.exportForSync().tabs.some((t) => t.id === extraId)).toBe(true);
+    expect(manager.exportForSync().trashed.some((entry) => entry.id === extraId)).toBe(false);
   });
 
   it('rename commits on Enter and updates the strip label', async () => {
@@ -554,7 +564,7 @@ describe('TabManager (characterization)', () => {
     saveNotes(
       {
         tabs: [stored('t1', 'one'), stored('t2', 'two'), stored('t3', 'three')],
-        tombstones: [],
+        trashed: [],
       },
       't2',
       { immediate: true },
@@ -574,7 +584,7 @@ describe('TabManager (characterization)', () => {
   });
 
   it('marks changed tabs dirty for the sync payload and unmarks nothing silently', async () => {
-    saveNotes({ tabs: [stored('t1', 'one'), stored('t2', 'two')], tombstones: [] }, 't1', {
+    saveNotes({ tabs: [stored('t1', 'one'), stored('t2', 'two')], trashed: [] }, 't1', {
       immediate: true,
     });
     await flushAndReboot();
@@ -589,7 +599,7 @@ describe('TabManager (characterization)', () => {
   });
 
   it('saveActiveFromEditor is a no-op when the editor content is unchanged', async () => {
-    saveNotes({ tabs: [stored('t1', '<b>same</b>')], tombstones: [] }, 't1', { immediate: true });
+    saveNotes({ tabs: [stored('t1', '<b>same</b>')], trashed: [] }, 't1', { immediate: true });
     await flushAndReboot();
     const manager = await bootedManager();
 
@@ -859,7 +869,7 @@ describe('note types (characterization)', () => {
           stored('t3', '# alien markdown', { noteType: 'markdown' as StoredNoteTab['noteType'] }),
           stored('t4', '<b>junk</b>', { noteType: 'NOT A TYPE' as StoredNoteTab['noteType'] }),
         ],
-        tombstones: [],
+        trashed: [],
       },
       't1',
       { immediate: true },
@@ -920,7 +930,7 @@ describe('non-html content (the typed content model)', () => {
     saveNotes(
       {
         tabs: [stored('board', json, { noteType: 'kanban' as StoredNoteTab['noteType'] })],
-        tombstones: [],
+        trashed: [],
       },
       'board',
       { immediate: true },
@@ -944,7 +954,7 @@ describe('non-html content (the typed content model)', () => {
           stored('plain', '<p>hello</p>'),
           stored('board', '{"cards":[]}', { noteType: 'kanban' as StoredNoteTab['noteType'] }),
         ],
-        tombstones: [],
+        trashed: [],
       },
       'board',
       { immediate: true },
@@ -976,7 +986,7 @@ describe('non-html content (the typed content model)', () => {
             noteType: 'markdown' as StoredNoteTab['noteType'],
           }),
         ],
-        tombstones: [],
+        trashed: [],
       },
       'src',
       { immediate: true },
@@ -998,7 +1008,7 @@ describe('non-html content (the typed content model)', () => {
             noteType: 'kanban' as StoredNoteTab['noteType'],
           }),
         ],
-        tombstones: [],
+        trashed: [],
       },
       'src',
       { immediate: true },
@@ -1119,7 +1129,7 @@ describe('html export of typed notes (the capture rule)', () => {
     saveNotes(
       {
         tabs: [stored('src', '<p>hello <b>world</b></p>')],
-        tombstones: [],
+        trashed: [],
       },
       'src',
       { immediate: true },
@@ -1148,7 +1158,7 @@ describe('html export of typed notes (the capture rule)', () => {
             noteType: 'board' as StoredNoteTab['noteType'],
           }),
         ],
-        tombstones: [],
+        trashed: [],
       },
       'src',
       { immediate: true },
@@ -1196,7 +1206,7 @@ describe('TabManager — the note menu actions', () => {
           stored('src', '<p>original words</p>', { name: 'Field notes' }),
           stored('other', '<p>unrelated</p>'),
         ],
-        tombstones: [],
+        trashed: [],
       },
       'src',
       { immediate: true },
@@ -1227,7 +1237,7 @@ describe('TabManager — the note menu actions', () => {
 
   it('a debounced persist fires on its own — its model lands in storage after the window', async () => {
     saveNotes(
-      { tabs: [stored('src', '<p>one</p>'), stored('other', '<p>two</p>')], tombstones: [] },
+      { tabs: [stored('src', '<p>one</p>'), stored('other', '<p>two</p>')], trashed: [] },
       'src',
       { immediate: true },
     );
@@ -1245,7 +1255,7 @@ describe('TabManager — the note menu actions', () => {
 
   it('cancelPendingPersist drops that write — a stale save cannot cross a test boundary', async () => {
     saveNotes(
-      { tabs: [stored('src', '<p>one</p>'), stored('other', '<p>two</p>')], tombstones: [] },
+      { tabs: [stored('src', '<p>one</p>'), stored('other', '<p>two</p>')], trashed: [] },
       'src',
       { immediate: true },
     );
@@ -1263,7 +1273,7 @@ describe('TabManager — the note menu actions', () => {
   }, 20000);
 
   it('duplicateNote of the ACTIVE note captures the unsaved editor state first', async () => {
-    saveNotes({ tabs: [stored('src', '<p>model</p>')], tombstones: [] }, 'src', {
+    saveNotes({ tabs: [stored('src', '<p>model</p>')], trashed: [] }, 'src', {
       immediate: true,
     });
     await flushAndReboot();
@@ -1283,7 +1293,7 @@ describe('TabManager — the note menu actions', () => {
           stored('md1', '# heading', { noteType: 'markdown' }),
           stored('html1', '<p>rich</p>'),
         ],
-        tombstones: [],
+        trashed: [],
       },
       'md1',
       { immediate: true },
@@ -1307,7 +1317,7 @@ describe('TabManager — the note menu actions', () => {
 
   it('changeNoteType to the default clears the type field; a same-type call is a no-op', async () => {
     saveNotes(
-      { tabs: [stored('md1', '# heading', { noteType: 'markdown' })], tombstones: [] },
+      { tabs: [stored('md1', '# heading', { noteType: 'markdown' })], trashed: [] },
       'md1',
       { immediate: true },
     );

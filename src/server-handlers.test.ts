@@ -317,7 +317,7 @@ describe('handleNotesPut — sync v2 seq stamping', () => {
     expect(reservations[0]).toContain('on conflict(user_id) do update');
     expect(reservations[0]).toContain('returning value');
 
-    const seqs = db.statements.map((statement) => statement.args?.[9]);
+    const seqs = db.statements.map((statement) => statement.args?.[10]);
     expect(seqs).toEqual([42, 43]);
     // Both rows carry the seq column in their INSERT — fresh writes get
     // stamped exactly like conflict updates.
@@ -333,7 +333,7 @@ describe('handleNotesPut — sync v2 seq stamping', () => {
       jsonRequest('PUT', { rows: [{ id: 'a', content: 'x', updated_at: 1, deleted: false }] }),
       user,
     );
-    expect(db.statements[0]?.args?.[9]).toBe(1);
+    expect(db.statements[0]?.args?.[10]).toBe(1);
   });
 
   it('the fallback reads the user max when RETURNING cannot be answered', async () => {
@@ -346,7 +346,7 @@ describe('handleNotesPut — sync v2 seq stamping', () => {
       jsonRequest('PUT', { rows: [{ id: 'a', content: 'x', updated_at: 1, deleted: false }] }),
       user,
     );
-    expect(db.statements[0]?.args?.[9]).toBe(8);
+    expect(db.statements[0]?.args?.[10]).toBe(8);
   });
 });
 
@@ -395,7 +395,7 @@ describe('handleNotesPut — the reservation is the sequence authority', () => {
       }),
       user,
     );
-    const first = db.statements.map((statement) => statement.args?.[9]);
+    const first = db.statements.map((statement) => statement.args?.[10]);
     db.statements.length = 0;
 
     await handleNotesPut(
@@ -408,7 +408,7 @@ describe('handleNotesPut — the reservation is the sequence authority', () => {
       }),
       user,
     );
-    const second = db.statements.map((statement) => statement.args?.[9]);
+    const second = db.statements.map((statement) => statement.args?.[10]);
 
     // The second batch stamps 3, 4 — the notes max stayed 0 the whole
     // time. Under the old read-max code both batches stamped 1, 2.

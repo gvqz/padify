@@ -20,10 +20,10 @@
  * works through the same path.
  */
 import { $ } from '../lib/q';
-import { showToast } from './toast';
 import { registerLayer } from './behavior/layers';
 import { openModal } from './behavior/modal';
 import { getTabManager, type TabManager } from '../tabs';
+import { showToast } from './toast';
 import {
   DEFAULT_NOTE_TYPE,
   NOTE_TYPES,
@@ -123,7 +123,7 @@ function buildMenuMarkup(): string {
       </button>
       <div class="padify-ctx-sep" role="separator"></div>
       <button type="button" class="padify-ctx-item padify-ctx-danger" role="menuitem" data-action="close">
-        ${ICONS.close}<span>Close tab</span>
+        ${ICONS.close}<span>Move to trash</span>
       </button>
     </div>
   </div>`;

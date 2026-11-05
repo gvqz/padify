@@ -1,0 +1,93 @@
+/**
+ * Trash chrome — the small sheet-specific layer the Recently Deleted sheet
+ * adds ON TOP of the History sheet's vocabulary (snap-* classes, see
+ * public/css/vercel/11-snapshots.css). The sheet reuses those classes on
+ * purpose: the two right-side sheets read as siblings of one design system,
+ * and the trash carries exactly one notion of its own — the retention
+ * countdown chip.
+ */
+
+/* The trash row's right edge: the restore action sits where the History
+   sheet keeps its expand affordance, so a scan down the rail finds the
+   primary action in the same place on both sheets. */
+.trash-item .snap-row {
+  cursor: default;
+}
+
+/* The retention countdown — how long the note still waits. Reads quiet on
+   purpose: it is a fact, not a warning, until the last days. */
+.trash-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  color: inherit;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+.trash-chip.is-last-days {
+  background: color-mix(in srgb, #e5484d 14%, transparent);
+  color: #e5484d;
+  opacity: 1;
+}
+
+/* Dark mode keeps the same recipe — the chips are color-mixed off the
+   palette tokens, only the danger needs a nudge. */
+[data-theme-mode='dark'] .trash-chip.is-last-days,
+body.dark .trash-chip.is-last-days {
+  color: #ff8789;
+}
+
+/* The per-row delete-forever: the History sheet's arm-then-confirm inline
+   pattern, expressed with the trash's danger tint only when armed. */
+.trash-purge {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 7px;
+  padding: 4px 6px;
+  line-height: 0;
+  color: inherit;
+  opacity: 0.55;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.trash-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.trash-purge:hover,
+.trash-purge:focus-visible {
+  opacity: 1;
+  background: color-mix(in srgb, #e5484d 12%, transparent);
+}
+
+.trash-purge[aria-live='assertive'],
+.trash-purge.is-armed {
+  opacity: 1;
+  background: #e5484d;
+  border-color: #e5484d;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 4px 9px;
+}
+
+/* The trash rows have no expand state — the whole row is meta + actions,
+   a flatter card than the History sheet's. */
+.trash-item .snap-preview {
+  margin-top: 2px;
+}

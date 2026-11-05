@@ -42,6 +42,7 @@ export const MARKUP_CONTRACT: MarkupContractGroup[] = [
       'preferences',
       'cloudNavButton',
       'tabRailCalendar',
+      'tabRailTrash',
     ],
   },
   {
@@ -86,6 +87,7 @@ export const MARKUP_CONTRACT: MarkupContractGroup[] = [
     ids: [
       'aboutModal',
       'snapshotsModal',
+      'trashModal',
       'keyboardShortcutsModal',
       'unicodePickerModal',
       'cloudModal',

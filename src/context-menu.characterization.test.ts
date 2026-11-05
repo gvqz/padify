@@ -842,7 +842,7 @@ describe('copyNotesToClipboard / deleteNotes', () => {
     expect(toastTone()).toBe('error');
   });
 
-  it('deleteNotes (confirmed) clears the active tab through the TabManager', async () => {
+  it('deleteNotes (confirmed) trashes the active note through the TabManager', async () => {
     ensureContextMenuMounted();
     const manager = await bootedManagerWithDomPort();
     const id = manager.getActive()!.id;
@@ -853,12 +853,16 @@ describe('copyNotesToClipboard / deleteNotes', () => {
     vi.mocked(confirmDialog).mockResolvedValueOnce(true);
     void deleteNotes();
 
-    // snapshotsManager is absent in jsdom — the delete proceeds anyway.
-    await vi.waitFor(() => expect(manager.getActive()!.content).toBe(''));
-    expect(manager.getActive()!.id).toBe(id); // the SAME tab, emptied — not removed
-    expect(manager.getActive()!.content).toBe('');
-    expect(note().innerHTML).toBe('');
+    // The note leaves the strip for the trash — words kept, same id,
+    // restorable. (The pre-trash flow emptied the tab in place; a
+    // recoverable delete made that the worse contract.)
+    await vi.waitFor(() =>
+      expect(manager.exportForSync().tabs.some((t) => t.id === id)).toBe(false),
+    );
+    const grave = manager.getTrashed().find((entry) => entry.id === id);
+    expect(grave?.content).toContain('precious words');
     expect(manager.exportForSync().dirty).toContain(id);
+    expect(manager.getActive()).not.toBeNull(); // a neighbour took the stage
   });
 
   it('deleteNotes (refused) touches nothing', async () => {

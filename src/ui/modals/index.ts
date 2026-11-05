@@ -19,6 +19,7 @@
 
 import aboutModalHtml from './about-modal.html?raw';
 import snapshotsModalHtml from './snapshots-modal.html?raw';
+import trashModalHtml from './trash-modal.html?raw';
 import keyboardShortcutsModalHtml from './keyboard-shortcuts-modal.html?raw';
 import unicodePickerModalHtml from './unicode-picker-modal.html?raw';
 import cloudModalHtml from './cloud-modal.html?raw';
@@ -30,6 +31,7 @@ import statisticsModalHtml from './statistics-modal.html?raw';
 const MODAL_PARTIALS: string[] = [
   aboutModalHtml,
   snapshotsModalHtml,
+  trashModalHtml,
   keyboardShortcutsModalHtml,
   unicodePickerModalHtml,
   cloudModalHtml,

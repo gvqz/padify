@@ -37,7 +37,8 @@ create index if not exists sessions_expires_at_idx on sessions(expires_at);
 
 -- ---------------------------------------------------------------------------
 -- Notes (the tabs on the main page) — created_at/updated_at are client epoch
--- milliseconds; deleted rows are tombstones.
+-- milliseconds; deleted rows are TRASH entries (content kept, deleted_at
+-- stamped) that the boot sweep retires after TRASH_RETENTION_MS.
 -- ---------------------------------------------------------------------------
 
 create table if not exists notes (
@@ -49,6 +50,14 @@ create table if not exists notes (
   created_at integer not null default 0,
   updated_at integer not null default 0,
   deleted    integer not null default 0,
+  -- Trash (recently deleted): WHEN the note was trashed, in client epoch
+  -- ms. Null on live notes and on rows written by pre-trash builds (those
+  -- are plain tombstones — the boot sweep retires them on the retention
+  -- clock using updated_at as the best-available stamp). The trash keeps
+  -- the note's content, so a restore is the same row with deleted_at
+  -- cleared and deleted=0 — the id, and every share link keyed to it,
+  -- survives the round trip.
+  deleted_at integer,
   note_type  text,
   -- Sync v2: a per-user monotonic sequence, stamped by the server on every
   -- write. Ordering and incremental pulls key off it (see handlers.ts);

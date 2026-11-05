@@ -38,6 +38,7 @@ import { CASES } from './case-conversions';
 import { getEditorPort, type EditorCommand, type FormatCommand } from './editor/port';
 import { getTabManager } from './tabs';
 import { isHtmlContent, isMarkdownNote, isRichNote } from './editor/note-types';
+import { deriveTabTitle } from './editor/note-content';
 import { isApplePlatform, shortcutLabel } from './lib/platform';
 import {
   mdClearFormatting,
@@ -83,31 +84,26 @@ export function copyNotesToClipboard(note: string): void {
 }
 
 export async function deleteNotes(): Promise<void> {
+  const tabs = getTabManager();
+  const active = tabs?.getActive();
+  if (!tabs || !active) {
+    return;
+  }
+  const title = deriveTabTitle(active);
   const confirmed = await confirmDialog({
-    title: 'Want to delete notes?',
-    text: "You won't be able to revert this!",
+    title: 'Delete this note?',
+    text: `"${title}" moves to the trash — restorable for 30 days, from the rail's trash button.`,
     danger: true,
-    confirm: 'Yes, Delete!',
-    cancel: 'No, keep it.',
+    confirm: 'Move to trash',
+    cancel: 'Keep it',
   });
   if (!confirmed) {
     return;
   }
-  // Save a safety snapshot before deleting — await so the snapshot
-  // actually lands before the note is wiped. Previously the call was
-  // fire-and-forget and could lose the snapshot if the IDB open hadn't
-  // completed yet, or if the page navigated away mid-write.
-  try {
-    await window.snapshotsManager!.createSnapshot();
-  } catch {
-    /* snapshots unavailable — the delete still proceeds */
-  }
-
-  // Clear the active tab (delete-notes only ever deleted the note
-  // that was on screen, so it stays per-tab now that tabs exist).
-  getTabManager()?.clearActiveTab();
-
-  showToast('Your notes has been deleted.', 'success');
+  // The trash IS the safety net now: the note's full record (words,
+  // name, type) moves to the trashed list, restorable under the same id —
+  // the pre-trash flow snapshot-first-and-wipe was theater next to that.
+  tabs.requestCloseTab(active.id);
 }
 
 interface FormatDef {

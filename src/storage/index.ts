@@ -59,25 +59,29 @@ import {
   hydrateNotes,
   loadNotes,
   parseLegacyNoteRecords,
+  purgeNoteRecords,
   reconcileNotesFromMirror,
   resetNotesForTests,
   saveNotes,
+  sweptTrashIds,
   whenNotesIdle,
   type NoteRecord,
   type NotesSnapshot,
   type StoredNoteTab,
-  type StoredTombstone,
+  type TrashedNote,
 } from './notes';
 
 export { stateGet, stateSet, stateRemove, storageBackend, type StorageBackend };
 export {
   ACTIVE_TAB_KEY,
   loadNotes,
+  purgeNoteRecords,
   saveNotes,
+  sweptTrashIds,
   whenNotesIdle,
   type NotesSnapshot,
   type StoredNoteTab,
-  type StoredTombstone,
+  type TrashedNote,
 };
 
 // ---------------------------------------------------------------------------
@@ -235,6 +239,14 @@ async function boot(): Promise<StorageBackend> {
     }
 
     hydrateNotes(await readAll<NoteRecord>(NOTES_STORE));
+
+    // The trash retention sweep ran inside hydrate — retire its rows from
+    // the database right now instead of waiting for the first save.
+    const swept = sweptTrashIds();
+    if (swept.length > 0) {
+      purgeNoteRecords(swept);
+      console.info(`[storage] trash sweep: retired ${swept.length} note(s) past retention`);
+    }
 
     // The newest note rows may live only in the legacy mirror (a pagehide
     // save whose IndexedDB write died with the page) — reconcile before

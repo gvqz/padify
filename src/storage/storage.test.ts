@@ -116,11 +116,14 @@ describe('kv store (settings)', () => {
 describe('notes repository', () => {
   beforeEach(freshBoot);
 
-  it('round-trips a snapshot with positions, tombstones and active tab', async () => {
+  it('round-trips a snapshot with positions, trash and active tab', async () => {
+    // A FRESH stamp — the retention sweep retires ancient entries on boot,
+    // and this test wants its trash to still be there after the reload.
+    const deletedAt = Date.now();
     saveNotes(
       {
         tabs: [note('a', '<b>one</b>'), note('b', 'two')],
-        tombstones: [{ id: 'x', updatedAt: 5 }],
+        trashed: [{ ...note('x', '<b>gone</b>'), deletedAt }],
       },
       'b',
     );
@@ -133,8 +136,32 @@ describe('notes repository', () => {
     const snapshot = await loadNotes();
     expect(snapshot.tabs.map((tab) => tab.id)).toEqual(['a', 'b']);
     expect(snapshot.tabs[0].content).toBe('<b>one</b>');
-    expect(snapshot.tombstones).toEqual([{ id: 'x', updatedAt: 5 }]);
+    // The trash keeps its words AND its stamp — that pair is what makes a
+    // restore one click and the retention sweep honest.
+    expect(snapshot.trashed).toEqual([
+      expect.objectContaining({ id: 'x', content: '<b>gone</b>', deletedAt }),
+    ]);
     expect(stateGet('padifyActiveTab')).toBe('b');
+  });
+
+  it('the boot sweep retires trash past its retention window', async () => {
+    saveNotes(
+      {
+        tabs: [note('a', 'a')],
+        trashed: [{ ...note('old', 'ancient words'), deletedAt: 1_000 }],
+      },
+      'a',
+    );
+    await whenNotesIdle();
+
+    await reboot();
+
+    const snapshot = await loadNotes();
+    expect(snapshot.trashed).toEqual([]);
+    expect(snapshot.tabs.map((tab) => tab.id)).toEqual(['a']);
+    // And the row left the store, not just the snapshot.
+    const records = await readAll<NoteRecord>(NOTES_STORE);
+    expect(records.some((record) => record.id === 'old')).toBe(false);
   });
 
   it('round-trips syncSeq through a reload — the cloud merge anchor survives boot', async () => {
@@ -148,7 +175,7 @@ describe('notes repository', () => {
           { ...note('a', 'body'), syncSeq: 42 },
           { ...note('b', 'body'), syncSeq: 0 },
         ],
-        tombstones: [],
+        trashed: [],
       },
       'a',
     );
@@ -164,18 +191,20 @@ describe('notes repository', () => {
     expect(b?.syncSeq).toBeUndefined(); // seq 0 and junk read as absent
   });
 
-  it('stores tombstones as deleted rows and hard-deletes vanished ids', async () => {
-    saveNotes({ tabs: [note('a', 'a'), note('b', 'b')], tombstones: [] }, 'a');
+  it('stores trash as deleted rows (words kept) and hard-deletes vanished ids', async () => {
+    saveNotes({ tabs: [note('a', 'a'), note('b', 'b')], trashed: [] }, 'a');
     await whenNotesIdle();
 
-    // b is removed without a tombstone (cloud-confirmed deletion) → hard delete.
-    // a is closed WITH a tombstone → deleted row.
-    saveNotes({ tabs: [note('a', 'a')], tombstones: [{ id: 'a', updatedAt: 9 }] }, null);
+    // b is removed without a trash entry (a purge, a merged-away id) →
+    // hard delete. a is trashed WITH its words → deleted row, content kept.
+    saveNotes({ tabs: [], trashed: [{ ...note('a', 'last words'), deletedAt: 9 }] }, null);
     await whenNotesIdle();
 
     const records = await readAll<NoteRecord>(NOTES_STORE);
     const byId = new Map(records.map((record) => [record.id, record]));
     expect(byId.get('a')?.deleted).toBe(true);
+    expect(byId.get('a')?.content).toBe('last words');
+    expect(byId.get('a')?.deletedAt).toBe(9);
     expect(byId.has('b')).toBe(false);
   });
 
@@ -186,7 +215,7 @@ describe('notes repository', () => {
     // guard, A's next save upserts a live row back over B's tombstone —
     // locally AND via the next cloud push. With it, A's saves leave the
     // row alone until a re-hydrate catches up.
-    saveNotes({ tabs: [note('a', 'original')], tombstones: [] }, 'a');
+    saveNotes({ tabs: [note('a', 'original')], trashed: [] }, 'a');
     await whenNotesIdle();
 
     // Simulate the other tab's mirror write.
@@ -197,7 +226,7 @@ describe('notes repository', () => {
       }),
     );
 
-    saveNotes({ tabs: [note('a', 'typed after the delete', 50)], tombstones: [] }, 'a');
+    saveNotes({ tabs: [note('a', 'typed after the delete', 50)], trashed: [] }, 'a');
     await whenNotesIdle();
 
     const records = await readAll<NoteRecord>(NOTES_STORE);
@@ -208,11 +237,11 @@ describe('notes repository', () => {
   });
 
   it('persists strip order as position and honours it on load', async () => {
-    saveNotes({ tabs: [note('a', 'a'), note('b', 'b'), note('c', 'c')], tombstones: [] }, 'a');
+    saveNotes({ tabs: [note('a', 'a'), note('b', 'b'), note('c', 'c')], trashed: [] }, 'a');
     await whenNotesIdle();
 
     // Reorder: b, c, a.
-    saveNotes({ tabs: [note('b', 'b'), note('c', 'c'), note('a', 'a')], tombstones: [] }, 'b');
+    saveNotes({ tabs: [note('b', 'b'), note('c', 'c'), note('a', 'a')], trashed: [] }, 'b');
     await whenNotesIdle();
 
     await reboot();
@@ -221,14 +250,14 @@ describe('notes repository', () => {
   });
 
   it('writes only the changed rows on a save', async () => {
-    saveNotes({ tabs: [note('a', 'a'), note('b', 'b')], tombstones: [] }, 'a');
+    saveNotes({ tabs: [note('a', 'a'), note('b', 'b')], trashed: [] }, 'a');
     await whenNotesIdle();
 
     // Unchanged model + no changes → the diff must be empty, i.e. a fresh
     // save issues no new write. Instrument by counting puts through the
     // database length: save the SAME model and expect no growth in flight.
     const before = (await readAll<NoteRecord>(NOTES_STORE)).length;
-    saveNotes({ tabs: [note('a', 'a'), note('b', 'b')], tombstones: [] }, 'a');
+    saveNotes({ tabs: [note('a', 'a'), note('b', 'b')], trashed: [] }, 'a');
     await whenNotesIdle();
     const after = (await readAll<NoteRecord>(NOTES_STORE)).length;
 
@@ -273,10 +302,10 @@ describe('notes repository', () => {
   });
 
   it('updates a changed note with the new content', async () => {
-    saveNotes({ tabs: [note('a', 'v1', 10)], tombstones: [] }, 'a');
+    saveNotes({ tabs: [note('a', 'v1', 10)], trashed: [] }, 'a');
     await whenNotesIdle();
 
-    saveNotes({ tabs: [note('a', 'v2', 20)], tombstones: [] }, 'a');
+    saveNotes({ tabs: [note('a', 'v2', 20)], trashed: [] }, 'a');
     await whenNotesIdle();
 
     const records = await readAll<NoteRecord>(NOTES_STORE);
@@ -295,7 +324,7 @@ describe('mirror reconciliation (pagehide durability)', () => {
 
   it('recovers a newer mirror row the dying page flushed after its IndexedDB write', async () => {
     // The committed state…
-    saveNotes({ tabs: [note('a', 'old words', 10)], tombstones: [] }, 'a');
+    saveNotes({ tabs: [note('a', 'old words', 10)], trashed: [] }, 'a');
     await whenNotesIdle();
 
     // …then the page died mid-flush: the mirror carried the last edit,
@@ -321,7 +350,7 @@ describe('mirror reconciliation (pagehide durability)', () => {
   });
 
   it('an older mirror row never beats a committed newer one', async () => {
-    saveNotes({ tabs: [note('a', 'fresh db', 20)], tombstones: [] }, 'a');
+    saveNotes({ tabs: [note('a', 'fresh db', 20)], trashed: [] }, 'a');
     await whenNotesIdle();
 
     localStorage.setItem('padifyTabs', JSON.stringify([note('a', 'stale mirror', 10)]));
@@ -332,27 +361,42 @@ describe('mirror reconciliation (pagehide durability)', () => {
     expect(snapshot.tabs[0].content).toBe('fresh db');
   });
 
-  it('re-applies a lost delete — a newer mirror tombstone wins over the live row', async () => {
-    saveNotes({ tabs: [note('a', 'about to die', 10)], tombstones: [] }, 'a');
+  it('re-applies a lost delete — a newer mirror trash wins over the live row', async () => {
+    // Fresh, ordered clocks: the delete is the newest event, but still
+    // inside the retention window (the reconcile respects it — ancient
+    // mirror trash is swept, not re-applied).
+    const trashedAt = Date.now();
+    saveNotes({ tabs: [note('a', 'about to die', trashedAt - 10)], trashed: [] }, 'a');
     await whenNotesIdle();
 
-    // The deletion's pagehide flush: the tombstone reached the mirror,
-    // the database's delete died.
+    // The deletion's pagehide flush: the trash reached the mirror, the
+    // database's delete died. The mirror tombstone blob carries id+clock;
+    // the reconciled trash keeps the committed row's WORDS — that is the
+    // rescue the trash exists for.
     localStorage.setItem('padifyTabs', JSON.stringify([]));
-    localStorage.setItem('padifyTabTombstones', JSON.stringify([{ id: 'a', updatedAt: 20 }]));
+    localStorage.setItem(
+      'padifyTabTombstones',
+      JSON.stringify([{ id: 'a', updatedAt: trashedAt }]),
+    );
 
     await reboot();
 
     const snapshot = await loadNotes();
     expect(snapshot.tabs).toHaveLength(0);
-    expect(snapshot.tombstones).toEqual([{ id: 'a', updatedAt: 20 }]);
+    expect(snapshot.trashed).toEqual([
+      expect.objectContaining({ id: 'a', content: 'about to die', deletedAt: trashedAt }),
+    ]);
   });
 
-  it('keeps the live row when the committed state is newer than the mirror tombstone', async () => {
-    saveNotes({ tabs: [note('a', 'still here', 30)], tombstones: [] }, 'a');
+  it('keeps the live row when the committed state is newer than the mirror trash', async () => {
+    const trashedAt = Date.now();
+    saveNotes({ tabs: [note('a', 'still here', trashedAt + 10)], trashed: [] }, 'a');
     await whenNotesIdle();
 
-    localStorage.setItem('padifyTabTombstones', JSON.stringify([{ id: 'a', updatedAt: 20 }]));
+    localStorage.setItem(
+      'padifyTabTombstones',
+      JSON.stringify([{ id: 'a', updatedAt: trashedAt }]),
+    );
 
     await reboot();
 
@@ -361,7 +405,7 @@ describe('mirror reconciliation (pagehide durability)', () => {
   });
 
   it('adopts a note the dying page created in its last moments', async () => {
-    saveNotes({ tabs: [note('a', 'stable', 10)], tombstones: [] }, 'a');
+    saveNotes({ tabs: [note('a', 'stable', 10)], trashed: [] }, 'a');
     await whenNotesIdle();
 
     localStorage.setItem(
@@ -386,9 +430,11 @@ describe('legacy blob mirror', () => {
 
   it('immediate saves write the legacy blobs to localStorage', () => {
     const tabs = [note('a', 'hello')];
-    saveNotes({ tabs, tombstones: [{ id: 'z', updatedAt: 3 }] }, 'a');
+    saveNotes({ tabs, trashed: [{ ...note('z', 'body'), deletedAt: 3 }] }, 'a');
 
     expect(JSON.parse(localStorage.getItem('padifyTabs') ?? '[]')).toEqual(tabs);
+    // The tombstones mirror carries the trash as id+clock pairs — the
+    // shape every pre-storage build reads.
     expect(JSON.parse(localStorage.getItem('padifyTabTombstones') ?? '[]')).toEqual([
       { id: 'z', updatedAt: 3 },
     ]);
@@ -399,10 +445,10 @@ describe('legacy blob mirror', () => {
     const first = [note('a', 'first', 1)];
     const second = [note('a', 'second', 2)];
 
-    saveNotes({ tabs: first, tombstones: [] }, 'a');
+    saveNotes({ tabs: first, trashed: [] }, 'a');
     // Typing path: the blob keeps the last immediate state until the window
     // elapses (or a flush happens).
-    saveNotes({ tabs: second, tombstones: [] }, 'a', { immediate: false });
+    saveNotes({ tabs: second, trashed: [] }, 'a', { immediate: false });
     expect(localStorage.getItem('padifyTabs')).toBe(JSON.stringify(first));
 
     flushNotesMirror();
@@ -417,7 +463,7 @@ describe('legacy blob mirror', () => {
 describe('legacy migration', () => {
   beforeEach(freshBoot);
 
-  it('imports tabs, tombstones and settings on first boot', async () => {
+  it('imports tabs, trash and settings on first boot', async () => {
     localStorage.setItem(
       'padifyTabs',
       JSON.stringify([
@@ -435,7 +481,10 @@ describe('legacy migration', () => {
     const snapshot = await loadNotes();
     expect(snapshot.tabs.map((tab) => tab.id)).toEqual(['t1', 't2']);
     expect(snapshot.tabs[0].name).toBe('First');
-    expect(snapshot.tombstones).toEqual([{ id: 'gone', updatedAt: 9 }]);
+    // A legacy tombstone migrates into the trash on its own clock — which
+    // is ancient, so the boot's retention sweep retires it on sight: old
+    // deletes do not come back as 30-day trash entries.
+    expect(snapshot.trashed).toEqual([]);
     expect(stateGet('mode')).toBe('dark');
     expect(stateGet('selectedFont')).toBe('serif');
     expect(stateGet('note')).toBe('legacy body');
@@ -487,7 +536,7 @@ describe('fallback backend', () => {
 
   it('loads and saves notes as the legacy blobs', async () => {
     const tabs = [note('a', 'fallback body')];
-    saveNotes({ tabs, tombstones: [] }, 'a');
+    saveNotes({ tabs, trashed: [] }, 'a');
 
     expect(JSON.parse(localStorage.getItem('padifyTabs') ?? '[]')).toEqual(tabs);
     expect(localStorage.getItem('padifyActiveTab')).toBe('a');

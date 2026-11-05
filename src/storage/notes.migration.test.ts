@@ -77,21 +77,21 @@ describe('migrateNoteRecord', () => {
   });
 
   it('a FUTURE version row passes through untouched — never restamped as current', () => {
-    // A row written by a newer build (say v3 with a new body field) must
-    // not be stamped v2 by this build: the downgrade would make the next
+    // A row written by a newer build (say v4 with a new body field) must
+    // not be stamped v3 by this build: the downgrade would make the next
     // upgrade misread the row forever. Unknown fields ride along; only
     // the version stamp is sacred.
     const row: NoteRecord = {
       id: 'tab-future',
       name: null,
-      content: 'future body under a v3 field',
+      content: 'future body under a v4 field',
       createdAt: 1,
       updatedAt: 2,
       position: 3,
       deleted: false,
-      v: 3,
+      v: 4,
       noteType: 'rich',
-      // A field only v3 builds know about:
+      // A field only v4 builds know about:
       futureField: { anything: true },
     } as NoteRecord;
 
@@ -131,8 +131,11 @@ describe('migrateNoteRecord', () => {
 });
 
 describe('NOTE_RECORD_VERSION', () => {
-  it('is 2 — the typed-content-model shape', () => {
-    // Bump this WITH a case in migrateNoteRecord (see the constant's doc).
-    expect(NOTE_RECORD_VERSION).toBe(2);
+  it('is 3 — the trash shape (deletedAt on deleted rows, content kept)', () => {
+    // v1: the legacy dual-read shape. v2: the typed content model.
+    // v3: deletes became trash — deleted rows carry deletedAt and keep
+    // their content. Bump WITH a case in migrateNoteRecord (see the
+    // constant's doc).
+    expect(NOTE_RECORD_VERSION).toBe(3);
   });
 });

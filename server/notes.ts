@@ -18,6 +18,7 @@ import type { SessionUser } from './auth';
 import {
   MAX_ROWS_PER_PUSH,
   NOTE_TYPE_ID_PATTERN,
+  TRASH_RETENTION_MS,
   type IncomingNoteRow,
   type NotesPullV2,
 } from '../shared/wire';
@@ -48,6 +49,17 @@ export function asBool(value: unknown, fallback = false): boolean {
 /** A well-formed note type id passes through; anything else reads as null. */
 export function parseNoteType(value: unknown): string | null {
   return typeof value === 'string' && NOTE_TYPE_ID_PATTERN.test(value) ? value : null;
+}
+
+/**
+ * The trash stamp a row carries: a positive integer epoch-ms on a trashed
+ * row, null everywhere else (live rows, junk, negatives, fractional).
+ */
+export function parseDeletedAt(value: unknown, deleted: boolean): number | null {
+  if (!deleted || typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return Math.round(value);
 }
 
 /**
@@ -82,6 +94,7 @@ export function parseNoteRows(value: unknown): IncomingNoteRow[] | null {
       created_at: asInt(row.created_at, 0),
       updated_at: asInt(row.updated_at, 0),
       deleted: asBool(row.deleted),
+      deleted_at: parseDeletedAt(row.deleted_at, asBool(row.deleted)),
       note_type: parseNoteType(row.note_type)
     });
   }
@@ -107,7 +120,7 @@ export async function handleNotesGet(db: Db, request: Request, user: SessionUser
     const cursor = Number.isFinite(cursorParam) && cursorParam > 0 ? Math.floor(cursorParam) : 0;
 
     const rows = await db.all(
-      `select id, name, content, position, created_at, updated_at, deleted, note_type, seq
+      `select id, name, content, position, created_at, updated_at, deleted, deleted_at, note_type, seq
        from notes where user_id = ? and (seq > ? or seq = 0) order by seq asc`,
       [user.id, cursor]
     );
@@ -129,6 +142,7 @@ export async function handleNotesGet(db: Db, request: Request, user: SessionUser
         created_at: Number(row.created_at) || 0,
         updated_at: Number(row.updated_at) || 0,
         deleted: Number(row.deleted) === 1,
+        deleted_at: row.deleted_at == null ? null : Number(row.deleted_at) || null,
         note_type: row.note_type == null ? null : String(row.note_type),
         seq: Number(row.seq) || 0
       })),
@@ -170,8 +184,9 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
   // ---- per-user storage quota ---------------------------------------------
   // One authenticated account used to be able to store unlimited 2 MB
   // note bodies — a cheap way to exhaust a small host's storage. The cap
-  // counts live note bytes (tombstones are empty), net of what this batch
-  // replaces.
+  // counts every stored byte, trashed rows included: the trash KEEPS the
+  // note's content on purpose (that is what makes it restorable), so a
+  // trash full of big notes occupies exactly the storage it looks like.
   const NOTE_BYTES_QUOTA = 25 * 1024 * 1024;
   const incomingIds = rows.map((row) => row.id);
   const placeholders = incomingIds.map(() => '?').join(', ');
@@ -181,12 +196,12 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
   );
   const existingById = new Map(existingRows.map((row) => [String(row.id), Number(row.bytes) || 0]));
   const incomingBytes = rows.reduce(
-    (total, row) => total + (row.deleted ? 0 : row.content.length),
+    (total, row) => total + row.content.length,
     0
   );
   const replacedBytes = rows.reduce((total, row) => total + (existingById.get(row.id) ?? 0), 0);
   const totalsRows = await db.all(
-    'select coalesce(sum(length(content)), 0) as total from notes where user_id = ? and deleted = 0',
+    'select coalesce(sum(length(content)), 0) as total from notes where user_id = ?',
     [user.id]
   );
   const currentTotal = Number(totalsRows[0]?.total ?? 0) || 0;
@@ -242,8 +257,8 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
   // pushed), and its reserved seqs simply leave a gap.
   await db.runMany(
     rows.map((row, index) => ({
-      sql: `insert into notes (id, user_id, name, content, position, created_at, updated_at, deleted, note_type, seq)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      sql: `insert into notes (id, user_id, name, content, position, created_at, updated_at, deleted, deleted_at, note_type, seq)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        on conflict(id) do update set
          name = excluded.name,
          content = excluded.content,
@@ -251,6 +266,7 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
          created_at = excluded.created_at,
          updated_at = excluded.updated_at,
          deleted = excluded.deleted,
+         deleted_at = excluded.deleted_at,
          note_type = excluded.note_type,
          seq = excluded.seq
        where notes.user_id = excluded.user_id
@@ -269,6 +285,7 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
         row.created_at,
         row.updated_at,
         row.deleted ? 1 : 0,
+        row.deleted_at ?? null,
         row.note_type,
         base + index + 1
       ]
@@ -297,4 +314,40 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
   }
 
   return json(request, { ok: true });
+}
+
+// ---------------------------------------------------------------------------
+// The trash retention sweep
+// ---------------------------------------------------------------------------
+
+/**
+ * Retires trashed rows whose retention window closed — the server half of
+ * TRASH_RETENTION_MS (the client sweeps its local store the same way).
+ *
+ * A trashed row stamps deleted_at; a pre-trash tombstone carries none, so
+ * its updated_at (the delete's own clock) stands in — those are already
+ * long-gone deletes on any upgraded install, and the sweep clears them on
+ * the first boot instead of keeping content-less rows alive forever.
+ *
+ * Hard-deleting means a device that never saw the trash row (offline past
+ * the whole window) re-uploads its still-live local copy on reconnect:
+ * the note returns. That resurrect edge is accepted deliberately — the
+ * opposite (the sweep waiting on every device's acknowledgement) is an
+ * unbounded distributed-consensus problem for a notepad.
+ */
+export async function sweepTrashedNotes(db: Db, now: number = Date.now()): Promise<number> {
+  const cutoff = now - TRASH_RETENTION_MS;
+  const stale = await db.all(
+    `select id from notes
+     where deleted = 1 and (deleted_at is not null and deleted_at < ?
+                        or deleted_at is null and updated_at < ?)`,
+    [cutoff, cutoff]
+  );
+  if (stale.length === 0) {
+    return 0;
+  }
+  const ids = stale.map((row) => String(row.id));
+  const placeholders = ids.map(() => '?').join(', ');
+  await db.run(`delete from notes where id in (${placeholders})`, ids);
+  return ids.length;
 }

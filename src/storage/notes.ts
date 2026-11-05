@@ -5,7 +5,7 @@
  * serialised on every debounced keystroke. Now each note is a row in the
  * IndexedDB `notes` store and a save writes only what actually changed:
  *
- *  • loadNotes()  → { tabs, tombstones } (plus the active tab id via kv)
+ *  • loadNotes()  → { tabs, trashed } (plus the active tab id via kv)
  *  • saveNotes()  → diff against the last-written index, then ONE
  *                   transaction with the changed rows
  *
@@ -29,6 +29,7 @@ import { NOTES_STORE, storageBackend, writeAll } from './idb';
 import { stateSet } from './kv';
 import { reportSaveFailure, reportSaveRecovered } from './persistence';
 import { normalizeNoteType, type NoteType } from '../editor/note-types';
+import { TRASH_RETENTION_MS } from '../../shared/wire';
 
 /** A live note, structurally identical to NoteTab in tabs.ts. */
 export interface StoredNoteTab {
@@ -57,15 +58,23 @@ export interface StoredNoteTab {
   copyOf?: string;
 }
 
-/** A deletion not yet confirmed by the cloud. */
-export interface StoredTombstone {
-  id: string;
-  updatedAt: number;
+/**
+ * A note in the trash — the full record plus the moment it landed there.
+ * Content is KEPT (that is what makes restore one click), and the id never
+ * changes, so a restored note keeps every share link keyed to it.
+ *
+ * `purged` marks a delete-forever placeholder: content emptied, trash stamp
+ * backdated past retention, invisible everywhere — it exists only until its
+ * sweeper row is confirmed pushed (see TabManager.purgeNote). Local-only.
+ */
+export interface TrashedNote extends StoredNoteTab {
+  deletedAt: number;
+  purged?: boolean;
 }
 
 export interface NotesSnapshot {
   tabs: StoredNoteTab[];
-  tombstones: StoredTombstone[];
+  trashed: TrashedNote[];
 }
 
 /**
@@ -90,6 +99,10 @@ export interface NotesSnapshot {
 export interface NoteRecord extends StoredNoteTab {
   position: number;
   deleted: boolean;
+  /** When the row was trashed (epoch ms) — present on every deleted row
+   *  written by trash-aware builds; the v3 migration stamps it onto legacy
+   *  tombstones from their updatedAt. */
+  deletedAt?: number;
   html?: string;
   /** Local schema version — absent means v1 (the legacy dual-read shape). */
   v?: number;
@@ -100,12 +113,14 @@ export interface NoteRecord extends StoredNoteTab {
  *  • 1 (implied, unversioned rows) — the pre-rename shape: body under
  *    `html`, dual-read by the loaders.
  *  • 2 — the typed-content-model shape: body under `content`, note type
- *    and color theme optional fields. Writers stamp v=2 since this
- *    constant landed.
+ *    and color theme optional fields.
+ *  • 3 — the trash shape: deleted rows carry `deletedAt` (epoch ms) and
+ *    KEEP their content — a delete is a trash entry now, restorable for
+ *    TRASH_RETENTION_MS, not a content-less tombstone.
  *
  * Bump it WITH a case in migrateNoteRecord — never one without the other.
  */
-export const NOTE_RECORD_VERSION = 2;
+export const NOTE_RECORD_VERSION = 3;
 
 /**
  * Reads a raw stored record into the current shape, running any needed
@@ -142,6 +157,22 @@ export function migrateNoteRecord(record: NoteRecord): NoteRecord {
           ? record.html
           : '';
     migrated = { ...record, content: body };
+  }
+
+  if (version < 3 && migrated.deleted) {
+    // v2 → v3: the trash transition. A deleted row without a trash stamp
+    // is a legacy tombstone — its delete clock is the best stamp there is.
+    // Content-less by construction (the old writers emptied it), so the
+    // entry is invisible in the trash UI and the retention sweep retires
+    // it on its own age.
+    const stamp =
+      typeof (migrated as { deletedAt?: unknown }).deletedAt === 'number' &&
+      (migrated as { deletedAt: number }).deletedAt > 0
+        ? (migrated as { deletedAt: number }).deletedAt
+        : typeof migrated.updatedAt === 'number' && migrated.updatedAt > 0
+          ? migrated.updatedAt
+          : Date.now();
+    migrated = { ...migrated, deletedAt: stamp };
   }
 
   return { ...migrated, v: NOTE_RECORD_VERSION };
@@ -206,6 +237,8 @@ let currentSnapshotForMirror: NotesSnapshot | null = null;
  * The last-written index powering the diff. Values are the fields that
  * matter for persistence — content changes always bump `updatedAt` in
  * TabManager, so content does not need to be compared (or copied) here.
+ * `deletedAt` keys the trash-diff; `swept` marks retention-retired rows
+ * seeded only so the next save deletes them.
  */
 const lastWritten = new Map<
   string,
@@ -214,7 +247,9 @@ const lastWritten = new Map<
     position: number;
     updatedAt: number;
     deleted: boolean;
+    deletedAt: number;
     noteType: NoteType | undefined;
+    swept: boolean;
   }
 >();
 
@@ -230,8 +265,13 @@ let mirrorDirty = false;
 
 /**
  * Boot hook: caches the hydrated snapshot (live tabs in strip order, then
- * tombstones) and seeds the diff index. Called by index.ts after the
+ * the trash) and seeds the diff index. Called by index.ts after the
  * database (and any legacy import) is in place.
+ *
+ * The retention sweep runs HERE: trashed rows whose window closed never
+ * join the snapshot (the trash UI never sees them) — but they DO seed the
+ * diff index, so the next saveNotes deletes them from the database, and
+ * sweptTrashIds() names them for index.ts's immediate cleanup write.
  */
 export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
   const valid = records.filter(
@@ -275,37 +315,120 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
       };
     });
 
-  const tombstones = valid
+  const cutoff = Date.now() - TRASH_RETENTION_MS;
+  const trashed = valid
     .filter((record) => record.deleted)
-    .map((record) => ({
-      id: record.id,
-      updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now(),
-    }));
+    .map((raw) => {
+      const record = migrateNoteRecord(raw);
+      const stamp =
+        typeof record.deletedAt === 'number' && record.deletedAt > 0
+          ? record.deletedAt
+          : typeof record.updatedAt === 'number' && record.updatedAt > 0
+            ? record.updatedAt
+            : 0;
+      return {
+        id: record.id,
+        name: typeof record.name === 'string' ? record.name : null,
+        content: typeof record.content === 'string' ? record.content : '',
+        createdAt: typeof record.createdAt === 'number' ? record.createdAt : Date.now(),
+        updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now(),
+        noteType: normalizeNoteType((record as { noteType?: unknown }).noteType),
+        colorTheme:
+          (record as { colorTheme?: unknown }).colorTheme === 'light' ||
+          (record as { colorTheme?: unknown }).colorTheme === 'dark'
+            ? (record as { colorTheme: 'light' | 'dark' }).colorTheme
+            : undefined,
+        syncSeq:
+          typeof (record as { syncSeq?: unknown }).syncSeq === 'number' &&
+          (record as { syncSeq: number }).syncSeq > 0
+            ? (record as { syncSeq: number }).syncSeq
+            : undefined,
+        copyOf:
+          typeof (record as { copyOf?: unknown }).copyOf === 'string' &&
+          (record as { copyOf: string }).copyOf
+            ? (record as { copyOf: string }).copyOf
+            : undefined,
+        deletedAt: stamp,
+        purged: (record as { purged?: unknown }).purged === true ? true : undefined,
+      } satisfies TrashedNote;
+    })
+    .filter((entry) => entry.deletedAt > cutoff);
 
   // Seed the diff index from the records as loaded: live tabs get their
   // position in the SORTED live list (that is the index saveNotes will use
-  // when it diffs), tombstones get -1.
+  // when it diffs), the surviving trash gets -1 — and swept rows seed too,
+  // so the next saveNotes deletes them from the database.
   live.forEach((tab, index) => {
     lastWritten.set(tab.id, {
       name: tab.name,
       position: index,
       updatedAt: tab.updatedAt,
       deleted: false,
+      deletedAt: 0,
       noteType: tab.noteType,
+      swept: false,
     });
   });
-  tombstones.forEach((tombstone) => {
-    lastWritten.set(tombstone.id, {
-      name: null,
-      position: -1,
-      updatedAt: tombstone.updatedAt,
-      deleted: true,
-      noteType: undefined,
+  valid
+    .filter((record) => record.deleted)
+    .forEach((record) => {
+      const swept = !trashed.some((entry) => entry.id === record.id);
+      lastWritten.set(record.id, {
+        name: null,
+        position: -1,
+        updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now(),
+        deleted: true,
+        noteType: undefined,
+        // A swept row must LOOK unchanged to the diff (nothing about it
+        // re-writes) while sitting in the index's delete path — the purge
+        // write removes it by id.
+        deletedAt: 0,
+        swept,
+      });
     });
-  });
 
-  bootSnapshot = { tabs: live, tombstones };
+  bootSnapshot = { tabs: live, trashed };
   return bootSnapshot;
+}
+
+/**
+ * The trashed rows the hydrate sweep retired — index.ts purges these from
+ * the database right after boot so they don't linger until the first save.
+ */
+export function sweptTrashIds(): string[] {
+  const ids: string[] = [];
+  lastWritten.forEach((signature, id) => {
+    if (signature.deleted && signature.swept) {
+      ids.push(id);
+    }
+  });
+  return ids;
+}
+
+/**
+ * Hard-deletes note records by id — the write path behind "Delete
+ * forever", "Empty trash" and the boot-time retention cleanup. Issues the
+ * IndexedDB delete directly (the rows are already gone from the model)
+ * and drops them from the diff index so no later save resurrects them.
+ */
+export function purgeNoteRecords(ids: string[]): void {
+  if (ids.length === 0) {
+    return;
+  }
+  ids.forEach((id) => lastWritten.delete(id));
+  if (storageBackend() === 'local-storage') {
+    // Fallback mode: rewrite the legacy blobs without the purged ids. The
+    // tombstones mirror drops them; a live row with a purged id (a torn
+    // state that should not exist) goes too.
+    const snapshot = currentSnapshotForMirror ?? bootSnapshot ?? { tabs: [], trashed: [] };
+    persistLegacyBlobs(snapshot);
+    return;
+  }
+  trackWrite(
+    writeAll(NOTES_STORE, [], ids).catch((error) => {
+      console.warn('[storage] trash purge failed — retrying on the next boot sweep', error);
+    }),
+  );
 }
 
 /** The persisted model for TabManager.init(). */
@@ -318,12 +441,15 @@ export function loadNotes(): Promise<NotesSnapshot> {
   }
   // Not booted yet (or hydrated without records): treat as an empty store —
   // TabManager bootstraps the welcome note from there.
-  return Promise.resolve({ tabs: [], tombstones: [] });
+  return Promise.resolve({ tabs: [], trashed: [] });
 }
 
 /**
  * Fallback-mode load: today's exact localStorage semantics, mapped into the
- * snapshot shape.
+ * snapshot shape. The tombstones blob reads as the trash's id+clock pairs —
+ * in fallback mode the blob IS the store, so a trashed entry there keeps
+ * whatever the blob carries (the fallback writes content-less deletes,
+ * same as it always did).
  */
 function loadLegacySnapshot(): NotesSnapshot {
   const tabs: StoredNoteTab[] = [];
@@ -361,27 +487,39 @@ function loadLegacySnapshot(): NotesSnapshot {
     /* malformed blob — start from an empty tab list */
   }
 
-  const tombstones: StoredTombstone[] = [];
+  const trashed: TrashedNote[] = [];
   try {
     const raw = localStorage.getItem(LEGACY_TOMBSTONES_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
     if (Array.isArray(parsed)) {
       parsed.forEach((entry: Record<string, unknown>) => {
         if (entry && typeof entry.id === 'string' && typeof entry.updatedAt === 'number') {
-          tombstones.push({ id: entry.id, updatedAt: entry.updatedAt });
+          const live = tabs.find((tab) => tab.id === entry.id);
+          trashed.push({
+            id: entry.id,
+            name: null,
+            content: '',
+            createdAt: live?.createdAt ?? entry.updatedAt,
+            updatedAt: entry.updatedAt,
+            noteType: undefined,
+            deletedAt:
+              typeof entry.deletedAt === 'number' && entry.deletedAt > 0
+                ? entry.deletedAt
+                : entry.updatedAt,
+          });
         }
       });
     }
   } catch {
-    /* malformed blob — no tombstones */
+    /* malformed blob — no trash */
   }
 
-  return { tabs, tombstones };
+  return { tabs, trashed };
 }
 
 /**
  * Migration hook: reads the legacy localStorage blobs into note records
- * (tombstones included). Empty when nothing is there. index.ts decides
+ * (trash included). Empty when nothing is there. index.ts decides
  * whether to import them.
  */
 export function parseLegacyNoteRecords(): NoteRecord[] {
@@ -391,15 +529,17 @@ export function parseLegacyNoteRecords(): NoteRecord[] {
     position: index,
     deleted: false,
   }));
-  snapshot.tombstones.forEach((tombstone) => {
+  snapshot.trashed.forEach((entry) => {
     records.push({
-      id: tombstone.id,
-      name: null,
-      content: '',
-      createdAt: tombstone.updatedAt,
-      updatedAt: tombstone.updatedAt,
+      id: entry.id,
+      name: entry.name,
+      content: entry.content,
+      createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt,
+      noteType: entry.noteType,
       position: -1,
       deleted: true,
+      deletedAt: entry.deletedAt,
     });
   });
   return records;
@@ -415,8 +555,13 @@ export function parseLegacyNoteRecords(): NoteRecord[] {
  * the same breath can die with the page — so the newest state of a note
  * can exist only in localStorage. For every mirror row strictly newer
  * than its committed IndexedDB row, the mirror copy is the truth: a
- * lost edit recovers, a lost delete re-applies so the note cannot
+ * lost edit recovers, a lost trash re-applies so the note cannot
  * resurrect.
+ *
+ * A recovered trash entry KEEPS the committed row's content when the mirror
+ * blob has none (it never does — the mirror writes id+clock pairs): the
+ * words on screen at the moment of the delete are exactly what the trash
+ * exists to keep.
  *
  * Rescued rows deliberately keep their STALE diff-index seeds (and new
  * ids get none), so the next saveNotes diffs them as changed and
@@ -428,27 +573,47 @@ export function reconcileNotesFromMirror(): boolean {
     return false;
   }
   const mirror = loadLegacySnapshot();
-  if (mirror.tabs.length === 0 && mirror.tombstones.length === 0) {
+  if (mirror.tabs.length === 0 && mirror.trashed.length === 0) {
     return false;
   }
 
   const liveById = new Map(bootSnapshot.tabs.map((tab) => [tab.id, tab]));
-  const tombstones = new Map(bootSnapshot.tombstones.map((grave) => [grave.id, grave]));
+  const trashById = new Map(bootSnapshot.trashed.map((grave) => [grave.id, grave]));
   let changed = false;
 
-  // Lost deletes re-apply — unless the committed row is at least as new
-  // (a delete followed by edits that DID commit wins over the tombstone).
-  for (const grave of mirror.tombstones) {
+  // Lost trashes re-apply — unless the committed row is at least as new
+  // (a delete followed by edits that DID commit wins over the trash), or
+  // the retention window already closed on them (a swept row must not
+  // come back from a stale mirror: the hydrate sweep just retired it, and
+  // re-adding it would make every ancient tombstone immortal).
+  const retentionCutoff = Date.now() - TRASH_RETENTION_MS;
+  for (const grave of mirror.trashed) {
+    if (grave.deletedAt <= retentionCutoff) {
+      continue;
+    }
     const live = liveById.get(grave.id);
-    const existing = tombstones.get(grave.id);
+    const existing = trashById.get(grave.id);
     if (
-      (live !== undefined && live.updatedAt >= grave.updatedAt) ||
-      (existing !== undefined && existing.updatedAt >= grave.updatedAt)
+      (live !== undefined && live.updatedAt >= grave.deletedAt) ||
+      (existing !== undefined && existing.deletedAt >= grave.deletedAt)
     ) {
       continue;
     }
+    // The trash keeps the committed row's words — that is the rescue.
+    const words = live ?? existing;
+    trashById.set(grave.id, {
+      id: grave.id,
+      name: words?.name ?? null,
+      content: words?.content ?? '',
+      createdAt: words?.createdAt ?? grave.deletedAt,
+      updatedAt: grave.deletedAt,
+      noteType: words?.noteType,
+      colorTheme: words?.colorTheme,
+      syncSeq: words?.syncSeq,
+      copyOf: words?.copyOf,
+      deletedAt: grave.deletedAt,
+    });
     liveById.delete(grave.id);
-    tombstones.set(grave.id, grave);
     changed = true;
   }
 
@@ -467,8 +632,13 @@ export function reconcileNotesFromMirror(): boolean {
       committed.colorTheme = row.colorTheme;
       committed.syncSeq = row.syncSeq;
       committed.copyOf = row.copyOf;
-      tombstones.delete(row.id);
+      trashById.delete(row.id);
     } else {
+      // A mirror-live row the store holds as TRASHED is a delete the
+      // mirror never saw — the committed trash (newer or equal) stands.
+      if (trashById.has(row.id)) {
+        continue;
+      }
       liveById.set(row.id, row);
     }
     changed = true;
@@ -482,7 +652,7 @@ export function reconcileNotesFromMirror(): boolean {
   const tabs = [...liveById.values()].sort(
     (a, b) => (order.get(a.id) ?? end) - (order.get(b.id) ?? end),
   );
-  bootSnapshot = { tabs, tombstones: [...tombstones.values()] };
+  bootSnapshot = { tabs, trashed: [...trashById.values()] };
   return true;
 }
 
@@ -543,9 +713,9 @@ export function saveNotes(
 }
 
 /**
- * Computes the changed rows. `deleted` tombstone rows and repositioned tabs
- * are upserts; ids that vanished from the model entirely (cloud-confirmed
- * deletions, merges) are deletes.
+ * Computes the changed rows. Trash rows (deleted, deletedAt stamped,
+ * content kept) are upserts; ids that vanished from the model entirely
+ * (purged trash, merges) are deletes.
  */
 function diffAgainstLastWritten(snapshot: NotesSnapshot): {
   upserts: NoteRecord[];
@@ -557,9 +727,9 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
   snapshot.tabs.forEach((tab, index) => {
     seen.add(tab.id);
     // Another tab of this browser deleted this note after we hydrated:
-    // never upsert a live row back over its tombstone (see
+    // never upsert a live row back over its trash row (see
     // externallyDeletedIds). The id stays "seen" so the trailing
-    // delete-sweep below doesn't drop the tombstone either.
+    // delete-sweep below doesn't drop the trash row either.
     if (externallyDeletedIds.has(tab.id)) {
       return;
     }
@@ -569,7 +739,9 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
       position: index,
       updatedAt: tab.updatedAt,
       deleted: false,
+      deletedAt: 0,
       noteType: tab.noteType,
+      swept: false,
     };
     if (
       !previous ||
@@ -586,26 +758,39 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
     }
   });
 
-  snapshot.tombstones.forEach((tombstone) => {
-    seen.add(tombstone.id);
-    const previous = lastWritten.get(tombstone.id);
-    if (!previous || !previous.deleted || previous.updatedAt !== tombstone.updatedAt) {
+  snapshot.trashed.forEach((grave) => {
+    seen.add(grave.id);
+    const previous = lastWritten.get(grave.id);
+    if (
+      !previous ||
+      !previous.deleted ||
+      previous.deletedAt !== grave.deletedAt ||
+      previous.updatedAt !== grave.updatedAt
+    ) {
       upserts.push({
-        id: tombstone.id,
-        name: null,
-        content: '',
-        createdAt: tombstone.updatedAt,
-        updatedAt: tombstone.updatedAt,
+        id: grave.id,
+        name: grave.name,
+        content: grave.content,
+        createdAt: grave.createdAt,
+        updatedAt: grave.updatedAt,
+        noteType: grave.noteType,
+        colorTheme: grave.colorTheme,
+        syncSeq: grave.syncSeq,
+        copyOf: grave.copyOf,
         position: -1,
         deleted: true,
+        deletedAt: grave.deletedAt,
+        ...(grave.purged ? { purged: true } : {}),
         v: NOTE_RECORD_VERSION,
       });
-      lastWritten.set(tombstone.id, {
-        name: null,
+      lastWritten.set(grave.id, {
+        name: grave.name,
         position: -1,
-        updatedAt: tombstone.updatedAt,
+        updatedAt: grave.updatedAt,
         deleted: true,
-        noteType: undefined,
+        deletedAt: grave.deletedAt,
+        noteType: grave.noteType,
+        swept: false,
       });
     }
   });
@@ -629,7 +814,7 @@ function persistLegacyBlobs(snapshot: NotesSnapshot): void {
   // lost on reload. Route failures through the same health machinery the
   // IndexedDB path uses, so the indicator warns and the persist() re-ask
   // has a chance to run. Only a clean sweep of BOTH writes counts as
-  // recovered — a successful tombstone write must not mask a failed tabs
+  // recovered — a successful trash write must not mask a failed tabs
   // write (reportSaveRecovered flips the indicator back to healthy).
   let failure: unknown = null;
   try {
@@ -638,7 +823,12 @@ function persistLegacyBlobs(snapshot: NotesSnapshot): void {
     failure = error;
   }
   try {
-    localStorage.setItem(LEGACY_TOMBSTONES_KEY, JSON.stringify(snapshot.tombstones));
+    localStorage.setItem(
+      LEGACY_TOMBSTONES_KEY,
+      JSON.stringify(
+        snapshot.trashed.map((grave) => ({ id: grave.id, updatedAt: grave.deletedAt })),
+      ),
+    );
   } catch (error) {
     if (failure === null) {
       failure = error;
@@ -681,7 +871,7 @@ function mirrorLegacyNotes(snapshot: NotesSnapshot, immediate: boolean): void {
   mirrorTimer = setTimeout(() => {
     mirrorTimer = null;
     if (mirrorDirty) {
-      writeLegacyNotesMirror(currentSnapshotForMirror ?? { tabs: [], tombstones: [] });
+      writeLegacyNotesMirror(currentSnapshotForMirror ?? { tabs: [], trashed: [] });
     }
   }, MIRROR_MIN_INTERVAL_MS - elapsed);
 }
@@ -689,7 +879,15 @@ function mirrorLegacyNotes(snapshot: NotesSnapshot, immediate: boolean): void {
 function writeLegacyNotesMirror(snapshot: NotesSnapshot): void {
   try {
     localStorage.setItem(LEGACY_TABS_KEY, JSON.stringify(snapshot.tabs));
-    localStorage.setItem(LEGACY_TOMBSTONES_KEY, JSON.stringify(snapshot.tombstones));
+    // The tombstones mirror carries the trash as id+clock pairs — the shape
+    // every pre-storage build reads, so a trashed note reads as deleted
+    // there and the cross-tab storage-event guard keeps working.
+    localStorage.setItem(
+      LEGACY_TOMBSTONES_KEY,
+      JSON.stringify(
+        snapshot.trashed.map((grave) => ({ id: grave.id, updatedAt: grave.deletedAt })),
+      ),
+    );
     lastMirrorWriteAt = Date.now();
     mirrorDirty = false;
   } catch {

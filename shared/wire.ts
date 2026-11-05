@@ -34,6 +34,13 @@ export interface IncomingNoteRow {
   created_at: number;
   updated_at: number;
   deleted: boolean;
+  /**
+   * Trash: when the note was trashed (client epoch ms), carried only by
+   * deleted rows from trash-aware builds. Live rows send null/0/undefined —
+   * any of the three stores null. Pre-trash clients sent nothing and their
+   * deletes stay plain tombstones (content-less, swept on updated_at).
+   */
+  deleted_at?: number | null;
   /** The note kind; null = the default (standard). */
   note_type: string | null;
 }
@@ -48,6 +55,9 @@ export interface PullRowV2 {
   updated_at: number;
   /** v2 answers a real boolean (v1 answered 0|1; the client normalizes). */
   deleted: boolean;
+  /** Trash: when the note was trashed (epoch ms); null on live rows and
+   *  on pre-trash tombstones. */
+  deleted_at?: number | null;
   note_type: string | null;
   /** The server's sequence for this version of the row. */
   seq: number;
@@ -81,6 +91,28 @@ export const MAX_BODY_BYTES = 2_000_000;
  * rejected on every sync cycle forever with no code path that shrinks it.
  */
 export const MAX_ROWS_PER_PUSH = 500;
+
+/**
+ * The PUT /api/notes answer for trash-aware servers: the rows exactly as
+ * they landed (id, seq, updated_at, deleted, deleted_at), so the client
+ * can adopt its pushed state without waiting for the next pull to echo it
+ * back. Pre-trash servers answered `{ ok: true }` — readers treat a missing
+ * `rows` as "no adoption data" and fall back to the pull echo.
+ */
+export interface NotesPutV2 {
+  ok: true;
+  rows: Array<Pick<PullRowV2, 'id' | 'updated_at' | 'deleted' | 'deleted_at' | 'seq'>>;
+}
+
+/**
+ * How long a trashed note stays restorable, on both sides of the wire.
+ * The server sweeps its rows on boot; the client sweeps its local store the
+ * same way, so a note trashed anywhere disappears everywhere after the
+ * window passes — unless a device was offline the whole time, in which case
+ * its local copy re-uploads on reconnect (the resurrect-on-sync edge case,
+ * accepted: a 30-day-old recovery beating a clean slate is the safer tie).
+ */
+export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Note type ids are url-safe slugs. Both sides enforce the same shape —

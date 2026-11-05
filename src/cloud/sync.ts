@@ -9,11 +9,14 @@
  *  • Conflicts never discard words. The merge is still last-write-wins
  *    per note, but a version that would be silently overwritten — a dirty
  *    local tab losing to a newer remote row, an unpushed edit losing to
- *    a tombstone, a clean local meeting the read-max race's equal-seq
- *    twin — is first copied to a fresh "conflicted copy" tab that rides
- *    the next push, so the losing words survive on every device.
- *  • Deletions are tombstoned (row kept with deleted=true) so closing a tab
- *    on one device removes it everywhere.
+ *    a delete — is first copied to a fresh "conflicted copy" tab that
+ *    rides the next push, so the losing words survive on every device.
+ *  • Deletions are TRASH, not tombstones: the deleted row keeps its
+ *    content and a deleted_at stamp, restorable for TRASH_RETENTION_MS
+ *    from any device (the same id, so share links survive the round
+ *    trip). A "delete forever" pushes a sweeper row backdated past the
+ *    window — the server's boot sweep and every client's hydrate sweep
+ *    retire it on sight, so purges propagate without a second protocol.
  *  • Every cloud failure is non-fatal: the UI degrades to an error/offline
  *    state and retries on the next change, `online` event or 30s tick.
  *
@@ -29,10 +32,11 @@ import { DEFAULT_NOTE_TYPE, normalizeNoteType } from '../editor/note-types';
 // compares against them (importing the constant — not a copy — so a
 // future seed edit can never desync the check).
 import { WELCOME_HTML } from '../editor/note-content';
-import type { NoteTab, TabManager, TabTombstone, TabsSyncPayload } from '../tabs';
+import type { NoteTab, TabManager, TabsSyncPayload } from '../tabs';
+import type { TrashedNote } from '../storage';
 // The wire contract both sides of the HTTP boundary share — types below,
 // and the one request-body ceiling the client batches under.
-import { MAX_BODY_BYTES, MAX_ROWS_PER_PUSH } from '../../shared/wire';
+import { MAX_BODY_BYTES, MAX_ROWS_PER_PUSH, TRASH_RETENTION_MS } from '../../shared/wire';
 import type { IncomingNoteRow } from '../../shared/wire';
 
 // ---------------------------------------------------------------------------
@@ -93,6 +97,9 @@ export interface NoteRow {
   created_at: number;
   updated_at: number;
   deleted: boolean;
+  /** Trash: when the note was trashed (epoch ms) — present on deleted
+   *  rows from trash-aware servers, absent on pre-trash tombstones. */
+  deleted_at?: number | null;
   /** The note kind; null = the default (standard). Absent on old servers. */
   note_type: string | null;
   /**
@@ -431,8 +438,9 @@ function onLocalChange(payload: TabsSyncPayload): void {
     return;
   }
 
+  // Trash rides the same queue as edits: a trashed, restored or purged note
+  // marks itself dirty in TabManager's dirtyIds set, so `dirty` covers both.
   payload.dirty.forEach((id) => pendingPush.add(id));
-  payload.tombstones.forEach((tombstone) => pendingPush.add(tombstone.id));
 
   if (pendingPush.size === 0) {
     return;
@@ -519,6 +527,7 @@ async function runSyncOnce(): Promise<void> {
     const payload = manager.exportForSync();
     const rows: NoteRow[] = [];
     const byId = new Map(payload.tabs.map((tab) => [tab.id, tab]));
+    const trashById = new Map(payload.trashed.map((grave) => [grave.id, grave]));
 
     pendingPush.forEach((id) => {
       const tab = byId.get(id);
@@ -526,10 +535,13 @@ async function runSyncOnce(): Promise<void> {
         rows.push(tabToRow(tab, payload.tabs.indexOf(tab)));
         return;
       }
-      const tombstone = payload.tombstones.find((entry) => entry.id === id);
-      if (tombstone) {
-        rows.push(tombstoneToRow(tombstone));
+      const grave = trashById.get(id);
+      if (grave) {
+        rows.push(trashToRow(grave));
       }
+      // Neither: a purged placeholder already retired, or a merged-away
+      // id — nothing to build, and the id leaves the queue below only if
+      // the server ever saw it; otherwise it stays queued harmlessly.
     });
 
     const pushed: string[] = [];
@@ -579,20 +591,29 @@ async function runSyncOnce(): Promise<void> {
   if (merge.changed) {
     manager.applyExternalMerge(merge.tabs);
   }
+  if (merge.trashChanged) {
+    manager.applyExternalTrash(merge.trashed);
+  }
+  // Trash rows a stale live row tried to un-delete: re-assert the delete
+  // right now, so the other window's next pull cannot win by accident.
+  if (merge.reassertTrashIds.length > 0) {
+    const trashById = new Map(merge.trashed.map((grave) => [grave.id, grave]));
+    const reassertRows = merge.reassertTrashIds
+      .map((id) => trashById.get(id))
+      .filter((grave): grave is TrashedNote => !!grave)
+      .map(trashToRow);
+    const { shippable: reassertShippable } = partitionRowsForPush(reassertRows);
+    for (const batch of batchRowsForPush(reassertShippable)) {
+      rememberEchoes(batch);
+      await api('/api/notes', { method: 'PUT', body: { v: 2, rows: batch } });
+    }
+  }
   // A dropped seed may sit in the push queue (its boot-time creation
   // persisted → dirty → pendingPush). Its tab is gone from the model and
   // it never reached the server, so nothing will ever confirm it — a
-  // queued id with no tab and no tombstone would keep the status pegged
+  // queued id with no tab behind it would keep the status pegged
   // at "pending" forever. Take it out.
   merge.droppedSeedIds.forEach((id) => pendingPush.delete(id));
-  // Tombstones whose delete lost to a strictly newer live row (a real edit
-  // made after the close): off the queue and out of the model. The note is
-  // back — a stale tombstone left behind would re-announce every cycle and
-  // misdate the note's next close (recordTombstone keeps existing entries).
-  if (merge.spentTombstoneIds.length > 0) {
-    merge.spentTombstoneIds.forEach((id) => pendingPush.delete(id));
-    manager.confirmTombstones(merge.spentTombstoneIds);
-  }
   // NOW the cursor may advance: the pulled rows are merged and the
   // persist has been issued. A throw above leaves the cursor where it
   // was, so the next cycle re-pulls instead of skipping.
@@ -618,12 +639,13 @@ async function runSyncOnce(): Promise<void> {
       });
   }
 
-  // 3. Push anything the pull revealed as missing or newer locally, and
-  //    confirm tombstones the cloud already has. Under v2, rows outside
-  //    the changed set are known-unchanged (their seq sits at or below the
-  //    cursor): they are only pushed for position drift, so an untouched
-  //    account stops re-publishing its whole list every cycle.
-  const confirmIds: string[] = [];
+  // 3. Push anything the pull revealed as missing or newer locally. Under
+  //    v2, rows outside the changed set are known-unchanged (their seq sits
+  //    at or below the cursor): they are only pushed for position drift, so
+  //    an untouched account stops re-publishing its whole list every cycle.
+  //    Trash never lands here — a trash row only ever rides the
+  //    pendingPush queue (one the pull didn't deliver is unchanged-and-
+  //    known; a pending one left in step 1).
   const diffRows: NoteRow[] = [];
   const remoteById = new Map(remoteRows.map((row) => [row.id, row]));
   const positionOf = pull.order
@@ -652,17 +674,6 @@ async function runSyncOnce(): Promise<void> {
       diffRows.push(tabToRow(tab, index));
     }
   });
-
-  payload.tombstones.forEach((tombstone) => {
-    const remote = remoteById.get(tombstone.id);
-    if (remote?.deleted) {
-      confirmIds.push(tombstone.id);
-    } else if (!remote || remote.updated_at < tombstone.updatedAt) {
-      diffRows.push(tombstoneToRow(tombstone));
-    }
-  });
-
-  manager.confirmTombstones(confirmIds);
 
   if (diffRows.length > 0) {
     // The same gate as step 1: oversized rows never leave the device
@@ -778,27 +789,30 @@ interface MergeResult {
   tabs: NoteTab[];
   changed: boolean;
   /**
-   * One sentence per conflicted copy created this merge, phrased for the
-   * toast (e.g. "Groceries — conflicted copy was kept"). Empty when no
-   * version needed rescuing.
+   * One sentence per rescued divergence this merge, phrased for the toast.
+   * Empty when no version needed rescuing.
    */
   conflicts: string[];
   /**
+   * The merged trash list — authoritative only when `trashChanged` is true
+   * (the caller then applies it through applyExternalTrash).
+   */
+  trashed: TrashedNote[];
+  trashChanged: boolean;
+  /**
+   * Trashed ids whose delete must be RE-asserted against a stale live row
+   * that arrived this pull (see the trash guard in mergeRemote). The
+   * caller pushes these trash rows right after the merge — the old
+   * step-3 tombstone block, narrowed to exactly the rows that need it.
+   */
+  reassertTrashIds: string[];
+  /**
    * Local untouched welcome-seed tabs this merge dropped (see
    * dropSeedTwins). The caller must take them out of pendingPush — a
-   * queued id whose tab and tombstone are both gone would keep the
+   * queued id whose tab and trash entry are both gone would keep the
    * status pegged at "pending" forever.
    */
   droppedSeedIds: string[];
-  /**
-   * Tombstones whose delete lost this merge to a strictly newer live
-   * row (a real edit made after the close — see the no-local guard in
-   * mergeRemote). The caller prunes them from the model and the push
-   * queue: the cloud has already decided, and a spent tombstone left
-   * behind would misdate the note's NEXT close (recordTombstone keeps
-   * the existing entry).
-   */
-  spentTombstoneIds: string[];
 }
 
 /**
@@ -887,15 +901,37 @@ export function mergeRemote(
 ): MergeResult {
   const tabs: NoteTab[] = payload.tabs.map((tab) => ({ ...tab }));
   const byId = new Map(tabs.map((tab) => [tab.id, tab]));
-  // Closed-here notes, by id: a pending tombstone is the user's own delete
-  // waiting for the cloud to confirm it (see the no-local guard below).
-  const tombstonesById = new Map(payload.tombstones.map((entry) => [entry.id, entry]));
+  // The local trash, by id — restorable rows the retention clock still owns.
+  const trashById = new Map(payload.trashed.map((entry) => [entry.id, { ...entry }]));
+  const trashed = [...trashById.values()];
   const freshRemote: NoteTab[] = [];
   const conflicts: string[] = [];
   const dirty = new Set(payload.dirty);
   const droppedSeedIds: string[] = [];
-  const spentTombstoneIds: string[] = [];
+  const reassertTrashIds: string[] = [];
   let touched = false;
+  let trashTouched = false;
+
+  /** Drops an id from the merged trash (a restore or a sweeper ate it). */
+  const dropTrash = (id: string): void => {
+    if (trashById.delete(id)) {
+      const index = trashed.findIndex((entry) => entry.id === id);
+      if (index >= 0) {
+        trashed.splice(index, 1);
+      }
+      trashTouched = true;
+    }
+  };
+
+  /** Adds or replaces a trash entry (another device's delete arriving). */
+  const putTrash = (entry: TrashedNote): void => {
+    if (trashById.has(entry.id)) {
+      dropTrash(entry.id);
+    }
+    trashed.push(entry);
+    trashById.set(entry.id, entry);
+    trashTouched = true;
+  };
 
   /** The local row wins the delete: newer by seq when both carry one,
    *  by clock otherwise. Equal seqs mean the delete replaced the very
@@ -1029,6 +1065,11 @@ export function mergeRemote(
   remoteRows.forEach((row) => {
     if (row.deleted) {
       const local = byId.get(row.id);
+      const grave = trashById.get(row.id);
+      // The trash stamp this row carries — deleted_at on trash-aware rows,
+      // the delete's own clock on pre-trash tombstones.
+      const stamp = row.deleted_at && row.deleted_at > 0 ? row.deleted_at : row.updated_at;
+
       if (local && localSurvivesDelete(local, row)) {
         // The local edit is newer than the remote delete. The note stays
         // exactly as it is (changed: false), and step 3 of the cycle sees
@@ -1037,35 +1078,92 @@ export function mergeRemote(
         // note; it may not bury a newer edit.
         return;
       }
-      if (local) {
-        if (dirty.has(local.id) && hasWords(local.content)) {
-          // Unconfirmed words about to be buried by a tombstone: the
-          // delete still takes the note, the branch keeps the words. A
-          // silent in-place update (not a mint) still tells no toast —
-          // the branch already exists; only its words moved.
-          const rescue = rescueLosingWords(local, true);
-          if (rescue.outcome === 'minted') {
-            freshRemote.push(rescue.tab);
-            conflicts.push(
-              `"${rescue.tab.name}" was deleted on another device — this device's unsynced changes were kept as a copy`,
-            );
+
+      if (stamp <= Date.now() - TRASH_RETENTION_MS) {
+        // A sweeper row (delete-forever, backdated past retention) or an
+        // expired trash: it never joins any model. A note this device
+        // still held — live or trashed — is retired on the spot; the
+        // retention clock has already run out on it everywhere.
+        if (local) {
+          byId.delete(row.id);
+          const index = tabs.findIndex((tab) => tab.id === row.id);
+          if (index >= 0) {
+            tabs.splice(index, 1);
           }
+          touched = true;
         }
+        if (grave) {
+          dropTrash(row.id);
+        }
+        return;
+      }
+
+      if (local) {
+        // The delete takes the note; the trash keeps its words. A dirty
+        // local's unpushed edits ride along in the trashed entry — the
+        // trash IS the rescue now, restorable for the retention window
+        // (the pre-trash flow minted a "copy (deleted elsewhere)" note for
+        // exactly these bytes).
+        const words = hasWords(local.content) ? local.content : wireRowContent(row);
+        const hadUnsyncedWords = dirty.has(local.id) && hasWords(local.content);
         byId.delete(row.id);
         const index = tabs.findIndex((tab) => tab.id === row.id);
         if (index >= 0) {
           tabs.splice(index, 1);
         }
+        putTrash({
+          id: row.id,
+          name: local.name ?? row.name,
+          content: words,
+          createdAt: local.createdAt,
+          updatedAt: row.updated_at,
+          noteType: normalizeNoteType(row.note_type) ?? local.noteType,
+          colorTheme: local.colorTheme,
+          syncSeq: row.seq && row.seq > 0 ? row.seq : local.syncSeq,
+          deletedAt: stamp,
+        });
         touched = true;
+        if (hadUnsyncedWords) {
+          conflicts.push(
+            `"${local.name ?? 'This note'}" was deleted on another device — its unsynced changes are kept in the trash`,
+          );
+        }
+        return;
       }
+
+      if (grave) {
+        // Already trashed here. A purged placeholder's own sweeper echo
+        // (or any row older than it) changes nothing; a strictly newer
+        // trash row refreshes the stamp.
+        if (grave.purged || row.updated_at <= grave.updatedAt) {
+          return;
+        }
+        putTrash({ ...grave, updatedAt: row.updated_at, deletedAt: stamp });
+        return;
+      }
+
+      // Fresh trash from another device — restorable for its remaining
+      // window. Pre-trash tombstones (no deleted_at) arrive with empty
+      // content and read as they are: deleted, gone, nothing to show.
+      putTrash({
+        id: row.id,
+        name: row.name,
+        content: wireRowContent(row),
+        createdAt: typeof row.created_at === 'number' ? row.created_at : Date.now(),
+        updatedAt: typeof row.updated_at === 'number' ? row.updated_at : Date.now(),
+        noteType: normalizeNoteType(row.note_type),
+        syncSeq: row.seq && row.seq > 0 ? row.seq : undefined,
+        deletedAt: stamp,
+      });
       return;
     }
 
     const local = byId.get(row.id);
     if (!local) {
+      const grave = trashById.get(row.id);
       // An echo of this device's own push, arriving for a note the model
-      // no longer holds: the tab was closed here after the push, or an
-      // earlier row of this very pull (a tombstone) deleted it. Our own
+      // no longer holds as live: the tab was trashed here after the push,
+      // or an earlier row of this very pull (a trash row) took it. Our own
       // bytes are never a reason to reopen a note we no longer have —
       // the push carried no user intent for the note's life, only its
       // bytes, and the delete (ours or the cloud's) came after them.
@@ -1073,22 +1171,20 @@ export function mergeRemote(
       if (echo && echo.updatedAt === row.updated_at && echo.content === wireRowContent(row)) {
         return;
       }
-      // A tombstone this device still holds says the user closed this tab
-      // here and the cloud has not confirmed the delete yet. A live row
-      // for it is a stale re-publish — another window re-pushing pre-close
-      // bytes (the shared-cursor blind spot, a position-drift diff) —
-      // unless it is strictly newer than the close, which is a real edit
-      // made after it and wins exactly like a newer local edit does.
-      // Either way the close sticks where it should: a stale row is
-      // dropped (step 3 of the cycle re-asserts the tombstone against
-      // it), and a genuinely newer one reopens the note — marking the
-      // tombstone spent, since its delete just lost the race.
-      const tombstone = tombstonesById.get(row.id);
-      if (tombstone) {
-        if (row.updated_at <= tombstone.updatedAt) {
+      // A trash entry this device still holds says the user deleted this
+      // note here. A live row for it is a stale re-publish — another
+      // window re-pushing pre-delete bytes (the shared-cursor blind spot,
+      // a position-drift diff) — unless it is strictly newer than the
+      // delete, which is a real edit or restore made after it and wins
+      // exactly like a newer local edit does. A stale row is dropped and
+      // the trash re-asserted against it; a genuinely newer one restores
+      // the note.
+      if (grave) {
+        if (row.updated_at <= grave.updatedAt) {
+          reassertTrashIds.push(row.id);
           return;
         }
-        spentTombstoneIds.push(row.id);
+        dropTrash(row.id);
       }
       freshRemote.push({
         id: row.id,
@@ -1222,7 +1318,15 @@ export function mergeRemote(
     }
   }
 
-  return { tabs, changed: touched, conflicts, droppedSeedIds, spentTombstoneIds };
+  return {
+    tabs,
+    changed: touched,
+    conflicts,
+    trashed,
+    trashChanged: trashTouched,
+    droppedSeedIds,
+    reassertTrashIds,
+  };
 }
 
 /** The server rejects request bodies over 2 MB (see shared/wire.ts). */
@@ -1350,16 +1454,20 @@ function tabToRow(tab: NoteTab, position: number): IncomingNoteRow {
   };
 }
 
-function tombstoneToRow(tombstone: TabTombstone): IncomingNoteRow {
+function trashToRow(grave: TrashedNote): IncomingNoteRow {
+  // The trash row carries the note's bytes (that is what makes it
+  // restorable everywhere) plus its stamp; position is meaningless for a
+  // deleted row (the pull's order array only walks live notes).
   return {
-    id: tombstone.id,
-    name: null,
-    content: '',
+    id: grave.id,
+    name: grave.name,
+    content: grave.content,
     position: 0,
-    created_at: tombstone.updatedAt,
-    updated_at: tombstone.updatedAt,
+    created_at: grave.createdAt,
+    updated_at: grave.updatedAt,
     deleted: true,
-    note_type: null,
+    deleted_at: grave.deletedAt > 0 ? grave.deletedAt : null,
+    note_type: grave.noteType ?? null,
   };
 }
 

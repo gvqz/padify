@@ -4,12 +4,13 @@
  * The HTTP surface lives in routes.ts (the route table + dispatcher) and
  * the domain modules it wires; this file is deliberately the only place
  * that touches Bun, and keeps only the boot sequence: create the
- * database, apply the schema, sweep expired sessions and the music
- * cache, and answer every request through route().
+ * database, apply the schema, sweep expired sessions, the music cache and
+ * the trash, and answer every request through route().
  */
 
 import { applySchema, createDb } from './db';
 import { sweepMusicCache } from './music';
+import { sweepTrashedNotes } from './notes';
 import { MAX_BODY_BYTES, json, pathPrefixFromEnv, stripPathPrefix } from './http';
 import { route } from './routes';
 import { MAX_ATTACHMENT_BYTES } from './attachments';
@@ -31,6 +32,13 @@ const db = await createDb();
 await applySchema(db);
 await db.run('delete from sessions where expires_at <= ?', [Date.now()]);
 await sweepMusicCache(db);
+// Trash retention: trashed notes stay restorable for TRASH_RETENTION_MS,
+// then the row goes. Pre-trash tombstones (no deleted_at) sweep on their
+// updated_at — old deletes, long confirmed everywhere.
+const sweptTrash = await sweepTrashedNotes(db);
+if (sweptTrash > 0) {
+  console.log(`[padify-api] trash sweep: retired ${sweptTrash} note(s) past retention`);
+}
 
 // ---------------------------------------------------------------------------
 // Serve + shutdown

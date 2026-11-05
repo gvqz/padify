@@ -379,7 +379,11 @@ const REQUIRED_COLUMNS: Array<{ table: string; column: string; definition: strin
   { table: 'shares', column: 'note_type', definition: 'text' },
   // Sync v2's per-user change sequence, stamped on every notes write; the
   // default 0 marks rows a seq-stamping build has never written.
-  { table: 'notes', column: 'seq', definition: 'integer not null default 0' }
+  { table: 'notes', column: 'seq', definition: 'integer not null default 0' },
+  // Trash: when a deleted row was trashed (client epoch ms). Null on live
+  // rows and on pre-trash tombstones. Nullable, no default — a 0 would be a
+  // 1970 timestamp and sweep fresh tombstones on the first boot.
+  { table: 'notes', column: 'deleted_at', definition: 'integer' }
 ];
 
 async function migrateColumns(db: Db): Promise<void> {
