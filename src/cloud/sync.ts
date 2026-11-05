@@ -32,6 +32,7 @@ import { DEFAULT_NOTE_TYPE, normalizeNoteType } from '../editor/note-types';
 // compares against them (importing the constant — not a copy — so a
 // future seed edit can never desync the check).
 import { WELCOME_HTML } from '../editor/note-content';
+import { mergeNoteVersions } from '../merge/notes';
 import type { NoteTab, TabManager, TabsSyncPayload } from '../tabs';
 import type { TrashedNote } from '../storage';
 // The wire contract both sides of the HTTP boundary share — types below,
@@ -118,6 +119,16 @@ export interface PullResult {
   order?: string[];
   /** The client's next cursor (v2 only; never advanced on v1 answers). */
   cursor?: number;
+}
+
+/**
+ * A PUT /api/notes answer from a trash-aware server: the rows exactly as
+ * they landed, stamped. The (content, name) are NOT in the answer — the
+ * client knows what it sent; the ids just need their fresh seqs.
+ */
+interface NotesPutAnswer {
+  ok?: boolean;
+  rows?: Array<{ id: string; seq: number }>;
 }
 
 /**
@@ -545,6 +556,9 @@ async function runSyncOnce(): Promise<void> {
     });
 
     const pushed: string[] = [];
+    // Rows the push answers named with their stamped seq — the adoption
+    // set for manager.adoptPushedRows (seq + merge base, no pull needed).
+    const adopted: Array<{ id: string; seq: number; content: string; name: string | null }> = [];
 
     // Rows the server would refuse on size never leave the device — but
     // they stay queued (a stuck id costs one stringify per cycle and ships
@@ -555,10 +569,31 @@ async function runSyncOnce(): Promise<void> {
     syncWarning = sizeWarningFor(stuckNames);
 
     try {
+      const batchById = new Map(shippable.map((row) => [row.id, row]));
       for (const batch of batchRowsForPush(shippable)) {
         rememberEchoes(batch);
-        await api('/api/notes', { method: 'PUT', body: { v: 2, rows: batch } });
+        const answer = await api<NotesPutAnswer>('/api/notes', {
+          method: 'PUT',
+          body: { v: 2, rows: batch },
+        });
         batch.forEach((row) => pushed.push(row.id));
+        // The stamped answer: each pushed note learns its seq AND pins its
+        // merge base without waiting for the pull echo. A server that
+        // answers the old shape ({ ok: true }, no rows) simply contributes
+        // nothing — the fingerprint fallback covers it.
+        for (const landed of answer?.rows ?? []) {
+          const sent = batchById.get(landed.id);
+          if (sent && landed.seq > 0) {
+            adopted.push({
+              id: landed.id,
+              seq: landed.seq,
+              // The answer carries no bytes — the base is what WE sent,
+              // read the same way the server read it (either key).
+              content: wireRowContent(sent),
+              name: sent.name ?? null,
+            });
+          }
+        }
       }
     } finally {
       // Whatever reached the server is no longer pending: on the happy
@@ -568,6 +603,9 @@ async function runSyncOnce(): Promise<void> {
       // next cycle — nothing is dropped.
       pushed.forEach((id) => pendingPush.delete(id));
       manager.confirmPushed(pushed);
+      if (adopted.length > 0) {
+        manager.adoptPushedRows(adopted);
+      }
     }
   }
 
@@ -589,7 +627,7 @@ async function runSyncOnce(): Promise<void> {
   const merge = mergeRemote(remoteRows, payload, { order: pull.order, ownEchoes });
 
   if (merge.changed) {
-    manager.applyExternalMerge(merge.tabs);
+    manager.applyExternalMerge(merge.tabs, merge.mergedIds);
   }
   if (merge.trashChanged) {
     manager.applyExternalTrash(merge.trashed);
@@ -800,6 +838,12 @@ interface MergeResult {
   trashed: TrashedNote[];
   trashChanged: boolean;
   /**
+   * Notes this merge auto-merged (both devices' words in one version) —
+   * the caller repaints them even under the typist's caret, because the
+   * editor's pre-merge bytes would overwrite half the merge otherwise.
+   */
+  mergedIds: string[];
+  /**
    * Trashed ids whose delete must be RE-asserted against a stale live row
    * that arrived this pull (see the trash guard in mergeRemote). The
    * caller pushes these trash rows right after the merge — the old
@@ -909,6 +953,7 @@ export function mergeRemote(
   const dirty = new Set(payload.dirty);
   const droppedSeedIds: string[] = [];
   const reassertTrashIds: string[] = [];
+  const mergedIds: string[] = [];
   let touched = false;
   let trashTouched = false;
 
@@ -1194,6 +1239,9 @@ export function mergeRemote(
         updatedAt: typeof row.updated_at === 'number' ? row.updated_at : Date.now(),
         noteType: normalizeNoteType(row.note_type),
         syncSeq: row.seq && row.seq > 0 ? row.seq : undefined,
+        // A note arriving whole starts life with the cloud's version as
+        // its merge base — the ancestor its next divergence diffs from.
+        syncBase: { content: wireRowContent(row), name: row.name },
       });
       touched = true;
       return;
@@ -1217,6 +1265,9 @@ export function mergeRemote(
         local.createdAt = typeof row.created_at === 'number' ? row.created_at : local.createdAt;
         local.updatedAt = row.updated_at;
         local.noteType = normalizeNoteType(row.note_type) ?? local.noteType;
+        // An identical echo IS the cloud agreeing to these bytes — pin the
+        // merge base alongside the seq it gained.
+        local.syncBase = { content: wireRowContent(row), name: row.name };
       }
       if (row.seq && row.seq > 0 && row.seq !== local.syncSeq) {
         local.syncSeq = row.seq;
@@ -1232,8 +1283,42 @@ export function mergeRemote(
         (dirty.has(local.id) || tieRaced(local, row)) &&
         hasWords(local.content)
       ) {
-        // Words the cloud never confirmed are about to be overwritten:
-        // the remote takes the canonical row, the branch takes the words.
+        // Words the cloud never confirmed are about to be overwritten.
+        // Two devices edited the same note — usually at different spots,
+        // which is complementary, not conflicting: try the three-way merge
+        // over the last version BOTH sides started from (syncBase, pinned
+        // by the stamped push answers and the echo/adoptions above). A
+        // clean merge keeps everyone's words in the canonical note and
+        // rides the next push; only true overlap falls through to the
+        // copy-mint below (the review flow's territory).
+        const base = local.syncBase;
+        if (base && base.content !== local.content && base.content !== wireRowContent(row)) {
+          const merged = mergeNoteVersions(
+            { name: base.name, content: base.content, noteType: local.noteType },
+            { name: local.name, content: local.content, noteType: local.noteType },
+            {
+              name: row.name,
+              content: wireRowContent(row),
+              noteType: normalizeNoteType(row.note_type) ?? local.noteType,
+            },
+          );
+          if (merged.status === 'clean') {
+            local.name = merged.name;
+            local.content = merged.content;
+            // The merged version builds on their row — it outranks it on
+            // every device once its own push lands a fresh seq.
+            local.updatedAt = Math.max(Date.now(), row.updated_at + 1, local.updatedAt + 1);
+            local.syncSeq = row.seq && row.seq > 0 ? row.seq : local.syncSeq;
+            touched = true;
+            mergedIds.push(local.id);
+            conflicts.push(
+              `"${merged.name ?? 'A note'}" was changed on two devices — the edits were merged`,
+            );
+            return;
+          }
+        }
+        // Genuine overlap (or no base to merge over): the remote takes the
+        // canonical row, the branch takes the words.
         const rescue = rescueLosingWords(local, false);
         if (rescue.outcome === 'minted') {
           freshRemote.push(rescue.tab);
@@ -1250,6 +1335,8 @@ export function mergeRemote(
       // local value instead of resetting the note to the default.
       local.noteType = normalizeNoteType(row.note_type) ?? local.noteType;
       local.syncSeq = row.seq && row.seq > 0 ? row.seq : local.syncSeq;
+      // Adopting their version makes it the new merge base.
+      local.syncBase = { content: wireRowContent(row), name: row.name };
       // A branch whose row was replaced by the winner no longer preserves
       // divergent words — its lineage marker goes, so the branch slot is
       // free for the next genuinely new conflict. A byte-identical
@@ -1326,6 +1413,7 @@ export function mergeRemote(
     trashChanged: trashTouched,
     droppedSeedIds,
     reassertTrashIds,
+    mergedIds,
   };
 }
 

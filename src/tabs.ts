@@ -123,6 +123,14 @@ export interface NoteTab {
    */
   syncSeq?: number;
   /**
+   * The last version the cloud agreed to (content + name) — the common
+   * ancestor of a three-way merge (see src/merge/ and storage/notes.ts's
+   * StoredNoteTab.syncBase). Cloud-only metadata: adopted on confirmed
+   * pushes and clean adoptions, never on local edits, so it always names
+   * a version that exists on the server.
+   */
+  syncBase?: { content: string; name: string | null };
+  /**
    * Conflicted-copy lineage: this tab was minted (or last updated) as the
    * unmerged branch of the note with this id (see cloud/sync.ts — the
    * merge's rescueLosingWords). Local-only metadata like syncSeq: it rides
@@ -296,6 +304,7 @@ export class TabManager {
               : undefined,
           syncSeq:
             typeof entry.syncSeq === 'number' && entry.syncSeq > 0 ? entry.syncSeq : undefined,
+          syncBase: entry.syncBase,
           copyOf: typeof entry.copyOf === 'string' && entry.copyOf ? entry.copyOf : undefined,
         };
       });
@@ -426,12 +435,56 @@ export class TabManager {
   }
 
   /**
+   * Called by the cloud sync layer after a push whose response carried the
+   * stamped rows (trash-aware servers answer with what landed): each note
+   * adopts its fresh seq AND its merge base — the exact (content, name)
+   * the server now holds, the ancestor every future three-way merge diffs
+   * from. A note whose words moved on since the snapshot keeps them; only
+   * the sync metadata moves.
+   */
+  adoptPushedRows(
+    rows: Array<{ id: string; seq: number; content: string; name: string | null }>,
+  ): void {
+    if (rows.length === 0) {
+      return;
+    }
+    let touchedAny = false;
+    for (const row of rows) {
+      const tab = this.tabs.find((entry) => entry.id === row.id);
+      if (!tab) {
+        continue;
+      }
+      if (row.seq > 0 && row.seq !== tab.syncSeq) {
+        tab.syncSeq = row.seq;
+        touchedAny = true;
+      }
+      const nextBase = { content: row.content, name: row.name };
+      if (tab.syncBase?.content !== nextBase.content || tab.syncBase?.name !== nextBase.name) {
+        tab.syncBase = nextBase;
+        touchedAny = true;
+      }
+    }
+    if (touchedAny) {
+      this.persist();
+    }
+  }
+
+  /**
    * Replaces the model with a merged tab list coming from the sync layer.
    * The editor only reloads when the user is not actively typing in it, so a
    * background pull can never swallow keystrokes.
+   *
+   * `forceRepaintIds` names notes the sync layer AUTO-MERGED (both devices'
+   * edits now live in one version, see src/merge/): those repaint even when
+   * the editor holds the caret — the editor's pre-merge bytes do NOT
+   * contain the other device's words, and the next capture would overwrite
+   * the merged version with them, silently dropping half the merge. The
+   * capture that fed the merge already saved the local words, so the
+   * repaint costs nothing but the caret's place.
    */
-  applyExternalMerge(nextTabs: NoteTab[]): void {
+  applyExternalMerge(nextTabs: NoteTab[], forceRepaintIds: readonly string[] = []): void {
     const activeBefore = this.getActive();
+    const forceRepaint = new Set(forceRepaintIds);
 
     this.tabs = nextTabs.map((tab) => ({
       ...tab,
@@ -472,6 +525,7 @@ export class TabManager {
         identityChanged ||
         activeBefore!.content !== active.content ||
         activeBefore!.name !== active.name;
+      const mergedActive = forceRepaint.has(active.id);
 
       // An identity change ALWAYS repaints, even mid-typing: the editor's
       // DOM belongs to a note that no longer exists (closed elsewhere),
@@ -480,8 +534,10 @@ export class TabManager {
       // rescued the unpushed words into a conflicted copy, so the repaint
       // costs at most the last ~700ms of un-captured keystrokes. A
       // content change on the SAME note still defers to the typist: the
-      // conflict machinery preserves the divergent words instead.
-      if (identityChanged || (contentChanged && !editorFocused)) {
+      // conflict machinery preserves the divergent words instead. An
+      // auto-merged note breaks that deference on purpose — its new bytes
+      // carry words the editor has never seen.
+      if (identityChanged || mergedActive || (contentChanged && !editorFocused)) {
         this.loadActiveIntoEditor();
       }
       this.notifyActiveChanged();

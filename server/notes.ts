@@ -296,12 +296,17 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
   // owns, but a cross-user id collision made the write a silent NO-OP
   // while the response still said ok — the client dropped the row from
   // its push queue and the note existed on exactly one device forever,
-  // with no error anywhere. Verify what actually landed.
+  // with no error anywhere. Verify what actually landed — and hand the
+  // STAMPED ROWS back: the client adopts each note's fresh seq and merge
+  // base from this answer instead of fingerprint-matching its own echo
+  // on the next pull (the pre-trash answer said only { ok: true }, and
+  // the whole ownEchoes apparatus exists to work around that silence).
   const landedRows = await db.all(
-    `select count(*) as landed from notes where user_id = ? and id in (${placeholders})`,
+    `select id, updated_at, deleted, deleted_at, seq from notes
+     where user_id = ? and id in (${placeholders})`,
     [user.id, ...incomingIds]
   );
-  const landed = Number(landedRows[0]?.landed ?? 0);
+  const landed = landedRows.length;
   if (landed < rows.length) {
     // Some rows didn't land (a different account owns those ids —
     // near-impossible with the client's random ids, but no longer
@@ -313,7 +318,16 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
     );
   }
 
-  return json(request, { ok: true });
+  return json(request, {
+    ok: true,
+    rows: landedRows.map(row => ({
+      id: String(row.id),
+      updated_at: Number(row.updated_at) || 0,
+      deleted: Number(row.deleted) === 1,
+      deleted_at: row.deleted_at == null ? null : Number(row.deleted_at) || null,
+      seq: Number(row.seq) || 0
+    }))
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -53,6 +53,13 @@ export interface StoredNoteTab {
   /** Sync v2: the server sequence of the last synced version (sync
    *  metadata; see tabs.ts NoteTab.syncSeq). */
   syncSeq?: number;
+  /**
+   * The last version the CLOUD agreed to (content + name at the last
+   * confirmed push or adoption) — the common ancestor a three-way merge
+   * diffs against (see src/merge/). Set only while cloud sync is active;
+   * absent on signed-out installs, so it costs nothing there.
+   */
+  syncBase?: { content: string; name: string | null };
   /** Conflicted-copy lineage (local-only sync metadata; see
    *  tabs.ts NoteTab.copyOf). */
   copyOf?: string;
@@ -178,6 +185,21 @@ export function migrateNoteRecord(record: NoteRecord): NoteRecord {
   return { ...migrated, v: NOTE_RECORD_VERSION };
 }
 
+/** Reads a stored syncBase back — junk reads as absent, never as a lie. */
+function readSyncBase(value: unknown): { content: string; name: string | null } | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const base = value as { content?: unknown; name?: unknown };
+  if (typeof base.content !== 'string') {
+    return undefined;
+  }
+  return {
+    content: base.content,
+    name: typeof base.name === 'string' ? base.name : null,
+  };
+}
+
 /** The active tab id is a plain kv setting. */
 export const ACTIVE_TAB_KEY = 'padifyActiveTab';
 
@@ -250,6 +272,7 @@ const lastWritten = new Map<
     deletedAt: number;
     noteType: NoteType | undefined;
     swept: boolean;
+    syncBase: { content: string; name: string | null } | undefined;
   }
 >();
 
@@ -305,6 +328,7 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
           (record as { syncSeq: number }).syncSeq > 0
             ? (record as { syncSeq: number }).syncSeq
             : undefined,
+        syncBase: readSyncBase((record as { syncBase?: unknown }).syncBase),
         // Round-trip the conflicted-copy lineage so the multiplication
         // guard survives reloads (see NoteTab.copyOf).
         copyOf:
@@ -367,6 +391,7 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
       deletedAt: 0,
       noteType: tab.noteType,
       swept: false,
+      syncBase: tab.syncBase,
     });
   });
   valid
@@ -384,6 +409,7 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
         // write removes it by id.
         deletedAt: 0,
         swept,
+        syncBase: undefined,
       });
     });
 
@@ -478,6 +504,7 @@ function loadLegacySnapshot(): NotesSnapshot {
                 : undefined,
             syncSeq:
               typeof entry.syncSeq === 'number' && entry.syncSeq > 0 ? entry.syncSeq : undefined,
+            syncBase: readSyncBase(entry.syncBase),
             copyOf: typeof entry.copyOf === 'string' && entry.copyOf ? entry.copyOf : undefined,
           });
         }
@@ -631,6 +658,7 @@ export function reconcileNotesFromMirror(): boolean {
       committed.noteType = row.noteType;
       committed.colorTheme = row.colorTheme;
       committed.syncSeq = row.syncSeq;
+      committed.syncBase = row.syncBase;
       committed.copyOf = row.copyOf;
       trashById.delete(row.id);
     } else {
@@ -742,14 +770,19 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
       deletedAt: 0,
       noteType: tab.noteType,
       swept: false,
+      syncBase: tab.syncBase,
     };
+    const sameSyncBase =
+      previous?.syncBase?.content === tab.syncBase?.content &&
+      previous?.syncBase?.name === tab.syncBase?.name;
     if (
       !previous ||
       previous.name !== signature.name ||
       previous.position !== index ||
       previous.updatedAt !== tab.updatedAt ||
       previous.noteType !== signature.noteType ||
-      previous.deleted
+      previous.deleted ||
+      !sameSyncBase
     ) {
       // Every writer stamps the current schema version (see
       // NOTE_RECORD_VERSION); v is local-only and never crosses the wire.
@@ -791,6 +824,7 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
         deletedAt: grave.deletedAt,
         noteType: grave.noteType,
         swept: false,
+        syncBase: undefined,
       });
     }
   });

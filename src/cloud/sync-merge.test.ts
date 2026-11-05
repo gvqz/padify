@@ -284,6 +284,108 @@ describe('mergeRemote — v2 seq ordering', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The three-way auto-merge — two devices editing one note is usually
+// complementary, not conflicting. With a known common ancestor (syncBase,
+// pinned by the stamped push answers), the merge splices both sides'
+// edits into the canonical note; only true overlap mints a copy.
+// ---------------------------------------------------------------------------
+
+describe('mergeRemote — the three-way auto-merge', () => {
+  it('complementary edits at different spots merge into the canonical note', () => {
+    // The grocery story: here the top item, there the bottom one, both
+    // from the same pushed version.
+    const local = tab('a', {
+      syncSeq: 5,
+      updatedAt: 4_000,
+      content: '<p>oat milk</p><p>bread</p><p>coffee</p>',
+      syncBase: { content: '<p>milk</p><p>bread</p><p>coffee</p>', name: null },
+    });
+    const remote = row('a', {
+      seq: 9,
+      updated_at: 9_000,
+      content: '<p>milk</p><p>bread</p><p>decaf coffee</p>',
+    });
+
+    const merge = mergeRemote([remote], payloadOf([local], ['a']));
+
+    expect(merge.tabs).toHaveLength(1); // no copy minted
+    expect(merge.tabs[0].content).toBe('<p>oat milk</p><p>bread</p><p>decaf coffee</p>');
+    expect(merge.tabs[0].syncSeq).toBe(9); // builds on their row
+    expect(merge.tabs[0].updatedAt).toBeGreaterThan(remote.updated_at); // outranks it
+    expect(merge.mergedIds).toEqual(['a']); // the editor repaints under the caret
+    expect(merge.changed).toBe(true);
+    expect(merge.conflicts[0]).toContain('merged');
+  });
+
+  it('a rename on their side rides into a clean word merge', () => {
+    const local = tab('a', {
+      name: 'Base', // unchanged here — only the words moved
+      syncSeq: 5,
+      updatedAt: 4_000,
+      content: '<p>one</p><p>three</p>',
+      syncBase: { content: '<p>one</p><p>two</p><p>three</p>', name: 'Base' },
+    });
+    const remote = row('a', {
+      seq: 9,
+      updated_at: 9_000,
+      name: 'Renamed there',
+      content: '<p>one</p><p>two</p><p>three</p><p>four</p>',
+    });
+
+    const merge = mergeRemote([remote], payloadOf([local], ['a']));
+
+    expect(merge.tabs).toHaveLength(1);
+    expect(merge.tabs[0].name).toBe('Renamed there');
+    expect(merge.tabs[0].content).toBe('<p>one</p><p>three</p><p>four</p>');
+  });
+
+  it('true overlap still mints the conflicted copy — the merge is not a lie', () => {
+    const local = tab('a', {
+      syncSeq: 5,
+      updatedAt: 4_000,
+      content: '<p>buy red milk</p>',
+      syncBase: { content: '<p>buy milk</p>', name: null },
+    });
+    const remote = row('a', {
+      seq: 9,
+      updated_at: 9_000,
+      content: '<p>buy blue milk</p>',
+    });
+
+    const merge = mergeRemote([remote], payloadOf([local], ['a']));
+
+    expect(merge.tabs).toHaveLength(2); // theirs + the copy
+    expect(merge.mergedIds).toEqual([]);
+    expect(merge.conflicts[0]).toContain('both versions');
+  });
+
+  it('no syncBase (a fresh install, a v1 server) falls back to the copy', () => {
+    const local = tab('a', {
+      syncSeq: 5,
+      updatedAt: 4_000,
+      content: '<p>different words entirely</p>',
+    });
+    const remote = row('a', { seq: 9, updated_at: 9_000, content: '<p>other words</p>' });
+
+    const merge = mergeRemote([remote], payloadOf([local], ['a']));
+
+    expect(merge.tabs).toHaveLength(2);
+    expect(merge.mergedIds).toEqual([]);
+  });
+
+  it('a clean adoption pins the arriving version as the next merge base', () => {
+    // Nothing local changed: the remote version becomes both the content
+    // and the ancestor the NEXT divergence diffs from.
+    const local = tab('a', { syncSeq: 5, updatedAt: 2_000, content: '<p>old</p>' });
+    const remote = row('a', { seq: 9, updated_at: 9_000, content: '<p>their new words</p>' });
+
+    const merge = mergeRemote([remote], payloadOf([local], []));
+
+    expect(merge.tabs[0].syncBase).toEqual({ content: '<p>their new words</p>', name: null });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Conflict preservation — the contract that nothing is silently discarded.
 // A version about to be overwritten (or buried) that the cloud never
 // confirmed becomes a conflicted copy: a fresh tab that rides the next

@@ -295,8 +295,15 @@ describe('handleNotesPut — sync v2 seq stamping', () => {
       // 2 numbers answers 43, and the rows stamp 42, 43.
       { match: 'sync_counters', rows: [{ value: 43 }] },
       // The post-write landed verification: both rows of this batch are
-      // the user's own, so the honest-accounting count sees 2 of 2.
-      { match: 'as landed', rows: [{ landed: 2 }] },
+      // the user's own — the read-back answers the stamped rows
+      // themselves (the client's merge-base adoption drinks from this).
+      {
+        match: 'select id, updated_at, deleted, deleted_at, seq from notes',
+        rows: [
+          { id: 'a', updated_at: 5, deleted: 0, deleted_at: null, seq: 42 },
+          { id: 'b', updated_at: 6, deleted: 0, deleted_at: null, seq: 43 },
+        ],
+      },
     ]);
     const response = await handleNotesPut(
       db,
@@ -309,6 +316,18 @@ describe('handleNotesPut — sync v2 seq stamping', () => {
       user,
     );
     expect(response.status).toBe(200);
+
+    // The stamped rows ride the answer — the client adopts each note's
+    // seq and merge base from exactly these.
+    const answer = (await response.json()) as {
+      ok: boolean;
+      rows: Array<{ id: string; seq: number }>;
+    };
+    expect(answer.ok).toBe(true);
+    expect(answer.rows).toEqual([
+      { id: 'a', updated_at: 5, deleted: false, deleted_at: null, seq: 42 },
+      { id: 'b', updated_at: 6, deleted: false, deleted_at: null, seq: 43 },
+    ]);
 
     // The reservation is one atomic statement — upsert with RETURNING —
     // run exactly once, before the batch.
@@ -731,7 +750,10 @@ describe('handleNotesPut — the round-2 storage guardrails', () => {
       // The batch's id already holds 3 MB server-side.
       { match: 'as bytes', rows: [{ id: 'big', bytes: 3 * 1024 * 1024 }] },
       { match: 'as total', rows: [{ total: 24 * 1024 * 1024 }] },
-      { match: 'as landed', rows: [{ landed: 1 }] },
+      {
+        match: 'select id, updated_at, deleted, deleted_at, seq from notes',
+        rows: [{ id: 'big', updated_at: 9, deleted: 0, deleted_at: null, seq: 1 }],
+      },
     ]);
     const response = await handleNotesPut(
       db,
@@ -747,7 +769,8 @@ describe('handleNotesPut — the round-2 storage guardrails', () => {
   it('409s when a foreign account already owns one of the batch ids', async () => {
     const db = new ScriptedDb([
       { match: 'as total', rows: [{ total: 0 }] },
-      { match: 'as landed', rows: [{ landed: 0 }] },
+      // The read-back finds nothing of ours under that id.
+      { match: 'select id, updated_at, deleted, deleted_at, seq from notes', rows: [] },
     ]);
     const response = await handleNotesPut(
       db,
