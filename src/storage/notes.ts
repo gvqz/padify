@@ -66,6 +66,14 @@ export interface StoredNoteTab {
    * crosses the wire.
    */
   conflict?: NoteConflictRecord;
+  /**
+   * The note changed on another device while it was NOT the active one
+   * (see tabs.ts — NoteTab.unseenChange): `from` is the bytes this device
+   * last had open, kept so the next open can show what arrived since.
+   * Rides storage (the change may outlive a reload — that is the point);
+   * never crosses the wire.
+   */
+  unseenChange?: { from: string; fromName: string | null };
   /** Conflicted-copy lineage (LEGACY — pre-review builds minted twin notes
    *  and marked them; nothing writes it anymore, values ride unread). */
   copyOf?: string;
@@ -241,6 +249,21 @@ function readSyncBase(value: unknown): { content: string; name: string | null } 
   };
 }
 
+/** Reads a stored unseenChange baseline back — junk reads as absent. */
+function readUnseenChange(value: unknown): { from: string; fromName: string | null } | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const unseen = value as { from?: unknown; fromName?: unknown };
+  if (typeof unseen.from !== 'string') {
+    return undefined;
+  }
+  return {
+    from: unseen.from,
+    fromName: typeof unseen.fromName === 'string' ? unseen.fromName : null,
+  };
+}
+
 /** The active tab id is a plain kv setting. */
 export const ACTIVE_TAB_KEY = 'padifyActiveTab';
 
@@ -314,6 +337,7 @@ const lastWritten = new Map<
     noteType: NoteType | undefined;
     swept: boolean;
     syncBase: { content: string; name: string | null } | undefined;
+    unseenChange: { from: string; fromName: string | null } | undefined;
     conflict:
       | {
           mine: { content: string; name: string | null };
@@ -376,6 +400,7 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
             ? (record as { syncSeq: number }).syncSeq
             : undefined,
         syncBase: readSyncBase((record as { syncBase?: unknown }).syncBase),
+        unseenChange: readUnseenChange((record as { unseenChange?: unknown }).unseenChange),
         conflict: readNoteConflict((record as { conflict?: unknown }).conflict),
         // Round-trip the conflicted-copy lineage so the multiplication
         // guard survives reloads (see NoteTab.copyOf).
@@ -440,6 +465,7 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
       noteType: tab.noteType,
       swept: false,
       syncBase: tab.syncBase,
+      unseenChange: tab.unseenChange,
       conflict: tab.conflict
         ? {
             mine: tab.conflict.mine,
@@ -467,6 +493,7 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
         deletedAt: 0,
         swept,
         syncBase: undefined,
+        unseenChange: undefined,
         conflict: undefined,
       });
     });
@@ -563,6 +590,7 @@ function loadLegacySnapshot(): NotesSnapshot {
             syncSeq:
               typeof entry.syncSeq === 'number' && entry.syncSeq > 0 ? entry.syncSeq : undefined,
             syncBase: readSyncBase(entry.syncBase),
+            unseenChange: readUnseenChange(entry.unseenChange),
             conflict: readNoteConflict(entry.conflict),
             copyOf: typeof entry.copyOf === 'string' && entry.copyOf ? entry.copyOf : undefined,
           });
@@ -718,6 +746,7 @@ export function reconcileNotesFromMirror(): boolean {
       committed.colorTheme = row.colorTheme;
       committed.syncSeq = row.syncSeq;
       committed.syncBase = row.syncBase;
+      committed.unseenChange = row.unseenChange;
       committed.copyOf = row.copyOf;
       trashById.delete(row.id);
     } else {
@@ -830,6 +859,7 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
       noteType: tab.noteType,
       swept: false,
       syncBase: tab.syncBase,
+      unseenChange: tab.unseenChange,
       conflict: tab.conflict
         ? {
             mine: tab.conflict.mine,
@@ -843,6 +873,9 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
     const sameSyncBase =
       previous?.syncBase?.content === tab.syncBase?.content &&
       previous?.syncBase?.name === tab.syncBase?.name;
+    const sameUnseen =
+      previous?.unseenChange?.from === tab.unseenChange?.from &&
+      previous?.unseenChange?.fromName === tab.unseenChange?.fromName;
     const sameConflict =
       previous?.conflict?.mine.content === tab.conflict?.mine.content &&
       previous?.conflict?.mine.name === tab.conflict?.mine.name &&
@@ -856,6 +889,7 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
       previous.noteType !== signature.noteType ||
       previous.deleted ||
       !sameSyncBase ||
+      !sameUnseen ||
       !sameConflict
     ) {
       // Every writer stamps the current schema version (see
@@ -899,6 +933,7 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
         noteType: grave.noteType,
         swept: false,
         syncBase: undefined,
+        unseenChange: undefined,
         conflict: undefined,
       });
     }

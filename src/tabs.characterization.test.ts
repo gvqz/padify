@@ -930,6 +930,168 @@ describe('note types (characterization)', () => {
   });
 });
 
+describe('unseenChange (changed while you were away)', () => {
+  const stored = (
+    id: string,
+    content: string,
+    overrides: Partial<StoredNoteTab> = {},
+  ): StoredNoteTab => ({
+    id,
+    name: null,
+    content,
+    createdAt: 0,
+    updatedAt: 0,
+    ...overrides,
+  });
+
+  async function bootedManager(): Promise<TabManager> {
+    const manager = trackManager(new TabManager($('#note')));
+    await manager.init();
+    return manager;
+  }
+
+  /** Two notes in the model: t1 active, t2 sitting unopened in the strip. */
+  async function bootedTwoNoteManager(): Promise<TabManager> {
+    saveNotes(
+      {
+        tabs: [stored('t1', '<p>the one you read</p>'), stored('t2', '<p>the background one</p>')],
+        trashed: [],
+      },
+      't1',
+      { immediate: true },
+    );
+    await flushAndReboot();
+    return bootedManager();
+  }
+
+  it('a merge that repaints an UNOPENED note parks what this device last had', async () => {
+    const manager = await bootedTwoNoteManager();
+
+    manager.applyExternalMerge([
+      stored('t1', '<p>the one you read</p>'),
+      stored('t2', '<p>the background one, plus remote words</p>', { updatedAt: 999 }),
+    ]);
+
+    const t2 = manager.exportForSync().tabs.find((t) => t.id === 't2')!;
+    expect(t2.unseenChange).toEqual({ from: '<p>the background one</p>', fromName: null });
+    // The active note never gains one — the merge toast already speaks for
+    // a change the user watched land.
+    const t1 = manager.exportForSync().tabs.find((t) => t.id === 't1')!;
+    expect(t1.unseenChange).toBeUndefined();
+  });
+
+  it('a parked conflict owns the note — no unseen stamp beside the review badge', async () => {
+    const manager = await bootedTwoNoteManager();
+    const conflict = {
+      kind: 'edit' as const,
+      detectedAt: 1,
+      mine: { name: null, content: '<p>mine</p>' },
+      theirs: { name: null, content: '<p>theirs</p>', updatedAt: 2 },
+    };
+
+    manager.applyExternalMerge([
+      stored('t1', '<p>the one you read</p>'),
+      stored('t2', '<p>the winning words</p>', { updatedAt: 999, conflict }),
+    ]);
+
+    const t2 = manager.exportForSync().tabs.find((t) => t.id === 't2')!;
+    expect(t2.conflict).toBeDefined();
+    expect(t2.unseenChange).toBeUndefined();
+  });
+
+  it('consecutive merges while the note stays unopened keep the FIRST baseline', async () => {
+    const manager = await bootedTwoNoteManager();
+
+    manager.applyExternalMerge([
+      stored('t1', '<p>the one you read</p>'),
+      stored('t2', '<p>first remote edit</p>', { updatedAt: 999 }),
+    ]);
+    manager.applyExternalMerge([
+      stored('t1', '<p>the one you read</p>'),
+      stored('t2', '<p>second remote edit</p>', { updatedAt: 1000 }),
+    ]);
+
+    const t2 = manager.exportForSync().tabs.find((t) => t.id === 't2')!;
+    expect(t2.unseenChange).toEqual({ from: '<p>the background one</p>', fromName: null });
+  });
+
+  it('switching to the note consumes the marker and peeks exactly once', async () => {
+    const manager = await bootedTwoNoteManager();
+    manager.applyExternalMerge([
+      stored('t1', '<p>the one you read</p>'),
+      stored('t2', '<p>remote words arrived</p>', { updatedAt: 999, name: 'Renamed afar' }),
+    ]);
+    const peeks: Array<{ id: string; from: string; fromName: string | null }> = [];
+    manager.onUnseenPeek = (tab, baseline) => peeks.push({ id: tab.id, ...baseline });
+
+    manager.switchTo('t2');
+    expect(peeks).toEqual([{ id: 't2', from: '<p>the background one</p>', fromName: null }]);
+    expect(manager.exportForSync().tabs.find((t) => t.id === 't2')!.unseenChange).toBeUndefined();
+
+    // The peek is a once-per-change affordance: away and back never re-fires.
+    manager.switchTo('t1');
+    manager.switchTo('t2');
+    expect(peeks).toHaveLength(1);
+  });
+
+  it('the peek defers to a parked conflict — the marker dies silently, the badge speaks', async () => {
+    const manager = await bootedTwoNoteManager();
+    // A stamp from an earlier, non-conflicting change…
+    manager.applyExternalMerge([
+      stored('t1', '<p>the one you read</p>'),
+      stored('t2', '<p>first remote edit</p>', { updatedAt: 999 }),
+    ]);
+    // …then a true race parks a conflict on the same note. The incoming
+    // row is the production shape: mergeRemote's payload spreads the
+    // stamped tab, so the old marker RIDES through the merge machinery
+    // (applyExternalMerge only declines to mint a NEW one beside a
+    // conflict — the badge is the surface that speaks).
+    const conflict = {
+      kind: 'edit' as const,
+      detectedAt: 1,
+      mine: { name: null, content: '<p>first remote edit</p>' },
+      theirs: { name: null, content: '<p>the race winner</p>', updatedAt: 2 },
+    };
+    manager.applyExternalMerge([
+      stored('t1', '<p>the one you read</p>'),
+      stored('t2', '<p>the race winner</p>', {
+        updatedAt: 1000,
+        conflict,
+        unseenChange: { from: '<p>the background one</p>', fromName: null },
+      }),
+    ]);
+    const peeks: unknown[] = [];
+    manager.onUnseenPeek = () => peeks.push('peek');
+
+    manager.switchTo('t2');
+
+    expect(peeks).toEqual([]);
+    expect(manager.exportForSync().tabs.find((t) => t.id === 't2')!.unseenChange).toBeUndefined();
+  });
+
+  it('the stamp rides storage — a reload still peeks on the next open', async () => {
+    const manager = await bootedTwoNoteManager();
+    manager.applyExternalMerge([
+      stored('t1', '<p>the one you read</p>'),
+      stored('t2', '<p>remote words arrived</p>', { updatedAt: 999 }),
+    ]);
+
+    await flushAndReboot();
+    const persisted = await loadNotes();
+    expect(persisted.tabs.find((t) => t.id === 't2')!.unseenChange).toEqual({
+      from: '<p>the background one</p>',
+      fromName: null,
+    });
+
+    // And the rebooted manager still peeks when the note opens.
+    const rebooted = await bootedManager();
+    const peeks: string[] = [];
+    rebooted.onUnseenPeek = (tab) => peeks.push(tab.id);
+    rebooted.switchTo('t2');
+    expect(peeks).toEqual(['t2']);
+  });
+});
+
 describe('non-html content (the typed content model)', () => {
   const stored = (
     id: string,

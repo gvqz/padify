@@ -322,6 +322,10 @@ Behaviour reference:
   splices the edits together. Only genuinely overlapping edits park the
   losing words on the note itself — a badge in the rail opens a review
   sheet (restore my version / keep the current one / keep both).
+- **The unseen-change peek.** A change that lands on a note you are not
+  looking at parks the bytes you last had; the next time you open that
+  note, a one-shot tracked-changes peek shows what arrived since (the
+  note already carries the new version — nothing to resolve).
 - **Deletions are trash.** A deleted note's row keeps its content and a
   `deleted_at` stamp, restorable for 30 days from any device under the
   same id (share links survive the round trip); the server and every

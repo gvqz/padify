@@ -142,6 +142,17 @@ export interface NoteTab {
    */
   conflict?: NoteConflict;
   /**
+   * The note changed on another device while it was NOT the active one
+   * (a sync merge repainted an unopened tab). `from` holds the bytes this
+   * device last had — the baseline the next open diffs against to show
+   * what arrived since. Consumed by the next switchTo: cleared from the
+   * note (the peek fires once per change, never on every re-open) and
+   * handed to onUnseenPeek. Rides storage so a change that outlives a
+   * reload still peeks on the next open; never crosses the wire. A note
+   * with a parked `conflict` never gains one — the review badge owns it.
+   */
+  unseenChange?: { from: string; fromName: string | null };
+  /**
    * Conflicted-copy lineage (LEGACY — pre-review builds minted twin notes
    * and marked them; nothing writes it anymore, existing values ride
    * storage untouched and unread).
@@ -300,6 +311,7 @@ export class TabManager {
           syncSeq:
             typeof entry.syncSeq === 'number' && entry.syncSeq > 0 ? entry.syncSeq : undefined,
           syncBase: entry.syncBase,
+          unseenChange: entry.unseenChange,
           conflict: readNoteConflict(entry.conflict),
           copyOf: typeof entry.copyOf === 'string' && entry.copyOf ? entry.copyOf : undefined,
         };
@@ -481,13 +493,37 @@ export class TabManager {
   applyExternalMerge(nextTabs: NoteTab[], forceRepaintIds: readonly string[] = []): void {
     const activeBefore = this.getActive();
     const forceRepaint = new Set(forceRepaintIds);
+    // The pre-merge model, keyed for the unseen-change stamp below — the
+    // merge's rows replace this.tabs wholesale, so the "what did this
+    // device last have" question must be asked before the swap.
+    const beforeById = new Map(this.tabs.map((tab) => [tab.id, tab]));
 
-    this.tabs = nextTabs.map((tab) => ({
-      ...tab,
-      // Sanitize is the html discipline; every other kind crosses the
-      // merge byte-exact.
-      content: isHtmlContent(tab.noteType) ? sanitizeNoteHtml(tab.content) : tab.content,
-    }));
+    this.tabs = nextTabs.map((tab) => {
+      const next: NoteTab = {
+        ...tab,
+        // Sanitize is the html discipline; every other kind crosses the
+        // merge byte-exact.
+        content: isHtmlContent(tab.noteType) ? sanitizeNoteHtml(tab.content) : tab.content,
+      };
+      // Words arrived on a note nobody is looking at — park what this
+      // device last had, so opening it can show the delta (see
+      // NoteTab.unseenChange). The note you are watching is exempt (the
+      // merge toast already speaks for it), and so is a parked conflict
+      // (the review badge is the louder surface; stacking a peek on it
+      // would be noise). A stamp already present keeps its ORIGINAL
+      // baseline: consecutive pulls while the note stays unopened extend
+      // the delta, they do not restart it.
+      const before = beforeById.get(tab.id);
+      if (
+        before &&
+        !next.conflict &&
+        next.id !== this.activeId &&
+        before.content !== next.content
+      ) {
+        next.unseenChange = before.unseenChange ?? { from: before.content, fromName: before.name };
+      }
+      return next;
+    });
 
     if (!this.tabs.some((tab) => tab.id === this.activeId)) {
       this.activeId = this.tabs[0]?.id ?? null;
@@ -1034,6 +1070,15 @@ export class TabManager {
 
     this.saveActiveFromEditor();
     this.activeId = tabId;
+    // Opening the note answers the question a parked unseenChange was
+    // holding: the marker is consumed HERE (before the persist, so the
+    // clear rides this very save) and the peek fires after the editor
+    // painted the new bytes — once per change, never on re-click.
+    const opened = this.tabs.find((entry) => entry.id === tabId);
+    const unseen = opened?.unseenChange;
+    if (opened && unseen) {
+      delete opened.unseenChange;
+    }
     this.persist();
     this.renderStrip();
     this.loadActiveIntoEditor();
@@ -1043,6 +1088,13 @@ export class TabManager {
     }
 
     this.notifyActiveChanged();
+
+    // The peek defers to a parked conflict: the review badge on the same
+    // note is the louder, more demanding surface — two sheets over one
+    // open would be the stacking the review flow just removed.
+    if (opened && unseen && !opened.conflict) {
+      this.onUnseenPeek?.(opened, unseen);
+    }
   }
 
   addTab(focusEditor = true, noteType: NoteType = DEFAULT_NOTE_TYPE): void {
@@ -1539,6 +1591,15 @@ export class TabManager {
    * clicked. The sheet owns the gesture; the manager only knows the note.
    */
   onConflictReview: ((tabId: string) => void) | null = null;
+
+  /**
+   * Hook for the "changed while you were away" peek — fires when a note
+   * whose words arrived from another device while it sat unopened is
+   * switched to. The sheet owns the gesture; the manager only knows the
+   * note and the bytes this device last had.
+   */
+  onUnseenPeek:
+    ((tab: NoteTab, baseline: { from: string; fromName: string | null }) => void) | null = null;
 
   /** The note a parked conflict belongs to (the sheet's read). */
   getConflictedNote(tabId: string): NoteTab | null {

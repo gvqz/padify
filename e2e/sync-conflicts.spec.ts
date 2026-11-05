@@ -57,6 +57,26 @@ async function signUp(page: Page, account: { email: string; password: string }):
   await expect(page.locator('#cloudModal')).toBeHidden();
 }
 
+/** Starts a sync cycle INSTANTLY — the same 'online' listener production
+ *  uses, dispatched microseconds after the keystrokes: deep inside the
+ *  500ms editor-capture window, so the cycle pushes the STALE model and
+ *  the merge-time capture is what makes the local dirty. That is the
+ *  production shape of a two-device race (the 30s tick landing mid-typing),
+ *  staged without the modal's click-to-click timing luck. */
+async function raceSync(page: Page): Promise<void> {
+  // The user looked away from the editor (the original staging bought
+  // this blur with the cloud modal's dance): an unfocused editor is what
+  // lets a merge repaint the note instead of deferring to the typist.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect
+    .poll(async () => page.locator('#cloudNavContainer').getAttribute('title'), {
+      timeout: 20_000,
+      message: 'the raced sync cycle to land',
+    })
+    .toContain('up to date');
+}
+
 /** Forces a full sync cycle through the modal's manual button. */
 async function forceSync(page: Page): Promise<void> {
   await page.locator('#cloudNavContainer').click();
@@ -149,29 +169,114 @@ test.describe('version conflicts (real API)', () => {
           timeout: 60_000,
           message: 'the note to arrive on device B',
         })
-        .toContain('MergeNote base start');
+        .toContain('MergeNote base start middle words base end');
 
       // B edits the END (waits out its capture+persist+push debounces so
-      // it arrives at the push CLEAN); A then edits the START.
+      // it arrives at the push CLEAN); A then edits the START. B must
+      // SWITCH to the pulled note first — its welcome tab is what was
+      // active, and typing into it would push the wrong note entirely.
+      await pageB.locator('#tabStripTabs .tab-strip-tab', { hasText: 'MergeNote' }).click();
       await pageB.locator('#note').click();
       await pageB.keyboard.press('Control+End');
-      await pageB.keyboard.type(' B tail edit');
+      await pageB.keyboard.type(' tailB');
       await pageB.waitForTimeout(2_600);
       await forceSync(pageB);
 
       await editor.click();
       await page.keyboard.press('Control+Home');
-      await page.keyboard.type('A head edit ');
-      await page.waitForTimeout(2_600); // A's push lands too
+      await page.keyboard.type('headA ');
+      await raceSync(page);
 
-      // A syncs: the merge splices both ends into one note. No badge, no
-      // twin — ONE note carrying both devices' words.
-      await forceSync(page);
-      await expect(page.locator('#note')).toContainText('A head edit');
-      await expect(page.locator('#note')).toContainText('B tail edit');
+      // The merge spliced both ends into one note. No badge, no twin —
+      // ONE note carrying both devices' words.
+      await expect(page.locator('#note')).toContainText('headA');
+      await expect(page.locator('#note')).toContainText('tailB');
       await expect(page.locator('.tab-strip-conflict')).toHaveCount(0);
       const titles = await page.locator('#tabStripTabs .tab-strip-title').allTextContents();
       expect(titles.filter((t) => t.includes('MergeNote'))).toHaveLength(1);
+
+      expect(bErrors, 'uncaught page errors (device B)').toEqual([]);
+    } finally {
+      await contextB.close();
+    }
+  });
+
+  test("a change that lands while you're away peeks on the next open — once, marked, no badge", async ({
+    page,
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const account = freshAccount();
+
+    // ---- the shared base: A writes PeekNote, then looks elsewhere -------
+    await signUp(page, account);
+    await page.locator('#addTab').click();
+    await page.locator('#note').click();
+    await page.keyboard.type('PeekNote origin words');
+    await forceSync(page);
+    // A opens a FRESH note — PeekNote sits in the strip, unwatched.
+    await page.locator('#addTab').click();
+    await expect(
+      page.locator('#tabStripTabs .tab-strip-title', { hasText: 'PeekNote origin words' }),
+    ).toBeVisible();
+
+    // ---- device B: the same account, edits PeekNote --------------------
+    const contextB = await browser.newContext();
+    const pageB = await contextB.newPage();
+    try {
+      const bErrors: string[] = [];
+      pageB.on('pageerror', (error) => bErrors.push(String(error)));
+      pageErrors.set(pageB, bErrors);
+
+      await pageB.goto('/');
+      await pageB.locator('#cloudNavContainer').click();
+      await pageB.locator('#cloudAuthEmail').fill(account.email);
+      await pageB.locator('#cloudAuthPassword').fill(account.password);
+      await pageB.locator('#cloudAuthSubmit').click();
+      await expect(pageB.locator('#cloudSignedInPane')).toBeVisible({ timeout: 15_000 });
+      await pageB.keyboard.press('Escape');
+
+      await expect
+        .poll(async () => pageB.locator('#tabStripTabs .tab-strip-title').allTextContents(), {
+          timeout: 60_000,
+          message: 'the note to arrive on device B',
+        })
+        .toContain('PeekNote origin words');
+
+      // B appends (waits out capture+persist+push so it arrives CLEAN).
+      await pageB.locator('#tabStripTabs .tab-strip-tab', { hasText: 'PeekNote' }).click();
+      await pageB.locator('#note').click();
+      await pageB.keyboard.press('Control+End');
+      await pageB.keyboard.type(' tailFromB');
+      await pageB.waitForTimeout(2_600);
+      await forceSync(pageB);
+
+      // ---- A pulls — PeekNote is NOT the active note, so the change -----
+      // ---- arrives unseen ----------------------------------------------
+      await raceSync(page);
+      // A clean adoption: no badge anywhere (this is not a conflict).
+      await expect(page.locator('.tab-strip-conflict')).toHaveCount(0);
+
+      // Opening the note answers "what changed since I last looked?":
+      // the peek opens over the freshly painted words, B's tail marked.
+      await page.locator('#tabStripTabs .tab-strip-tab', { hasText: 'PeekNote' }).click();
+      await expect(page.locator('#unseenModal')).toHaveClass(/in/);
+      await expect(page.locator('#unseenDiff')).toContainText('PeekNote origin words');
+      await expect(page.locator('#unseenDiff .conflict-ins')).toContainText('tailFromB');
+      // Nothing was lost — nothing is struck through.
+      await expect(page.locator('#unseenDiff .conflict-del')).toHaveCount(0);
+
+      // Close it; the note underneath already carries everyone's words.
+      await page.locator('#unseenModal .snap-foot [data-dismiss="modal"]').click();
+      await expect(page.locator('#unseenModal')).not.toHaveClass(/in/);
+      await expect(page.locator('#note')).toContainText('PeekNote origin words');
+      await expect(page.locator('#note')).toContainText('tailFromB');
+
+      // The peek is once per change: away and back, nothing re-opens.
+      await page.locator('#addTab').click();
+      await page.locator('#tabStripTabs .tab-strip-tab', { hasText: 'PeekNote' }).click();
+      await expect(page.locator('#note')).toContainText('tailFromB');
+      await expect(page.locator('#unseenModal')).not.toHaveClass(/in/);
 
       expect(bErrors, 'uncaught page errors (device B)').toEqual([]);
     } finally {
@@ -236,18 +341,20 @@ test.describe('version conflicts (real API)', () => {
       // debounces first, so B arrives at the race CLEAN.
       await tabWithTitle(pageB, 'RaceNote').click();
       await pageB.locator('#note').click();
+      await pageB.keyboard.press('Control+End');
       await pageB.keyboard.type(' B first words');
       await pageB.waitForTimeout(2_600); // capture 500ms + persist 400ms + push 1.2s
       await forceSync(pageB);
 
       await tabWithTitle(page, 'RaceNote').click();
       await editor.click();
-      await page.keyboard.type('A words typed while B had already pushed');
-      await page.locator('#cloudNavContainer').click();
-      await expect(page.locator('#cloudModal')).toBeVisible();
-      await page.locator('#cloudSyncNow').click();
-      await page.waitForTimeout(1_500);
-      await page.keyboard.press('Escape');
+      // Control+End on BOTH devices with a leading space: two insertions
+      // at the SAME anchor are the true overlap — anything less (adjacent
+      // anchors, glued words) the merge legitimately splices as
+      // complementary, and no badge is the CORRECT answer there.
+      await page.keyboard.press('Control+End');
+      await page.keyboard.type(' raceA');
+      await raceSync(page);
 
       // ONE note, wearing the review badge — no twin anywhere.
       await expect
@@ -268,12 +375,19 @@ test.describe('version conflicts (real API)', () => {
       await badged.click();
       await expect(page.locator('#conflictModal')).toHaveClass(/in/);
       // The tracked body marks A's lost words struck, B's words live.
-      await expect(page.locator('#conflictDiff')).toContainText('A words typed');
+      await expect(page.locator('#conflictDiff')).toContainText('raceA');
       await page.locator('[data-conflict-resolution="mine"]').click();
       await expect(page.locator('#conflictModal')).toBeHidden();
-      await expect(page.locator('#note')).toContainText('A words typed while B had already pushed');
+      await expect(page.locator('#note')).toContainText('raceA');
       // The badge retired with the record.
       await expect(page.locator('.tab-strip-conflict')).toHaveCount(0);
+
+      // The restored version must reach BOTH devices before the second
+      // race — a shared ancestor is what makes the second overlap a
+      // conflict instead of two disjoint edits on diverged lineages.
+      await forceSync(page);
+      await forceSync(pageB);
+      await expect(pageB.locator('#note')).toContainText('raceA');
 
       // ---- race 2: the same shape again --------------------------------
       await pageB.locator('#note').click();
@@ -284,12 +398,9 @@ test.describe('version conflicts (real API)', () => {
 
       await tabWithTitle(page, 'RaceNote').click();
       await editor.click();
-      await page.keyboard.type('A second words, still typing');
-      await page.locator('#cloudNavContainer').click();
-      await expect(page.locator('#cloudModal')).toBeVisible();
-      await page.locator('#cloudSyncNow').click();
-      await page.waitForTimeout(1_500);
-      await page.keyboard.press('Escape');
+      await page.keyboard.press('Control+End');
+      await page.keyboard.type(' raceA2');
+      await raceSync(page);
 
       // Still ONE note, still ONE badge — the record refreshed, nothing
       // minted. The strip never fills with near-duplicates again.
@@ -305,12 +416,12 @@ test.describe('version conflicts (real API)', () => {
 
       // The second review offers the SECOND race's losing words.
       await tabWithTitle(page, 'RaceNote').locator('.tab-strip-conflict').click();
-      await expect(page.locator('#conflictDiff')).toContainText('A second words');
+      await expect(page.locator('#conflictDiff')).toContainText('raceA2');
       await page.locator('[data-conflict-resolution="both"]').click();
       await expect(page.locator('#conflictModal')).toBeHidden();
       // "Keep both": the note keeps my words AND their version lands as
       // an explicit copy — the old twin behavior, as a decision.
-      await expect(page.locator('#note')).toContainText('A second words, still typing');
+      await expect(page.locator('#note')).toContainText('raceA2');
       await expect(
         page.locator('#tabStripTabs .tab-strip-title', { hasText: '(other version)' }),
       ).toBeVisible();

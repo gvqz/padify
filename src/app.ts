@@ -33,6 +33,7 @@ import { initCloudUI } from './cloud/ui';
 import { initCloudShare } from './cloud/share';
 import { initShareUI } from './cloud/share-ui';
 import { initConflictReview } from './conflicts';
+import { initUnseenChange } from './unseen';
 import { initVoiceTyping, toggleVoiceTyping, handleTabSwitchedWhileListening } from './voice';
 import { initTypingEffects } from './typing-effects';
 import { initPipWindow } from './pip-window';
@@ -134,6 +135,10 @@ export async function initApp(): Promise<void> {
   // The version-review sheet wires onto the manager's badge hook (the
   // strip's delegated conflict-badge click opens it).
   initConflictReview();
+  // The "changed while you were away" peek wires onto its own hook (a
+  // note whose words arrived while it sat unopened shows the delta on
+  // its next open).
+  initUnseenChange();
 
   // The editor seam — every reader/writer of the note surface goes through
   // this port (see editor/port.ts). The document-model engine is installed

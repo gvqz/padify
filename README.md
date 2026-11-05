@@ -20,6 +20,7 @@ Built as a Progressive Web App using the [Service Worker API](https://developer.
 - **Trash** — deleted notes wait 30 days, restorable from any synced device under the same id (share links survive); "delete forever" propagates everywhere
 - **Snapshots** — restore notes from previously saved versions
 - **Conflict review** — a note edited on two devices merges automatically when the edits don't overlap; when they do, a badge opens a tracked-changes review (restore my version / keep the current one / keep both)
+- **Changed-while-away peek** — opening a note whose words arrived from another device while it sat unopened shows what changed since your last look, marked inline, once
 - Keyboard shortcuts for common actions
 - Full-screen mode for distraction-free writing
 - Optimal line length for a better reading experience
