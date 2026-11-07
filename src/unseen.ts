@@ -10,14 +10,15 @@
  * lost, and one Close button is the whole footer.
  *
  * The rendering is the review sheet's tracked-changes view reused verbatim
- * (renderTrackedDiff): words no longer there struck through, words added
- * since the last open underlined. The legend copy is this sheet's own — the
+ * (renderTrackedDiff): words no longer there struck through and dimmed,
+ * words added since the last open tinted green. The legend rows name
+ * only the marks the diff shows; the copy is this sheet's own — the
  * marks mean "then → now", not "mine → theirs".
  */
 
 import { openModal } from './ui/behavior/modal';
 import { getTabManager, type NoteTab } from './tabs';
-import { renderTrackedDiff } from './conflicts';
+import { renderDiffLegend, renderTrackedDiff } from './conflicts';
 
 /** Opens the peek over a note that just switched to. */
 export function openUnseenPeek(
@@ -26,8 +27,9 @@ export function openUnseenPeek(
 ): void {
   const diffHost = document.getElementById('unseenDiff');
   const meta = document.getElementById('unseenMeta');
+  const legend = document.getElementById('unseenLegend');
   const modal = document.getElementById('unseenModal');
-  if (!diffHost || !meta || !modal) {
+  if (!diffHost || !meta || !legend || !modal) {
     return;
   }
 
@@ -35,7 +37,7 @@ export function openUnseenPeek(
   // "mine → theirs": what this device last had stands in for mine, the
   // note's current bytes for theirs. The name-differs note at the bottom
   // of the rendering reads correctly for both.
-  diffHost.innerHTML = renderTrackedDiff(
+  const diffHtml = renderTrackedDiff(
     {
       kind: 'edit',
       detectedAt: Date.now(),
@@ -44,6 +46,13 @@ export function openUnseenPeek(
     },
     tab.noteType,
   );
+  diffHost.innerHTML = diffHtml;
+  // The legend names only the marks present — a peek that only added
+  // words never mentions strikes.
+  legend.innerHTML = renderDiffLegend(diffHtml, {
+    del: 'words that are no longer there',
+    ins: 'words that arrived since you last opened it',
+  });
 
   const when = new Date(tab.updatedAt || Date.now());
   meta.textContent = `Their edit landed ${when.toLocaleString()}.`;

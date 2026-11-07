@@ -12,10 +12,10 @@
  *    question ("which words survive?"), and marked-up text answers it at
  *    a glance.
  *  • THE MARKS are word-level (the same token diff the merge runs):
- *    struck-through for this device's parked words that the current
- *    version does not carry, underlined for the other device's words this
- *    device never had. Formatting-only differences (tags that moved with
- *    no text change) get a note instead of markup soup.
+ *    struck-through and dimmed for this device's parked words that the
+ *    current version does not carry, green-tinted for the other device's
+ *    words this device never had. Formatting-only differences (tags that
+ *    moved with no text change) get a note instead of markup soup.
  *  • THE RESOLUTIONS are three, one click each, no stacked dialog:
  *    restore my version (re-apply the parked words, re-push), keep the
  *    current version (clear the record — nothing moves), or keep both
@@ -37,6 +37,16 @@ let reviewingTabId: string | null = null;
 // ---------------------------------------------------------------------------
 // The tracked-changes rendering
 // ---------------------------------------------------------------------------
+
+/** Wraps a changed run, keeping its leading/trailing whitespace OUTSIDE
+ *  the mark — a tinted box that swallows a trailing space renders
+ *  lopsided, and the space belongs to the sentence, not the change. */
+function markedRun(tag: 'del' | 'ins', cls: string, text: string): string {
+  const lead = text.match(/^\s+/)?.[0] ?? '';
+  const trail = text.match(/\s+$/)?.[0] ?? '';
+  const core = text.slice(lead.length, text.length - trail.length);
+  return `${lead}<${tag} class="${cls}">${escapeHtml(core)}</${tag}>${trail}`;
+}
 
 /** Word-diffs mine against theirs, rendering ONE marked-up document.
  *  Exported for the sheet's tests — pure markup from a record. */
@@ -79,7 +89,7 @@ export function renderTrackedDiff(conflict: NoteConflict, noteType?: NoteType): 
         .map((token) => token.value)
         .join('');
       if (text.trim()) {
-        html += `<del class="conflict-del">${escapeHtml(text)}</del>`;
+        html += markedRun('del', 'conflict-del', text);
       } else {
         sawTagChange = true;
       }
@@ -91,7 +101,7 @@ export function renderTrackedDiff(conflict: NoteConflict, noteType?: NoteType): 
         .map((token) => token.value)
         .join('');
       if (text.trim()) {
-        html += `<ins class="conflict-ins">${escapeHtml(text)}</ins>`;
+        html += markedRun('ins', 'conflict-ins', text);
       } else {
         sawTagChange = true;
       }
@@ -115,6 +125,26 @@ export function renderTrackedDiff(conflict: NoteConflict, noteType?: NoteType): 
     `<p class="conflict-text">${body}</p>` +
     notes.map((note) => `<p class="conflict-note">${escapeHtml(note)}</p>`).join('')
   );
+}
+
+/** The legend rows for a tracked diff — one row per mark the diff
+ *  ACTUALLY shows (a sample word wearing the treatment, then what it
+ *  means), so a diff with no removals never mentions strikes and a
+ *  pure addition never mentions them either. Shared by the review
+ *  sheet and the away-peek; the copy is each sheet's own. */
+export function renderDiffLegend(diffHtml: string, copy: { del: string; ins: string }): string {
+  const rows: string[] = [];
+  if (diffHtml.includes('conflict-del')) {
+    rows.push(
+      `<span class="conflict-mark conflict-del">removed</span><span>${escapeHtml(copy.del)}</span>`,
+    );
+  }
+  if (diffHtml.includes('conflict-ins')) {
+    rows.push(
+      `<span class="conflict-mark conflict-ins">added</span><span>${escapeHtml(copy.ins)}</span>`,
+    );
+  }
+  return rows.join('');
 }
 
 /** Html notes preview through the sanitizer; text kinds pass verbatim. */
@@ -157,7 +187,12 @@ function renderConflictSheet(tabId: string): void {
   const when = new Date(tab.conflict.theirs.updatedAt || tab.conflict.detectedAt);
   subtitle.textContent = 'It changed on another device while this one had unsynced edits.';
   meta.textContent = `Their edit landed ${when.toLocaleString()}.`;
-  diffHost.innerHTML = renderTrackedDiff(tab.conflict, tab.noteType);
+  const diffHtml = renderTrackedDiff(tab.conflict, tab.noteType);
+  diffHost.innerHTML = diffHtml;
+  document.getElementById('conflictLegend')!.innerHTML = renderDiffLegend(diffHtml, {
+    del: "this device's words — not kept in the current version",
+    ins: "the other device's words — now in the note",
+  });
 }
 
 /** Opens the sheet for a note (the strip badge and the note menu's path). */

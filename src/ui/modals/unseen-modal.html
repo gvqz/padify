@@ -6,9 +6,9 @@
      vocabulary — sibling by design).
 
      One document, tracked-changes style: words no longer there struck
-     through, words added since the last open underlined. Nothing to
-     decide — the note already carries the new version; the peek only
-     answers "what changed?". One way out. -->
+     through and dimmed, words added since the last open tinted green.
+     Nothing to decide — the note already carries the new version; the
+     peek only answers "what changed?". One way out. -->
 <div
   id="unseenModal"
   class="modal fade snapshots-sheet-host"
@@ -41,19 +41,16 @@
 
       <!-- The tracked-changes body: the note's CURRENT version with the
            delta since the last open marked. Legend first — the marks carry
-           the whole meaning. -->
+           the whole meaning; its rows are rendered to match what the diff
+           actually shows (a peek with no removals never mentions strikes). -->
       <div class="snap-scroll">
-        <p class="conflict-legend">
-          <span class="conflict-mark conflict-del">struck through</span> — words that are no longer
-          there <span class="conflict-mark conflict-ins">underlined</span> — words added since you
-          last opened it
-        </p>
+        <div id="unseenLegend" class="conflict-legend"></div>
         <div id="unseenDiff" class="conflict-diff" aria-live="polite"></div>
         <p class="conflict-meta" id="unseenMeta"></p>
       </div>
 
       <footer class="snap-foot conflict-actions">
-        <button type="button" class="snap-act copy" data-dismiss="modal">Close</button>
+        <button type="button" class="snap-act ghost" data-dismiss="modal">Close</button>
       </footer>
     </div>
   </div>

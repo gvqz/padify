@@ -30,7 +30,7 @@
 import { openModal } from './ui/behavior/modal';
 import { getTabManager } from './tabs';
 import { deriveTabTitle, escapeHtml, htmlToText, type TitledNote } from './editor/note-content';
-import { normalizeNoteType, noteTypeLabel } from './editor/note-types';
+import { normalizeNoteType } from './editor/note-types';
 import { TRASH_RETENTION_MS } from '../shared/wire';
 import type { TrashedNote } from './storage';
 
@@ -55,8 +55,27 @@ function trashTitle(grave: TrashedNote): string {
 }
 
 function trashPreview(grave: TrashedNote): string {
-  const text = htmlToText(grave.content).replace(/\s+/g, ' ').trim();
-  return escapeHtml(text.slice(0, 120));
+  const text = htmlToText(grave.content).trim();
+  if (!text) {
+    return '';
+  }
+  // The title derives from the note's first line (unless the note was
+  // explicitly named) — a preview that echoed that same line read as
+  // duplication, so the preview starts past it. Named notes keep their
+  // whole text: the name is not the body's first line. A single-line
+  // note yields no preview at all — the title line already says it,
+  // the same once-only rule the History sheet's rows follow.
+  const named = !!(grave.name && grave.name.trim());
+  let body = text;
+  if (!named) {
+    const firstBreak = text.indexOf('\n');
+    body = firstBreak === -1 ? '' : text.slice(firstBreak + 1).trim();
+  }
+  // Truncate on a word boundary with an explicit ellipsis — a hard
+  // slice feeding the CSS ellipsis read as a mid-word cut.
+  const flat = body.replace(/\s+/g, ' ');
+  const shown = flat.length > 120 ? `${flat.slice(0, 119).replace(/\s+\S*$/, '')}…` : flat;
+  return escapeHtml(shown);
 }
 
 function dayKey(timestamp: number, now: number = Date.now()): string {
@@ -86,11 +105,6 @@ function clock(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function typeLabel(grave: TrashedNote): string {
-  const noteType = normalizeNoteType(grave.noteType);
-  return noteType && noteType !== 'html' ? noteTypeLabel(noteType) : 'Note';
-}
-
 /** One row of the timeline. No per-node listeners — the list delegates. */
 function buildRow(grave: TrashedNote, now: number): HTMLLIElement {
   const li = document.createElement('li');
@@ -98,26 +112,37 @@ function buildRow(grave: TrashedNote, now: number): HTMLLIElement {
   li.dataset.trashId = grave.id;
   const preview = trashPreview(grave);
   const title = escapeHtml(trashTitle(grave));
-  // Same skeleton the History sheet's rows use: [when][rail][content] —
-  // the content wrapper keeps the grid placement (and the preview below
-  // the action line, never over it).
+  // The EXACT skeleton the History sheet's rows use:
+  // [when][rail][what] — three grid children, because .snap-row's grid
+  // has three columns. A missing rail spacer parks the content in the
+  // 20px rail column and the row collapses (name crushed to zero,
+  // chips and actions spilling out unclipped).
+  //
+  // Inside .snap-what, two lines: the title line (name + retention
+  // chip — the name takes every spare pixel) and the body line
+  // (preview + the row's actions at its right end). The History sheet
+  // keeps its actions in an expandable detail; the trash row has no
+  // detail, so the actions live on the body line where they never
+  // compete with the title for width.
   li.innerHTML = `
     <div class="snap-row" role="group" aria-label="${title}">
       <span class="snap-when">${clock(grave.deletedAt)}</span>
-      <div class="snap-content">
-        <div class="snap-line">
+      <span class="snap-rail" aria-hidden="true"></span>
+      <span class="snap-what">
+        <span class="snap-line">
           <span class="snap-name">${title}</span>
-          <span class="snap-note">${escapeHtml(typeLabel(grave))}</span>
           ${retentionChip(grave.deletedAt, now)}
+        </span>
+        <span class="trash-body">
+          ${preview ? `<span class="snap-preview">${preview}</span>` : ''}
           <span class="trash-row-actions">
-            <button type="button" class="snap-act restore" data-trash-action="restore">Restore</button>
+            <button type="button" class="snap-act ghost" data-trash-action="restore">Restore</button>
             <button type="button" class="trash-purge" data-trash-action="purge" title="Delete forever" aria-label="Delete ${title} forever">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
             </button>
           </span>
-        </div>
-        ${preview ? `<p class="snap-preview">${preview}</p>` : ''}
-      </div>
+        </span>
+      </span>
     </div>`;
   return li;
 }
@@ -195,19 +220,34 @@ function renderTrashSheet(): void {
 
   // Day runs — the same anchoring the History sheet uses (Today /
   // Yesterday / the date), newest day first because getTrashed sorts
-  // newest-first already.
+  // newest-first already. The group-start/group-end trims ride along
+  // for the same reason they exist on History: the rail's line breaks
+  // at day boundaries instead of dangling past the last dot.
   let currentKey = '';
+  let runRows: HTMLLIElement[] = [];
+  const closeRun = (): void => {
+    if (runRows.length === 0) {
+      return;
+    }
+    runRows[0].classList.add('group-start');
+    runRows[runRows.length - 1].classList.add('group-end');
+    runRows = [];
+  };
   for (const grave of graves) {
     const key = dayKey(grave.deletedAt, now);
     if (key !== currentKey) {
+      closeRun();
       currentKey = key;
       const day = document.createElement('li');
       day.className = 'snap-day';
       day.textContent = key;
       list.appendChild(day);
     }
-    list.appendChild(buildRow(grave, now));
+    const row = buildRow(grave, now);
+    runRows.push(row);
+    list.appendChild(row);
   }
+  closeRun();
 
   count.textContent = graves.length === 1 ? '1 note' : `${graves.length} notes`;
   emptyBtn.disabled = graves.length === 0;

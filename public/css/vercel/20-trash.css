@@ -5,13 +5,46 @@
  * purpose: the two right-side sheets read as siblings of one design system,
  * and the trash carries exactly one notion of its own — the retention
  * countdown chip.
+ *
+ * This file also styles the two tracked-changes sheets that share the
+ * vocabulary (the away-peek and Version review) — their chrome is the
+ * same sheet frame; their bodies are marked prose.
  */
 
-/* The trash row's right edge: the restore action sits where the History
-   sheet keeps its expand affordance, so a scan down the rail finds the
-   primary action in the same place on both sheets. */
+/* The trash row: same [when][rail][what] grid as History, but the actions
+   live on the body line (the trash row has no expandable detail), and the
+   row is not itself an affordance — nothing navigates. */
 .trash-item .snap-row {
   cursor: default;
+  padding-right: 14px;
+}
+
+/* The title line: the name takes every spare pixel — the retention chip
+   is the only thing beside it, with a little more air than the History
+   rows' 6px so a long title never visually touches the chip. */
+.trash-item .snap-line {
+  gap: 8px;
+}
+
+.trash-item .snap-name {
+  flex: 1 1 auto;
+}
+
+/* The body line: preview text left, the row's actions at the right end.
+   The History sheet keeps its actions in an expandable detail; the trash
+   row has no detail, so Restore and the purge × sit here, under the
+   title, where they never compete with it for width. */
+.trash-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 3px;
+}
+
+.trash-body .snap-preview {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* The retention countdown — how long the note still waits. Reads quiet on
@@ -20,6 +53,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  flex: 0 0 auto;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -65,6 +99,7 @@ body.dark .trash-chip.is-last-days {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  flex: 0 0 auto;
   margin-left: auto;
 }
 
@@ -86,15 +121,16 @@ body.dark .trash-chip.is-last-days {
   padding: 4px 9px;
 }
 
-/* The trash rows have no expand state — the whole row is meta + actions,
-   a flatter card than the History sheet's. */
+/* The preview is a fact, not a target — nothing in it is clickable, and
+   it must never eat a click aimed at the actions beside it. */
 .trash-item .snap-preview {
-  margin-top: 2px;
+  pointer-events: none;
 }
 
 /* ---------------------------------------------------------------------------
-   Version review — the conflict sheet (src/conflicts.ts). Same sheet
-   chrome as History and Trash; the body is tracked-changes prose.
+   Version review — the conflict sheet (src/conflicts.ts) and the away-peek
+   (src/unseen.ts). Same sheet chrome as History and Trash; the body is
+   tracked-changes prose.
    --------------------------------------------------------------------------- */
 
 /* The strip's conflict badge sits where the old fork badge lived, but it
@@ -118,35 +154,48 @@ body.dark .tab-strip-conflict:hover {
   color: #ffd08a;
 }
 
-/* The legend explains the marks — without it the marks are just styling. */
+/* The legend explains the marks — without it the marks are just styling.
+   Two stacked rows, one per mark: a sample word wearing the treatment,
+   then what it means. A single wrapped run of prose read as one confusing
+   sentence; the grid keeps each definition whole, and baseline alignment
+   keeps the chip's sample word and its description on one line. */
 .conflict-legend {
-  margin: 0 0 10px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 8px;
+  row-gap: 5px;
+  margin: 2px 0 12px;
   font-size: 11.5px;
-  line-height: 1.7;
-  opacity: 0.75;
+  line-height: 1.5;
+  color: var(--vz-fg-muted, inherit);
 }
 
+/* The sample word — the chip demonstrates the treatment itself. */
 .conflict-mark {
   display: inline-block;
-  padding: 0 5px;
+  justify-self: start;
+  padding: 1px 6px;
   border-radius: 5px;
-  margin: 0 2px;
-  font-size: 10.5px;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
 .conflict-mark.conflict-del {
   background: color-mix(in srgb, #e5484d 12%, transparent);
   text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
 }
 
 .conflict-mark.conflict-ins {
-  background: color-mix(in srgb, #30a46c 14%, transparent);
-  text-decoration: underline;
+  background: color-mix(in srgb, #30a46c 16%, transparent);
 }
 
-/* The tracked-changes body: ONE document, marked. */
+/* The tracked-changes body: ONE document, marked. No min-height — a
+   short diff followed by a forced gap read as orphaned content. */
 .conflict-diff {
-  min-height: 80px;
+  min-height: 0;
 }
 
 .conflict-text {
@@ -157,22 +206,35 @@ body.dark .tab-strip-conflict:hover {
   word-break: break-word;
 }
 
+/* Removed words: struck, dimmed, faintly red. Adjacent removed/added
+   runs get a whisker of daylight — a struck word glued to the word that
+   replaced it reads as one garbled token. */
 .conflict-text del,
 .conflict-diff del.conflict-del {
   text-decoration: line-through;
   text-decoration-thickness: 1.5px;
-  opacity: 0.65;
+  opacity: 0.62;
   background: color-mix(in srgb, #e5484d 8%, transparent);
   border-radius: 3px;
   padding: 0 2px;
 }
 
+.conflict-text del + ins,
+.conflict-text ins + del,
+.conflict-diff del.conflict-del + ins.conflict-ins,
+.conflict-diff ins.conflict-ins + del.conflict-del {
+  margin-left: 3px;
+}
+
+/* Added words: tinted green. The underline is explicitly retired — the
+   <ins> element ships one from the browser's own stylesheet, and a
+   word-level underline breaks at every word boundary, which reads as a
+   rendering bug rather than a mark. The tint alone carries the meaning,
+   and the legend names it. */
 .conflict-text ins,
 .conflict-diff ins.conflict-ins {
-  text-decoration: underline;
-  text-decoration-thickness: 1.5px;
-  text-decoration-color: #30a46c;
-  background: color-mix(in srgb, #30a46c 10%, transparent);
+  text-decoration: none;
+  background: color-mix(in srgb, #30a46c 13%, transparent);
   border-radius: 3px;
   padding: 0 2px;
 }
@@ -193,21 +255,46 @@ body.dark .tab-strip-conflict:hover {
   opacity: 0.6;
 }
 
-/* Three ways out, spread across the sheet's footer. */
+/* Three ways out, one row, one baseline — a wrapped action row reads as
+   broken, and these are the sheet's whole point. */
 .conflict-actions {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
 }
 
 .conflict-actions .snap-act {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
-/* The preview is a fact, not a target — nothing in it is clickable, and
-   it must never eat a click aimed at the actions beside it. */
-.trash-item .snap-preview {
-  pointer-events: none;
+/* A text-sized secondary button for the sheet footers. The History
+   sheet's .snap-act.copy is a 27px ICON button; reusing it for text
+   crushed "Keep both" into a two-line column and turned "Close" into
+   a 27px pill. This is the text sibling of that style. */
+.snap-act.ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  background: var(--vz-bg-elevated, transparent);
+  border: 1px solid var(--vz-border, currentColor);
+  border-radius: var(--vz-radius, 6px);
+  color: var(--vz-fg-muted, inherit);
+  font-size: 12px;
+  line-height: 1.45;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.snap-act.ghost:hover,
+.snap-act.ghost:focus-visible {
+  color: var(--vz-fg, inherit);
+  background: var(--vz-bg-hover, transparent);
+  border-color: var(--vz-border-strong, currentColor);
 }

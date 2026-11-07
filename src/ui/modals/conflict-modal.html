@@ -5,9 +5,9 @@
      chrome reuses the History sheet's vocabulary — sibling by design).
 
      One document, tracked-changes style: this device's words struck
-     through where the other version removed them, the other version's
-     words underlined where it added them. Three ways out, no dialog
-     stacked over the sheet. -->
+     through and dimmed where the current version dropped them, the other
+     version's words tinted green where it added them. Three ways out, no
+     dialog stacked over the sheet. -->
 <div
   id="conflictModal"
   class="modal fade snapshots-sheet-host"
@@ -40,13 +40,10 @@
 
       <!-- The tracked-changes body: the note's CURRENT version (theirs,
            the one the row took) with this device's parked words marked.
-           Legend first — the marks carry the whole meaning. -->
+           Legend first — the marks carry the whole meaning; its rows are
+           rendered to match what the diff actually shows. -->
       <div class="snap-scroll">
-        <p class="conflict-legend">
-          <span class="conflict-mark conflict-del">struck through</span> — this device's words not
-          in the current version <span class="conflict-mark conflict-ins">underlined</span> — the
-          other device's words
-        </p>
+        <div id="conflictLegend" class="conflict-legend"></div>
         <div id="conflictDiff" class="conflict-diff" aria-live="polite"></div>
         <p class="conflict-meta" id="conflictMeta"></p>
       </div>
@@ -55,10 +52,10 @@
         <button type="button" class="snap-act restore" data-conflict-resolution="mine">
           Restore my version
         </button>
-        <button type="button" class="snap-act copy" data-conflict-resolution="both">
+        <button type="button" class="snap-act ghost" data-conflict-resolution="both">
           Keep both
         </button>
-        <button type="button" class="snap-act delete" data-conflict-resolution="theirs">
+        <button type="button" class="snap-act ghost" data-conflict-resolution="theirs">
           Keep current
         </button>
       </footer>

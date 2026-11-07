@@ -47,13 +47,20 @@
 
 /* The host covers the viewport and catches backdrop clicks; the sheet
    hangs off its right edge. No host scroll — the sheet owns 100% of
-   the height and scrolls internally. */
-#snapshotsModal {
+   the height and scrolls internally.
+
+   Scoped to .snapshots-sheet-host, not #snapshotsModal: History, Trash,
+   the away-peek and Version review are four separate modals that all
+   wear the same host class — the sheet frame is the shared vocabulary,
+   and every one of them must hang off the right edge identically (an
+   ID-scoped rule left the three younger sheets rendering as centered
+   bootstrap cards instead). */
+.snapshots-sheet-host {
   padding: 0 !important;
   overflow: hidden;
 }
 
-#snapshotsModal .modal-dialog.snapshots-sheet {
+.snapshots-sheet-host .modal-dialog.snapshots-sheet {
   position: fixed;
   top: 0;
   right: 0;
@@ -69,18 +76,18 @@
 
 /* Slide in from the right — the host's other dialogs rise and settle;
    a sheet that reads as a sheet moves along its edge. */
-.modal.fade#snapshotsModal .modal-dialog.snapshots-sheet {
+.modal.fade.snapshots-sheet-host .modal-dialog.snapshots-sheet {
   transform: translateX(56px);
   opacity: 0;
   transition: transform 240ms var(--vz-ease), opacity 180ms var(--vz-ease);
 }
 
-.modal.in#snapshotsModal .modal-dialog.snapshots-sheet {
+.modal.in.snapshots-sheet-host .modal-dialog.snapshots-sheet {
   transform: translateX(0);
   opacity: 1;
 }
 
-#snapshotsModal .modal-content.snapshots-content {
+.snapshots-sheet-host .modal-content.snapshots-content {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -980,11 +987,11 @@
 /* ---- small screens ------------------------------------------------------------ */
 
 @media (max-width: 640px) {
-  #snapshotsModal .modal-dialog.snapshots-sheet {
+  .snapshots-sheet-host .modal-dialog.snapshots-sheet {
     width: 100vw;
   }
 
-  #snapshotsModal .modal-content.snapshots-content {
+  .snapshots-sheet-host .modal-content.snapshots-content {
     border-left: none;
   }
 
@@ -1044,7 +1051,7 @@
 /* ---- motion safety ------------------------------------------------------------ */
 
 @media (prefers-reduced-motion: reduce) {
-  .modal.fade#snapshotsModal .modal-dialog.snapshots-sheet {
+  .modal.fade.snapshots-sheet-host .modal-dialog.snapshots-sheet {
     transform: none;
     transition: none;
   }
