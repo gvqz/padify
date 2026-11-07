@@ -719,13 +719,6 @@ export class SnapshotsManager {
     };
     document.getElementById('snapshotsButton')?.addEventListener('click', openSheet);
 
-    // The rail's trash entry lands on the trash segment — its question,
-    // answered directly. Same sheet, pre-filtered.
-    document.getElementById('tabRailTrash')?.addEventListener('click', () => {
-      this.setSegment('trash');
-      openSheet();
-    });
-
     // The timeline's one delegated pair — rows expand, actions dispatch
     // (see wireSheetTimeline). Renders come and go underneath it.
     const list = document.getElementById('snapshotsList');

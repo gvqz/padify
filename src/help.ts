@@ -97,7 +97,7 @@ const steps: HelpStep[] = [
     accent: 'emerald',
     icon: ICONS.clock,
     title: 'Never lose your work',
-    text: 'Snapshots capture versions of a note that you can restore anytime, live statistics track words, pages and speaking time, and notes export to plain text, PDF, HTML or DOCX.',
+    text: 'History keeps every version of a note and everything you trash for 30 days — restore either from one timeline; live statistics track words, pages and speaking time, and notes export to plain text, PDF, HTML or DOCX.',
     hints: [],
   },
   {

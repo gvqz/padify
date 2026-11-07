@@ -168,9 +168,6 @@ const LEGACY_NOTE_KEY = 'note';
 /** Notifies the rail's count badge (and any other listener) about tab count. */
 const RAIL_COUNT_ID = 'tabRailCount';
 
-/** The rail's trash-entry badge — mirrors the trash count beside the sheet. */
-const RAIL_TRASH_ID = 'tabRailTrashCount';
-
 /**
  * Everything the cloud sync layer needs after the model changed. The
  * `trashed` list rides along so the sync layer can push trash rows (and
@@ -237,6 +234,7 @@ export class TabManager {
   private dirtyIds: Set<string> = new Set();
   private persistListeners: Set<(payload: TabsSyncPayload) => void> = new Set();
   private activeListeners: Set<(tab: NoteTab) => void> = new Set();
+  private trashListeners: Set<() => void> = new Set();
   /** The surface that currently paints the host — dismissed before a
    * different kind takes the stage (the NoteSurface.dismiss contract). */
   private paintedBy: NoteSurface | null = null;
@@ -377,6 +375,19 @@ export class TabManager {
     this.activeListeners.add(listener);
     return () => {
       this.activeListeners.delete(listener);
+    };
+  }
+
+  /**
+   * Fires whenever a note moved to the trash — the delete receipt the
+   * save indicator turns into its trash flash (the toast already owns
+   * the words and the Undo; this owns the "where did it go" moment at
+   * the save icon, which returns to its day job when the flash ends).
+   */
+  addTrashListener(listener: () => void): () => void {
+    this.trashListeners.add(listener);
+    return () => {
+      this.trashListeners.delete(listener);
     };
   }
 
@@ -887,14 +898,6 @@ export class TabManager {
     if (count) {
       count.textContent = String(this.tabs.length);
     }
-    // The trash badge mirrors the VISIBLE trash (purged placeholders are
-    // gone in spirit already); hidden when empty so the rail stays quiet.
-    const trashCount = document.getElementById(RAIL_TRASH_ID);
-    if (trashCount) {
-      const visible = this.trashed.filter((entry) => !entry.purged).length;
-      trashCount.textContent = String(visible);
-      trashCount.toggleAttribute('hidden', visible === 0);
-    }
   }
 
   private buildTabElement(tab: NoteTab): HTMLElement {
@@ -1356,6 +1359,12 @@ export class TabManager {
     // The trash row rides the next push — the same dirty set the tabs use
     // (the sync layer resolves pending ids against tabs FIRST, trash second).
     this.dirtyIds.add(tab.id);
+
+    // The flash fires BEFORE the persist calls below: requestCloseTab's own
+    // persist would otherwise paint "Saved" over the trash animation in
+    // the same tick it starts (the save indicator holds its flash above
+    // the persist's success paint while the animation runs).
+    this.trashListeners.forEach((listener) => listener());
 
     if (this.tabs.length === 0) {
       const fresh = createTab('');

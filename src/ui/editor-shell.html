@@ -5,32 +5,11 @@
         <span class="tab-rail-eyebrow">Notes</span>
         <span class="tab-rail-head-tools">
           <span class="tab-rail-count" id="tabRailCount" title="Notes on this device">1</span>
-          <button
-            type="button"
-            class="tab-rail-calendar"
-            id="tabRailTrash"
-            title="Trash — History's trash view, deleted notes kept for 30 days"
-            aria-label="Open the trash"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M19 7v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7" />
-              <path d="M10 11v6M14 11v6" />
-              <path d="M15 7V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3" />
-              <path d="M4 7h16" />
-            </svg>
-            <!-- trash-count badge, filled by the rail count pass -->
-            <span class="tab-rail-calendar-dot" id="tabRailTrashCount" hidden></span>
-          </button>
+          <!-- The trash lives in one place: History (the topbar's clock-
+              back button), where versions and deleted notes share the
+              timeline. The rail keeps only the calendar — the delete
+              toast's Undo and the save icon's trash flash cover the
+              moments in between. -->
           <button
             type="button"
             class="tab-rail-calendar"
@@ -1795,6 +1774,48 @@
             aria-hidden="true"
           >
             <path d="m5 13 4 4L19 7" />
+          </svg>
+          <!-- The trash flash — a note that just moved to the trash drops
+               into the can here, then the chip returns to its save job.
+               The viewBox carries 5 units of headroom above the can: the
+               lid lifts into it and the paper falls from it; the paper
+               group paints FIRST so it passes behind the lifted lid
+               (overlap reads as depth, not fusion). -->
+          <svg
+            class="save-state-trash"
+            width="14"
+            height="16.5"
+            viewBox="0 -5 24 28"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <g class="save-state-paper">
+              <rect
+                x="8.8"
+                y="2.2"
+                width="6.4"
+                height="7.6"
+                rx="0.8"
+                fill="var(--vz-bg)"
+                stroke="currentColor"
+                stroke-width="1.4"
+              />
+              <!-- dog-ear + one text line — the sheet reads as a note -->
+              <path d="M12.6 2.4l2 2h-2z" fill="currentColor" stroke="none" />
+              <path d="M10.5 6.2h2.6" stroke-width="1.1" />
+            </g>
+            <g class="save-state-trash-lid">
+              <path d="M15 7V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3" />
+              <path d="M4 7h16" />
+            </g>
+            <g class="save-state-trash-can">
+              <path d="M19 7v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7" />
+              <path d="M10 11v6M14 11v6" />
+            </g>
           </svg>
           <span class="save-state-text">Saved</span>
         </div>

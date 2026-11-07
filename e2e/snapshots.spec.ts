@@ -36,13 +36,12 @@ async function openSnapshots(page: Page): Promise<void> {
   await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
 }
 
-/** The rail's trash entry — same sheet, landed on its trash segment. */
+/** History opened straight onto its trash segment — the one door the
+ *  recovery story keeps (the rail's own trash button is gone; the save
+ *  icon's flash and the toast's Undo cover the moment of the delete). */
 async function openHistoryOnTrash(page: Page): Promise<void> {
-  await page.locator('#tabRailTrash').click();
-  await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
-  await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="trash"]')).toHaveClass(
-    /is-active/,
-  );
+  await openSnapshots(page);
+  await pickSegment(page, 'trash');
 }
 
 function snapshotRows(page: Page) {
@@ -221,7 +220,10 @@ test.describe('the rebuilt menu', () => {
       .click();
     await expect(page.locator('#toast')).toContainText('moved to trash');
     await expect(page.locator('#toast .toast-action')).toHaveText('Undo');
-    await expect(page.locator('#tabRailTrashCount')).toBeVisible();
+    // The save icon plays the trash flash — the delete's receipt where
+    // the eye already rests ("Saved" hands the chip back when it ends).
+    await expect(page.locator('#saveState')).toHaveClass(/trashed/);
+    await expect(page.locator('#saveState')).toContainText('Moved to trash');
     await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(1);
 
     // Undo — the note is back under its own id, no sheet ever opened.
@@ -231,7 +233,9 @@ test.describe('the rebuilt menu', () => {
     await expect(
       page.locator('#tabStripTabs .tab-strip-tab', { hasText: 'words worth keeping' }),
     ).toHaveCount(1);
-    await expect(page.locator('#tabRailTrashCount')).toBeHidden();
+    // The flash ended on its own clock — the save icon is back.
+    await expect(page.locator('#saveState')).not.toHaveClass(/trashed/);
+    await expect(page.locator('#saveState')).toContainText('Saved');
   });
 
   test('an unchanged note is declined — no duplicate rows', async ({ page }) => {
@@ -1298,7 +1302,7 @@ test.describe('the segmented filter', () => {
       .locator('#tabStripTabs .tab-strip-tab', { hasText: 'casualty words' })
       .locator('.tab-strip-close')
       .click();
-    await expect(page.locator('#tabRailTrashCount')).toBeVisible();
+    await expect(page.locator('#saveState')).toHaveClass(/trashed/);
   }
 
   test('narrows the timeline to one kind of row — time never reorders', async ({ page }) => {

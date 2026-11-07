@@ -66,4 +66,12 @@
   body .bottom-line .word-count-container:hover {
     transform: none;
   }
+
+  /* The save icon's trash flash: the can stays still and the paper
+     never falls — the words ("Moved to trash") carry the whole message. */
+  .save-state.trashed .save-state-paper,
+  .save-state.trashed .save-state-trash-lid,
+  .save-state.trashed .save-state-trash-can {
+    animation: none;
+  }
 }
