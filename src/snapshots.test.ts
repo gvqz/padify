@@ -4,23 +4,21 @@ import {
   MAX_SNAPSHOTS,
   deriveSnapshotPreview,
   deriveSnapshotTitle,
-  formatSnapshotClock,
-  formatSnapshotDayLabel,
   formatSnapshotTimestamp,
-  groupSnapshotsByType,
   isCurrentSnapshotState,
+  isRestorableGrave,
   isSameSnapshotState,
   openSnapshotsDatabase,
   pruneSnapshots,
   readSnapshotsForNote,
   snapshotChangeBadge,
-  snapshotDayGroups,
-  snapshotDayKey,
   snapshotHasContent,
-  snapshotMatchesTypeFilter,
   snapshotReadableText,
   snapshotSearchText,
   snapshotTypeBadgeLabel,
+  trashRetentionChip,
+  trashRowModel,
+  trashRowSearchText,
 } from './snapshots';
 
 /**
@@ -31,10 +29,11 @@ import {
  *    (pruneSnapshots) and the per-note read (readSnapshotsForNote), all
  *    pinned against raw databases with fake-indexeddb.
  *
- *  • the decision layer — the pure helpers that make snapshots behave
- *    the same across note types: what counts as content, what counts as
- *    a duplicate, how the menu groups rows by type, and how titles,
- *    previews and search text are derived per kind.
+ *  • the decision layer — the pure helpers that make the History sheet
+ *    behave the same across note types and row kinds: what counts as
+ *    content, what counts as a duplicate, how titles, previews and
+ *    search text are derived per kind, and how a trashed note maps onto
+ *    the shared row model (retention chip, restore hint, search text).
  *
  *  • the manager's DOM wiring is not under test; e2e/snapshots.spec.ts
  *    drives the whole menu instead.
@@ -496,94 +495,6 @@ describe('isSameSnapshotState — duplicate detection', () => {
   });
 });
 
-const row = (overrides: Record<string, unknown> = {}) =>
-  ({
-    id: 1,
-    noteId: 'tab-a',
-    title: 'a row',
-    content: 'x',
-    preview: 'x',
-    timestamp: 100,
-    formattedDate: '',
-    ...overrides,
-  }) as Parameters<typeof groupSnapshotsByType>[0][number];
-
-describe('groupSnapshotsByType — the menu\u2019s sections', () => {
-  it('sections follow the registry order, recency be damned', () => {
-    // A markdown snapshot NEWER than every plain one must not float its
-    // section above Notes — the menu\u2019s shape is the sort the user asked
-    // for, and it stays stable between visits.
-    const sections = groupSnapshotsByType([
-      row({ id: 1, noteType: undefined, timestamp: 100 }),
-      row({ id: 2, noteType: 'markdown', timestamp: 300 }),
-      row({ id: 3, noteType: undefined, timestamp: 200 }),
-    ]);
-    expect(sections.map((section) => section.key)).toEqual(['standard', 'markdown']);
-    expect(sections[0].label).toBe('Notes');
-    expect(sections[0].rows).toHaveLength(2);
-    expect(sections[1].label).toBe('Markdown');
-    expect(sections[1].rows).toHaveLength(1);
-  });
-
-  it('rows inside a section are newest first', () => {
-    const sections = groupSnapshotsByType([
-      row({ id: 1, timestamp: 100 }),
-      row({ id: 2, timestamp: 300 }),
-      row({ id: 3, timestamp: 200 }),
-    ]);
-    expect(sections[0].rows.map((entry) => entry.id)).toEqual([2, 3, 1]);
-  });
-
-  it('a timestamp tie breaks by id — the later write leads', () => {
-    // Legacy stores could land two captures in one millisecond; the
-    // higher store id is the later write and must not sort below its twin.
-    const sections = groupSnapshotsByType([
-      row({ id: 1, timestamp: 500 }),
-      row({ id: 2, timestamp: 500 }),
-    ]);
-    expect(sections[0].rows.map((entry) => entry.id)).toEqual([2, 1]);
-  });
-
-  it('legacy rows, junk ids and explicit standard all read as Notes', () => {
-    const sections = groupSnapshotsByType([
-      row({ id: 1, noteType: undefined }),
-      row({ id: 2, noteType: 'standard' }),
-      row({ id: 3, noteType: 'not a real id!' }),
-    ]);
-    expect(sections).toHaveLength(1);
-    expect(sections[0].key).toBe('standard');
-    expect(sections[0].rows).toHaveLength(3);
-  });
-
-  it('unknown future types trail the known ones, alphabetically', () => {
-    const sections = groupSnapshotsByType([
-      row({ id: 1, noteType: 'zeta' }),
-      row({ id: 2, noteType: undefined }),
-      row({ id: 3, noteType: 'alpha' }),
-    ]);
-    expect(sections.map((section) => section.key)).toEqual(['standard', 'alpha', 'zeta']);
-    // Unknown ids fall back to the registry\u2019s label rule: the id itself.
-    expect(sections[1].label).toBe('alpha');
-  });
-
-  it('every kind gets its section label and icon', () => {
-    const sections = groupSnapshotsByType([
-      row({ id: 1, noteType: 'drawing' }),
-      row({ id: 2, noteType: 'tasks' }),
-      row({ id: 3, noteType: 'rich' }),
-    ]);
-    const byKey = Object.fromEntries(sections.map((section) => [section.key, section.label]));
-    expect(byKey).toMatchObject({
-      rich: 'Rich Text',
-      tasks: 'Task Lists',
-      drawing: 'Drawings',
-    });
-    for (const section of sections) {
-      expect(section.icon).toContain('<svg');
-    }
-  });
-});
-
 describe('snapshotSearchText — what a row answers to', () => {
   const row = (overrides: Partial<Parameters<typeof snapshotSearchText>[0]> = {}) =>
     ({
@@ -672,6 +583,13 @@ describe('deriveSnapshotTitle / deriveSnapshotPreview — per-kind copy', () => 
     expect(title.endsWith('...')).toBe(true);
   });
 
+  it('the cap lands on a word boundary — a mid-word cut reads as a rendering bug', () => {
+    const title = deriveSnapshotTitle(`<div>${'word '.repeat(20)}</div>`);
+    expect(title.endsWith('...')).toBe(true);
+    // Nine whole words, not nine and a fraction.
+    expect(title).toBe('word word word word word word word word word...');
+  });
+
   it('non-html kinds title from their readable first line — a section of type labels is a section of twins', () => {
     // Markdown: the source is the text; the leading hashes render away.
     expect(deriveSnapshotTitle('# Trail log', 'markdown')).toBe('Trail log');
@@ -752,71 +670,6 @@ describe('formatSnapshotTimestamp — dates at render time', () => {
   it('is derived from the timestamp — the same moment renders the same twice', () => {
     const ts = 1696598400000;
     expect(formatSnapshotTimestamp(ts)).toBe(formatSnapshotTimestamp(ts));
-  });
-});
-
-describe('the timeline helpers — day groups, clocks, readable text', () => {
-  // A fixed 'now' (2026-10-25T12:00:00 local) so Today/Yesterday and
-  // the year-rollover cases are deterministic.
-  const now = new Date(2026, 9, 25, 12, 0, 0).getTime();
-  const sameDay = (hoursAgo: number) => now - hoursAgo * 60 * 60 * 1000;
-
-  it('day keys are local calendar days — midnight splits, hours do not', () => {
-    const morning = new Date(2026, 9, 25, 9, 30).getTime();
-    const night = new Date(2026, 9, 25, 23, 45).getTime();
-    const nextDay = new Date(2026, 9, 26, 0, 5).getTime();
-    expect(snapshotDayKey(morning)).toBe(snapshotDayKey(night));
-    expect(snapshotDayKey(morning)).not.toBe(snapshotDayKey(nextDay));
-  });
-
-  it('labels Today, Yesterday, and calendar dates', () => {
-    expect(formatSnapshotDayLabel(sameDay(3), now)).toBe('Today');
-    expect(formatSnapshotDayLabel(sameDay(20), now)).toBe('Yesterday');
-    // Two days back in the same year: month name and day, no year.
-    expect(formatSnapshotDayLabel(new Date(2026, 9, 23, 10, 0).getTime(), now)).toBe('October 23');
-  });
-
-  it('appends the year once the date leaves the current one', () => {
-    expect(formatSnapshotDayLabel(new Date(2024, 11, 31, 10, 0).getTime(), now)).toBe(
-      'December 31, 2024',
-    );
-  });
-
-  it('the clock is a short time string with digits', () => {
-    const clock = formatSnapshotClock(now);
-    expect(clock).toMatch(/^\d{1,2}:\d{2}/);
-  });
-
-  it('day groups are suppressed when every row is from today', () => {
-    // Five of-today rows under a 'TODAY' bar is a stutter — the section
-    // header plus the clocks already say it.
-    const todayRows = [sameDay(1), sameDay(2), sameDay(3)].map((timestamp, i) =>
-      row({ id: i + 1, timestamp }),
-    );
-    expect(snapshotDayGroups(todayRows, now)).toEqual([]);
-  });
-
-  it('day groups return the moment a section spans beyond today', () => {
-    const rows = [
-      row({ id: 1, timestamp: sameDay(1) }),
-      row({ id: 2, timestamp: sameDay(20) }), // yesterday
-    ];
-    const groups = snapshotDayGroups(rows, now);
-    expect(groups.map((group) => group.label)).toEqual(['Today', 'Yesterday']);
-    expect(groups[0].rows).toHaveLength(1);
-    expect(groups[1].rows).toHaveLength(1);
-  });
-
-  it('a section of only-yesterday rows keeps its day label', () => {
-    // Not today — the label is real information, not a stutter.
-    const rows = [row({ id: 1, timestamp: sameDay(20) }), row({ id: 2, timestamp: sameDay(21) })];
-    const groups = snapshotDayGroups(rows, now);
-    expect(groups.map((group) => group.label)).toEqual(['Yesterday']);
-    expect(groups[0].rows).toHaveLength(2);
-  });
-
-  it('empty rows answer no groups', () => {
-    expect(snapshotDayGroups([], now)).toEqual([]);
   });
 });
 
@@ -938,28 +791,6 @@ describe('snapshotReadableText — per-kind projections', () => {
   });
 });
 
-describe('snapshotMatchesTypeFilter — the toolbar’s type narrowing', () => {
-  it('null means no filter — everything survives', () => {
-    expect(snapshotMatchesTypeFilter({ noteType: 'markdown' }, null)).toBe(true);
-    expect(snapshotMatchesTypeFilter({ noteType: 'drawing' }, null)).toBe(true);
-    expect(snapshotMatchesTypeFilter({}, null)).toBe(true);
-  });
-
-  it('a filter keeps only its own kind', () => {
-    expect(snapshotMatchesTypeFilter({ noteType: 'markdown' }, 'markdown')).toBe(true);
-    expect(snapshotMatchesTypeFilter({ noteType: 'markdown' }, 'drawing')).toBe(false);
-  });
-
-  it('absent, standard and MALFORMED ids all read as the classic note', () => {
-    expect(snapshotMatchesTypeFilter({}, 'standard')).toBe(true);
-    expect(snapshotMatchesTypeFilter({ noteType: 'standard' }, 'standard')).toBe(true);
-    // A malformed id is junk, not a kind — normalizeNoteType folds it
-    // into the default, the same rule every type comparison here applies.
-    expect(snapshotMatchesTypeFilter({ noteType: 'Not A Type!' }, 'standard')).toBe(true);
-    expect(snapshotMatchesTypeFilter({ noteType: 'standard' }, 'markdown')).toBe(false);
-  });
-});
-
 describe('isCurrentSnapshotState — the Current chip', () => {
   it('matches on identical bytes and a normalized type', () => {
     expect(
@@ -1004,5 +835,136 @@ describe('isCurrentSnapshotState — the Current chip', () => {
         { content: scene(1790000000000), noteType: 'drawing' },
       ),
     ).toBe(true);
+  });
+});
+
+describe('isRestorableGrave — what the trash shows', () => {
+  const grave = (overrides: Record<string, unknown> = {}) =>
+    ({
+      id: 'tab-gone',
+      name: null,
+      content: '',
+      createdAt: 1,
+      updatedAt: 2,
+      deletedAt: 3,
+      ...overrides,
+    }) as Parameters<typeof isRestorableGrave>[0];
+
+  it('a grave with words is restorable', () => {
+    expect(isRestorableGrave(grave({ content: '<div>the words</div>' }))).toBe(true);
+  });
+
+  it('a grave with only a name is restorable — the strip spoke that name', () => {
+    expect(isRestorableGrave(grave({ name: 'Phoenix' }))).toBe(true);
+  });
+
+  it('a tombstone-shaped grave (no words, no name) is invisible', () => {
+    expect(isRestorableGrave(grave())).toBe(false);
+    expect(isRestorableGrave(grave({ content: '<div></div>' }))).toBe(false);
+  });
+
+  it('emptiness is judged per kind — a task list with no rows is nothing to show', () => {
+    const emptied = JSON.stringify({ version: 1, color: 'blue', tasks: [] });
+    expect(isRestorableGrave(grave({ content: emptied, noteType: 'tasks' }))).toBe(false);
+  });
+});
+
+describe('trashRetentionChip — the countdown', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const now = 1_000_000_000_000;
+  const trashedDaysAgo = (days: number) => now - days * DAY;
+
+  it('counts the days left, pluralized', () => {
+    expect(trashRetentionChip(trashedDaysAgo(3), now)).toMatchObject({ text: '27 days' });
+    expect(trashRetentionChip(trashedDaysAgo(29), now)).toMatchObject({ text: '1 day' });
+  });
+
+  it('the last three days left dress danger', () => {
+    expect(trashRetentionChip(trashedDaysAgo(27), now)).toMatchObject({ danger: true });
+    expect(trashRetentionChip(trashedDaysAgo(28), now)).toMatchObject({ danger: true });
+    expect(trashRetentionChip(trashedDaysAgo(26), now)).toMatchObject({ danger: false });
+    expect(trashRetentionChip(trashedDaysAgo(3), now)).toMatchObject({ danger: false });
+  });
+
+  it('a lapsed stamp reads as its last day — never negative, never zero', () => {
+    const chip = trashRetentionChip(now - 31 * DAY, now);
+    expect(chip.text).toBe('last day');
+    expect(chip.danger).toBe(true);
+  });
+});
+
+describe('trashRowModel — a trashed note on the shared timeline', () => {
+  it('a named note titles by its name, the way the strip spoke it', () => {
+    const model = trashRowModel({
+      id: 'tab-x',
+      name: 'Phoenix',
+      content: '<div>Phoenix rises</div>',
+      createdAt: 1,
+      updatedAt: 2,
+      deletedAt: Date.now() - 1000,
+    });
+    expect(model.title).toBe('Phoenix');
+    expect(model.trash).toBe(true);
+    expect(model.current).toBeUndefined();
+    expect(model.key).toBe('t:tab-x');
+    // The detail card owns the actions: restore, and delete forever.
+    expect(model.actions?.map((action) => action.kind)).toEqual(['restore', 'delete']);
+    expect(model.hint).toContain('share links keep working');
+  });
+
+  it('an unnamed note titles from its content, like every version row', () => {
+    const model = trashRowModel({
+      id: 'tab-y',
+      name: null,
+      content: '<div>grocery run</div>',
+      createdAt: 1,
+      updatedAt: 2,
+      deletedAt: Date.now() - 1000,
+    });
+    expect(model.title).toBe('grocery run');
+    expect(model.noteChip).toBeUndefined();
+  });
+
+  it('the detail card says when it was trashed and what kind it is', () => {
+    const model = trashRowModel({
+      id: 'tab-z',
+      name: null,
+      content: '# Trail log',
+      createdAt: 1,
+      updatedAt: 2,
+      deletedAt: Date.now() - 1000,
+      noteType: 'markdown',
+    });
+    expect(model.detailMeta?.[0]).toMatch(/^Trashed /);
+    expect(model.detailMeta?.[1]).toBe('Markdown');
+    expect(model.detailText).toBe('# Trail log');
+  });
+});
+
+describe('trashRowSearchText — the trash answers the same field', () => {
+  it('matches the name, the content and the preview', () => {
+    const grave = {
+      id: 'tab-s',
+      name: 'Phoenix',
+      content: '<div>the ashes hold grocery words</div>',
+      createdAt: 1,
+      updatedAt: 2,
+      deletedAt: 3,
+    };
+    expect(trashRowSearchText(grave)).toContain('phoenix');
+    expect(trashRowSearchText(grave)).toContain('grocery');
+  });
+
+  it('html markup never answers a search for tags', () => {
+    const grave = {
+      id: 'tab-s2',
+      name: null,
+      content: '<div>plain words</div>',
+      createdAt: 1,
+      updatedAt: 2,
+      deletedAt: 3,
+    };
+    expect(trashRowSearchText(grave)).not.toContain('<div>');
+    expect(trashRowSearchText(grave).includes('div')).toBe(false);
   });
 });

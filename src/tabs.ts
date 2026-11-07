@@ -1465,6 +1465,15 @@ export class TabManager {
       purged: true,
     });
     this.dirtyIds.add(grave.id);
+    // Delete forever means forever: the note's snapshots go with it, or
+    // the History sheet would keep offering a resurrection after the
+    // toast said "for good". Best-effort — a snapshots outage must not
+    // block the purge itself.
+    try {
+      void window.snapshotsManager?.deleteSnapshotsForNotes([noteId]);
+    } catch {
+      /* the sweep is best-effort */
+    }
     this.persist();
     this.renderRailCount();
     return true;
@@ -1495,6 +1504,13 @@ export class TabManager {
         })),
       );
     visible.forEach((grave) => this.dirtyIds.add(grave.id));
+    // Forever means forever — every emptied note's snapshots sweep with
+    // it (see purgeNote). Best-effort, never blocking the empty itself.
+    try {
+      void window.snapshotsManager?.deleteSnapshotsForNotes(visible.map((grave) => grave.id));
+    } catch {
+      /* the sweep is best-effort */
+    }
     this.persist();
     this.renderRailCount();
     return visible.length;

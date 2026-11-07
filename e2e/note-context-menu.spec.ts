@@ -171,10 +171,10 @@ test('move to trash on a note with content needs no ask — the trash is the ask
   await expect(page.locator(MENU)).toBeHidden();
 
   // The trash IS the undo path: no confirm dialog, the words restorable
-  // from the trash sheet for the retention window.
+  // from History's trash segment for the retention window.
   await expect(page.locator('dialog.vz-dialog')).toBeHidden();
   await expect(page.locator('#tabRailTrashCount')).toBeVisible();
   await page.locator('#tabRailTrash').click();
-  await expect(page.locator('#trashModal')).toHaveClass(/in/);
-  await expect(page.locator('#trashList .trash-item')).toHaveCount(1);
+  await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
+  await expect(page.locator('#snapshotsList .snap-item.is-trash')).toHaveCount(1);
 });

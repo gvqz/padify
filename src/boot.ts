@@ -29,7 +29,6 @@
 import { initApp } from './app';
 import { initHelp } from './help';
 import { initSnapshots } from './snapshots';
-import { initTrash } from './trash';
 import { initTimer } from './timer';
 import { mountMusicPlayer } from './features/music-player/markup';
 import { loadPlayerState } from './features/music-player/state';
@@ -95,7 +94,6 @@ export async function bootPadify(): Promise<void> {
   // (initTasks).
   mountTasksMarkup();
   initSnapshots();
-  initTrash();
   initContextMenu();
   // The break popup's controls live in a modal partial — they can only be
   // bound here, after mountModals() (import-time binding found no elements

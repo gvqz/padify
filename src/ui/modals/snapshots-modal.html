@@ -1,11 +1,14 @@
-<!-- Snapshots — the History sheet. A right-side timeline of safety
-     copies; structure and rendering live in src/snapshots.ts, styles in
+<!-- History — the one sheet. A right-side timeline where safety copies
+     (versions) and deleted notes (trash entries) share a single
+     chronology; structure and rendering live in src/snapshots.ts, the
+     shared row vocabulary in src/ui/sheet-kit.ts, styles in
      public/css/vercel/11-snapshots.css.
 
-     One continuous chronology — no type sections, no folding: time is
-     the only axis and each day anchors its own run of the rail. Rows
-     expand in place into a detail card that owns the actions (restore,
-     copy, delete); nothing here opens a second dialog. -->
+     One continuous timeline — time is the only axis and each day anchors
+     its own run of the rail. The segmented filter (All · Versions ·
+     Trash) narrows it without reordering it; the search field covers
+     both kinds. Rows expand in place into a detail card that owns the
+     actions; nothing here opens a second dialog. -->
 <div
   id="snapshotsModal"
   class="modal fade snapshots-sheet-host"
@@ -17,7 +20,7 @@
       <header class="snap-head">
         <div class="snap-head-copy">
           <h2 class="snap-title" id="snapshotsTitle">History</h2>
-          <p class="snap-subtitle">Safety copies of your notes — restore any version.</p>
+          <p class="snap-subtitle">Versions and deleted notes — one timeline.</p>
         </div>
         <button type="button" class="close" data-dismiss="modal" aria-label="Close history">
           <svg
@@ -34,10 +37,9 @@
         </button>
       </header>
 
-      <!-- Pinned toolbar: the two filters (text and type) and the one
-           primary action. The type filter narrows the timeline to one
-           kind of note; it never reorders it — time stays the only
-           axis. Its menu is a small popover owned by .snap-type-wrap. -->
+      <!-- Pinned toolbar: the search field, the segmented filter and the
+           one primary action. The segment narrows the timeline to one
+           kind of row; it never reorders it — time stays the only axis. -->
       <div class="snap-toolbar">
         <div class="snap-search">
           <svg
@@ -57,8 +59,8 @@
             type="text"
             id="searchSnapshots"
             class="snap-search-input"
-            placeholder="Filter snapshots..."
-            aria-label="Filter snapshots"
+            placeholder="Filter history..."
+            aria-label="Filter history"
           />
           <span id="snapshotSearchMeta" class="snap-search-meta" hidden></span>
           <button
@@ -83,48 +85,16 @@
           </button>
           <span class="snap-search-slash" aria-hidden="true"><kbd>/</kbd></span>
         </div>
-        <div class="snap-type-wrap">
-          <button
-            type="button"
-            id="snapshotTypeFilter"
-            class="snap-type-btn"
-            aria-haspopup="menu"
-            aria-expanded="false"
-            title="Show one kind of note"
-          >
-            <svg
-              class="snap-type-ico"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M4 6h16"></path>
-              <path d="M7 12h10"></path>
-              <path d="M10 18h4"></path>
-            </svg>
-            <span class="snap-type-label" id="snapshotTypeLabel">All types</span>
-            <svg
-              class="snap-type-chev"
-              width="10"
-              height="10"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.4"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="m6 9 6 6 6-6" />
-            </svg>
+        <div class="snap-seg" id="snapshotSegment" role="group" aria-label="Timeline filter">
+          <button type="button" class="snap-seg-btn is-active" data-seg="all" aria-pressed="true">
+            All
           </button>
-          <div id="snapshotTypeMenu" class="snap-type-menu" role="menu" hidden>
-            <!-- Options render on open: All types, then each type present, with counts -->
-          </div>
+          <button type="button" class="snap-seg-btn" data-seg="versions" aria-pressed="false">
+            Versions
+          </button>
+          <button type="button" class="snap-seg-btn" data-seg="trash" aria-pressed="false">
+            Trash
+          </button>
         </div>
         <button
           id="createSnapshotBtn"
@@ -185,13 +155,16 @@
               stroke-linejoin="round"
             />
           </svg>
-          <p id="noSnapshotsEmpty">No snapshots yet.</p>
+          <p id="noSnapshotsEmpty">Nothing here yet.</p>
           <p class="snap-empty-hint" id="noSnapshotsHint">
             Take one with the button above, or
             <span class="snap-kbd-inline"><kbd data-mod-key>Ctrl</kbd> + <kbd>U</kbd></span
-            >.
+            >. Trashed notes wait here too.
           </p>
-          <p id="noSnapshotsMiss" hidden>No snapshots match.</p>
+          <p class="snap-empty-hint" id="noTrashHint" hidden>
+            Deleted notes wait here for 30 days before they go for good.
+          </p>
+          <p id="noSnapshotsMiss" hidden>Nothing matches.</p>
           <button type="button" id="clearSearchFromEmpty" class="snap-clear-miss" hidden>
             Clear the filter
           </button>
@@ -203,25 +176,46 @@
 
       <footer class="snap-foot">
         <span id="snapshotsCount" class="snap-foot-count">0</span>
-        <button id="deleteAllSnapshotsBtn" class="snap-delete-all" type="button" disabled>
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-hidden="true"
-          >
-            <path
-              d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94208 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          <span class="snap-delete-all-label">Delete all</span>
-        </button>
+        <span class="snap-foot-actions">
+          <button id="emptyTrashBtn" class="snap-delete-all" type="button" hidden>
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <path
+                d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94208 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <span class="snap-delete-all-label">Empty trash</span>
+          </button>
+          <button id="deleteAllSnapshotsBtn" class="snap-delete-all" type="button" disabled>
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <path
+                d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94208 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <span class="snap-delete-all-label">Delete all versions</span>
+          </button>
+        </span>
       </footer>
     </div>
   </div>

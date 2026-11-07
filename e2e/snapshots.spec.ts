@@ -1,18 +1,22 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
- * Snapshots e2e — the History sheet, driven the way a person uses it.
+ * History e2e — the one sheet, driven the way a person uses it.
  *
- * The sheet is a right-side timeline: one continuous chronology (no
- * type sections, no folding), day anchors on the rail, entries that
- * expand in place into a detail card owning the actions. Restore is
- * one click (the pre-restore safety copy is the undo path); deletes
- * confirm with a two-step arm on the button itself. Coverage spans
- * the note types (the feature must behave identically on plain, rich
- * and markdown notes), duplicate prevention (including the restore
- * loop), the note-identity contract (restores go to the note a
- * snapshot came from; deleted notes resurrect as their own notes),
- * and both faces of the empty state.
+ * The sheet is a right-side timeline where versions and deleted notes
+ * share a single chronology: day anchors on the rail, entries that
+ * expand in place into a detail card owning the actions. The segmented
+ * filter (All · Versions · Trash) narrows without reordering; the
+ * search field covers both kinds. Restore is one click (the
+ * pre-restore safety copy is the undo path); every destructive button
+ * confirms with a two-step arm on the button itself. Coverage spans
+ * the note types (identical behavior on plain, rich and markdown
+ * notes), duplicate prevention (including the restore loop), the
+ * note-identity contract (restores go to the note a snapshot came
+ * from; a TRASHED source comes back under its own id; a gone source
+ * resurrects as its own note), the trash round trips (the delete
+ * toast's Undo, delete-forever sweeping the note's versions), and
+ * every face of the empty state.
  */
 
 const pageErrors = new WeakMap<Page, string[]>();
@@ -32,8 +36,29 @@ async function openSnapshots(page: Page): Promise<void> {
   await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
 }
 
+/** The rail's trash entry — same sheet, landed on its trash segment. */
+async function openHistoryOnTrash(page: Page): Promise<void> {
+  await page.locator('#tabRailTrash').click();
+  await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
+  await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="trash"]')).toHaveClass(
+    /is-active/,
+  );
+}
+
 function snapshotRows(page: Page) {
   return page.locator('#snapshotsList .snap-item');
+}
+
+function trashRows(page: Page) {
+  return page.locator('#snapshotsList .snap-item.is-trash');
+}
+
+/** Narrows the timeline with the segmented filter. */
+async function pickSegment(page: Page, segment: 'all' | 'versions' | 'trash'): Promise<void> {
+  await page.locator(`#snapshotSegment .snap-seg-btn[data-seg="${segment}"]`).click();
+  await expect(page.locator(`#snapshotSegment .snap-seg-btn[data-seg="${segment}"]`)).toHaveClass(
+    /is-active/,
+  );
 }
 
 /** An entry's actions live inside its detail card — expand it first,
@@ -141,7 +166,9 @@ test.describe('the rebuilt menu', () => {
     await expect(snapshotRows(page)).toHaveCount(1);
   });
 
-  test('closing a background tab trashes it — no snapshot, no dialog', async ({ page }) => {
+  test('closing a background tab trashes it — the History sheet holds it one click from restored', async ({
+    page,
+  }) => {
     await page.goto('/');
     const editor = page.locator('#note');
 
@@ -160,13 +187,51 @@ test.describe('the rebuilt menu', () => {
     await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(1);
     await expect(page.locator('#toast')).toContainText('moved to trash');
 
-    // The trash sheet holds the note, one click from restored.
-    await page.locator('#tabRailTrash').click();
-    await expect(page.locator('#trashModal')).toHaveClass(/in/);
-    const trashRow = page.locator('#trashList .trash-item', { hasText: 'background note body' });
+    // The rail's trash entry lands on the trash segment — the deleted
+    // note is a row on the one timeline.
+    await openHistoryOnTrash(page);
+    const trashRow = trashRows(page).filter({ hasText: 'background note body' });
     await expect(trashRow).toHaveCount(1);
-    await trashRow.locator('[data-trash-action="restore"]').click();
+    // The retention chip counts the wait; the footer counts the trash.
+    await expect(trashRow.locator('.snap-chip')).toContainText('30 days');
+    await expect(page.locator('#snapshotsCount')).toContainText('1 in trash');
+
+    // Expand, restore — the note returns under its own id.
+    await expandRow(page, trashRow);
+    await trashRow.locator('[data-sheet-action="restore"]').click();
     await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(2);
+    await expect(page.locator('#toast')).toContainText('back in the notes list');
+  });
+
+  test("the delete toast's Undo restores the note without opening anything", async ({ page }) => {
+    await page.goto('/');
+    const editor = page.locator('#note');
+
+    // A background note with words — deleting it leaves the Welcome
+    // note on stage, so the strip's story is only the delete's.
+    await page.locator('#addTab').click();
+    await editor.click();
+    await page.keyboard.type('words worth keeping');
+    await page.locator('#tabStripTabs .tab-strip-tab').first().click();
+
+    // Delete — the toast carries the way out.
+    await page
+      .locator('#tabStripTabs .tab-strip-tab', { hasText: 'words worth keeping' })
+      .locator('.tab-strip-close')
+      .click();
+    await expect(page.locator('#toast')).toContainText('moved to trash');
+    await expect(page.locator('#toast .toast-action')).toHaveText('Undo');
+    await expect(page.locator('#tabRailTrashCount')).toBeVisible();
+    await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(1);
+
+    // Undo — the note is back under its own id, no sheet ever opened.
+    await page.locator('#toast .toast-action').click();
+    await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(2);
+    await expect(page.locator('#toast')).toContainText('back in the notes list');
+    await expect(
+      page.locator('#tabStripTabs .tab-strip-tab', { hasText: 'words worth keeping' }),
+    ).toHaveCount(1);
+    await expect(page.locator('#tabRailTrashCount')).toBeHidden();
   });
 
   test('an unchanged note is declined — no duplicate rows', async ({ page }) => {
@@ -403,7 +468,9 @@ test.describe('restore — to the note it came from', () => {
     await expect(editor).toContainText('work in progress');
   });
 
-  test('a snapshot of a deleted note resurrects it as its own note', async ({ page }) => {
+  test('a snapshot of a TRASHED note brings it back under its own id — no duplicate beside its grave', async ({
+    page,
+  }) => {
     await page.goto('/');
     const editor = page.locator('#note');
 
@@ -427,8 +494,7 @@ test.describe('restore — to the note it came from', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
 
-    // The note is trashed — no snapshot on close anymore (the trash keeps
-    // the words), so exactly one row remains.
+    // The note is trashed — its versions stay on the timeline.
     await page
       .locator('#tabStripTabs .tab-strip-tab', { hasText: 'Phoenix' })
       .first()
@@ -436,17 +502,45 @@ test.describe('restore — to the note it came from', () => {
       .click();
     await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(1);
 
-    // Restore — the note is gone, so it comes back as its OWN note.
+    // Restore — the note is in the trash, so it comes back UNDER ITS
+    // OWN ID, emptied grave and all: one note, not a duplicate. (The
+    // version row, not the grave — both hold the same words here.)
     await openSnapshots(page);
-    await expandRow(page, snapshotRows(page).first());
-    await snapshotRows(page).first().locator('.restore').click();
-    await toastSays(page, 'Snapshot restored!');
-    await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
+    const versionRow = page
+      .locator('#snapshotsList .snap-item:not(.is-trash)', { hasText: 'Phoenix rises' })
+      .first();
+    await expandRow(page, versionRow);
+    await expect(versionRow.locator('.snap-detail-hint')).toContainText('back from the trash');
+    await versionRow.locator('[data-sheet-action="restore"]').click();
+    await expect(page.locator('#toast')).toContainText('back from the trash');
 
     const tabs = page.locator('#tabStripTabs .tab-strip-tab');
     await expect(tabs).toHaveCount(2);
     await expect(page.locator('#tabStripTabs .tab-strip-tab.active')).toContainText('Phoenix');
     await expect(editor).toContainText('Phoenix rises');
+    // The grave is empty — the trash segment says so.
+    await pickSegment(page, 'trash');
+    await expect(page.locator('#noSnapshotsEmpty')).toHaveText('Nothing in the trash.');
+  });
+
+  test('a snapshot whose note is GONE resurrects it as its own note', async ({ page }) => {
+    await page.goto('/');
+
+    // An orphaned snapshot — attributed to a note that is neither open
+    // nor trashed (the shape an aged-out or swept grave leaves behind).
+    await seedSnapshotDaysAgo(page, 0);
+
+    await openSnapshots(page);
+    const orphan = snapshotRows(page).filter({ hasText: 'an entry from days ago' }).first();
+    await expandRow(page, orphan);
+    await expect(orphan.locator('.snap-detail-hint')).toContainText('as its own note');
+    await orphan.locator('[data-sheet-action="restore"]').click();
+    await expect(page.locator('#toast')).toContainText('as a new note');
+
+    // The note is reborn with the snapshot's recorded name and content.
+    await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(2);
+    await expect(page.locator('#tabStripTabs .tab-strip-tab.active')).toContainText('Old days');
+    await expect(page.locator('#note')).toContainText('an entry from days ago');
   });
 });
 
@@ -614,53 +708,108 @@ test.describe('note types — consistent behavior', () => {
 });
 
 test.describe('deleting', () => {
-  test('one row deletes on the second press — the arm is the confirm', async ({ page }) => {
-    await page.goto('/');
-    await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
-
-    await openSnapshots(page);
-    const row = snapshotRows(page).first();
-    await expandRow(page, row);
-    const del = row.locator('.delete');
-
-    // First press arms: the label says Confirm, nothing is gone.
-    await del.click();
-    await expect(del).toHaveClass(/is-armed/);
-    await expect(del).toContainText('Confirm');
-    await expect(snapshotRows(page)).toHaveCount(1);
-
-    // Second press commits.
-    await del.click();
-    await expect(snapshotRows(page)).toHaveCount(0);
-    await expect(page.locator('#snapshotsCount')).toHaveText('0 of 200');
-    await expect(page.locator('#noSnapshotsEmpty')).toBeVisible();
-    await expect(page.locator('#deleteAllSnapshotsBtn')).toBeDisabled();
-  });
-
-  test('an armed delete disarms on a click elsewhere — the confirm is a gesture', async ({
+  test("delete forever arms on the trash row, then commits — and the note's versions go with it", async ({
     page,
   }) => {
     await page.goto('/');
-    await page.locator('#note').click();
+    const editor = page.locator('#note');
+
+    // A note with words and a snapshot of it, then trashed.
+    await page.locator('#addTab').click();
+    await editor.click();
+    await page.keyboard.type('gone for good');
     await page.keyboard.press('Control+U');
+    await toastSays(page, 'Snapshot created!');
+    await page.locator('#tabStripTabs .tab-strip-tab').first().click();
+    await page
+      .locator('#tabStripTabs .tab-strip-tab', { hasText: 'gone for good' })
+      .locator('.tab-strip-close')
+      .click();
 
-    await openSnapshots(page);
-    const row = snapshotRows(page).first();
+    await openHistoryOnTrash(page);
+    const row = trashRows(page).first();
     await expandRow(page, row);
-    const del = row.locator('.delete');
+    const purge = row.locator('[data-sheet-action="delete"]');
 
-    await del.click();
-    await expect(del).toHaveClass(/is-armed/);
+    // First press arms: the label turns the question, nothing is gone.
+    await purge.click();
+    await expect(purge).toHaveClass(/is-armed/);
+    await expect(purge).toContainText('Delete forever?');
+    await expect(trashRows(page)).toHaveCount(1);
+
+    // Second press commits — forever means forever: the trash row AND
+    // the note's snapshots are gone, nothing left to resurrect from.
+    await purge.click();
+    await expect(page.locator('#toast')).toContainText('Deleted for good.');
+    await expect(trashRows(page)).toHaveCount(0);
+    await pickSegment(page, 'versions');
+    await expect(snapshotRows(page).filter({ hasText: 'gone for good' })).toHaveCount(0);
+    await expect(page.locator('#noSnapshotsEmpty')).toBeVisible();
+  });
+
+  test('an armed delete-forever disarms on a click elsewhere — the confirm is a gesture', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const editor = page.locator('#note');
+
+    await editor.click();
+    await page.keyboard.type('stays a while');
+    await page.locator('#tabStripTabs .tab-strip-tab.active .tab-strip-close').click();
+
+    await openHistoryOnTrash(page);
+    const row = trashRows(page).first();
+    await expandRow(page, row);
+    const purge = row.locator('[data-sheet-action="delete"]');
+
+    await purge.click();
+    await expect(purge).toHaveClass(/is-armed/);
 
     // A click anywhere else is not a confirmation.
     await page.locator('#snapshotsModal .snap-head').click();
-    await expect(del).not.toHaveClass(/is-armed/);
-    await expect(del).toContainText('Delete');
-    await expect(snapshotRows(page)).toHaveCount(1);
+    await expect(purge).not.toHaveClass(/is-armed/);
+    await expect(purge).toContainText('Delete forever');
+    await expect(trashRows(page)).toHaveCount(1);
   });
 
-  test('delete all arms, then clears the store on the second press', async ({ page }) => {
+  test('empty trash arms, then empties on the second press', async ({ page }) => {
+    await page.goto('/');
+    const editor = page.locator('#note');
+
+    // Two trashed notes to empty.
+    for (const words of ['first casualty', 'second casualty']) {
+      await page.locator('#addTab').click();
+      await editor.click();
+      await page.keyboard.type(words);
+    }
+    await page.locator('#tabStripTabs .tab-strip-tab').first().click();
+    await page
+      .locator('#tabStripTabs .tab-strip-tab', { hasText: 'first casualty' })
+      .locator('.tab-strip-close')
+      .click();
+    await page
+      .locator('#tabStripTabs .tab-strip-tab', { hasText: 'second casualty' })
+      .locator('.tab-strip-close')
+      .click();
+
+    await openHistoryOnTrash(page);
+    await expect(trashRows(page)).toHaveCount(2);
+
+    const empty = page.locator('#emptyTrashBtn');
+    await empty.click();
+    await expect(empty).toHaveClass(/is-armed/);
+    await expect(empty).toContainText('Really empty it?');
+    await expect(trashRows(page)).toHaveCount(2); // nothing yet
+
+    await empty.click();
+    await expect(page.locator('#toast')).toContainText('Deleted 2 notes for good.');
+    await expect(trashRows(page)).toHaveCount(0);
+    await expect(page.locator('#noSnapshotsEmpty')).toHaveText('Nothing in the trash.');
+    // The button retires with the trash it emptied.
+    await expect(page.locator('#emptyTrashBtn')).toBeHidden();
+  });
+
+  test('delete all versions arms, then clears the store on the second press', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
     await page.keyboard.press('Control+U');
@@ -680,6 +829,7 @@ test.describe('deleting', () => {
     await expect(snapshotRows(page)).toHaveCount(0);
     await expect(page.locator('#snapshotsCount')).toHaveText('0 of 200');
     await expect(page.locator('#noSnapshotsEmpty')).toBeVisible();
+    await expect(page.locator('#deleteAllSnapshotsBtn')).toBeDisabled();
   });
 });
 
@@ -860,9 +1010,11 @@ test.describe('the day-anchored timeline', () => {
 
     const row = snapshotRows(page).first();
     await expandRow(page, row);
-    await expect(row.locator('.restore')).toHaveText('Restore');
-    await expect(row.locator('.copy')).toBeVisible();
-    await expect(row.locator('.delete')).toBeVisible();
+    await expect(row.locator('[data-sheet-action="restore"]')).toHaveText('Restore');
+    await expect(row.locator('[data-sheet-action="copy"]')).toBeVisible();
+    // History is memory, not housekeeping — a version row offers no
+    // delete; the cap prunes, and the footer clears the whole store.
+    await expect(row.locator('[data-sheet-action="delete"]')).toHaveCount(0);
   });
 
   test('the footer tells the whole story: N of 200', async ({ page }) => {
@@ -924,9 +1076,8 @@ test.describe('the day-anchored timeline', () => {
     await expect(page.locator('#snapshotsList .snap-day')).toHaveCount(1);
     const row = snapshotRows(page).first();
     await expandRow(page, row);
-    await expect(row.locator('.restore')).toBeVisible();
-    await expect(row.locator('.copy')).toBeVisible();
-    await expect(row.locator('.delete')).toBeVisible();
+    await expect(row.locator('[data-sheet-action="restore"]')).toBeVisible();
+    await expect(row.locator('[data-sheet-action="copy"]')).toBeVisible();
   });
 });
 
@@ -972,7 +1123,7 @@ test.describe('the search and the footer', () => {
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
   });
 
-  test('the footer reports results while filtering, the store against its cap otherwise', async ({
+  test('the footer tells the store’s truth; the field’s hit counter owns the filtered story', async ({
     page,
   }) => {
     await page.goto('/');
@@ -984,14 +1135,18 @@ test.describe('the search and the footer', () => {
     await page.keyboard.press('Control+U');
     await openSnapshots(page);
 
+    // No filters: the store against its cap.
     await expect(page.locator('#snapshotsCount')).toHaveText('2 of 200');
 
-    // 'xylophone' exists only in the second version's text — one match.
+    // 'xylophone' exists only in the second version's text — one hit,
+    // counted beside the query it describes. The footer stays the
+    // store's truth: one truth per place, never two numbers disagreeing.
     await page.locator('#searchSnapshots').fill('xylophone');
-    await expect(page.locator('#snapshotsCount')).toHaveText('1 of 2');
+    await expect(page.locator('#snapshotSearchMeta')).toHaveText('1 hit');
+    await expect(page.locator('#snapshotsCount')).toHaveText('2 of 200');
 
     await page.locator('#searchSnapshots').fill('zzz-no-match');
-    await expect(page.locator('#snapshotsCount')).toHaveText('0 of 2');
+    await expect(page.locator('#snapshotSearchMeta')).toHaveText('0 hits');
     await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
     await page.locator('#searchSnapshots').fill('');
     await expect(page.locator('#snapshotsCount')).toHaveText('2 of 200');
@@ -1123,107 +1278,119 @@ test.describe('the search and the footer', () => {
   });
 });
 
-test.describe('the type filter', () => {
-  /** A store with two kinds in it: the welcome note's plain snapshot
-   *  and a markdown note's snapshot. The one way to see a filter work
-   *  against a mixed history. */
-  async function seedPlainAndMarkdown(page: Page): Promise<void> {
+test.describe('the segmented filter', () => {
+  /** A timeline with both kinds in it: the welcome note's plain
+   *  snapshot, and a trashed note with its own words. The one way to
+   *  see a segment work against a mixed history. */
+  async function seedVersionsAndTrash(page: Page): Promise<void> {
     await page.goto('/');
     await page.locator('#note').click();
     await page.keyboard.press('Control+U');
     await toastSays(page, 'Snapshot created!');
 
-    await newTypedNote(page, 'Markdown note');
-    const editor = page.locator('#note .markdown-source');
+    // A second note, trashed — its grave joins the timeline.
+    await page.locator('#addTab').click();
+    const editor = page.locator('#note');
     await editor.click();
-    await page.keyboard.type('# Trail log today');
-    await page.keyboard.press('Control+U');
-    await toastSays(page, 'Snapshot created!');
+    await page.keyboard.type('casualty words');
+    await page.locator('#tabStripTabs .tab-strip-tab').first().click();
+    await page
+      .locator('#tabStripTabs .tab-strip-tab', { hasText: 'casualty words' })
+      .locator('.tab-strip-close')
+      .click();
+    await expect(page.locator('#tabRailTrashCount')).toBeVisible();
   }
 
-  test('narrows the timeline to one kind — the footer tells the truth', async ({ page }) => {
-    await seedPlainAndMarkdown(page);
+  test('narrows the timeline to one kind of row — time never reorders', async ({ page }) => {
+    await seedVersionsAndTrash(page);
     await openSnapshots(page);
+
+    // Both kinds share the one chronology, newest first: the trash entry
+    // (just deleted) leads the welcome note's snapshot.
     await expect(snapshotRows(page)).toHaveCount(2);
+    await expect(snapshotRows(page).first()).toHaveClass(/is-trash/);
 
-    const trigger = page.locator('#snapshotTypeFilter');
-    await expect(trigger).toContainText('All types');
+    // The trash segment answers the rail button's question directly.
+    await pickSegment(page, 'trash');
+    await expect(trashRows(page)).toHaveCount(1);
+    await expect(trashRows(page).first().locator('.snap-name')).toContainText('casualty words');
+    await expect(snapshotRows(page).filter({ hasNotText: 'casualty words' })).toHaveCount(0);
+    // The empty state speaks for the segment it stands in.
+    // (Not empty here — the trash holds the casualty.)
 
-    await trigger.click();
-    const menu = page.locator('#snapshotTypeMenu');
-    await expect(menu).toBeVisible();
-    // "All types" plus each kind PRESENT — no dead-end options — each
-    // with its live count.
-    await expect(menu.locator('.snap-type-opt')).toHaveCount(3);
-    await expect(menu.locator('.snap-type-opt', { hasText: 'Notes' })).toContainText('1');
-    await expect(menu.locator('.snap-type-opt', { hasText: 'Markdown' })).toContainText('1');
-
-    await menu.locator('.snap-type-opt', { hasText: 'Markdown' }).click();
-    await expect(menu).toBeHidden();
+    // The versions segment keeps the snapshot and drops the grave.
+    await pickSegment(page, 'versions');
     await expect(snapshotRows(page)).toHaveCount(1);
-    await expect(snapshotRows(page).first().locator('.snap-name')).toContainText('Trail log');
-    // The trigger says what is shown and dresses the part; the footer
-    // counts the narrowed list against the whole store.
-    await expect(trigger).toContainText('Markdown');
-    await expect(trigger).toHaveClass(/is-active/);
-    await expect(page.locator('#snapshotsCount')).toHaveText('1 of 2');
+    await expect(snapshotRows(page).first()).not.toHaveClass(/is-trash/);
+    await expect(page.locator('#emptyTrashBtn')).toBeVisible();
 
     // Back to everything.
-    await trigger.click();
-    await menu.locator('.snap-type-opt', { hasText: 'All types' }).click();
+    await pickSegment(page, 'all');
     await expect(snapshotRows(page)).toHaveCount(2);
-    await expect(trigger).toContainText('All types');
-    await expect(trigger).not.toHaveClass(/is-active/);
-    await expect(page.locator('#snapshotsCount')).toHaveText('2 of 200');
   });
 
-  test('a capture the type filter would HIDE clears the filter so the flash is visible', async ({
+  test('the trash segment empty state explains what waits here', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+
+    await openSnapshots(page);
+    await pickSegment(page, 'trash');
+    await expect(page.locator('#noSnapshotsEmpty')).toHaveText('Nothing in the trash.');
+    await expect(page.locator('#noTrashHint')).toBeVisible();
+    // The footer stays the store's truth — versions against the cap.
+    await expect(page.locator('#snapshotsCount')).toHaveText('1 of 200');
+  });
+
+  test('a capture that lands while the trash segment is active clears it so the flash is visible', async ({
     page,
   }) => {
-    await seedPlainAndMarkdown(page);
+    await seedVersionsAndTrash(page);
     await openSnapshots(page);
 
-    // Filter to Markdown.
-    await page.locator('#snapshotTypeFilter').click();
-    await page.locator('#snapshotTypeMenu .snap-type-opt', { hasText: 'Markdown' }).click();
-    await expect(snapshotRows(page)).toHaveCount(1);
+    // Park the sheet on the trash segment.
+    await pickSegment(page, 'trash');
+    await expect(trashRows(page)).toHaveCount(1);
 
-    // The PLAIN note takes a new snapshot — the filter would hide it.
-    // Close the sheet with the header × (Escape is the filter's reset
-    // now, and this test is about the CAPTURE clearing the filter).
+    // Close, edit the note, reopen — the segment persists like the
+    // query does. The capture is then taken WITH THE SHEET OPEN (the
+    // button): it would be hidden by the trash segment, so the segment
+    // gives way — the new snapshot is the thing the user asked for, the
+    // segment was yesterday's context.
     await page.locator('#snapshotsModal .snap-head .close').click();
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
-    await expect(page.locator('#snapshotTypeFilter')).toContainText('Markdown');
-    await page.locator('#tabStripTabs .tab-strip-tab').first().click();
     await page.locator('#note').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' grocery run');
     await openSnapshots(page);
-    await expect(snapshotRows(page)).toHaveCount(1);
+    await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="trash"]')).toHaveClass(
+      /is-active/,
+    );
+
     await page.locator('#createSnapshotBtn').click();
     await toastSays(page, 'Snapshot created!');
 
-    // The filter gave way: the fresh plain row leads the WHOLE list,
-    // flash and all, and the trigger says so.
+    // The segment reset to all — the whole history shows, flash and all.
+    await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="all"]')).toHaveClass(
+      /is-active/,
+    );
     await expect(snapshotRows(page)).toHaveCount(3);
-    await expect(page.locator('#snapshotTypeFilter')).toContainText('All types');
     await expect(snapshotRows(page).first()).toHaveClass(/is-new/);
   });
 
-  test('Escape clears the type filter first; the sheet closes on the next press', async ({
-    page,
-  }) => {
-    await seedPlainAndMarkdown(page);
+  test('Escape clears the segment first; the sheet closes on the next press', async ({ page }) => {
+    await seedVersionsAndTrash(page);
     await openSnapshots(page);
 
-    await page.locator('#snapshotTypeFilter').click();
-    await page.locator('#snapshotTypeMenu .snap-type-opt', { hasText: 'Markdown' }).click();
-    await expect(snapshotRows(page)).toHaveCount(1);
+    await pickSegment(page, 'trash');
+    await expect(trashRows(page)).toHaveCount(1);
 
     // Escape (focus on the body, not the search field) clears the
-    // filter — the sheet stays.
+    // segment — the sheet stays.
     await page.keyboard.press('Escape');
-    await expect(page.locator('#snapshotTypeFilter')).toContainText('All types');
+    await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="all"]')).toHaveClass(
+      /is-active/,
+    );
     await expect(snapshotRows(page)).toHaveCount(2);
     await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
 
@@ -1232,42 +1399,32 @@ test.describe('the type filter', () => {
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
   });
 
-  test('Escape with the menu open closes THE MENU, not the sheet', async ({ page }) => {
-    await seedPlainAndMarkdown(page);
+  test('the search covers both kinds — a deleted note answers by its words', async ({ page }) => {
+    await seedVersionsAndTrash(page);
     await openSnapshots(page);
 
-    await page.locator('#snapshotTypeFilter').click();
-    await expect(page.locator('#snapshotTypeMenu')).toBeVisible();
+    // The field finds the trash entry by its content — the exact moment
+    // a person needs the trash most is when they only remember words.
+    await page.locator('#searchSnapshots').fill('casualty');
+    await expect(snapshotRows(page)).toHaveCount(1);
+    await expect(snapshotRows(page).first()).toHaveClass(/is-trash/);
+    await expect(page.locator('#snapshotSearchMeta')).toHaveText('1 hit');
 
-    await page.keyboard.press('Escape');
-    await expect(page.locator('#snapshotTypeMenu')).toBeHidden();
-    await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
-  });
-
-  test('a click outside the menu closes it without choosing', async ({ page }) => {
-    await seedPlainAndMarkdown(page);
-    await openSnapshots(page);
-
-    await page.locator('#snapshotTypeFilter').click();
-    await expect(page.locator('#snapshotTypeMenu')).toBeVisible();
-
-    await page.locator('#snapshotsModal .snap-head').click();
-    await expect(page.locator('#snapshotTypeMenu')).toBeHidden();
-    // Nothing was chosen — the whole history still shows.
-    await expect(snapshotRows(page)).toHaveCount(2);
-    await expect(page.locator('#snapshotTypeFilter')).toContainText('All types');
+    // And the field still finds versions by theirs.
+    await page.locator('#searchSnapshots').fill('Welcome');
+    await expect(snapshotRows(page)).toHaveCount(1);
+    await expect(snapshotRows(page).first()).not.toHaveClass(/is-trash/);
   });
 
   test('combined filters miss honestly, and the way out clears BOTH', async ({ page }) => {
-    await seedPlainAndMarkdown(page);
+    await seedVersionsAndTrash(page);
     await openSnapshots(page);
 
-    // Markdown rows only…
-    await page.locator('#snapshotTypeFilter').click();
-    await page.locator('#snapshotTypeMenu .snap-type-opt', { hasText: 'Markdown' }).click();
-    await expect(snapshotRows(page)).toHaveCount(1);
+    // Trash rows only…
+    await pickSegment(page, 'trash');
+    await expect(trashRows(page)).toHaveCount(1);
 
-    // …then a query only the plain row could answer: a dead end two
+    // …then a query only a version could answer: a dead end two
     // filters built. The recovery button clears the pair of them.
     await page.locator('#searchSnapshots').fill('Welcome');
     await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
@@ -1275,7 +1432,9 @@ test.describe('the type filter', () => {
 
     await page.locator('#clearSearchFromEmpty').click();
     await expect(page.locator('#searchSnapshots')).toHaveValue('');
-    await expect(page.locator('#snapshotTypeFilter')).toContainText('All types');
+    await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="all"]')).toHaveClass(
+      /is-active/,
+    );
     await expect(snapshotRows(page)).toHaveCount(2);
     await expect(page.locator('#noSnapshotsMiss')).toBeHidden();
   });

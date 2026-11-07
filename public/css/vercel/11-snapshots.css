@@ -281,158 +281,57 @@
   border-radius: 4px;
 }
 
-/* ---- the type filter — trigger + popover menu ----------------------------- */
+/* ---- the segmented filter — one kind of row at a time --------------------- */
 
-/* The wrap owns the popover's anchor; the menu hangs under the button,
-   right-aligned, over the scroll area. */
-.snap-type-wrap {
-  position: relative;
-  flex: 0 0 auto;
-}
-
-.snap-type-btn {
+/* A quiet grouped control: the segment narrows the timeline (versions,
+   trash, or both) without ever reordering it. The active pill lifts on
+   the elevated surface — the same quiet-fill language the search field
+   and the old type button spoke. */
+.snap-seg {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 9px;
+  gap: 2px;
+  flex: 0 0 auto;
+  padding: 2px;
   background: var(--vz-bg-subtle);
   border: 1px solid transparent;
-  border-radius: var(--vz-radius);
-  color: var(--vz-fg-muted);
-  font-size: 12.5px;
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: border-color var(--vz-dur) ease, color var(--vz-dur) ease,
-    background-color var(--vz-dur) ease;
+  border-radius: 8px;
+  transition: border-color var(--vz-dur) ease;
 }
 
-.snap-type-btn:hover:not(:disabled),
-.snap-type-btn:focus-visible {
-  color: var(--vz-fg);
+.snap-seg:hover {
   border-color: var(--vz-border);
 }
 
-.snap-type-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-/* A filter in force is dressed in the accent — the label says what is
-   shown, the color says it is not the whole story. */
-.snap-type-btn.is-active {
-  color: var(--vz-primary);
-  background: var(--vz-bg-elevated);
-  border-color: var(--vz-primary);
-}
-
-.snap-type-ico {
-  flex: 0 0 auto;
-  width: 13px;
-  height: 13px;
-}
-
-.snap-type-chev {
-  flex: 0 0 auto;
-  opacity: 0.7;
-  transition: transform var(--vz-dur) ease;
-}
-
-.snap-type-btn[aria-expanded='true'] .snap-type-chev {
-  transform: rotate(180deg);
-}
-
-.snap-type-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 40;
-  min-width: 200px;
-  padding: 4px;
-  background: var(--vz-bg-elevated);
-  border: 1px solid var(--vz-border);
-  border-radius: var(--vz-radius-md);
-  box-shadow: var(--vz-shadow-dialog);
-  animation: snap-menu-in 120ms var(--vz-ease);
-}
-
-.snap-type-menu[hidden] {
-  display: none;
-}
-
-@keyframes snap-menu-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.snap-type-opt {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 7px 9px;
+.snap-seg-btn {
+  appearance: none;
+  height: 26px;
+  padding: 0 11px;
   border: none;
-  border-radius: var(--vz-radius);
+  border-radius: 6px;
   background: transparent;
-  color: var(--vz-fg);
-  font-size: 12.5px;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 100ms ease;
-}
-
-.snap-type-opt:hover,
-.snap-type-opt:focus-visible {
-  background: var(--vz-bg-hover);
-  outline: none;
-}
-
-.snap-type-opt-ico {
-  flex: 0 0 auto;
-  display: inline-flex;
   color: var(--vz-fg-muted);
-}
-
-.snap-type-opt.is-selected .snap-type-opt-ico {
-  color: var(--vz-primary);
-}
-
-.snap-type-opt-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 500;
   white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease;
 }
 
-.snap-type-opt.is-selected .snap-type-opt-label {
-  font-weight: 600;
+.snap-seg-btn:hover,
+.snap-seg-btn:focus-visible {
+  color: var(--vz-fg);
 }
 
-.snap-type-opt-count {
-  flex: 0 0 auto;
-  font-size: 11px;
-  color: var(--vz-fg-subtle);
-  font-variant-numeric: tabular-nums;
+.snap-seg-btn:focus-visible {
+  outline: 2px solid var(--vz-primary);
+  outline-offset: 1px;
 }
 
-/* The check only exists on the selected row — its slot holds the count
-   line honest (count right-aligned against the check column). */
-.snap-type-opt-check {
-  flex: 0 0 auto;
-  display: none;
-  color: var(--vz-primary);
-}
-
-.snap-type-opt.is-selected .snap-type-opt-check {
-  display: inline-flex;
+.snap-seg-btn.is-active {
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
 .snap-take {
@@ -460,6 +359,49 @@
 
 .snap-take:active {
   transform: scale(0.98);
+}
+
+/* A trash row's dot dresses danger — the row kind reads on the rail
+   before any chip says it. */
+.snap-item.is-trash::after {
+  border-color: var(--vz-danger);
+}
+
+.snap-item.is-trash.is-open::after {
+  background: var(--vz-danger);
+  border-color: var(--vz-danger);
+}
+
+/* The retention countdown — how long the note still waits. Reads quiet
+   on purpose: it is a fact, not a warning, until the last days. */
+.snap-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  color: inherit;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+.snap-chip.is-danger {
+  background: color-mix(in srgb, #e5484d 14%, transparent);
+  color: #e5484d;
+  opacity: 1;
+}
+
+/* Dark mode keeps the same recipe — the chips are color-mixed off the
+   palette tokens, only the danger needs a nudge. */
+[data-theme-mode='dark'] .snap-chip.is-danger,
+body.dark .snap-chip.is-danger {
+  color: #ff8789;
 }
 
 /* ---- the scroll area ------------------------------------------------------- */
@@ -582,7 +524,7 @@
   column-gap: var(--snap-gap);
   align-items: start;
   width: 100%;
-  padding: 12px 10px 12px 0;
+  padding: 12px 14px 12px 0;
   margin: 0;
   border: none;
   border-radius: var(--vz-radius-md);
@@ -715,11 +657,15 @@
   color: var(--vz-danger);
 }
 
-/* Under a query, matches glow the way every list browser teaches. */
+/* Under a query, matches glow the way every list browser teaches: a
+   soft tint behind the word plus the underline — an underline alone on
+   an already-bold title reads as the row's own styling, not as the
+   REASON the row answered. */
 .snap-row mark {
-  background: transparent;
+  background: color-mix(in srgb, var(--vz-star, var(--vz-fg)) 24%, transparent);
   color: var(--vz-fg);
   font-weight: 700;
+  border-radius: 2px;
   text-decoration: underline;
   text-decoration-color: var(--vz-star, var(--vz-fg));
   text-underline-offset: 2px;
@@ -893,6 +839,21 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The footer's scoped destructives live together at the right edge —
+   Empty trash (only when the trash holds something) beside Delete all
+   versions. Each is its own two-step confirm; the group is just
+   layout. */
+.snap-foot-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.snap-foot-actions .snap-delete-all[hidden] {
+  display: none;
+}
+
 .snap-delete-all {
   display: inline-flex;
   align-items: center;
@@ -1006,7 +967,7 @@
   }
 
   .snap-row {
-    padding: 11px 8px 11px 0;
+    padding: 11px 10px 11px 0;
   }
 
   .snap-detail {
@@ -1018,16 +979,21 @@
   }
 }
 
-/* Narrow phones: the type filter sheds its label and reads as an icon
-   button — the title and the menu carry the words. */
+/* Narrow phones: the segmented filter sheds its labels to initials —
+   the timeline is the point, and the segments' meaning survives as
+   A / V / T with the active state carrying the rest. */
 @media (max-width: 400px) {
-  .snap-type-label,
-  .snap-type-chev {
-    display: none;
+  .snap-seg-btn {
+    padding: 0 8px;
+    font-size: 11px;
   }
 
-  .snap-type-btn {
-    padding: 0 8px;
+  .snap-seg-btn[data-seg='versions'] {
+    padding: 0 9px;
+  }
+
+  .snap-take {
+    padding: 0 9px;
   }
 }
 
@@ -1059,9 +1025,5 @@
   .snap-item.is-new .snap-row {
     animation: none;
     background: var(--vz-bg-chip);
-  }
-
-  .snap-type-menu {
-    animation: none;
   }
 }
