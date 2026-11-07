@@ -1366,7 +1366,10 @@ export class TabManager {
       this.loadActiveIntoEditor();
       this.focusEditor();
       this.notifyActiveChanged();
-      showToast(`"${title}" moved to trash. A fresh tab is ready.`);
+      showToast(`"${title}" moved to trash. A fresh tab is ready.`, 'neutral', {
+        label: 'Undo',
+        run: () => this.undoTrash(tab.id, title),
+      });
       return;
     }
 
@@ -1383,7 +1386,21 @@ export class TabManager {
       this.renderStrip();
     }
 
-    showToast(`"${title}" moved to trash.`);
+    showToast(`"${title}" moved to trash.`, 'neutral', {
+      label: 'Undo',
+      run: () => this.undoTrash(tab.id, title),
+    });
+  }
+
+  /** The delete toast's Undo — the trash round trip without the trip:
+   *  most visits to the trash happen seconds after the delete, so the
+   *  restore is offered ON the receipt. The note returns under its own
+   *  id (restoreNote), and the undo confirms itself — the strip visibly
+   *  grows back, but a line of confirmation closes the loop cleanly. */
+  private undoTrash(noteId: string, title: string): void {
+    if (this.restoreNote(noteId)) {
+      showToast(`"${title}" is back in the notes list.`, 'success');
+    }
   }
 
   /**

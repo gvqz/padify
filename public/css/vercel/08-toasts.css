@@ -32,6 +32,38 @@ body.dark #toast {
   border-color: rgba(0, 0, 0, 0.2);
 }
 
+/* An action button inside the toast — "moved to trash · Undo". Reads as
+   part of the sentence (underlined, inherits the toast's ink) rather
+   than as a second control: the toast is one line of prose with a way
+   out, not a form. Generous hit area without visible padding growth —
+   the padding is negative-margin compensated so the line height stays
+   what the text alone would occupy. */
+body #toast .toast-action {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 4px 2px;
+  margin: -4px 0 -4px 10px;
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1.5px;
+  cursor: pointer;
+}
+
+body #toast .toast-action:hover,
+body #toast .toast-action:focus-visible {
+  text-decoration-thickness: 2.5px;
+}
+
+body #toast .toast-action:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
 /* Tone glyphs — monochrome by design: a check for confirmations, a bare
    exclamation for failures. Neutral toasts carry no glyph. */
 body #toast[data-tone='success']::before,
