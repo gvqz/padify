@@ -160,13 +160,31 @@
 
 /* ---- toolbar: two filters + the one primary action ----------------------- */
 
+/* Two rows, honestly sized: the sheet is 460px wide, and one row of
+   search + segment + take left the field a 41px sliver with its
+   placeholder clipped to nothing. Row one gives the search the full
+   width; row two splits it — the segment filter at the left, the
+   primary action pinned right. Filters sit together, the action
+   stands apart. */
 .snap-toolbar {
   flex: 0 0 auto;
   display: flex;
-  align-items: center;
-  gap: 7px;
+  flex-direction: column;
+  gap: 8px;
   padding: 0 20px 12px 22px;
   border-bottom: 1px solid var(--vz-border);
+}
+
+.snap-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* The primary action owns the row's far edge — the distance from the
+   segment filter is itself the grouping: filter there, act here. */
+.snap-toolbar-row .snap-take {
+  margin-left: auto;
 }
 
 /* The text filter reads as a field, not a third button: a quiet fill
@@ -212,6 +230,15 @@
   background: transparent;
   font-size: 13px;
   color: var(--vz-fg);
+}
+
+/* The field's focus story belongs to its CONTAINER: the pill grows the
+   strong border and halo via :focus-within below. The global keyboard
+   ring (base.css) would paint a second, harder ring around the bare
+   input inside — two indicators stacked, the inner one crowding the
+   hits counter at the field's trailing edge. One indicator, the pill's. */
+.snap-search-input:focus-visible {
+  outline: none;
 }
 
 .snap-search-input::placeholder {
@@ -328,10 +355,16 @@
   outline-offset: 1px;
 }
 
+/* The active pill: quiet fill plus one crisp edge — the same philosophy
+   as the rail's selected tab (its edge is a bar; a pill's is a ring).
+   The ring reads at a glance without painting the control in color. */
 .snap-seg-btn.is-active {
   background: var(--vz-bg-elevated);
   color: var(--vz-fg);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  font-weight: 600;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    inset 0 0 0 1px var(--vz-border-strong);
 }
 
 .snap-take {
@@ -979,9 +1012,10 @@ body.dark .snap-chip.is-danger {
   }
 }
 
-/* Narrow phones: the segmented filter sheds its labels to initials —
-   the timeline is the point, and the segments' meaning survives as
-   A / V / T with the active state carrying the rest. */
+/* Narrow phones: the toolbar's two rows bought the segment the room it
+   needs — labels STAY (A/V/T would trade meaning for pixels nobody
+   needs back; even at 360px the row holds with 50px to spare). Only
+   the paddings and type tighten. */
 @media (max-width: 400px) {
   .snap-seg-btn {
     padding: 0 8px;
@@ -1011,6 +1045,12 @@ body.dark .snap-chip.is-danger {
 
   .snap-toolbar {
     padding-bottom: 8px;
+  }
+
+  /* Two rows already cost vertical space; the gap tightens so the
+     toolbar stays a band, not a block. */
+  .snap-toolbar-row + .snap-toolbar-row {
+    margin-top: -3px;
   }
 }
 

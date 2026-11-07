@@ -37,89 +37,98 @@
         </button>
       </header>
 
-      <!-- Pinned toolbar: the search field, the segmented filter and the
-           one primary action. The segment narrows the timeline to one
-           kind of row; it never reorders it — time stays the only axis. -->
+      <!-- Pinned toolbar, two rows — the sheet is 460px wide and one
+           row cannot honestly hold a search field, a segmented filter
+           AND the primary action (the field paid for it: it collapsed
+           to a sliver). Row one gives the whole width to the search;
+           row two splits it between the segment filter (left) and the
+           one primary action (right) — filters together, the action
+           apart. The segment narrows the timeline to one kind of row;
+           it never reorders it — time stays the only axis. -->
       <div class="snap-toolbar">
-        <div class="snap-search">
-          <svg
-            class="snap-search-icon"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <circle cx="11" cy="11" r="8"></circle>
-            <path d="m21 21-4.35-4.35"></path>
-          </svg>
-          <input
-            type="text"
-            id="searchSnapshots"
-            class="snap-search-input"
-            placeholder="Filter history..."
-            aria-label="Filter history"
-          />
-          <span id="snapshotSearchMeta" class="snap-search-meta" hidden></span>
-          <button
-            type="button"
-            id="clearSnapshotSearch"
-            class="snap-search-clear"
-            aria-label="Clear filter"
-            hidden
-          >
+        <div class="snap-toolbar-row">
+          <div class="snap-search">
             <svg
-              width="12"
-              height="12"
+              class="snap-search-icon"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              stroke-width="2.4"
-              stroke-linecap="round"
-              aria-hidden="true"
-            >
-              <path d="M6 6l12 12M18 6L6 18" />
-            </svg>
-          </button>
-          <span class="snap-search-slash" aria-hidden="true"><kbd>/</kbd></span>
-        </div>
-        <div class="snap-seg" id="snapshotSegment" role="group" aria-label="Timeline filter">
-          <button type="button" class="snap-seg-btn is-active" data-seg="all" aria-pressed="true">
-            All
-          </button>
-          <button type="button" class="snap-seg-btn" data-seg="versions" aria-pressed="false">
-            Versions
-          </button>
-          <button type="button" class="snap-seg-btn" data-seg="trash" aria-pressed="false">
-            Trash
-          </button>
-        </div>
-        <button
-          id="createSnapshotBtn"
-          class="snap-take"
-          type="button"
-          title="Take snapshot"
-          data-shortcut-title="mod+u"
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-hidden="true"
-          >
-            <path
-              d="M12 5V19M5 12H19"
-              stroke="currentColor"
               stroke-width="2"
               stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input
+              type="text"
+              id="searchSnapshots"
+              class="snap-search-input"
+              placeholder="Filter history..."
+              aria-label="Filter history"
             />
-          </svg>
-          Take snapshot
-        </button>
+            <span id="snapshotSearchMeta" class="snap-search-meta" hidden></span>
+            <button
+              type="button"
+              id="clearSnapshotSearch"
+              class="snap-search-clear"
+              aria-label="Clear filter"
+              hidden
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.4"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+            <span class="snap-search-slash" aria-hidden="true"><kbd>/</kbd></span>
+          </div>
+        </div>
+        <div class="snap-toolbar-row">
+          <div class="snap-seg" id="snapshotSegment" role="group" aria-label="Timeline filter">
+            <button type="button" class="snap-seg-btn is-active" data-seg="all" aria-pressed="true">
+              All
+            </button>
+            <button type="button" class="snap-seg-btn" data-seg="versions" aria-pressed="false">
+              Versions
+            </button>
+            <button type="button" class="snap-seg-btn" data-seg="trash" aria-pressed="false">
+              Trash
+            </button>
+          </div>
+          <button
+            id="createSnapshotBtn"
+            class="snap-take"
+            type="button"
+            title="Take snapshot"
+            data-shortcut-title="mod+u"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <path
+                d="M12 5V19M5 12H19"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+            </svg>
+            Take snapshot
+          </button>
+        </div>
       </div>
 
       <!-- The one scroller: day-anchored timeline, or the empty state. -->
