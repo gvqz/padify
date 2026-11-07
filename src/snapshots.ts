@@ -334,10 +334,15 @@ export function snapshotSearchText(snapshot: Snapshot): string {
 }
 
 /** How much of the readable text is searchable. The cache holds one
- *  search string per row in memory — a 100KB note must not become a
- *  100KB lowercase copy of itself. Matches deeper than the cap are a
- *  fair loss for a menu that previews 100 characters. */
-const SNAPSHOT_SEARCH_CAP = 2000;
+ *  search string per row in memory, so the cap is a memory ceiling,
+ *  not a philosophy: at 200 rows × 20KB the worst case is ~4MB of
+ *  lowercase copies — cheap next to the alternative. 2000 proved too
+ *  tight the day the WELCOME note itself outgrew it (2013 readable
+ *  chars), and a note app whose pitch is "never lose your work"
+ *  cannot ship an unsearchable tail: what you typed last is usually
+ *  what you are looking for. Only pathological paste-bombs feel the
+ *  cap, and those still match on their first 20,000 characters. */
+const SNAPSHOT_SEARCH_CAP = 20_000;
 
 /**
  * The short chip a row shows — 'Markdown', 'Rich Text' — matching the

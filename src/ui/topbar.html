@@ -397,6 +397,7 @@
             title="History — note versions and trash"
           >
             <svg
+              class="snapshots-icon-clock"
               width="18"
               height="18"
               viewBox="0 0 24 24"
@@ -412,6 +413,51 @@
               />
               <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" />
               <path d="M7 3v4a1 1 0 0 0 1 1h7" />
+            </svg>
+            <!-- The trash flash — a note that just moved to the trash
+                 drops into the can right here on the History button,
+                 then the clock returns. The receipt plays where the
+                 recovery door lives: the can swallows the note, the
+                 button that opens History wears it. The viewBox carries
+                 5 units of headroom above the can: the lid lifts into
+                 it and the paper falls from it; the paper group paints
+                 FIRST so it passes behind the lifted lid (overlap
+                 reads as depth, not fusion). -->
+            <svg
+              class="snapshots-icon-trash"
+              width="18"
+              height="21"
+              viewBox="0 -5 24 28"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <g class="snapshots-flash-paper">
+                <rect
+                  x="8.8"
+                  y="2.2"
+                  width="6.4"
+                  height="7.6"
+                  rx="0.8"
+                  fill="var(--vz-bg)"
+                  stroke="currentColor"
+                  stroke-width="1.4"
+                />
+                <!-- dog-ear + one text line — the sheet reads as a note -->
+                <path d="M12.6 2.4l2 2h-2z" fill="currentColor" stroke="none" />
+                <path d="M10.5 6.2h2.6" stroke-width="1.1" />
+              </g>
+              <g class="snapshots-flash-lid">
+                <path d="M15 7V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3" />
+                <path d="M4 7h16" />
+              </g>
+              <g class="snapshots-flash-can">
+                <path d="M19 7v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7" />
+                <path d="M10 11v6M14 11v6" />
+              </g>
             </svg>
             <span class="snapshot-text">History</span>
           </a>

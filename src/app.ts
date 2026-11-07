@@ -40,6 +40,7 @@ import { initPipWindow } from './pip-window';
 import { openModal, closeAllModals } from './ui/behavior/modal';
 import { registerLayer } from './ui/behavior/layers';
 import { initSaveIndicator } from './save-indicator';
+import { initTrashFlash } from './trash-flash';
 import { initTabRailDrawer } from './tab-rail-drawer';
 import { initRichToolbar } from './editor/rich-toolbar';
 import { initMarkdownToolbar } from './editor/markdown/toolbar';
@@ -350,6 +351,9 @@ export async function initApp(): Promise<void> {
 
   // ---- save-state indicator (see save-indicator.ts) -----------------
   initSaveIndicator(notepad, tabManager);
+
+  // ---- the delete receipt on the History button (see trash-flash.ts) ----
+  initTrashFlash(tabManager);
 
   // ---- left note rail (mobile drawer) — see tab-rail-drawer.ts ------
   initTabRailDrawer(tabManager);

@@ -200,8 +200,14 @@ export interface SheetRowModel {
   actions?: SheetRowAction[];
 }
 
-/** How much of the readable text the detail card shows. */
-const SHEET_DETAIL_CAP = 2000;
+/** How much of the readable text the detail card holds. The card is a
+ *  240px scrolling window (see 11-snapshots.css) — the cap is a DOM
+ *  ceiling, not a visible one, and it sits at the same height as the
+ *  search cap so the card never shows less than the search can find.
+ *  2000 proved too tight the day the WELCOME note itself outgrew it
+ *  (2013 readable chars): the words a user just typed — the ones at
+ *  the END — were the first thing the card cut. */
+const SHEET_DETAIL_CAP = 20_000;
 
 /**
  * The preview usually opens with the note's own first line — the title

@@ -173,10 +173,9 @@ test('move to trash on a note with content needs no ask — the trash is the ask
   // The trash IS the undo path: no confirm dialog, the words restorable
   // from History's trash segment for the retention window.
   await expect(page.locator('dialog.vz-dialog')).toBeHidden();
-  // The save icon plays the trash flash — the receipt at the spot the
-  // eye rests (the toast owns the words and the Undo).
-  await expect(page.locator('#saveState')).toHaveClass(/trashed/);
-  await expect(page.locator('#saveState')).toContainText('Moved to trash');
+  // The History button plays the trash flash — the receipt on the door
+  // the note just arrived behind (the toast owns the words and the Undo).
+  await expect(page.locator('#snapshotsButton')).toHaveClass(/is-trashed/);
   // And History keeps the one door to the trash: open it, pick the
   // segment, the note is there.
   await page.locator('#snapshotsButton').click();

@@ -220,10 +220,11 @@ test.describe('the rebuilt menu', () => {
       .click();
     await expect(page.locator('#toast')).toContainText('moved to trash');
     await expect(page.locator('#toast .toast-action')).toHaveText('Undo');
-    // The save icon plays the trash flash — the delete's receipt where
-    // the eye already rests ("Saved" hands the chip back when it ends).
-    await expect(page.locator('#saveState')).toHaveClass(/trashed/);
-    await expect(page.locator('#saveState')).toContainText('Moved to trash');
+    // The History button plays the trash flash — the delete's receipt
+    // on the door the note just arrived behind (the clock hands the
+    // button back when it ends).
+    await expect(page.locator('#snapshotsButton')).toHaveClass(/is-trashed/);
+    await expect(page.locator('#snapshotsButton .snapshots-icon-trash')).toBeVisible();
     await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(1);
 
     // Undo — the note is back under its own id, no sheet ever opened.
@@ -233,9 +234,10 @@ test.describe('the rebuilt menu', () => {
     await expect(
       page.locator('#tabStripTabs .tab-strip-tab', { hasText: 'words worth keeping' }),
     ).toHaveCount(1);
-    // The flash ended on its own clock — the save icon is back.
-    await expect(page.locator('#saveState')).not.toHaveClass(/trashed/);
-    await expect(page.locator('#saveState')).toContainText('Saved');
+    // The flash ended on its own clock — the History button's clock
+    // icon is back.
+    await expect(page.locator('#snapshotsButton')).not.toHaveClass(/is-trashed/);
+    await expect(page.locator('#snapshotsButton .snapshots-icon-clock')).toBeVisible();
   });
 
   test('an unchanged note is declined — no duplicate rows', async ({ page }) => {
@@ -1302,7 +1304,7 @@ test.describe('the segmented filter', () => {
       .locator('#tabStripTabs .tab-strip-tab', { hasText: 'casualty words' })
       .locator('.tab-strip-close')
       .click();
-    await expect(page.locator('#saveState')).toHaveClass(/trashed/);
+    await expect(page.locator('#snapshotsButton')).toHaveClass(/is-trashed/);
   }
 
   test('narrows the timeline to one kind of row — time never reorders', async ({ page }) => {

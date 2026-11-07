@@ -547,15 +547,22 @@ describe('snapshotSearchText — what a row answers to', () => {
     expect(snapshotSearchText(row({ noteName: 'Groceries' }))).toContain('groceries');
   });
 
-  it('deep text past the search cap is not cached — 2000 characters deep is enough', () => {
+  it('deep text past the search cap is not cached — 20,000 characters deep is enough', () => {
     // The cache holds one search string per row in memory; the readable
     // projection is capped so a giant note does not become a giant
-    // lowercase copy of itself.
-    const deep = `x`.repeat(2500) + 'needle deep in the note';
+    // lowercase copy of itself. The cap sits high enough that a real
+    // note never feels it (the WELCOME note is ~2,000 readable chars) —
+    // only paste-bombs do.
+    const deep = `x`.repeat(20_500) + 'needle deep in the note';
     expect(snapshotSearchText(row({ content: deep })).includes('needle')).toBe(false);
-    // …while anything within the cap is fair game.
+    // …while anything within the cap is fair game — including the whole
+    // of any honest note.
     const near = `${'x'.repeat(1000)}needle closer to the top`;
     expect(snapshotSearchText(row({ content: near })).includes('needle')).toBe(true);
+    // A note the size of the welcome note is searchable to its LAST
+    // word — the tail is where fresh writing lives.
+    const tail = `${'x'.repeat(1900)}needle at the end of a welcome-sized note`;
+    expect(snapshotSearchText(row({ content: tail })).includes('needle')).toBe(true);
   });
 });
 

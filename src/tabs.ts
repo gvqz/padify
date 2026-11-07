@@ -380,9 +380,9 @@ export class TabManager {
 
   /**
    * Fires whenever a note moved to the trash — the delete receipt the
-   * save indicator turns into its trash flash (the toast already owns
-   * the words and the Undo; this owns the "where did it go" moment at
-   * the save icon, which returns to its day job when the flash ends).
+   * History button in the top bar turns into its trash flash (the toast
+   * owns the words and the Undo; this owns the "where did it go" gesture
+   * on the door the note just arrived behind).
    */
   addTrashListener(listener: () => void): () => void {
     this.trashListeners.add(listener);
@@ -1360,10 +1360,9 @@ export class TabManager {
     // (the sync layer resolves pending ids against tabs FIRST, trash second).
     this.dirtyIds.add(tab.id);
 
-    // The flash fires BEFORE the persist calls below: requestCloseTab's own
-    // persist would otherwise paint "Saved" over the trash animation in
-    // the same tick it starts (the save indicator holds its flash above
-    // the persist's success paint while the animation runs).
+    // The flash fires BEFORE the persist calls below so its first tick
+    // lands clean — the receipt should never start behind the persist's
+    // own work in the same beat.
     this.trashListeners.forEach((listener) => listener());
 
     if (this.tabs.length === 0) {

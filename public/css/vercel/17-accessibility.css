@@ -67,11 +67,18 @@
     transform: none;
   }
 
-  /* The save icon's trash flash: the can stays still and the paper
-     never falls — the words ("Moved to trash") carry the whole message. */
-  .save-state.trashed .save-state-paper,
-  .save-state.trashed .save-state-trash-lid,
-  .save-state.trashed .save-state-trash-can {
+  /* The History button's trash flash: the can stays still and the
+     paper never falls — the red trash icon standing in for the clock
+     carries the whole message without the motion. */
+  #snapshotsButton.is-trashed .snapshots-flash-paper,
+  #snapshotsButton.is-trashed .snapshots-flash-lid,
+  #snapshotsButton.is-trashed .snapshots-flash-can {
     animation: none;
+  }
+
+  /* A still paper would hang mid-air beside the mouth — under reduced
+     motion it simply never appears; the can alone tells the story. */
+  #snapshotsButton.is-trashed .snapshots-flash-paper {
+    opacity: 0;
   }
 }
