@@ -191,4 +191,26 @@ describe('renderSheetTimeline — the open row survives the rebuild', () => {
     expect(row.classList.contains('is-open')).toBe(false);
     list.remove();
   });
+
+  it('the row tooltip tells the truth about the NEXT click', () => {
+    const list = mountList();
+    renderSheetTimeline(list, rows, {});
+    const handlers: SheetTimelineHandlers = { onAction: () => {} };
+    wireSheetTimeline(list, handlers);
+
+    const rowOf = (key: string) =>
+      list.querySelector(`.snap-item[data-row-key="${key}"] .snap-row`) as HTMLElement;
+    expect(rowOf('v:1').getAttribute('title')).toBe('Show details');
+
+    // Open — the promise flips to the collapse the next click performs.
+    rowOf('v:1').click();
+    expect(rowOf('v:1').getAttribute('title')).toBe('Hide details');
+
+    // The accordion closing a neighbor resets ITS promise too — a
+    // tooltip that says Hide on a row that just snapped shut lies.
+    rowOf('v:2').click();
+    expect(rowOf('v:1').getAttribute('title')).toBe('Show details');
+    expect(rowOf('v:2').getAttribute('title')).toBe('Hide details');
+    list.remove();
+  });
 });

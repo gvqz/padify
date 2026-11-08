@@ -17,12 +17,35 @@ const COLLAPSE_TRANSITION_MS = 350;
 
 const transitioning = new WeakSet<HTMLElement>();
 
+/** The pending completion of the transition an element is running —
+ *  tracked so an interrupting fold can cancel it (an expand's timer
+ *  landing after a fold would re-open the menu the fold just closed). */
+const pendingCompletion = new WeakMap<HTMLElement, number>();
+
 function fire(el: HTMLElement, type: string, cancelable = false): boolean {
   return el.dispatchEvent(new CustomEvent(type, { bubbles: false, cancelable }));
 }
 
 function afterTransition(el: HTMLElement, fn: () => void): void {
-  window.setTimeout(fn, COLLAPSE_TRANSITION_MS);
+  pendingCompletion.set(
+    el,
+    window.setTimeout(() => {
+      pendingCompletion.delete(el);
+      fn();
+    }, COLLAPSE_TRANSITION_MS),
+  );
+}
+
+/** Cancels the transition an element is mid-way through — the caller
+ *  owns the element's next state, and the old completion must not land
+ *  after it. */
+function cancelPendingCompletion(el: HTMLElement): void {
+  const timer = pendingCompletion.get(el);
+  if (timer !== undefined) {
+    window.clearTimeout(timer);
+    pendingCompletion.delete(el);
+    transitioning.delete(el);
+  }
 }
 
 function expand(el: HTMLElement): void {
@@ -59,6 +82,13 @@ function collapse(el: HTMLElement): void {
   });
 }
 
+/** The trigger that opens a collapse, found the way the delegated
+ *  handler finds it: the data-target (or href) that names the element. */
+function triggerFor(el: HTMLElement): HTMLElement | null {
+  if (!el.id) return null;
+  return document.querySelector<HTMLElement>(`[data-target="#${el.id}"], a[href="#${el.id}"]`);
+}
+
 export function initCollapseBehavior(): void {
   document.addEventListener('click', (event) => {
     const target = event.target;
@@ -86,14 +116,22 @@ export function initCollapseBehavior(): void {
 
 /** Folds a collapse that a navigation is about to cover — the navbar
  *  hamburger staying open underneath a full-screen History sheet reads
- *  as a waypoint nobody dismissed. No-op when already folded or
- *  mid-transition; the trigger's aria-expanded follows. */
+ *  as a waypoint nobody dismissed. A fold that lands while an expand is
+ *  still animating CANCELS the expand's pending completion first: the
+ *  timer would fire after the fold finished and re-open the menu under
+ *  the sheet (CI caught exactly that race). No-op when already folded
+ *  and idle; the trigger's aria-expanded follows. */
 export function closeCollapse(target: ElementOrDocument | null | undefined): void {
   const el = target instanceof HTMLElement ? target : null;
-  if (!el || transitioning.has(el) || !el.classList.contains('in')) return;
+  if (!el) return;
+  const busy = transitioning.has(el);
+  if (!busy && !el.classList.contains('in')) return;
   if (!fire(el, 'hide.bs.collapse', true)) return;
-  document
-    .querySelector<HTMLElement>('[data-target="#navbar"], a[href="#navbar"]')
-    ?.setAttribute('aria-expanded', 'false');
+  triggerFor(el)?.setAttribute('aria-expanded', 'false');
+  if (busy) {
+    // An interrupted expand leaves a partial height behind — the fold
+    // animates from wherever the menu actually is.
+    cancelPendingCompletion(el);
+  }
   collapse(el);
 }

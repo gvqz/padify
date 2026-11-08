@@ -421,7 +421,7 @@ function buildItem(row: SheetRowModel, term: string, open = false): HTMLLIElemen
   const hintHtml = row.hint ? `<p class="snap-detail-hint">${escapeHtmlText(row.hint)}</p>` : '';
 
   li.innerHTML = `
-    <button type="button" class="snap-row" aria-expanded="${open ? 'true' : 'false'}" aria-controls="${detailId}" title="Show details">
+    <button type="button" class="snap-row" aria-expanded="${open ? 'true' : 'false'}" aria-controls="${detailId}" title="${open ? 'Hide details' : 'Show details'}">
       <span class="snap-when">${escapeHtmlText(formatSheetClock(row.timestamp))}</span>
       <span class="snap-rail" aria-hidden="true"></span>
       <span class="snap-what">
@@ -528,13 +528,19 @@ export function wireSheetTimeline(list: HTMLElement, handlers: SheetTimelineHand
     list.querySelectorAll('.snap-item.is-open').forEach((other) => {
       if (other !== item) {
         other.classList.remove('is-open');
-        other.querySelector('.snap-row')?.setAttribute('aria-expanded', 'false');
+        const otherRow = other.querySelector<HTMLElement>('.snap-row');
+        otherRow?.setAttribute('aria-expanded', 'false');
+        otherRow?.setAttribute('title', 'Show details');
         other.querySelector('.snap-detail')?.setAttribute('hidden', '');
       }
     });
     const open = !item.classList.contains('is-open');
     item.classList.toggle('is-open', open);
     rowButton.setAttribute('aria-expanded', String(open));
+    // The tooltip tells the truth about the NEXT click — a row that
+    // already shows its card promising "Show details" is a tooltip
+    // lying half the time.
+    rowButton.setAttribute('title', open ? 'Hide details' : 'Show details');
     item.querySelector('.snap-detail')?.toggleAttribute('hidden', !open);
   });
 }
