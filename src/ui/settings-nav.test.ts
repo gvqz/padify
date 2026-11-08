@@ -131,6 +131,49 @@ describe('settings navigation', () => {
   });
 });
 
+describe('the mobile section strip', () => {
+  /** jsdom lays nothing out — stub the strip's geometry so the edge
+   *  sync sees a scrollable row (the values mirror a 375px phone:
+   *  620px of tabs in a 374px strip). */
+  function stubStrip(nav: HTMLElement, scrollWidth: number, clientWidth: number): void {
+    Object.defineProperty(nav, 'scrollWidth', { value: scrollWidth, configurable: true });
+    Object.defineProperty(nav, 'clientWidth', { value: clientWidth, configurable: true });
+  }
+
+  it('a strip with hidden width announces it — and which edge is live', () => {
+    const nav = pane('prefNav');
+    stubStrip(nav, 620, 374);
+
+    nav.dispatchEvent(new Event('scroll'));
+
+    expect(nav.classList.contains('can-scroll')).toBe(true);
+    expect(nav.classList.contains('at-start')).toBe(true);
+    expect(nav.classList.contains('at-end')).toBe(false);
+  });
+
+  it('scrolling to the far end hands the fade to the left edge', () => {
+    const nav = pane('prefNav');
+    stubStrip(nav, 620, 374);
+    Object.defineProperty(nav, 'scrollLeft', { value: 246, configurable: true });
+
+    nav.dispatchEvent(new Event('scroll'));
+
+    expect(nav.classList.contains('at-start')).toBe(false);
+    expect(nav.classList.contains('at-end')).toBe(true);
+  });
+
+  it('a strip that fits stays silent — no fade on an honest row', () => {
+    const nav = pane('prefNav');
+    stubStrip(nav, 300, 374);
+
+    nav.dispatchEvent(new Event('scroll'));
+
+    expect(nav.classList.contains('can-scroll')).toBe(false);
+    expect(nav.classList.contains('at-start')).toBe(true);
+    expect(nav.classList.contains('at-end')).toBe(true);
+  });
+});
+
 describe('settings search', () => {
   it('a row query shows only the panes with matching rows, filtered to those rows', () => {
     type('font');

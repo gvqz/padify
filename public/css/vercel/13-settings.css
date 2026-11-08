@@ -750,16 +750,49 @@ body.dark .pref-done-btn:hover {
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;
+    /* the strip's edge fades (see .can-scroll below) anchor to it */
+    position: relative;
   }
 
   .pref-nav::-webkit-scrollbar {
     display: none;
   }
 
+  /* The strip's honest edges: it scrolls horizontally (six tabs don't
+     fit 374px) but hides its scrollbar, so the tabs past the fold read
+     as missing. settings-nav.ts toggles can-scroll / at-start / at-end
+     (on scroll, resize, and modal show); the fades sit over the strip,
+     in the modal's own surface color, and never swallow a tap. */
+  .pref-nav.can-scroll:not(.at-end)::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 26px;
+    background: linear-gradient(to right, transparent, var(--vz-bg-elevated));
+    pointer-events: none;
+  }
+
+  .pref-nav.can-scroll:not(.at-start)::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 26px;
+    background: linear-gradient(to right, var(--vz-bg-elevated), transparent);
+    pointer-events: none;
+  }
+
   .pref-nav-item {
     flex: 0 0 auto;
     width: auto;
-    padding: 7px 11px;
+    /* Touch: 7px padding over 12.5px text made ~29px items — under the
+       44px comfort line and under the strip's own rhythm. min-height
+       carries the row; the flex centering keeps the label even. */
+    min-height: 40px;
+    padding: 10px 12px;
   }
 
   .pref-nav-item.is-active::before {

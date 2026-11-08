@@ -156,6 +156,7 @@ export function initSettingsNav(): void {
   function clearSearch(): void {
     layout.classList.remove('is-searching');
     nav.removeAttribute('hidden');
+    syncNavEdges();
     for (const { pane } of sections) {
       pane.classList.remove('is-match');
       for (const row of Array.from(pane.querySelectorAll<HTMLElement>('.pref-row'))) {
@@ -219,7 +220,31 @@ export function initSettingsNav(): void {
     }
   }
 
+  /**
+   * Mobile strip honesty: when the section nav overflows its row (six
+   * tabs don't fit 374px) and hides its own scrollbar, the tabs past
+   * the fold read as missing — nothing says "keep scrolling". This
+   * toggles the edge classes the CSS fades the strip's edges with:
+   * `can-scroll` while hidden width exists, `at-start` / `at-end` for
+   * which edge the fade belongs on. The cloud tab can join late, so
+   * the check re-runs on modal show and on resize, not only on scroll.
+   */
+  function syncNavEdges(): void {
+    const overflow = nav.scrollWidth - nav.clientWidth;
+    nav.classList.toggle('can-scroll', overflow > 1);
+    nav.classList.toggle('at-start', nav.scrollLeft <= 1);
+    nav.classList.toggle('at-end', nav.scrollLeft >= overflow - 1);
+  }
+
   // ---- wiring -------------------------------------------------------------
+
+  nav.addEventListener('scroll', syncNavEdges, { passive: true });
+  window.addEventListener('resize', syncNavEdges);
+  // The strip is laid out by the time the modal finishes showing (the
+  // dialog transitions in); a resize listener alone would miss a cloud
+  // tab that appeared since the last open.
+  document.getElementById('preferencesModal')?.addEventListener('shown.bs.modal', syncNavEdges);
+  syncNavEdges();
 
   nav.addEventListener('click', (event) => {
     const button = (event.target as HTMLElement).closest('.pref-nav-item');
