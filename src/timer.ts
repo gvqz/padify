@@ -94,13 +94,12 @@ const timerModalHtml = `
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <button type="button" class="close" data-dismiss="modal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
-                    <h4 class="modal-title custom-modal-title generic-gap">
-                        Writing Session
-                        <a href="#" data-placement="bottom" data-toggle="tooltip" title="Pick a duration and the timer ticks at the bottom right corner. A chime marks the end of the session.">
-                            <img src="img/tooltip.svg" alt="Tooltip Icon" />
-                        </a>
-                    </h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close writing session"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+                    <div class="pref-header-copy">
+                        <span class="pref-eyebrow">Focus</span>
+                        <h4 class="modal-title custom-modal-title">Writing Session</h4>
+                        <p class="pref-subtitle">Pick a duration — a corner timer and a chime at the end.</p>
+                    </div>
                 </div>
                 <div class="modal-body">
                     <div id="timerSelectView">

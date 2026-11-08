@@ -42,6 +42,41 @@ test.describe('music player', () => {
     await expect(page.locator('#mpPbSub')).toHaveText('Search a song to play');
   });
 
+  test('an offline API tells one story — the notice says why, the hero stops promising songs', async ({
+    page,
+  }) => {
+    // The capabilities call answers "search is off, and here is why" —
+    // the hero under the notice used to keep advertising "Millions of
+    // songs, free", a contradiction on one screen.
+    await page.route('**/api/music/capabilities', (route) =>
+      route.fulfill({ json: { search: false, reason: 'no upstream credentials in this build' } }),
+    );
+    await page.goto('/');
+    await openPlayer(page);
+
+    await expect(page.locator('#mpSearchNotice')).toBeVisible();
+    await expect(page.locator('#mpSearchNotice')).toHaveText(
+      'no upstream credentials in this build',
+    );
+    await expect(page.locator('#mpSearchIdle .mp-search-idle-sub')).toHaveText(
+      'Search is offline here — favorites and your playlist still work.',
+    );
+    await expect(page.locator('#mpSearchIdle .mp-search-idle-sub')).not.toContainText('Millions');
+
+    // And the promise comes back when the API does: re-stub on, reopen.
+    await page.unroute('**/api/music/capabilities');
+    await page.route('**/api/music/capabilities', (route) =>
+      route.fulfill({ json: { search: true } }),
+    );
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#musicPlayerModal')).not.toHaveClass(/in/);
+    await openPlayer(page);
+    await expect(page.locator('#mpSearchNotice')).toBeHidden();
+    await expect(page.locator('#mpSearchIdle .mp-search-idle-sub')).toContainText(
+      'Millions of songs, free',
+    );
+  });
+
   test('favoriting an ambience track fills its heart everywhere it renders', async ({ page }) => {
     await page.goto('/');
     await openPlayer(page);

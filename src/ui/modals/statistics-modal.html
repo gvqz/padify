@@ -10,7 +10,7 @@
     <!-- Modal content-->
     <div class="modal-content">
       <div class="modal-header">
-        <button type="button" class="close" data-dismiss="modal">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close statistics">
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -23,7 +23,11 @@
             <path d="M6 6l12 12M18 6L6 18" />
           </svg>
         </button>
-        <h4 class="modal-title custom-modal-title">Statistics</h4>
+        <div class="pref-header-copy">
+          <span class="pref-eyebrow">Report</span>
+          <h4 class="modal-title custom-modal-title">Statistics</h4>
+          <p class="pref-subtitle">This note, by the numbers — every stat on the board at once.</p>
+        </div>
       </div>
       <div class="modal-body modal-container">
         <!-- Spoken only when there is nothing to report (empty note): the

@@ -138,6 +138,7 @@ class MusicPlayerApp {
   private readonly searchInput: HTMLInputElement;
   private readonly searchNotice: HTMLElement;
   private readonly searchIdle: HTMLElement;
+  private readonly searchIdleSub: HTMLElement;
   private readonly resultsView: HTMLElement;
   private readonly resultsList: HTMLElement;
   private readonly resultsEmpty: HTMLElement;
@@ -204,6 +205,7 @@ class MusicPlayerApp {
     this.searchInput = byId('mpSearchInput');
     this.searchNotice = byId('mpSearchNotice');
     this.searchIdle = byId('mpSearchIdle');
+    this.searchIdleSub = this.searchIdle.querySelector('.mp-search-idle-sub') as HTMLElement;
     this.resultsView = byId('mpResults');
     this.resultsList = byId('mpResultsList');
     this.resultsEmpty = byId('mpResultsEmpty');
@@ -260,6 +262,15 @@ class MusicPlayerApp {
     this.renderAmbience();
     this.restoreFreeQueue();
     this.bootstrap();
+
+    // Capabilities re-check on every open: the offline story must be
+    // able to HEAL. A check that ran only at boot keeps "search is
+    // offline" (banner + honest hero) on screen forever, even after
+    // the API came back — the open is exactly when the user asks
+    // again. One cheap GET to the local API per visit.
+    this.root.addEventListener('show.bs.modal', () => {
+      void this.checkCapabilities();
+    });
   }
 
   // ---- persistence ---------------------------------------------------------
@@ -729,13 +740,29 @@ class MusicPlayerApp {
     this.caps = await fetchMusicCapabilities();
     this.capsChecked = true;
     if (!this.caps.search) {
-      // The server's own diagnosis beats the generic "looks offline"
-      // copy — "no Spotify credentials, no yt-dlp" tells the owner what
-      // to fix; "offline" starts "spotify isn't linked" guesses.
-      this.showSearchNotice(
-        this.caps.reason ?? 'Search needs the Padify music API — it looks offline here.',
-      );
+      this.announceSearchOffline();
+    } else {
+      this.clearSearchNotice();
+      // The API came back (a re-open after the backend was fixed): the
+      // hero's promise is true again.
+      this.searchIdleSub.textContent =
+        'Millions of songs, free — no account needed. Search by song, artist or album.';
     }
+  }
+
+  /** The one offline voice: the server's own diagnosis beats the
+   *  generic "looks offline" copy ("no Spotify credentials, no
+   *  yt-dlp" tells the owner what to fix), and the idle hero must not
+   *  keep promising what the notice just denied — "Millions of songs,
+   *  free" under a banner that says search is offline is a
+   *  contradiction on one screen. Say what still works instead:
+   *  favorites and the local playlist never touch the API. */
+  private announceSearchOffline(): void {
+    this.showSearchNotice(
+      this.caps.reason ?? 'Search needs the Padify music API — it looks offline here.',
+    );
+    this.searchIdleSub.textContent =
+      'Search is offline here — favorites and your playlist still work.';
   }
 
   /** Plays a list of tracks starting at `index` through the free engine. */
@@ -976,7 +1003,7 @@ class MusicPlayerApp {
     if (!this.capsChecked) await this.checkCapabilities();
     if (seq !== this.searchSeq) return; // a newer keystroke won
     if (!this.caps.search) {
-      this.showSearchNotice('Search needs the Padify music API — it looks offline here.');
+      this.announceSearchOffline();
       return;
     }
     this.clearSearchNotice();

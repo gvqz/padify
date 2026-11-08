@@ -233,8 +233,20 @@ body.dark .ucp-modal .modal-content {
   font-size: 14px;
 }
 
+/* Long names ("Superscripts & Subscripts") don't shrink below their
+   min-content in a flex row, so the count badge rode past the row's
+   right edge — measured 7px over on seven categories. The name yields
+   (shrink, clip, ellipsis); the badge never does. */
+.ucp-cat-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ucp-cat-count {
   margin-left: auto;
+  flex: 0 0 auto;
   font-size: 10px;
   color: var(--ucp-muted);
   background: var(--ucp-chip);
