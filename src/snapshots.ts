@@ -77,6 +77,7 @@
  *    snapshots from the store too (deleteSnapshotsForNotes).
  */
 import { $ } from './lib/q';
+import { closeCollapse } from './ui/behavior/collapse';
 import { openModal } from './ui/behavior/modal';
 import { getActiveNoteContent, getEditorText, getTabManager, htmlToText } from './tabs';
 import {
@@ -98,7 +99,6 @@ import { updateWordCountPill } from './word-count-pill';
 import { TRASH_RETENTION_MS } from '../shared/wire';
 import type { TrashedNote } from './storage';
 import {
-  escapeHtmlText,
   renderSheetTimeline,
   wireSheetTimeline,
   type SheetRowModel,
@@ -444,15 +444,17 @@ const SNAPSHOT_TITLE_PREFIX: Partial<Record<string, RegExp>> = {
 /** Truncation that lands on a word boundary — a hard slice feeding a
  *  CSS ellipsis reads as a mid-word cut, and a title is a word thing.
  *  A boundary suspiciously early (a long single word) falls back to the
- *  hard cut; the cap holds either way. */
+ *  hard cut; the cap holds either way. The ellipsis is the SINGLE
+ *  character — the same one CSS text-overflow paints — so a derive-capped
+ *  line and a container-clipped line end the same way in one list. */
 function capAtWordBoundary(text: string, cap: number): string {
   if (text.length <= cap) {
     return text;
   }
-  const cut = text.slice(0, cap - 3);
+  const cut = text.slice(0, cap - 1);
   const boundary = cut.lastIndexOf(' ');
   const head = boundary > cap / 2 ? cut.slice(0, boundary) : cut;
-  return `${head.trimEnd()}...`;
+  return `${head.trimEnd()}\u2026`;
 }
 
 /**
@@ -836,7 +838,7 @@ export class SnapshotsManager {
   setupEventListeners(): void {
     // Open the History sheet — a fresh read every time, because the
     // store (and the trash) may have moved under a stale render.
-    const openSheet = (): void => {
+    const openSheet = (event?: Event): void => {
       this.wireTabsListener();
       // Every open answers the note on stage — the default view is THIS
       // note's chain — unless a delete just made a promise: the flash on
@@ -848,7 +850,15 @@ export class SnapshotsManager {
       // A leftover armed destructive from a previous visit must not
       // survive into a new one — the arm is a gesture, not a state.
       this.scopeDeleteConfirm.disarm();
-      openModal($('#snapshotsModal').get(0));
+      // On a phone the History button lives in the hamburger's collapse;
+      // fold it — a menu still standing under a full-screen sheet reads
+      // as a waypoint nobody dismissed.
+      closeCollapse(document.getElementById('navbar'));
+      // The opener rides along so the sheet's close returns focus to
+      // the button that opened it (the keyboard's way in deserves the
+      // keyboard's way back; the modal layer owns the restore).
+      const opener = event?.currentTarget instanceof HTMLElement ? event.currentTarget : undefined;
+      openModal($('#snapshotsModal').get(0), opener);
       // Paint from the cache the moment the sheet asks for it — the
       // reader's first clicks land on a list that is already there,
       // not on one an async re-read is about to replace (a rebuild
@@ -1073,6 +1083,9 @@ export class SnapshotsManager {
   }
 
   /** A compact fingerprint of everything the sheet's rows derive from:
+   *  the ACTIVE NOTE (the note view's subject — the tab-cycle shortcuts
+   *  can switch it under an open sheet without moving a single row of
+   *  data, and a stale chain under "Versions of this note" is a lie),
    *  the graves (id + arrival time) and the version cache (id + capture
    *  time). Snapshots and graves are immutable once written, so presence
    *  and identity fully determine the rows; order is normalized away
@@ -1087,7 +1100,8 @@ export class SnapshotsManager {
       .map(({ snapshot }) => `${snapshot.id ?? '?'}@${snapshot.timestamp}`)
       .sort()
       .join(',');
-    return `${gravePart}#${cachePart}`;
+    const activePart = getTabManager()?.getActive()?.id ?? '-';
+    return `${activePart}#${gravePart}#${cachePart}`;
   }
 
   /** A note moved to the trash (app.ts wires the tab model's listener
@@ -1109,13 +1123,22 @@ export class SnapshotsManager {
     if (kind === 'restore' && rowKind === 't') {
       // A trash row's Restore: the note returns under its own id at the
       // end of the strip; the sheet stays open — closing is the user's
-      // move.
+      // move. The grave is read BEFORE the restore: restoreNote fires
+      // the persist listeners synchronously, the re-render drops the
+      // row, and a DOM title lookup after it finds nothing — the toast
+      // used to mourn an anonymous "The note".
       const manager = getTabManager();
+      const grave = manager?.getTrashed().find((entry) => entry.id === id);
       if (manager?.restoreNote(id)) {
-        const title =
-          document.querySelector(`.snap-item[data-row-key="${CSS.escape(key)}"] .snap-name`)
-            ?.textContent ?? 'The note';
-        showToast(`"${title}" is back in the notes list.`, 'success');
+        // The same title the row wore (the note's name, or its first
+        // line) — the toast says who came back.
+        const title = grave ? trashRowModel(grave).title : null;
+        showToast(
+          title
+            ? `\u201c${title}\u201d is back in the notes list.`
+            : 'The note is back in the notes list.',
+          'success',
+        );
         this.renderRows(this.currentSearchTerm());
       }
       return;
@@ -1911,7 +1934,11 @@ export class SnapshotsManager {
     };
   }
 
-  // Copy a snapshot content to clipboard
+  // Copy a snapshot's content to the clipboard — the READABLE text, the
+  // same projection the detail card above the button shows. The raw
+  // content is a storage format (html markup for text notes, a JSON
+  // envelope for drawings); pasting `<div>` tags or scene braces into
+  // another app answers a question nobody asked.
   copySnapshot(snapshotId: number | undefined, buttonElement: Element): void {
     if (snapshotId === undefined || !this.db) return;
 
@@ -1922,9 +1949,10 @@ export class SnapshotsManager {
     request.onsuccess = (event) => {
       const snapshot = (event.target as IDBRequest).result as Snapshot | undefined;
       if (snapshot) {
+        const readable = snapshotReadableText(snapshot.content, snapshot.noteType);
         // Use the Clipboard API
         navigator.clipboard
-          .writeText(snapshot.content)
+          .writeText(readable)
           .then(() => {
             this.showCopySuccess(buttonElement);
           })
@@ -1932,7 +1960,7 @@ export class SnapshotsManager {
             console.error('Failed to copy text: ', err);
             // Fallback for older browsers
             const textArea = document.createElement('textarea');
-            textArea.value = snapshot.content;
+            textArea.value = readable;
             document.body.appendChild(textArea);
             textArea.select();
             document.execCommand('copy');
@@ -1953,7 +1981,7 @@ export class SnapshotsManager {
   showCopySuccess(button: Element): void {
     const originalHTML = button.innerHTML;
     button.innerHTML =
-      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <polyline points="20 6 9 17 4 12"></polyline> </g></svg>';
+      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
 
     setTimeout(() => {
       button.innerHTML = originalHTML;
@@ -2031,12 +2059,6 @@ export class SnapshotsManager {
       console.error('Error deleting all snapshots', event);
       showToast('Error deleting snapshots');
     };
-  }
-
-  // Helper to escape HTML
-  escapeHtml(unsafe: string | null | undefined): string {
-    if (!unsafe) return '';
-    return escapeHtmlText(unsafe.toString());
   }
 }
 

@@ -248,7 +248,9 @@
 .snap-search-meta {
   flex: 0 0 auto;
   font-size: 10.5px;
-  color: var(--vz-fg-subtle);
+  /* fg-muted — the hits count is the answer to "is anything left?", read
+     mid-filter; subtle fell under AA at this size. */
+  color: var(--vz-fg-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -494,7 +496,10 @@ body.dark .snap-chip.is-danger {
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: var(--vz-fg-subtle);
+  /* fg-muted, not fg-subtle: this is the smallest type on the sheet, and
+     subtle measured 3.55:1 on light / 4.31:1 on dark — under WCAG AA at
+     any size. The day anchors are structure, not garnish. */
+  color: var(--vz-fg-muted);
 }
 
 .snap-timeline > .snap-day:first-child {
@@ -602,7 +607,9 @@ body.dark .snap-chip.is-danger {
   padding-top: 2px;
   font-size: 11px;
   line-height: 1.45;
-  color: var(--vz-fg-subtle);
+  /* fg-muted for the same AA reason as the day labels — the clock is the
+     row's anchor, and an anchor you cannot read is decoration. */
+  color: var(--vz-fg-muted);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
   white-space: nowrap;
@@ -619,7 +626,9 @@ body.dark .snap-chip.is-danger {
 .snap-line {
   display: flex;
   align-items: center;
-  gap: 6px;
+  /* 8px — the chips that follow the name need daylight from the bold
+     title they annotate; 6px read as a near-touch at 10.5px chip size. */
+  gap: 8px;
   min-width: 0;
 }
 
@@ -774,7 +783,8 @@ body.dark .snap-chip.is-danger {
   gap: 6px;
   margin-top: 9px;
   font-size: 11px;
-  color: var(--vz-fg-subtle);
+  /* fg-muted — 11px facts (the full date, the type) under AA in subtle. */
+  color: var(--vz-fg-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -873,7 +883,10 @@ body.dark .snap-chip.is-danger {
   margin: 9px 0 0;
   font-size: 11px;
   line-height: 1.5;
-  color: var(--vz-fg-subtle);
+  /* fg-muted — the hint is the one sentence that says where a restore
+     lands; it must survive the card's subtle fill (subtle-on-subtle
+     measured under AA in both themes). */
+  color: var(--vz-fg-muted);
 }
 
 /* ---- footer ----------------------------------------------------------------- */
@@ -890,7 +903,9 @@ body.dark .snap-chip.is-danger {
 
 .snap-foot-count {
   font-size: 11.5px;
-  color: var(--vz-fg-subtle);
+  /* fg-muted — the footer's count line is the view's ledger; subtle
+     measured 3.55:1 light / 4.31:1 dark, under AA at this size. */
+  color: var(--vz-fg-muted);
   font-variant-numeric: tabular-nums;
 }
 

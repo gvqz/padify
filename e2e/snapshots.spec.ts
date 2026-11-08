@@ -148,6 +148,22 @@ test.describe('the rebuilt menu', () => {
     expect(box!.height, 'the sheet owns the full viewport height').toBeGreaterThanOrEqual(790);
   });
 
+  test('the sheet takes focus on open and hands it back on close', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#snapshotsButton').click();
+    await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
+
+    // Focus moved INTO the dialog once the slide settles — a keyboard
+    // user's Tab walks the sheet, not the page buried behind it.
+    await expect(page.locator('#snapshotsModal')).toBeFocused();
+
+    // Closing returns focus to the button that opened the sheet — the
+    // keyboard's way in deserves the keyboard's way back.
+    await page.locator('#snapshotsModal .snap-head .close').click();
+    await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
+    await expect(page.locator('#snapshotsButton')).toBeFocused();
+  });
+
   test('the take button snapshots the active note and refreshes the count', async ({ page }) => {
     await page.goto('/');
     await openSnapshots(page);
@@ -222,6 +238,34 @@ test.describe('the rebuilt menu', () => {
     await expect(snapshotRows(page)).toHaveCount(1);
   });
 
+  test('the note view follows the note — a switch under an open sheet re-answers it', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const editor = page.locator('#note');
+
+    // Two notes, one snapshot each, titled by their single line.
+    await editor.click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('first note body');
+    await page.keyboard.press('Control+U');
+    await page.locator('#addTab').click();
+    await page.keyboard.type('second note body');
+    await page.keyboard.press('Control+U');
+
+    await openSnapshots(page);
+    // The sheet answers the note on stage.
+    await expect(snapshotRows(page).first().locator('.snap-name')).toHaveText('second note body');
+
+    // The tab-cycle shortcut can switch the note under an open sheet —
+    // the rows, the Current chip and the subtitle's subject are answers
+    // about the ACTIVE note, and a stale chain under "Versions of this
+    // note" would be a lie.
+    await page.keyboard.press('Control+Alt+ArrowLeft');
+    await expect(editor).toContainText('first note body');
+    await expect(snapshotRows(page).first().locator('.snap-name')).toHaveText('first note body');
+  });
+
   test('closing a background tab trashes it — the History sheet holds it one click from restored', async ({
     page,
   }) => {
@@ -256,7 +300,12 @@ test.describe('the rebuilt menu', () => {
     await expandRow(page, trashRow);
     await trashRow.locator('[data-sheet-action="restore"]').click();
     await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(2);
-    await expect(page.locator('#toast')).toContainText('back in the notes list');
+    // The toast NAMES who came back — the grave's own title, not an
+    // anonymous "The note" (the restore re-renders the rows away; the
+    // name is read before it goes).
+    await expect(page.locator('#toast')).toHaveText(
+      '\u201cbackground note body\u201d is back in the notes list.',
+    );
   });
 
   test("the delete toast's Undo restores the note without opening anything", async ({ page }) => {
@@ -1127,6 +1176,29 @@ test.describe('the day-anchored timeline', () => {
     await expect(row.locator('[data-sheet-action="delete"]')).toHaveCount(0);
   });
 
+  test('copy content copies the READABLE text — the card above the button, not the markup under it', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('plain words to copy');
+    await page.keyboard.press('Control+U');
+    await openSnapshots(page);
+
+    const row = snapshotRows(page).first();
+    await expandRow(page, row);
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await row.locator('[data-sheet-action="copy"]').click();
+
+    // The clipboard holds the same projection the detail card shows —
+    // words, never the html bytes they are stored as (and never a
+    // drawing's JSON envelope, for the kinds that wear one).
+    const clipped = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipped).toContain('plain words to copy');
+    expect(clipped).not.toContain('<');
+  });
+
   test('the footer tells the whole story: the chain, the store, the cap', async ({ page }) => {
     await page.goto('/');
     await openSnapshots(page);
@@ -1181,6 +1253,12 @@ test.describe('the day-anchored timeline', () => {
     // The navbar collapses its tools behind the hamburger at this width.
     await page.locator('.navbar-toggle').click();
     await openSnapshots(page);
+
+    // Opening the sheet folds the hamburger — a menu still standing
+    // under a full-screen sheet is a waypoint nobody dismissed, and its
+    // toggle must say so too.
+    await expect(page.locator('#navbar')).not.toHaveClass(/in/);
+    await expect(page.locator('.navbar-toggle')).toHaveAttribute('aria-expanded', 'false');
 
     // The sheet is the whole screen.
     const dialog = page.locator('#snapshotsModal .modal-dialog');

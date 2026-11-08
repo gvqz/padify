@@ -11,6 +11,8 @@
  * from the stylesheet's .collapsing rule.
  */
 
+import type { ElementOrDocument } from '../../lib/q';
+
 const COLLAPSE_TRANSITION_MS = 350;
 
 const transitioning = new WeakSet<HTMLElement>();
@@ -72,10 +74,26 @@ export function initCollapseBehavior(): void {
     event.preventDefault();
     if (el.classList.contains('in')) {
       if (!fire(el, 'hide.bs.collapse', true)) return;
+      trigger.setAttribute('aria-expanded', 'false');
       collapse(el);
     } else {
       if (!fire(el, 'show.bs.collapse', true)) return;
+      trigger.setAttribute('aria-expanded', 'true');
       expand(el);
     }
   });
+}
+
+/** Folds a collapse that a navigation is about to cover — the navbar
+ *  hamburger staying open underneath a full-screen History sheet reads
+ *  as a waypoint nobody dismissed. No-op when already folded or
+ *  mid-transition; the trigger's aria-expanded follows. */
+export function closeCollapse(target: ElementOrDocument | null | undefined): void {
+  const el = target instanceof HTMLElement ? target : null;
+  if (!el || transitioning.has(el) || !el.classList.contains('in')) return;
+  if (!fire(el, 'hide.bs.collapse', true)) return;
+  document
+    .querySelector<HTMLElement>('[data-target="#navbar"], a[href="#navbar"]')
+    ?.setAttribute('aria-expanded', 'false');
+  collapse(el);
 }

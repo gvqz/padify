@@ -120,7 +120,13 @@ export function openModal(
   el.classList.add('in');
 
   window.setTimeout(() => {
-    el.focus();
+    // Focus lands in the dialog when it opens — unless the user already
+    // moved focus somewhere inside it during the fade (a "/" shortcut
+    // into a search field, a Tab): the delayed focus() must not steal
+    // it back from the element the user chose.
+    if (!el.contains(document.activeElement)) {
+      el.focus();
+    }
     fire(el, 'shown.bs.modal');
   }, fadeDelay(el));
 }

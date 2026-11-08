@@ -488,7 +488,9 @@ export function renderSheetTimeline(
   if (flashed) {
     list.querySelector('.snap-item.is-new')?.scrollIntoView({
       block: 'nearest',
-      behavior: 'smooth',
+      // Smooth is a motion; the reduced-motion preference owns it (CSS
+      // cannot reach a JS scrollIntoView).
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
     });
   }
 }

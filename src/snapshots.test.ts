@@ -594,14 +594,16 @@ describe('deriveSnapshotTitle / deriveSnapshotPreview — per-kind copy', () => 
     const long = 'x'.repeat(80);
     const title = deriveSnapshotTitle(`<div>${long}</div>`);
     expect(title.length).toBe(50);
-    expect(title.endsWith('...')).toBe(true);
+    expect(title.endsWith('\u2026')).toBe(true);
   });
 
   it('the cap lands on a word boundary — a mid-word cut reads as a rendering bug', () => {
     const title = deriveSnapshotTitle(`<div>${'word '.repeat(20)}</div>`);
-    expect(title.endsWith('...')).toBe(true);
-    // Nine whole words, not nine and a fraction.
-    expect(title).toBe('word word word word word word word word word...');
+    expect(title.endsWith('\u2026')).toBe(true);
+    // Nine whole words, not nine and a fraction. The single-character
+    // ellipsis matches what CSS text-overflow paints — one list, one
+    // truncation glyph.
+    expect(title).toBe('word word word word word word word word word\u2026');
   });
 
   it('non-html kinds title from their readable first line — a section of type labels is a section of twins', () => {
@@ -665,7 +667,7 @@ describe('deriveSnapshotTitle / deriveSnapshotPreview — per-kind copy', () => 
   it('previews cap at 100 characters', () => {
     const preview = deriveSnapshotPreview(`<div>${'y'.repeat(150)}</div>`);
     expect(preview.length).toBe(100);
-    expect(preview.endsWith('...')).toBe(true);
+    expect(preview.endsWith('\u2026')).toBe(true);
   });
 
   it('markdown previews its raw source; empties say so', () => {
