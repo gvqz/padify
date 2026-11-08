@@ -774,6 +774,11 @@ export class SnapshotsManager {
    *  merge, the delete toast's Undo). */
   private wiredTabsListener = false;
 
+  /** Fingerprint of the row data the LAST renderRows painted (see
+   *  rowsFingerprint). A persist that moves nothing the sheet shows
+   *  must not rebuild the list — see wireTabsListener. */
+  private renderedFingerprint: string | null = null;
+
   constructor() {
     this.dbName = 'NotepadSnapshotsDB';
     this.storeName = 'snapshots';
@@ -844,6 +849,17 @@ export class SnapshotsManager {
       // survive into a new one — the arm is a gesture, not a state.
       this.scopeDeleteConfirm.disarm();
       openModal($('#snapshotsModal').get(0));
+      // Paint from the cache the moment the sheet asks for it — the
+      // reader's first clicks land on a list that is already there,
+      // not on one an async re-read is about to replace (a rebuild
+      // under an in-flight click can eat it: the delegated accordion
+      // then reads the replaced row as never opened). A fresh open
+      // also RESETS expansion: a row left open by the previous visit
+      // must not come back pre-expanded — the reader's first click on
+      // it would read as a toggle-to-CLOSE (expandRow is a toggle).
+      // The store read below still owns the truth — if it moved, it
+      // re-renders, with any row opened THIS visit carried over.
+      this.renderRows(this.currentSearchTerm(), { resetOpen: true });
       // Honor the search field's leftover text — reopening used to show the
       // unfiltered list under a stale query.
       void this.loadSnapshots(this.currentSearchTerm());
@@ -1038,9 +1054,40 @@ export class SnapshotsManager {
     this.wiredTabsListener = true;
     manager.addPersistListener(() => {
       if (document.getElementById('snapshotsModal')?.classList.contains('in')) {
-        this.renderRows(this.currentSearchTerm());
+        // A persist that moved nothing the sheet shows must not rebuild
+        // the list. The everyday case is typing's debounce landing under
+        // an open sheet: the rows would come back byte-identical, and a
+        // rebuild under an in-flight click replaces the very node the
+        // click is landing on — the delegated accordion then reads the
+        // replaced row as never opened (CI caught this as a Restore
+        // click on a button that never became visible again). Graves
+        // and versions are the only row inputs a persist can move; the
+        // Current chip reads the note's LIVE content, which the open
+        // already painted. Sync merges, the toast's Undo and purges all
+        // move graves and DO re-render (with the open row carried over).
+        if (this.rowsFingerprint() !== this.renderedFingerprint) {
+          this.renderRows(this.currentSearchTerm());
+        }
       }
     });
+  }
+
+  /** A compact fingerprint of everything the sheet's rows derive from:
+   *  the graves (id + arrival time) and the version cache (id + capture
+   *  time). Snapshots and graves are immutable once written, so presence
+   *  and identity fully determine the rows; order is normalized away
+   *  because renderRows sorts by its own rules anyway. */
+  private rowsFingerprint(): string {
+    const graves = getTabManager()?.getTrashed() ?? [];
+    const gravePart = graves
+      .map((grave) => `${grave.id}@${grave.deletedAt}`)
+      .sort()
+      .join(',');
+    const cachePart = this.cache
+      .map(({ snapshot }) => `${snapshot.id ?? '?'}@${snapshot.timestamp}`)
+      .sort()
+      .join(',');
+    return `${gravePart}#${cachePart}`;
   }
 
   /** A note moved to the trash (app.ts wires the tab model's listener
@@ -1412,7 +1459,15 @@ export class SnapshotsManager {
       snapshot,
       searchText: snapshotSearchText(snapshot),
     }));
-    this.renderRows(searchTerm);
+    // The read is async; the sheet may already paint exactly what it
+    // answers (openSheet's synchronous render, a refresh landing after
+    // its own flash). Rows the rebuild would paint byte-identical must
+    // not be rebuilt: a rebuild under the reader's cursor replaces the
+    // very node an in-flight click is landing on. Render on movement
+    // only — the fingerprint (graves + versions) is what the rows are.
+    if (this.rowsFingerprint() !== this.renderedFingerprint) {
+      this.renderRows(searchTerm);
+    }
   }
 
   /** The change badge of every row that has one — computed against the
@@ -1492,10 +1547,18 @@ export class SnapshotsManager {
     };
   }
 
-  // Render the current view through the sheet kit: the active note's
-  // chain (note), every note's versions (all), or the graves (trash).
-  // Day runs anchor the rail in every view; only the ROW SET changes.
-  private renderRows(searchTerm: string = ''): void {
+  /** Renders the current view through the sheet kit: the active note's
+   *  chain (note), every note's versions (all), or the graves (trash).
+   *  Day runs anchor the rail in every view; only the ROW SET changes.
+   *
+   *  `resetOpen` is the fresh-open contract: a new visit starts
+   *  collapsed (the DOM keeps the last visit's expansion, and a
+   *  carried-open row would make the reader's first click a
+   *  toggle-to-CLOSE); every in-session re-render — a persist, a
+   *  capture, the open's own async store read — carries the open row
+   *  across instead, so a background refresh rebuilds the list around
+   *  the reader. */
+  private renderRows(searchTerm: string = '', opts: { resetOpen?: boolean } = {}): void {
     const list = document.getElementById('snapshotsList');
     const empty = document.getElementById('noSnapshots');
     if (!list || !empty) {
@@ -1553,11 +1616,26 @@ export class SnapshotsManager {
 
     const rows: SheetRowModel[] = this.segment === 'trash' ? trashModels : versionModels;
 
+    // A re-render must not snap shut the row the user is reading: the
+    // sheet re-renders when a save lands underneath it (wireTabsListener
+    // — a sync merge, the delete toast's Undo, an in-flight debounce
+    // from the typing that OPENED the sheet), and a rebuilt list used
+    // to come back fully collapsed, mid-read. Carry the open row's key
+    // across the rebuild; a key that no longer exists renders closed.
+    const openRow = opts.resetOpen
+      ? null
+      : (list.querySelector<HTMLElement>('.snap-item.is-open') as HTMLElement | null);
+    const openKey = openRow?.dataset.rowKey ?? null;
+
     renderSheetTimeline(list, rows, {
       term: filtering ? term : '',
       flashKey: this.pendingFlashKey,
+      openKey,
     });
     this.pendingFlashKey = null;
+    // What the rows now derive from — the persist listener compares
+    // against this to skip rebuilds that would paint the same list.
+    this.renderedFingerprint = this.rowsFingerprint();
 
     // The header's one line follows the view (and, in the note view, the
     // note itself — a restore that switches notes re-names the sheet).

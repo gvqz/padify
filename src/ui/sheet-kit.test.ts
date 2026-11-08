@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   escapeHtmlText,
   highlightMatches,
+  renderSheetTimeline,
   sheetDayGroups,
   sheetDayKey,
   sheetDayLabel,
   formatSheetClock,
+  wireSheetTimeline,
+  type SheetRowModel,
+  type SheetTimelineHandlers,
 } from './sheet-kit';
 
 /**
@@ -115,5 +119,76 @@ describe('sheetDayGroups — always anchored', () => {
 
   it('empty rows answer no groups', () => {
     expect(sheetDayGroups([], now)).toEqual([]);
+  });
+});
+
+describe('renderSheetTimeline — the open row survives the rebuild', () => {
+  // The sheet re-renders when a save lands underneath it; the reader's
+  // expanded row must come back expanded. This is the contract the
+  // snapshots manager leans on (it reads the open key off the old DOM
+  // and hands it back) — pinned here at the kit level.
+  const baseRow = (key: string, title: string): SheetRowModel => ({
+    key,
+    timestamp: new Date(2026, 9, 25, 12, 0, 0).getTime(),
+    title,
+    detailText: `${title} body`,
+    detailMeta: ['October 25, 2026', 'Plain note'],
+  });
+
+  const rows = [baseRow('v:1', 'First version'), baseRow('v:2', 'Second version')];
+
+  function mountList(): HTMLElement {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    return list;
+  }
+
+  it('openKey renders that row expanded — class, aria, and detail all agree', () => {
+    const list = mountList();
+    renderSheetTimeline(list, rows, { openKey: 'v:2' });
+
+    const open = list.querySelector('.snap-item[data-row-key="v:2"]') as HTMLElement;
+    expect(open.classList.contains('is-open')).toBe(true);
+    expect(open.querySelector('.snap-row')?.getAttribute('aria-expanded')).toBe('true');
+    expect(open.querySelector('.snap-detail')?.hasAttribute('hidden')).toBe(false);
+
+    const closed = list.querySelector('.snap-item[data-row-key="v:1"]') as HTMLElement;
+    expect(closed.classList.contains('is-open')).toBe(false);
+    expect(closed.querySelector('.snap-row')?.getAttribute('aria-expanded')).toBe('false');
+    expect(closed.querySelector('.snap-detail')?.hasAttribute('hidden')).toBe(true);
+    list.remove();
+  });
+
+  it('a key that no longer exists quietly renders everything closed', () => {
+    const list = mountList();
+    renderSheetTimeline(list, rows, { openKey: 'v:gone' });
+    expect(list.querySelector('.snap-item.is-open')).toBeNull();
+    list.remove();
+  });
+
+  it('the restored open state still answers the accordion click', () => {
+    const list = mountList();
+    renderSheetTimeline(list, rows, { openKey: 'v:1' });
+    const handlers: SheetTimelineHandlers = { onAction: () => {} };
+    wireSheetTimeline(list, handlers);
+
+    // Clicking the open row closes it (the toggle reads the same
+    // is-open class the render restored — a half-restored state would
+    // desync the accordion).
+    (list.querySelector('.snap-item[data-row-key="v:1"] .snap-row') as HTMLElement).click();
+    const row = list.querySelector('.snap-item[data-row-key="v:1"]') as HTMLElement;
+    expect(row.classList.contains('is-open')).toBe(false);
+    expect(row.querySelector('.snap-detail')?.hasAttribute('hidden')).toBe(true);
+
+    // And clicking a closed row opens it, closing the other — one open
+    // at a time still holds after a carried-open render.
+    (list.querySelector('.snap-item[data-row-key="v:2"] .snap-row') as HTMLElement).click();
+    expect(
+      (list.querySelector('.snap-item[data-row-key="v:2"]') as HTMLElement).classList.contains(
+        'is-open',
+      ),
+    ).toBe(true);
+    expect(row.classList.contains('is-open')).toBe(false);
+    list.remove();
   });
 });

@@ -168,6 +168,48 @@ test.describe('the rebuilt menu', () => {
     await expect(snapshotRows(page).first().locator('.snap-note')).toHaveCount(0);
   });
 
+  test('a save landing under the open sheet keeps the row the reader expanded', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    // A version on the welcome note — the row the reader will expand.
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+    await toastSays(page, 'Snapshot created!');
+
+    // A second note with words of its own, then into the trash. The
+    // delete toast's Undo (six seconds of life) is a persist this test
+    // fires ON PURPOSE, while the sheet is open and a row is expanded.
+    await page.locator('#addTab').click();
+    await page.locator('#note').click();
+    await page.keyboard.type('second note words');
+    await page.locator('#tabStripTabs .tab-strip-tab').nth(1).click({ button: 'right' });
+    await page.locator('#noteCtxMenu [data-action="close"]').click();
+
+    // History opens on its trash view (the delete's promise); widen to
+    // the one timeline and expand the version row.
+    await openSnapshots(page);
+    await pickSegment(page, 'all');
+    const versionRow = snapshotRows(page).first();
+    await expandRow(page, versionRow);
+
+    // The Undo lands: the note is back, a persist fires, the graves the
+    // sheet shows moved — the list MUST re-render around the reader
+    // (the row that was open comes back open, not snapped shut under
+    // the cursor). A no-op persist — typing's debounce — must not
+    // rebuild at all; CI caught the original as a Restore click on a
+    // button that never became visible again.
+    await page.locator('#toast .toast-action').click();
+    await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(2);
+
+    await expect(versionRow.locator('.snap-detail')).toBeVisible();
+    await expect(versionRow.locator('.snap-row')).toHaveAttribute('aria-expanded', 'true');
+
+    // And the action the reader came for still lands on the rebuilt DOM.
+    await versionRow.locator('.restore').click();
+    await toastSays(page, 'Snapshot restored!');
+  });
+
   test('the keyboard shortcut works with the sheet closed', async ({ page }) => {
     await page.goto('/');
     const editor = page.locator('#note');

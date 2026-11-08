@@ -351,6 +351,14 @@ export interface RenderSheetOptions {
   term?: string;
   /** The row that just landed — it flashes once and scrolls into view. */
   flashKey?: string | null;
+  /** The row that should render EXPANDED — its detail card open, its
+   *  row button aria-expanded. A re-render must not snap shut the row
+   *  the user is reading: the caller reads the open row's key off the
+   *  old DOM and hands it back, so a background refresh (a save that
+   *  lands under an open sheet) rebuilds the list around the reader
+   *  instead of collapsing it. A key that no longer exists (the row
+   *  was purged) quietly renders everything closed. */
+  openKey?: string | null;
 }
 
 /** The action glyph for the kit's icon-only buttons. */
@@ -375,10 +383,13 @@ function renderActions(actions: SheetRowAction[] | undefined, rowKey: string): s
   return `<div class="snap-detail-actions">${buttons.join('')}</div>`;
 }
 
-/** Builds one timeline entry's DOM — the skeleton every sheet shares. */
-function buildItem(row: SheetRowModel, term: string): HTMLLIElement {
+/** Builds one timeline entry's DOM — the skeleton every sheet shares.
+ *  `open` renders the entry expanded (the state wireSheetTimeline's row
+ *  click toggles): the accordion is one-open-at-a-time by construction,
+ *  so a re-render carrying the open key restores exactly that state. */
+function buildItem(row: SheetRowModel, term: string, open = false): HTMLLIElement {
   const li = document.createElement('li');
-  li.className = `snap-item${row.trash ? ' is-trash' : ''}${row.current ? ' is-current' : ''}`;
+  li.className = `snap-item${row.trash ? ' is-trash' : ''}${row.current ? ' is-current' : ''}${open ? ' is-open' : ''}`;
   li.dataset.rowKey = row.key;
 
   const titleHtml = term ? highlightMatches(row.title, term) : escapeHtmlText(row.title);
@@ -410,7 +421,7 @@ function buildItem(row: SheetRowModel, term: string): HTMLLIElement {
   const hintHtml = row.hint ? `<p class="snap-detail-hint">${escapeHtmlText(row.hint)}</p>` : '';
 
   li.innerHTML = `
-    <button type="button" class="snap-row" aria-expanded="false" aria-controls="${detailId}" title="Show details">
+    <button type="button" class="snap-row" aria-expanded="${open ? 'true' : 'false'}" aria-controls="${detailId}" title="Show details">
       <span class="snap-when">${escapeHtmlText(formatSheetClock(row.timestamp))}</span>
       <span class="snap-rail" aria-hidden="true"></span>
       <span class="snap-what">
@@ -424,7 +435,7 @@ function buildItem(row: SheetRowModel, term: string): HTMLLIElement {
         ${deltaHtml}
       </span>
     </button>
-    <div class="snap-detail" id="${detailId}" role="region" aria-label="Details" hidden>
+    <div class="snap-detail" id="${detailId}" role="region" aria-label="Details"${open ? '' : ' hidden'}>
       <div class="snap-detail-text">${escapeHtmlText(capped) || 'No content'}</div>
       ${metaHtml ? `<div class="snap-detail-meta">${metaHtml}</div>` : ''}
       ${renderActions(row.actions, row.key)}
@@ -439,7 +450,8 @@ function buildItem(row: SheetRowModel, term: string): HTMLLIElement {
  * trims that break the rail's line at day boundaries, the flash on the
  * just-landed row, and the scroll that brings it into view. Rows carry
  * no listeners of their own — wireSheetTimeline's one delegated pair
- * covers every row a render can produce.
+ * covers every row a render can produce. `opts.openKey` re-opens the
+ * row that was open before the rebuild (see RenderSheetOptions).
  */
 export function renderSheetTimeline(
   list: HTMLElement,
@@ -447,6 +459,7 @@ export function renderSheetTimeline(
   opts: RenderSheetOptions = {},
 ): void {
   const term = (opts.term ?? '').trim().toLowerCase();
+  const openKey = opts.openKey ?? null;
   list.textContent = '';
 
   let flashed = false;
@@ -457,7 +470,7 @@ export function renderSheetTimeline(
     list.appendChild(dayHeader);
 
     group.rows.forEach((row, index) => {
-      const li = buildItem(row, term);
+      const li = buildItem(row, term, row.key === openKey);
       if (index === 0) {
         li.classList.add('group-start');
       }
