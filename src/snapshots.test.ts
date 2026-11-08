@@ -1,10 +1,16 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { TRASH_RETENTION_MS } from '../shared/wire';
 import {
+  HISTORY_TRASH_REDIRECT_MS,
   MAX_SNAPSHOTS,
   deriveSnapshotPreview,
   deriveSnapshotTitle,
   formatSnapshotTimestamp,
+  historyFooterText,
+  historyOpeningSegment,
+  historyScopeDeleteLabels,
+  historySubtitle,
   isCurrentSnapshotState,
   isRestorableGrave,
   isSameSnapshotState,
@@ -16,6 +22,7 @@ import {
   snapshotReadableText,
   snapshotSearchText,
   snapshotTypeBadgeLabel,
+  trashDaysLeft,
   trashRetentionChip,
   trashRowModel,
   trashRowSearchText,
@@ -973,5 +980,164 @@ describe('trashRowSearchText — the trash answers the same field', () => {
     };
     expect(trashRowSearchText(grave)).not.toContain('<div>');
     expect(trashRowSearchText(grave).includes('div')).toBe(false);
+  });
+});
+
+describe('historyOpeningSegment — the delete’s promise, once', () => {
+  it('no delete, or a stale one, opens on the note being written', () => {
+    expect(historyOpeningSegment(null)).toBe('note');
+    // Freshly stale — past the window, back to the honest default.
+    expect(historyOpeningSegment(Date.now() - HISTORY_TRASH_REDIRECT_MS - 1)).toBe('note');
+  });
+
+  it('a fresh delete opens on the trash — the flash’s promise kept', () => {
+    expect(historyOpeningSegment(Date.now())).toBe('trash');
+    expect(historyOpeningSegment(Date.now() - HISTORY_TRASH_REDIRECT_MS + 1)).toBe('trash');
+  });
+
+  it('the window is 30 seconds — long enough to click, short enough to be context', () => {
+    expect(HISTORY_TRASH_REDIRECT_MS).toBe(30_000);
+  });
+});
+
+describe('historySubtitle — the header names the view it stands over', () => {
+  it('the note view names the note, or admits it has no name', () => {
+    expect(historySubtitle('note', 'Grocery run')).toBe('Versions of “Grocery run”.');
+    expect(historySubtitle('note', '  ')).toBe('Versions of this note.');
+    expect(historySubtitle('note', undefined)).toBe('Versions of this note.');
+  });
+
+  it('all notes and trash say what they are', () => {
+    expect(historySubtitle('all')).toBe('Every version of every note.');
+    expect(historySubtitle('trash')).toBe('Deleted notes — kept for 30 days.');
+  });
+});
+
+describe('historyFooterText — the view’s own number first', () => {
+  it('the note view counts the chain, then the store beside it', () => {
+    expect(
+      historyFooterText({
+        segment: 'note',
+        noteVersions: 3,
+        totalVersions: 12,
+        trashCount: 2,
+        nextTrashDays: 4,
+        cap: 200,
+      }),
+    ).toBe('3 versions · 12 of 200 across all notes');
+    // The singular is honest.
+    expect(
+      historyFooterText({
+        segment: 'note',
+        noteVersions: 1,
+        totalVersions: 1,
+        trashCount: 0,
+        nextTrashDays: null,
+        cap: 200,
+      }),
+    ).toBe('1 version · 1 of 200 across all notes');
+  });
+
+  it('all notes keeps the store’s truth, trash beside it', () => {
+    expect(
+      historyFooterText({
+        segment: 'all',
+        noteVersions: 3,
+        totalVersions: 12,
+        trashCount: 2,
+        nextTrashDays: 4,
+        cap: 200,
+      }),
+    ).toBe('12 of 200 · 2 in trash');
+    expect(
+      historyFooterText({
+        segment: 'all',
+        noteVersions: 0,
+        totalVersions: 0,
+        trashCount: 0,
+        nextTrashDays: null,
+        cap: 200,
+      }),
+    ).toBe('0 of 200');
+  });
+
+  it('the trash view counts graves and names the next departure', () => {
+    expect(
+      historyFooterText({
+        segment: 'trash',
+        noteVersions: 0,
+        totalVersions: 5,
+        trashCount: 2,
+        nextTrashDays: 4,
+        cap: 200,
+      }),
+    ).toBe('2 in trash · next leaves in 4 days');
+    expect(
+      historyFooterText({
+        segment: 'trash',
+        noteVersions: 0,
+        totalVersions: 5,
+        trashCount: 1,
+        nextTrashDays: 1,
+        cap: 200,
+      }),
+    ).toBe('1 in trash · next leaves tomorrow');
+    expect(
+      historyFooterText({
+        segment: 'trash',
+        noteVersions: 0,
+        totalVersions: 5,
+        trashCount: 1,
+        nextTrashDays: 0,
+        cap: 200,
+      }),
+    ).toBe('1 in trash · one leaves today');
+    expect(
+      historyFooterText({
+        segment: 'trash',
+        noteVersions: 0,
+        totalVersions: 5,
+        trashCount: 0,
+        nextTrashDays: null,
+        cap: 200,
+      }),
+    ).toBe('0 in trash');
+  });
+});
+
+describe('historyScopeDeleteLabels — one button, dressed for its view', () => {
+  it('the note view deletes the note’s versions, counting them in the ask', () => {
+    expect(historyScopeDeleteLabels('note', 3)).toEqual({
+      quiet: "Delete this note's versions",
+      armed: 'Delete 3 versions?',
+    });
+    expect(historyScopeDeleteLabels('note', 1)).toEqual({
+      quiet: "Delete this note's versions",
+      armed: 'Delete 1 version?',
+    });
+  });
+
+  it('all versions and the trash keep their established asks', () => {
+    expect(historyScopeDeleteLabels('all', 9)).toEqual({
+      quiet: 'Delete all versions',
+      armed: 'Really delete all?',
+    });
+    expect(historyScopeDeleteLabels('trash', 2)).toEqual({
+      quiet: 'Empty trash',
+      armed: 'Really empty it?',
+    });
+  });
+});
+
+describe('trashDaysLeft — the one clock the chip and the footer share', () => {
+  it('counts whole days up, floored at zero', () => {
+    const now = Date.now();
+    // Exactly expired: zero days — gone today. A millisecond past the
+    // window still waits (the ceiling rounds any remainder up to a day).
+    expect(trashDaysLeft(now - TRASH_RETENTION_MS, now)).toBe(0);
+    expect(trashDaysLeft(now - TRASH_RETENTION_MS - 5 * 24 * 60 * 60 * 1000, now)).toBe(0);
+    expect(trashDaysLeft(now - TRASH_RETENTION_MS + 1, now)).toBe(1);
+    expect(trashDaysLeft(now, now)).toBe(30);
+    expect(trashDaysLeft(now - 1000, now)).toBe(30);
   });
 });

@@ -1,19 +1,26 @@
 /**
- * History — the one sheet: safety copies and deleted notes on a single
- * timeline (src/snapshots.ts owns the versions; the trash rides along
- * from the tab model, TabManager.trashed).
+ * History — the one sheet, answering the three questions a person
+ * actually brings to it (src/snapshots.ts owns the versions; the trash
+ * rides along from the tab model, TabManager.trashed).
  *
  * The structural contract:
  *
- *  • ONE TIMELINE — versions and trash entries are the same shape (a
- *    timestamped copy of a note, carrying identity), so they share one
- *    chronology, one day-anchored rail, one search field and one row
- *    renderer (src/ui/sheet-kit.ts — the shared vocabulary, born when
- *    the hand-copied twin of this sheet drifted). A trash entry is a
- *    row KIND, not a sheet: the rail dot dresses danger, a chip counts
- *    the retention, and its detail card offers Restore / Delete forever.
- *    The toolbar's segmented filter (All · Versions · Trash) narrows
- *    the timeline without ever reordering it — time stays the only axis.
+ *  • THREE VIEWS, one toolbar — “This note” (the default), “All notes”
+ *    and “Trash”. The sheet is opened FROM a note, so its first answer
+ *    is that note's chain: versions scoped by identity (noteId),
+ *    newest first, the change badges reading like the note's own
+ *    commit log. “All notes” is the deliberate browse — every note's
+ *    VERSIONS on one chronology, and nothing else: a trashed note used
+ *    to appear twice beside its own versions (a grave row and version
+ *    rows, same titles, different affordances), which was the mess
+ *    this rework removed. Trash is its own view because a deleted note
+ *    is not a version of anything — it is a note waiting, on a clock.
+ *  • THE DELETE'S PROMISE — the trash flash on the History button
+ *    (trash-flash.ts) says “it went in HERE”, and the next open honors
+ *    it: a delete within HISTORY_TRASH_REDIRECT_MS lands the sheet on
+ *    the Trash view once, then the promise is consumed. After that,
+ *    every open starts on the note being written — the honest default,
+ *    because the sheet cannot know which note you will be in tomorrow.
  *  • IDENTITY — a snapshot records the note it came from (noteId + the
  *    note's NAME). Restore uses that identity: it brings the SOURCE
  *    note on stage and restores THERE; when the note sits in the TRASH,
@@ -39,20 +46,24 @@
  *    characters — never raw markup or JSON braces. The field carries
  *    its own trailing chrome: a live result count, a clear button
  *    (Escape works too), a "/" focus shortcut, and highlighted matches
- *    in the rows. A capture that lands while ANY filter (text or
- *    segment) would hide it clears that filter, so the flash the user
- *    is promised is a flash they can see.
+ *    in the rows. The QUERY IS SCOPED to the view it filters — this
+ *    note's words, all notes' words, the trash's words — and a miss
+ *    offers the way OUT of the scope ("Search all notes" / "Search the
+ *    trash"), because the words are usually somewhere. A capture that
+ *    lands while ANY filter (text or view) would hide it clears that
+ *    filter, so the flash the user is promised is a flash they can see.
  *  • DATES — formatted at render time from the timestamp; the stored
  *    formattedDate field is written for older builds only.
  *  • THE CURRENT CHIP is unique by fiat — several snapshots can hold
  *    the same bytes as the open note (a restore chain guarantees it),
  *    but only the NEWEST of them wears the chip; an older twin is just
  *    history. A trash row never wears it.
- *  • THE SHEET — right-side, docked, ONE continuous timeline (see
+ *  • THE SHEET — right-side, docked, day-anchored rail (see
  *    11-snapshots.css for the frame). Entries expand in place into a
- *    detail card that owns the actions. The footer reports the store's
- *    truth (versions against the cap, trash beside it) while a query
- *    runs in the field's own hit counter.
+ *    detail card that owns the actions. The footer tells the VIEW's
+ *    truth beside ONE destructive button whose scope is the view it
+ *    stands in — this note's versions, all versions, or the trash —
+ *    never two destructives from different scopes side by side.
  *  • RESTORE — one click, no confirmation dialog: the pre-restore
  *    safety copy (saved automatically right before the apply) is the
  *    undo path, so the ask would be theater. The sheet STAYS OPEN
@@ -82,6 +93,7 @@ import {
 } from './editor/drawing/scene';
 import { parseTaskNoteContent, taskNotePlainText } from './editor/tasks/content';
 import { showToast } from './ui/toast';
+import { hydrateModifierKeyElements } from './ui/platform-hints';
 import { updateWordCountPill } from './word-count-pill';
 import { TRASH_RETENTION_MS } from '../shared/wire';
 import type { TrashedNote } from './storage';
@@ -527,6 +539,12 @@ export function snapshotChangeBadge(
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** Days a grave still waits — trashRetentionChip and the footer's
+ *  “next leaves in” share this clock so they can never disagree. */
+export function trashDaysLeft(deletedAt: number, now: number = Date.now()): number {
+  return Math.max(0, Math.ceil((deletedAt + TRASH_RETENTION_MS - now) / DAY_MS));
+}
+
 /**
  * A trash row worth showing: words or a name. Tombstone-shaped entries
  * (migrated pre-trash deletes with no content) are invisible: they have
@@ -545,7 +563,7 @@ export function trashRetentionChip(
   deletedAt: number,
   now: number = Date.now(),
 ): { text: string; danger: boolean; title: string } {
-  const daysLeft = Math.max(0, Math.ceil((deletedAt + TRASH_RETENTION_MS - now) / DAY_MS));
+  const daysLeft = trashDaysLeft(deletedAt, now);
   if (daysLeft <= 0) {
     return {
       text: 'last day',
@@ -600,11 +618,111 @@ export function trashRowSearchText(grave: TrashedNote): string {
 }
 
 // ---------------------------------------------------------------------------
-// The manager
+// Pure helpers — the sheet's three views (exported so tests pin the
+// decision layer without the manager's DOM wiring)
 // ---------------------------------------------------------------------------
 
-/** The toolbar's segmented filter — which rows the timeline shows. */
-export type HistorySegment = 'all' | 'versions' | 'trash';
+/** The toolbar's views: which rows the sheet shows. 'note' is the
+ *  default — the sheet is opened from a note and answers for it first. */
+export type HistorySegment = 'note' | 'all' | 'trash';
+
+/** How long a delete keeps its promise that History opens on the trash.
+ *  The button's flash is 2.4s (trash-flash.ts); the door stays pointed
+ *  at the trash a while longer — the eye needs time to decide to click —
+ *  but not forever: an hour-old delete is no longer the open's context. */
+export const HISTORY_TRASH_REDIRECT_MS = 30_000;
+
+/**
+ * The view a fresh open lands on. The default answers the question the
+ * sheet is opened FROM — what does THIS note look like — but a recent
+ * delete overrides it once: the flash on the button promised the trash,
+ * and the first open inside the window keeps that promise. The promise
+ * is consumed by the open itself (see openSheet).
+ */
+export function historyOpeningSegment(
+  lastTrashedAt: number | null,
+  now: number = Date.now(),
+): HistorySegment {
+  if (lastTrashedAt !== null && now - lastTrashedAt < HISTORY_TRASH_REDIRECT_MS) {
+    return 'trash';
+  }
+  return 'note';
+}
+
+/** The header's one-line truth about the view it stands over. */
+export function historySubtitle(segment: HistorySegment, noteName?: string): string {
+  if (segment === 'trash') {
+    return 'Deleted notes — kept for 30 days.';
+  }
+  if (segment === 'all') {
+    return 'Every version of every note.';
+  }
+  const name = noteName?.trim();
+  return name ? `Versions of \u201c${name}\u201d.` : 'Versions of this note.';
+}
+
+/** The facts the footer's count line speaks from. */
+export interface HistoryFooterFacts {
+  segment: HistorySegment;
+  /** Versions of the ACTIVE note — the 'note' view's subject. */
+  noteVersions: number;
+  /** The whole store's version count — what the cap caps. */
+  totalVersions: number;
+  /** Restorable graves. */
+  trashCount: number;
+  /** Days until the soonest grave goes for good; null when none. */
+  nextTrashDays: number | null;
+  /** The version cap, for the “of N” truth. */
+  cap: number;
+}
+
+/** The footer's count line, per view: the view's own truth first, the
+ *  store's beside it. One number per question, never two numbers
+ *  disagreeing about the same one. */
+export function historyFooterText(f: HistoryFooterFacts): string {
+  if (f.segment === 'trash') {
+    const base = `${f.trashCount} in trash`;
+    if (f.nextTrashDays === null) {
+      return base;
+    }
+    if (f.nextTrashDays <= 0) {
+      return `${base} \u00b7 one leaves today`;
+    }
+    if (f.nextTrashDays === 1) {
+      return `${base} \u00b7 next leaves tomorrow`;
+    }
+    return `${base} \u00b7 next leaves in ${f.nextTrashDays} days`;
+  }
+  if (f.segment === 'note') {
+    const own = `${f.noteVersions} ${f.noteVersions === 1 ? 'version' : 'versions'}`;
+    return `${own} \u00b7 ${f.totalVersions} of ${f.cap} across all notes`;
+  }
+  return `${f.totalVersions} of ${f.cap}${f.trashCount > 0 ? ` \u00b7 ${f.trashCount} in trash` : ''}`;
+}
+
+/** The footer's ONE destructive, dressed for the view it stands in —
+ *  the button's scope is always the view's scope, so its label and its
+ *  armed question must follow the segment (and the note, for the note
+ *  view: switching notes mid-arm is a different question). */
+export function historyScopeDeleteLabels(
+  segment: HistorySegment,
+  noteVersions: number,
+): { quiet: string; armed: string } {
+  if (segment === 'trash') {
+    return { quiet: 'Empty trash', armed: 'Really empty it?' };
+  }
+  if (segment === 'note') {
+    return {
+      quiet: "Delete this note's versions",
+      armed: `Delete ${noteVersions} ${noteVersions === 1 ? 'version' : 'versions'}?`,
+    };
+  }
+  return { quiet: 'Delete all versions', armed: 'Really delete all?' };
+}
+
+// ---------------------------------------------------------------------------
+// The manager
+// ---------------------------------------------------------------------------
 
 export class SnapshotsManager {
   dbName: string;
@@ -635,18 +753,21 @@ export class SnapshotsManager {
   private resolveReady!: () => void;
   private rejectReady!: (err: unknown) => void;
 
-  /** The segmented filter — narrows the timeline, never reorders it;
-   *  persists across close/open like the search query. */
-  private segment: HistorySegment = 'all';
+  /** The toolbar's view. Every open resets it (see openSheet) — a stale
+   *  view is a stale answer to a question nobody asked again. */
+  private segment: HistorySegment = 'note';
+
+  /** When a note last moved to the trash — the delete's promise that the
+   *  NEXT open lands on the Trash view. Consumed by that open; expires
+   *  on HISTORY_TRASH_REDIRECT_MS. */
+  private lastTrashedAt: number | null = null;
 
   /** The trash row's Delete forever — arm, then confirm, in place. */
   private purgeConfirm = new TwoStepConfirm();
 
-  /** The footer's Delete all versions — same two-step contract. */
-  private deleteAllConfirm = new TwoStepConfirm();
-
-  /** The footer's Empty trash — same two-step contract. */
-  private emptyTrashConfirm = new TwoStepConfirm();
+  /** The footer's ONE destructive — same two-step contract, keyed by the
+   *  scope it would sweep so switching views (or notes) disarms. */
+  private scopeDeleteConfirm = new TwoStepConfirm();
 
   /** Whether the tab model's persist listener is wired — the timeline
    *  refreshes when the trash moves underneath an open sheet (a sync
@@ -694,7 +815,6 @@ export class SnapshotsManager {
     openSnapshotsDatabase(this.dbName, this.storeName).then(
       (db) => {
         this.db = db;
-        void this.updateSnapshotsCount();
         void this.loadSnapshots(this.currentSearchTerm());
         this.resolveReady();
       },
@@ -713,14 +833,20 @@ export class SnapshotsManager {
     // store (and the trash) may have moved under a stale render.
     const openSheet = (): void => {
       this.wireTabsListener();
+      // Every open answers the note on stage — the default view is THIS
+      // note's chain — unless a delete just made a promise: the flash on
+      // this very button said "it went in here", and the first open
+      // inside its window lands on the Trash view. The promise is
+      // consumed by the open; a later open starts on the note again.
+      this.segment = historyOpeningSegment(this.lastTrashedAt);
+      this.lastTrashedAt = null;
+      // A leftover armed destructive from a previous visit must not
+      // survive into a new one — the arm is a gesture, not a state.
+      this.scopeDeleteConfirm.disarm();
       openModal($('#snapshotsModal').get(0));
       // Honor the search field's leftover text — reopening used to show the
       // unfiltered list under a stale query.
       void this.loadSnapshots(this.currentSearchTerm());
-      // The delete-all affordance re-reads the store on every open — its
-      // enabled state was last written at boot (or at the last capture),
-      // and a store that changed underneath must not show a stale gray.
-      void this.updateSnapshotsCount();
     };
     document.getElementById('snapshotsButton')?.addEventListener('click', openSheet);
 
@@ -738,8 +864,8 @@ export class SnapshotsManager {
       void this.createSnapshot();
     });
 
-    // The segmented filter — one tap narrows the timeline, never
-    // reorders it.
+    // The toolbar's views — one tap re-answers the sheet: this note's
+    // chain, every note's versions, or the trash.
     document.querySelectorAll('#snapshotSegment .snap-seg-btn').forEach((button) => {
       button.addEventListener('click', () => {
         const seg = (button as HTMLElement).dataset.seg as HistorySegment | undefined;
@@ -749,30 +875,47 @@ export class SnapshotsManager {
       });
     });
 
-    // Delete all versions — arm on the first press, commit on the
-    // second. The button's own label carries the confirm; no dialog
-    // stacks over the sheet.
-    document.getElementById('deleteAllSnapshotsBtn')?.addEventListener('click', (event) => {
+    // The footer's ONE destructive — its scope is whatever view it
+    // stands in. Arm on the first press, commit on the second; the
+    // button's own label carries the confirm, and the scope key keeps
+    // an arm from leaking across a view (or note) switch. No dialog
+    // ever stacks over the sheet.
+    document.getElementById('historyScopeDeleteBtn')?.addEventListener('click', (event) => {
       const button = event.currentTarget as HTMLElement;
-      if (this.deleteAllConfirm.tap('versions', button, 'Really delete all?')) {
-        this.deleteAllSnapshots();
+      const manager = getTabManager();
+      if (!manager) {
+        return;
       }
-    });
-
-    // Empty trash — the same two-step contract, scoped to the trash
-    // rows (the notes' snapshots go with them: forever means forever).
-    document.getElementById('emptyTrashBtn')?.addEventListener('click', (event) => {
-      const button = event.currentTarget as HTMLElement;
-      if (this.emptyTrashConfirm.tap('trash', button, 'Really empty it?')) {
+      const activeId = manager.getActive()?.id;
+      const noteVersions = this.cache.filter(({ snapshot }) => snapshot.noteId === activeId).length;
+      const labels = historyScopeDeleteLabels(this.segment, noteVersions);
+      const scopeKey = this.segment === 'note' ? `note:${activeId ?? '-'}` : this.segment;
+      if (!this.scopeDeleteConfirm.tap(scopeKey, button, labels.armed)) {
+        return;
+      }
+      if (this.segment === 'note') {
+        if (!activeId) {
+          return;
+        }
+        void this.deleteSnapshotsForNotes([activeId]).then((deleted) => {
+          showToast(
+            deleted === 1
+              ? 'Deleted 1 version of this note.'
+              : `Deleted ${deleted} versions of this note.`,
+          );
+        });
+      } else if (this.segment === 'all') {
+        this.deleteAllSnapshots();
+      } else {
         this.emptyTrashFromSheet();
       }
     });
 
-    // Escape with a segment narrowed (and no text query — the field owns
-    // that case) resets the segment first, by the same muscle memory the
-    // search field follows: the narrowest state gives way before the
-    // sheet itself closes. Capture phase, so the modal layer's own
-    // Escape never sees this press.
+    // Escape with a view beyond the default (and no text query — the
+    // field owns that case) resets the view first, by the same muscle
+    // memory the search field follows: the narrowest state gives way
+    // before the sheet itself closes. Capture phase, so the modal
+    // layer's own Escape never sees this press.
     document.addEventListener(
       'keydown',
       (e) => {
@@ -782,13 +925,13 @@ export class SnapshotsManager {
         const modal = document.getElementById('snapshotsModal');
         const search = document.getElementById('searchSnapshots') as HTMLInputElement | null;
         if (
-          this.segment !== 'all' &&
+          this.segment !== 'note' &&
           modal?.classList.contains('in') &&
           (search?.value.trim() ?? '') === ''
         ) {
           e.stopPropagation();
           e.preventDefault();
-          this.setSegment('all');
+          this.setSegment('note');
         }
       },
       true,
@@ -814,19 +957,19 @@ export class SnapshotsManager {
 
     // Escape in the search field clears the filters first — the input has a
     // clear button now, but the reset muscle memory from every other search
-    // box still applies. A text query goes first; an empty field with a
-    // segment active narrows THAT back to all. stopPropagation keeps the
-    // document-level Escape handler from closing the modal under the same
-    // press (the capture listener above has already had its turn).
+    // box still applies. A text query goes first; an empty field on a
+    // non-default view narrows THAT back to the note. stopPropagation keeps
+    // the document-level Escape handler from closing the modal under the
+    // same press (the capture listener above has already had its turn).
     document.getElementById('searchSnapshots')?.addEventListener('keydown', (e) => {
       const input = e.target as HTMLInputElement;
       if (e.key === 'Escape' && input.value !== '') {
         e.stopPropagation();
         input.value = '';
         this.renderRows('');
-      } else if (e.key === 'Escape' && this.segment !== 'all') {
+      } else if (e.key === 'Escape' && this.segment !== 'note') {
         e.stopPropagation();
-        this.setSegment('all');
+        this.setSegment('note');
       }
     });
 
@@ -854,16 +997,22 @@ export class SnapshotsManager {
       }
     });
 
-    // The no-match empty state's recovery action — clears whatever
-    // filtered the list into that dead end (the query, the segment, or
-    // both) without making the user find the tiny ×.
+    // The no-match state's two ways out. "Clear the filter" drops the
+    // QUERY only — the view the user chose is theirs to keep (the old
+    // behavior also reset the view, throwing a trash browser back to
+    // versions for the crime of a bad query). "Search the trash" /
+    // "Search all notes" carries the query INTO the other scope: the
+    // words are usually somewhere, and a miss here is a strong hint the
+    // somewhere is there.
     document.getElementById('clearSearchFromEmpty')?.addEventListener('click', () => {
       const input = document.getElementById('searchSnapshots') as HTMLInputElement | null;
       if (input) {
         input.value = '';
       }
-      this.setSegment('all');
       this.renderRows('');
+    });
+    document.getElementById('widenSearchFromEmpty')?.addEventListener('click', () => {
+      this.setSegment(this.segment === 'all' ? 'trash' : 'all');
     });
 
     // Keyboard shortcut: the platform's primary modifier + U
@@ -892,6 +1041,13 @@ export class SnapshotsManager {
         this.renderRows(this.currentSearchTerm());
       }
     });
+  }
+
+  /** A note moved to the trash (app.ts wires the tab model's listener
+   *  here — the manager constructs before the tab model exists). This is
+   *  the flash's second half: the next open lands on the Trash view. */
+  noteTrashed(): void {
+    this.lastTrashedAt = Date.now();
   }
 
   /** The timeline's action dispatcher — one row, one gesture. */
@@ -941,20 +1097,31 @@ export class SnapshotsManager {
     }
   }
 
-  /** Applies a segmented choice and re-renders. */
+  /** Applies a view choice and re-renders. */
   private setSegment(segment: HistorySegment): void {
     this.segment = segment;
     this.renderSegment();
     this.renderRows(this.currentSearchTerm());
   }
 
-  /** The segmented filter's buttons mirror the state they own. */
-  private renderSegment(): void {
+  /** The view buttons mirror the state they own, and the Trash tab
+   *  carries the count of what waits there — the signal a browser in
+   * another view should not have to switch tabs to see. */
+  private renderSegment(trashCount?: number): void {
+    const graves =
+      trashCount ?? (getTabManager()?.getTrashed() ?? []).filter(isRestorableGrave).length;
     document.querySelectorAll('#snapshotSegment .snap-seg-btn').forEach((node) => {
       const button = node as HTMLElement;
       const active = button.dataset.seg === this.segment;
       button.classList.toggle('is-active', active);
       button.setAttribute('aria-pressed', String(active));
+      if (button.dataset.seg === 'trash') {
+        const count = button.querySelector<HTMLElement>('.snap-seg-count');
+        if (count) {
+          count.textContent = graves > 0 ? String(graves) : '';
+          count.toggleAttribute('hidden', graves === 0);
+        }
+      }
     });
   }
 
@@ -1167,8 +1334,12 @@ export class SnapshotsManager {
             input.value = '';
           }
         }
+        // A capture is a version of the ACTIVE note — the note view is
+        // exactly where it lands, and any other view that would hide it
+        // (the trash) gives way: the new snapshot is the thing the user
+        // asked for, the view was yesterday's context.
         if (this.segment === 'trash') {
-          this.segment = 'all';
+          this.segment = 'note';
           this.renderSegment();
         }
 
@@ -1178,7 +1349,6 @@ export class SnapshotsManager {
           .then((pruned) => {
             if (pruned > 0) {
               void this.loadSnapshots(this.currentSearchTerm());
-              void this.updateSnapshotsCount();
             }
           })
           .catch((error) => {
@@ -1189,7 +1359,6 @@ export class SnapshotsManager {
           });
 
         void this.loadSnapshots(this.currentSearchTerm());
-        void this.updateSnapshotsCount();
         resolve();
       };
 
@@ -1274,9 +1443,15 @@ export class SnapshotsManager {
   }
 
   /** Maps a snapshot onto the shared row model. Current is NOT set here —
-   *  ONE Current ever is a decision about the whole timeline (the newest
-   *  identical row wears it), which renderRows owns. */
-  private versionRowModel(snapshot: Snapshot, change?: SnapshotChangeBadge): SheetRowModel {
+   *  ONE Current ever is a decision about the whole view (the newest
+   *  identical row wears it), which renderRows owns. The note chip is
+   *  suppressed in the note view: every row on that rail is the same
+   *  note, and a chip repeating it is noise, not information. */
+  private versionRowModel(
+    snapshot: Snapshot,
+    change?: SnapshotChangeBadge,
+    showNoteChip = true,
+  ): SheetRowModel {
     // Where restore sends this version — the card says the target's
     // name before the click, not a dialog's after it.
     const manager = getTabManager();
@@ -1301,7 +1476,7 @@ export class SnapshotsManager {
       key: `v:${snapshot.id ?? 'x'}`,
       timestamp: snapshot.timestamp,
       title: snapshot.title,
-      noteChip: snapshot.noteName,
+      noteChip: showNoteChip ? snapshot.noteName : undefined,
       preview: snapshot.preview,
       detailText: snapshotReadableText(snapshot.content, snapshot.noteType),
       detailMeta: [
@@ -1317,9 +1492,9 @@ export class SnapshotsManager {
     };
   }
 
-  // Render the cached versions plus the model's trash through the sheet
-  // kit — ONE continuous timeline, day runs anchoring the rail, trash
-  // entries a row kind among versions.
+  // Render the current view through the sheet kit: the active note's
+  // chain (note), every note's versions (all), or the graves (trash).
+  // Day runs anchor the rail in every view; only the ROW SET changes.
   private renderRows(searchTerm: string = ''): void {
     const list = document.getElementById('snapshotsList');
     const empty = document.getElementById('noSnapshots');
@@ -1331,6 +1506,7 @@ export class SnapshotsManager {
     const filtering = term !== '';
     const now = Date.now();
     const manager = getTabManager();
+    const activeTab = manager?.getActive();
     const graves = (manager?.getTrashed() ?? []).filter(isRestorableGrave);
 
     // The 'Current' chip answers one question — is this row the note I
@@ -1339,9 +1515,19 @@ export class SnapshotsManager {
     const active = getActiveNoteContent();
     const badges = this.computeChangeBadges();
 
-    const filtered = this.cache.filter((row) => !filtering || row.searchText.includes(term));
+    // The version set is SCOPED by the view: the active note's chain by
+    // identity (legacy rows without a noteId belong to no note and ride
+    // only in All notes), or every note's. The query then filters inside
+    // the scope — the field searches what the view shows, nothing else.
+    const scoped = this.cache.filter(({ snapshot }) =>
+      this.segment === 'note'
+        ? snapshot.noteId !== undefined && snapshot.noteId === activeTab?.id
+        : true,
+    );
+    const filtered = scoped.filter((row) => !filtering || row.searchText.includes(term));
+    const showNoteChip = this.segment !== 'note';
     const versionModels = filtered.map(({ snapshot }) =>
-      this.versionRowModel(snapshot, badges.get(snapshot.id ?? -1)),
+      this.versionRowModel(snapshot, badges.get(snapshot.id ?? -1), showNoteChip),
     );
 
     // ONE Current, ever. Several snapshots can hold the note's exact
@@ -1360,21 +1546,12 @@ export class SnapshotsManager {
       }
     }
 
+    // The trash view's rows — searched within themselves, like any view.
     const trashModels = graves
       .filter((grave) => !filtering || trashRowSearchText(grave).includes(term))
       .map((grave) => trashRowModel(grave, now));
 
-    let rows: SheetRowModel[];
-    switch (this.segment) {
-      case 'versions':
-        rows = versionModels;
-        break;
-      case 'trash':
-        rows = trashModels;
-        break;
-      default:
-        rows = [...versionModels, ...trashModels].sort((a, b) => b.timestamp - a.timestamp);
-    }
+    const rows: SheetRowModel[] = this.segment === 'trash' ? trashModels : versionModels;
 
     renderSheetTimeline(list, rows, {
       term: filtering ? term : '',
@@ -1382,29 +1559,66 @@ export class SnapshotsManager {
     });
     this.pendingFlashKey = null;
 
-    // The empty state has faces: nothing stored yet (the copy explains
-    // what lands here), or nothing that matched the search (the miss
-    // carries a recovery action, a one-click way out of the dead end the
-    // query built). They share the icon; the copy must not lie.
-    const hasAnyVersions = this.cache.length > 0;
-    const hasAnyTrash = graves.length > 0;
+    // The header's one line follows the view (and, in the note view, the
+    // note itself — a restore that switches notes re-names the sheet).
+    const subtitle = document.getElementById('snapshotsSubtitle');
+    if (subtitle) {
+      subtitle.textContent = historySubtitle(this.segment, activeTab?.name ?? undefined);
+    }
+
+    // The empty state has faces, per view: the view's own emptiness (the
+    // copy explains what would land here), or a query that matched
+    // nothing IN it (the miss carries two ways out — drop the query, or
+    // carry it into the other scope). They share the icon; the copy
+    // must not lie.
+    const scopeHasContent =
+      this.segment === 'trash'
+        ? graves.length > 0
+        : this.segment === 'note'
+          ? scoped.length > 0
+          : this.cache.length > 0;
     const hasRows = rows.length > 0;
     list.style.display = hasRows ? 'block' : 'none';
     empty.style.display = hasRows ? 'none' : 'flex';
-    // The miss face belongs to a QUERY that hid everything — a segment
-    // showing its own (empty) kind is that segment's empty face, not a
-    // dead end, and must not offer to "clear the filter".
-    const showMiss = filtering && (hasAnyVersions || hasAnyTrash) && !hasRows;
+    // The miss face belongs to a QUERY that hid rows the view holds. An
+    // empty view with a query is that view's empty face — there is
+    // nothing for the query to have hidden, and offering to "clear the
+    // filter" would claim otherwise.
+    const showMiss = filtering && scopeHasContent && !hasRows;
     const trashFace = this.segment === 'trash';
+    const noteFace = this.segment === 'note';
     document.getElementById('noSnapshotsEmpty')?.toggleAttribute('hidden', showMiss);
     document.getElementById('noSnapshotsHint')?.toggleAttribute('hidden', showMiss || trashFace);
     document.getElementById('noTrashHint')?.toggleAttribute('hidden', showMiss || !trashFace);
     document.getElementById('noSnapshotsMiss')?.toggleAttribute('hidden', !showMiss);
+    document.getElementById('noSnapshotsEmptyActions')?.toggleAttribute('hidden', !showMiss);
     document.getElementById('clearSearchFromEmpty')?.toggleAttribute('hidden', !showMiss);
+    // The miss's second way out: carry the query into the other scope.
+    // From the note view the wider version scope is All notes; from All
+    // notes the other dimension entirely — the trash.
+    const widen = document.getElementById('widenSearchFromEmpty');
+    if (widen) {
+      widen.textContent = this.segment === 'all' ? 'Search the trash' : 'Search all notes';
+      widen.toggleAttribute('hidden', !showMiss);
+    }
     if (!showMiss) {
       const title = document.getElementById('noSnapshotsEmpty');
       if (title) {
-        title.textContent = trashFace ? 'Nothing in the trash.' : 'Nothing here yet.';
+        title.textContent = trashFace
+          ? 'Nothing in the trash.'
+          : noteFace
+            ? 'No versions of this note yet.'
+            : 'Nothing here yet.';
+      }
+      // The hint points at what would land here — the note view's CTA
+      // is the note's own; All notes also names where the deleted
+      // notes went (the wayfinding a first-time browser needs).
+      const hint = document.getElementById('noSnapshotsHint');
+      if (hint) {
+        hint.innerHTML = noteFace
+          ? 'Take one with the button above, or <span class="snap-kbd-inline"><kbd data-mod-key>Ctrl</kbd> + <kbd>U</kbd></span>.'
+          : 'Take one with the button above, or <span class="snap-kbd-inline"><kbd data-mod-key>Ctrl</kbd> + <kbd>U</kbd></span>. Deleted notes wait in the trash.';
+        hydrateModifierKeyElements(hint);
       }
     }
 
@@ -1425,28 +1639,48 @@ export class SnapshotsManager {
     // the field's trailing edge then.
     document.querySelector('.snap-search')?.classList.toggle('has-query', filtering);
 
-    // The footer tells the store's truth: versions against the cap, the
-    // trash beside it. The filtered story lives in the field's own hit
-    // counter — one truth per place, never two numbers disagreeing.
+    // The footer's count line tells the VIEW's truth (its own number
+    // first, the store's beside it); the filtered story lives in the
+    // field's own hit counter — one truth per place, never two numbers
+    // disagreeing.
     const countElement = document.getElementById('snapshotsCount');
     if (countElement) {
-      countElement.textContent =
-        `${this.cache.length} of ${MAX_SNAPSHOTS}` +
-        (hasAnyTrash ? ` \u00b7 ${graves.length} in trash` : '');
+      const nextTrashDays = graves.length
+        ? Math.min(...graves.map((grave) => trashDaysLeft(grave.deletedAt, now)))
+        : null;
+      countElement.textContent = historyFooterText({
+        segment: this.segment,
+        noteVersions: scoped.length,
+        totalVersions: this.cache.length,
+        trashCount: graves.length,
+        nextTrashDays,
+        cap: MAX_SNAPSHOTS,
+      });
     }
 
-    // The footer's scoped destructives: versions always visible (disabled
-    // against an empty store), trash only when it has something to empty.
-    const emptyTrashBtn = document.getElementById('emptyTrashBtn') as HTMLButtonElement | null;
-    emptyTrashBtn?.toggleAttribute('hidden', graves.length === 0);
-    const deleteAllBtn = document.getElementById(
-      'deleteAllSnapshotsBtn',
-    ) as HTMLButtonElement | null;
-    if (deleteAllBtn) {
-      deleteAllBtn.disabled = this.cache.length === 0;
+    // The footer's ONE destructive: its label, armed question, and
+    // availability follow the view it stands in. The label write is
+    // skipped while an arm is live — the confirm owns the button's text
+    // until it disarms (and disarm restores the label it captured).
+    const scopeBtn = document.getElementById('historyScopeDeleteBtn') as HTMLButtonElement | null;
+    if (scopeBtn) {
+      const labels = historyScopeDeleteLabels(this.segment, scoped.length);
+      if (!scopeBtn.classList.contains('is-armed')) {
+        const label = scopeBtn.querySelector('.snap-delete-all-label');
+        if (label) {
+          label.textContent = labels.quiet;
+        }
+      }
+      // The trash view HIDES its destructive when there is nothing to
+      // empty (a disabled “Empty trash” over an empty view is noise);
+      // the version views keep theirs visible but disabled — the
+      // affordance's existence is information even when gray.
+      scopeBtn.toggleAttribute('hidden', trashFace && graves.length === 0);
+      scopeBtn.disabled =
+        (noteFace && scoped.length === 0) || (this.segment === 'all' && this.cache.length === 0);
     }
 
-    this.renderSegment();
+    this.renderSegment(graves.length);
   }
 
   // Restore a snapshot — into THE NOTE IT CAME FROM.
@@ -1682,7 +1916,6 @@ export class SnapshotsManager {
       transaction.oncomplete = () => {
         if (deleted > 0) {
           void this.loadSnapshots(this.currentSearchTerm());
-          void this.updateSnapshotsCount();
         }
         resolve(deleted);
       };
@@ -1714,36 +1947,11 @@ export class SnapshotsManager {
 
     request.onsuccess = () => {
       void this.loadSnapshots(this.currentSearchTerm());
-      void this.updateSnapshotsCount();
     };
 
     request.onerror = (event) => {
       console.error('Error deleting all snapshots', event);
       showToast('Error deleting snapshots');
-    };
-  }
-
-  /** The store's size, against the footer and the delete-all affordance.
-   *  The count TEXT itself is renderRows' to write — it knows the whole
-   *  story (versions against the cap, trash beside it) — so this owns
-   *  only the button's enabled state. Waits for the database open like
-   *  every read: a boot-moment call must not read a null database and
-   *  leave the button stuck disabled. */
-  async updateSnapshotsCount(): Promise<void> {
-    await this.ready().catch(() => undefined);
-    if (!this.db) return;
-
-    const transaction = this.db.transaction([this.storeName], 'readonly');
-    const store = transaction.objectStore(this.storeName);
-    const countRequest = store.count();
-
-    countRequest.onsuccess = () => {
-      const deleteAllBtn = document.getElementById(
-        'deleteAllSnapshotsBtn',
-      ) as HTMLButtonElement | null;
-      if (deleteAllBtn) {
-        deleteAllBtn.disabled = countRequest.result === 0;
-      }
     };
   }
 

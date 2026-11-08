@@ -354,6 +354,11 @@ export async function initApp(): Promise<void> {
 
   // ---- the delete receipt on the History button (see trash-flash.ts) ----
   initTrashFlash(tabManager);
+  // The flash's second half: a delete also promises the NEXT History
+  // open lands on the trash (snapshots.ts owns the window and the
+  // one-shot). Wired here because the snapshots manager constructs
+  // before the tab model exists.
+  tabManager.addTrashListener(() => window.snapshotsManager?.noteTrashed());
 
   // ---- left note rail (mobile drawer) — see tab-rail-drawer.ts ------
   initTabRailDrawer(tabManager);

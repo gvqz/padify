@@ -5,9 +5,9 @@
  * their sheet-specific layer.
  *
  * The trash sheet that once lived here merged INTO History — deleted
- * notes are a row kind on the one timeline now, and their chrome
- * (the danger rail dot, the retention chip) lives in 11-snapshots.css
- * with every other row's.
+ * notes are rows on the History sheet's trash view now, and their
+ * chrome (the danger rail dot, the retention chip) lives in
+ * 11-snapshots.css with every other row's.
  */
 
 /* ---------------------------------------------------------------------------

@@ -1,14 +1,15 @@
-<!-- History — the one sheet. A right-side timeline where safety copies
-     (versions) and deleted notes (trash entries) share a single
-     chronology; structure and rendering live in src/snapshots.ts, the
+<!-- History — the one sheet. A right-side timeline answering three
+     questions from one toolbar: THIS note's versions (the default —
+     the sheet is opened from a note), every note's versions, and the
+     trash. Structure and rendering live in src/snapshots.ts, the
      shared row vocabulary in src/ui/sheet-kit.ts, styles in
      public/css/vercel/11-snapshots.css.
 
-     One continuous timeline — time is the only axis and each day anchors
-     its own run of the rail. The segmented filter (All · Versions ·
-     Trash) narrows it without reordering it; the search field covers
-     both kinds. Rows expand in place into a detail card that owns the
-     actions; nothing here opens a second dialog. -->
+     Every view is a day-anchored timeline — time stays the only axis
+     within a view. The query is scoped to the view it filters; a miss
+     offers the way out of the scope. Rows expand in place into a
+     detail card that owns the actions; nothing here opens a second
+     dialog. -->
 <div
   id="snapshotsModal"
   class="modal fade snapshots-sheet-host"
@@ -20,7 +21,7 @@
       <header class="snap-head">
         <div class="snap-head-copy">
           <h2 class="snap-title" id="snapshotsTitle">History</h2>
-          <p class="snap-subtitle">Versions and deleted notes — one timeline.</p>
+          <p class="snap-subtitle" id="snapshotsSubtitle">Versions of this note.</p>
         </div>
         <button type="button" class="close" data-dismiss="modal" aria-label="Close history">
           <svg
@@ -38,13 +39,13 @@
       </header>
 
       <!-- Pinned toolbar, two rows — the sheet is 460px wide and one
-           row cannot honestly hold a search field, a segmented filter
-           AND the primary action (the field paid for it: it collapsed
-           to a sliver). Row one gives the whole width to the search;
-           row two splits it between the segment filter (left) and the
-           one primary action (right) — filters together, the action
-           apart. The segment narrows the timeline to one kind of row;
-           it never reorders it — time stays the only axis. -->
+           row cannot honestly hold a search field, a view switch AND
+           the primary action (the field paid for it: it collapsed to a
+           sliver). Row one gives the whole width to the search; row
+           two splits it between the views (left) and the one primary
+           action (right) — browsing together, the action apart. The
+           QUERY searches the view it stands in; the trash tab carries
+           a count of what waits there. -->
       <div class="snap-toolbar">
         <div class="snap-toolbar-row">
           <div class="snap-search">
@@ -93,15 +94,20 @@
           </div>
         </div>
         <div class="snap-toolbar-row">
-          <div class="snap-seg" id="snapshotSegment" role="group" aria-label="Timeline filter">
-            <button type="button" class="snap-seg-btn is-active" data-seg="all" aria-pressed="true">
-              All
+          <div class="snap-seg" id="snapshotSegment" role="group" aria-label="History view">
+            <button
+              type="button"
+              class="snap-seg-btn is-active"
+              data-seg="note"
+              aria-pressed="true"
+            >
+              This note
             </button>
-            <button type="button" class="snap-seg-btn" data-seg="versions" aria-pressed="false">
-              Versions
+            <button type="button" class="snap-seg-btn" data-seg="all" aria-pressed="false">
+              All notes
             </button>
             <button type="button" class="snap-seg-btn" data-seg="trash" aria-pressed="false">
-              Trash
+              Trash<span class="snap-seg-count" aria-label="notes in trash" hidden></span>
             </button>
           </div>
           <button
@@ -131,7 +137,11 @@
         </div>
       </div>
 
-      <!-- The one scroller: day-anchored timeline, or the empty state. -->
+      <!-- The one scroller: the view's day-anchored timeline, or the
+           empty state — whose face follows the view (nothing here yet,
+           nothing in the trash, nothing of this note yet) and whose
+           miss face carries two ways out: drop the query, or carry it
+           into the other scope. -->
       <div class="snap-scroll">
         <div id="noSnapshots" class="snap-empty">
           <svg
@@ -164,19 +174,24 @@
               stroke-linejoin="round"
             />
           </svg>
-          <p id="noSnapshotsEmpty">Nothing here yet.</p>
+          <p id="noSnapshotsEmpty">No versions of this note yet.</p>
           <p class="snap-empty-hint" id="noSnapshotsHint">
             Take one with the button above, or
             <span class="snap-kbd-inline"><kbd data-mod-key>Ctrl</kbd> + <kbd>U</kbd></span
-            >. Trashed notes wait here too.
+            >.
           </p>
           <p class="snap-empty-hint" id="noTrashHint" hidden>
             Deleted notes wait here for 30 days before they go for good.
           </p>
           <p id="noSnapshotsMiss" hidden>Nothing matches.</p>
-          <button type="button" id="clearSearchFromEmpty" class="snap-clear-miss" hidden>
-            Clear the filter
-          </button>
+          <div class="snap-empty-actions" id="noSnapshotsEmptyActions" hidden>
+            <button type="button" id="clearSearchFromEmpty" class="snap-clear-miss" hidden>
+              Clear the filter
+            </button>
+            <button type="button" id="widenSearchFromEmpty" class="snap-clear-miss" hidden>
+              Search all notes
+            </button>
+          </div>
         </div>
         <ol id="snapshotsList" class="snap-timeline">
           <!-- Day runs of timeline entries render here -->
@@ -185,8 +200,12 @@
 
       <footer class="snap-foot">
         <span id="snapshotsCount" class="snap-foot-count">0</span>
+        <!-- ONE destructive, scoped to the view it stands in — this
+             note's versions, all versions, or the trash. The label and
+             its armed question follow the view (snapshots.ts owns the
+             mapping); the two-step confirm lives on the button. -->
         <span class="snap-foot-actions">
-          <button id="emptyTrashBtn" class="snap-delete-all" type="button" hidden>
+          <button id="historyScopeDeleteBtn" class="snap-delete-all" type="button" hidden>
             <svg
               width="13"
               height="13"
@@ -203,26 +222,7 @@
                 stroke-linejoin="round"
               />
             </svg>
-            <span class="snap-delete-all-label">Empty trash</span>
-          </button>
-          <button id="deleteAllSnapshotsBtn" class="snap-delete-all" type="button" disabled>
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              aria-hidden="true"
-            >
-              <path
-                d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94208 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            <span class="snap-delete-all-label">Delete all versions</span>
+            <span class="snap-delete-all-label">Delete this note's versions</span>
           </button>
         </span>
       </footer>

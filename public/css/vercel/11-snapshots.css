@@ -308,12 +308,12 @@
   border-radius: 4px;
 }
 
-/* ---- the segmented filter — one kind of row at a time --------------------- */
+/* ---- the view switch — one question at a time ------------------------------ */
 
-/* A quiet grouped control: the segment narrows the timeline (versions,
-   trash, or both) without ever reordering it. The active pill lifts on
-   the elevated surface — the same quiet-fill language the search field
-   and the old type button spoke. */
+/* A quiet grouped control: the buttons answer the three questions the
+   sheet exists for (this note's chain, every note's versions, the
+   trash). The active pill lifts on the elevated surface — the same
+   quiet-fill language the search field speaks. */
 .snap-seg {
   display: inline-flex;
   align-items: center;
@@ -365,6 +365,28 @@
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.08),
     inset 0 0 0 1px var(--vz-border-strong);
+}
+
+/* The Trash tab's count — what waits there, visible from every view.
+   Danger-soft, the same dress the retention chips wear: a count of
+   things that leave is a caution, not a badge of honor. */
+.snap-seg-count {
+  display: inline-block;
+  min-width: 17px;
+  margin-left: 6px;
+  padding: 1px 5px 0;
+  border-radius: 999px;
+  background: var(--vz-danger-soft);
+  color: var(--vz-danger);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 15px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.snap-seg-count[hidden] {
+  display: none;
 }
 
 .snap-take {
@@ -872,10 +894,10 @@ body.dark .snap-chip.is-danger {
   font-variant-numeric: tabular-nums;
 }
 
-/* The footer's scoped destructives live together at the right edge —
-   Empty trash (only when the trash holds something) beside Delete all
-   versions. Each is its own two-step confirm; the group is just
-   layout. */
+/* The footer's ONE destructive, right-edged — its scope is the view it
+   stands in (this note's versions, all versions, the trash), so there
+   is never a second destructive from another scope competing for the
+   same glance. */
 .snap-foot-actions {
   display: inline-flex;
   align-items: center;
@@ -960,7 +982,6 @@ body.dark .snap-chip.is-danger {
 }
 
 .snap-clear-miss {
-  margin-top: 12px;
   padding: 5px 14px;
   background: var(--vz-bg-elevated);
   border: 1px solid var(--vz-border);
@@ -976,6 +997,20 @@ body.dark .snap-chip.is-danger {
 .snap-clear-miss:focus-visible {
   border-color: var(--vz-border-strong);
   background: var(--vz-bg-hover);
+}
+
+/* The miss face's two ways out, side by side: drop the query, or carry
+   it into the other scope. */
+.snap-empty-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.snap-empty-actions[hidden] {
+  display: none;
 }
 
 /* ---- small screens ------------------------------------------------------------ */
@@ -1012,18 +1047,19 @@ body.dark .snap-chip.is-danger {
   }
 }
 
-/* Narrow phones: the toolbar's two rows bought the segment the room it
-   needs — labels STAY (A/V/T would trade meaning for pixels nobody
-   needs back; even at 360px the row holds with 50px to spare). Only
-   the paddings and type tighten. */
+/* Narrow phones: the toolbar's two rows bought the views the room they
+   need — labels STAY (T/A/T would trade meaning for pixels nobody
+   needs back). Only the paddings and type tighten. */
 @media (max-width: 400px) {
   .snap-seg-btn {
     padding: 0 8px;
     font-size: 11px;
   }
 
-  .snap-seg-btn[data-seg='versions'] {
-    padding: 0 9px;
+  .snap-seg-count {
+    min-width: 15px;
+    margin-left: 4px;
+    padding: 1px 4px 0;
   }
 
   .snap-take {

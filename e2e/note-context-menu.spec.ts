@@ -171,15 +171,17 @@ test('move to trash on a note with content needs no ask — the trash is the ask
   await expect(page.locator(MENU)).toBeHidden();
 
   // The trash IS the undo path: no confirm dialog, the words restorable
-  // from History's trash segment for the retention window.
+  // from History's trash view for the retention window.
   await expect(page.locator('dialog.vz-dialog')).toBeHidden();
   // The History button plays the trash flash — the receipt on the door
   // the note just arrived behind (the toast owns the words and the Undo).
   await expect(page.locator('#snapshotsButton')).toHaveClass(/is-trashed/);
-  // And History keeps the one door to the trash: open it, pick the
-  // segment, the note is there.
+  // And the flash's promise has a second half: the next open lands on
+  // the trash view itself — no segment to find, the note is right there.
   await page.locator('#snapshotsButton').click();
   await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
-  await page.locator('#snapshotSegment .snap-seg-btn[data-seg="trash"]').click();
+  await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="trash"]')).toHaveClass(
+    /is-active/,
+  );
   await expect(page.locator('#snapshotsList .snap-item.is-trash')).toHaveCount(1);
 });

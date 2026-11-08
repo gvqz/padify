@@ -36,7 +36,7 @@ async function openSnapshots(page: Page): Promise<void> {
   await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
 }
 
-/** History opened straight onto its trash segment — the one door the
+/** History opened straight onto its trash view — the one door the
  *  recovery story keeps (the rail's own trash button is gone; the save
  *  icon's flash and the toast's Undo cover the moment of the delete). */
 async function openHistoryOnTrash(page: Page): Promise<void> {
@@ -52,8 +52,8 @@ function trashRows(page: Page) {
   return page.locator('#snapshotsList .snap-item.is-trash');
 }
 
-/** Narrows the timeline with the segmented filter. */
-async function pickSegment(page: Page, segment: 'all' | 'versions' | 'trash'): Promise<void> {
+/** Narrows the sheet to one of its three views. */
+async function pickSegment(page: Page, segment: 'note' | 'all' | 'trash'): Promise<void> {
   await page.locator(`#snapshotSegment .snap-seg-btn[data-seg="${segment}"]`).click();
   await expect(page.locator(`#snapshotSegment .snap-seg-btn[data-seg="${segment}"]`)).toHaveClass(
     /is-active/,
@@ -112,15 +112,26 @@ async function newTypedNote(page: Page, kind: 'Rich text note' | 'Markdown note'
 }
 
 test.describe('the rebuilt menu', () => {
-  test('boots empty: the empty state explains itself, delete-all is disabled', async ({ page }) => {
+  test('boots empty: the note view explains itself, its destructive is disabled', async ({
+    page,
+  }) => {
     await page.goto('/');
     await openSnapshots(page);
 
+    // The sheet opens on THIS note — the welcome note, with no versions
+    // yet. The empty face says so, and offers the note's own CTA.
     await expect(page.locator('#noSnapshotsEmpty')).toBeVisible();
+    await expect(page.locator('#noSnapshotsEmpty')).toHaveText('No versions of this note yet.');
     await expect(page.locator('#noSnapshotsHint')).toContainText('Take one with the button above');
     await expect(page.locator('#noSnapshotsMiss')).toBeHidden();
-    await expect(page.locator('#deleteAllSnapshotsBtn')).toBeDisabled();
-    await expect(page.locator('#snapshotsCount')).toHaveText('0 of 200');
+    await expect(page.locator('#historyScopeDeleteBtn')).toBeDisabled();
+    await expect(page.locator('#historyScopeDeleteBtn .snap-delete-all-label')).toHaveText(
+      "Delete this note's versions",
+    );
+    // The footer counts the chain first, the store beside it.
+    await expect(page.locator('#snapshotsCount')).toHaveText(
+      '0 versions · 0 of 200 across all notes',
+    );
   });
 
   test('the sheet opens docked to the right edge, full height', async ({ page }) => {
@@ -144,10 +155,14 @@ test.describe('the rebuilt menu', () => {
     await page.locator('#createSnapshotBtn').click();
     await toastSays(page, 'Snapshot created!');
 
+    // The note view holds the active note's chain — the capture is its
+    // newest row.
     await expect(snapshotRows(page)).toHaveCount(1);
     await expect(snapshotRows(page).first().locator('.snap-name')).toContainText('Welcome');
-    await expect(page.locator('#snapshotsCount')).toHaveText('1 of 200');
-    await expect(page.locator('#deleteAllSnapshotsBtn')).toBeEnabled();
+    await expect(page.locator('#snapshotsCount')).toHaveText(
+      '1 version · 1 of 200 across all notes',
+    );
+    await expect(page.locator('#historyScopeDeleteBtn')).toBeEnabled();
     // A plain unnamed note carries no note chip — its first line IS its
     // label, and the name line already shows it.
     await expect(snapshotRows(page).first().locator('.snap-note')).toHaveCount(0);
@@ -455,14 +470,17 @@ test.describe('restore — to the note it came from', () => {
     await page.keyboard.type('work in progress');
 
     // Restore the Welcome snapshot from here — the restore must land on
-    // the WELCOME note.
+    // the WELCOME note. (The all-notes view: the note on stage has no
+    // versions of its own to restore from.)
     await openSnapshots(page);
+    await pickSegment(page, 'all');
     await expandRow(page, snapshotRows(page).first());
     await snapshotRows(page).first().locator('.restore').click();
     await toastSays(page, 'Snapshot restored!');
     // The menu stays open; the tab switch happened underneath. Close it
-    // before driving the tab strip again.
-    await page.keyboard.press('Escape');
+    // (the close button — a view beyond the default would eat one
+    // Escape resetting itself) before driving the tab strip again.
+    await page.locator('#snapshotsModal .snap-head .close').click();
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
 
     // The Welcome note is on stage again...
@@ -494,10 +512,13 @@ test.describe('restore — to the note it came from', () => {
     await page.keyboard.press('Control+U');
     await toastSays(page, 'Snapshot created!');
 
-    // The row carries the note's name — identity on a shared timeline.
+    // The row carries the note's name — identity on the shared
+    // chronology (the all-notes view; the note view drops the chip as
+    // redundant).
     await openSnapshots(page);
+    await pickSegment(page, 'all');
     await expect(snapshotRows(page).first().locator('.snap-note')).toHaveText('Phoenix');
-    await page.keyboard.press('Escape');
+    await page.locator('#snapshotsModal .snap-head .close').click();
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
 
     // The note is trashed — its versions stay on the timeline.
@@ -510,8 +531,11 @@ test.describe('restore — to the note it came from', () => {
 
     // Restore — the note is in the trash, so it comes back UNDER ITS
     // OWN ID, emptied grave and all: one note, not a duplicate. (The
-    // version row, not the grave — both hold the same words here.)
+    // version row, not the grave — both hold the same words here. The
+    // open after the delete landed on the trash; the versions live in
+    // the all-notes view.)
     await openSnapshots(page);
+    await pickSegment(page, 'all');
     const versionRow = page
       .locator('#snapshotsList .snap-item:not(.is-trash)', { hasText: 'Phoenix rises' })
       .first();
@@ -536,7 +560,9 @@ test.describe('restore — to the note it came from', () => {
     // nor trashed (the shape an aged-out or swept grave leaves behind).
     await seedSnapshotDaysAgo(page, 0);
 
+    // The orphan belongs to no live note — the all-notes view holds it.
     await openSnapshots(page);
+    await pickSegment(page, 'all');
     const orphan = snapshotRows(page).filter({ hasText: 'an entry from days ago' }).first();
     await expandRow(page, orphan);
     await expect(orphan.locator('.snap-detail-hint')).toContainText('as its own note');
@@ -573,11 +599,13 @@ test.describe('note types — consistent behavior', () => {
 
     // Restoring from a DIFFERENT note still lands on the markdown note —
     // its surface comes back with its content, and the plain note that
-    // was on stage is never touched.
+    // was on stage is never touched. (All notes: the plain note on
+    // stage has no versions yet.)
     await page.keyboard.press('Escape');
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
     await page.locator('#addTab').click();
     await openSnapshots(page);
+    await pickSegment(page, 'all');
     await expandRow(page, snapshotRows(page).first());
     await snapshotRows(page).first().locator('.restore').click();
     await toastSays(page, 'Snapshot restored!');
@@ -648,8 +676,10 @@ test.describe('note types — consistent behavior', () => {
 
     // Restore the plain snapshot — the row whose name is the Welcome
     // text. Its note (the Welcome note) is unchanged, and the note
-    // being edited is not the one being written to.
+    // being edited is not the one being written to. (All notes: the
+    // markdown note on stage has no versions of its own.)
     await openSnapshots(page);
+    await pickSegment(page, 'all');
     const plainRow = page
       .locator('#snapshotsList .snap-item', {
         hasText: 'Welcome! Padify is an offline-capable',
@@ -659,8 +689,9 @@ test.describe('note types — consistent behavior', () => {
     await plainRow.locator('.restore').click();
     await toastSays(page, 'Snapshot restored!');
     await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
-    // Close the menu before driving the tab strip again.
-    await page.keyboard.press('Escape');
+    // Close the menu before driving the tab strip again (the button — a
+    // view beyond the default would eat one Escape resetting itself).
+    await page.locator('#snapshotsModal .snap-head .close').click();
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
 
     // The Welcome note is on stage; the markdown chrome stood down.
@@ -705,7 +736,12 @@ test.describe('note types — consistent behavior', () => {
     await openSnapshots(page);
     // No section headers exist at all.
     await expect(page.locator('#snapshotsList .snapshots-type')).toHaveCount(0);
-    // The newest (plain) row leads, whatever its type.
+    // The sheet opened on THIS note (plain) — one row of its chain. The
+    // all-notes view holds both notes' versions in one chronology.
+    const noteRows = snapshotRows(page);
+    await expect(noteRows).toHaveCount(1);
+    await expect(noteRows.first().locator('.snap-name')).toContainText('plain words');
+    await pickSegment(page, 'all');
     const rows = snapshotRows(page);
     await expect(rows).toHaveCount(2);
     await expect(rows.first().locator('.snap-name')).toContainText('plain words');
@@ -748,7 +784,7 @@ test.describe('deleting', () => {
     await purge.click();
     await expect(page.locator('#toast')).toContainText('Deleted for good.');
     await expect(trashRows(page)).toHaveCount(0);
-    await pickSegment(page, 'versions');
+    await pickSegment(page, 'all');
     await expect(snapshotRows(page).filter({ hasText: 'gone for good' })).toHaveCount(0);
     await expect(page.locator('#noSnapshotsEmpty')).toBeVisible();
   });
@@ -801,7 +837,9 @@ test.describe('deleting', () => {
     await openHistoryOnTrash(page);
     await expect(trashRows(page)).toHaveCount(2);
 
-    const empty = page.locator('#emptyTrashBtn');
+    // The ONE destructive wears the trash view's scope.
+    const empty = page.locator('#historyScopeDeleteBtn');
+    await expect(empty.locator('.snap-delete-all-label')).toHaveText('Empty trash');
     await empty.click();
     await expect(empty).toHaveClass(/is-armed/);
     await expect(empty).toContainText('Really empty it?');
@@ -812,30 +850,49 @@ test.describe('deleting', () => {
     await expect(trashRows(page)).toHaveCount(0);
     await expect(page.locator('#noSnapshotsEmpty')).toHaveText('Nothing in the trash.');
     // The button retires with the trash it emptied.
-    await expect(page.locator('#emptyTrashBtn')).toBeHidden();
+    await expect(page.locator('#historyScopeDeleteBtn')).toBeHidden();
   });
 
-  test('delete all versions arms, then clears the store on the second press', async ({ page }) => {
+  test("the note view's destructive deletes THIS note's versions, counted in the ask", async ({
+    page,
+  }) => {
     await page.goto('/');
     await page.locator('#note').click();
     await page.keyboard.press('Control+U');
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' two');
     await page.keyboard.press('Control+U');
+
+    // A SECOND note with its own version — the scoped delete must leave
+    // it standing (the old global button would have swept it).
+    await page.locator('#addTab').click();
+    await page.locator('#note').click();
+    await page.keyboard.type('bystander note');
+    await page.keyboard.press('Control+U');
+    await toastSays(page, 'Snapshot created!');
+    await page.locator('#tabStripTabs .tab-strip-tab').first().click();
+
     await openSnapshots(page);
     await expect(snapshotRows(page)).toHaveCount(2);
+    await expect(page.locator('#snapshotsCount')).toHaveText(
+      '2 versions · 3 of 200 across all notes',
+    );
 
-    const delAll = page.locator('#deleteAllSnapshotsBtn');
-    await delAll.click();
-    await expect(delAll).toHaveClass(/is-armed/);
-    await expect(delAll).toContainText('Really delete all?');
+    const del = page.locator('#historyScopeDeleteBtn');
+    await expect(del.locator('.snap-delete-all-label')).toHaveText("Delete this note's versions");
+    await del.click();
+    await expect(del).toHaveClass(/is-armed/);
+    await expect(del).toContainText('Delete 2 versions?');
     await expect(snapshotRows(page)).toHaveCount(2); // nothing yet
 
-    await delAll.click();
+    await del.click();
+    await expect(page.locator('#toast')).toContainText('Deleted 2 versions of this note.');
     await expect(snapshotRows(page)).toHaveCount(0);
-    await expect(page.locator('#snapshotsCount')).toHaveText('0 of 200');
-    await expect(page.locator('#noSnapshotsEmpty')).toBeVisible();
-    await expect(page.locator('#deleteAllSnapshotsBtn')).toBeDisabled();
+    await expect(page.locator('#noSnapshotsEmpty')).toHaveText('No versions of this note yet.');
+    await expect(page.locator('#snapshotsCount')).toHaveText(
+      '0 versions · 1 of 200 across all notes',
+    );
+    await expect(page.locator('#historyScopeDeleteBtn')).toBeDisabled();
   });
 });
 
@@ -862,7 +919,10 @@ test.describe('the day-anchored timeline', () => {
     await page.keyboard.press('Control+U');
     await seedSnapshotDaysAgo(page, 2);
 
+    // The seeded row belongs to another chain — the all-notes view
+    // holds the whole span.
     await openSnapshots(page);
+    await pickSegment(page, 'all');
     const days = page.locator('#snapshotsList .snap-day');
     await expect(days).toHaveCount(2);
     await expect(days.first()).toHaveText('Today');
@@ -989,6 +1049,8 @@ test.describe('the day-anchored timeline', () => {
     });
 
     await openSnapshots(page);
+    // The twin lives in another chain — the all-notes view holds both.
+    await pickSegment(page, 'all');
     await expect(snapshotRows(page)).toHaveCount(2);
     const currents = page.locator('#snapshotsList .snap-item.is-current');
     await expect(currents).toHaveCount(1);
@@ -1023,9 +1085,16 @@ test.describe('the day-anchored timeline', () => {
     await expect(row.locator('[data-sheet-action="delete"]')).toHaveCount(0);
   });
 
-  test('the footer tells the whole story: N of 200', async ({ page }) => {
+  test('the footer tells the whole story: the chain, the store, the cap', async ({ page }) => {
     await page.goto('/');
     await openSnapshots(page);
+    // The note view's count — the welcome note's chain (none yet), the
+    // store beside it.
+    await expect(page.locator('#snapshotsCount')).toHaveText(
+      '0 versions · 0 of 200 across all notes',
+    );
+    // All notes carries the store's truth alone.
+    await pickSegment(page, 'all');
     await expect(page.locator('#snapshotsCount')).toHaveText('0 of 200');
   });
 
@@ -1129,7 +1198,7 @@ test.describe('the search and the footer', () => {
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
   });
 
-  test('the footer tells the store’s truth; the field’s hit counter owns the filtered story', async ({
+  test('the footer tells the view’s truth; the field’s hit counter owns the filtered story', async ({
     page,
   }) => {
     await page.goto('/');
@@ -1141,21 +1210,27 @@ test.describe('the search and the footer', () => {
     await page.keyboard.press('Control+U');
     await openSnapshots(page);
 
-    // No filters: the store against its cap.
-    await expect(page.locator('#snapshotsCount')).toHaveText('2 of 200');
+    // No filters: the chain first, the store beside it.
+    await expect(page.locator('#snapshotsCount')).toHaveText(
+      '2 versions · 2 of 200 across all notes',
+    );
 
     // 'xylophone' exists only in the second version's text — one hit,
     // counted beside the query it describes. The footer stays the
-    // store's truth: one truth per place, never two numbers disagreeing.
+    // view's truth: one truth per place, never two numbers disagreeing.
     await page.locator('#searchSnapshots').fill('xylophone');
     await expect(page.locator('#snapshotSearchMeta')).toHaveText('1 hit');
-    await expect(page.locator('#snapshotsCount')).toHaveText('2 of 200');
+    await expect(page.locator('#snapshotsCount')).toHaveText(
+      '2 versions · 2 of 200 across all notes',
+    );
 
     await page.locator('#searchSnapshots').fill('zzz-no-match');
     await expect(page.locator('#snapshotSearchMeta')).toHaveText('0 hits');
     await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
     await page.locator('#searchSnapshots').fill('');
-    await expect(page.locator('#snapshotsCount')).toHaveText('2 of 200');
+    await expect(page.locator('#snapshotsCount')).toHaveText(
+      '2 versions · 2 of 200 across all notes',
+    );
   });
 
   test('a capture that MATCHES the active filter keeps the query', async ({ page }) => {
@@ -1284,17 +1359,17 @@ test.describe('the search and the footer', () => {
   });
 });
 
-test.describe('the segmented filter', () => {
-  /** A timeline with both kinds in it: the welcome note's plain
+test.describe('the three views', () => {
+  /** A history with both kinds in it: the welcome note's plain
    *  snapshot, and a trashed note with its own words. The one way to
-   *  see a segment work against a mixed history. */
+   *  see a view work against a mixed history. */
   async function seedVersionsAndTrash(page: Page): Promise<void> {
     await page.goto('/');
     await page.locator('#note').click();
     await page.keyboard.press('Control+U');
     await toastSays(page, 'Snapshot created!');
 
-    // A second note, trashed — its grave joins the timeline.
+    // A second note, trashed — its grave waits in the trash view.
     await page.locator('#addTab').click();
     const editor = page.locator('#note');
     await editor.click();
@@ -1307,97 +1382,161 @@ test.describe('the segmented filter', () => {
     await expect(page.locator('#snapshotsButton')).toHaveClass(/is-trashed/);
   }
 
-  test('narrows the timeline to one kind of row — time never reorders', async ({ page }) => {
+  test('three views, three answers — the note first, the grave never mixed in', async ({
+    page,
+  }) => {
     await seedVersionsAndTrash(page);
+    // The seed just deleted — the first open carries the flash's promise
+    // (the trash). Consume it; then the honest default stands.
+    await openSnapshots(page);
+    await page.locator('#snapshotsModal .snap-head .close').click();
     await openSnapshots(page);
 
-    // Both kinds share the one chronology, newest first: the trash entry
-    // (just deleted) leads the welcome note's snapshot.
-    await expect(snapshotRows(page)).toHaveCount(2);
-    await expect(snapshotRows(page).first()).toHaveClass(/is-trash/);
+    // The sheet opens on THIS note — the welcome note's chain alone.
+    // The trashed note is not here: it is not a version of anything.
+    await expect(snapshotRows(page)).toHaveCount(1);
+    await expect(snapshotRows(page).first()).not.toHaveClass(/is-trash/);
+    await expect(snapshotRows(page).first().locator('.snap-name')).toContainText('Welcome');
+    await expect(page.locator('#snapshotsSubtitle')).toHaveText('Versions of this note.');
+    // The trash tab carries the count of what waits there.
+    await expect(page.locator('.snap-seg-btn[data-seg="trash"] .snap-seg-count')).toHaveText('1');
 
-    // The trash segment answers the rail button's question directly.
+    // All notes: every note's VERSIONS on one chronology — and nothing
+    // else. The grave does not double the trashed note here.
+    await pickSegment(page, 'all');
+    await expect(snapshotRows(page)).toHaveCount(1);
+    await expect(snapshotRows(page).first()).not.toHaveClass(/is-trash/);
+    await expect(page.locator('#snapshotsSubtitle')).toHaveText('Every version of every note.');
+
+    // The trash view answers the flash's question directly.
     await pickSegment(page, 'trash');
     await expect(trashRows(page)).toHaveCount(1);
     await expect(trashRows(page).first().locator('.snap-name')).toContainText('casualty words');
     await expect(snapshotRows(page).filter({ hasNotText: 'casualty words' })).toHaveCount(0);
-    // The empty state speaks for the segment it stands in.
-    // (Not empty here — the trash holds the casualty.)
+    await expect(page.locator('#snapshotsSubtitle')).toHaveText(
+      'Deleted notes — kept for 30 days.',
+    );
+    // The footer counts the trash and names the next departure.
+    await expect(page.locator('#snapshotsCount')).toContainText('1 in trash');
+    await expect(page.locator('#snapshotsCount')).toContainText('next leaves in 30 days');
+  });
 
-    // The versions segment keeps the snapshot and drops the grave.
-    await pickSegment(page, 'versions');
+  test('the sheet follows the note on stage — reopen answers for the new subject', async ({
+    page,
+  }) => {
+    await page.goto('/');
+
+    // Two live notes, one version each.
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+U');
+    await toastSays(page, 'Snapshot created!');
+    await page.locator('#addTab').click();
+    await page.locator('#note').click();
+    await page.keyboard.type('second note words');
+    await page.keyboard.press('Control+U');
+    await toastSays(page, 'Snapshot created!');
+
+    // Open — the second note's chain alone (it is on stage).
+    await openSnapshots(page);
     await expect(snapshotRows(page)).toHaveCount(1);
-    await expect(snapshotRows(page).first()).not.toHaveClass(/is-trash/);
-    await expect(page.locator('#emptyTrashBtn')).toBeVisible();
+    await expect(snapshotRows(page).first().locator('.snap-name')).toContainText(
+      'second note words',
+    );
 
-    // Back to everything.
+    // Switch to the welcome note, reopen — the sheet answers for it.
+    await page.locator('#snapshotsModal .snap-head .close').click();
+    await page.locator('#tabStripTabs .tab-strip-tab').first().click();
+    await openSnapshots(page);
+    await expect(snapshotRows(page)).toHaveCount(1);
+    await expect(snapshotRows(page).first().locator('.snap-name')).toContainText('Welcome');
+    // All notes still holds both chains.
     await pickSegment(page, 'all');
     await expect(snapshotRows(page)).toHaveCount(2);
   });
 
-  test('the trash segment empty state explains what waits here', async ({ page }) => {
+  test('a delete points the next open at the trash — once', async ({ page }) => {
+    await seedVersionsAndTrash(page);
+
+    // The flash promised "it went in HERE" — the first open after the
+    // delete lands on the trash without a click.
+    await openSnapshots(page);
+    await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="trash"]')).toHaveClass(
+      /is-active/,
+    );
+    await expect(trashRows(page)).toHaveCount(1);
+
+    // The promise was for THAT open. Close, reopen — the honest default
+    // again: the note on stage.
+    await page.locator('#snapshotsModal .snap-head .close').click();
+    await openSnapshots(page);
+    await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="note"]')).toHaveClass(
+      /is-active/,
+    );
+    await expect(snapshotRows(page)).toHaveCount(1);
+  });
+
+  test('the trash view empty state explains what waits here', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
     await page.keyboard.press('Control+U');
 
     await openSnapshots(page);
+    // No trash, no count chip.
+    await expect(page.locator('.snap-seg-btn[data-seg="trash"] .snap-seg-count')).toBeHidden();
     await pickSegment(page, 'trash');
     await expect(page.locator('#noSnapshotsEmpty')).toHaveText('Nothing in the trash.');
     await expect(page.locator('#noTrashHint')).toBeVisible();
-    // The footer stays the store's truth — versions against the cap.
-    await expect(page.locator('#snapshotsCount')).toHaveText('1 of 200');
+    // The footer counts the trash it stands in; the versions live in
+    // their own view's footer now.
+    await expect(page.locator('#snapshotsCount')).toHaveText('0 in trash');
   });
 
-  test('a capture that lands while the trash segment is active clears it so the flash is visible', async ({
+  test('a capture that lands while the trash view is active clears it so the flash is visible', async ({
     page,
   }) => {
     await seedVersionsAndTrash(page);
-    await openSnapshots(page);
-
-    // Park the sheet on the trash segment.
-    await pickSegment(page, 'trash');
-    await expect(trashRows(page)).toHaveCount(1);
-
-    // Close, edit the note, reopen — the segment persists like the
-    // query does. The capture is then taken WITH THE SHEET OPEN (the
-    // button): it would be hidden by the trash segment, so the segment
-    // gives way — the new snapshot is the thing the user asked for, the
-    // segment was yesterday's context.
-    await page.locator('#snapshotsModal .snap-head .close').click();
-    await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
+    // The edit happens BEFORE the sheet opens — the capture will be
+    // taken with the sheet open, through the keyboard shortcut, so
+    // nothing has to close or click underneath it.
     await page.locator('#note').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' grocery run');
+
+    // The seed's delete points the open at the trash — exactly where a
+    // capture would be invisible.
     await openSnapshots(page);
     await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="trash"]')).toHaveClass(
       /is-active/,
     );
+    await expect(trashRows(page)).toHaveCount(1);
 
-    await page.locator('#createSnapshotBtn').click();
+    await page.keyboard.press('Control+U');
     await toastSays(page, 'Snapshot created!');
 
-    // The segment reset to all — the whole history shows, flash and all.
-    await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="all"]')).toHaveClass(
+    // The view gave way to the note — the new snapshot is the thing
+    // the user asked for, the view was yesterday's context. The
+    // welcome note's chain shows, flash and all.
+    await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="note"]')).toHaveClass(
       /is-active/,
     );
-    await expect(snapshotRows(page)).toHaveCount(3);
+    await expect(snapshotRows(page)).toHaveCount(2);
     await expect(snapshotRows(page).first()).toHaveClass(/is-new/);
   });
 
-  test('Escape clears the segment first; the sheet closes on the next press', async ({ page }) => {
+  test('Escape clears the view first; the sheet closes on the next press', async ({ page }) => {
     await seedVersionsAndTrash(page);
     await openSnapshots(page);
 
     await pickSegment(page, 'trash');
     await expect(trashRows(page)).toHaveCount(1);
 
-    // Escape (focus on the body, not the search field) clears the
-    // segment — the sheet stays.
+    // Escape (focus on the body, not the search field) resets the view
+    // to the note — the sheet stays.
     await page.keyboard.press('Escape');
-    await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="all"]')).toHaveClass(
+    await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="note"]')).toHaveClass(
       /is-active/,
     );
-    await expect(snapshotRows(page)).toHaveCount(2);
+    await expect(snapshotRows(page)).toHaveCount(1);
     await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
 
     // The next Escape is the sheet's.
@@ -1405,24 +1544,52 @@ test.describe('the segmented filter', () => {
     await expect(page.locator('#snapshotsModal')).not.toHaveClass(/in/);
   });
 
-  test('the search covers both kinds — a deleted note answers by its words', async ({ page }) => {
+  test('the query is scoped to its view — and a miss carries the query out of the scope', async ({
+    page,
+  }) => {
     await seedVersionsAndTrash(page);
+    // Consume the delete's redirect first — this test is about the
+    // views' own behavior, not the promise.
+    await openSnapshots(page);
+    await page.locator('#snapshotsModal .snap-head .close').click();
     await openSnapshots(page);
 
-    // The field finds the trash entry by its content — the exact moment
-    // a person needs the trash most is when they only remember words.
+    // The note view holds the welcome note's chain — 'casualty' is not
+    // its words. A miss, honestly counted, with the way out beside it.
     await page.locator('#searchSnapshots').fill('casualty');
-    await expect(snapshotRows(page)).toHaveCount(1);
-    await expect(snapshotRows(page).first()).toHaveClass(/is-trash/);
+    await expect(page.locator('#snapshotSearchMeta')).toHaveText('0 hits');
+    await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
+    await expect(page.locator('#widenSearchFromEmpty')).toHaveText('Search all notes');
+
+    // All notes holds every VERSION — the casualty never had one. The
+    // scope widens again, one dimension over.
+    await page.locator('#widenSearchFromEmpty').click();
+    await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="all"]')).toHaveClass(
+      /is-active/,
+    );
+    await expect(page.locator('#searchSnapshots')).toHaveValue('casualty');
+    await expect(page.locator('#snapshotSearchMeta')).toHaveText('0 hits');
+    await expect(page.locator('#widenSearchFromEmpty')).toHaveText('Search the trash');
+
+    // The trash holds the words — the exact moment a person needs the
+    // trash most is when they only remember words, and the query walked
+    // itself there.
+    await page.locator('#widenSearchFromEmpty').click();
+    await expect(trashRows(page)).toHaveCount(1);
     await expect(page.locator('#snapshotSearchMeta')).toHaveText('1 hit');
 
-    // And the field still finds versions by theirs.
+    // And the way back out works the same: a version's words miss in
+    // the trash, widen returns to all notes, and the version answers.
     await page.locator('#searchSnapshots').fill('Welcome');
+    await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
+    await page.locator('#widenSearchFromEmpty').click();
     await expect(snapshotRows(page)).toHaveCount(1);
     await expect(snapshotRows(page).first()).not.toHaveClass(/is-trash/);
   });
 
-  test('combined filters miss honestly, and the way out clears BOTH', async ({ page }) => {
+  test('a miss clears the QUERY, not the view — the choice of view is the user’s', async ({
+    page,
+  }) => {
     await seedVersionsAndTrash(page);
     await openSnapshots(page);
 
@@ -1430,18 +1597,20 @@ test.describe('the segmented filter', () => {
     await pickSegment(page, 'trash');
     await expect(trashRows(page)).toHaveCount(1);
 
-    // …then a query only a version could answer: a dead end two
-    // filters built. The recovery button clears the pair of them.
+    // …then a query only a version could answer: a dead end the scope
+    // built. The recovery button drops the query and KEEPS the view —
+    // throwing a trash browser back to versions for the crime of a bad
+    // query was the old behavior, and it was a surprise.
     await page.locator('#searchSnapshots').fill('Welcome');
     await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
     await expect(page.locator('#clearSearchFromEmpty')).toBeVisible();
 
     await page.locator('#clearSearchFromEmpty').click();
     await expect(page.locator('#searchSnapshots')).toHaveValue('');
-    await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="all"]')).toHaveClass(
+    await expect(page.locator('#snapshotSegment .snap-seg-btn[data-seg="trash"]')).toHaveClass(
       /is-active/,
     );
-    await expect(snapshotRows(page)).toHaveCount(2);
+    await expect(trashRows(page)).toHaveCount(1);
     await expect(page.locator('#noSnapshotsMiss')).toBeHidden();
   });
 });
