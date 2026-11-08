@@ -76,6 +76,26 @@ async function openSharePanel(page: Page): Promise<void> {
 }
 
 /**
+ * Waits for the cloud to be idle — "up to date" — so no push or merge
+ * is in flight. The empty-note refusal test used to sleep a fixed
+ * 700ms and raced the background local-change cycle on slow machines:
+ * a merge landing mid-assertion could repaint the unfocused editor from
+ * a model that still held the typed words (the delete sat inside the
+ * input debounce), and the refusal never appeared. The same settle the
+ * sync specs' forceSync exists for — "a fixed sleep raced under CI
+ * load" — inlined here because the share panel, not the cloud modal,
+ * is this spec's surface.
+ */
+async function waitForSettledSync(page: Page): Promise<void> {
+  await expect
+    .poll(() => page.locator('#cloudNavContainer').getAttribute('title'), {
+      timeout: 20_000,
+      message: 'the typed words to finish uploading',
+    })
+    .toContain('up to date');
+}
+
+/**
  * The links inventory: Settings → Cloud sync → Shared links. The modal's
  * open fires the list's refresh — wait for that fetch to land so the
  * rows the test clicks are the settled ones, not a render about to be
@@ -137,6 +157,10 @@ test.describe('share links (real API)', () => {
   }) => {
     await signUp(page, freshAccount());
     await typeIntoFreshNote(page, 'temporary words that will be deleted');
+    // The words must be ON the server (and its echo settled) before the
+    // note goes empty — otherwise a cycle landing after the delete can
+    // merge the server's copy back over it.
+    await waitForSettledSync(page);
     await openSharePanel(page);
 
     // A note with words: the create button is alive, no refusal shown.
@@ -149,10 +173,40 @@ test.describe('share links (real API)', () => {
     await page.keyboard.press('Control+a');
     await page.keyboard.press('Backspace');
     await page.waitForTimeout(700); // let the capture land in the model
+    // TEMP-DIAG: background sampler — what happens to the editor while
+    // the assertion polls.
+    const samples: string[] = [];
+    void page
+      .waitForFunction(
+        () => {
+          const note = document.getElementById('note');
+          const line = document.getElementById('shareEmptyLine');
+          return {
+            e: (note?.textContent ?? '').slice(0, 20),
+            h: line?.hasAttribute('hidden') ?? null,
+          };
+        },
+        { timeout: 6000 },
+      )
+      .catch(() => null);
+    const sampler = setInterval(() => {
+      void page
+        .evaluate(() => ({
+          e: (document.getElementById('note')?.textContent ?? '').slice(0, 20),
+          h: document.getElementById('shareEmptyLine')?.hasAttribute('hidden') ?? null,
+        }))
+        .then((s) => samples.push(`${Date.now() % 100000} ${JSON.stringify(s)}`))
+        .catch(() => undefined);
+    }, 120);
     await openSharePanel(page);
 
-    await expect(page.locator('#shareEmptyLine')).toBeVisible();
-    await expect(page.locator('#shareCreateBtn')).toBeDisabled();
+    try {
+      await expect(page.locator('#shareEmptyLine')).toBeVisible();
+      await expect(page.locator('#shareCreateBtn')).toBeDisabled();
+    } finally {
+      clearInterval(sampler);
+      console.log('TEMP-DIAG samples:', JSON.stringify(samples, null, 0));
+    }
   });
 
   test('a note with words shares: one Active card, and the button turns into the expiration', async ({
