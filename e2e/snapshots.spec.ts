@@ -1295,6 +1295,43 @@ test.describe('the version diffstat', () => {
     // The baseline carries nothing.
     await expect(rows.nth(1).locator('.snap-delta')).toHaveCount(0);
   });
+
+  test('the detail card shows the DIFF against the predecessor — not a reprint', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.locator('#note').click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.press('Delete');
+    await page.keyboard.type('trail log');
+    await page.keyboard.press('Control+U'); // the baseline
+
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type('\nmet a fox at the ridge');
+    await page.keyboard.press('Control+U');
+
+    await openSnapshots(page);
+    const rows = snapshotRows(page);
+    await expect(rows).toHaveCount(2);
+
+    // The newest version's card IS the change: the added line is an
+    // ins, the caption names the comparison, the counts agree.
+    await expandRow(page, rows.first());
+    const card = rows.first().locator('.snap-detail');
+    await expect(card.locator('.snap-diff')).toBeVisible();
+    await expect(card.locator('.snap-diff-line.is-add .snap-diff-text')).toContainText(
+      'met a fox at the ridge',
+    );
+    await expect(card.locator('.snap-diff-cap')).toContainText('Changed since');
+    await expect(card.locator('.snap-diff-stat .is-up')).toHaveText('+1');
+    // The full-text body is gone — the diff is the card.
+    await expect(card.locator('.snap-detail-text')).toHaveCount(0);
+
+    // The baseline (no predecessor) keeps the full-text card.
+    await expandRow(page, rows.nth(1));
+    await expect(rows.nth(1).locator('.snap-detail .snap-detail-text')).toBeVisible();
+    await expect(rows.nth(1).locator('.snap-detail .snap-diff')).toHaveCount(0);
+  });
 });
 
 test.describe('the search and the footer', () => {
@@ -1732,5 +1769,62 @@ test.describe('the three views', () => {
     );
     await expect(trashRows(page)).toHaveCount(1);
     await expect(page.locator('#noSnapshotsMiss')).toBeHidden();
+  });
+
+  test("the toolbar tells the truth per view — the field's scope, the action's home", async ({
+    page,
+  }) => {
+    await seedVersionsAndTrash(page);
+    // Consume the delete's redirect — this test is about the views'
+    // own behavior.
+    await openSnapshots(page);
+    await page.locator('#snapshotsModal .snap-head .close').click();
+    await openSnapshots(page);
+
+    // The note view: the field promises the note's own words, the
+    // action stands ready.
+    await expect(page.locator('#searchSnapshots')).toHaveAttribute(
+      'placeholder',
+      'Filter this note...',
+    );
+    await expect(page.locator('#createSnapshotBtn')).toBeVisible();
+
+    // All notes widens the promise.
+    await pickSegment(page, 'all');
+    await expect(page.locator('#searchSnapshots')).toHaveAttribute(
+      'placeholder',
+      'Filter all versions...',
+    );
+    await expect(page.locator('#createSnapshotBtn')).toBeVisible();
+
+    // The trash view: the field scopes to the graves, and Take
+    // snapshot sits out — the view browses deleted notes; there is no
+    // note on stage to capture into it.
+    await pickSegment(page, 'trash');
+    await expect(page.locator('#searchSnapshots')).toHaveAttribute(
+      'placeholder',
+      'Filter the trash...',
+    );
+    await expect(page.locator('#createSnapshotBtn')).toBeHidden();
+
+    // Back to the note view — the action returns with the view.
+    await pickSegment(page, 'note');
+    await expect(page.locator('#createSnapshotBtn')).toBeVisible();
+    await page.locator('#snapshotsModal .snap-head .close').click();
+  });
+
+  test('a miss names the query it failed to find', async ({ page }) => {
+    await seedVersionsAndTrash(page);
+    // Consume the delete's redirect first.
+    await openSnapshots(page);
+    await page.locator('#snapshotsModal .snap-head .close').click();
+    await openSnapshots(page);
+
+    await page.locator('#searchSnapshots').fill('zzz-no-such-words');
+    await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
+    await expect(page.locator('#noSnapshotsMiss')).toHaveText(
+      'Nothing matches \u201czzz-no-such-words\u201d.',
+    );
+    await page.locator('#snapshotsModal .snap-head .close').click();
   });
 });

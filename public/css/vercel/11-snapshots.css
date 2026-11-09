@@ -292,6 +292,16 @@
   display: none;
 }
 
+/* The "/" keycap is a KEYBOARD affordance: on a touch device there is
+   no key to press it with, and it spends the field's trailing edge
+   pretending otherwise. Sits after the base rule on purpose — same
+   specificity, later wins. */
+@media (hover: none), (pointer: coarse) {
+  .snap-search-slash {
+    display: none;
+  }
+}
+
 .snap-search-slash kbd,
 .snap-kbd-inline kbd {
   display: inline-flex;
@@ -316,13 +326,18 @@
    sheet exists for (this note's chain, every note's versions, the
    trash). The active pill lifts on the elevated surface — the same
    quiet-fill language the search field speaks. */
+/* The segment sheds its fill: the search pill above already owns the
+   band's one quiet-gray surface, and two stacked grays read as a mud
+   band (audit: "muddy stacked-gray band"). The ACTIVE PILL carries
+   elevated + ring on the bare sheet — the group reads as a control
+   through its pressed state, the way the app's quiet tabs do. */
 .snap-seg {
   display: inline-flex;
   align-items: center;
   gap: 2px;
   flex: 0 0 auto;
   padding: 2px;
-  background: var(--vz-bg-subtle);
+  background: transparent;
   border: 1px solid transparent;
   border-radius: 8px;
   transition: border-color var(--vz-dur) ease;
@@ -370,16 +385,18 @@
 }
 
 /* The Trash tab's count — what waits there, visible from every view.
-   Danger-soft, the same dress the retention chips wear: a count of
-   things that leave is a caution, not a badge of honor. */
+   Neutral wayfinding, not a warning: red stays reserved for "leaving
+   soon" (the expiring rows' dots and chips), and a number that is
+   just an inventory dressed in red cried wolf on every open. */
 .snap-seg-count {
   display: inline-block;
   min-width: 17px;
   margin-left: 6px;
   padding: 1px 5px 0;
   border-radius: 999px;
-  background: var(--vz-danger-soft);
-  color: var(--vz-danger);
+  background: var(--vz-bg-chip);
+  border: 1px solid var(--vz-border);
+  color: var(--vz-fg-muted);
   font-size: 10.5px;
   font-weight: 600;
   line-height: 15px;
@@ -391,6 +408,12 @@
   display: none;
 }
 
+/* The toolbar's action, quieted. The sheet's filled primary is the
+   RESTORE a card opens onto — two black buttons per glance (Take + a
+   row's Restore) fought for the eye and the toolbar's lost both times
+   it mattered (an expanded card, a search miss). Take snapshot also
+   has Ctrl+U and the note's context menu; it can afford to speak
+   second. */
 .snap-take {
   flex: 0 0 auto;
   display: inline-flex;
@@ -398,33 +421,42 @@
   gap: 6px;
   height: 32px;
   padding: 0 12px;
-  background: var(--vz-primary);
-  border: 1px solid var(--vz-primary);
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius);
-  color: var(--vz-primary-fg);
+  color: var(--vz-fg);
   font-size: 12.5px;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color var(--vz-dur) ease, transform 100ms ease;
+  transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease,
+    transform 100ms ease;
 }
 
 .snap-take:hover,
 .snap-take:focus-visible {
-  background: var(--vz-primary-hover);
+  background: var(--vz-bg-hover);
+  border-color: var(--vz-border-strong);
+}
+
+.snap-take[hidden] {
+  display: none;
 }
 
 .snap-take:active {
   transform: scale(0.98);
 }
 
-/* A trash row's dot dresses danger — the row kind reads on the rail
-   before any chip says it. */
-.snap-item.is-trash::after {
+/* Red on this rail means "leaving soon" — a grave in its last days
+   (the retention chip turned danger beside the title, and the dot
+   follows it). A plain trashed note keeps the neutral dot: the trash
+   view is already all trash, and red on every row answered a question
+   nobody asked while diluting the one signal that matters. */
+.snap-item.is-trash.is-expiring::after {
   border-color: var(--vz-danger);
 }
 
-.snap-item.is-trash.is-open::after {
+.snap-item.is-trash.is-expiring.is-open::after {
   background: var(--vz-danger);
   border-color: var(--vz-danger);
 }
@@ -538,6 +570,10 @@ body.dark .snap-chip.is-danger {
   top: 21px;
 }
 
+/* The dot centers on the title line (row padding 12px + half the
+   18.6px first line ≈ 21px; the dot is 14px tall with its border). */
+
+
 .snap-item.group-end::before {
   bottom: auto;
   height: 21px;
@@ -554,7 +590,7 @@ body.dark .snap-chip.is-danger {
   content: '';
   position: absolute;
   left: calc(var(--snap-time) + var(--snap-gap) + (var(--snap-rail) / 2) - 5px);
-  top: 17px;
+  top: 14px;
   width: 10px;
   height: 10px;
   border-radius: 50%;
@@ -603,8 +639,38 @@ body.dark .snap-chip.is-danger {
   outline-offset: -2px;
 }
 
+/* The disclosure affordance — a bare text row read as a list, not as
+   the accordion it is (audit: "nothing signals these rows are
+   clickable"). A quiet chevron at the row's far edge, turning to point
+   down at the card it opens. */
+.snap-caret {
+  position: absolute;
+  top: 12px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--vz-fg-subtle);
+  pointer-events: none;
+  transition: transform 160ms var(--vz-ease), color var(--vz-dur) ease;
+}
+
+.snap-row:hover .snap-caret,
+.snap-row:focus-visible .snap-caret {
+  color: var(--vz-fg-muted);
+}
+
+.snap-item.is-open .snap-caret {
+  transform: rotate(90deg);
+  color: var(--vz-fg-muted);
+}
+
 .snap-when {
-  padding-top: 2px;
+  /* Baseline-aligned with the title (see .snap-what) — the clock and
+     the name share a first baseline no matter their font sizes. */
+  align-self: baseline;
   font-size: 11px;
   line-height: 1.45;
   /* fg-muted for the same AA reason as the day labels — the clock is the
@@ -621,6 +687,12 @@ body.dark .snap-chip.is-danger {
 
 .snap-what {
   min-width: 0;
+  /* Same baseline contract as the clock: the column's first line is
+     the title line, and its baseline is what the clock aligns to. The
+     old top-alignment sat an 11px clock flush with a 13px title —
+     boxes level, baselines a pixel and a half apart, which reads as
+     "almost right" at exactly the size where it matters. */
+  align-self: baseline;
 }
 
 .snap-line {
@@ -677,16 +749,17 @@ body.dark .snap-chip.is-danger {
   display: inline-flex;
 }
 
-.snap-current-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--vz-success);
+.snap-subline {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 2px;
+  min-width: 0;
 }
 
 .snap-preview {
-  display: block;
-  margin-top: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -702,8 +775,10 @@ body.dark .snap-chip.is-danger {
 }
 
 .snap-delta {
-  display: inline-block;
-  margin-top: 5px;
+  /* The diffstat rides the preview line's tail — the row's answer to
+     "what changed" belongs beside the words that changed, not on a
+     third line that breaks the two-line rhythm every badged row had. */
+  flex: 0 0 auto;
   padding: 1px 6px;
   font-size: 10.5px;
   line-height: 1.5;
@@ -711,6 +786,7 @@ body.dark .snap-chip.is-danger {
   color: var(--vz-fg-muted);
   background: var(--vz-bg-chip);
   border-radius: 999px;
+  white-space: nowrap;
 }
 
 .snap-delta.is-up {
@@ -775,6 +851,120 @@ body.dark .snap-chip.is-danger {
   word-break: break-word;
   scrollbar-width: thin;
   scrollbar-color: var(--vz-border) transparent;
+}
+
+/* ---- the diff card ---- */
+
+/* What a version's detail card shows against its predecessor. The
+   caption names the comparison; the body scrolls like the full text
+   it replaces. Additions sit on a neutral chip fill with a green
+   sign, deletions on the system's one semantic tint (danger-soft)
+   with the minus — red is the only tint this design system keeps, so
+   the diff spends it exactly where care is owed: on what left. */
+.snap-diff-cap {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 6px;
+  margin-bottom: 7px;
+  border-bottom: 1px solid var(--vz-border);
+  font-size: 11px;
+  color: var(--vz-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.snap-diff-stat {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.snap-diff-stat .is-up {
+  color: var(--vz-success);
+  font-weight: 600;
+}
+
+.snap-diff-stat .is-down {
+  color: var(--vz-danger);
+  font-weight: 600;
+}
+
+.snap-diff-body {
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-size: 12px;
+  line-height: 1.6;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vz-border) transparent;
+}
+
+.snap-diff-line {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 0 6px 0 0;
+  border-radius: 4px;
+  /* ins/del come with browser text-decoration defaults — the tint and
+     the sign carry the semantics; the underline noise does not. */
+  text-decoration: none;
+}
+
+.snap-diff-sign {
+  flex: 0 0 14px;
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--vz-fg-subtle);
+  user-select: none;
+}
+
+.snap-diff-text {
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--vz-fg);
+}
+
+.snap-diff-line.is-add {
+  background: var(--vz-bg-chip);
+}
+
+.snap-diff-line.is-add .snap-diff-sign {
+  color: var(--vz-success);
+}
+
+.snap-diff-line.is-del {
+  background: var(--vz-danger-soft);
+}
+
+.snap-diff-line.is-del .snap-diff-sign {
+  color: var(--vz-danger);
+}
+
+.snap-diff-line.is-del .snap-diff-text {
+  /* Full fg, not muted: the tint and the minus already carry the
+     "removed" semantics, and muted-over-danger-soft measured muddy in
+     dark mode — the words are what the reader is scanning for. */
+  color: var(--vz-fg);
+}
+
+.snap-diff-line.is-ctx .snap-diff-text {
+  color: var(--vz-fg-muted);
+}
+
+.snap-diff-gap {
+  padding: 3px 6px 3px 21px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vz-fg-subtle);
+  user-select: none;
+}
+
+.snap-diff-gap.is-end {
+  padding-top: 7px;
+  color: var(--vz-fg-muted);
 }
 
 .snap-detail-meta {
@@ -1014,6 +1204,21 @@ body.dark .snap-chip.is-danger {
   background: var(--vz-bg-hover);
 }
 
+/* The miss's first way out carries the weight: the user's own query is
+   what hid the rows, so clearing it is the recovery; carrying the
+   query into another scope is the speculation. */
+.snap-clear-miss.is-primary {
+  background: var(--vz-bg-elevated);
+  border-color: var(--vz-border-strong);
+  font-weight: 600;
+}
+
+.snap-clear-miss.is-primary:hover,
+.snap-clear-miss.is-primary:focus-visible {
+  border-color: var(--vz-fg-muted);
+  background: var(--vz-bg-hover);
+}
+
 /* The miss face's two ways out, side by side: drop the query, or carry
    it into the other scope. */
 .snap-empty-actions {
@@ -1055,6 +1260,11 @@ body.dark .snap-chip.is-danger {
 
   .snap-detail {
     margin-right: 2px;
+    /* Flush on a phone: the desktop's 78px nesting indent buys a cue
+       the border-and-fill already carries, and on a 390px screen it
+       cost a quarter of the card's width — the diff and the actions
+       get it back. */
+    margin-left: 8px;
   }
 
   .snap-take {
@@ -1116,5 +1326,9 @@ body.dark .snap-chip.is-danger {
   .snap-item.is-new .snap-row {
     animation: none;
     background: var(--vz-bg-chip);
+  }
+
+  .snap-caret {
+    transition: none;
   }
 }

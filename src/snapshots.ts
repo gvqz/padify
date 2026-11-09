@@ -100,8 +100,11 @@ import { TRASH_RETENTION_MS } from '../shared/wire';
 import type { TrashedNote } from './storage';
 import {
   renderSheetTimeline,
+  sheetDiff,
   wireSheetTimeline,
+  type SheetDiff,
   type SheetRowModel,
+  type SheetRowDiff,
   TwoStepConfirm,
 } from './ui/sheet-kit';
 
@@ -370,6 +373,31 @@ export function snapshotTypeBadgeLabel(noteType: string): string {
     return 'Rich Text';
   }
   return noteTypeLabel(noteType as NoteType);
+}
+
+/**
+ * The diff card's caption — when the version's predecessor was taken.
+ * Same-day predecessors speak the clock alone (the day is the row
+ * above); older ones name their date, with the year only when it is
+ * not this one (the sheet-day rule, one glance over).
+ */
+export function snapshotDiffCaption(previousTimestamp: number, now: number = Date.now()): string {
+  const time = new Date(previousTimestamp).toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const date = new Date(previousTimestamp);
+  const today = new Date(now);
+  if (date.toDateString() === today.toDateString()) {
+    return `Changed since ${time}`;
+  }
+  const sameYear = date.getFullYear() === today.getFullYear();
+  const day = date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  });
+  return `Changed since ${day}, ${time}`;
 }
 
 /** Render-time date — the row always speaks the user's current locale. */
@@ -780,6 +808,38 @@ export class SnapshotsManager {
    *  rowsFingerprint). A persist that moves nothing the sheet shows
    *  must not rebuild the list — see wireTabsListener. */
   private renderedFingerprint: string | null = null;
+
+  /** Line diffs by snapshot id — the LCS is fine once but wrong to pay
+   *  per keystroke (renderRows runs on every search keypress; the rows
+   *  are immutable, so the diff of a (row, predecessor) pair is too).
+   *  Keyed by the row's id and validated against the predecessor's id
+   *  the pairing last saw — a capture between renders can hand an
+   *  older row a NEWER predecessor's slot? No: a capture only ever
+   *  inserts at the head of a note's chain, so an existing pair's
+   *  predecessor never changes. The validation is cheap insurance. */
+  private diffMemo: Map<number, { prevId: number; diff: SheetDiff | null }> = new Map();
+
+  /** The diff a version's card shows against its predecessor — null
+   *  when there is nothing to diff (no predecessor, no line changes,
+   *  or a note too large to diff honestly; the card then shows the
+   *  full text). */
+  private rowDiff(snapshot: Snapshot, previous: Snapshot | undefined): SheetRowDiff | undefined {
+    if (!previous || snapshot.id === undefined) {
+      return undefined;
+    }
+    const memo = this.diffMemo.get(snapshot.id);
+    if (memo && memo.prevId === previous.id) {
+      return memo.diff
+        ? { diff: memo.diff, caption: snapshotDiffCaption(previous.timestamp) }
+        : undefined;
+    }
+    const diff = sheetDiff(
+      snapshotReadableText(previous.content, previous.noteType),
+      snapshotReadableText(snapshot.content, snapshot.noteType),
+    );
+    this.diffMemo.set(snapshot.id, { prevId: previous.id ?? -1, diff });
+    return diff ? { diff, caption: snapshotDiffCaption(previous.timestamp) } : undefined;
+  }
 
   constructor() {
     this.dbName = 'NotepadSnapshotsDB';
@@ -1500,8 +1560,11 @@ export class SnapshotsManager {
    *  row's store id. Rows group by their NOTE (the version chain lives
    *  inside a note) — cache order is already newest-first, so the first
    *  earlier row with the same noteId is the previous version. */
-  private computeChangeBadges(): Map<number, SnapshotChangeBadge> {
-    const badges = new Map<number, SnapshotChangeBadge>();
+  /** The badge AND the predecessor it was measured against — the
+   *  predecessor is what the detail card's diff needs (one walk, two
+   *  answers, the same pairing rule both read). */
+  private computeChangeContext(): Map<number, { badge: SnapshotChangeBadge; previous: Snapshot }> {
+    const context = new Map<number, { badge: SnapshotChangeBadge; previous: Snapshot }>();
     const rows = this.cache.map((row) => row.snapshot);
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -1514,10 +1577,10 @@ export class SnapshotsManager {
       }
       const badge = snapshotChangeBadge(row, previous);
       if (badge) {
-        badges.set(row.id, badge);
+        context.set(row.id, { badge, previous });
       }
     }
-    return badges;
+    return context;
   }
 
   /** Maps a snapshot onto the shared row model. Current is NOT set here —
@@ -1529,6 +1592,7 @@ export class SnapshotsManager {
     snapshot: Snapshot,
     change?: SnapshotChangeBadge,
     showNoteChip = true,
+    previous?: Snapshot,
   ): SheetRowModel {
     // Where restore sends this version — the card says the target's
     // name before the click, not a dialog's after it.
@@ -1556,6 +1620,7 @@ export class SnapshotsManager {
       title: snapshot.title,
       noteChip: showNoteChip ? snapshot.noteName : undefined,
       preview: snapshot.preview,
+      diff: this.rowDiff(snapshot, previous),
       detailText: snapshotReadableText(snapshot.content, snapshot.noteType),
       detailMeta: [
         formatSnapshotTimestamp(snapshot.timestamp),
@@ -1599,7 +1664,7 @@ export class SnapshotsManager {
     // have open, byte for byte? Read once per render; typing can't race
     // it (the sheet covers the editor).
     const active = getActiveNoteContent();
-    const badges = this.computeChangeBadges();
+    const changes = this.computeChangeContext();
 
     // The version set is SCOPED by the view: the active note's chain by
     // identity (legacy rows without a noteId belong to no note and ride
@@ -1612,9 +1677,10 @@ export class SnapshotsManager {
     );
     const filtered = scoped.filter((row) => !filtering || row.searchText.includes(term));
     const showNoteChip = this.segment !== 'note';
-    const versionModels = filtered.map(({ snapshot }) =>
-      this.versionRowModel(snapshot, badges.get(snapshot.id ?? -1), showNoteChip),
-    );
+    const versionModels = filtered.map(({ snapshot }) => {
+      const change = changes.get(snapshot.id ?? -1);
+      return this.versionRowModel(snapshot, change?.badge, showNoteChip, change?.previous);
+    });
 
     // ONE Current, ever. Several snapshots can hold the note's exact
     // bytes — a restore chain (restore → safety copy → capture) sees to
@@ -1667,6 +1733,31 @@ export class SnapshotsManager {
       subtitle.textContent = historySubtitle(this.segment, activeTab?.name ?? undefined);
     }
 
+    // The field's promise follows the view it filters — "Filter
+    // history" overstated the note view's scope and understated the
+    // trash's (the query never crosses views on its own).
+    const searchField = document.getElementById('searchSnapshots') as HTMLInputElement | null;
+    if (searchField) {
+      const placeholder =
+        this.segment === 'trash'
+          ? 'Filter the trash...'
+          : this.segment === 'all'
+            ? 'Filter all versions...'
+            : 'Filter this note...';
+      searchField.placeholder = placeholder;
+      searchField.setAttribute('aria-label', placeholder);
+    }
+
+    // The toolbar's one action sits out the Trash view: there is no
+    // note on stage to snapshot INTO it (the view browses graves), and
+    // the row it would answer — the active note's — is not what the
+    // eye is here for. The tab's own actions are Restore and Delete
+    // forever, on the rows.
+    const takeBtn = document.getElementById('createSnapshotBtn') as HTMLButtonElement | null;
+    if (takeBtn) {
+      takeBtn.hidden = this.segment === 'trash';
+    }
+
     // The empty state has faces, per view: the view's own emptiness (the
     // copy explains what would land here), or a query that matched
     // nothing IN it (the miss carries two ways out — drop the query, or
@@ -1688,6 +1779,16 @@ export class SnapshotsManager {
     const showMiss = filtering && scopeHasContent && !hasRows;
     const trashFace = this.segment === 'trash';
     const noteFace = this.segment === 'note';
+    if (showMiss) {
+      const miss = document.getElementById('noSnapshotsMiss');
+      if (miss) {
+        // Name the query (in the case it was typed, not the case the
+        // matcher lowercased to) — the miss is about THESE words, and
+        // a bare "Nothing matches." reads as a system failure instead
+        // of an answer.
+        miss.textContent = `Nothing matches \u201c${searchTerm.trim()}\u201d.`;
+      }
+    }
     document.getElementById('noSnapshotsEmpty')?.toggleAttribute('hidden', showMiss);
     document.getElementById('noSnapshotsHint')?.toggleAttribute('hidden', showMiss || trashFace);
     document.getElementById('noTrashHint')?.toggleAttribute('hidden', showMiss || !trashFace);

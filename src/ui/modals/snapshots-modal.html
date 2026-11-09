@@ -67,10 +67,10 @@
               type="text"
               id="searchSnapshots"
               class="snap-search-input"
-              placeholder="Filter history..."
-              aria-label="Filter history"
+              placeholder="Filter this note..."
+              aria-label="Filter this note"
             />
-            <span id="snapshotSearchMeta" class="snap-search-meta" hidden></span>
+            <span id="snapshotSearchMeta" class="snap-search-meta" aria-live="polite" hidden></span>
             <button
               type="button"
               id="clearSnapshotSearch"
@@ -186,7 +186,12 @@
           </p>
           <p id="noSnapshotsMiss" hidden>Nothing matches.</p>
           <div class="snap-empty-actions" id="noSnapshotsEmptyActions" hidden>
-            <button type="button" id="clearSearchFromEmpty" class="snap-clear-miss" hidden>
+            <button
+              type="button"
+              id="clearSearchFromEmpty"
+              class="snap-clear-miss is-primary"
+              hidden
+            >
               Clear the filter
             </button>
             <button type="button" id="widenSearchFromEmpty" class="snap-clear-miss" hidden>

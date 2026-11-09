@@ -6,6 +6,7 @@ import {
   sheetDayGroups,
   sheetDayKey,
   sheetDayLabel,
+  sheetDiff,
   formatSheetClock,
   wireSheetTimeline,
   type SheetRowModel,
@@ -211,6 +212,226 @@ describe('renderSheetTimeline — the open row survives the rebuild', () => {
     rowOf('v:2').click();
     expect(rowOf('v:1').getAttribute('title')).toBe('Show details');
     expect(rowOf('v:2').getAttribute('title')).toBe('Hide details');
+    list.remove();
+  });
+});
+
+describe('sheetDiff — the line diff a version card shows', () => {
+  it('aligns an edit into del-then-add against shared context', () => {
+    const old = 'one\ntwo\nthree';
+    const next = 'one\ntwo point five\nthree';
+    const diff = sheetDiff(old, next);
+    expect(diff).not.toBeNull();
+    expect(diff!.added).toBe(1);
+    expect(diff!.removed).toBe(1);
+    expect(diff!.entries).toEqual([
+      { kind: 'ctx', text: 'one' },
+      { kind: 'del', text: 'two' },
+      { kind: 'add', text: 'two point five' },
+      { kind: 'ctx', text: 'three' },
+    ]);
+  });
+
+  it('a pure addition keeps the old text as context', () => {
+    const diff = sheetDiff('a\nb', 'a\nb\nc');
+    expect(diff!.entries).toEqual([
+      { kind: 'ctx', text: 'a' },
+      { kind: 'ctx', text: 'b' },
+      { kind: 'add', text: 'c' },
+    ]);
+    expect(diff!.added).toBe(1);
+    expect(diff!.removed).toBe(0);
+  });
+
+  it('a deletion leaves only the survivors', () => {
+    const diff = sheetDiff('a\nb\nc', 'a\nc');
+    expect(diff!.entries).toEqual([
+      { kind: 'ctx', text: 'a' },
+      { kind: 'del', text: 'b' },
+      { kind: 'ctx', text: 'c' },
+    ]);
+  });
+
+  it('identical texts answer null — the card falls back to full text', () => {
+    expect(sheetDiff('same\nlines', 'same\nlines')).toBeNull();
+    expect(sheetDiff('', '')).toBeNull();
+  });
+
+  it('empty-to-content is all additions', () => {
+    const diff = sheetDiff('', 'first\nsecond');
+    expect(diff!.entries).toEqual([
+      { kind: 'add', text: 'first' },
+      { kind: 'add', text: 'second' },
+    ]);
+  });
+
+  it('collapses long unchanged runs into counted gaps', () => {
+    // The change sits mid-note: context on both sides, a counted gap
+    // before, and the tail beyond the last change trimmed away.
+    const lines = Array.from({ length: 22 }, (_, i) => `line ${i}`);
+    const old = [...lines.slice(0, 10), 'the changed line', ...lines.slice(11)].join('\n');
+    const next = [...lines.slice(0, 10), 'the edited line', ...lines.slice(11)].join('\n');
+    const diff = sheetDiff(old, next);
+    expect(diff!.entries.map((entry) => entry.kind)).toEqual([
+      'gap',
+      'ctx',
+      'ctx',
+      'del',
+      'add',
+      'ctx',
+      'ctx',
+    ]);
+    // 10 unchanged lines before the change − 2 kept context = 8 folded.
+    expect(diff!.entries[0]).toEqual({ kind: 'gap', count: 8 });
+  });
+
+  it('trims trailing context beyond the last change', () => {
+    // The change is at the head; a tail of unchanged lines beyond the
+    // kept context is padding, not orientation — no gap is minted for a
+    // tail that exists only to end.
+    const old = ['old head', ...Array.from({ length: 10 }, (_, i) => `l${i}`)].join('\n');
+    const next = ['new head', ...Array.from({ length: 10 }, (_, i) => `l${i}`)].join('\n');
+    const diff = sheetDiff(old, next);
+    expect(diff!.entries.map((entry) => entry.kind)).toEqual(['del', 'add', 'ctx', 'ctx']);
+    // ±2 context: l0 and l1 orient the change; l2..l9 are trimmed.
+    expect(diff!.entries[diff!.entries.length - 1]).toEqual({ kind: 'ctx', text: 'l1' });
+  });
+
+  it('caps the rendered body and says so', () => {
+    // Many SMALL changes spread over a long note — every line stays in
+    // the kept window (±2 context around each change covers all), so
+    // only the render cap can stop the body.
+    const old = Array.from({ length: 200 }, (_, i) => `o${i}`).join('\n');
+    const next = Array.from({ length: 200 }, (_, i) => (i % 4 === 0 ? `x${i}` : `o${i}`)).join(
+      '\n',
+    );
+    const diff = sheetDiff(old, next);
+    expect(diff!.truncated).toBe(true);
+    const renderedLines = diff!.entries.filter(
+      (entry) => entry.kind === 'add' || entry.kind === 'del' || entry.kind === 'ctx',
+    ).length;
+    expect(renderedLines).toBeLessThanOrEqual(160);
+  });
+
+  it('a long same-kind run folds its tail into a counted note', () => {
+    // A whole-note replacement is one wall of red — the card shows the
+    // first 30 deletions and counts the rest, then the additions.
+    const old = Array.from({ length: 40 }, (_, i) => `old ${i}`).join('\n');
+    const next = Array.from({ length: 3 }, (_, i) => `new ${i}`).join('\n');
+    const diff = sheetDiff(old, next);
+    const dels = diff!.entries.filter((entry) => entry.kind === 'del').length;
+    expect(dels).toBe(12);
+    expect(diff!.entries).toContainEqual({ kind: 'gap', count: 28, tone: 'del' });
+    // The stat still speaks the whole truth.
+    expect(diff!.removed).toBe(40);
+    expect(diff!.added).toBe(3);
+    // No "truncated" flag — nothing was cut silently; the fold says so.
+    expect(diff!.truncated).toBe(false);
+  });
+
+  it('declines sides too large to diff honestly', () => {
+    const big = Array.from({ length: 601 }, (_, i) => `line ${i}`).join('\n');
+    expect(sheetDiff(big, big + '\nmore')).toBeNull();
+    expect(sheetDiff('small', big)).toBeNull();
+  });
+
+  it('a mid-line rewording is one del and one add, not two contexts', () => {
+    const diff = sheetDiff('the kettle knows', 'the kettle knew');
+    expect(diff!.entries).toEqual([
+      { kind: 'del', text: 'the kettle knows' },
+      { kind: 'add', text: 'the kettle knew' },
+    ]);
+  });
+});
+
+describe('renderSheetTimeline — the anatomy the rows wear', () => {
+  const row = (key: string): SheetRowModel => ({
+    key,
+    timestamp: new Date(2026, 9, 25, 12, 0, 0).getTime(),
+    title: 'A version',
+    detailText: 'body',
+  });
+
+  it('every row carries the disclosure chevron', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    renderSheetTimeline(list, [row('v:1')], {});
+    expect(list.querySelector('.snap-item .snap-row .snap-caret')).not.toBeNull();
+    list.remove();
+  });
+
+  it('a diff-bearing row renders the diff card in place of the full text', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    const diffRow: SheetRowModel = {
+      ...row('v:9'),
+      detailText: 'the full text nobody should have to read here',
+      diff: {
+        caption: 'Changed since 11:02 AM',
+        diff: {
+          entries: [
+            { kind: 'ctx', text: 'one' },
+            { kind: 'del', text: 'two' },
+            { kind: 'add', text: 'two point five' },
+            { kind: 'gap', count: 5 },
+          ],
+          added: 1,
+          removed: 1,
+          truncated: false,
+        },
+      },
+    };
+    renderSheetTimeline(list, [diffRow], {});
+    expect(list.querySelector('.snap-detail .snap-diff')).not.toBeNull();
+    expect(list.querySelector('.snap-detail .snap-diff-cap')?.textContent).toContain(
+      'Changed since 11:02 AM',
+    );
+    expect(list.querySelector('.snap-detail .snap-diff-line.is-del')).not.toBeNull();
+    expect(list.querySelector('.snap-detail .snap-diff-line.is-add')).not.toBeNull();
+    expect(list.querySelector('.snap-detail .snap-detail-text')).toBeNull();
+    list.remove();
+  });
+
+  it('a diff-free row keeps the full-text card', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    renderSheetTimeline(list, [row('v:1')], {});
+    expect(list.querySelector('.snap-detail .snap-detail-text')).not.toBeNull();
+    expect(list.querySelector('.snap-detail .snap-diff')).toBeNull();
+    list.remove();
+  });
+
+  it('an expiring trash row wears the danger class; a fresh one does not', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    const grave = (danger: boolean): SheetRowModel => ({
+      ...row(danger ? 't:old' : 't:fresh'),
+      trash: true,
+      chip: { text: danger ? 'last day' : '30 days', danger },
+    });
+    renderSheetTimeline(list, [grave(true), grave(false)], {});
+    expect(
+      list.querySelector('.snap-item[data-row-key="t:old"]')?.classList.contains('is-expiring'),
+    ).toBe(true);
+    expect(
+      list.querySelector('.snap-item[data-row-key="t:fresh"]')?.classList.contains('is-expiring'),
+    ).toBe(false);
+    list.remove();
+  });
+
+  it('a re-render hands focus back to the row button that held it', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    renderSheetTimeline(list, [row('v:1'), row('v:2')], {});
+    const first = list.querySelector<HTMLElement>('.snap-item[data-row-key="v:1"] .snap-row');
+    first!.focus();
+    expect(document.activeElement).toBe(first);
+
+    // The rebuild replaces the nodes — focus survives on the
+    // counterpart.
+    renderSheetTimeline(list, [row('v:1'), row('v:2')], {});
+    const refocused = list.querySelector<HTMLElement>('.snap-item[data-row-key="v:1"] .snap-row');
+    expect(document.activeElement).toBe(refocused);
     list.remove();
   });
 });

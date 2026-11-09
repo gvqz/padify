@@ -24,6 +24,30 @@ body #toast {
   font-size: 13px;
   padding: 10px 18px;
   bottom: 34px;
+  /* True horizontal centering. The legacy margin-left:-125px only
+     centered the 250px MINIMUM — a toast wider than that (a long note
+     title + Undo) grew rightward only, ending flush against the
+     viewport's right edge on a phone. The translate PROPERTY centers
+     at any width and composes with the transform-based enter/leave
+     below instead of fighting it. */
+  margin-left: 0;
+  translate: -50% 0;
+}
+
+/* A modal is open on a phone → the sheet IS the screen, and its footer
+   owns the bottom edge: the count line and the view's one destructive
+   (Empty trash) live exactly where a bottom-docked toast parks — the
+   delete receipt used to sit ON them (measured: 16px of overlap, the
+   Undo target covering the footer's text). While any modal is open the
+   toast lifts clear of the footer band instead: 34px base + ~50px of
+   sheet footer + clearance. It then floats over the sheet's CONTENT —
+   the one place a transient belongs (a first attempt docked it under
+   the navbar, where it covered the search field — controls, not
+   content). */
+@media (max-width: 640px) {
+  body.modal-open #toast {
+    bottom: 92px;
+  }
 }
 
 body.dark #toast {

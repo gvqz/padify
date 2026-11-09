@@ -165,6 +165,224 @@ export interface SheetDelta {
   unit: string;
 }
 
+// ---------------------------------------------------------------------------
+// The line diff — what the detail card shows a version AGAINST
+// ---------------------------------------------------------------------------
+
+/** One aligned line of a diff. Context lines are shared text. */
+export interface SheetDiffLine {
+  kind: 'add' | 'del' | 'ctx';
+  text: string;
+}
+
+/** A run of lines the card collapsed away — unchanged context, or the
+ *  tail of a change run too long to read at a glance. */
+export interface SheetDiffGap {
+  kind: 'gap';
+  count: number;
+  /** What the folded lines were: shared context (default), removals,
+   *  or additions — the note the row renders says so. */
+  tone?: 'ctx' | 'del' | 'add';
+}
+
+export type SheetDiffEntry = SheetDiffLine | SheetDiffGap;
+
+/** The diff a version's detail card renders, previous → current. */
+export interface SheetDiff {
+  entries: SheetDiffEntry[];
+  added: number;
+  removed: number;
+  /** The rendered body stopped at the line cap. */
+  truncated: boolean;
+}
+
+/** Any side larger than this declines the diff — the LCS table is
+ *  O(n·m) and the card is a glance, not a merge tool. The caller falls
+ *  back to the full text. */
+const DIFF_MAX_SIDE_LINES = 600;
+
+/** Unchanged lines kept on each side of a change run. */
+const DIFF_CONTEXT = 2;
+
+/** Rendered lines the card holds before it truncates. */
+const DIFF_RENDER_CAP = 160;
+
+/** How many consecutive same-kind change lines render before the run
+ *  folds its tail into a counted note. A whole-note replacement is a
+ *  wall of one color — the card is a glance, and Copy still carries
+ *  every line out. Twelve lines: the run's shape reads, the fold note
+ *  and the additions after it stay inside the card's 240px window. */
+const DIFF_RUN_CAP = 12;
+
+/**
+ * The line diff of two readable projections — additions and deletions
+ * aligned against their shared lines (longest-common-subsequence on
+ * lines; word-level granularity is a merge tool's job, and this is a
+ * card). Null when the texts share every line (nothing to show — the
+ * caller renders the full text instead) or when either side is too
+ * large to diff honestly.
+ *
+ * Pure and exported: the unit tests pin the alignment, the collapse
+ * and the caps without the manager's DOM wiring.
+ */
+export function sheetDiff(oldText: string, newText: string): SheetDiff | null {
+  const a = oldText === '' ? [] : oldText.split('\n');
+  const b = newText === '' ? [] : newText.split('\n');
+  if (a.length > DIFF_MAX_SIDE_LINES || b.length > DIFF_MAX_SIDE_LINES) {
+    return null;
+  }
+
+  // The LCS table, bottom-up. Int32Array over a sparse structure: a
+  // 600×600 worst case is 1.4MB that dies at the end of this call.
+  const n = a.length;
+  const m = b.length;
+  const w = m + 1;
+  const table = new Int32Array((n + 1) * w);
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      table[i * w + j] =
+        a[i] === b[j]
+          ? table[(i + 1) * w + j + 1] + 1
+          : Math.max(table[(i + 1) * w + j], table[i * w + j + 1]);
+    }
+  }
+
+  // Walk the alignment: on a tie the deletion leads (the old text's
+  // line leaves before the new one arrives — the order every diff
+  // reader already knows).
+  const ops: SheetDiffLine[] = [];
+  let added = 0;
+  let removed = 0;
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      ops.push({ kind: 'ctx', text: a[i] });
+      i++;
+      j++;
+    } else if (table[(i + 1) * w + j] >= table[i * w + j + 1]) {
+      ops.push({ kind: 'del', text: a[i] });
+      i++;
+      removed++;
+    } else {
+      ops.push({ kind: 'add', text: b[j] });
+      j++;
+      added++;
+    }
+  }
+  while (i < n) {
+    ops.push({ kind: 'del', text: a[i] });
+    i++;
+    removed++;
+  }
+  while (j < m) {
+    ops.push({ kind: 'add', text: b[j] });
+    j++;
+    added++;
+  }
+
+  if (added === 0 && removed === 0) {
+    // Same lines: the difference lives below the line level (a type
+    // switch, a drawing whose bytes moved without its text). The card
+    // has nothing to say that the full text doesn't say better.
+    return null;
+  }
+
+  // Long same-kind runs fold their tails FIRST — 37 straight deletions
+  // become the first DIFF_RUN_CAP and a counted note. Folding before
+  // the context pass keeps every count honest (a fold applied after a
+  // render-cap truncation would undercount the tail it summarizes).
+  // The stat above the body already speaks the whole truth (+2 −37);
+  // the body is for the eye, and the eye wants the shape, not the wall.
+  const stream: SheetDiffEntry[] = [];
+  let runKind: 'add' | 'del' | null = null;
+  let runLen = 0;
+  const foldRun = (): void => {
+    if (runKind && runLen > DIFF_RUN_CAP) {
+      const excess = runLen - DIFF_RUN_CAP;
+      stream.length -= excess;
+      stream.push({ kind: 'gap', count: excess, tone: runKind });
+    }
+    runKind = null;
+    runLen = 0;
+  };
+  for (const op of ops) {
+    if (op.kind === 'add' || op.kind === 'del') {
+      if (op.kind !== runKind) {
+        foldRun();
+        runKind = op.kind;
+      }
+      runLen++;
+      stream.push(op);
+    } else {
+      foldRun();
+      stream.push(op);
+    }
+  }
+  foldRun();
+
+  // Collapse the context: keep ±DIFF_CONTEXT lines around each change
+  // (a folded gap counts as context — it exists to summarize, and only
+  // beside its run), fold longer unchanged runs into a counted gap.
+  // The card is a window onto WHAT MOVED, not a reprint of the note.
+  const keep = new Array<boolean>(stream.length).fill(false);
+  let lastChange = -1;
+  for (let k = 0; k < stream.length; k++) {
+    if (stream[k].kind !== 'ctx' && stream[k].kind !== 'gap') {
+      for (
+        let c = Math.max(0, k - DIFF_CONTEXT);
+        c <= Math.min(stream.length - 1, k + DIFF_CONTEXT);
+        c++
+      ) {
+        keep[c] = true;
+      }
+      lastChange = k;
+    }
+  }
+  // A change near the head or tail can leave trailing kept context
+  // beyond the last change — trim it so the card ends where the story
+  // does (context exists to orient a change, not to pad it).
+  const keepEnd = Math.min(stream.length - 1, lastChange + DIFF_CONTEXT);
+
+  const entries: SheetDiffEntry[] = [];
+  let rendered = 0;
+  let truncated = false;
+  let gapRun = 0;
+  const flushGap = (): void => {
+    if (gapRun > 0) {
+      entries.push({ kind: 'gap', count: gapRun });
+      gapRun = 0;
+    }
+  };
+  for (let k = 0; k <= keepEnd; k++) {
+    if (!keep[k] && stream[k].kind === 'ctx') {
+      gapRun++;
+      continue;
+    }
+    if (!keep[k] && stream[k].kind === 'gap') {
+      // A fold note outside the kept window: its run's survivors were
+      // also dropped, so the note would summarize lines the card never
+      // shows — drop the note with them.
+      continue;
+    }
+    flushGap();
+    if (rendered >= DIFF_RENDER_CAP) {
+      truncated = true;
+      break;
+    }
+    entries.push(stream[k]);
+    rendered++;
+  }
+  return { entries, added, removed, truncated };
+}
+
+/** The diff card's caption — who the version is diffed against. */
+export interface SheetRowDiff {
+  diff: SheetDiff;
+  /** 'Changed since Nov 8, 4:12 PM' — the previous capture's clock. */
+  caption: string;
+}
+
 export interface SheetRowAction {
   /** The action id the provider's onAction receives. */
   kind: 'restore' | 'copy' | 'delete';
@@ -198,6 +416,10 @@ export interface SheetRowModel {
   /** Where the action lands, spelled before the click. */
   hint?: string;
   actions?: SheetRowAction[];
+  /** The line diff against this row's predecessor — when present it
+   *  REPLACES the full text in the detail card: the card answers “what
+   *  changed here?”, and Copy still carries the whole version out. */
+  diff?: SheetRowDiff;
 }
 
 /** How much of the readable text the detail card holds. The card is a
@@ -390,6 +612,13 @@ function renderActions(actions: SheetRowAction[] | undefined, rowKey: string): s
 function buildItem(row: SheetRowModel, term: string, open = false): HTMLLIElement {
   const li = document.createElement('li');
   li.className = `snap-item${row.trash ? ' is-trash' : ''}${row.current ? ' is-current' : ''}${open ? ' is-open' : ''}`;
+  // A grave in its last days — the rail dot dresses danger to match
+  // the retention chip beside the title. Red on this rail means
+  // "leaving soon"; a plain trash row keeps the neutral dot (see
+  // 11-snapshots.css).
+  if (row.trash && row.chip?.danger) {
+    li.classList.add('is-expiring');
+  }
   li.dataset.rowKey = row.key;
 
   const titleHtml = term ? highlightMatches(row.title, term) : escapeHtmlText(row.title);
@@ -400,8 +629,10 @@ function buildItem(row: SheetRowModel, term: string, open = false): HTMLLIElemen
   const chipHtml = row.chip
     ? `<span class="snap-chip${row.chip.danger ? ' is-danger' : ''}"${row.chip.title ? ` title="${escapeHtmlText(row.chip.title)}"` : ''}>${escapeHtmlText(row.chip.text)}</span>`
     : '';
+  // Current keeps its text pill; the rail's green ring is the scan
+  // line. A second dot inside the pill encoded the same fact twice.
   const currentHtml = row.current
-    ? '<span class="snap-current" title="This version is what the note holds right now"><span class="snap-current-dot" aria-hidden="true"></span>Current</span>'
+    ? '<span class="snap-current" title="This version is what the note holds right now">Current</span>'
     : '';
   const preview = row.preview ? previewForDisplay(row.preview, row.title) : '';
   const previewHtml = term ? highlightMatches(preview, term) : escapeHtmlText(preview);
@@ -420,6 +651,13 @@ function buildItem(row: SheetRowModel, term: string, open = false): HTMLLIElemen
     .join('<span class="snap-detail-sep" aria-hidden="true">\u00b7</span>');
   const hintHtml = row.hint ? `<p class="snap-detail-hint">${escapeHtmlText(row.hint)}</p>` : '';
 
+  // The card's body: the DIFF when there is one to show (a version
+  // with a predecessor — the question the card exists to answer), else
+  // the full readable text (a first version, a trashed note).
+  const bodyHtml = row.diff
+    ? renderDiff(row.diff)
+    : `<div class="snap-detail-text">${escapeHtmlText(capped) || 'No content'}</div>`;
+
   li.innerHTML = `
     <button type="button" class="snap-row" aria-expanded="${open ? 'true' : 'false'}" aria-controls="${detailId}" title="${open ? 'Hide details' : 'Show details'}">
       <span class="snap-when">${escapeHtmlText(formatSheetClock(row.timestamp))}</span>
@@ -431,18 +669,54 @@ function buildItem(row: SheetRowModel, term: string, open = false): HTMLLIElemen
           ${currentHtml}
           ${chipHtml}
         </span>
-        <span class="snap-preview" title="${escapeHtmlText(preview)}">${previewHtml}</span>
-        ${deltaHtml}
+        <span class="snap-subline">
+          <span class="snap-preview" title="${escapeHtmlText(preview)}">${previewHtml}</span>
+          ${deltaHtml}
+        </span>
       </span>
+      <span class="snap-caret" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
     </button>
     <div class="snap-detail" id="${detailId}" role="region" aria-label="Details"${open ? '' : ' hidden'}>
-      <div class="snap-detail-text">${escapeHtmlText(capped) || 'No content'}</div>
+      ${bodyHtml}
       ${metaHtml ? `<div class="snap-detail-meta">${metaHtml}</div>` : ''}
       ${renderActions(row.actions, row.key)}
       ${hintHtml}
     </div>
   `;
   return li;
+}
+
+/** The diff card's body — the caption, then the aligned lines. ins/del
+ *  carry the semantics for assistive tech; the classes carry the dress. */
+function renderDiff(rowDiff: SheetRowDiff): string {
+  const { diff, caption } = rowDiff;
+  const body = diff.entries
+    .map((entry) => {
+      if (entry.kind === 'gap') {
+        const unit = entry.count === 1 ? 'line' : 'lines';
+        const what =
+          entry.tone === 'del'
+            ? `more removed ${unit}`
+            : entry.tone === 'add'
+              ? `more added ${unit}`
+              : `unchanged ${unit}`;
+        return `<div class="snap-diff-gap" aria-hidden="true">\u22ef ${entry.count} ${what}</div>`;
+      }
+      const tag = entry.kind === 'add' ? 'ins' : entry.kind === 'del' ? 'del' : 'div';
+      const sign = entry.kind === 'add' ? '+' : entry.kind === 'del' ? '\u2212' : '';
+      const cls = entry.kind === 'ctx' ? 'is-ctx' : entry.kind === 'add' ? 'is-add' : 'is-del';
+      const text = entry.text === '' ? '\u00a0' : escapeHtmlText(entry.text);
+      return `<${tag} class="snap-diff-line ${cls}"><span class="snap-diff-sign" aria-hidden="true">${sign}</span><span class="snap-diff-text">${text}</span></${tag}>`;
+    })
+    .join('');
+  const stat = `<span class="snap-diff-stat"><span class="is-up">+${diff.added}</span> <span class="is-down">\u2212${diff.removed}</span></span>`;
+  return `
+    <div class="snap-diff">
+      <div class="snap-diff-cap">${escapeHtmlText(caption)} ${stat}</div>
+      <div class="snap-diff-body" role="region" aria-label="Changes since the previous version">${body}</div>
+      ${diff.truncated ? '<div class="snap-diff-gap is-end">Diff truncated \u2014 restore or copy for the full text.</div>' : ''}
+    </div>
+  `;
 }
 
 /**
@@ -460,6 +734,20 @@ export function renderSheetTimeline(
 ): void {
   const term = (opts.term ?? '').trim().toLowerCase();
   const openKey = opts.openKey ?? null;
+
+  // A rebuild replaces the very nodes that hold focus — a Restore
+  // click, a capture, a background persist — and focus used to fall to
+  // <body>, killing the keyboard reader's place mid-sheet (Enter-Enter
+  // no longer went anywhere). Remember WHERE the focus was (the row,
+  // and the action button inside it) and put it back on the
+  // counterpart the rebuild painted.
+  const active =
+    document.activeElement instanceof HTMLElement && list.contains(document.activeElement)
+      ? document.activeElement
+      : null;
+  const focusKey = active?.closest<HTMLElement>('.snap-item')?.dataset.rowKey ?? null;
+  const focusAction = active?.dataset.sheetAction ?? null;
+
   list.textContent = '';
 
   let flashed = false;
@@ -483,6 +771,19 @@ export function renderSheetTimeline(
       }
       list.appendChild(li);
     });
+  }
+
+  if (focusKey) {
+    const target = focusAction
+      ? list.querySelector<HTMLElement>(
+          `[data-sheet-action="${CSS.escape(focusAction)}"][data-row-key="${CSS.escape(focusKey)}"]`,
+        )
+      : list.querySelector<HTMLElement>(
+          `.snap-item[data-row-key="${CSS.escape(focusKey)}"] .snap-row`,
+        );
+    // No scroll: the flash's scroll below owns motion when it is
+    // wanted; the reader's row is already where it was.
+    target?.focus({ preventScroll: true });
   }
 
   if (flashed) {

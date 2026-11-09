@@ -18,6 +18,7 @@ import {
   pruneSnapshots,
   readSnapshotsForNote,
   snapshotChangeBadge,
+  snapshotDiffCaption,
   snapshotHasContent,
   snapshotReadableText,
   snapshotSearchText,
@@ -999,6 +1000,25 @@ describe('historyOpeningSegment — the delete’s promise, once', () => {
 
   it('the window is 30 seconds — long enough to click, short enough to be context', () => {
     expect(HISTORY_TRASH_REDIRECT_MS).toBe(30_000);
+  });
+});
+
+describe('snapshotDiffCaption — who the diff is against', () => {
+  const now = new Date(2026, 10, 9, 12, 0, 0).getTime();
+
+  it('a same-day predecessor speaks the clock alone', () => {
+    const earlierToday = new Date(2026, 10, 9, 9, 2, 0).getTime();
+    expect(snapshotDiffCaption(earlierToday, now)).toMatch(/^Changed since \d{1,2}:\d{2}/);
+  });
+
+  it('an older predecessor names its date, without the year it shares', () => {
+    const yesterday = new Date(2026, 10, 8, 16, 30, 0).getTime();
+    expect(snapshotDiffCaption(yesterday, now)).toMatch(/^Changed since Nov 8, \d{1,2}:\d{2}/);
+  });
+
+  it('a predecessor from another year carries the year', () => {
+    const oldYear = new Date(2024, 11, 31, 10, 0, 0).getTime();
+    expect(snapshotDiffCaption(oldYear, now)).toMatch(/^Changed since Dec 31, 2024, \d{1,2}:\d{2}/);
   });
 });
 
