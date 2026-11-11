@@ -14,6 +14,7 @@ import {
   isCurrentSnapshotState,
   isRestorableGrave,
   isSameSnapshotState,
+  normalizeTrashView,
   openSnapshotsDatabase,
   pruneSnapshots,
   readSnapshotsForNote,
@@ -1148,6 +1149,18 @@ describe('historyScopeDeleteLabels — one button, dressed for its view', () => 
       quiet: 'Empty trash',
       armed: 'Really empty it?',
     });
+  });
+});
+
+describe('normalizeTrashView — the stored layout degrades to the list', () => {
+  it('knows the two faces and nothing else', () => {
+    expect(normalizeTrashView('cards')).toBe('cards');
+    expect(normalizeTrashView('list')).toBe('list');
+    expect(normalizeTrashView(null)).toBe('list');
+    // A future or hand-edited value falls back to the face every view
+    // shares — never to a broken one.
+    expect(normalizeTrashView('grid')).toBe('list');
+    expect(normalizeTrashView('')).toBe('list');
   });
 });
 

@@ -1828,3 +1828,175 @@ test.describe('the three views', () => {
     await page.locator('#snapshotsModal .snap-head .close').click();
   });
 });
+
+test.describe("the trash's two layouts — the timeline or the card gallery", () => {
+  /** One trashed note with a couple of lines to its name — enough page
+   *  for a card to be a page. */
+  async function seedATrashedNote(page: Page): Promise<void> {
+    await page.goto('/');
+    await page.locator('#addTab').click();
+    const editor = page.locator('#note');
+    await editor.click();
+    await page.keyboard.type('page one words');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('page two words');
+    await page.locator('#tabStripTabs .tab-strip-tab').first().click();
+    await page
+      .locator('#tabStripTabs .tab-strip-tab', { hasText: 'page one words' })
+      .locator('.tab-strip-close')
+      .click();
+    await expect(page.locator('#snapshotsButton')).toHaveClass(/is-trashed/);
+  }
+
+  /** Opens the sheet off the delete's redirect and narrows to the
+   *  trash — the view's own behavior, not the flash's promise. */
+  async function openSheetOnTrash(page: Page): Promise<void> {
+    await openSnapshots(page);
+    await page.locator('#snapshotsModal .snap-head .close').click();
+    await openSnapshots(page);
+    await pickSegment(page, 'trash');
+  }
+
+  function trashCards(page: Page) {
+    return page.locator('#snapshotsList .snap-card');
+  }
+
+  async function pickLayout(page: Page, layout: 'list' | 'cards'): Promise<void> {
+    await page.locator(`#trashViewToggle .snap-view-btn[data-view="${layout}"]`).click();
+    await expect(
+      page.locator(`#trashViewToggle .snap-view-btn[data-view="${layout}"]`),
+    ).toHaveClass(/is-active/);
+  }
+
+  test('the layout switch belongs to the trash; the list is the default', async ({ page }) => {
+    await seedATrashedNote(page);
+    await openSnapshots(page);
+    await page.locator('#snapshotsModal .snap-head .close').click();
+    await openSnapshots(page);
+
+    // The note view owes no layout switch — its rows are versions on a
+    // rail, and a control that cannot speak here should not be seen.
+    await expect(page.locator('#trashViewToggle')).toBeHidden();
+
+    await pickSegment(page, 'trash');
+    await expect(page.locator('#trashViewToggle')).toBeVisible();
+    await expect(page.locator('#trashViewToggle .snap-view-btn[data-view="list"]')).toHaveClass(
+      /is-active/,
+    );
+
+    // The default face is the shared one: timeline rows, no cards.
+    await expect(trashRows(page)).toHaveCount(1);
+    await expect(trashCards(page)).toHaveCount(0);
+    await expect(page.locator('#snapshotsList')).not.toHaveClass(/is-card-grid/);
+  });
+
+  test('cards paint the graves as pages — the document face, actions on it', async ({ page }) => {
+    await seedATrashedNote(page);
+    await openSheetOnTrash(page);
+    await pickLayout(page, 'cards');
+
+    // The list became a grid of cards.
+    await expect(page.locator('#snapshotsList')).toHaveClass(/is-card-grid/);
+    await expect(trashCards(page)).toHaveCount(1);
+    await expect(trashRows(page)).toHaveCount(0);
+
+    const card = trashCards(page).first();
+    // The page paints the note's own words — starting past the title
+    // echo (the card says the name bigger, below).
+    await expect(card.locator('.snap-card-line')).toHaveCount(1);
+    await expect(card.locator('.snap-card-line').first()).toHaveText('page two words');
+    // …the body carries the name, the compact when, and the chip…
+    await expect(card.locator('.snap-card-title')).toHaveText('page one words');
+    await expect(card.locator('.snap-card-meta .snap-chip')).toHaveText('30 days');
+    await expect(card.locator('.snap-card-when')).toContainText('Trashed');
+    // …and the actions sit on the face — one tap from Restore, the
+    // same two-step Delete forever, no detail card to expand.
+    await expect(card.locator('[data-sheet-action="restore"]')).toBeVisible();
+    await expect(card.locator('[data-sheet-action="delete"] .confirm-label')).toHaveText(
+      'Delete forever',
+    );
+    await expect(card.locator('.snap-row')).toHaveCount(0);
+    // No rail vocabulary survives the switch: no day anchors.
+    await expect(page.locator('#snapshotsList .snap-day')).toHaveCount(0);
+  });
+
+  test('the query still reaches inside the cards, and the miss stays honest', async ({ page }) => {
+    await seedATrashedNote(page);
+    await openSheetOnTrash(page);
+    await pickLayout(page, 'cards');
+
+    // Words from the page's second line — the query finds them where
+    // the list's preview never reached.
+    await page.locator('#searchSnapshots').fill('page two');
+    await expect(trashCards(page)).toHaveCount(1);
+    await expect(trashCards(page).first().locator('.snap-card-line mark')).toHaveText('page two');
+
+    // And a miss is still a miss, in either face.
+    await page.locator('#searchSnapshots').fill('zzz-no-such-words');
+    await expect(page.locator('#noSnapshotsMiss')).toBeVisible();
+    await expect(page.locator('#snapshotSearchMeta')).toHaveText('0 hits');
+
+    await page.locator('#clearSnapshotSearch').click();
+    await expect(trashCards(page)).toHaveCount(1);
+  });
+
+  test('a card restores its note', async ({ page }) => {
+    await seedATrashedNote(page);
+    await openSheetOnTrash(page);
+    await pickLayout(page, 'cards');
+
+    await trashCards(page).first().locator('[data-sheet-action="restore"]').click();
+    await toastSays(page, '\u201cpage one words\u201d is back in the notes list.');
+    // The card left with the grave; the trash's empty face stands in.
+    await expect(trashCards(page)).toHaveCount(0);
+    await expect(page.locator('#noSnapshotsEmpty')).toHaveText('Nothing in the trash.');
+    // And the note itself is back on the strip.
+    await expect(
+      page.locator('#tabStripTabs .tab-strip-tab', { hasText: 'page one words' }),
+    ).toHaveCount(1);
+  });
+
+  test('a card\u2019s delete forever keeps the two-step arm', async ({ page }) => {
+    await seedATrashedNote(page);
+    await openSheetOnTrash(page);
+    await pickLayout(page, 'cards');
+
+    const purge = trashCards(page).first().locator('[data-sheet-action="delete"]');
+    // First tap arms — the label turns the question, on the card face.
+    await purge.click();
+    await expect(purge).toHaveClass(/is-armed/);
+    await expect(purge.locator('.confirm-label')).toHaveText('Delete forever?');
+
+    // The second tap commits — for good means for good.
+    await purge.click();
+    await toastSays(page, 'Deleted for good.');
+    await expect(trashCards(page)).toHaveCount(0);
+  });
+
+  test('the layout is a preference — it survives the close, and can be unmade', async ({
+    page,
+  }) => {
+    await seedATrashedNote(page);
+
+    // Choose the cards, close, and come back.
+    await openSheetOnTrash(page);
+    await pickLayout(page, 'cards');
+    await expect(trashCards(page)).toHaveCount(1);
+    await page.locator('#snapshotsModal .snap-head .close').click();
+    await openSnapshots(page);
+
+    // The VIEW reset to the note (every open answers the note on
+    // stage) — but the trash remembers its face.
+    await expect(page.locator('#trashViewToggle')).toBeHidden();
+    await pickSegment(page, 'trash');
+    await expect(page.locator('#trashViewToggle .snap-view-btn[data-view="cards"]')).toHaveClass(
+      /is-active/,
+    );
+    await expect(trashCards(page)).toHaveCount(1);
+
+    // And the choice can be unmade, the same way.
+    await pickLayout(page, 'list');
+    await expect(trashRows(page)).toHaveCount(1);
+    await expect(trashCards(page)).toHaveCount(0);
+  });
+});

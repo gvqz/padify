@@ -41,12 +41,18 @@
 
       <!-- Pinned toolbar, two rows — the sheet is 460px wide and one
            row cannot honestly hold a search field, a view switch AND
-           the primary action (the field paid for it: it collapsed to a
-           sliver). Row one gives the whole width to the search; row
-           two splits it between the views (left) and the one primary
-           action (right) — browsing together, the action apart. The
-           QUERY searches the view it stands in; the trash tab carries
-           a count of what waits there. -->
+           the one primary action (the field paid for it: it collapsed
+           to a sliver). Row one gives the whole width to the search;
+           row two splits it between the views (left) and the one
+           primary action (right) — browsing together, the action
+           apart. The QUERY searches the view it stands in; the trash
+           tab carries a count of what waits there. In the trash the
+           right end changes hands: Take snapshot sits out (nothing on
+           stage to capture into) and the LAYOUT switch stands in —
+           the same timeline as a list of rows, or as a gallery of
+           note cards (the Notability face: a page thumbnail per
+           grave). The choice is a preference, not a view — it
+           survives the close; the list stays the default. -->
       <div class="snap-toolbar">
         <div class="snap-toolbar-row">
           <div class="snap-search">
@@ -109,6 +115,52 @@
             </button>
             <button type="button" class="snap-seg-btn" data-seg="trash" aria-pressed="false">
               Trash<span class="snap-seg-count" aria-label="notes in trash" hidden></span>
+            </button>
+          </div>
+          <div class="snap-view" id="trashViewToggle" role="group" aria-label="Trash layout" hidden>
+            <button
+              type="button"
+              class="snap-view-btn is-active"
+              data-view="list"
+              aria-pressed="true"
+              title="List view"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="snap-view-btn"
+              data-view="cards"
+              aria-pressed="false"
+              title="Card view"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="4" y="4" width="7" height="9" rx="1.5" />
+                <rect x="13" y="4" width="7" height="9" rx="1.5" />
+                <rect x="4" y="15" width="7" height="5" rx="1.5" />
+                <rect x="13" y="15" width="7" height="5" rx="1.5" />
+              </svg>
             </button>
           </div>
           <button

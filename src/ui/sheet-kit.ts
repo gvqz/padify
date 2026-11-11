@@ -376,6 +376,27 @@ export function sheetDiff(oldText: string, newText: string): SheetDiff | null {
   return { entries, added, removed, truncated };
 }
 
+/** The card's when-line — the compact clock a gallery has room for.
+ *  Today keeps the clock (the day is trivial); another day keeps the
+ *  day; another year drops the clock and names the year. The full
+ *  timestamp stays on the row's detail card — the card is a glance,
+ *  and a gallery of glances cannot afford “Trashed Nov 11, 2026,
+ *  12:03 PM” next to the chip it has to share a line with. */
+export function formatCardWhen(timestamp: number, now: number = Date.now()): string {
+  const date = new Date(timestamp);
+  const today = new Date(now);
+  if (date.toDateString() === today.toDateString()) {
+    return `Trashed ${formatSheetClock(timestamp)}`;
+  }
+  const sameYear = date.getFullYear() === today.getFullYear();
+  const day = date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  });
+  return `Trashed ${day}`;
+}
+
 /** The diff card's caption — who the version is diffed against. */
 export interface SheetRowDiff {
   diff: SheetDiff;
@@ -581,14 +602,27 @@ export interface RenderSheetOptions {
    *  instead of collapsing it. A key that no longer exists (the row
    *  was purged) quietly renders everything closed. */
   openKey?: string | null;
+  /** The rows' face: the day-anchored timeline (the default — every
+   *  version view, and the trash's own default) or the card gallery
+   *  (the trash's second face: a page thumbnail per grave, its
+   *  actions on its face, no rail to anchor — the card carries its
+   *  own when-line). */
+  layout?: 'timeline' | 'cards';
 }
 
 /** The action glyph for the kit's icon-only buttons. */
 const COPY_ICON =
   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
 
-/** Renders one row's action buttons — styled by kind, keyed by data. */
-function renderActions(actions: SheetRowAction[] | undefined, rowKey: string): string {
+/** Renders one row's action buttons — styled by kind, keyed by data.
+ *  The wrapper class follows the face the actions stand on (a detail
+ *  card's foot, a gallery card's face) so each can size them its own
+ *  way; the buttons themselves stay one vocabulary. */
+function renderActions(
+  actions: SheetRowAction[] | undefined,
+  rowKey: string,
+  wrapperClass = 'snap-detail-actions',
+): string {
   if (!actions || actions.length === 0) {
     return '';
   }
@@ -602,7 +636,7 @@ function renderActions(actions: SheetRowAction[] | undefined, rowKey: string): s
     }
     return `<button type="button" class="snap-act delete" data-sheet-action="delete" data-row-key="${escapeHtmlText(rowKey)}"${title}><span class="confirm-label">${escapeHtmlText(action.label)}</span></button>`;
   });
-  return `<div class="snap-detail-actions">${buttons.join('')}</div>`;
+  return `<div class="${wrapperClass}">${buttons.join('')}</div>`;
 }
 
 /** Builds one timeline entry's DOM — the skeleton every sheet shares.
@@ -719,13 +753,147 @@ function renderDiff(rowDiff: SheetRowDiff): string {
   `;
 }
 
+// ---------------------------------------------------------------------------
+// The card gallery — the trash view's second face
+// ---------------------------------------------------------------------------
+
+/** How many lines of the page a card paints before it fades. */
+const CARD_PAGE_LINES = 8;
+
+/** The page a card paints — the note's readable lines, folded for a
+ *  thumbnail. Pure and exported: the tests pin the fold without the
+ *  manager's DOM wiring. */
+export interface CardPage {
+  lines: string[];
+  /** The page holds more than it shows — the bottom fades. */
+  more: boolean;
+}
+
+/** The page's lines: leading blanks dropped (a page that opens with
+ *  its own whitespace reads as broken, not blank), runs of blanks
+ *  collapsed to one (the rhythm a real page keeps), the first
+ *  maxLines kept — and the fade flag only when WORDS remain below,
+ *  because a blank tail is the note's own padding, not content the
+ *  fade would promise. Trailing blanks on the last kept line trim
+ *  away: the page's height ends where its words do. */
+export function cardPageLines(text: string, maxLines: number = CARD_PAGE_LINES): CardPage {
+  const raw = text.split('\n').map((line) => line.trimEnd());
+  let start = 0;
+  while (start < raw.length && raw[start].trim() === '') {
+    start++;
+  }
+  const lines: string[] = [];
+  let more = false;
+  for (let k = start; k < raw.length; k++) {
+    const line = raw[k];
+    if (line.trim() === '' && lines.length > 0 && lines[lines.length - 1].trim() === '') {
+      continue;
+    }
+    if (lines.length >= maxLines) {
+      more = raw.slice(k).some((rest) => rest.trim() !== '');
+      break;
+    }
+    lines.push(line);
+  }
+  while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+    lines.pop();
+  }
+  return { lines, more };
+}
+
+/** Drops a leading line that only says the title — the card already
+ *  says it, bigger, right below the page. The same prefixes the row's
+ *  title derivation strips (markdown hashes, task checkboxes) count as
+ *  the echo; a first line that says MORE than the title is content and
+ *  stays. */
+function stripTitleEcho(text: string, title: string): string {
+  const trimmed = title.trim();
+  if (!trimmed) {
+    return text;
+  }
+  const lines = text.split('\n');
+  let i = 0;
+  while (i < lines.length && lines[i].trim() === '') {
+    i++;
+  }
+  if (i >= lines.length) {
+    return text;
+  }
+  const first = lines[i].trim().replace(/^[#>\-*\u2022\s]+/, '');
+  if (first.toLowerCase() === trimmed.toLowerCase()) {
+    lines.splice(i, 1);
+  }
+  return lines.join('\n');
+}
+
+/** Builds one gallery card — the Notability face a grave can wear: a
+ *  page thumbnail (the readable lines on faint ruled paper; the page
+ *  keeps its paper color in the dark theme, the way a real thumbnail
+ *  of a real page does), the title, the when-line with the retention
+ *  chip, and the actions the row's detail card owns brought up onto
+ *  the face — a card IS its detail, one tap from Restore. The page is
+ *  aria-hidden: it decorates the title assistive tech already has, it
+ *  does not re-read the note. */
+function buildCard(row: SheetRowModel, term: string): HTMLLIElement {
+  const li = document.createElement('li');
+  li.className = `snap-card${row.trash ? ' is-trash' : ''}`;
+  // The same red the rail's dot wears in the list: a grave in its last
+  // days marks its page's corner, and the retention chip turned danger
+  // beside the when-line (see 11-snapshots.css).
+  if (row.trash && row.chip?.danger) {
+    li.classList.add('is-expiring');
+  }
+  li.dataset.rowKey = row.key;
+
+  const page = cardPageLines(stripTitleEcho(row.detailText ?? '', row.title));
+  const pageHtml = page.lines.length
+    ? page.lines
+        .map((line) => {
+          const blank = line.trim() === '';
+          const body = blank
+            ? '\u00a0'
+            : term
+              ? highlightMatches(line, term)
+              : escapeHtmlText(line);
+          return `<span class="snap-card-line${blank ? ' is-blank' : ''}">${body}</span>`;
+        })
+        .join('')
+    : '<span class="snap-card-line is-empty">No content</span>';
+  const titleHtml = term ? highlightMatches(row.title, term) : escapeHtmlText(row.title);
+  const chipHtml = row.chip
+    ? `<span class="snap-chip${row.chip.danger ? ' is-danger' : ''}"${row.chip.title ? ` title="${escapeHtmlText(row.chip.title)}"` : ''}>${escapeHtmlText(row.chip.text)}</span>`
+    : '';
+  const when = formatCardWhen(row.timestamp);
+
+  li.innerHTML = `
+    <div class="snap-card-page${page.more ? ' is-cut' : ''}" aria-hidden="true">
+      <div class="snap-card-lines">${pageHtml}</div>
+    </div>
+    <div class="snap-card-body">
+      <p class="snap-card-title" title="${escapeHtmlText(row.title)}">${titleHtml}</p>
+      <p class="snap-card-meta">
+        <span class="snap-card-when" title="${escapeHtmlText(when)}">${escapeHtmlText(when)}</span>
+        ${chipHtml}
+      </p>
+      ${renderActions(row.actions, row.key, 'snap-card-actions')}
+    </div>
+  `;
+  return li;
+}
+
 /**
- * Renders the whole timeline: day runs (always anchored), the group
- * trims that break the rail's line at day boundaries, the flash on the
- * just-landed row, and the scroll that brings it into view. Rows carry
- * no listeners of their own — wireSheetTimeline's one delegated pair
- * covers every row a render can produce. `opts.openKey` re-opens the
- * row that was open before the rebuild (see RenderSheetOptions).
+ * Renders the sheet's rows in the face the caller chose: the timeline
+ * (day runs always anchored, the group trims that break the rail's
+ * line at day boundaries) or the card gallery (the trash's second
+ * face — a page thumbnail per grave, no rail, no day anchors; the
+ * card's own when-line carries its time). The flash on the
+ * just-landed row and the scroll that brings it into view belong to
+ * both. Rows carry no listeners of their own — wireSheetTimeline's one
+ * delegated pair covers every row a render can produce, in either
+ * face (a card's actions speak the same data-sheet-action dialect).
+ * `opts.openKey` re-opens the row that was open before the rebuild
+ * (see RenderSheetOptions) — the gallery has no accordion, so it
+ * renders nothing open.
  */
 export function renderSheetTimeline(
   list: HTMLElement,
@@ -734,6 +902,7 @@ export function renderSheetTimeline(
 ): void {
   const term = (opts.term ?? '').trim().toLowerCase();
   const openKey = opts.openKey ?? null;
+  const layout = opts.layout ?? 'timeline';
 
   // A rebuild replaces the very nodes that hold focus — a Restore
   // click, a capture, a background persist — and focus used to fall to
@@ -745,32 +914,46 @@ export function renderSheetTimeline(
     document.activeElement instanceof HTMLElement && list.contains(document.activeElement)
       ? document.activeElement
       : null;
-  const focusKey = active?.closest<HTMLElement>('.snap-item')?.dataset.rowKey ?? null;
+  const focusKey = active?.closest<HTMLElement>('.snap-item, .snap-card')?.dataset.rowKey ?? null;
   const focusAction = active?.dataset.sheetAction ?? null;
 
   list.textContent = '';
 
   let flashed = false;
-  for (const group of sheetDayGroups(rows)) {
-    const dayHeader = document.createElement('li');
-    dayHeader.className = 'snap-day';
-    dayHeader.textContent = group.label;
-    list.appendChild(dayHeader);
-
-    group.rows.forEach((row, index) => {
-      const li = buildItem(row, term, row.key === openKey);
-      if (index === 0) {
-        li.classList.add('group-start');
-      }
-      if (index === group.rows.length - 1) {
-        li.classList.add('group-end');
-      }
+  if (layout === 'cards') {
+    // The gallery: one card per row, newest-first down the grid. No
+    // day anchors — a gallery groups by document, not by calendar,
+    // and the card's when-line carries its own time.
+    for (const row of rows) {
+      const li = buildCard(row, term);
       if (!flashed && opts.flashKey != null && row.key === opts.flashKey) {
         li.classList.add('is-new');
         flashed = true;
       }
       list.appendChild(li);
-    });
+    }
+  } else {
+    for (const group of sheetDayGroups(rows)) {
+      const dayHeader = document.createElement('li');
+      dayHeader.className = 'snap-day';
+      dayHeader.textContent = group.label;
+      list.appendChild(dayHeader);
+
+      group.rows.forEach((row, index) => {
+        const li = buildItem(row, term, row.key === openKey);
+        if (index === 0) {
+          li.classList.add('group-start');
+        }
+        if (index === group.rows.length - 1) {
+          li.classList.add('group-end');
+        }
+        if (!flashed && opts.flashKey != null && row.key === opts.flashKey) {
+          li.classList.add('is-new');
+          flashed = true;
+        }
+        list.appendChild(li);
+      });
+    }
   }
 
   if (focusKey) {
@@ -787,7 +970,7 @@ export function renderSheetTimeline(
   }
 
   if (flashed) {
-    list.querySelector('.snap-item.is-new')?.scrollIntoView({
+    list.querySelector('.snap-item.is-new, .snap-card.is-new')?.scrollIntoView({
       block: 'nearest',
       // Smooth is a motion; the reduced-motion preference owns it (CSS
       // cannot reach a JS scrollIntoView).

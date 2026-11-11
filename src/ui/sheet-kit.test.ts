@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cardPageLines,
   escapeHtmlText,
+  formatCardWhen,
   highlightMatches,
   renderSheetTimeline,
   sheetDayGroups,
@@ -432,6 +434,188 @@ describe('renderSheetTimeline — the anatomy the rows wear', () => {
     renderSheetTimeline(list, [row('v:1'), row('v:2')], {});
     const refocused = list.querySelector<HTMLElement>('.snap-item[data-row-key="v:1"] .snap-row');
     expect(document.activeElement).toBe(refocused);
+    list.remove();
+  });
+});
+
+describe('cardPageLines — the page a card paints', () => {
+  it('keeps the note\u2019s lines and drops the leading blanks', () => {
+    const page = cardPageLines('\n\n  first line\nsecond line');
+    expect(page.lines).toEqual(['  first line', 'second line']);
+    expect(page.more).toBe(false);
+  });
+
+  it('collapses blank runs to one and trims the trailing blanks', () => {
+    const page = cardPageLines('one\n\n\n\ntwo\n\n\n');
+    expect(page.lines).toEqual(['one', '', 'two']);
+  });
+
+  it('caps at the max and flags the fade only when words remain below', () => {
+    const eight = Array.from({ length: 8 }, (_, i) => `line ${i + 1}`).join('\n');
+    expect(cardPageLines(eight).more).toBe(false);
+    expect(cardPageLines(`${eight}\nnine`).more).toBe(true);
+    // A blank tail is the note\u2019s own padding — no fade promises it.
+    expect(cardPageLines(`${eight}\n\n\n`).more).toBe(false);
+    expect(cardPageLines(eight, 3).lines).toEqual(['line 1', 'line 2', 'line 3']);
+  });
+
+  it('a page with no words is no lines', () => {
+    expect(cardPageLines('')).toEqual({ lines: [], more: false });
+    expect(cardPageLines(' \n \t ')).toEqual({ lines: [], more: false });
+  });
+});
+
+describe('formatCardWhen — the compact clock a card has room for', () => {
+  const noon = new Date(2026, 10, 11, 12, 0, 0).getTime();
+
+  it('today keeps the clock — the day is trivial', () => {
+    const evening = new Date(2026, 10, 11, 18, 42, 0).getTime();
+    expect(formatCardWhen(evening, noon)).toBe(
+      `Trashed ${new Date(evening).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`,
+    );
+  });
+
+  it('another day keeps the day and drops the time', () => {
+    const otherDay = new Date(2026, 9, 25, 12, 0, 0).getTime();
+    expect(formatCardWhen(otherDay, noon)).toBe('Trashed Oct 25');
+  });
+
+  it('another year names the year — a long-lived trash can hold last year', () => {
+    const otherYear = new Date(2024, 11, 31, 23, 59, 0).getTime();
+    expect(formatCardWhen(otherYear, noon)).toBe('Trashed Dec 31, 2024');
+  });
+});
+
+describe('renderSheetTimeline — the card gallery', () => {
+  const grave = (key: string, lines: string): SheetRowModel => ({
+    key,
+    timestamp: new Date(2026, 9, 25, 12, 0, 0).getTime(),
+    title: 'A deleted note',
+    trash: true,
+    chip: { text: '30 days', danger: false },
+    detailText: lines,
+    detailMeta: ['Trashed Oct 25, 2026, 12:00 PM', 'Plain text'],
+    actions: [
+      { kind: 'restore', label: 'Restore' },
+      { kind: 'delete', label: 'Delete forever' },
+    ],
+  });
+
+  it('a card is its detail: page, title, when, chip, actions on the face', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    renderSheetTimeline(list, [grave('t:1', 'first words\nsecond line')], { layout: 'cards' });
+    const card = list.querySelector<HTMLElement>('.snap-card[data-row-key="t:1"]');
+    expect(card).not.toBeNull();
+    // The page paints the readable lines…
+    expect(card!.querySelectorAll('.snap-card-line').length).toBe(2);
+    expect(card!.querySelector('.snap-card-line')?.textContent).toBe('first words');
+    // …the body carries the title, the compact when, the chip…
+    expect(card!.querySelector('.snap-card-title')?.textContent).toBe('A deleted note');
+    expect(card!.querySelector('.snap-card-when')?.textContent).toContain('Trashed Oct 25');
+    expect(card!.querySelector('.snap-card-meta .snap-chip')?.textContent).toBe('30 days');
+    // …and the actions sit on the face, speaking the row dialect.
+    const restore = card!.querySelector<HTMLElement>('[data-sheet-action="restore"]');
+    expect(restore?.dataset.rowKey).toBe('t:1');
+    const purge = card!.querySelector<HTMLElement>('[data-sheet-action="delete"]');
+    expect(purge?.querySelector('.confirm-label')?.textContent).toBe('Delete forever');
+    // No accordion to open — the card owns everything it shows.
+    expect(card!.querySelector('.snap-row')).toBeNull();
+    expect(card!.querySelector('.snap-detail')).toBeNull();
+    list.remove();
+  });
+
+  it('the gallery carries no rail vocabulary: no day anchors, no timeline rows', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    renderSheetTimeline(list, [grave('t:1', 'words')], { layout: 'cards' });
+    expect(list.querySelector('.snap-day')).toBeNull();
+    expect(list.querySelector('.snap-item')).toBeNull();
+    list.remove();
+  });
+
+  it('a wordless grave paints the honest empty page', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    renderSheetTimeline(list, [grave('t:2', '\n \n')], { layout: 'cards' });
+    expect(list.querySelector('.snap-card-line.is-empty')?.textContent).toBe('No content');
+    expect(list.querySelector('.snap-card-page.is-cut')).toBeNull();
+    list.remove();
+  });
+
+  it('the expiring grave wears the class; a fresh one does not', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    const expiring = { ...grave('t:old', 'words'), chip: { text: 'last day', danger: true } };
+    renderSheetTimeline(list, [expiring, grave('t:fresh', 'words')], { layout: 'cards' });
+    expect(
+      list.querySelector('.snap-card[data-row-key="t:old"]')?.classList.contains('is-expiring'),
+    ).toBe(true);
+    expect(
+      list.querySelector('.snap-card[data-row-key="t:fresh"]')?.classList.contains('is-expiring'),
+    ).toBe(false);
+    list.remove();
+  });
+
+  it('a query highlights inside the page and the title', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    renderSheetTimeline(list, [grave('t:1', 'Grocery list\nbread')], {
+      layout: 'cards',
+      term: 'groce',
+    });
+    expect(list.querySelector('.snap-card-line mark')?.textContent).toBe('Groce');
+    expect(list.querySelector('.snap-card-title mark')).toBeNull();
+    list.remove();
+  });
+
+  it('the page drops a first line that only echoes the title', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    const echo = { ...grave('t:3', 'A deleted note\n\nthe real words'), title: 'A deleted note' };
+    renderSheetTimeline(list, [echo], { layout: 'cards' });
+    const lines = [...list.querySelectorAll('.snap-card-line')].map((n) => n.textContent);
+    expect(lines).toEqual(['the real words']);
+    list.remove();
+  });
+
+  it('a first line that says MORE than the title is content and stays', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    const longer = {
+      ...grave('t:4', 'A deleted note, revised\nsecond line'),
+      title: 'A deleted note',
+    };
+    renderSheetTimeline(list, [longer], { layout: 'cards' });
+    const lines = [...list.querySelectorAll('.snap-card-line')].map((n) => n.textContent);
+    expect(lines).toEqual(['A deleted note, revised', 'second line']);
+    list.remove();
+  });
+
+  it('a re-render hands focus back to the card action that held it', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    renderSheetTimeline(list, [grave('t:1', 'words')], { layout: 'cards' });
+    const restore = list.querySelector<HTMLElement>(
+      '.snap-card[data-row-key="t:1"] [data-sheet-action="restore"]',
+    );
+    restore!.focus();
+    expect(document.activeElement).toBe(restore);
+
+    renderSheetTimeline(list, [grave('t:1', 'words')], { layout: 'cards' });
+    const refocused = list.querySelector<HTMLElement>(
+      '.snap-card[data-row-key="t:1"] [data-sheet-action="restore"]',
+    );
+    expect(document.activeElement).toBe(refocused);
+    list.remove();
+  });
+
+  it('the timeline (the default) still paints rows, not cards', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    renderSheetTimeline(list, [grave('t:1', 'words')], {});
+    expect(list.querySelector('.snap-item')).not.toBeNull();
+    expect(list.querySelector('.snap-card')).toBeNull();
     list.remove();
   });
 });

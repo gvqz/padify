@@ -447,6 +447,68 @@
   transform: scale(0.98);
 }
 
+/* ---- the trash's layout switch — list rows, or note cards ------------------ */
+
+/* It stands in the right end Take snapshot vacates in the trash (the
+   two never share a view: Take needs a note on stage, the layout
+   switch needs graves), so the row's shape survives the view change.
+   Same quiet group language as the segment control: bare until
+   hovered, the active pill lifting on the elevated surface with a
+   ring — two controls, one grammar. */
+.snap-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 2px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition: border-color var(--vz-dur) ease;
+}
+
+.snap-view:hover {
+  border-color: var(--vz-border);
+}
+
+.snap-view[hidden] {
+  display: none;
+}
+
+.snap-view-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--vz-fg-muted);
+  cursor: pointer;
+  transition: color var(--vz-dur) ease, background-color var(--vz-dur) ease;
+}
+
+.snap-view-btn:hover,
+.snap-view-btn:focus-visible {
+  color: var(--vz-fg);
+}
+
+.snap-view-btn:focus-visible {
+  outline: 2px solid var(--vz-primary);
+  outline-offset: 1px;
+}
+
+.snap-view-btn.is-active {
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    inset 0 0 0 1px var(--vz-border-strong);
+}
+
 /* Red on this rail means "leaving soon" — a grave in its last days
    (the retention chip turned danger beside the title, and the dot
    follows it). A plain trashed note keeps the neutral dot: the trash
@@ -1079,6 +1141,239 @@ body.dark .snap-chip.is-danger {
   color: var(--vz-fg-muted);
 }
 
+/* ---- the trash's card gallery ------------------------------------------------ */
+
+/* The list becomes a grid — the Notability face: one card per grave.
+   Two columns in the sheet's 460px (a third never fits honestly);
+   order stays newest-first, so time reads down each column, then
+   across. The empty state, the search, the footer and the miss face
+   are all the timeline's — only the rows changed clothes. */
+.snap-timeline.is-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  gap: 14px;
+  padding-top: 8px;
+}
+
+.snap-timeline.is-card-grid .snap-day {
+  /* Unreachable in practice (the gallery renders none) — a guard so a
+     stray day anchor can never lay itself across the grid. */
+  display: none;
+}
+
+/* One grave, one document. The card is the detail card's equal: the
+   page, the name, the when, and the actions all live on its face —
+   nothing expands, nothing opens a second dialog. */
+.snap-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color var(--vz-dur) ease, box-shadow var(--vz-dur) ease;
+}
+
+.snap-card:hover,
+.snap-card:focus-within {
+  border-color: var(--vz-border-strong);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.09);
+}
+
+.snap-card.is-new {
+  animation: snap-flash 1.1s var(--vz-ease) 2;
+}
+
+/* The page thumbnail. It grows to fill the card (the grid row shares
+   one height — pages align at the top, the names at the bottom, the
+   way a shelf of documents stands) with a floor so a short note still
+   reads as a page and not a sliver. */
+.snap-card-page {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 118px;
+  padding: 10px 12px;
+  overflow: hidden;
+  background: #fdfdfd;
+  /* Faint rules under the text — a lined page says “note” before a
+     word is read. The rules live under the WORDS only (content-box
+     origin): the sides stay clean margins, the way real ruled paper
+     keeps its gutters, and each rule lands under its own line (the
+     period matches the line-height). */
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 16px,
+    rgba(15, 23, 42, 0.05) 16px,
+    rgba(15, 23, 42, 0.05) 17px
+  );
+  background-origin: content-box;
+}
+
+/* A grave in its last days: the page's corner wears the same red the
+   rail's dot wears in the list (the retention chip turned danger on
+   the when-line already; the dot is the page's own marker — one red,
+   two places, the same meaning). */
+.snap-card.is-expiring .snap-card-page::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vz-danger);
+  box-shadow: 0 0 0 2px #fdfdfd;
+  z-index: 2;
+}
+
+.snap-card-lines {
+  position: relative;
+  display: block;
+}
+
+/* The fade when the page holds more than it shows (cardPageLines
+   flagged it): the last line dissolves into the paper — steep and
+   short, so the line above it stays crisp and the cut reads as depth,
+   not as a half-rendered row (audit, twice). */
+.snap-card-page.is-cut .snap-card-lines::after {
+  content: '';
+  position: absolute;
+  left: -12px;
+  right: -12px;
+  bottom: 0;
+  height: 22px;
+  background: linear-gradient(to bottom, rgba(253, 253, 253, 0.25), #fdfdfd 92%);
+  pointer-events: none;
+}
+
+/* The page's ink — fixed, not themed: a thumbnail shows the document,
+   not the UI, and a note's document is light paper with dark ink in
+   every file browser that ever previewed one. The theme owns the
+   card's chrome (border, body, actions); the paper owns itself. No
+   line is privileged — the note's own title line was stripped as an
+   echo (the card says it bigger, below). */
+.snap-card-line {
+  display: block;
+  font-size: 10.5px;
+  line-height: 17px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #3f3f46;
+}
+
+.snap-card-line.is-empty {
+  color: #a1a1aa;
+  font-style: italic;
+}
+
+/* A query hit inside the page: amber on paper (the row's star tint is
+   a theme color; on fixed paper a fixed amber is the honest twin). */
+.snap-card-line mark {
+  background: rgba(250, 204, 21, 0.42);
+  color: inherit;
+  font-weight: 700;
+  border-radius: 2px;
+}
+
+/* The card's chrome — name, when, chip, actions; the sheet's tokens,
+   the sheet's theme. */
+.snap-card-body {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 11px 11px;
+  border-top: 1px solid var(--vz-border);
+}
+
+.snap-card-title {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--vz-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.snap-card-title mark {
+  background: color-mix(in srgb, var(--vz-star, var(--vz-fg)) 24%, transparent);
+  color: var(--vz-fg);
+  font-weight: 700;
+  border-radius: 2px;
+  text-decoration: underline;
+  text-decoration-color: var(--vz-star, var(--vz-fg));
+  text-underline-offset: 2px;
+}
+
+/* The when-line and the chip share a first BASELINE (the same rule
+   the row's clock and title follow) and a tighter metric set — a
+   phone's 149px of card content has to hold “Trashed 01:20 AM” and
+   “30 days” on one line, and 3px of ellipsis read as a mistake. */
+.snap-card-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin: 0;
+  min-width: 0;
+}
+
+.snap-card-when {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 10px;
+  color: var(--vz-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.snap-card-meta .snap-chip {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+}
+
+/* The actions stack — a card is narrow, and two buttons sharing one
+   170px row could only fit by wrapping (“Delete forever” broke onto
+   two lines on a phone). Column: both full-width, the same heights,
+   thumb-sized targets. */
+.snap-card-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.snap-card-actions .snap-act.restore {
+  padding: 6px 8px;
+  font-size: 11.5px;
+  text-align: center;
+}
+
+/* Delete forever keeps its quiet hierarchy but earns a BOUNDARY on
+   the card face — beside a solid Restore, a bare text link read as an
+   afterthought (audit), and a destructive needs to look grabbable
+   before it needs to look safe. Danger stays reserved for hover and
+   the armed confirm. */
+.snap-card-actions .snap-act.delete {
+  justify-content: center;
+  padding: 5px 8px;
+  font-size: 11px;
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+}
+
+.snap-card-actions .snap-act.delete:hover,
+.snap-card-actions .snap-act.delete:focus-visible {
+  color: var(--vz-danger);
+  background: var(--vz-danger-soft);
+  border-color: var(--vz-danger);
+}
+
 /* ---- footer ----------------------------------------------------------------- */
 
 .snap-foot {
@@ -1270,6 +1565,14 @@ body.dark .snap-chip.is-danger {
   .snap-take {
     padding: 0 10px;
   }
+
+  /* The gallery tightens on a phone: two columns still (one card per
+     column at 140px reads as a list with worse spacing), the gap
+     closes to the sheet's own rhythm. */
+  .snap-timeline.is-card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
 }
 
 /* Narrow phones: the toolbar's two rows bought the views the room they
@@ -1324,6 +1627,15 @@ body.dark .snap-chip.is-danger {
   }
 
   .snap-item.is-new .snap-row {
+    animation: none;
+    background: var(--vz-bg-chip);
+  }
+
+  .snap-card {
+    transition: none;
+  }
+
+  .snap-card.is-new {
     animation: none;
     background: var(--vz-bg-chip);
   }

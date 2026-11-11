@@ -656,6 +656,40 @@ export function trashRowSearchText(grave: TrashedNote): string {
  *  default — the sheet is opened from a note and answers for it first. */
 export type HistorySegment = 'note' | 'all' | 'trash';
 
+/** The trash view's face: the shared timeline rows (the default — the
+ *  vocabulary every view speaks) or a gallery of note cards (a page
+ *  thumbnail per grave, Notability-style: the card IS its detail, the
+ *  actions live on its face). */
+export type TrashViewLayout = 'list' | 'cards';
+
+/** Where the layout preference lives — the app's padify-* key family.
+ *  Read once at boot, written on the toggle. */
+const TRASH_VIEW_KEY = 'padify-history-trash-view';
+
+/** The stored value, or the default. Anything but 'cards' is the list:
+ *  an unknown value (a future kind, a hand-edited one) degrades to the
+ *  face every view shares, never to a broken one. */
+export function normalizeTrashView(value: string | null): TrashViewLayout {
+  return value === 'cards' ? 'cards' : 'list';
+}
+
+function loadTrashViewPref(): TrashViewLayout {
+  try {
+    return normalizeTrashView(localStorage.getItem(TRASH_VIEW_KEY));
+  } catch {
+    return 'list';
+  }
+}
+
+function saveTrashViewPref(view: TrashViewLayout): void {
+  try {
+    localStorage.setItem(TRASH_VIEW_KEY, view);
+  } catch {
+    // Private mode, storage disabled — the preference is a nicety for
+    // THIS visit, not a contract; the toggle still works in-session.
+  }
+}
+
 /** How long a delete keeps its promise that History opens on the trash.
  *  The button's flash is 2.4s (trash-flash.ts); the door stays pointed
  *  at the trash a while longer — the eye needs time to decide to click —
@@ -787,6 +821,14 @@ export class SnapshotsManager {
    *  view is a stale answer to a question nobody asked again. */
   private segment: HistorySegment = 'note';
 
+  /** The trash view's face — timeline rows or the card gallery. A
+   *  PREFERENCE, not a view: the segment resets on every open because
+   *  each open answers a fresh question, but the layout answers “how
+   *  do you like to browse the trash”, and yesterday's answer to that
+   *  is still today's. Persists in localStorage; the list stays the
+   *  default so the shared vocabulary is what a fresh visit meets. */
+  private trashView: TrashViewLayout = 'list';
+
   /** When a note last moved to the trash — the delete's promise that the
    *  NEXT open lands on the Trash view. Consumed by that open; expires
    *  on HISTORY_TRASH_REDIRECT_MS. */
@@ -845,6 +887,7 @@ export class SnapshotsManager {
     this.dbName = 'NotepadSnapshotsDB';
     this.storeName = 'snapshots';
     this.db = null;
+    this.trashView = loadTrashViewPref();
     this.readyPromise = new Promise<void>((resolve, reject) => {
       this.resolveReady = resolve;
       this.rejectReady = reject;
@@ -957,6 +1000,20 @@ export class SnapshotsManager {
         const seg = (button as HTMLElement).dataset.seg as HistorySegment | undefined;
         if (seg && seg !== this.segment) {
           this.setSegment(seg);
+        }
+      });
+    });
+
+    // The trash's layout — list rows or note cards. A preference, not
+    // a view: it survives closes (the segment resets on every open;
+    // the face chosen for browsing graves is the user's to keep), and
+    // the toggle only stands in the trash, where there are graves to
+    // browse either way.
+    document.querySelectorAll('#trashViewToggle .snap-view-btn').forEach((button) => {
+      button.addEventListener('click', () => {
+        const view = (button as HTMLElement).dataset.view as TrashViewLayout | undefined;
+        if (view && view !== this.trashView) {
+          this.setTrashView(view);
         }
       });
     });
@@ -1252,6 +1309,34 @@ export class SnapshotsManager {
           count.toggleAttribute('hidden', graves === 0);
         }
       }
+    });
+  }
+
+  /** Applies a layout choice to the trash and re-renders. The query
+   *  survives the switch — the words mean the same thing in either
+   *  face. */
+  private setTrashView(view: TrashViewLayout): void {
+    this.trashView = view;
+    saveTrashViewPref(view);
+    this.renderViewToggle();
+    this.renderRows(this.currentSearchTerm());
+  }
+
+  /** The layout switch mirrors the state it owns, and stands only in
+   *  the trash: the other views are timelines by nature (their rows
+   *  are versions of one note, not documents), and a control with
+   *  nothing to say in two of three views should not be seen there. */
+  private renderViewToggle(): void {
+    const group = document.getElementById('trashViewToggle');
+    if (!group) {
+      return;
+    }
+    group.hidden = this.segment !== 'trash';
+    group.querySelectorAll('.snap-view-btn').forEach((node) => {
+      const button = node as HTMLElement;
+      const active = button.dataset.view === this.trashView;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', String(active));
     });
   }
 
@@ -1705,6 +1790,10 @@ export class SnapshotsManager {
 
     const rows: SheetRowModel[] = this.segment === 'trash' ? trashModels : versionModels;
 
+    // The trash's face: the card gallery when the preference says so —
+    // every other view (and the trash's default) stays the timeline.
+    const cardGallery = this.segment === 'trash' && this.trashView === 'cards';
+
     // A re-render must not snap shut the row the user is reading: the
     // sheet re-renders when a save lands underneath it (wireTabsListener
     // — a sync merge, the delete toast's Undo, an in-flight debounce
@@ -1719,7 +1808,8 @@ export class SnapshotsManager {
     renderSheetTimeline(list, rows, {
       term: filtering ? term : '',
       flashKey: this.pendingFlashKey,
-      openKey,
+      openKey: cardGallery ? null : openKey,
+      layout: cardGallery ? 'cards' : 'timeline',
     });
     this.pendingFlashKey = null;
     // What the rows now derive from — the persist listener compares
@@ -1770,7 +1860,11 @@ export class SnapshotsManager {
           ? scoped.length > 0
           : this.cache.length > 0;
     const hasRows = rows.length > 0;
-    list.style.display = hasRows ? 'block' : 'none';
+    // Inline display stays OFF the list (a '' reset, not 'block'): the
+    // card gallery is a CSS grid on .is-card-grid, and an inline block
+    // would out-cascade it.
+    list.style.display = hasRows ? '' : 'none';
+    list.classList.toggle('is-card-grid', cardGallery);
     empty.style.display = hasRows ? 'none' : 'flex';
     // The miss face belongs to a QUERY that hid rows the view holds. An
     // empty view with a query is that view's empty face — there is
@@ -1883,6 +1977,7 @@ export class SnapshotsManager {
     }
 
     this.renderSegment(graves.length);
+    this.renderViewToggle();
   }
 
   // Restore a snapshot — into THE NOTE IT CAME FROM.
