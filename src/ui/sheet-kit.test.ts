@@ -618,4 +618,60 @@ describe('renderSheetTimeline — the card gallery', () => {
     expect(list.querySelector('.snap-card')).toBeNull();
     list.remove();
   });
+
+  it('a drawing grave paints the drawing itself — the scene, whole, on its own paper', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    const art = {
+      ...grave('t:9', 'words a text page would paint'),
+      thumb: {
+        markup:
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20"><rect x="1" y="1" width="38" height="18"/></svg>',
+        background: '#282828',
+      },
+    };
+    renderSheetTimeline(list, [art], { layout: 'cards' });
+    const page = list.querySelector<HTMLElement>('.snap-card[data-row-key="t:9"] .snap-card-page');
+    // The page IS the drawing: the svg rides inline, on the canvas's own
+    // color, with no ruled lines, no text page, no cut to fade.
+    expect(page?.classList.contains('is-drawing')).toBe(true);
+    expect(page?.getAttribute('style')).toBe('background:#282828');
+    expect(page?.querySelector('svg rect')).not.toBeNull();
+    expect(page?.querySelector('.snap-card-line')).toBeNull();
+    expect(page?.classList.contains('is-cut')).toBe(false);
+    // The body is the body — the picture changed nothing else.
+    expect(list.querySelector('.snap-card-title')?.textContent).toBe('A deleted note');
+    expect(list.querySelector('[data-sheet-action="restore"]')).not.toBeNull();
+    list.remove();
+  });
+
+  it('a drawing with no canvas color keeps the CSS paper', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    const art = {
+      ...grave('t:10', 'words'),
+      thumb: { markup: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>' },
+    };
+    renderSheetTimeline(list, [art], { layout: 'cards' });
+    const page = list.querySelector<HTMLElement>('.snap-card-page');
+    expect(page?.getAttribute('style')).toBeNull();
+    expect(page?.querySelector('svg')).not.toBeNull();
+    list.remove();
+  });
+
+  it('the timeline face ignores the thumb — the picture is the gallery\u2019s alone', () => {
+    const list = document.createElement('ul');
+    document.body.appendChild(list);
+    const art = {
+      ...grave('t:11', 'the readable words'),
+      preview: 'the readable words',
+      thumb: { markup: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>' },
+    };
+    renderSheetTimeline(list, [art], {});
+    expect(list.querySelector('.snap-card-page')).toBeNull();
+    expect(list.querySelector('.snap-card')).toBeNull();
+    // The row still speaks text — the preview line the rail always had.
+    expect(list.querySelector('.snap-preview')?.textContent).toBe('the readable words');
+    list.remove();
+  });
 });

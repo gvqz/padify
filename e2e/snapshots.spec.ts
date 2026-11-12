@@ -1920,6 +1920,59 @@ test.describe("the trash's two layouts — the timeline or the card gallery", ()
     await expect(page.locator('#snapshotsList .snap-day')).toHaveCount(0);
   });
 
+  test('a drawing grave shows the drawing — the scene itself, as the card\u2019s page', async ({
+    page,
+  }) => {
+    // A drawing note with one rectangle in it, drawn the way a person
+    // draws (the canvas's own interactive surface).
+    await page.goto('/');
+    await page.locator('#addTabTypeMenu').click();
+    await page
+      .locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Drawing' })
+      .click();
+    await expect(page.locator('#note [data-drawing-canvas]')).toBeVisible();
+    await expect(page.locator('#note .excalidraw')).toBeVisible({ timeout: 20_000 });
+
+    const canvas = page.locator('#note .excalidraw canvas.interactive');
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.keyboard.press('r');
+    await page.mouse.move(box!.x + box!.width * 0.3, box!.y + box!.height * 0.3);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.6, { steps: 8 });
+    await page.mouse.up();
+    // The full persist chain (surface announce + debounce + store).
+    await page.waitForTimeout(2_000);
+
+    // Trash it: the drawing tab is the newest on the strip.
+    await page.locator('#tabStripTabs .tab-strip-tab').last().locator('.tab-strip-close').click();
+    await expect(page.locator('#snapshotsButton')).toHaveClass(/is-trashed/);
+
+    await openHistoryOnTrash(page);
+    await pickLayout(page, 'cards');
+
+    const card = trashCards(page).first();
+    // The page IS the drawing: the scene projected to an inline svg —
+    // not the ruled lines a text grave paints, and not the canvas chunk
+    // come back to life (the gallery stays lazy-load-free).
+    const cardPage = card.locator('.snap-card-page');
+    await expect(cardPage).toHaveClass(/is-drawing/);
+    await expect(cardPage.locator('svg')).toBeVisible();
+    const shapes = await cardPage.locator('svg rect, svg path, svg ellipse, svg polygon').count();
+    expect(shapes).toBeGreaterThanOrEqual(1);
+    await expect(card.locator('.snap-card-line')).toHaveCount(0);
+    // The body stays the body — name, when, chip, actions on the face.
+    await expect(card.locator('.snap-card-title')).toContainText('Drawing');
+    await expect(card.locator('.snap-card-meta .snap-chip')).toHaveText('30 days');
+    await expect(card.locator('[data-sheet-action="restore"]')).toBeVisible();
+
+    // And the picture restores: the drawing comes back to the strip.
+    await card.locator('[data-sheet-action="restore"]').click();
+    await expect(trashCards(page)).toHaveCount(0);
+    await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(2);
+  });
+
   test('the query still reaches inside the cards, and the miss stays honest', async ({ page }) => {
     await seedATrashedNote(page);
     await openSheetOnTrash(page);

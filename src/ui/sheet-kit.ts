@@ -441,6 +441,30 @@ export interface SheetRowModel {
    *  REPLACES the full text in the detail card: the card answers “what
    *  changed here?”, and Copy still carries the whole version out. */
   diff?: SheetRowDiff;
+  /** The gallery page's PICTURE face — a drawing grave's scene
+   *  projected to inline SVG by the drawing domain's pure renderer
+   *  (editor/drawing/thumb.ts, vendor-free by design: the gallery must
+   *  not be the door the 1–2 MB canvas chunk sneaks through).
+   *
+   *  This is the ONE field on the model that is pre-built markup
+   *  rather than plain text. The trust is earned at the source: the
+   *  renderer escapes every string and validates every color the
+   *  scene supplies before embedding it, so the kit injects the
+   *  markup verbatim inside an aria-hidden page. Absent → the
+   *  ruled-lines page (the timeline face ignores it entirely). */
+  thumb?: SheetThumb;
+}
+
+/** A picture a gallery card paints its page with — a drawing, seen
+ *  whole, on the canvas's own paper. */
+export interface SheetThumb {
+  /** A complete inline `<svg>` — viewBox-sized to the scene's content,
+   *  aspect-preserving. Trusted markup: built by the drawing domain's
+   *  pure renderer, escaped at build time (see SheetRowModel.thumb). */
+  markup: string;
+  /** The scene's own canvas color (validated hex) — the page paints it
+   *  behind the drawing; the CSS paper stands in when absent. */
+  background?: string;
 }
 
 /** How much of the readable text the detail card holds. The card is a
@@ -845,20 +869,39 @@ function buildCard(row: SheetRowModel, term: string): HTMLLIElement {
   }
   li.dataset.rowKey = row.key;
 
-  const page = cardPageLines(stripTitleEcho(row.detailText ?? '', row.title));
-  const pageHtml = page.lines.length
-    ? page.lines
-        .map((line) => {
-          const blank = line.trim() === '';
-          const body = blank
-            ? '\u00a0'
-            : term
-              ? highlightMatches(line, term)
-              : escapeHtmlText(line);
-          return `<span class="snap-card-line${blank ? ' is-blank' : ''}">${body}</span>`;
-        })
-        .join('')
-    : '<span class="snap-card-line is-empty">No content</span>';
+  // The page's face. A drawing grave's page is the DRAWING — the scene
+  // itself, whole, on the canvas's own paper (no rules to rule, no cut
+  // to fade: a drawing is seen entire or not at all). Every other
+  // grave paints the readable lines on ruled paper.
+  let pageClass = 'snap-card-page';
+  let pageStyle = '';
+  let pageInner: string;
+  if (row.thumb) {
+    pageClass += ' is-drawing';
+    pageInner = row.thumb.markup;
+    if (row.thumb.background) {
+      pageStyle = ` style="background:${row.thumb.background}"`;
+    }
+  } else {
+    const page = cardPageLines(stripTitleEcho(row.detailText ?? '', row.title));
+    if (page.more) {
+      pageClass += ' is-cut';
+    }
+    const pageHtml = page.lines.length
+      ? page.lines
+          .map((line) => {
+            const blank = line.trim() === '';
+            const body = blank
+              ? '\u00a0'
+              : term
+                ? highlightMatches(line, term)
+                : escapeHtmlText(line);
+            return `<span class="snap-card-line${blank ? ' is-blank' : ''}">${body}</span>`;
+          })
+          .join('')
+      : '<span class="snap-card-line is-empty">No content</span>';
+    pageInner = `<div class="snap-card-lines">${pageHtml}</div>`;
+  }
   const titleHtml = term ? highlightMatches(row.title, term) : escapeHtmlText(row.title);
   const chipHtml = row.chip
     ? `<span class="snap-chip${row.chip.danger ? ' is-danger' : ''}"${row.chip.title ? ` title="${escapeHtmlText(row.chip.title)}"` : ''}>${escapeHtmlText(row.chip.text)}</span>`
@@ -866,9 +909,7 @@ function buildCard(row: SheetRowModel, term: string): HTMLLIElement {
   const when = formatCardWhen(row.timestamp);
 
   li.innerHTML = `
-    <div class="snap-card-page${page.more ? ' is-cut' : ''}" aria-hidden="true">
-      <div class="snap-card-lines">${pageHtml}</div>
-    </div>
+    <div class="${pageClass}"${pageStyle} aria-hidden="true">${pageInner}</div>
     <div class="snap-card-body">
       <p class="snap-card-title" title="${escapeHtmlText(row.title)}">${titleHtml}</p>
       <p class="snap-card-meta">

@@ -92,6 +92,7 @@ import {
   drawingScenePlainText,
   parseDrawingScene,
 } from './editor/drawing/scene';
+import { drawingSceneThumb } from './editor/drawing/thumb';
 import { parseTaskNoteContent, taskNotePlainText } from './editor/tasks/content';
 import { showToast } from './ui/toast';
 import { hydrateModifierKeyElements } from './ui/platform-hints';
@@ -105,6 +106,7 @@ import {
   type SheetDiff,
   type SheetRowModel,
   type SheetRowDiff,
+  type SheetThumb,
   TwoStepConfirm,
 } from './ui/sheet-kit';
 
@@ -860,6 +862,37 @@ export class SnapshotsManager {
    *  inserts at the head of a note's chain, so an existing pair's
    *  predecessor never changes. The validation is cheap insurance. */
   private diffMemo: Map<number, { prevId: number; diff: SheetDiff | null }> = new Map();
+
+  /** Drawing pages by grave key — the thumbnail is the one row face
+   *  that costs real work (parse and project the whole scene), and
+   *  renderRows runs on every search keystroke. Keyed by the grave's
+   *  key and validated against the content it last saw, so an edited-
+   *  and-retrashed note repaints honestly. */
+  private thumbMemo: Map<string, { content: string; thumb: SheetThumb | null }> = new Map();
+
+  /** The picture a drawing grave's gallery card paints — the scene
+   *  projected to inline SVG (null: not a drawing, or nothing a
+   *  thumbnail can honestly show; the card then paints the ruled-lines
+   *  page like any text grave). */
+  private graveThumb(grave: TrashedNote): SheetThumb | null {
+    if (normalizeNoteType(grave.noteType) !== 'drawing') {
+      return null;
+    }
+    const key = `t:${grave.id}`;
+    const memo = this.thumbMemo.get(key);
+    if (memo && memo.content === grave.content) {
+      return memo.thumb;
+    }
+    const thumb = drawingSceneThumb(grave.content);
+    // The bridge between two honest shapes: the renderer answers
+    // 'no canvas color' as null (a value it computed), the model keeps
+    // it optional (a field it may not carry).
+    const sheet: SheetThumb | null = thumb
+      ? { markup: thumb.markup, background: thumb.background ?? undefined }
+      : null;
+    this.thumbMemo.set(key, { content: grave.content, thumb: sheet });
+    return sheet;
+  }
 
   /** The diff a version's card shows against its predecessor — null
    *  when there is nothing to diff (no predecessor, no line changes,
@@ -1784,15 +1817,25 @@ export class SnapshotsManager {
     }
 
     // The trash view's rows — searched within themselves, like any view.
+    // A drawing grave in the gallery wears the DRAWING as its page (the
+    // scene projected whole; the memo makes the per-keystroke re-renders
+    // free) — the timeline face stays text, the picture is the gallery's
+    // alone.
+    const cardGallery = this.segment === 'trash' && this.trashView === 'cards';
     const trashModels = graves
       .filter((grave) => !filtering || trashRowSearchText(grave).includes(term))
-      .map((grave) => trashRowModel(grave, now));
+      .map((grave) => {
+        const model = trashRowModel(grave, now);
+        if (cardGallery) {
+          const thumb = this.graveThumb(grave);
+          if (thumb) {
+            model.thumb = thumb;
+          }
+        }
+        return model;
+      });
 
     const rows: SheetRowModel[] = this.segment === 'trash' ? trashModels : versionModels;
-
-    // The trash's face: the card gallery when the preference says so —
-    // every other view (and the trash's default) stays the timeline.
-    const cardGallery = this.segment === 'trash' && this.trashView === 'cards';
 
     // A re-render must not snap shut the row the user is reading: the
     // sheet re-renders when a save lands underneath it (wireTabsListener

@@ -1264,6 +1264,31 @@ body.dark .snap-chip.is-danger {
   color: #3f3f46;
 }
 
+/* A drawing's page — the canvas IS the paper. No rules (the note drew
+   its own lines), no cut fade (a drawing is seen ENTIRE, scaled to
+   fit — the fade promises text below the fold, and there is none), and
+   a taller floor than text: a sketch wants room the way a paragraph
+   wants density. The scene's own canvas color rides in as an inline
+   background when it set one; the CSS paper stands in when it did
+   not, so a drawing never floats on chrome. */
+.snap-card-page.is-drawing {
+  min-height: 148px;
+  padding: 0;
+  background-image: none;
+}
+
+/* The drawing itself, pinned to the page's full box — absolute rather
+   than percent-of-flex so the svg always has a definite box to meet
+   (preserveAspectRatio centers the scene; wide drawings letterbox on
+   their own paper, the way a document previews). */
+.snap-card-page.is-drawing svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .snap-card-line.is-empty {
   color: #a1a1aa;
   font-style: italic;
