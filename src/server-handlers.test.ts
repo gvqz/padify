@@ -3,7 +3,12 @@ import type { Db, Row, SqlStatement, SqlValue } from '../server/db';
 import { clientKey, rateLimited, resetRateLimitsForTests } from '../server/ratelimit';
 import { MAX_BODY_BYTES } from '../server/http';
 import { handleNotesGet, handleNotesPut } from '../server/notes';
-import { handlePublicShareGet, handleSharesPatch, handleSharesPost } from '../server/shares';
+import {
+  createShareToken,
+  handlePublicShareGet,
+  handleSharesPatch,
+  handleSharesPost,
+} from '../server/shares';
 import { handleSignup } from '../server/auth-routes';
 import { route } from '../server/routes';
 import { hashPassword, verifyPasswordWithCost } from '../server/auth';
@@ -824,6 +829,37 @@ describe('handleSharesPost — the token mint', () => {
     // Every mint is fresh — a repeated token would collide two notes'
     // public links.
     expect(minted.size).toBe(25);
+  });
+});
+
+describe('createShareToken — the mint’s statistics', () => {
+  const ALPHABET = '347ACDEFHJKMNPRTUVWXY';
+
+  it('draws the alphabet uniformly — the rejection band must follow the alphabet size, not a hardcoded 240', () => {
+    // The defect this pins: the band was hardcoded to 240 bytes, which is
+    // uniform only for a 20-symbol alphabet. With the 21 symbols above,
+    // 240 % 21 = 9 — the first nine symbols drew 12 byte-values each and
+    // the rest 11, a ~9% bias that contradicted the code's own
+    // uniformity comment. The band is now derived (256 - 256 % size =
+    // 252); this test fails loudly if a future edit hardcodes it again
+    // or resizes the alphabet without redrawing the math. 1,000 tokens
+    // are 24,000 characters: the expected count per symbol is ~1,143
+    // with σ ≈ 23, so the ±20% band is ~9σ wide — it never flakes on
+    // honest randomness, only on real bias.
+    const draws = 1_000;
+    const counts = new Map<string, number>();
+    for (let i = 0; i < draws; i += 1) {
+      for (const symbol of createShareToken()) {
+        counts.set(symbol, (counts.get(symbol) ?? 0) + 1);
+      }
+    }
+    const expected = (draws * 24) / ALPHABET.length;
+    for (const symbol of ALPHABET) {
+      const got = counts.get(symbol) ?? 0;
+      expect(Math.abs(got - expected)).toBeLessThan(expected * 0.2);
+    }
+    // Nothing outside the alphabet can ever appear.
+    expect(counts.size).toBe(ALPHABET.length);
   });
 });
 

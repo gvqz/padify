@@ -25,22 +25,33 @@ const DAY_MS = 86_400_000;
  * scribbled down, screenshotted at small sizes or retyped by a human
  * cannot silently mutate into a different valid-looking token (the
  * production share dialog renders at small monospace, where Q/0 and 5/S
- * are genuinely hard to tell apart). 24 characters of a 20-symbol
- * alphabet is ~104 bits of entropy — brute force is not a thing at the
+ * are genuinely hard to tell apart). 24 characters of this 21-symbol
+ * alphabet is ~105 bits of entropy — brute force is not a thing at the
  * share bucket's rate limit. Pre-existing tokens keep working unchanged:
  * lookup is by exact string, only minting changes.
  */
 const TOKEN_ALPHABET = '347ACDEFHJKMNPRTUVWXY';
 const TOKEN_LENGTH = 24;
+/**
+ * Rejection-sampling cut-off, DERIVED from the alphabet size — never
+ * hardcoded: 256 is a multiple of no alphabet but a power of two, so
+ * bytes at or above 256 - (256 % size) would weight the first
+ * (256 % size) symbols once reduced modulo the size. Deriving the band
+ * keeps the draw uniform no matter how TOKEN_ALPHABET is edited later —
+ * the band this replaces was hardcoded 240, which is uniform only for a
+ * 20-symbol alphabet; with these 21 symbols it biased the first nine
+ * ~9% over the rest (harmless for entropy, wrong for the claim).
+ */
+const TOKEN_BYTE_LIMIT = 256 - (256 % TOKEN_ALPHABET.length);
 
-function createShareToken(): string {
+export function createShareToken(): string {
   let token = '';
   while (token.length < TOKEN_LENGTH) {
     const bytes = randomBytes(TOKEN_LENGTH * 2);
     for (const byte of bytes) {
-      // Rejection band: 256 is not a multiple of the alphabet size, so
-      // bytes >= 240 would weight the alphabet's tail — discard them.
-      if (byte >= 240) {
+      // Rejection band — see TOKEN_BYTE_LIMIT: bytes at or above it
+      // would weight the alphabet's head once reduced modulo its size.
+      if (byte >= TOKEN_BYTE_LIMIT) {
         continue;
       }
       if (token.length >= TOKEN_LENGTH) {
