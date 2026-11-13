@@ -36,6 +36,57 @@ function freshAccount(): { email: string; password: string } {
   return { email: `${stem}@example.test`, password: 'a long enough password' };
 }
 
+/**
+ * The session token's readable home changed: it used to mirror to
+ * localStorage (world-readable — the exact surface the storage hardening
+ * removed), and now lives in the `padify` IndexedDB kv store with
+ * localStorage only as the no-IDB fallback backend. This init script
+ * exposes a page-side reader that checks both, so the spec's raw fetches
+ * keep using the app's own session.
+ */
+function installSessionTokenReader(page: Page): Promise<void> {
+  return page.addInitScript(() => {
+    const readToken = (): Promise<string | null> => {
+      const fromRaw = (raw: string | null): string | null => {
+        if (!raw) return null;
+        try {
+          return (JSON.parse(raw) as { token?: string }).token ?? null;
+        } catch {
+          return null;
+        }
+      };
+      const mirrored = fromRaw(localStorage.getItem('padifySession'));
+      if (mirrored) {
+        return Promise.resolve(mirrored);
+      }
+      return new Promise((resolve) => {
+        const request = indexedDB.open('padify');
+        request.onerror = () => resolve(null);
+        request.onsuccess = () => {
+          const db = request.result;
+          try {
+            const get = db.transaction('kv', 'readonly').objectStore('kv').get('padifySession');
+            get.onsuccess = () => {
+              resolve(fromRaw(get.result?.value ?? null));
+              db.close();
+            };
+            get.onerror = () => {
+              resolve(null);
+              db.close();
+            };
+          } catch {
+            resolve(null);
+            db.close();
+          }
+        };
+      });
+    };
+    (
+      window as unknown as { __padifySessionToken?: () => Promise<string | null> }
+    ).__padifySessionToken = readToken;
+  });
+}
+
 async function signUp(page: Page, account: { email: string; password: string }): Promise<void> {
   await page.goto('/');
   await page.locator('#cloudNavContainer').click();
@@ -51,6 +102,10 @@ async function signUp(page: Page, account: { email: string; password: string }):
 }
 
 test.describe('attachments (real API)', () => {
+  test.beforeEach(async ({ page }) => {
+    await installSessionTokenReader(page);
+  });
+
   test('the server round trip through a real session', async ({ page }) => {
     test.setTimeout(60_000);
     await signUp(page, freshAccount());
@@ -58,8 +113,9 @@ test.describe('attachments (real API)', () => {
 
     // Upload raw bytes with the app's own session token.
     const uploaded = await page.evaluate(async (attachmentId) => {
-      const raw = localStorage.getItem('padifySession');
-      const token = raw ? ((JSON.parse(raw) as { token?: string }).token ?? null) : null;
+      const token = await (
+        window as unknown as { __padifySessionToken?: () => Promise<string | null> }
+      ).__padifySessionToken!();
       const response = await fetch('/api/attachments', {
         method: 'POST',
         headers: {
@@ -84,8 +140,9 @@ test.describe('attachments (real API)', () => {
 
     // Download them back — same bytes, typed, immutable, ETagged.
     const downloaded = await page.evaluate(async (attachmentId) => {
-      const raw = localStorage.getItem('padifySession');
-      const token = raw ? ((JSON.parse(raw) as { token?: string }).token ?? null) : null;
+      const token = await (
+        window as unknown as { __padifySessionToken?: () => Promise<string | null> }
+      ).__padifySessionToken!();
       const response = await fetch(`/api/attachments/${attachmentId}`, {
         headers: { authorization: `Bearer ${token}` },
       });
@@ -107,8 +164,9 @@ test.describe('attachments (real API)', () => {
     // The ETag answers If-None-Match with a 304.
     const revalidated = await page.evaluate(
       async ({ attachmentId, etag: tag }) => {
-        const raw = localStorage.getItem('padifySession');
-        const token = raw ? ((JSON.parse(raw) as { token?: string }).token ?? null) : null;
+        const token = await (
+          window as unknown as { __padifySessionToken?: () => Promise<string | null> }
+        ).__padifySessionToken!();
         const response = await fetch(`/api/attachments/${attachmentId}`, {
           headers: { authorization: `Bearer ${token}`, 'if-none-match': tag },
         });
@@ -120,8 +178,9 @@ test.describe('attachments (real API)', () => {
 
     // The list carries the meta, never the bytes.
     const listed = await page.evaluate(async () => {
-      const raw = localStorage.getItem('padifySession');
-      const token = raw ? ((JSON.parse(raw) as { token?: string }).token ?? null) : null;
+      const token = await (
+        window as unknown as { __padifySessionToken?: () => Promise<string | null> }
+      ).__padifySessionToken!();
       const response = await fetch('/api/attachments', {
         headers: { authorization: `Bearer ${token}` },
       });
@@ -133,8 +192,9 @@ test.describe('attachments (real API)', () => {
 
     // A retried identical upload is a 200 duplicate; different bytes a 409.
     const retried = await page.evaluate(async (attachmentId) => {
-      const raw = localStorage.getItem('padifySession');
-      const token = raw ? ((JSON.parse(raw) as { token?: string }).token ?? null) : null;
+      const token = await (
+        window as unknown as { __padifySessionToken?: () => Promise<string | null> }
+      ).__padifySessionToken!();
       const response = await fetch('/api/attachments', {
         method: 'POST',
         headers: {
@@ -150,8 +210,9 @@ test.describe('attachments (real API)', () => {
     expect(retried.body).toMatchObject({ duplicate: true });
 
     const collided = await page.evaluate(async (attachmentId) => {
-      const raw = localStorage.getItem('padifySession');
-      const token = raw ? ((JSON.parse(raw) as { token?: string }).token ?? null) : null;
+      const token = await (
+        window as unknown as { __padifySessionToken?: () => Promise<string | null> }
+      ).__padifySessionToken!();
       const response = await fetch('/api/attachments', {
         method: 'POST',
         headers: {
@@ -167,8 +228,9 @@ test.describe('attachments (real API)', () => {
 
     // Delete is idempotent and the id is gone.
     const deleted = await page.evaluate(async (attachmentId) => {
-      const raw = localStorage.getItem('padifySession');
-      const token = raw ? ((JSON.parse(raw) as { token?: string }).token ?? null) : null;
+      const token = await (
+        window as unknown as { __padifySessionToken?: () => Promise<string | null> }
+      ).__padifySessionToken!();
       const first = await fetch(`/api/attachments/${attachmentId}`, {
         method: 'DELETE',
         headers: { authorization: `Bearer ${token}` },
@@ -223,8 +285,9 @@ test.describe('attachments (real API)', () => {
       .poll(
         async () =>
           page.evaluate(async (attachmentId) => {
-            const raw = localStorage.getItem('padifySession');
-            const token = raw ? ((JSON.parse(raw) as { token?: string }).token ?? null) : null;
+            const token = await (
+              window as unknown as { __padifySessionToken?: () => Promise<string | null> }
+            ).__padifySessionToken!();
             const response = await fetch('/api/attachments', {
               headers: { authorization: `Bearer ${token}` },
             });

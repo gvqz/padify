@@ -153,6 +153,17 @@ export interface NoteTab {
    */
   unseenChange?: { from: string; fromName: string | null };
   /**
+   * DURABLE sync-dirty marker: these bytes differ from what the cloud last
+   * agreed to (or the cloud has never seen them). Written by persist() in
+   * the SAME record write as the content, so it is exactly as crash-safe
+   * as the words it describes; TabManager.init() re-seeds the in-memory
+   * dirtyIds set from it, and the sync layer's session start re-queues the
+   * id for a pull-first recovery cycle (see cloud/sync.ts —
+   * seedPendingFromModel). Cloud-only metadata: never crosses the wire,
+   * cleared by confirmPushed's persist once the server has the bytes.
+   */
+  unpushed?: boolean;
+  /**
    * Conflicted-copy lineage (LEGACY — pre-review builds minted twin notes
    * and marked them; nothing writes it anymore, existing values ride
    * storage untouched and unread).
@@ -254,6 +265,23 @@ export class TabManager {
     this.trashed = snapshot.trashed.filter(
       (entry) => entry && typeof entry.id === 'string' && typeof entry.deletedAt === 'number',
     );
+    // Durable sync-dirty recovery: records an earlier session stamped
+    // `unpushed` re-enter the in-memory dirty set here. The push queue and
+    // the dirty set used to be memory-only while the pull cursor survived
+    // reloads — an edit made just before a reload was then silently
+    // overwritten when another device later pushed the same note. Seeding
+    // the set (tabs AND trash) lets the sync layer's session start queue
+    // these ids for a pull-first recovery cycle instead.
+    this.tabs.forEach((tab) => {
+      if (tab.unpushed === true) {
+        this.dirtyIds.add(tab.id);
+      }
+    });
+    this.trashed.forEach((grave) => {
+      if (grave.unpushed === true) {
+        this.dirtyIds.add(grave.id);
+      }
+    });
     this.migrateLegacyNote();
 
     const savedActive = stateGet(ACTIVE_TAB_KEY);
@@ -311,6 +339,7 @@ export class TabManager {
           syncBase: entry.syncBase,
           unseenChange: entry.unseenChange,
           conflict: readNoteConflict(entry.conflict),
+          unpushed: entry.unpushed === true ? true : undefined,
           copyOf: typeof entry.copyOf === 'string' && entry.copyOf ? entry.copyOf : undefined,
         };
       });
@@ -344,6 +373,9 @@ export class TabManager {
    * throttled.
    */
   private persist(immediate = true): void {
+    // The durable dirty marker rides the same write as the content — the
+    // flag and the bytes it describes can never drift apart across a crash.
+    this.stampUnpushedFlags();
     saveNotes({ tabs: this.tabs, trashed: this.trashed }, this.activeId, { immediate });
 
     const payload = this.exportForSync();
@@ -351,6 +383,28 @@ export class TabManager {
       this.onPersist(payload);
     }
     this.persistListeners.forEach((listener) => listener(payload));
+  }
+
+  /**
+   * Mirrors the dirty set onto the records before every write (see
+   * NoteTab.unpushed): every dirtyIds mutation funnels through a persist
+   * eventually, so one stamp point keeps the flag exactly as fresh as the
+   * content beside it. `undefined` keeps the stored records lean — the
+   * overwhelming majority of notes are confirmed at any given moment.
+   */
+  private stampUnpushedFlags(): void {
+    this.tabs.forEach((tab) => {
+      const unpushed = this.dirtyIds.has(tab.id);
+      if (unpushed !== (tab.unpushed === true)) {
+        tab.unpushed = unpushed || undefined;
+      }
+    });
+    this.trashed.forEach((grave) => {
+      const unpushed = this.dirtyIds.has(grave.id);
+      if (unpushed !== (grave.unpushed === true)) {
+        grave.unpushed = unpushed || undefined;
+      }
+    });
   }
 
   /**
@@ -440,16 +494,26 @@ export class TabManager {
     if (ids.length === 0) {
       return;
     }
+    let cleared = false;
     for (const id of ids) {
-      this.dirtyIds.delete(id);
+      if (this.dirtyIds.delete(id)) {
+        cleared = true;
+      }
     }
     // Purged placeholders leave once their sweeper row is stored — there is
     // nothing left to show, restore or push for them.
     const confirmed = new Set(ids);
-    if (this.trashed.some((entry) => entry.purged && confirmed.has(entry.id))) {
+    const purgedGone = this.trashed.some((entry) => entry.purged && confirmed.has(entry.id));
+    if (purgedGone) {
       this.trashed = this.trashed.filter((entry) => !(entry.purged && confirmed.has(entry.id)));
-      this.persist();
       this.renderRailCount();
+    }
+    // Retire the durable unpushed flags in the same breath: a flag left
+    // true on a confirmed note re-seeds it as dirty on every future boot,
+    // pushing a synced note once per session forever. The persist's diff
+    // write rewrites only the records whose flag actually flipped.
+    if (cleared || purgedGone) {
+      this.persist();
     }
   }
 

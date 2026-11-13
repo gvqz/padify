@@ -26,7 +26,7 @@
 
 import { api as apiCall, ApiError } from './api';
 import { flushAttachmentUploads } from './attachments';
-import { stateGet, stateSet, stateRemove } from '../storage';
+import { stateGet, stateSet, stateRemove, storageBackend } from '../storage';
 import { DEFAULT_NOTE_TYPE, normalizeNoteType } from '../editor/note-types';
 // The welcome seed's exact bytes: the untouched-seed test in mergeRemote
 // compares against them (importing the constant — not a copy — so a
@@ -235,12 +235,38 @@ function storeSession(next: StoredSession | null): void {
   session = next;
   try {
     if (next) {
-      stateSet(SESSION_KEY, JSON.stringify(next));
+      // NOT mirrored to localStorage. The 30-day sliding bearer token is
+      // the one stored value an attacker could USE elsewhere verbatim, and
+      // localStorage is the synchronous, world-readable API any XSS reach
+      // touches first — kv's StateSetOptions.{ localStorage: false } exists
+      // for exactly this value (see src/storage/kv.ts). It costs nothing:
+      // the session is read back through the kv mirror, which hydrates
+      // from IndexedDB at boot, and the fallback backend keeps writing
+      // localStorage because there it is the only store.
+      stateSet(SESSION_KEY, JSON.stringify(next), { localStorage: false });
     } else {
       stateRemove(SESSION_KEY);
     }
   } catch {
     /* storage unavailable — session lives for this page only */
+  }
+}
+
+/**
+ * One-time (per boot) removal of the world-readable localStorage copy of
+ * the session that older builds mirrored there. Only runs when IndexedDB
+ * is actually serving — in the fallback backend localStorage IS the store
+ * and scrubbing it would sign the user out. The IndexedDB copy (the
+ * incumbent, kept newer by every post-migration write) is untouched.
+ */
+function scrubLegacySessionMirror(): void {
+  if (storageBackend() !== 'indexeddb') {
+    return;
+  }
+  try {
+    localStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* storage unavailable — nothing to scrub */
   }
 }
 
@@ -282,6 +308,7 @@ export async function initCloudSync(tabManager: TabManager): Promise<void> {
   manager = tabManager;
   manager.onPersist = (payload) => onLocalChange(payload);
 
+  scrubLegacySessionMirror();
   session = loadStoredSession();
 
   // Validate any stored session against the API (this also slides the
@@ -297,6 +324,7 @@ export async function initCloudSync(tabManager: TabManager): Promise<void> {
       }
       setStatus(signedInStatus('syncing'));
       startSyncTimer();
+      seedPendingFromModel();
       void syncCycle('session-restored');
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
@@ -371,6 +399,10 @@ function handleSignedOut(): void {
   currentUserEmail = null;
   lastSyncAt = null;
   syncWarning = null;
+  // The in-memory queue dies with the session; the durable unpushed flags
+  // on the note records deliberately do NOT — the bytes are still unconfirmed
+  // by the cloud, so the next sign-in re-seeds them (seedPendingFromModel)
+  // instead of leaving them to be silently outranked by a newer remote row.
   pendingPush.clear();
   stopSyncTimer();
   setStatus({ state: 'signed-out' });
@@ -399,6 +431,7 @@ async function signIn(email: string, password: string): Promise<AuthResult> {
     currentUserEmail = data.user.email;
     setStatus(syncingStatus());
     startSyncTimer();
+    seedPendingFromModel();
     void syncCycle('sign-in');
     return { ok: true };
   } catch (error) {
@@ -421,6 +454,7 @@ async function signUp(email: string, password: string): Promise<AuthResult> {
     currentUserEmail = data.user.email;
     setStatus(syncingStatus());
     startSyncTimer();
+    seedPendingFromModel();
     void syncCycle('sign-up');
     return { ok: true };
   } catch (error) {
@@ -443,6 +477,56 @@ async function signOut(): Promise<void> {
 // ---------------------------------------------------------------------------
 // Local change ingestion
 // ---------------------------------------------------------------------------
+
+/**
+ * True when the next cycle must PULL AND MERGE BEFORE pushing — the recovery
+ * order for edits that outlived their session (see seedPendingFromModel).
+ * Cleared only after a pull's merge actually ran; a cycle that fails earlier
+ * (offline) retries in the same mode.
+ */
+let recoverOnNextCycle = false;
+
+/**
+ * Re-seeds the push queue from the model's durable dirty state at every
+ * session start (boot with a restored session, sign-in, sign-up).
+ *
+ * The bug this closes: pendingPush and TabManager's dirtyIds were memory-only,
+ * while the pull cursor lives in sessionStorage and SURVIVES a reload. Edit a
+ * note, reload before the 1.2s push debounce fires, and the post-reload cycle
+ * had an empty queue, an empty dirty set and a cursor that delivered nothing
+ * for the note — so the edit was never pushed (step 3 only re-pushes
+ * undelivered rows on position drift) and, when another device later edited
+ * the same note, the merge saw a "clean" local losing to a higher seq and
+ * silently overwrote the stranded words: no three-way merge, no conflict
+ * park, no trash copy. Last keystrokes before a reload simply vanished.
+ *
+ * The durable half now lives on the note records themselves (NoteTab.unpushed,
+ * stamped by TabManager.persist in the same write as the content), so the
+ * dirty state is exactly as crash-safe as the bytes it describes. Seeding it
+ * back here restores the merge's protection — and sets recoverOnNextCycle so
+ * the strand is reconciled against the remote truth BEFORE it is pushed
+ * (the server's upsert is unconditional for live-vs-live rows, so pushing a
+ * stale strand first would clobber another device's newer words instead).
+ */
+function seedPendingFromModel(): void {
+  if (!manager) {
+    return;
+  }
+  const dirty = manager.exportForSync().dirty;
+  if (dirty.length === 0) {
+    return;
+  }
+  let added = false;
+  for (const id of dirty) {
+    if (!pendingPush.has(id)) {
+      pendingPush.add(id);
+      added = true;
+    }
+  }
+  if (added) {
+    recoverOnNextCycle = true;
+  }
+}
 
 function onLocalChange(payload: TabsSyncPayload): void {
   if (!currentUserId) {
@@ -517,6 +601,90 @@ async function syncCycle(_reason: string): Promise<void> {
   }
 }
 
+/**
+ * Step 1 of the cycle: push whatever is pending (a no-op with an empty
+ * queue). Rows go out in body-capped batches (see batchRowsForPush) so one
+ * oversized note can never hold the rest of the queue hostage — it fails
+ * alone.
+ */
+async function pushPendingQueue(): Promise<void> {
+  if (!manager || pendingPush.size === 0) {
+    return;
+  }
+  const payload = manager.exportForSync();
+  const rows: NoteRow[] = [];
+  const byId = new Map(payload.tabs.map((tab) => [tab.id, tab]));
+  const trashById = new Map(payload.trashed.map((grave) => [grave.id, grave]));
+
+  pendingPush.forEach((id) => {
+    const tab = byId.get(id);
+    if (tab) {
+      rows.push(tabToRow(tab, payload.tabs.indexOf(tab)));
+      return;
+    }
+    const grave = trashById.get(id);
+    if (grave) {
+      rows.push(trashToRow(grave));
+    }
+    // Neither: a purged placeholder already retired, or a merged-away
+    // id — nothing to build, and the id leaves the queue below only if
+    // the server ever saw it; otherwise it stays queued harmlessly.
+  });
+
+  const pushed: string[] = [];
+  // Rows the push answers named with their stamped seq — the adoption
+  // set for manager.adoptPushedRows (seq + merge base, no pull needed).
+  const adopted: Array<{ id: string; seq: number; content: string; name: string | null }> = [];
+
+  // Rows the server would refuse on size never leave the device — but
+  // they stay queued (a stuck id costs one stringify per cycle and ships
+  // the moment the note is trimmed under the cap), the rest of the queue
+  // flows on without them, and the failure stops being silent: the
+  // status carries the reason until the note shrinks or goes.
+  const { shippable, stuckNames } = partitionRowsForPush(rows);
+  syncWarning = sizeWarningFor(stuckNames);
+
+  try {
+    const batchById = new Map(shippable.map((row) => [row.id, row]));
+    for (const batch of batchRowsForPush(shippable)) {
+      rememberEchoes(batch);
+      const answer = await api<NotesPutAnswer>('/api/notes', {
+        method: 'PUT',
+        body: { v: 2, rows: batch },
+      });
+      batch.forEach((row) => pushed.push(row.id));
+      // The stamped answer: each pushed note learns its seq AND pins its
+      // merge base without waiting for the pull echo. A server that
+      // answers the old shape ({ ok: true }, no rows) simply contributes
+      // nothing — the fingerprint fallback covers it.
+      for (const landed of answer?.rows ?? []) {
+        const sent = batchById.get(landed.id);
+        if (sent && landed.seq > 0) {
+          adopted.push({
+            id: landed.id,
+            seq: landed.seq,
+            // The answer carries no bytes — the base is what WE sent,
+            // read the same way the server read it (either key).
+            content: wireRowContent(sent),
+            name: sent.name ?? null,
+          });
+        }
+      }
+    }
+  } finally {
+    // Whatever reached the server is no longer pending: on the happy
+    // path the whole queue drains; when one batch fails, the notes that
+    // made it out still count as pushed and stop re-announcing on every
+    // future persist. The ids the server never saw stay queued for the
+    // next cycle — nothing is dropped.
+    pushed.forEach((id) => pendingPush.delete(id));
+    manager.confirmPushed(pushed);
+    if (adopted.length > 0) {
+      manager.adoptPushedRows(adopted);
+    }
+  }
+}
+
 async function runSyncOnce(): Promise<void> {
   if (!manager || !currentUserId || !session) {
     return;
@@ -531,82 +699,15 @@ async function runSyncOnce(): Promise<void> {
     syncWarning = null;
   }
 
-  // 1. Push whatever is pending (a no-op with an empty queue). Rows go out
-  //    in body-capped batches (see batchRowsForPush) so one oversized note
-  //    can never hold the rest of the queue hostage — it fails alone.
-  if (pendingPush.size > 0) {
-    const payload = manager.exportForSync();
-    const rows: NoteRow[] = [];
-    const byId = new Map(payload.tabs.map((tab) => [tab.id, tab]));
-    const trashById = new Map(payload.trashed.map((grave) => [grave.id, grave]));
-
-    pendingPush.forEach((id) => {
-      const tab = byId.get(id);
-      if (tab) {
-        rows.push(tabToRow(tab, payload.tabs.indexOf(tab)));
-        return;
-      }
-      const grave = trashById.get(id);
-      if (grave) {
-        rows.push(trashToRow(grave));
-      }
-      // Neither: a purged placeholder already retired, or a merged-away
-      // id — nothing to build, and the id leaves the queue below only if
-      // the server ever saw it; otherwise it stays queued harmlessly.
-    });
-
-    const pushed: string[] = [];
-    // Rows the push answers named with their stamped seq — the adoption
-    // set for manager.adoptPushedRows (seq + merge base, no pull needed).
-    const adopted: Array<{ id: string; seq: number; content: string; name: string | null }> = [];
-
-    // Rows the server would refuse on size never leave the device — but
-    // they stay queued (a stuck id costs one stringify per cycle and ships
-    // the moment the note is trimmed under the cap), the rest of the queue
-    // flows on without them, and the failure stops being silent: the
-    // status carries the reason until the note shrinks or goes.
-    const { shippable, stuckNames } = partitionRowsForPush(rows);
-    syncWarning = sizeWarningFor(stuckNames);
-
-    try {
-      const batchById = new Map(shippable.map((row) => [row.id, row]));
-      for (const batch of batchRowsForPush(shippable)) {
-        rememberEchoes(batch);
-        const answer = await api<NotesPutAnswer>('/api/notes', {
-          method: 'PUT',
-          body: { v: 2, rows: batch },
-        });
-        batch.forEach((row) => pushed.push(row.id));
-        // The stamped answer: each pushed note learns its seq AND pins its
-        // merge base without waiting for the pull echo. A server that
-        // answers the old shape ({ ok: true }, no rows) simply contributes
-        // nothing — the fingerprint fallback covers it.
-        for (const landed of answer?.rows ?? []) {
-          const sent = batchById.get(landed.id);
-          if (sent && landed.seq > 0) {
-            adopted.push({
-              id: landed.id,
-              seq: landed.seq,
-              // The answer carries no bytes — the base is what WE sent,
-              // read the same way the server read it (either key).
-              content: wireRowContent(sent),
-              name: sent.name ?? null,
-            });
-          }
-        }
-      }
-    } finally {
-      // Whatever reached the server is no longer pending: on the happy
-      // path the whole queue drains; when one batch fails, the notes that
-      // made it out still count as pushed and stop re-announcing on every
-      // future persist. The ids the server never saw stay queued for the
-      // next cycle — nothing is dropped.
-      pushed.forEach((id) => pendingPush.delete(id));
-      manager.confirmPushed(pushed);
-      if (adopted.length > 0) {
-        manager.adoptPushedRows(adopted);
-      }
-    }
+  // 1. Push whatever is pending — UNLESS this cycle is recovering edits
+  //    that outlived a reload (seedPendingFromModel). The server's upsert
+  //    takes live rows unconditionally, so a strand pushed before the pull
+  //    could clobber a newer remote edit with stale bytes; the merge must
+  //    see the remote truth first, and the strand ships afterwards with
+  //    whatever the merge left standing (merged, parked or untouched).
+  const recover = recoverOnNextCycle;
+  if (!recover) {
+    await pushPendingQueue();
   }
 
   // 2. Pull (v2: only what changed past the stored cursor; v1 servers
@@ -625,6 +726,11 @@ async function runSyncOnce(): Promise<void> {
 
   const payload = manager.exportForSync();
   const merge = mergeRemote(remoteRows, payload, { order: pull.order, ownEchoes });
+
+  // The pull's merge has run — recovery mode has served its purpose. A
+  // failure above (offline pull, merge throw) keeps the flag armed so the
+  // retry reconciles in the same order.
+  recoverOnNextCycle = false;
 
   if (merge.changed) {
     manager.applyExternalMerge(merge.tabs, merge.mergedIds);
@@ -677,6 +783,14 @@ async function runSyncOnce(): Promise<void> {
       });
   }
 
+  // The recovery cycle's postponed push: the merge has now seen every
+  // remote row newer than the cursor, so whatever the strand notes look
+  // like here is safe to ship (merged words, the winner's bytes after a
+  // park, or the untouched strand when nothing newer arrived).
+  if (recover) {
+    await pushPendingQueue();
+  }
+
   // 3. Push anything the pull revealed as missing or newer locally. Under
   //    v2, rows outside the changed set are known-unchanged (their seq sits
   //    at or below the cursor): they are only pushed for position drift, so
@@ -689,7 +803,15 @@ async function runSyncOnce(): Promise<void> {
   const positionOf = pull.order
     ? new Map(pull.order.map((id, index) => [id, index] as const))
     : null;
-  const mergedTabs = manager.exportForSync().tabs;
+  const mergedExport = manager.exportForSync();
+  const mergedTabs = mergedExport.tabs;
+  // The dirty set as it stands NOW, after the merge and any push
+  // confirmation — the safety net for a note that is dirty but was never
+  // queued (edits made while signed out, a queue cleared by a sign-out
+  // round trip). An undelivered row the model still calls dirty is a
+  // strand by definition: its bytes differ from what the cloud last
+  // agreed to, and nothing else in this cycle will ship them.
+  const dirtyNow = new Set(mergedExport.dirty);
 
   mergedTabs.forEach((tab, index) => {
     const remote = remoteById.get(tab.id);
@@ -701,7 +823,7 @@ async function runSyncOnce(): Promise<void> {
       // A row the pull did not deliver: under v2 that means unchanged
       // since the cursor (its place alone decides), or brand-new to the
       // server — the first upload of a local-only note.
-      if (remotePosition === null || remotePosition !== index) {
+      if (remotePosition === null || remotePosition !== index || dirtyNow.has(tab.id)) {
         diffRows.push(tabToRow(tab, index));
       }
       return;

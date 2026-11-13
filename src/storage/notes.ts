@@ -74,6 +74,14 @@ export interface StoredNoteTab {
    * never crosses the wire.
    */
   unseenChange?: { from: string; fromName: string | null };
+  /**
+   * DURABLE sync-dirty marker (see tabs.ts — NoteTab.unpushed): these
+   * bytes differ from what the cloud last agreed to. Stamped by
+   * TabManager.persist in the same record write as the content; re-seeded
+   * into the dirty set at boot. Local-only sync metadata: never crosses
+   * the wire.
+   */
+  unpushed?: boolean;
   /** Conflicted-copy lineage (LEGACY — pre-review builds minted twin notes
    *  and marked them; nothing writes it anymore, values ride unread). */
   copyOf?: string;
@@ -344,6 +352,8 @@ const lastWritten = new Map<
           theirs: { content: string; updatedAt: number };
         }
       | undefined;
+    /** The durable sync-dirty flag as last written (see StoredNoteTab.unpushed). */
+    unpushed?: boolean;
   }
 >();
 
@@ -402,6 +412,9 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
         syncBase: readSyncBase((record as { syncBase?: unknown }).syncBase),
         unseenChange: readUnseenChange((record as { unseenChange?: unknown }).unseenChange),
         conflict: readNoteConflict((record as { conflict?: unknown }).conflict),
+        // Durable sync-dirty flag — the reload-recovery seed (see
+        // tabs.ts NoteTab.unpushed).
+        unpushed: (record as { unpushed?: unknown }).unpushed === true ? true : undefined,
         // Round-trip the conflicted-copy lineage so the multiplication
         // guard survives reloads (see NoteTab.copyOf).
         copyOf:
@@ -447,6 +460,7 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
             : undefined,
         deletedAt: stamp,
         purged: (record as { purged?: unknown }).purged === true ? true : undefined,
+        unpushed: (record as { unpushed?: unknown }).unpushed === true ? true : undefined,
       } satisfies TrashedNote;
     })
     .filter((entry) => entry.deletedAt > cutoff);
@@ -475,6 +489,7 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
             },
           }
         : undefined,
+      unpushed: tab.unpushed === true,
     });
   });
   valid
@@ -495,6 +510,10 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
         syncBase: undefined,
         unseenChange: undefined,
         conflict: undefined,
+        // Surviving trash keeps its sync-dirty flag so the first save
+        // doesn't needlessly rewrite the row (swept rows are deleted on
+        // their next save anyway — the flag is moot for them).
+        unpushed: (record as { unpushed?: unknown }).unpushed === true,
       });
     });
 
@@ -592,6 +611,7 @@ function loadLegacySnapshot(): NotesSnapshot {
             syncBase: readSyncBase(entry.syncBase),
             unseenChange: readUnseenChange(entry.unseenChange),
             conflict: readNoteConflict(entry.conflict),
+            unpushed: entry.unpushed === true ? true : undefined,
             copyOf: typeof entry.copyOf === 'string' && entry.copyOf ? entry.copyOf : undefined,
           });
         }
@@ -748,6 +768,9 @@ export function reconcileNotesFromMirror(): boolean {
       committed.syncBase = row.syncBase;
       committed.unseenChange = row.unseenChange;
       committed.copyOf = row.copyOf;
+      // A rescued row is newer than the committed one by construction — its
+      // sync-dirty flag is the truth about whether the cloud ever saw it.
+      committed.unpushed = row.unpushed;
       trashById.delete(row.id);
     } else {
       // A mirror-live row the store holds as TRASHED is a delete the
@@ -869,6 +892,7 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
             },
           }
         : undefined,
+      unpushed: tab.unpushed === true,
     };
     const sameSyncBase =
       previous?.syncBase?.content === tab.syncBase?.content &&
@@ -890,7 +914,8 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
       previous.deleted ||
       !sameSyncBase ||
       !sameUnseen ||
-      !sameConflict
+      !sameConflict ||
+      previous.unpushed !== signature.unpushed
     ) {
       // Every writer stamps the current schema version (see
       // NOTE_RECORD_VERSION); v is local-only and never crosses the wire.
@@ -906,7 +931,8 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
       !previous ||
       !previous.deleted ||
       previous.deletedAt !== grave.deletedAt ||
-      previous.updatedAt !== grave.updatedAt
+      previous.updatedAt !== grave.updatedAt ||
+      (previous.unpushed === true) !== (grave.unpushed === true)
     ) {
       upserts.push({
         id: grave.id,
@@ -922,6 +948,7 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
         deleted: true,
         deletedAt: grave.deletedAt,
         ...(grave.purged ? { purged: true } : {}),
+        ...(grave.unpushed ? { unpushed: true } : {}),
         v: NOTE_RECORD_VERSION,
       });
       lastWritten.set(grave.id, {
@@ -935,6 +962,7 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
         syncBase: undefined,
         unseenChange: undefined,
         conflict: undefined,
+        unpushed: grave.unpushed === true,
       });
     }
   });
