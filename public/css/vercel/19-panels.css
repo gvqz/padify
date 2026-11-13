@@ -643,7 +643,10 @@ body.panel-sheet-open {
   flex: 1 1 auto;
   min-width: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11.5px;
+  /* Generous size for a value humans retyped by hand for years: the token
+     is confusable-free by construction (see server/shares.ts), and the
+     display owes it the same legibility. */
+  font-size: 13px;
   line-height: 1.55;
   color: var(--vz-fg);
   word-break: break-all;

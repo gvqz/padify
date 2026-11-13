@@ -802,6 +802,31 @@ describe('handleSharesPost — the live-share cap', () => {
   });
 });
 
+describe('handleSharesPost — the token mint', () => {
+  const shareRequest = (): Request =>
+    jsonRequest('POST', { note_id: 'n1', title: 't', content: '<p>x</p>', days: 7 });
+
+  it('mints tokens from the confusable-free alphabet (no 0/O/Q, 1/I/l, 2/Z, 5/S, 6/G, 8/B, 9/g, no lowercase)', async () => {
+    // The production fire this pins: share URLs are retyped and read at
+    // small sizes, and a token containing Q next to 0 or 5 next to S can
+    // be copied wrong by an honest human — a dead link nobody can debug.
+    // The alphabet keeps exactly the symbols that cannot be mistaken for
+    // one another in any common font.
+    const minted = new Set<string>();
+    for (let i = 0; i < 25; i += 1) {
+      const db = new ScriptedDb([{ match: 'as live', rows: [{ live: 0 }] }]);
+      const response = await handleSharesPost(db, shareRequest(), user);
+      expect(response.status).toBe(201);
+      const body = (await response.json()) as { row?: { token?: string } };
+      expect(body.row?.token).toMatch(/^[347ACDEFHJKMNPRTUVWXY]{24}$/);
+      minted.add(body.row!.token!);
+    }
+    // Every mint is fresh — a repeated token would collide two notes'
+    // public links.
+    expect(minted.size).toBe(25);
+  });
+});
+
 describe('handleSharesPost — the empty-note refusal', () => {
   it('400s a blank html note — the delete-all skeleton is emptiness, not words', async () => {
     const db = new ScriptedDb([{ match: 'as live', rows: [{ live: 0 }] }]);

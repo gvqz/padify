@@ -229,6 +229,44 @@ test.describe('share links (real API)', () => {
     await expect(page.locator('.share-create-label')).toHaveText('Update expiration');
   });
 
+  test('the URL the user is SHOWN round-trips: its exact DOM text opens the shared note', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(60_000);
+    // The production fire this pins (QA report C1): the link displayed in
+    // the dialog is the link a recipient receives, and nothing ever
+    // verified the DISPLAYED value against the endpoint that must serve
+    // it — a mangled or stale token rendered fine in every DOM-to-DOM
+    // assertion and still 404ed for every human who clicked it. Here the
+    // exact textContent of the URL field is walked through the public
+    // API AND the public page.
+    await signUp(page, freshAccount());
+    await typeIntoFreshNote(page, 'the round trip line');
+    await openSharePanel(page);
+
+    await page.locator('#shareCreateBtn').click();
+    await expect(page.locator('#shareActiveCard')).toBeVisible();
+
+    const displayed = (await page.locator('#shareActiveUrl').textContent()) ?? '';
+    expect(displayed).toContain('/share/?t=');
+    const token = new URL(displayed).searchParams.get('t') ?? '';
+    // The displayed token is confusable-free by construction (see
+    // server/shares.ts) — pin it at the UI boundary too.
+    expect(token).toMatch(/^[347ACDEFHJKMNPRTUVWXY]{24}$/);
+
+    // The public API serves the note for the DISPLAYED token.
+    const apiResponse = await request.get(`/api/share/${token}`);
+    expect(apiResponse.status()).toBe(200);
+    const body = (await apiResponse.json()) as { content?: string; row?: { content?: string } };
+    expect(body.content ?? body.row?.content ?? '').toContain('the round trip line');
+
+    // And the public page — the recipient's actual experience — renders
+    // the note from the DISPLAYED URL, byte for byte.
+    await page.goto(displayed);
+    await expect(page.locator('body')).toContainText('the round trip line');
+  });
+
   test.describe('the remade anatomy', () => {
     // The copy receipt needs a real clipboard — grant it for this group.
     test.use({ permissions: ['clipboard-write', 'clipboard-read'] });

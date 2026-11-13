@@ -19,9 +19,37 @@ import { asInt, asString, parseNoteType } from './notes';
 
 const DAY_MS = 86_400_000;
 
+/**
+ * Tokens are drawn from a confusable-free alphabet: no 0/O/Q, 1/I/l,
+ * 2/Z, 5/S, 6/G, 8/B, 9/g, and no lowercase at all — a link read aloud,
+ * scribbled down, screenshotted at small sizes or retyped by a human
+ * cannot silently mutate into a different valid-looking token (the
+ * production share dialog renders at small monospace, where Q/0 and 5/S
+ * are genuinely hard to tell apart). 24 characters of a 20-symbol
+ * alphabet is ~104 bits of entropy — brute force is not a thing at the
+ * share bucket's rate limit. Pre-existing tokens keep working unchanged:
+ * lookup is by exact string, only minting changes.
+ */
+const TOKEN_ALPHABET = '347ACDEFHJKMNPRTUVWXY';
+const TOKEN_LENGTH = 24;
+
 function createShareToken(): string {
-  const bytes = randomBytes(18);
-  return bytes.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  let token = '';
+  while (token.length < TOKEN_LENGTH) {
+    const bytes = randomBytes(TOKEN_LENGTH * 2);
+    for (const byte of bytes) {
+      // Rejection band: 256 is not a multiple of the alphabet size, so
+      // bytes >= 240 would weight the alphabet's tail — discard them.
+      if (byte >= 240) {
+        continue;
+      }
+      if (token.length >= TOKEN_LENGTH) {
+        break;
+      }
+      token += TOKEN_ALPHABET[byte % TOKEN_ALPHABET.length];
+    }
+  }
+  return token;
 }
 
 export async function handleSharesGet(db: Db, request: Request, user: SessionUser): Promise<Response> {
