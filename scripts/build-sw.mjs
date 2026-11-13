@@ -48,6 +48,21 @@ function walk(dir) {
 }
 
 /**
+ * Dotfiles are server/OS directives, never site assets. The production
+ * fire this guards against: build-headers.mjs writes dist/.htaccess (the
+ * Apache twin of Netlify's _headers) BEFORE this script runs, and Apache
+ * answers .htaccess with 403 by default (<Files ".ht*"> Require all
+ * denied). One 403 inside cache.addAll() rejects the entire install —
+ * no worker ever activates, so offline, installability and the update
+ * flow all silently die on that host while the same build stays healthy
+ * on hosts that 404 or serve the file. Dotfiles must not exist as far
+ * as the worker is concerned. (Files INSIDE dot-directories, like
+ * .well-known/assetlinks.json, keep their normal classification — only
+ * the file's own basename is inspected.)
+ */
+const isDotfile = (rel) => (rel.split('/').pop() ?? '').startsWith('.');
+
+/**
  * Assets the entry page references directly (script src / link href /
  * img src): the app shell. Same-origin, base-relative URLs only —
  * cross-origin references are none of the precache's
@@ -148,6 +163,10 @@ export function generateServiceWorker(distDir, options = {}) {
     // directives for the CDN, not site assets — the worker must not
     // precache or runtime-cache them.
     .filter((entry) => entry.rel !== '_headers' && entry.rel !== '_redirects')
+    // Same class of directive for Apache hosts (.htaccess) and OS/editor
+    // droppings (.DS_Store) — see isDotfile. One 403 answering a precache
+    // fetch is a failed install, which is a dead PWA on that host.
+    .filter((entry) => !isDotfile(entry.rel))
     .sort((a, b) => a.rel.localeCompare(b.rel));
 
   const shell = shellAssetPaths(distDir, basePath);

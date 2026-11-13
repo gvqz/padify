@@ -117,6 +117,41 @@ describe('precache manifest', () => {
     expect(build.runtimeCachedFiles).not.toContain('_headers');
     expect(build.runtimeCachedFiles).not.toContain('_redirects');
   });
+
+  it('never caches dotfiles — one 403 on .htaccess is a dead install on Apache hosts', () => {
+    // The production fire this pins: the deployed AlwaysData worker listed
+    // "/padify/.htaccess" in CACHE_FILES, and Apache answers .htaccess with
+    // 403 — cache.addAll() treats that single rejection as a failed install,
+    // so the worker never activated and offline/updates were dead on that
+    // host (verified live: sw.js served 200 with .htaccess in the manifest,
+    // .htaccess itself 403). Dotfiles are deploy directives and droppings,
+    // not assets: the worker must not know they exist, in EITHER list —
+    // a runtime-cached dotfile would 403/404 on first use just the same.
+    write('index.html', shellHtml());
+    write('assets/main.js', 'console.log("padify main");');
+    write('.htaccess', 'Require all denied\n');
+    write('sounds/.DS_Store', 'finder droppings');
+
+    const build = generateServiceWorker(fixtureDir);
+
+    expect(build.precacheUrls).not.toContain('/.htaccess');
+    expect(build.precacheUrls).not.toContain('/sounds/.DS_Store');
+    expect(build.runtimeCachedFiles).not.toContain('.htaccess');
+    expect(build.runtimeCachedFiles).not.toContain('sounds/.DS_Store');
+  });
+
+  it('still classifies files that merely live inside a dot-directory', () => {
+    // Only the file's OWN basename makes it a dotfile: .well-known/
+    // contents (apple-app-site-links, assetlinks.json) are real, servable
+    // public assets and keep their normal small-file precache treatment.
+    write('index.html', shellHtml());
+    write('assets/main.js', 'console.log("padify main");');
+    write('.well-known/assetlinks.json', '{}');
+
+    const build = generateServiceWorker(fixtureDir);
+
+    expect(build.precacheUrls).toContain('/.well-known/assetlinks.json');
+  });
 });
 
 describe('cache version', () => {
