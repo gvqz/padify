@@ -13,7 +13,9 @@ set -u
 cd "$(dirname "$0")/../server"
 
 PORT=3041
-DB_FILE="${PADIFY_DEV_DB:-/home/z/my-project/db/custom.db}"
+# Override with PADIFY_DEV_DB; defaults to a throwaway file inside the
+# repo (gitignored) instead of any one machine's home directory.
+DB_FILE="${PADIFY_DEV_DB:-$(cd "$(dirname "$0")/.." && pwd)/.scratch/dev-api.db}"
 
 alive() {
   curl -s -o /dev/null -m 2 -w '%{http_code}' "http://127.0.0.1:${PORT}/api/me"

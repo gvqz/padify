@@ -1,7 +1,11 @@
 Padify
 ======
 
-An offline-capable, no-frills notepad. Quick, distraction-free, dark-mode enabled, mobile-compatible and minimalist in nature. Runs entirely in your browser — notes are stored locally and keep working without a connection.
+An offline-capable notepad that grew into a full writing workspace: seven note
+types (plain, rich text, Markdown, task lists, drawings, …), optional cloud
+sync, share links, snapshots, and a built-in music player — while staying
+quick, dark-mode enabled and mobile-compatible. Runs entirely in your
+browser — notes are stored locally and keep working without a connection.
 
 Built as a Progressive Web App using the [Service Worker API](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API), so it keeps working even when you're offline.
 
@@ -27,14 +31,14 @@ Built as a Progressive Web App using the [Service Worker API](https://developer.
 - Floating window (Picture-in-Picture) to take notes on top of other apps
 - Multiple notes in **tabs** on the main page, with **bold / italic / underline / strikethrough** formatting that renders right in the editor
 - Download notes as **plain text**, **PDF**, **HTML**, and **DOCX**
-- Monospaced, serif and dyslexic fonts
-- Optional typewriter sound, break reminders, and a built-in music player — free song search and playback with no account (local favorites, queue and playlist) — plus a 12-sound ambience mixer
+- Monospaced, serif, handwritten, pixel, typewriter and other writing fonts (eight in total)
+- Optional typewriter sound, break reminders, and a built-in music player — free song search and playback with no account (local favorites, queue and playlist) — plus a 12-track ambience player (rain, fireside, crickets, …)
 - Unicode character picker — 5,400+ symbols, math, arrows, currency, box drawing, braille and emoji with search, favorites and recents (`Ctrl/Cmd + Shift + O`)
 - Privacy-focused — nothing is collected, there are no analytics or trackers, and with cloud sync off nothing you type ever leaves the device
 
 ## Retired mini tools
 
-The standalone companion-tool pages (Rich Text Notes, Markdown Editor, Voice Notes, Simple Kanban, Text Tools, Text Diff, Teleprompter, Drawingpad, Tasks) have been removed from the app. Their full feature sets were captured before deletion in [markdownreports/](markdownreports/) — one report per page — to serve as the reference for rebuilding those features as note types inside the main editor's new-note flow.
+The standalone companion-tool pages (Rich Text Notes, Markdown Editor, Voice Notes, Simple Kanban, Text Tools, Text Diff, Teleprompter, Drawingpad, Tasks) have been removed from the app. Their full feature sets were captured before deletion in [legacyfeatures/](legacyfeatures/) — one report per page — to serve as the reference for rebuilding those features as note types inside the main editor's new-note flow.
 
 ## Privacy
 
@@ -44,17 +48,27 @@ Be equally clear about what opting in means: when a user signs in, their notes (
 
 ## Running locally
 
-The app is fully static — no build step required.
+The app is built with TypeScript and Vite — a build (or the dev server) is
+required; raw TypeScript sources and build-time HTML includes mean a plain
+static file server cannot serve the repo root.
 
-1. Serve the repository root over HTTP (Service Workers don't work from `file://`):
+1. Install dependencies and start the dev server:
 
    ```bash
-   npx serve .
-   # or
-   python3 -m http.server 8080
+   bun install        # or: npm install
+   bun run dev        # or: npm run dev
    ```
 
-2. Open `http://localhost:8080` in your browser.
+2. Open `http://localhost:3000` in your browser (the dev server proxies
+   `/api` to a local API when one is running on `:3041` — see below).
+
+3. Everything works offline-first without the API; to exercise cloud sync,
+   share links and the other server-backed features locally, run the Bun
+   API server (see `server/` and `docs/CLOUD_SETUP.md`):
+
+   ```bash
+   bun server/index.ts
+   ```
 
 ## License
 
@@ -66,13 +80,14 @@ The app is built with [TypeScript](https://www.typescriptlang.org/) and [Vite](h
 
 ```
 bun install        # install dependencies (or: npm install)
-bun run dev        # dev server with HMR at http://localhost:5173
+bun run dev        # dev server with HMR at http://localhost:3000
 bun run build      # typecheck + production build into dist/ (+ service worker)
 bun run preview    # serve the production build locally
 bun run typecheck  # strict TypeScript check only
 bun run lint       # eslint (or: bun run lint:fix)
 npm run test       # vitest, single run (Node runtime — jsdom breaks on some Bun builds; or: npm run test:watch)
 bun run format     # prettier --write (or: bun run format:check)
+npm run test:e2e   # playwright against a real API (requires bun + chromium)
 ```
 
 CI runs typecheck, lint, format check, tests and the production build on
@@ -83,13 +98,10 @@ every push and pull request (`.github/workflows/ci.yml`).
 - `index.html` — main app entry, references `/src/main.ts`
 - `src/` — application code as strict TypeScript modules
   - `src/unicode/` — the character picker (`picker.ts`) and the generated symbol database
-- `public/` — static assets copied verbatim to the build (css, fonts, sounds, images, mini tools)
+- `public/` — static assets copied verbatim to the build (css, fonts, sounds, images, the share viewer)
 - `scripts/build-sw.mjs` — post-build step that generates `dist/sw.js` with a precache manifest of every build artifact
 - `scripts/gen-unicode-data.mjs` — regenerates `src/unicode/symbols-data.ts` from the Unicode Character Database (`bun run gen:unicode`)
 
 The service worker is generated from the build output, so every hashed asset is
 precached automatically. Code-split chunks (the Unicode database, PDF/DOCX
 exporters) are fetched on first use, keeping the initial payload small.
-
-The mini tools under `public/` are self-contained static pages; they can be
-migrated into TypeScript modules incrementally over time.
