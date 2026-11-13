@@ -39,6 +39,26 @@ const sweptTrash = await sweepTrashedNotes(db);
 if (sweptTrash > 0) {
   console.log(`[padify-api] trash sweep: retired ${sweptTrash} note(s) past retention`);
 }
+// …and again periodically: a long-lived server (the alwaysdata box runs
+// for weeks between deploys) used to keep expired trash — and the
+// "30 days, then gone" promise with it — alive until its next restart,
+// purely because the sweep only ran at boot. Hourly is far tighter than
+// the 30-day window needs and cheap enough (one indexed count) to never
+// matter. unref'd so the timer never holds the process open (tests
+// import this module's siblings, and supervisors own the lifecycle).
+const TRASH_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+const trashSweeper = setInterval(() => {
+  void sweepTrashedNotes(db)
+    .then((swept) => {
+      if (swept > 0) {
+        console.log(`[padify-api] trash sweep: retired ${swept} note(s) past retention`);
+      }
+    })
+    .catch((error) => {
+      console.warn('[padify-api] periodic trash sweep failed — retrying next hour', error);
+    });
+}, TRASH_SWEEP_INTERVAL_MS);
+trashSweeper.unref?.();
 
 // ---------------------------------------------------------------------------
 // Serve + shutdown
