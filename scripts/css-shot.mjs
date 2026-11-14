@@ -17,7 +17,15 @@ const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = process.argv[2] ?? '/tmp/css-shots/run';
 mkdirSync(outDir, { recursive: true });
 
-// Serve dist/ on a fixed port.
+// Serve dist/ on a fixed port — after proving no zombie holds it (a stale
+// server would shoot the OLD build and "prove" nothing).
+try {
+  await fetch('http://localhost:4173/');
+  console.error('REFUSED: port 4173 already answers — kill the stale server first.');
+  process.exit(2);
+} catch {
+  /* port free */
+}
 const server = spawn('python3', ['-m', 'http.server', '4173', '--directory', join(repo, 'dist')], {
   stdio: 'ignore',
 });

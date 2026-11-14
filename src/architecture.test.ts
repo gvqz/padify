@@ -66,27 +66,46 @@ function referencedElementIds(): Map<string, string[]> {
   return refs;
 }
 
-describe('bootstrap single source of truth', () => {
-  // Bootstrap survives ONLY as the vendored stylesheet public/css/
-  // bootstrap.min.css (the first cascade layer). The npm package and the
-  // JS bundle are gone — modal/collapse/tooltip live in src/ui/behavior/.
-  // The file is pinned by content hash: if this test fails, someone edited
-  // a minified vendored file by hand. To bump the bootstrap version,
-  // replace the file with the new dist CSS and update BOTH the hash and
-  // the banner version below — deliberately, in a commit that says so.
-  const VENDORED_BOOTSTRAP_SHA256 =
-    '6d92dfc1700fd38cd130ad818e23bc8aef697f815b2ea5face2b5dfad22f2e11';
-  const VENDORED_BOOTSTRAP_VERSION = '3.4.1';
-
-  it('the vendored stylesheet is untouched (content-hash pin)', () => {
-    const vendored = read('public/css/bootstrap.min.css');
-    const digest = createHash('sha256').update(vendored).digest('hex');
-    expect(digest).toBe(VENDORED_BOOTSTRAP_SHA256);
+describe('bootstrap stays out entirely', () => {
+  // Bootstrap 3.4.1 shipped for years as a vendored stylesheet (the first
+  // cascade layer) plus class-named markup the app kept. Phase 1 un-shipped
+  // it: the ~9% of its rules the app still matched or could emit were
+  // extracted mechanically (scripts/bootstrap-extract.mjs, driven by the
+  // DOM cascade audit + the emit-corpus analysis) and folded into
+  // vercel/02-base.css; everything else never matched and never will.
+  // These pins keep it from creeping back in by accident.
+  it('no vendored bootstrap stylesheet exists in public/css', () => {
+    const cssDir = resolve(process.cwd(), 'public', 'css');
+    const files = readdirSync(cssDir)
+      .filter((f) => f.endsWith('.css'))
+      .map((f) => f.toLowerCase());
+    const offenders = files.filter((f) => /bootstrap/.test(f));
+    expect(offenders).toEqual([]);
   });
 
-  it('the vendored stylesheet banner matches the pinned version', () => {
-    const banner = read('public/css/bootstrap.min.css').slice(0, 200);
-    expect(banner).toContain(`Bootstrap v${VENDORED_BOOTSTRAP_VERSION}`);
+  it('index.html links only the vercel design system', () => {
+    const links = [
+      ...read(join(process.cwd(), 'index.html')).matchAll(/href="(\/css\/[^"]+\.css)"/g),
+    ].map((m) => m[1]);
+    expect(links.length).toBeGreaterThan(0);
+    const offenders = links.filter((href) => !href.startsWith('/css/vercel/'));
+    expect(offenders).toEqual([]);
+  });
+
+  it('the bootstrap subset inside 02-base stays the extracted one (content-hash pin)', () => {
+    // The extracted block is delimited by the banner the extractor writes;
+    // hand edits inside it would silently fork the vendored reset. Bump the
+    // hash only by re-running scripts/bootstrap-extract.mjs deliberately.
+    const VENDORED_SUBSET_SHA256 =
+      '740a13026bd95c8eea9655b2498f50533608d96ec42b5e83ecac3534b9e26c68';
+    const base = read(join(process.cwd(), 'public', 'css', 'vercel', '02-base.css'));
+    const start = base.indexOf('/* Bootstrap 3.4.1 — the surviving subset.');
+    const end = base.indexOf('/* [phase-1 fold]');
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const slice = base.slice(start, end);
+    const digest = createHash('sha256').update(slice).digest('hex');
+    expect(digest).toBe(VENDORED_SUBSET_SHA256);
   });
 
   it('jquery and the bootstrap JS bundle stay out of the dependency tree', () => {

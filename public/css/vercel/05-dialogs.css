@@ -1,3 +1,946 @@
+
+/* [phase-1 fold] Shortcuts-modal table
+   Folded from public/css/editor.css (Phase 1 consolidation — the file
+   itself is gone; see docs/ARCHITECTURE-REVIEW.md and
+   scripts/css-fold-plan.json for the verified mapping). */
+/* Scoped to the modal chrome (the keyboard-shortcuts table). Note tables
+   must not match these — the rich text editor paints its own table subset
+   with vercel.css's #note rules. */
+.modal-content table {
+  padding: 0;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
+.modal-content table tr {
+  display: flex;
+  background-color: var(--dough-white);
+  margin: 0;
+  padding: 10px;
+  align-items: center;
+}
+
+.modal-content table tr:nth-child(n+2) {
+  border-top: 1px solid #e0e0e0;
+}
+
+.modal-content table tr td {
+  text-align: left;
+  margin: 0;
+  padding: 6px 13px;
+  width: 50%;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+/* [phase-1 fold] Modal chrome
+   Folded from public/css/components.css (Phase 1 consolidation — the file
+   itself is gone; see docs/ARCHITECTURE-REVIEW.md and
+   scripts/css-fold-plan.json for the verified mapping). */
+.modal-content {
+  background-color: var(--dough-white);
+}
+.modal-container {
+  padding: 10px 20px;
+}
+.custom-modal-title {
+  display: inline-block;
+}
+.install-app-btn-container {
+  display: none;
+}
+
+.install-app-btn {
+  background-color: #3F51B5;
+}
+
+.install-app-btn:hover,
+.install-app-btn:focus {
+  color: white;
+}
+
+/* [phase-1 fold] About modal
+   Folded from public/css/effects.css (Phase 1 consolidation — the file
+   itself is gone; see docs/ARCHITECTURE-REVIEW.md and
+   scripts/css-fold-plan.json for the verified mapping). */
+.about-modal {
+  position: relative;
+  width: 100%;
+  padding: 20px 0 12px;
+}
+
+.about-modal-logo {
+  position: absolute;
+  right: 0px;
+  top: 60px;
+  transform: rotate(6deg);
+  opacity: 0.09;
+}
+@media screen and (max-width: 591px) {
+  .about-modal-logo {
+    display: none;
+  }
+}
+
+/* [phase-1 fold] Modal header close + white-noise title
+   Folded from public/css/animations.css (Phase 1 consolidation — the file
+   itself is gone; see docs/ARCHITECTURE-REVIEW.md and
+   scripts/css-fold-plan.json for the verified mapping). */
+.modal-header .close {
+    margin-top: 0px;
+}
+
+#whiteNoiseModal .custom-modal-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* [phase-1 fold] Dialogs — shortcuts search, dark theme, brand menu, help tour
+   Folded from public/css/modals.css (Phase 1 consolidation — the file
+   itself is gone; see docs/ARCHITECTURE-REVIEW.md and
+   scripts/css-fold-plan.json for the verified mapping). */
+#keyboardShortcutsModal .modal-dialog {
+  width: min(720px, calc(100vw - 24px));
+  max-width: 720px;
+}
+
+#keyboardShortcutsModal .modal-header {
+  padding: 20px 24px 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#keyboardShortcutsModal .modal-header .close {
+  margin: 0;
+}
+
+#keyboardShortcutsModal .modal-body {
+  padding: 8px 20px 20px;
+  /* 190px underestimated the real header+footer chrome — the dialog poked
+     ~9px below an 800px viewport. 220px keeps the whole frame on screen. */
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+#keyboardShortcutsModal .modal-footer {
+  padding: 14px 24px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* Search input */
+.shortcut-search-wrap {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.shortcut-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 15px;
+  height: 15px;
+  color: var(--vz-fg-muted);
+  pointer-events: none;
+}
+
+.shortcut-search-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 14px 0 36px;
+  border-radius: var(--vz-radius);
+  border: 1px solid var(--vz-border);
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg);
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--vz-dur) ease, background-color var(--vz-dur) ease, box-shadow var(--vz-dur) ease;
+}
+
+.shortcut-search-input::placeholder {
+  color: var(--vz-fg-muted);
+}
+
+.shortcut-search-input:focus {
+  border-color: var(--vz-border-strong);
+  background: var(--vz-bg-elevated);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+}
+
+body.dark .shortcut-search-input:focus {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
+}
+
+/* Cards & Rows */
+.shortcut-card {
+  margin-top: 4px;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 16px;
+  border-top: 1px solid var(--vz-border);
+  transition: background-color 100ms ease;
+}
+
+.shortcut-row:first-child {
+  border-top: none;
+}
+
+.shortcut-row:hover {
+  background-color: var(--vz-bg-subtle);
+}
+
+.shortcut-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.shortcut-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--vz-fg);
+  line-height: 1.35;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.shortcut-description {
+  font-size: 11.5px;
+  color: var(--vz-fg-muted);
+  line-height: 1.4;
+}
+
+.shortcut-badge {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--vz-fg-muted);
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  white-space: nowrap;
+}
+
+.shortcut-keys {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--vz-fg-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+/* Modern Keycaps */
+#keyboardShortcutsModal kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vz-fg);
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border-strong);
+  border-radius: 5px;
+  box-shadow: 0 1.5px 0 var(--vz-border-strong);
+  text-shadow: none;
+  line-height: 1;
+}
+
+body.dark #keyboardShortcutsModal kbd {
+  background: var(--vz-bg-chip);
+  color: var(--vz-fg);
+  border-color: var(--vz-border-strong);
+  box-shadow: 0 1.5px 0 var(--vz-border-strong);
+}
+
+/* Empty Search Results State */
+.shortcut-no-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.shortcut-no-results svg {
+  width: 36px;
+  height: 36px;
+  color: var(--vz-fg-muted);
+  margin-bottom: 12px;
+  opacity: 0.7;
+}
+
+.shortcut-no-results-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--vz-fg);
+  margin: 0 0 4px;
+}
+
+.shortcut-no-results-hint {
+  font-size: 12.5px;
+  color: var(--vz-fg-muted);
+  margin: 0;
+}
+
+/* Mobile responsive layout */
+@media (max-width: 540px) {
+  #keyboardShortcutsModal .modal-header {
+    padding: 16px 18px 12px;
+  }
+
+  #keyboardShortcutsModal .modal-body {
+    padding: 8px 12px 14px;
+  }
+
+  .shortcut-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px 14px;
+  }
+
+  .shortcut-keys {
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+
+/* ==========================================================================
+   Dark theme for app dialogs (Bootstrap modals + SweetAlert2 popups).
+   Aligns every modal with the dark palette already used by the snapshots
+   modal and the Unicode picker: slate surfaces, light text, blue accent.
+   ========================================================================== */
+
+.dark {
+  --c-text-primary: #e2e8f0;
+  --c-text-secondary: #a0aec0;
+  --c-border-primary: #4a5568;
+  --c-bg-primary: #2d3748;
+  --c-bg-secondary: #1a2332;
+  --c-bg-button: #2d3748;
+  --slider-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.4), 0 2px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* ---- dialog frame ------------------------------------------------------ */
+
+.dark .modal-content {
+  background-color: #2d3748;
+  border: 1px solid #4a5568;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+
+.dark .modal-header {
+  border-bottom: 1px solid #4a5568;
+}
+
+.dark .modal-footer {
+  border-top: 1px solid #4a5568;
+}
+
+.dark .modal-body label,
+.dark .modal-body .checkbox label,
+.dark .modal-body .radio label {
+  color: #e2e8f0;
+}
+
+/* ---- form controls ------------------------------------------------------ */
+
+.dark .form-control {
+  border: 1px solid #4a5568;
+}
+
+/* ---- buttons ------------------------------------------------------------ */
+
+.dark .btn-default,
+.dark .modal-content .btn-default {
+  background-color: #1a2332;
+  border: 1px solid #4a5568;
+  color: #e2e8f0;
+}
+
+.dark .btn-default:hover,
+.dark .btn-default:focus,
+.dark .btn-default:active,
+.dark .btn-default.active {
+  background-color: #4a5568;
+  border: 1px solid #4a5568;
+  color: #ffffff;
+}
+
+/* ---- keyboard shortcuts keycaps ------------------------------------------ */
+
+.dark kbd {
+  border: 2px solid #4a5568;
+  box-shadow: 0 4px #10161f, inset 0 -2px 4px rgba(0, 0, 0, 0.35);
+  text-shadow: none;
+}
+
+/* ---- volume slider dark accent (preferences typewriter volume) ------------ */
+
+/* ---- preferences toggles + theme switcher --------------------------------- */
+
+.dark .checkbox.checbox-switch label span {
+  background-color: #1a2332;
+  border-color: #4a5568;
+  box-shadow: #4a5568 0px 0px 0px 0px inset;
+}
+
+.dark .checkbox.checbox-switch label>input:checked+span {
+  background-color: #63b3ed;
+  border-color: #63b3ed;
+  box-shadow: rgba(99, 179, 237, 0.45) 0px 0px 0px 8px inset;
+}
+
+/* ---- SweetAlert2 non-toast dialogs ---------------------------------------- */
+
+/* ---- timer modal ----------------------------------------------------------- */
+
+.dark .timer-modal .btn-primary {
+  background-color: #2c5282;
+  border-color: #2c5282;
+}
+
+.dark .timer-modal .btn-primary:hover,
+.dark .timer-modal .btn-primary:focus,
+.dark .timer-modal .btn-primary:active,
+.dark .timer-modal .btn-primary.active {
+  background-color: #31708e;
+  border-color: #31708e;
+}
+
+/* ---- keyboard shortcuts table rows ----------------------------------------- */
+
+.dark .modal-body table tr {
+  background-color: #1a2332;
+}
+
+.dark .modal-body table tr:nth-child(n+2) {
+  border-top: 1px solid #4a5568;
+}
+
+/* ---- brand (wordmark) menu -------------------------------------------------- */
+
+/* The wordmark menu rides on the same popover design system as the other
+   navbar dropdowns (vercel.css `.navbar .dropdown-menu` — background, border,
+   radius, shadow, entrance animation). The #brandMenu-scoped rules below only
+   tweak placement, widen the frame for the shortcut row and add the caret. */
+
+.brand-menu-wrap {
+  position: relative;
+  /* The wrapper must be a float, not an inline-block. The header row's
+     geometry relies on the Bootstrap mechanism: the wordmark floats left
+     and the flex `.icon-container` box sits beside it on the same 50px
+     line. An inline-block wrapper would contain the floated brand and
+     become an in-flow 50px block, pushing the icon row (and the whole
+     navbar) onto a second line. */
+  float: left;
+}
+
+#brandMenu {
+  top: calc(100% + 2px);
+  min-width: 248px;
+}
+
+/* two-layer caret: border-colored diamond underneath, background diamond on
+   top — a seamless tooltip pointer through the popover border */
+#brandMenu::before,
+#brandMenu::after {
+  content: "";
+  position: absolute;
+  transform: rotate(45deg);
+}
+
+#brandMenu::before {
+  top: -6.5px;
+  left: 19px;
+  width: 12px;
+  height: 12px;
+  background: var(--vz-border);
+}
+
+#brandMenu::after {
+  top: -5.5px;
+  left: 20px;
+  width: 10px;
+  height: 10px;
+  background: var(--vz-bg-elevated);
+}
+
+.brand-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--vz-radius);
+  color: var(--vz-fg);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+
+.brand-menu-item:hover,
+.brand-menu-item:focus {
+  background: var(--vz-bg-hover);
+  color: var(--vz-fg);
+  text-decoration: none;
+  outline: none;
+}
+
+.brand-menu-item svg {
+  flex: none;
+  color: var(--vz-fg-muted);
+  transition: color 0.1s ease;
+}
+
+.brand-menu-item:hover svg,
+.brand-menu-item:focus svg {
+  color: var(--vz-fg);
+}
+
+.brand-menu-text {
+  flex: 1 1 auto;
+}
+
+.brand-menu-kbd {
+  flex: none;
+  padding: 2px 6px;
+  border: 1px solid var(--vz-border);
+  border-radius: 4px;
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg-muted);
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* ---- help tour modal -------------------------------------------------------- */
+
+.help-dialog {
+  width: 560px;
+  max-width: calc(100vw - 30px);
+}
+
+.help-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.help-close {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  z-index: 2;
+}
+
+.dark .help-close,
+.dark .help-close:hover {
+  color: #e2e8f0;
+}
+
+.help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px 0;
+}
+
+.help-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #98938a;
+}
+
+.help-counter {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: #a9a49a;
+}
+
+.help-body {
+  padding: 10px 24px 0;
+}
+
+.help-stage {
+  min-height: 264px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.help-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 8px 0 2px;
+}
+
+.help-stage[data-direction="forward"] .help-step {
+  animation: help-in-forward 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.help-stage[data-direction="backward"] .help-step {
+  animation: help-in-backward 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+@keyframes help-in-forward {
+  from {
+    opacity: 0;
+    transform: translateX(26px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes help-in-backward {
+  from {
+    opacity: 0;
+    transform: translateX(-26px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.help-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 19px;
+  margin-bottom: 18px;
+}
+
+.help-icon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.help-title {
+  margin: 0 0 9px;
+  font-size: 19px;
+  font-weight: 700;
+  color: #2e2c26;
+}
+
+.help-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.68;
+  color: #6b675e;
+}
+
+.help-hints {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 16px;
+  margin-top: 16px;
+}
+
+.help-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: #8a857b;
+}
+
+.help-hint kbd {
+  padding: 2px 8px;
+  font-size: 10.5px;
+  margin: 0;
+  border-width: 1px;
+  box-shadow: 0 2px #c9c5b9;
+}
+
+.help-more {
+  display: inline-block;
+  margin-top: 16px;
+  font-size: 13px;
+  color: #3574d8;
+}
+
+.help-more:hover,
+.help-more:focus {
+  color: #2a5cb2;
+  text-decoration: none;
+}
+
+.help-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px 22px 6px;
+  border-top: 1px solid #eeebe0;
+}
+
+.help-dots {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.help-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 99px;
+  background: #d8d4c8;
+  transition: width 0.2s ease, background 0.2s ease;
+}
+
+.help-dot:hover {
+  background: #b9b4a6;
+}
+
+.help-dot.active {
+  width: 22px;
+  background: #3b82f6;
+}
+
+.help-nav {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.help-btn {
+  min-width: 92px;
+}
+
+/* step accent tints */
+
+.help-step[data-accent="blue"] .help-icon {
+  background: rgba(59, 130, 246, 0.13);
+  color: #2f6fe4;
+}
+
+.help-step[data-accent="violet"] .help-icon {
+  background: rgba(139, 92, 246, 0.13);
+  color: #7c4df0;
+}
+
+.help-step[data-accent="rose"] .help-icon {
+  background: rgba(244, 63, 94, 0.12);
+  color: #e0446c;
+}
+
+.help-step[data-accent="amber"] .help-icon {
+  background: rgba(245, 158, 11, 0.16);
+  color: #d9820b;
+}
+
+.help-step[data-accent="teal"] .help-icon {
+  background: rgba(20, 184, 166, 0.14);
+  color: #0e9488;
+}
+
+.help-step[data-accent="emerald"] .help-icon {
+  background: rgba(16, 185, 129, 0.14);
+  color: #0d9668;
+}
+
+.help-step[data-accent="sky"] .help-icon {
+  background: rgba(14, 165, 233, 0.14);
+  color: #0b87c8;
+}
+
+.help-step[data-accent="indigo"] .help-icon {
+  background: rgba(99, 102, 241, 0.14);
+  color: #5457d8;
+}
+
+/* dark theme */
+
+.dark .help-eyebrow {
+  color: #8b98ab;
+}
+
+.dark .help-counter {
+  color: #74829a;
+}
+
+.dark .help-title {
+  color: #e2e8f0;
+}
+
+.dark .help-text {
+  color: #a9b4c2;
+}
+
+.dark .help-hint {
+  color: #9fb0c4;
+}
+
+.dark .help-hint kbd {
+  color: #cbd5e0;
+  background: #1a2332;
+  border-color: #4a5568;
+  box-shadow: 0 2px #10161f;
+}
+
+.dark .help-more {
+  color: #7cc5ff;
+}
+
+.dark .help-more:hover,
+.dark .help-more:focus {
+  color: #a8d9ff;
+}
+
+.dark .help-footer {
+  border-top-color: #4a5568;
+}
+
+.dark .help-dot {
+  background: #46566f;
+}
+
+.dark .help-dot:hover {
+  background: #56627a;
+}
+
+.dark .help-dot.active {
+  background: #60a5fa;
+}
+
+.dark .help-step[data-accent="blue"] .help-icon {
+  background: rgba(96, 165, 250, 0.16);
+  color: #93c5fd;
+}
+
+.dark .help-step[data-accent="violet"] .help-icon {
+  background: rgba(167, 139, 250, 0.16);
+  color: #c4b5fd;
+}
+
+.dark .help-step[data-accent="rose"] .help-icon {
+  background: rgba(251, 113, 133, 0.14);
+  color: #fda4af;
+}
+
+.dark .help-step[data-accent="amber"] .help-icon {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fcd34d;
+}
+
+.dark .help-step[data-accent="teal"] .help-icon {
+  background: rgba(45, 212, 191, 0.14);
+  color: #5eead4;
+}
+
+.dark .help-step[data-accent="emerald"] .help-icon {
+  background: rgba(52, 211, 153, 0.14);
+  color: #6ee7b7;
+}
+
+.dark .help-step[data-accent="sky"] .help-icon {
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+}
+
+.dark .help-step[data-accent="indigo"] .help-icon {
+  background: rgba(129, 140, 248, 0.15);
+  color: #a5b4fc;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .help-stage[data-direction="forward"] .help-step,
+  .help-stage[data-direction="backward"] .help-step {
+    animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .help-dialog {
+    width: auto;
+  }
+
+  .help-body {
+    padding: 8px 18px 0;
+  }
+
+  .help-stage {
+    min-height: 252px;
+  }
+
+  .help-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+  }
+
+  .help-icon svg {
+    width: 26px;
+    height: 26px;
+  }
+
+  .help-title {
+    font-size: 17.5px;
+  }
+
+  .help-text {
+    font-size: 13.5px;
+  }
+
+  .help-nav {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
 /* vercel design system — part 5/17: Dialog frames — one recipe for every popup
    Split from the former vercel.css (cascade order preserved —
    index.html loads these files in numeric order, last in the

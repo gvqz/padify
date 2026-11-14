@@ -1,3 +1,12 @@
+
+/* [phase-1 fold] Reset-preferences button
+   Folded from public/css/components.css (Phase 1 consolidation — the file
+   itself is gone; see docs/ARCHITECTURE-REVIEW.md and
+   scripts/css-fold-plan.json for the verified mapping). */
+#resetPreferences {
+  float: right;
+  margin-right: 2px;
+}
 /* vercel design system — part 13/17: Settings — the two-pane settings workspace
    Split from the former vercel.css (cascade order preserved —
    index.html loads these files in numeric order, last in the

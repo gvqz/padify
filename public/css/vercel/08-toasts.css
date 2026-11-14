@@ -1,3 +1,125 @@
+
+/* [phase-1 fold] The #toast element
+   Folded from public/css/components.css (Phase 1 consolidation — the file
+   itself is gone; see docs/ARCHITECTURE-REVIEW.md and
+   scripts/css-fold-plan.json for the verified mapping). */
+#toast {
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(10px);
+  min-width: 250px;
+  margin-left: -125px;
+  background-color: #cecece;
+  text-align: center;
+  position: fixed;
+  z-index: 1;
+  left: 50%;
+  /* Transition-driven enter/leave: the leave actually plays (the old
+     keyframe pair baked the fade-out into .show, snapped back to full
+     opacity when it ended, and only vanished when the JS timer fired).
+     The delayed visibility step keeps the element interactable-free but
+     invisible only AFTER the fade completes. */
+  transition: opacity 0.18s ease, transform 0.18s ease,
+    visibility 0s linear 0.18s;
+}
+
+.dark #toast {
+  background-color: #202630;
+}
+
+#toast.show {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0s;
+}
+
+/* [phase-1 fold] Toast popups + the break reminder
+   Folded from public/css/animations.css (Phase 1 consolidation — the file
+   itself is gone; see docs/ARCHITECTURE-REVIEW.md and
+   scripts/css-fold-plan.json for the verified mapping). */
+.toast-popup {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  padding: 14px;
+  z-index: 1060;
+  display: none;
+  max-width: 305px;
+}
+
+.toast-popup.show {
+  display: block;
+  animation: slideIn 0.5s ease-out forwards;
+}
+
+.toast-popup.hide {
+  animation: slideOut 0.3s ease-in forwards;
+}
+
+.toast-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toast-content a {
+  text-decoration: none;
+  flex-grow: 1;
+}
+
+.close-popup {
+  background: none;
+  border: none;
+  font-size: 17px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+/* Break reminder — layout only; the vercel layer (08-toasts.css) owns the
+   look and the docking (the markup is re-parented into .tab-rail-foot —
+   a rail section, absolute above the New note control — so there is no
+   JS geometry to keep fresh). */
+.break-reminder-popup {
+  max-width: none;
+}
+
+.break-reminder-content {
+  align-items: flex-start;
+}
+
+.break-reminder-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.break-reminder-copy strong {
+  line-height: 1.3;
+}
+
+.break-reminder-copy p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.break-reminder-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.break-reminder-popup.break-active .break-reminder-copy strong {
+  font-size: 26px;
+  letter-spacing: 1px;
+}
+
+.break-reminder-popup.break-active .break-reminder-copy p {
+  font-size: 13px;
+}
 /* vercel design system — part 8/17: Toasts & transient popups
    Split from the former vercel.css (cascade order preserved —
    index.html loads these files in numeric order, last in the

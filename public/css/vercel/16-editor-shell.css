@@ -1,3 +1,249 @@
+
+/* [phase-1 fold] Editor surface base
+   Folded from public/css/editor.css (Phase 1 consolidation — the file
+   itself is gone; see docs/ARCHITECTURE-REVIEW.md and
+   scripts/css-fold-plan.json for the verified mapping). */
+textarea,
+#note {
+  width: 100%;
+  height: 100%;
+  font-size: 18px;
+  outline: none;
+  box-shadow: none;
+  -webkit-box-shadow: none;
+  -moz-box-shadow: none;
+  outline: 0px !important;
+  -webkit-appearance: none;
+  resize: none;
+  background: transparent;
+  scrollbar-gutter: stable;
+}
+
+/* The note's DEFAULT face, parked at zero specificity: an ID-level
+   font-family here beat the font-selection classes (.serif, .monospaced,
+   .handwritten, .humanist in switches.css) forever, so the font picker
+   silently did nothing for them. :where() keeps the default while
+   letting every class rule win. */
+:where(textarea, #note) {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+}
+
+/* [phase-1 fold] Keyburst — typing celebratory particles
+   Folded from public/css/fonts.css (Phase 1 consolidation — the file
+   itself is gone; see docs/ARCHITECTURE-REVIEW.md and
+   scripts/css-fold-plan.json for the verified mapping). */
+#keyburstLayer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 999;
+}
+
+.keyburst-particle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--burst-color, #ff6b6b);
+  box-shadow: 0 0 6px var(--burst-color, #ff6b6b);
+  opacity: 1;
+  transform: translate(0, 0) scale(1);
+  animation: keyburst 650ms ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes keyburst {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--burst-x, 0), var(--burst-y, -20px)) scale(0);
+  }
+}
+
+/* Confetti pop — pieces pop UP above the text line, flutter, and only
+   drift back down as they fade, so the fresh text is never covered */
+.keyburst-confetti {
+  position: absolute;
+  border-radius: 1px;
+  background: var(--burst-color, #ff6b6b);
+  opacity: 1;
+  transform: translate(0, 0) rotate(0deg);
+  animation: keyburst-confetti 900ms cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes keyburst-confetti {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg);
+  }
+  55% {
+    opacity: 0.95;
+    transform: translate(calc(var(--burst-x, 0) * 0.75), var(--burst-y, -24px))
+      rotate(calc(var(--burst-rotate, 360deg) * 0.55));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--burst-x, 0), calc(var(--burst-y, -24px) + 30px))
+      rotate(var(--burst-rotate, 360deg));
+  }
+}
+
+/* Fireworks — a core flash just above the line, then sparks fly up and
+   drop back down only as they fade. The core is deliberately compact: a
+   full-size flash sitting on the caret washed out the typed text. */
+.keyburst-flash {
+  position: absolute;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 0 8px 2px var(--burst-color, #ffd166);
+  transform: translate(-50%, -50%) scale(0.3);
+  animation: keyburst-flash 380ms ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes keyburst-flash {
+  0% {
+    opacity: 0.8;
+    transform: translate(-50%, -50%) scale(0.3);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+}
+
+.keyburst-firework {
+  position: absolute;
+  border-radius: 999px;
+  background: var(--burst-color, #ff6b6b);
+  box-shadow: 0 0 6px var(--burst-color, #ff6b6b);
+  opacity: 1;
+  transform: translate(0, 0) scale(1);
+  animation: keyburst-firework 800ms ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes keyburst-firework {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  70% {
+    /* Half-faded by the apex: the drop that follows never passes over the
+       text at a brightness that could mask it. */
+    opacity: 0.5;
+    transform: translate(var(--burst-x, 0), var(--burst-y, -20px)) scale(0.9);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--burst-x, 0), calc(var(--burst-y, -20px) + 16px)) scale(0.4);
+  }
+}
+
+/* Shooting stars — glowing glyphs fan upward */
+.keyburst-star {
+  position: absolute;
+  color: var(--burst-color, #ffd166);
+  text-shadow: 0 0 6px var(--burst-color, #ffd166);
+  line-height: 1;
+  opacity: 1;
+  transform: translate(0, 0) rotate(0deg) scale(0.8);
+  animation: keyburst-star 700ms ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes keyburst-star {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(0.8);
+  }
+  55% {
+    /* Hold nearly opaque through the flight: a plain 1→0 ease-out fade
+       fell to ~30% opacity within 200ms and the stars vanished mid-air. */
+    opacity: 0.95;
+    transform: translate(calc(var(--burst-x, 0) * 0.7), calc(var(--burst-y, -40px) * 0.7))
+      rotate(calc(var(--burst-rotate, 90deg) * 0.6)) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--burst-x, 0), var(--burst-y, -40px))
+      rotate(var(--burst-rotate, 90deg)) scale(1.15);
+  }
+}
+
+/* Neon sparks — few, small, one restrained glow each. The old look was
+   ten 8px squares with double glows packed into a 16px radius: they
+   merged into an opaque blob that completely hid the typed characters. */
+.keyburst-neon {
+  position: absolute;
+  border-radius: 2px;
+  background: var(--burst-color, #00f5d4);
+  box-shadow: 0 0 4px 1px var(--burst-color, #00f5d4);
+  opacity: 1;
+  transform: translate(0, 0) rotate(45deg) scale(0.7);
+  animation: keyburst-neon 480ms ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes keyburst-neon {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(45deg) scale(0.7);
+  }
+  45% {
+    opacity: 0.9;
+    transform:
+      translate(calc(var(--burst-x, 0) * 0.6), calc(var(--burst-y, 0) * 0.6))
+      rotate(45deg) scale(0.85);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--burst-x, 0), var(--burst-y, -16px)) rotate(45deg) scale(0);
+  }
+}
+
+/* Emoji burst — little glyphs pop up and spin away */
+.keyburst-emoji {
+  position: absolute;
+  line-height: 1;
+  opacity: 1;
+  transform: translate(0, 0) rotate(0deg) scale(0.6);
+  animation: keyburst-emoji 850ms ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes keyburst-emoji {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(0.6);
+  }
+  45% {
+    /* Opaque through the spread-out half of the flight; the old curve
+       started fading at 30% and the glyphs were gone mid-spread. */
+    opacity: 1;
+    transform:
+      translate(calc(var(--burst-x, 0) * 0.55), calc(var(--burst-y, -30px) * 0.7))
+      rotate(calc(var(--burst-rotate, 30deg) * 0.6)) scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--burst-x, 0), var(--burst-y, -36px))
+      rotate(calc(var(--burst-rotate, 30deg) * 2)) scale(0.9);
+  }
+}
+
+/* The bursts are decorative by definition — users who ask the OS for
+   reduced motion get a calm editor instead of a firework show. */
+@media (prefers-reduced-motion: reduce) {
+  #keyburstLayer {
+    display: none;
+  }
+}
 /* vercel design system — part 16/17: Editor shell — the rich text surface
    (contenteditable #note), the left note rail, the tab strip, the rich
    toolbar and the overlays that hang off them. Re-cut from the former

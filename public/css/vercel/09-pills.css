@@ -1,3 +1,66 @@
+
+/* [phase-1 fold] Word-count pill
+   Folded from public/css/components.css (Phase 1 consolidation — the file
+   itself is gone; see docs/ARCHITECTURE-REVIEW.md and
+   scripts/css-fold-plan.json for the verified mapping). */
+.word-count-container {
+  display: flex;
+  background: #e2dcd8;
+  margin-left: auto;
+  padding: 6px 14px;
+  border-radius: 20px;
+  color: #403333;
+  font-weight: bold;
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  gap: 10px;
+  align-items: center;
+}
+
+.dark .word-count-container a {
+  color: #000;
+}
+
+.dark .word-count-container.transparency a {
+  color: #fff;
+}
+
+.word-count-container.transparency a,
+.word-count-container a {
+  color: #000;
+}
+
+.transparency.word-count-container {
+  background: #fff2 !important;
+  box-shadow: 0px 10px 15px rgba(0, 0, 0, 0.2), 0 0 18px #fff inset;
+  backdrop-filter: blur(5px);
+}
+
+.dark .transparency.word-count-container {
+  color: #fff;
+  box-shadow: none;
+}
+
+.dark .word-count-container {
+  background: #9ed4ff;
+}
+
+.word-count-container p {
+  margin: 0;
+}
+
+/* [phase-1 fold] The bottom dock line (base; the mobile override lives below)
+   Folded from public/css/timer.css (Phase 1 consolidation — the file
+   itself is gone; see docs/ARCHITECTURE-REVIEW.md and
+   scripts/css-fold-plan.json for the verified mapping). */
+.bottom-line {
+  position: absolute;
+  bottom: 1.2em;
+  right: 1.4em;
+  display: flex;
+  gap: 6px;
+}
 /* vercel design system — part 9/17: Bottom pills — quiet bordered capsules
    Split from the former vercel.css (cascade order preserved —
    index.html loads these files in numeric order, last in the

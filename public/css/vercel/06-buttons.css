@@ -1,3 +1,12 @@
+
+/* [phase-1 fold] Timer start button
+   Folded from public/css/timer.css (Phase 1 consolidation). Must stay
+   ABOVE the .btn rules below: same specificity (0,1,0), so the later
+   .btn declarations must keep winning the tie, as they did pre-fold. */
+.timer-start-btn {
+  font-weight: 600;
+  padding: 8px 18px;
+}
 /* vercel design system — part 6/17: Buttons — black primary, bordered secondary, red danger
    Split from the former vercel.css (cascade order preserved —
    index.html loads these files in numeric order, last in the
