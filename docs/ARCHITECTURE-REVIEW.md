@@ -8,9 +8,9 @@
 
 ## 1. The verdict first
 
-**No to a rewrite. Yes to a phased structural overhaul — of four specific things, not the app.**
+**No to a rewrite. Yes to a phased structural overhaul — of three specific things, not the app.** (Four on the first pass; the fourth, the "twin markdown renderer", turned out not to exist — see S4's correction.)
 
-The honest split: Padify's *engine room* (document model, editor port, storage diffing, sync server, test culture) is the best part of the codebase and is worth every line it occupies. The *superstructure* accreted around it (CSS, the second markdown renderer, the smeared sync state, the god object, the stats module) is where the "extremely big mess" feeling comes from — and it is real, measurable, and fixable layer by layer.
+The honest split: Padify's *engine room* (document model, editor port, storage diffing, sync server, test culture) is the best part of the codebase and is worth every line it occupies. The *superstructure* accreted around it (CSS, the smeared sync state, the god object, the stats module) is where the "extremely big mess" feeling comes from — and it is real, measurable, and fixable layer by layer.
 
 A from-scratch rewrite would discard the one asset that took the longest to build: ~2,000 tests that pin real browser behavior, including the data-loss races fixed in the last three weeks. Those bugs would all come back. The mess is concentrated and separable; that is the key fact.
 
@@ -64,14 +64,9 @@ Every feature must reach through it (the tasks hub reads `allTabs`, sync holds a
 
 **Fix:** mechanical consolidation — `vercel/` (the newer, sectioned system) wins; every legacy sheet is either deleted or its few live rules are folded in; bootstrap un-shipped entirely. `dead-css-audit.mjs` already tracks usage. Needs a visual-QA pass across themes/devices — that is why it was deferred, and it is still the right first overhaul item because it is the most mechanical.
 
-### S4. The markdown renderer exists twice — ~10,000 lines
+### S4. ~~The markdown renderer exists twice~~ — CORRECTED: it does not
 
-- `src/editor/markdown/render.ts` — 3,523 lines (TypeScript, in-app, CommonMark+GFM+KaTeX)
-- `public/share/markdown-render.js` — 6,559 lines (hand-maintained standalone JS for the public share page)
-
-Same pipeline, implemented twice, kept honest by drift/parity tests (`render.github-parity.test.ts`, the share-bundle regeneration rule). Every renderer fix must land twice — commit `1ff74d2` had to regenerate the bundle for an html-policy fix.
-
-**Fix:** `scripts/build-share.mjs` already bundles for the share page — compile the *one* renderer (`render.ts` + its sanitizer) into the standalone share bundle instead of maintaining a hand-written twin. Deletes ~6.5k lines and a whole class of drift bug. The share page's constraints (no-build, CSP) are satisfied by a build artifact it already loads.
+The review's first pass read `public/share/markdown-render.js` (6,559 lines) as a hand-maintained twin of `src/editor/markdown/render.ts` (3,523 lines). Wrong: the share file is **generated** by `scripts/build-share.mjs` from `render.ts` (bundled, tree-shaken, KaTeX-free), stamped DO NOT EDIT, and pinned by a drift test that regenerates it in memory (`src/share-sanitizer.test.ts`) plus a corpus test running both implementations over the same inputs. There is ONE source of truth; the large committed artifact is the price of the share page being a no-build static island (public/ ships verbatim). No action needed — the residue is only that greps and repo size see the artifact twice.
 
 ### S5. A note's past lives in three systems
 
@@ -118,7 +113,7 @@ The localStorage blob mirror (`padifyTabs`), the legacy `note` key migration, `c
 Accretion without deletion, and *rules that arrived after the growth*:
 
 - The layering test landed 2026-09-25 (`e7b4247`); the Reminders feature 2026-10-14 (`bc87cf2`); the vercel CSS split 2026-10-02. The borders were frozen *after* the interiors had already grown — `architecture.test.ts` could hold the perimeter but not consolidate what was inside it.
-- Each feature (tasks, music, share, snapshots) arrived as a new layer on the plain-notepad core and brought its own UI system (→ triple CSS), its own persistence (→ second DB + cloud), its own renderer where the host page differed (→ twin markdown).
+- Each feature (tasks, music, share, snapshots) arrived as a new layer on the plain-notepad core and brought its own UI system (→ triple CSS), its own persistence (→ second DB + cloud). (The markdown "twin" initially suspected here is generated, not hand-copied — see S4.)
 - Sync was retrofitted onto records that were never versioned (`html` field named for a format that outlived its accuracy "by a year", per its own comment) — hence metadata fields accreting onto `NoteTab` one bug at a time instead of a ledger designed up front.
 
 None of this is carelessness — it is the standard cost of a solo project shipping features faster than it consolidates. The presence of the architecture test, the port seam, and the test culture is why this is recoverable without a rewrite.
@@ -130,12 +125,12 @@ None of this is carelessness — it is the standard cost of a solo project shipp
 | Phase | Work | Size | Risk |
 |-------|------|------|------|
 | 1 | **CSS consolidation** — vercel/ wins, legacy 16 + bootstrap deleted or folded, dead-css-audit as the map, visual QA pass | ~1–2 weeks, mostly mechanical | Low (visual regressions caught by QA) |
-| 2 | **One markdown renderer** — build-share compiles `render.ts` for the share page; delete `markdown-render.js` | days | Low-medium (parity tests already exist as the safety net) |
+| 2 | ~~One markdown renderer~~ **already the design** — `build-share.mjs` generates the share bundle from `render.ts` with a drift test; no work left | none | none |
 | 3 | **Sync ledger extraction** (S1) — the fix for the data-loss bug class; then **TabManager split** (S2) | 2–3 weeks | Medium — this is the one that needs the full test suite green at every step |
 | 4 | **Statistics unification** (S6), **tasks-land rename/decision** (S7), **snapshots-vs-trash decision** (S5) | ~1 week combined | Low |
 | 5 | **Legacy amputation** (S8) after a dated migration release; history rewrite (S10) as a coordinated one-off | small + one event | Low once scheduled |
 
-Phases 1–2 are pure deletion and immediately shrink the "mess" feeling. Phase 3 is the real overhaul and pays for itself by retiring a whole bug class. Nothing here requires a big-bang.
+Phase 1 is pure deletion and immediately shrinks the "mess" feeling. Phase 3 is the real overhaul and pays for itself by retiring a whole bug class. Nothing here requires a big-bang.
 
 ---
 
@@ -144,4 +139,4 @@ Phases 1–2 are pure deletion and immediately shrink the "mess" feeling. Phase 
 - **Do not rewrite the editor.** The model/port/engine is the most-tested, best-documented part; the legacy execCommand engine it replaced is the cautionary tale sitting in the git log.
 - **Do not rewrite the server.** Zero-dependency, schema-light, hardened in the last three weeks.
 - **Do not rewrite to "fix UX."** The UX findings (calendar hijack, PiP vanishing, Ctrl+U conflict, stats nonsense) are each a decision plus a small diff, not a symptom of engine rot.
-- **Do not start with the sync ledger because it is the deepest.** Start with deletion (CSS, renderer) — the codebase gets smaller and the mess feeling drops before the hard refactor begins.
+- **Do not start with the sync ledger because it is the deepest.** Start with deletion (CSS) — the codebase gets smaller and the mess feeling drops before the hard refactor begins.
