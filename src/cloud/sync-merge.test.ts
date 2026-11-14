@@ -311,6 +311,15 @@ describe('mergeRemote — the three-way auto-merge', () => {
     expect(merge.tabs).toHaveLength(1); // no copy minted
     expect(merge.tabs[0].content).toBe('<p>oat milk</p><p>bread</p><p>decaf coffee</p>');
     expect(merge.tabs[0].syncSeq).toBe(9); // builds on their row
+    // …and their row is the NEXT merge base: the merged bytes build on a
+    // version the server holds, so the next divergence diffs against it —
+    // not against the pre-merge ancestor one version older (a stale base
+    // misattributes complementary edits and degrades the next auto-merge
+    // into a parked conflict).
+    expect(merge.tabs[0].syncBase).toEqual({
+      content: '<p>milk</p><p>bread</p><p>decaf coffee</p>',
+      name: null,
+    });
     expect(merge.tabs[0].updatedAt).toBeGreaterThan(remote.updated_at); // outranks it
     expect(merge.mergedIds).toEqual(['a']); // the editor repaints under the caret
     expect(merge.changed).toBe(true);

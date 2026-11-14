@@ -748,6 +748,56 @@ describe('TabManager (characterization)', () => {
     expect(manager.exportForSync().dirty).not.toContain(first.id);
   });
 
+  it('a merged-away tab leaves no dirty id, but a TRASHED one keeps its delete queued', async () => {
+    const manager = await bootedManager();
+    $('#note').html('<b>doomed words</b>');
+    const goneId = manager.getActive()!.id;
+    manager.requestCloseTab(goneId);
+    expect(manager.exportForSync().dirty).toContain(goneId);
+
+    // Any later merge (a remote change to some other note) must not drain
+    // the delete from the dirty set: the durable unpushed flag on the
+    // grave is what survives a reload that happens before the push lands.
+    // The old cleanup built "alive" from the live tabs only, so the very
+    // next merge un-durability'd every pending delete.
+    manager.applyExternalMerge([stored('remote', '<b>their words</b>')]);
+
+    expect(manager.exportForSync().dirty).toContain(goneId);
+    expect(manager.exportForSync().trashed.find((entry) => entry.id === goneId)?.unpushed).toBe(
+      true,
+    );
+  });
+
+  it('the trash round-trips the merge base — a restored note can still three-way merge', async () => {
+    // syncBase names the last version the cloud agreed to. It used to die
+    // at the trash door (never persisted on graves, never rebuilt on
+    // restore), so a restored note's next cross-device divergence parked a
+    // review conflict instead of auto-merging — manufactured conflict
+    // noise for exactly the notes people delete and restore.
+    const base = { content: '<p>cloud agreed</p>', name: 'Kept name' };
+    saveNotes(
+      {
+        tabs: [stored('t1', '<p>local edit</p>', { syncSeq: 7, syncBase: base })],
+        trashed: [],
+      },
+      't1',
+      { immediate: true },
+    );
+    await flushAndReboot();
+
+    const manager = await bootedManager();
+    expect(manager.exportForSync().tabs.find((tab) => tab.id === 't1')?.syncBase).toEqual(base);
+    manager.requestCloseTab('t1');
+    await flushAndReboot();
+
+    const second = await bootedManager();
+    const grave = second.exportForSync().trashed.find((entry) => entry.id === 't1');
+    expect(grave?.syncBase).toEqual(base); // survived the trash round trip
+
+    expect(second.restoreNote('t1')).toBe(true);
+    expect(second.exportForSync().tabs.find((tab) => tab.id === 't1')?.syncBase).toEqual(base);
+  });
+
   it('a parked conflict record survives a reload', async () => {
     // The review's payload is the record: if it fell out of the storage
     // round trip, every reload would forget the divergence and the badge

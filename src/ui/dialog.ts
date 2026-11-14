@@ -48,6 +48,17 @@ interface DialogFace {
 
 let face: DialogFace | null = null;
 
+/**
+ * The settle of the question currently on stage. One dialog means one
+ * standing question: a second ask settles the first as cancelled (and
+ * detaches ITS listeners) before wiring its own — without this, the
+ * shared buttons answered both promises with one click (a "Reload now?"
+ * arriving over a destructive confirm could silently confirm the
+ * destructive one), and the first promise hung until the second was
+ * answered.
+ */
+let activeSettle: ((answer: 'confirm' | 'cancel') => void) | null = null;
+
 /** Builds (once) the one dialog the app owns. */
 function dialogFace(): DialogFace {
   if (face) {
@@ -133,6 +144,9 @@ export function promptDialog(options: PromptOptions): Promise<string | null> {
 function ask(face: DialogFace, focusInput: boolean): Promise<'confirm' | 'cancel'> {
   return new Promise((resolve) => {
     const settle = (answer: 'confirm' | 'cancel'): void => {
+      if (activeSettle === settle) {
+        activeSettle = null;
+      }
       face.confirm.removeEventListener('click', onConfirm);
       face.cancel.removeEventListener('click', onCancel);
       face.dialog.removeEventListener('cancel', onCancel);
@@ -142,13 +156,18 @@ function ask(face: DialogFace, focusInput: boolean): Promise<'confirm' | 'cancel
     const onConfirm = (): void => settle('confirm');
     const onCancel = (): void => settle('cancel');
 
+    // A question already stood — answer it cancelled before this one
+    // takes the stage. Settling also detaches the old ask's listeners
+    // from the shared buttons, so this question's clicks answer this
+    // question only.
+    activeSettle?.('cancel');
+
     face.confirm.addEventListener('click', onConfirm);
     face.cancel.addEventListener('click', onCancel);
     face.dialog.addEventListener('cancel', onCancel);
+    activeSettle = settle;
 
     if (face.dialog.open) {
-      // A question already stood — answer it cancelled before this one
-      // takes the stage.
       closeDialog(face.dialog);
     }
     if (typeof face.dialog.showModal === 'function') {

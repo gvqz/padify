@@ -2079,7 +2079,7 @@ export class SnapshotsManager {
       let cameFromTrash = false;
       if (grave && !source) {
         if (!manager.restoreNote(grave.id)) {
-          showToast('Cannot restore — the notes list is at its cap.');
+          showToast('Cannot restore — the note is no longer in the trash.');
           return;
         }
         cameFromTrash = true;
@@ -2101,7 +2101,7 @@ export class SnapshotsManager {
           '',
         );
         if (!revived) {
-          showToast('Cannot restore — the notes list is at its cap.');
+          showToast('Cannot restore — the note could not be recreated.');
           return;
         }
         manager.switchTo(revived.id, false);
@@ -2217,14 +2217,29 @@ export class SnapshotsManager {
   }
 
   // Show copy success feedback
+  /** The standing copy flash: its reset timer and the resting icon that
+   * timer must restore. A second click inside the flash cancels the
+   * first reset instead of letting it fire — the old per-click snapshot
+   * adopted the checkmark as the "original" icon on a double click and
+   * the button stayed a checkmark forever. */
+  private copyFlash: { timer: ReturnType<typeof setTimeout>; icon: string } | null = null;
+
   showCopySuccess(button: Element): void {
-    const originalHTML = button.innerHTML;
+    const standing = this.copyFlash;
+    if (standing) {
+      clearTimeout(standing.timer);
+    }
+    // Snapshot the resting icon only when the button is at rest — the
+    // flash's own checkmark is never a valid "original".
+    const icon = standing?.icon ?? button.innerHTML;
     button.innerHTML =
       '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
 
-    setTimeout(() => {
-      button.innerHTML = originalHTML;
+    const timer = setTimeout(() => {
+      button.innerHTML = icon;
+      this.copyFlash = null;
     }, 700);
+    this.copyFlash = { timer, icon };
   }
 
   /**

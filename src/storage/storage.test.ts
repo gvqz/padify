@@ -236,6 +236,41 @@ describe('notes repository', () => {
     expect(byId.get('a')?.content).toBe('original');
   });
 
+  it('a RESTORE in the other tab lifts the blacklist — live upserts resume', async () => {
+    // The blacklist used to be add-only: the other tab deleting a note
+    // blacklisted it for the rest of this tab's session, even after the
+    // other tab RESTORED the note. Every later save skipped the live
+    // upsert, so edits to the restored note never reached IndexedDB
+    // again (a reload usually rescued the words through the mirror; a
+    // quota-blocked mirror write or a crash lost them outright).
+    saveNotes({ tabs: [note('a', 'original')], trashed: [] }, 'a');
+    await whenNotesIdle();
+
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: 'padifyTabTombstones',
+        newValue: JSON.stringify([{ id: 'a', updatedAt: 99 }]),
+      }),
+    );
+    saveNotes({ tabs: [note('a', 'typed while blacklisted', 50)], trashed: [] }, 'a');
+    await whenNotesIdle();
+    let records = await readAll<NoteRecord>(NOTES_STORE);
+    expect(records.find((record) => record.id === 'a')?.content).toBe('original');
+
+    // The other tab restores the note: the blob loses the id, and this
+    // tab's next save must upsert the live row again.
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: 'padifyTabTombstones',
+        newValue: JSON.stringify([]),
+      }),
+    );
+    saveNotes({ tabs: [note('a', 'typed after the restore', 60)], trashed: [] }, 'a');
+    await whenNotesIdle();
+    records = await readAll<NoteRecord>(NOTES_STORE);
+    expect(records.find((record) => record.id === 'a')?.content).toBe('typed after the restore');
+  });
+
   it('persists strip order as position and honours it on load', async () => {
     saveNotes({ tabs: [note('a', 'a'), note('b', 'b'), note('c', 'c')], trashed: [] }, 'a');
     await whenNotesIdle();
@@ -669,5 +704,38 @@ describe('kv reconciliation (writes lost between the stores)', () => {
     // No readable evidence → IndexedDB (stale) wins — the documented
     // limitation, not a crash.
     expect(stateGet('mode')).toBe('dark');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A failed save must retry its DELETES, not just its upserts.
+// ---------------------------------------------------------------------------
+
+describe('failed saves retry their deletes', () => {
+  beforeEach(freshBoot);
+
+  it('a write that fails mid-delete does not orphan the row — the next save re-issues it', async () => {
+    saveNotes({ tabs: [note('t1', 'one'), note('t2', 'two')], trashed: [] }, 't1');
+    await whenNotesIdle();
+    expect((await readAll<NoteRecord>(NOTES_STORE)).map((r) => r.id).sort()).toEqual(['t1', 't2']);
+
+    // The model loses t2 entirely (a merged-away tab, a dropped seed
+    // twin). The store write FAILS (quota, abort) — the delete must
+    // survive that failure.
+    const idb = await import('./idb');
+    const failing = vi.spyOn(idb, 'writeAll').mockRejectedValueOnce(new Error('simulated quota'));
+    saveNotes({ tabs: [note('t1', 'one')], trashed: [] }, 't1');
+    await whenNotesIdle();
+    expect(failing).toHaveBeenCalledTimes(1);
+    failing.mockRestore();
+
+    // Nothing else changed — but the delete MUST ship on the next save:
+    // the old failure path dropped the id from the diff index, a delete
+    // can only ever be derived from an indexed id, so it was never
+    // re-issued and the orphaned row re-hydrated as a live note at the
+    // next boot.
+    saveNotes({ tabs: [note('t1', 'one')], trashed: [] }, 't1');
+    await whenNotesIdle();
+    expect((await readAll<NoteRecord>(NOTES_STORE)).map((r) => r.id)).toEqual(['t1']);
   });
 });

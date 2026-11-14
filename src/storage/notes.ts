@@ -310,11 +310,19 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
       if (!Array.isArray(parsed)) {
         return;
       }
+      const fresh = new Set<string>();
       for (const entry of parsed) {
         if (entry && typeof entry.id === 'string') {
-          externallyDeletedIds.add(entry.id);
+          fresh.add(entry.id);
         }
       }
+      // Mirror, never merge: the blob IS the trash as the other tab
+      // sees it now. A restore there removes the id from the blob, and
+      // an add-only set would keep the note blacklisted for the rest of
+      // this session — every later save would skip its live upsert, so
+      // edits to the restored note never reached IndexedDB again.
+      externallyDeletedIds.clear();
+      fresh.forEach((id) => externallyDeletedIds.add(id));
     } catch {
       /* the other tab wrote a partial blob — ignore it */
     }
@@ -334,28 +342,27 @@ let currentSnapshotForMirror: NotesSnapshot | null = null;
  * `deletedAt` keys the trash-diff; `swept` marks retention-retired rows
  * seeded only so the next save deletes them.
  */
-const lastWritten = new Map<
-  string,
-  {
-    name: string | null;
-    position: number;
-    updatedAt: number;
-    deleted: boolean;
-    deletedAt: number;
-    noteType: NoteType | undefined;
-    swept: boolean;
-    syncBase: { content: string; name: string | null } | undefined;
-    unseenChange: { from: string; fromName: string | null } | undefined;
-    conflict:
-      | {
-          mine: { content: string; name: string | null };
-          theirs: { content: string; updatedAt: number };
-        }
-      | undefined;
-    /** The durable sync-dirty flag as last written (see StoredNoteTab.unpushed). */
-    unpushed?: boolean;
-  }
->();
+interface LastWrittenEntry {
+  name: string | null;
+  position: number;
+  updatedAt: number;
+  deleted: boolean;
+  deletedAt: number;
+  noteType: NoteType | undefined;
+  swept: boolean;
+  syncBase: { content: string; name: string | null } | undefined;
+  unseenChange: { from: string; fromName: string | null } | undefined;
+  conflict:
+    | {
+        mine: { content: string; name: string | null };
+        theirs: { content: string; updatedAt: number };
+      }
+    | undefined;
+  /** The durable sync-dirty flag as last written (see StoredNoteTab.unpushed). */
+  unpushed?: boolean;
+}
+
+const lastWritten = new Map<string, LastWrittenEntry>();
 
 // ---- compatibility mirror state ---------------------------------------------
 
@@ -453,6 +460,10 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
           (record as { syncSeq: number }).syncSeq > 0
             ? (record as { syncSeq: number }).syncSeq
             : undefined,
+        // The merge base survives the trash so a restored note can still
+        // three-way merge (see TrashedNote.syncBase — same contract as the
+        // live rows above).
+        syncBase: readSyncBase((record as { syncBase?: unknown }).syncBase),
         copyOf:
           typeof (record as { copyOf?: unknown }).copyOf === 'string' &&
           (record as { copyOf: string }).copyOf
@@ -492,10 +503,11 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
       unpushed: tab.unpushed === true,
     });
   });
+  const survivingTrashById = new Map(trashed.map((entry) => [entry.id, entry]));
   valid
     .filter((record) => record.deleted)
     .forEach((record) => {
-      const swept = !trashed.some((entry) => entry.id === record.id);
+      const swept = !survivingTrashById.has(record.id);
       lastWritten.set(record.id, {
         name: null,
         position: -1,
@@ -504,10 +516,12 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
         noteType: undefined,
         // A swept row must LOOK unchanged to the diff (nothing about it
         // re-writes) while sitting in the index's delete path — the purge
-        // write removes it by id.
+        // write removes it by id. Surviving trash seeds its own syncBase:
+        // seeding undefined would flag every grave as changed on every
+        // boot and rewrite each row once per session.
         deletedAt: 0,
         swept,
-        syncBase: undefined,
+        syncBase: swept ? undefined : survivingTrashById.get(record.id)?.syncBase,
         unseenChange: undefined,
         conflict: undefined,
         // Surviving trash keeps its sync-dirty flag so the first save
@@ -824,7 +838,7 @@ export function saveNotes(
     return;
   }
 
-  const { upserts, deletes } = diffAgainstLastWritten(snapshot);
+  const { upserts, deletes, retired } = diffAgainstLastWritten(snapshot);
 
   if (upserts.length > 0 || deletes.length > 0) {
     const write = writeAll(NOTES_STORE, upserts, deletes)
@@ -840,10 +854,15 @@ export function saveNotes(
         // save indicator shows (quota causes get the storage-full
         // wording and a re-ask for navigator.storage.persist()).
         reportSaveFailure(error);
-        // Drop the affected entries from the diff index so the next save
-        // re-writes them.
+        // Drop the affected upserts from the diff index so the next save
+        // re-writes them — but HAND THE DELETES THEIR SIGNATURES BACK: a
+        // delete only exists while its id sits in the index (the diff
+        // derives one exactly from "indexed yesterday, vanished from the
+        // model today"), so dropping it there on failure meant the
+        // delete was never re-issued and the orphaned row re-hydrated
+        // live at the next boot.
         upserts.forEach((record) => lastWritten.delete(record.id));
-        deletes.forEach((id) => lastWritten.delete(id));
+        retired.forEach((entry, id) => lastWritten.set(id, entry));
       });
     trackWrite(write);
   }
@@ -854,11 +873,14 @@ export function saveNotes(
 /**
  * Computes the changed rows. Trash rows (deleted, deletedAt stamped,
  * content kept) are upserts; ids that vanished from the model entirely
- * (purged trash, merges) are deletes.
+ * (purged trash, merges) are deletes — whose index entries leave with
+ * this diff but are returned as `retired`, so a failed write can put
+ * them back and the next save re-issues the delete.
  */
 function diffAgainstLastWritten(snapshot: NotesSnapshot): {
   upserts: NoteRecord[];
   deletes: string[];
+  retired: Map<string, LastWrittenEntry>;
 } {
   const upserts: NoteRecord[] = [];
   const seen = new Set<string>();
@@ -927,11 +949,15 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
   snapshot.trashed.forEach((grave) => {
     seen.add(grave.id);
     const previous = lastWritten.get(grave.id);
+    const sameGraveBase =
+      previous?.syncBase?.content === grave.syncBase?.content &&
+      previous?.syncBase?.name === grave.syncBase?.name;
     if (
       !previous ||
       !previous.deleted ||
       previous.deletedAt !== grave.deletedAt ||
       previous.updatedAt !== grave.updatedAt ||
+      !sameGraveBase ||
       (previous.unpushed === true) !== (grave.unpushed === true)
     ) {
       upserts.push({
@@ -943,6 +969,9 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
         noteType: grave.noteType,
         colorTheme: grave.colorTheme,
         syncSeq: grave.syncSeq,
+        // The merge base persists with the grave — restoreNote hands it
+        // back to the live tab (see TrashedNote.syncBase).
+        syncBase: grave.syncBase,
         copyOf: grave.copyOf,
         position: -1,
         deleted: true,
@@ -959,7 +988,7 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
         deletedAt: grave.deletedAt,
         noteType: grave.noteType,
         swept: false,
-        syncBase: undefined,
+        syncBase: grave.syncBase,
         unseenChange: undefined,
         conflict: undefined,
         unpushed: grave.unpushed === true,
@@ -968,14 +997,21 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
   });
 
   const deletes: string[] = [];
+  const retired = new Map<string, LastWrittenEntry>();
   lastWritten.forEach((_signature, id) => {
     if (!seen.has(id)) {
       deletes.push(id);
     }
   });
-  deletes.forEach((id) => lastWritten.delete(id));
+  deletes.forEach((id) => {
+    const entry = lastWritten.get(id);
+    if (entry) {
+      retired.set(id, entry);
+    }
+    lastWritten.delete(id);
+  });
 
-  return { upserts, deletes };
+  return { upserts, deletes, retired };
 }
 
 /** Fallback-mode save: the exact pre-migration whole-blob writes. */
@@ -1104,6 +1140,16 @@ const inFlightWrites: Promise<void>[] = [];
 
 function trackWrite(write: Promise<void>): void {
   inFlightWrites.push(write);
+  // Settled writes leave the array on their own: whenNotesIdle is a
+  // test/diagnostic hook nothing in production drains, so without this
+  // a long-lived session accumulated one dead promise per save — a slow
+  // but unbounded leak for a notepad people leave open for days.
+  void write.then(() => {
+    const index = inFlightWrites.indexOf(write);
+    if (index >= 0) {
+      inFlightWrites.splice(index, 1);
+    }
+  });
 }
 
 /**

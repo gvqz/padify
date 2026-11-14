@@ -146,6 +146,14 @@ interface StoredSession {
 }
 
 const SESSION_KEY = 'padifySession';
+/**
+ * The account this device's notes were last synced under (kv, per
+ * browser — never synced anywhere). Powers the account-switch guard
+ * (accountSwitchDeclined): the notes store has no account scoping, so
+ * without it a second account signing in here silently uploaded the
+ * first account's notes in its very first cycle.
+ */
+const ACCOUNT_OWNER_KEY = 'padifySyncOwner';
 const SYNC_INTERVAL_MS = 30_000;
 const PUSH_DEBOUNCE_MS = 1_200;
 
@@ -317,6 +325,13 @@ export async function initCloudSync(tabManager: TabManager): Promise<void> {
     setStatus(syncingStatus());
     try {
       const me = await api<{ user: { id: string; email: string } }>('/api/me');
+      if (await accountSwitchDeclined(me.user.id, me.user.email)) {
+        // The device's notes belong to another account and the user chose
+        // to keep them local — this restored session does not run.
+        storeSession(null);
+        setStatus({ state: 'signed-out' });
+        return;
+      }
       currentUserId = me.user.id;
       currentUserEmail = me.user.email;
       if (me.user.email !== session.email) {
@@ -426,6 +441,12 @@ async function signIn(email: string, password: string): Promise<AuthResult> {
       method: 'POST',
       body: { email: email.trim(), password },
     });
+    if (await accountSwitchDeclined(data.user.id, data.user.email)) {
+      return {
+        ok: false,
+        message: 'Sign-in cancelled — the notes on this device stay local and were not uploaded.',
+      };
+    }
     storeSession({ token: data.token, userId: data.user.id, email: data.user.email });
     currentUserId = data.user.id;
     currentUserEmail = data.user.email;
@@ -449,6 +470,12 @@ async function signUp(email: string, password: string): Promise<AuthResult> {
       method: 'POST',
       body: { email: email.trim(), password },
     });
+    if (await accountSwitchDeclined(data.user.id, data.user.email)) {
+      return {
+        ok: false,
+        message: 'Sign-up cancelled — the notes on this device stay local and were not uploaded.',
+      };
+    }
     storeSession({ token: data.token, userId: data.user.id, email: data.user.email });
     currentUserId = data.user.id;
     currentUserEmail = data.user.email;
@@ -472,6 +499,67 @@ async function signOut(): Promise<void> {
   }
   storeSession(null);
   handleSignedOut();
+}
+
+/** Records whose notes the device now holds — only after a full cycle
+ *  completed, so an account that never actually synced never claims the
+ *  device. */
+function markAccountOwner(): void {
+  if (!currentUserId) {
+    return;
+  }
+  try {
+    stateSet(ACCOUNT_OWNER_KEY, currentUserId);
+  } catch {
+    /* storage unavailable — the switch guard degrades to not asking */
+  }
+}
+
+/**
+ * The account-switch guard. The notes database is per-browser, not
+ * per-account: signing into a second account here used to upload the
+ * first account's notes to it in the very first cycle (the pull delivers
+ * none of them, so step 3 of runSyncOnce sees "local-only rows" and ships
+ * them all). The owner marker makes the switch visible — with real notes
+ * on the device, the user explicitly chooses to merge them into the new
+ * account or to keep them local (the sign-in then aborts and nothing is
+ * uploaded; declining leaves every note exactly where it is).
+ *
+ * Returns true only when the user DECLINED the switch.
+ */
+async function accountSwitchDeclined(userId: string, email: string): Promise<boolean> {
+  if (!manager) {
+    return false;
+  }
+  let previousOwner: string | null;
+  try {
+    previousOwner = stateGet(ACCOUNT_OWNER_KEY);
+  } catch {
+    return false;
+  }
+  if (!previousOwner || previousOwner === userId) {
+    return false;
+  }
+  const payload = manager.exportForSync();
+  const notes =
+    payload.tabs.filter((tab) => !isUntouchedWelcomeSeed(tab)).length +
+    payload.trashed.filter((grave) => !grave.purged).length;
+  if (notes === 0) {
+    return false;
+  }
+  // Lazy like the toast below it: this module stays import-clean for
+  // its tests, and the dialog only loads when a switch actually stands.
+  const { confirmDialog } = await import('../ui/dialog');
+  const proceed = await confirmDialog({
+    title: 'Notes from another account are on this device',
+    text:
+      `${notes} ${notes === 1 ? 'note is' : 'notes are'} on this device under a different account. ` +
+      `Continuing as ${email} uploads ${notes === 1 ? 'it' : 'them'} there — they merge into ` +
+      'that account and appear on its other devices.',
+    confirm: 'Upload and continue',
+    cancel: 'Keep them local',
+  });
+  return !proceed;
 }
 
 // ---------------------------------------------------------------------------
@@ -571,6 +659,7 @@ async function syncCycle(_reason: string): Promise<void> {
   try {
     await runSyncOnce();
     lastSyncAt = Date.now();
+    markAccountOwner();
     setStatus(signedInStatus(pendingPush.size > 0 ? 'pending' : 'idle'));
     // Attachments ride along after the cycle — never inside it, so a
     // multi-megabyte upload can never delay note sync. Fire-and-forget:
@@ -812,6 +901,21 @@ async function runSyncOnce(): Promise<void> {
   // strand by definition: its bytes differ from what the cloud last
   // agreed to, and nothing else in this cycle will ship them.
   const dirtyNow = new Set(mergedExport.dirty);
+
+  // A queued id with neither a tab nor a grave behind it can never
+  // produce a row, and nothing outside this cycle will ever confirm it —
+  // left alone it pegs the status at "pending" forever (the dropped-seed
+  // eviction above covers the seed flavor; merged-away locals and
+  // retention-swept graves are the rest).
+  const modelIds = new Set<string>([
+    ...mergedTabs.map((tab) => tab.id),
+    ...mergedExport.trashed.map((grave) => grave.id),
+  ]);
+  for (const id of [...pendingPush]) {
+    if (!modelIds.has(id)) {
+      pendingPush.delete(id);
+    }
+  }
 
   mergedTabs.forEach((tab, index) => {
     const remote = remoteById.get(tab.id);
@@ -1393,6 +1497,15 @@ export function mergeRemote(
             // every device once its own push lands a fresh seq.
             local.updatedAt = Math.max(Date.now(), row.updated_at + 1, local.updatedAt + 1);
             local.syncSeq = row.seq && row.seq > 0 ? row.seq : local.syncSeq;
+            // Their row IS a version the server holds, and the merged
+            // bytes build on it — that makes it the honest common
+            // ancestor for the NEXT divergence. Leaving the pre-merge
+            // base in place meant diffing against a version one step
+            // older, which misattributes complementary edits and
+            // degrades the next auto-merge into a parked conflict (the
+            // winning-remote path below pins the base for the same
+            // reason).
+            local.syncBase = { content: wireRowContent(row), name: row.name };
             touched = true;
             mergedIds.push(local.id);
             conflicts.push(

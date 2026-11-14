@@ -614,9 +614,17 @@ export class TabManager {
 
     // A merged-away tab can never push again — its pending dirty id would
     // otherwise sit in the set forever, re-serialized (and skipped) on
-    // every cycle.
+    // every cycle. Trash ids are alive too: deletes, restores and purges
+    // all queue through the same dirty set (requestCloseTab, purgeNote,
+    // emptyTrash), and dropping one here would clear its durable unpushed
+    // flag on the next persist — a reload before the push lands could
+    // then lose the delete. Ids leave the dirty set only through
+    // confirmPushed (the server has the bytes) or by leaving the model.
     if (this.dirtyIds.size > 0) {
-      const alive = new Set(this.tabs.map((tab) => tab.id));
+      const alive = new Set<string>([
+        ...this.tabs.map((tab) => tab.id),
+        ...this.trashed.map((grave) => grave.id),
+      ]);
       for (const id of [...this.dirtyIds]) {
         if (!alive.has(id)) {
           this.dirtyIds.delete(id);
@@ -1417,6 +1425,11 @@ export class TabManager {
       noteType: tab.noteType,
       colorTheme: tab.colorTheme,
       syncSeq: tab.syncSeq,
+      // The merge base rides along: a restore that meets a remote edit
+      // must still three-way merge instead of parking a review conflict
+      // (the base names the last version the cloud agreed to — see
+      // NoteTab.syncBase).
+      syncBase: tab.syncBase,
       copyOf: tab.copyOf,
       deletedAt: Date.now(),
     });
@@ -1498,6 +1511,11 @@ export class TabManager {
       noteType: normalizeNoteType(grave.noteType),
       colorTheme: grave.colorTheme,
       syncSeq: grave.syncSeq,
+      // Back comes the merge base the trash kept — the next divergence
+      // diffs against the last cloud-agreed version, not against nothing
+      // (a missing base degrades the three-way merge into a parked
+      // conflict for exactly the notes people delete and restore).
+      syncBase: grave.syncBase,
     };
     if (grave.copyOf) {
       restored.copyOf = grave.copyOf;
@@ -1540,12 +1558,10 @@ export class TabManager {
     // Delete forever means forever: the note's snapshots go with it, or
     // the History sheet would keep offering a resurrection after the
     // toast said "for good". Best-effort — a snapshots outage must not
-    // block the purge itself.
-    try {
-      void window.snapshotsManager?.deleteSnapshotsForNotes([noteId]);
-    } catch {
-      /* the sweep is best-effort */
-    }
+    // block the purge itself. The catch lives ON the promise: the old
+    // synchronous try/catch around a voided promise never fired, and the
+    // rejection went unhandled instead.
+    void window.snapshotsManager?.deleteSnapshotsForNotes([noteId])?.catch(() => undefined);
     this.persist();
     this.renderRailCount();
     return true;
@@ -1577,12 +1593,11 @@ export class TabManager {
       );
     visible.forEach((grave) => this.dirtyIds.add(grave.id));
     // Forever means forever — every emptied note's snapshots sweep with
-    // it (see purgeNote). Best-effort, never blocking the empty itself.
-    try {
-      void window.snapshotsManager?.deleteSnapshotsForNotes(visible.map((grave) => grave.id));
-    } catch {
-      /* the sweep is best-effort */
-    }
+    // it (see purgeNote). Best-effort, never blocking the empty itself;
+    // the catch rides the promise (see purgeNote for why).
+    void window.snapshotsManager
+      ?.deleteSnapshotsForNotes(visible.map((grave) => grave.id))
+      ?.catch(() => undefined);
     this.persist();
     this.renderRailCount();
     return visible.length;
