@@ -79,6 +79,8 @@ export function json(
   });
 }
 
+const utf8 = new TextEncoder();
+
 export async function readJson(request: Request): Promise<Record<string, unknown> | null> {
   const contentLength = Number(request.headers.get('content-length') ?? '0');
   if (contentLength > MAX_BODY_BYTES) {
@@ -86,7 +88,11 @@ export async function readJson(request: Request): Promise<Record<string, unknown
   }
   try {
     const text = await request.text();
-    if (text.length > MAX_BODY_BYTES) {
+    // The ceiling is BYTES: content-length already gates the sized path,
+    // but a chunked body carries no header — and text.length counts
+    // UTF-16 code units, so a multibyte-heavy JSON could carry ~3x the
+    // cap past a character-counted check on the headerless path.
+    if (utf8.encode(text).length > MAX_BODY_BYTES) {
       return null;
     }
     const parsed = JSON.parse(text);

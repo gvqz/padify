@@ -109,7 +109,11 @@ create table if not exists shares (
   note_type  text,
   created_at integer not null default 0,
   expires_at integer not null,
-  revoked    integer not null default 0
+  revoked    integer not null default 0,
+  -- When the revoke happened: the prune sweep's grace clock. Null on
+  -- live rows and on rows revoked before the column existed (the sweep
+  -- falls back to their expiry).
+  revoked_at integer
 );
 
 create index if not exists shares_user_id_idx on shares(user_id);

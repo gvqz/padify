@@ -2,12 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Db, Row, SqlStatement, SqlValue } from '../server/db';
 import { clientKey, rateLimited, resetRateLimitsForTests } from '../server/ratelimit';
 import { MAX_BODY_BYTES } from '../server/http';
-import { handleNotesGet, handleNotesPut } from '../server/notes';
+import { handleNotesGet, handleNotesPut, sweepTrashedNotes } from '../server/notes';
 import {
   createShareToken,
   handlePublicShareGet,
   handleSharesPatch,
   handleSharesPost,
+  sweepStaleShares,
 } from '../server/shares';
 import { handleSignup } from '../server/auth-routes';
 import { route } from '../server/routes';
@@ -138,11 +139,12 @@ describe('handleSharesPatch — the input caps hold', () => {
     expect(await bodyOf(response)).toEqual({ ok: true });
 
     // The revoke-all-for-notes statement ran once with at most 500 ids…
+    // (revoked_at rides along now — the dead-link sweep's grace clock.)
     const revokes = db.statements.filter((statement) =>
-      statement.sql.includes('update shares set revoked = 1 where user_id'),
+      statement.sql.includes('update shares set revoked = 1, revoked_at'),
     );
     expect(revokes).toHaveLength(1);
-    expect(revokes[0].args!.length).toBeLessThanOrEqual(501); // 500 ids + user id
+    expect(revokes[0].args!.length).toBeLessThanOrEqual(502); // 500 ids + user id + revoked_at
     // …and the refresh updates wrote at most 100 rows, batched in one pipeline.
     const updates = db.statements.filter((statement) =>
       statement.sql.includes('update shares set title'),
@@ -952,10 +954,14 @@ describe('handleSharesPost — one active link per note', () => {
     expect((body.row as { token: string }).token).toBe('tok-new');
 
     const revoke = db.statements.find((statement) =>
-      statement.sql.includes('update shares set revoked = 1 where user_id = ? and token in'),
+      statement.sql.includes(
+        'update shares set revoked = 1, revoked_at = ? where user_id = ? and token in',
+      ),
     );
     expect(revoke).toBeTruthy();
-    expect(revoke?.args).toEqual(['user-1', 'tok-mid', 'tok-old']);
+    // revoked_at (the sweep's grace clock) leads the args.
+    expect(revoke?.args?.slice(1)).toEqual(['user-1', 'tok-mid', 'tok-old']);
+    expect(typeof revoke?.args?.[0]).toBe('number');
   });
 
   it('a note without a live link still mints one — the cap tests above stay true', async () => {
@@ -1023,5 +1029,163 @@ describe('handleAttachmentPost — the round-2 upload guardrails', () => {
       id: 'attachment-test-0001',
       duplicate: true,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The sweep family — counted, single-statement, eligibility re-checked.
+// ---------------------------------------------------------------------------
+
+describe('sweepTrashedNotes — the delete re-checks eligibility at delete time', () => {
+  it('deletes in ONE statement with the conditions inline, counted by RETURNING', async () => {
+    const db = new ScriptedDb([{ match: 'delete from notes', rows: [{ id: 'a' }, { id: 'b' }] }]);
+    const swept = await sweepTrashedNotes(db, 1_000_000_000);
+
+    expect(swept).toBe(2);
+    // One statement — the SELECT-then-DELETE this replaces was two
+    // round-trips apart on the HTTP backend, and a restore landing in
+    // between was hard-deleted by id anyway.
+    expect(db.sqls).toHaveLength(1);
+    expect(db.sqls[0]).toMatch(/^delete from notes/);
+    expect(db.sqls[0]).toContain('deleted = 1');
+    expect(db.sqls[0]).toContain('deleted_at < ?');
+    expect(db.sqls[0]).toContain('updated_at < ?');
+    expect(db.sqls[0]).toContain('returning id');
+  });
+});
+
+describe('sweepStaleShares — dead links leave the table', () => {
+  it('prunes expired and revoked rows in one grace-windowed statement', async () => {
+    const db = new ScriptedDb([
+      { match: 'delete from shares', rows: [{ token: 't1' }, { token: 't2' }] },
+    ]);
+    const swept = await sweepStaleShares(db, 1_000_000_000);
+
+    expect(swept).toBe(2);
+    expect(db.sqls).toHaveLength(1);
+    // Expired links: past their expiry AND the grace window.
+    expect(db.sqls[0]).toContain('revoked = 0 and expires_at <= ?');
+    // Revoked links: revoked_at is the grace clock; rows revoked before
+    // the column existed fall back to their expiry, then created_at.
+    expect(db.sqls[0]).toContain('coalesce(revoked_at, expires_at, created_at) < ?');
+    expect(db.sqls[0]).toContain('returning token');
+  });
+});
+
+describe('handleNotesPut — the quota counts bytes, not characters', () => {
+  it('a CJK batch trips the cap at a third of the character count', async () => {
+    // 24 MB standing + 600,000 CJK characters (1.8 MB of UTF-8, the
+    // 3-bytes-per-character case) = past the 25 MB cap. The
+    // character-counted version saw 24 MB + 0.6 MB and let it through —
+    // a CJK-heavy account could stand at 3x the intended quota.
+    const db = new ScriptedDb([
+      { match: 'as bytes', rows: [] },
+      { match: 'as total', rows: [{ total: 24 * 1024 * 1024 }] },
+    ]);
+    const response = await handleNotesPut(
+      db,
+      jsonRequest('PUT', {
+        rows: [{ id: 'cjk', content: '字'.repeat(600_000), updated_at: 5, deleted: false }],
+      }),
+      user,
+    );
+    expect(response.status).toBe(413);
+    expect(String((await bodyOf(response)).error)).toContain('storage space');
+  });
+});
+
+describe('handleSharesPost — the live-share byte budget', () => {
+  const shareRequest = (content: string): Request =>
+    jsonRequest('POST', { note_id: 'n1', title: 't', content, days: 7 });
+
+  it('413s a create that would push live bytes past the budget', async () => {
+    // 10 MB standing + a 3 KB CJK newcomer measured in its UTF-8 bytes —
+    // the row cap alone never bounded this (200 rows x the 2 MB body
+    // ceiling was 400 MB per account).
+    const db = new ScriptedDb([
+      { match: 'as live', rows: [{ live: 0 }] },
+      { match: 'as total', rows: [{ total: 10 * 1024 * 1024 }] },
+    ]);
+    const response = await handleSharesPost(db, shareRequest('字'.repeat(1024)), user);
+
+    expect(response.status).toBe(413);
+    expect(String((await bodyOf(response)).error)).toContain('share-link storage');
+    expect(db.statements.some((statement) => statement.sql.includes('insert into shares'))).toBe(
+      false,
+    );
+  });
+
+  it('a small create still lands — bytes, not characters, are the unit', async () => {
+    const db = new ScriptedDb([
+      { match: 'as live', rows: [{ live: 0 }] },
+      { match: 'as total', rows: [{ total: 0 }] },
+    ]);
+    const response = await handleSharesPost(db, shareRequest('<p>字</p>'), user);
+    expect(response.status).toBe(201);
+  });
+});
+
+describe('handleSharesPatch — the refresh byte budget', () => {
+  it('413s a refresh that would grow live bytes past the budget', async () => {
+    const db = new ScriptedDb([
+      { match: 'group by note_id', rows: [{ note_id: 'n1', bytes: 0 }] },
+      { match: 'as total', rows: [{ total: 10 * 1024 * 1024 }] },
+    ]);
+    const response = await handleSharesPatch(
+      db,
+      jsonRequest('PATCH', {
+        refresh: [{ note_id: 'n1', title: 't', content: '字'.repeat(2048) }],
+      }),
+      user,
+    );
+
+    expect(response.status).toBe(413);
+    expect(
+      db.statements.some((statement) => statement.sql.includes('update shares set title')),
+    ).toBe(false);
+  });
+
+  it('a shrinking refresh never trips the budget — deltas, not absolutes', async () => {
+    // The note's live row holds 10 MB; the refresh replaces it with
+    // something tiny. The budget math counts the delta (negative), so a
+    // full budget must not refuse a shrink.
+    const db = new ScriptedDb([
+      { match: 'group by note_id', rows: [{ note_id: 'n1', bytes: 10 * 1024 * 1024 }] },
+      { match: 'as total', rows: [{ total: 10 * 1024 * 1024 }] },
+    ]);
+    const response = await handleSharesPatch(
+      db,
+      jsonRequest('PATCH', {
+        refresh: [{ note_id: 'n1', title: 't', content: '<p>small</p>' }],
+      }),
+      user,
+    );
+    expect(response.status).toBe(200);
+  });
+});
+
+describe('route — the 405 probe is paced on public paths too', () => {
+  beforeEach(() => {
+    resetRateLimitsForTests();
+  });
+
+  it('an exhausted api bucket turns the 405 probe into a 429', async () => {
+    const db = new ScriptedDb();
+    // Saturate the anonymous api bucket (the same client key the probe
+    // carries — no session, no forwarded-for).
+    for (let i = 0; i < 320; i += 1) {
+      rateLimited(new Request('http://api.test/api/notes'), 'api');
+    }
+
+    const response = await route(
+      db,
+      new Request('http://api.test/api/auth/signin', { method: 'GET' }),
+      '/api/auth/signin',
+    );
+
+    // The old 405 branch rated the probe only when some same-path route
+    // needed auth — an all-public path (signin, the share-token route)
+    // answered 405 without ever touching a bucket.
+    expect(response.status).toBe(429);
   });
 });

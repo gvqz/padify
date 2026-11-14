@@ -383,7 +383,11 @@ const REQUIRED_COLUMNS: Array<{ table: string; column: string; definition: strin
   // Trash: when a deleted row was trashed (client epoch ms). Null on live
   // rows and on pre-trash tombstones. Nullable, no default — a 0 would be a
   // 1970 timestamp and sweep fresh tombstones on the first boot.
-  { table: 'notes', column: 'deleted_at', definition: 'integer' }
+  { table: 'notes', column: 'deleted_at', definition: 'integer' },
+  // When a share was revoked — the dead-link sweep's grace clock (see
+  // sweepStaleShares). Nullable: live rows and rows revoked before the
+  // column existed carry null.
+  { table: 'shares', column: 'revoked_at', definition: 'integer' }
 ];
 
 async function migrateColumns(db: Db): Promise<void> {

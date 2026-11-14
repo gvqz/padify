@@ -257,53 +257,62 @@ function runYtSearch(q: string, limit: number): Promise<unknown[]> {
   if (ytSearchRunnerForTests) {
     return ytSearchRunnerForTests(q, limit);
   }
-  return new Promise<unknown[]>((resolve, reject) => {
-    const proc = Bun.spawn(
-      [
-        YTDLP_PATH,
-        '--no-warnings',
-        '--flat-playlist',
-        '--dump-single-json',
-        `ytsearch${limit}:${q}`,
-      ],
-      {
-        stdout: 'pipe',
-        stderr: 'pipe',
-        stdin: 'ignore',
-      },
-    );
+  // The same guard the resolver path runs under (see withResolverSlot):
+  // the module's memory budget assumes at most a couple of yt-dlp
+  // processes at once, and a search IS one of them. Spawning it bare —
+  // while the resolve path queued — let a burst of searches (up to 41s
+  // each, retries included) fan out past the cap on exactly the hosts
+  // the cap protects.
+  return withResolverSlot(
+    () =>
+      new Promise<unknown[]>((resolve, reject) => {
+        const proc = Bun.spawn(
+          [
+            YTDLP_PATH,
+            '--no-warnings',
+            '--flat-playlist',
+            '--dump-single-json',
+            `ytsearch${limit}:${q}`,
+          ],
+          {
+            stdout: 'pipe',
+            stderr: 'pipe',
+            stdin: 'ignore',
+          },
+        );
 
-    let settled = false;
-    const done = (err: Error | null, out: string): void => {
-      if (settled) return;
-      settled = true;
-      if (err) {
-        reject(err);
-        return;
-      }
-      try {
-        const data = JSON.parse(out) as { entries?: unknown };
-        resolve(Array.isArray(data.entries) ? data.entries : []);
-      } catch {
-        reject(new Error('yt-dlp search returned unusable JSON.'));
-      }
-    };
+        let settled = false;
+        const done = (err: Error | null, out: string): void => {
+          if (settled) return;
+          settled = true;
+          if (err) {
+            reject(err);
+            return;
+          }
+          try {
+            const data = JSON.parse(out) as { entries?: unknown };
+            resolve(Array.isArray(data.entries) ? data.entries : []);
+          } catch {
+            reject(new Error('yt-dlp search returned unusable JSON.'));
+          }
+        };
 
-    const timer = setTimeout(() => {
-      proc.kill();
-      done(new Error('yt-dlp search timed out.'), '');
-    }, YTDLP_SEARCH_TIMEOUT_MS);
+        const timer = setTimeout(() => {
+          proc.kill();
+          done(new Error('yt-dlp search timed out.'), '');
+        }, YTDLP_SEARCH_TIMEOUT_MS);
 
-    Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
-      .then(([out, , code]) => {
-        clearTimeout(timer);
-        done(code === 0 ? null : new Error(`yt-dlp search exited with code ${code}.`), out);
-      })
-      .catch((error: unknown) => {
-        clearTimeout(timer);
-        done(error instanceof Error ? error : new Error('yt-dlp search failed.'), '');
-      });
-  });
+        Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
+          .then(([out, , code]) => {
+            clearTimeout(timer);
+            done(code === 0 ? null : new Error(`yt-dlp search exited with code ${code}.`), out);
+          })
+          .catch((error: unknown) => {
+            clearTimeout(timer);
+            done(error instanceof Error ? error : new Error('yt-dlp search failed.'), '');
+          });
+      }),
+  );
 }
 
 /** One retry after a beat — YouTube's soft rate limits are transient. */

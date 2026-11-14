@@ -309,14 +309,17 @@ export async function route(db: Db, request: Request, pathname: string): Promise
     // Known path, wrong method. Auth first (a 401 must not reveal which
     // methods exist), rate the probe, then 405 with the allowed set.
     const needsAuth = samePath.some((r) => r.auth !== 'public');
-    if (needsAuth) {
-      const user = await userForRequest(db, request);
-      if (rateLimited(request, 'api', user?.id)) {
-        return json(request, { error: 'Too many requests — slow down a little.' }, 429);
-      }
-      if (!user && samePath.some((r) => r.auth === 'required')) {
-        return json(request, { error: 'Not signed in.' }, 401);
-      }
+    const user = needsAuth ? await userForRequest(db, request) : null;
+    // Every probe is paced, all-public paths included: without this, a
+    // wrong-method request on a path whose routes are all public (the
+    // share-token route, signin) answered 405 without ever touching a
+    // bucket — a scraper could probe those routes' method sets at line
+    // rate while the real GET/POST stays capped.
+    if (rateLimited(request, 'api', user?.id)) {
+      return json(request, { error: 'Too many requests — slow down a little.' }, 429);
+    }
+    if (needsAuth && !user && samePath.some((r) => r.auth === 'required')) {
+      return json(request, { error: 'Not signed in.' }, 401);
     }
     const allow = [...new Set(samePath.map((r) => r.method))].join(', ');
     return json(

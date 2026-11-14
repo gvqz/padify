@@ -11,6 +11,7 @@
 import { applySchema, createDb } from './db';
 import { sweepMusicCache } from './music';
 import { sweepTrashedNotes } from './notes';
+import { sweepStaleShares } from './shares';
 import { MAX_BODY_BYTES, json, pathPrefixFromEnv, stripPathPrefix } from './http';
 import { route } from './routes';
 import { MAX_ATTACHMENT_BYTES } from './attachments';
@@ -30,35 +31,40 @@ const HOSTNAME = process.env.IP ?? '0.0.0.0';
 
 const db = await createDb();
 await applySchema(db);
-await db.run('delete from sessions where expires_at <= ?', [Date.now()]);
-await sweepMusicCache(db);
-// Trash retention: trashed notes stay restorable for TRASH_RETENTION_MS,
-// then the row goes. Pre-trash tombstones (no deleted_at) sweep on their
-// updated_at — old deletes, long confirmed everywhere.
-const sweptTrash = await sweepTrashedNotes(db);
-if (sweptTrash > 0) {
-  console.log(`[padify-api] trash sweep: retired ${sweptTrash} note(s) past retention`);
+
+/**
+ * The maintenance pass: expired sessions, dead music-cache rows, dead
+ * share links, trash past retention. Runs at boot AND hourly below — the
+ * boot pass alone put every one of these windows on the deploy calendar
+ * (the alwaysdata box runs for weeks between restarts), so each table
+ * just grew until the next deploy.
+ */
+async function sweepAll(): Promise<void> {
+  await db.run('delete from sessions where expires_at <= ?', [Date.now()]);
+  await sweepMusicCache(db);
+  const sweptShares = await sweepStaleShares(db);
+  if (sweptShares > 0) {
+    console.log(`[padify-api] share sweep: pruned ${sweptShares} dead link(s)`);
+  }
+  const sweptTrash = await sweepTrashedNotes(db);
+  if (sweptTrash > 0) {
+    console.log(`[padify-api] trash sweep: retired ${sweptTrash} note(s) past retention`);
+  }
 }
-// …and again periodically: a long-lived server (the alwaysdata box runs
-// for weeks between deploys) used to keep expired trash — and the
-// "30 days, then gone" promise with it — alive until its next restart,
-// purely because the sweep only ran at boot. Hourly is far tighter than
-// the 30-day window needs and cheap enough (one indexed count) to never
-// matter. unref'd so the timer never holds the process open (tests
-// import this module's siblings, and supervisors own the lifecycle).
-const TRASH_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
-const trashSweeper = setInterval(() => {
-  void sweepTrashedNotes(db)
-    .then((swept) => {
-      if (swept > 0) {
-        console.log(`[padify-api] trash sweep: retired ${swept} note(s) past retention`);
-      }
-    })
-    .catch((error) => {
-      console.warn('[padify-api] periodic trash sweep failed — retrying next hour', error);
-    });
-}, TRASH_SWEEP_INTERVAL_MS);
-trashSweeper.unref?.();
+
+await sweepAll();
+// …and again periodically: hourly is far tighter than any of the windows
+// needs ("30 days, then gone", 30-day sessions, a 7-day link grace) and
+// cheap enough — four indexed statements — to never matter. unref'd so
+// the timer never holds the process open (tests import this module's
+// siblings, and supervisors own the lifecycle).
+const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+const sweeper = setInterval(() => {
+  void sweepAll().catch((error) => {
+    console.warn('[padify-api] periodic sweep failed — retrying next hour', error);
+  });
+}, SWEEP_INTERVAL_MS);
+sweeper.unref?.();
 
 // ---------------------------------------------------------------------------
 // Serve + shutdown

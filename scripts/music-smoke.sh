@@ -43,8 +43,6 @@ curl -s -X POST "http://localhost:$PORT/api/auth/signup" -H 'content-type: appli
 echo
 
 echo "--- music_resolutions table exists:"
-bun -e "const db = require('bun:sqlite').default ? new (require('bun:sqlite').Database)('$DB', {readonly:true}) : null;
-" 2>/dev/null || true
 bun -e "
 const { Database } = require('bun:sqlite');
 const db = new Database('$DB', { readonly: true });

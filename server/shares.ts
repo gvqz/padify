@@ -20,6 +20,28 @@ import { asInt, asString, parseNoteType } from './notes';
 const DAY_MS = 86_400_000;
 
 /**
+ * Per-account ceiling on LIVE share bytes. The row cap bounds COUNT, but
+ * each row carries a full denormalized copy of the note — 200 live rows
+ * at the 2 MB body ceiling was 400 MB per account, 16x the notes quota,
+ * on hosts whose whole budget is 128 MB. Refresh updates count against
+ * the same budget, as deltas (shrinking a big row frees room).
+ */
+const SHARE_BYTES_QUOTA = 10 * 1024 * 1024;
+
+/** Measures UTF-8 bytes — the unit the share budget counts in. */
+const utf8 = new TextEncoder();
+
+/** Live-row byte total for the account — the storage the user perceives. */
+async function liveShareBytes(db: Db, userId: string, now: number): Promise<number> {
+  const rows = await db.all(
+    `select coalesce(sum(length(cast(content as blob))), 0) as total
+       from shares where user_id = ? and revoked = 0 and expires_at > ?`,
+    [userId, now]
+  );
+  return Number(rows[0]?.total ?? 0) || 0;
+}
+
+/**
  * Tokens are drawn from a confusable-free alphabet: no 0/O/Q, 1/I/l,
  * 2/Z, 5/S, 6/G, 8/B, 9/g, and no lowercase at all — a link read aloud,
  * scribbled down, screenshotted at small sizes or retyped by a human
@@ -132,8 +154,8 @@ export async function handleSharesPost(db: Db, request: Request, user: SessionUs
         const staleTokens = actives.slice(1).map(row => String(row.token));
         const placeholders = staleTokens.map(() => '?').join(', ');
         await db.run(
-          `update shares set revoked = 1 where user_id = ? and token in (${placeholders})`,
-          [user.id, ...staleTokens]
+          `update shares set revoked = 1, revoked_at = ? where user_id = ? and token in (${placeholders})`,
+          [now, user.id, ...staleTokens]
         );
       }
       return json(request, {
@@ -155,8 +177,9 @@ export async function handleSharesPost(db: Db, request: Request, user: SessionUs
 
   // Per-user cap: shares each carry a full denormalized copy of the note
   // (up to the body limit) — unlimited shares were unlimited storage.
-  // Revoked/expired rows still count until pruned; keeping the cap on
-  // LIVE rows matches what the user perceives as "my links".
+  // Revoked/expired rows leave via the sweep below after a grace window;
+  // keeping the cap on LIVE rows matches what the user perceives as "my
+  // links".
   const MAX_LIVE_SHARES = 200;
   const liveRows = await db.all(
     'select count(*) as live from shares where user_id = ? and revoked = 0 and expires_at > ?',
@@ -170,8 +193,22 @@ export async function handleSharesPost(db: Db, request: Request, user: SessionUs
     );
   }
 
+  // Per-account BYTE budget on top of the row cap: rows alone never
+  // bounded storage, because each row is a full copy of the note. Live
+  // rows only, counted in UTF-8 bytes the way the database holds them —
+  // the character-counted version let a CJK-heavy account stand at 3x
+  // whatever number it thought it was enforcing.
+  const byteNow = Date.now();
+  if ((await liveShareBytes(db, user.id, byteNow)) + utf8.encode(content).length > SHARE_BYTES_QUOTA) {
+    return json(
+      request,
+      { error: 'This account is out of share-link storage — revoke or let expire a few links.' },
+      413
+    );
+  }
+
   const token = createShareToken();
-  const now = Date.now();
+  const now = byteNow;
   const expiresAt = now + days * DAY_MS;
 
   try {
@@ -238,7 +275,7 @@ export async function handleSharesPatch(db: Db, request: Request, user: SessionU
   }
 
   if (token) {
-    await db.run('update shares set revoked = 1 where token = ? and user_id = ?', [token, user.id]);
+    await db.run('update shares set revoked = 1, revoked_at = ? where token = ? and user_id = ?', [Date.now(), token, user.id]);
     return json(request, { ok: true });
   }
 
@@ -252,9 +289,9 @@ export async function handleSharesPatch(db: Db, request: Request, user: SessionU
     : [];
   if (noteIds.length > 0) {
     const placeholders = noteIds.map(() => '?').join(', ');
-    const args: SqlValue[] = [user.id, ...noteIds];
+    const args: SqlValue[] = [Date.now(), user.id, ...noteIds];
     await db.run(
-      `update shares set revoked = 1 where user_id = ? and note_id in (${placeholders})`,
+      `update shares set revoked = 1, revoked_at = ? where user_id = ? and note_id in (${placeholders})`,
       args
     );
     return json(request, { ok: true });
@@ -269,6 +306,7 @@ export async function handleSharesPatch(db: Db, request: Request, user: SessionU
   const refresh = Array.isArray(body.refresh) ? body.refresh.slice(0, MAX_REFRESH) : [];
   const now = Date.now();
   const statements: SqlStatement[] = [];
+  const refreshed: Array<{ noteId: string; bytes: number }> = [];
   for (const entry of refresh) {
     if (!entry || typeof entry !== 'object') {
       continue;
@@ -278,13 +316,41 @@ export async function handleSharesPatch(db: Db, request: Request, user: SessionU
     if (!noteId) {
       continue;
     }
+    const nextContent = asString(item.content ?? item.html);
     statements.push({
       sql: `update shares set title = ?, content = ?, note_type = ?
             where user_id = ? and note_id = ? and revoked = 0 and expires_at > ?`,
-      args: [asString(item.title).slice(0, 200), asString(item.content ?? item.html), parseNoteType(item.note_type), user.id, noteId, now]
+      args: [asString(item.title).slice(0, 200), nextContent, parseNoteType(item.note_type), user.id, noteId, now]
     });
+    refreshed.push({ noteId, bytes: utf8.encode(nextContent).length });
   }
   if (statements.length > 0) {
+    // The refresh path used to grow live rows with no ceiling in sight —
+    // a create-time byte cap alone was theater when every existing row
+    // could be refreshed up to the body limit. The same per-account
+    // budget applies here (see SHARE_BYTES_QUOTA), counted as deltas so
+    // a refresh that shrinks a big row FREES room; a note with no live
+    // row updates nothing and costs nothing.
+    const placeholders = refreshed.map(() => '?').join(', ');
+    const oldRows = await db.all(
+      `select note_id, sum(length(cast(content as blob))) as bytes
+         from shares
+        where user_id = ? and revoked = 0 and expires_at > ? and note_id in (${placeholders})
+        group by note_id`,
+      [user.id, now, ...refreshed.map(entry => entry.noteId)]
+    );
+    const oldById = new Map(oldRows.map(row => [String(row.note_id), Number(row.bytes) || 0]));
+    const delta = refreshed.reduce(
+      (total, entry) => total + entry.bytes - (oldById.get(entry.noteId) ?? 0),
+      0
+    );
+    if ((await liveShareBytes(db, user.id, now)) + delta > SHARE_BYTES_QUOTA) {
+      return json(
+        request,
+        { error: 'This account is out of share-link storage — revoke or let expire a few links.' },
+        413
+      );
+    }
     await db.runMany(statements);
   }
 
@@ -313,4 +379,37 @@ export async function handlePublicShareGet(db: Db, request: Request, token: stri
       expires_at: Number(row.expires_at)
     }
   });
+}
+
+// ---------------------------------------------------------------------------
+// The dead-link sweep
+// ---------------------------------------------------------------------------
+
+/** How long a dead link stays visible in the owner's list before it goes. */
+const SHARE_DEATH_GRACE_MS = 7 * DAY_MS;
+
+/**
+ * Prunes dead share rows — revoked links and expired ones, a grace window
+ * past their death. Every cap above counts LIVE rows only, but the dead
+ * rows themselves used to live forever: an account could cycle 200-live-
+ * row generations (create, revoke, repeat) and keep every generation's
+ * bytes, because nothing in the server ever said `delete from shares`.
+ * The public endpoint already 404s these rows — the grace only keeps a
+ * fresh revoke visible in the owner's list long enough to read its
+ * "revoked" state.
+ *
+ * Revocation time (revoked_at) is the grace clock; rows revoked before
+ * that column existed fall back to their expiry — the best available
+ * "long dead by now" evidence.
+ */
+export async function sweepStaleShares(db: Db, now: number = Date.now()): Promise<number> {
+  const cutoff = now - SHARE_DEATH_GRACE_MS;
+  const retired = await db.all(
+    `delete from shares
+      where (revoked = 0 and expires_at <= ?)
+         or (revoked = 1 and coalesce(revoked_at, expires_at, created_at) < ?)
+      returning token`,
+    [cutoff, cutoff]
+  );
+  return retired.length;
 }

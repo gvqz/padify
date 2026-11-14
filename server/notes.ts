@@ -37,6 +37,9 @@ export function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
 }
 
+/** Measures UTF-8 bytes — the unit every quota and body cap counts in. */
+const utf8 = new TextEncoder();
+
 export function asInt(value: unknown, fallback: number): number {
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) ? Math.round(parsed) : fallback;
@@ -187,21 +190,26 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
   // counts every stored byte, trashed rows included: the trash KEEPS the
   // note's content on purpose (that is what makes it restorable), so a
   // trash full of big notes occupies exactly the storage it looks like.
+  // Both sides count BYTES: SQLite's length() on TEXT counts characters
+  // and JS .length counts UTF-16 code units, so the character-counted
+  // version let a CJK-heavy account stand at 3x the intended cap (4x for
+  // astral text) while every check passed. cast(content as blob) and the
+  // TextEncoder both count what the disk actually holds.
   const NOTE_BYTES_QUOTA = 25 * 1024 * 1024;
   const incomingIds = rows.map((row) => row.id);
   const placeholders = incomingIds.map(() => '?').join(', ');
   const existingRows = await db.all(
-    `select id, coalesce(length(content), 0) as bytes from notes where user_id = ? and id in (${placeholders})`,
+    `select id, coalesce(length(cast(content as blob)), 0) as bytes from notes where user_id = ? and id in (${placeholders})`,
     [user.id, ...incomingIds]
   );
   const existingById = new Map(existingRows.map((row) => [String(row.id), Number(row.bytes) || 0]));
   const incomingBytes = rows.reduce(
-    (total, row) => total + row.content.length,
+    (total, row) => total + utf8.encode(row.content).length,
     0
   );
   const replacedBytes = rows.reduce((total, row) => total + (existingById.get(row.id) ?? 0), 0);
   const totalsRows = await db.all(
-    'select coalesce(sum(length(content)), 0) as total from notes where user_id = ?',
+    'select coalesce(sum(length(cast(content as blob))), 0) as total from notes where user_id = ?',
     [user.id]
   );
   const currentTotal = Number(totalsRows[0]?.total ?? 0) || 0;
@@ -351,17 +359,21 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
  */
 export async function sweepTrashedNotes(db: Db, now: number = Date.now()): Promise<number> {
   const cutoff = now - TRASH_RETENTION_MS;
-  const stale = await db.all(
-    `select id from notes
-     where deleted = 1 and (deleted_at is not null and deleted_at < ?
-                        or deleted_at is null and updated_at < ?)`,
+  // ONE statement, deliberately. The SELECT-then-DELETE this replaces
+  // re-checked nothing at delete time, and on the HTTP backend the two
+  // statements are two round-trips apart — a restore landing in between
+  // (the upsert's delete-race guard accepts it: a strictly newer
+  // updated_at) was hard-deleted by id anyway, taking the just-restored
+  // note with it on every device. The eligibility conditions are
+  // re-evaluated atomically here, and RETURNING hands back what went —
+  // the same pattern the seq reservation and the share expiry update
+  // already use for counted writes.
+  const retired = await db.all(
+    `delete from notes
+      where deleted = 1 and (deleted_at is not null and deleted_at < ?
+                           or deleted_at is null and updated_at < ?)
+      returning id`,
     [cutoff, cutoff]
   );
-  if (stale.length === 0) {
-    return 0;
-  }
-  const ids = stale.map((row) => String(row.id));
-  const placeholders = ids.map(() => '?').join(', ');
-  await db.run(`delete from notes where id in (${placeholders})`, ids);
-  return ids.length;
+  return retired.length;
 }

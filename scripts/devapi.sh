@@ -10,12 +10,18 @@
 #
 # Safe to run repeatedly: an already-answering API is left alone.
 set -u
-cd "$(dirname "$0")/../server"
+# Resolve the repo root BEFORE the cd below: $0 is re-evaluated after the
+# move, and a relative invocation (`bash scripts/devapi.sh` from the repo
+# root) then made the inner `cd scripts/..` fail against server/ — the
+# substitution came back empty and the throwaway DB landed at
+# /.scratch/dev-api.db, where mkdir and Bun both refuse to follow.
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "${REPO_ROOT}/server"
 
 PORT=3041
 # Override with PADIFY_DEV_DB; defaults to a throwaway file inside the
 # repo (gitignored) instead of any one machine's home directory.
-DB_FILE="${PADIFY_DEV_DB:-$(cd "$(dirname "$0")/.." && pwd)/.scratch/dev-api.db}"
+DB_FILE="${PADIFY_DEV_DB:-${REPO_ROOT}/.scratch/dev-api.db}"
 
 alive() {
   curl -s -o /dev/null -m 2 -w '%{http_code}' "http://127.0.0.1:${PORT}/api/me"
