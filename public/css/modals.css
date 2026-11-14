@@ -235,24 +235,11 @@ body.dark #keyboardShortcutsModal kbd {
   }
 }
 
-@media (max-width: 720px) {
-  .statistics-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 360px) {
-  .statistics-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media print {
 
   .dark .toast-popup,
   .toast-popup,
-  .word-count-container,
-  .coffee-icon {
+  .word-count-container {
     display: none !important;
   }
 
@@ -307,11 +294,6 @@ body.dark #keyboardShortcutsModal kbd {
   color: #e2e8f0;
 }
 
-.dark .modal-body .help-block,
-.dark .modal-body .text-muted {
-  color: #a0aec0;
-}
-
 /* ---- form controls ------------------------------------------------------ */
 
 .dark .form-control {
@@ -330,20 +312,10 @@ body.dark #keyboardShortcutsModal kbd {
 .dark .btn-default:hover,
 .dark .btn-default:focus,
 .dark .btn-default:active,
-.dark .btn-default.active,
-.dark .open>.dropdown-toggle.btn-default {
+.dark .btn-default.active {
   background-color: #4a5568;
   border: 1px solid #4a5568;
   color: #ffffff;
-}
-
-.dark .btn-link {
-  color: #63b3ed;
-}
-
-.dark .btn-link:hover,
-.dark .btn-link:focus {
-  color: #90cdf4;
 }
 
 /* ---- keyboard shortcuts keycaps ------------------------------------------ */
@@ -358,40 +330,19 @@ body.dark #keyboardShortcutsModal kbd {
 
 /* ---- preferences toggles + theme switcher --------------------------------- */
 
-.dark .checkbox.checbox-switch label span,
-.dark .checkbox-inline.checbox-switch span {
+.dark .checkbox.checbox-switch label span {
   background-color: #1a2332;
   border-color: #4a5568;
   box-shadow: #4a5568 0px 0px 0px 0px inset;
 }
 
-.dark .checkbox.checbox-switch label>input:checked+span,
-.dark .checkbox-inline.checbox-switch>input:checked+span {
+.dark .checkbox.checbox-switch label>input:checked+span {
   background-color: #63b3ed;
   border-color: #63b3ed;
   box-shadow: rgba(99, 179, 237, 0.45) 0px 0px 0px 8px inset;
 }
 
 /* ---- SweetAlert2 non-toast dialogs ---------------------------------------- */
-
-.dark .swal2-title {
-  color: #e2e8f0;
-}
-
-.dark .swal2-html-container {
-  color: #cbd5e0;
-}
-
-.dark .swal2-cancel {
-  background-color: #1a2332;
-  border: 1px solid #4a5568;
-  color: #e2e8f0;
-}
-
-.dark .swal2-cancel:hover {
-  background-color: #4a5568;
-  color: #ffffff;
-}
 
 /* ---- timer modal ----------------------------------------------------------- */
 
@@ -407,7 +358,6 @@ body.dark #keyboardShortcutsModal kbd {
   background-color: #31708e;
   border-color: #31708e;
 }
-
 
 /* ---- keyboard shortcuts table rows ----------------------------------------- */
 

@@ -6,10 +6,6 @@
  */
 
 /* Volume slider (shared: preferences typewriter volume + ambience mixer) */
-.volume-control {
-  width: 100px;
-}
-
 .volume-slider {
   width: 100%;
   height: 4px;
@@ -98,41 +94,8 @@
   color: white;
 }
 
-.typewriter-switch {
-  gap: 12px;
-}
-
-.typewriter-switch-volume {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
 #typewriterVolumeValue {
   width: 30px;
-}
-
-@media (max-width: 767px) {
-  .preferences-panel .form-group {
-    display: block;
-    padding: 16px 6px;
-  }
-
-  .preferences-panel .control-label {
-    margin-bottom: 12px;
-  }
-
-  .preferences-panel .col-sm-6.col-md-5 {
-    justify-content: flex-start;
-  }
-
-  .typewriter-switch {
-    flex-wrap: wrap;
-  }
-
-  .preferences-panel .checkbox.checbox-switch {
-    flex-direction: row-reverse;
-  }
 }
 
 #keyburstLayer {

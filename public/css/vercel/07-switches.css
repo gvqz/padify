@@ -7,9 +7,7 @@
    -------------------------------------------------------------------------- */
 
 body .checkbox.checbox-switch label span,
-body .checkbox-inline.checbox-switch span,
-body.dark .modal .checkbox.checbox-switch label span,
-body.dark .modal .checkbox-inline.checbox-switch span {
+body.dark .modal .checkbox.checbox-switch label span {
   width: 40px;
   height: 24px;
   border-radius: 999px;
@@ -24,9 +22,7 @@ body.dark .modal .checkbox-inline.checbox-switch span {
 }
 
 body .checkbox.checbox-switch label span::before,
-body .checkbox-inline.checbox-switch span::before,
-body.dark .modal .checkbox.checbox-switch label span::before,
-body.dark .modal .checkbox-inline.checbox-switch span::before {
+body.dark .modal .checkbox.checbox-switch label span::before {
   content: " ";
   display: inline-block;
   width: 18px;
@@ -42,24 +38,19 @@ body.dark .modal .checkbox-inline.checbox-switch span::before {
 }
 
 body .checkbox.checbox-switch label > input:checked + span,
-body .checkbox-inline.checbox-switch > input:checked + span,
-body.dark .modal .checkbox.checbox-switch label > input:checked + span,
-body.dark .modal .checkbox-inline.checbox-switch > input:checked + span {
+body.dark .modal .checkbox.checbox-switch label > input:checked + span {
   background: var(--vz-primary);
   border-color: var(--vz-primary);
   box-shadow: none;
 }
 
 body .checkbox.checbox-switch label > input:checked + span::before,
-body .checkbox-inline.checbox-switch > input:checked + span::before,
-body.dark .modal .checkbox.checbox-switch label > input:checked + span::before,
-body.dark .modal .checkbox-inline.checbox-switch > input:checked + span::before {
+body.dark .modal .checkbox.checbox-switch label > input:checked + span::before {
   left: 18px;
   background: #ffffff;
 }
 
-body.dark .modal .checkbox.checbox-switch label > input:checked + span::before,
-body.dark .modal .checkbox-inline.checbox-switch > input:checked + span::before {
+body.dark .modal .checkbox.checbox-switch label > input:checked + span::before {
   background: var(--vz-primary-fg);
 }
 

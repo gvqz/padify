@@ -52,12 +52,6 @@ input[type=radio]:focus {
   outline-offset: revert;
 }
 
-@media (min-width: 992px) {
-  .col-md-5 {
-    width: 50%;
-  }
-}
-
 #mainContainer {
   position: relative;
 }
@@ -110,13 +104,6 @@ input[type=radio]:focus {
     padding-top: 0px;
   }
 }
-
-.generic-flex {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
 
 /* --------------------------------------------------------------------------
    Standards-mode parity (the doctype round)

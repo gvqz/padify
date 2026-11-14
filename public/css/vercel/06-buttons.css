@@ -45,8 +45,7 @@
 .btn-primary:hover,
 .btn-primary:focus,
 .btn-primary:active,
-.btn-primary.active,
-.open > .dropdown-toggle.btn-primary {
+.btn-primary.active {
   background: var(--vz-primary) !important;
   border: 1px solid var(--vz-primary) !important;
   color: var(--vz-primary-fg) !important;
@@ -61,8 +60,7 @@
 .btn-default:hover,
 .btn-default:focus,
 .btn-default:active,
-.btn-default.active,
-.open > .dropdown-toggle.btn-default {
+.btn-default.active {
   background: var(--vz-bg-elevated) !important;
   border: 1px solid var(--vz-border) !important;
   color: var(--vz-fg) !important;
@@ -72,23 +70,6 @@
 .btn-default:focus {
   background: var(--vz-bg-subtle) !important;
   border-color: var(--vz-border-strong) !important;
-}
-
-.btn-danger,
-.btn-danger:hover,
-.btn-danger:focus,
-.btn-danger:active,
-.btn-danger.active,
-.open > .dropdown-toggle.btn-danger {
-  background: var(--vz-danger) !important;
-  border: 1px solid var(--vz-danger) !important;
-  color: #ffffff !important;
-}
-
-.btn-danger:hover,
-.btn-danger:focus {
-  background: var(--vz-danger-hover) !important;
-  border-color: var(--vz-danger-hover) !important;
 }
 
 .btn[disabled],

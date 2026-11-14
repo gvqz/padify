@@ -6,115 +6,12 @@
  */
 
 /* Switch Light */
-.checkbox.checbox-switch.switch-light label>input:checked+span,
-.checkbox-inline.checbox-switch.switch-light>input:checked+span {
-  background-color: rgb(248, 249, 250);
-  border-color: rgb(248, 249, 250);
-  box-shadow: rgb(248, 249, 250) 0px 0px 0px 8px inset;
-  transition: border 0.4s ease 0s, box-shadow 0.4s ease 0s, background-color 1.2s ease 0s;
-}
-
 /* Switch Dark */
-.checkbox.checbox-switch.switch-dark label>input:checked+span,
-.checkbox-inline.checbox-switch.switch-dark>input:checked+span {
-  background-color: rgb(52, 58, 64);
-  border-color: rgb(52, 58, 64);
-  box-shadow: rgb(52, 58, 64) 0px 0px 0px 8px inset;
-  transition: border 0.4s ease 0s, box-shadow 0.4s ease 0s, background-color 1.2s ease 0s;
-}
-
-.checkbox.checbox-switch.switch-dark label>input:checked:disabled+span,
-.checkbox-inline.checbox-switch.switch-dark>input:checked:disabled+span {
-  background-color: rgb(100, 102, 104);
-  border-color: rgb(100, 102, 104);
-  box-shadow: rgb(100, 102, 104) 0px 0px 0px 8px inset;
-  transition: border 0.4s ease 0s, box-shadow 0.4s ease 0s, background-color 1.2s ease 0s;
-}
-
 /* Switch Success */
-.checkbox.checbox-switch.switch-success label>input:checked+span,
-.checkbox-inline.checbox-switch.switch-success>input:checked+span {
-  background-color: rgb(40, 167, 69);
-  border-color: rgb(40, 167, 69);
-  box-shadow: rgb(40, 167, 69) 0px 0px 0px 8px inset;
-  transition: border 0.4s ease 0s, box-shadow 0.4s ease 0s, background-color 1.2s ease 0s;
-}
-
-.checkbox.checbox-switch.switch-success label>input:checked:disabled+span,
-.checkbox-inline.checbox-switch.switch-success>input:checked:disabled+span {
-  background-color: rgb(153, 217, 168);
-  border-color: rgb(153, 217, 168);
-  box-shadow: rgb(153, 217, 168) 0px 0px 0px 8px inset;
-}
-
 /* Switch Danger */
-.checkbox.checbox-switch.switch-danger label>input:checked+span,
-.checkbox-inline.checbox-switch.switch-danger>input:checked+span {
-  background-color: rgb(200, 35, 51);
-  border-color: rgb(200, 35, 51);
-  box-shadow: rgb(200, 35, 51) 0px 0px 0px 8px inset;
-  transition: border 0.4s ease 0s, box-shadow 0.4s ease 0s, background-color 1.2s ease 0s;
-}
-
-.checkbox.checbox-switch.switch-danger label>input:checked:disabled+span,
-.checkbox-inline.checbox-switch.switch-danger>input:checked:disabled+span {
-  background-color: rgb(216, 119, 129);
-  border-color: rgb(216, 119, 129);
-  box-shadow: rgb(216, 119, 129) 0px 0px 0px 8px inset;
-  transition: border 0.4s ease 0s, box-shadow 0.4s ease 0s, background-color 1.2s ease 0s;
-}
-
 /* Switch Primary */
-.checkbox.checbox-switch.switch-primary label>input:checked+span,
-.checkbox-inline.checbox-switch.switch-primary>input:checked+span {
-  background-color: rgb(0, 105, 217);
-  border-color: rgb(0, 105, 217);
-  box-shadow: rgb(0, 105, 217) 0px 0px 0px 8px inset;
-  transition: border 0.4s ease 0s, box-shadow 0.4s ease 0s, background-color 1.2s ease 0s;
-}
-
-.checkbox.checbox-switch.switch-primary label>input:checked:disabled+span,
-.checkbox-inline.checbox-switch.switch-primary>input:checked:disabled+span {
-  background-color: rgb(109, 163, 221);
-  border-color: rgb(109, 163, 221);
-  box-shadow: rgb(109, 163, 221) 0px 0px 0px 8px inset;
-  transition: border 0.4s ease 0s, box-shadow 0.4s ease 0s, background-color 1.2s ease 0s;
-}
-
 /* Switch Info */
-.checkbox.checbox-switch.switch-info label>input:checked+span,
-.checkbox-inline.checbox-switch.switch-info>input:checked+span {
-  background-color: rgb(23, 162, 184);
-  border-color: rgb(23, 162, 184);
-  box-shadow: rgb(23, 162, 184) 0px 0px 0px 8px inset;
-  transition: border 0.4s ease 0s, box-shadow 0.4s ease 0s, background-color 1.2s ease 0s;
-}
-
-.checkbox.checbox-switch.switch-info label>input:checked:disabled+span,
-.checkbox-inline.checbox-switch.switch-info>input:checked:disabled+span {
-  background-color: rgb(102, 192, 206);
-  border-color: rgb(102, 192, 206);
-  box-shadow: rgb(102, 192, 206) 0px 0px 0px 8px inset;
-  transition: border 0.4s ease 0s, box-shadow 0.4s ease 0s, background-color 1.2s ease 0s;
-}
-
 /* Switch Warning */
-.checkbox.checbox-switch.switch-warning label>input:checked+span,
-.checkbox-inline.checbox-switch.switch-warning>input:checked+span {
-  background-color: rgb(255, 193, 7);
-  border-color: rgb(255, 193, 7);
-  box-shadow: rgb(255, 193, 7) 0px 0px 0px 8px inset;
-  transition: border 0.4s ease 0s, box-shadow 0.4s ease 0s, background-color 1.2s ease 0s;
-}
-
-.checkbox.checbox-switch.switch-warning label>input:checked:disabled+span,
-.checkbox-inline.checbox-switch.switch-warning>input:checked:disabled+span {
-  background-color: rgb(226, 195, 102);
-  border-color: rgb(226, 195, 102);
-  box-shadow: rgb(226, 195, 102) 0px 0px 0px 8px inset;
-  transition: border 0.4s ease 0s, box-shadow 0.4s ease 0s, background-color 1.2s ease 0s;
-}
-
 .monospaced {
   font-family: Consolas, Menlo, Monaco, Lucida Console, Liberation Mono, DejaVu Sans Mono, Bitstream Vera Sans Mono, Courier New, monospace, serif;
 }
@@ -306,5 +203,4 @@
     animation: none;
   }
 }
-
 

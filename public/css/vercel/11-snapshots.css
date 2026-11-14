@@ -1051,10 +1051,6 @@ body.dark .snap-chip.is-danger {
   margin-top: 10px;
 }
 
-.snap-detail-spacer {
-  flex: 1 1 auto;
-}
-
 .snap-act {
   font-family: inherit;
 }

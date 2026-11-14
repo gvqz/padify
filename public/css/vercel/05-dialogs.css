@@ -243,33 +243,5 @@ body .install-app-btn:active {
 }
 
 /* PWA update notice — inverted bar */
-body .sticky-notice {
-  background: var(--vz-primary);
-  color: var(--vz-primary-fg);
-  border-radius: var(--vz-radius);
-  box-shadow: var(--vz-shadow-pill);
-  font-weight: 500;
-  border: none;
-}
-
-body .sticky-notice a {
-  color: var(--vz-primary-fg);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-body.dark .sticky-notice {
-  background: var(--vz-primary);
-  color: var(--vz-primary-fg);
-}
-
-body.dark .sticky-notice a {
-  color: var(--vz-primary-fg);
-}
-
 /* The legacy .dark .sticky-notice keeps a 17px glow + bold — the vercel
    skin's quiet pill look instead. */
-body.dark .sticky-notice {
-  box-shadow: var(--vz-shadow-pill, none);
-  font-weight: 500;
-}

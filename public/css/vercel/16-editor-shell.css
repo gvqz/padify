@@ -1398,17 +1398,6 @@ body.dark #note[data-empty]::before {
   color: var(--vz-fg);
 }
 
-/* The fork badge marking conflicted copies — a quiet amber so a strip full
-   of branches during a two-device race reads as "sync did this on purpose"
-   rather than "my notes duplicated". */
-.tab-strip-copy {
-  color: #b8860b;
-}
-
-body.dark .tab-strip-copy {
-  color: #d9a441;
-}
-
 .tab-strip-close {
   display: inline-flex;
   align-items: center;
