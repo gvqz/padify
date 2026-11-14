@@ -215,7 +215,10 @@ const MD_FORMATS: { id: string; label: string; glyph: string }[] = [
   { id: 'bold', label: 'Bold', glyph: 'B' },
   { id: 'italic', label: 'Italic', glyph: 'I' },
   { id: 'strike', label: 'Strikethrough', glyph: 'S' },
-  { id: 'code', label: 'Inline code', glyph: '</>' },
+  // Entity-escaped on purpose: the markup rides insertAdjacentHTML, and
+  // a bare `</>` is a parse error the HTML parser silently DROPS — the
+  // button rendered blank (only its title named it).
+  { id: 'code', label: 'Inline code', glyph: '&lt;/&gt;' },
 ];
 
 const menuMarkup = `
@@ -1124,7 +1127,10 @@ class ContextMenu {
     return port ? port.redo() : this.execCommand('redo');
   }
 
-  /** Replaces the current selection, keeping the native undo stack intact. */
+  /** Replaces the current selection through the engine — Cut and Delete
+   *  arrive as the empty replacement, and the engine's own deletion keeps
+   *  them on the undo stack (the raw-Range fallback used to mutate the
+   *  DOM behind the engine's back: one Ctrl+Z could not restore them). */
   private replaceSelection(replacement: string): void {
     const editor = this.editor;
     if (!editor) return;
@@ -1132,8 +1138,13 @@ class ContextMenu {
     editor.focus({ preventScroll: true });
 
     const port = getEditorPort();
-    const ok = port ? port.insertText(replacement) : this.execCommand('insertText', replacement);
-    if (!ok) {
+    let ok: boolean;
+    if (replacement === '') {
+      ok = port ? port.deleteSelection() : this.execCommand('delete');
+    } else {
+      ok = port ? port.insertText(replacement) : this.execCommand('insertText', replacement);
+    }
+    if (!ok && replacement !== '') {
       const selection = window.getSelection();
       if (selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);

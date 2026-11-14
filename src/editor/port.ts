@@ -114,6 +114,15 @@ export interface EditorPort {
   insertText(text: string, options?: { selectInserted?: boolean }): boolean;
 
   /**
+   * Deletes the current selection through the engine — the model's twin
+   * of the clipboard's Cut/Delete. insertText('') refuses by contract, so
+   * callers deleting a selection (the context menu's Cut and Delete) come
+   * here: one history group, one undo step, the caret collapses at the
+   * deletion point. Returns false when there is nothing to delete.
+   */
+  deleteSelection(): boolean;
+
+  /**
    * Inserts an HTML fragment at the caret, replacing the selection — the
    * styled-paste path. The fragment is sanitized into the note's own
    * formatting subset first (external fonts, colors and scripts never

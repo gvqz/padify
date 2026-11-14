@@ -1079,7 +1079,7 @@ export function toggleListKind(
     // fallback appended a stray EMPTY checklist at the note's end while
     // the caret jumped into it (issue #61). The same fallback used to
     // fire from inside table cells.
-    current.setAttribute(CHECKLIST_ATTR, 'true');
+    let list: HTMLElement = current;
     if (current.tagName === 'OL') {
       const unordered = document.createElement('ul');
       for (const attr of Array.from(current.attributes)) {
@@ -1091,9 +1091,14 @@ export function toggleListKind(
         unordered.append(current.firstChild);
       }
       current.replaceWith(unordered);
-      current.setAttribute(CHECKLIST_ATTR, 'true');
+      // current is detached now — everything below must speak to the
+      // list that actually lives in the model (the old code set the
+      // attribute and queried items on the detached node: no-ops, and
+      // the items never gained their unchecked default).
+      list = unordered;
     }
-    current.querySelectorAll('li').forEach((li) => {
+    list.setAttribute(CHECKLIST_ATTR, 'true');
+    list.querySelectorAll('li').forEach((li) => {
       if (!li.hasAttribute(CHECKED_ATTR)) {
         li.setAttribute(CHECKED_ATTR, 'false');
       }
@@ -1607,6 +1612,30 @@ function coverageTouchesFully(node: Text): boolean {
   return streamLengthOfNode(node) > 0;
 }
 
+/**
+ * Deletes the covered range — the model-engine twin of the clipboard's
+ * Cut/Delete. splitAtEdges first (so every touched run is fully covered),
+ * then the covered text nodes go. The caller's command pipeline opens the
+ * history group, so one undo restores the deleted words — the raw Range
+ * fallback the context menu used to take here mutated the DOM behind the
+ * engine's back, and Ctrl+Z could not bring the cut text back.
+ */
+export function deleteCoveredRange(model: HTMLElement, coverage: [number, number]): OpResult {
+  if (coverage[1] <= coverage[0]) {
+    return UNCHANGED;
+  }
+  splitAtEdges(model, coverage);
+  const victims = coveredTextNodes(model, coverage);
+  let changed = false;
+  for (const victim of victims) {
+    if (coverageTouchesFully(victim)) {
+      victim.remove();
+      changed = true;
+    }
+  }
+  return changed ? { changed: true } : UNCHANGED;
+}
+
 // ---------------------------------------------------------------------------
 // Dividers and tables.
 // ---------------------------------------------------------------------------
@@ -1652,7 +1681,6 @@ function splitBlockAt(block: HTMLElement, spot: DomSpot): HTMLElement {
     return block;
   }
   const text = spot.node;
-  const parent = text.parentElement ?? block;
   const tail = document.createElement(block.tagName.toLowerCase());
   const style = block.getAttribute('style');
   if (style) {
@@ -1669,16 +1697,16 @@ function splitBlockAt(block: HTMLElement, spot: DomSpot): HTMLElement {
     block.parentElement?.insertBefore(tail, block.nextSibling);
     return tail;
   }
-  // Split the text node: the part after belongs to the tail.
-  const head = text.splitText(spot.raw);
+  // Split the text node: splitText hands back the SECOND half — the
+  // part after the caret, which belongs to the tail.
+  const tailText = text.splitText(spot.raw);
   const toMove: Node[] = [];
-  for (let el: Node | null = head; el; el = el.nextSibling) {
+  for (let el: Node | null = tailText; el; el = el.nextSibling) {
     toMove.push(el);
   }
   for (const el of toMove) {
     tail.append(el);
   }
-  void parent;
   block.parentElement?.insertBefore(tail, block.nextSibling);
   return tail;
 }
@@ -1804,11 +1832,9 @@ export function runTableActionAt(
 function deleteTable(model: HTMLElement, table: HTMLElement): OpResult {
   const next = table.nextElementSibling;
   table.remove();
-  const target = next ?? model;
   const intent: OpIntent = next
     ? { spot: { kind: 'element', node: next, childIndex: 0 } }
     : { preserve: true };
-  void target;
   return { changed: true, intent };
 }
 

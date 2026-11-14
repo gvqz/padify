@@ -52,6 +52,30 @@ describe('htmlToMarkdown', () => {
     );
   });
 
+  it('escapes line heads that would re-parse as block structure', () => {
+    // A hard break followed by structure punctuation is still TEXT —
+    // unescaped, the words after the break come back as a heading, a
+    // list or a table row instead of the text the user typed.
+    expect(htmlToMarkdown('<div>a\n# not a heading</div>')).toBe('a\\\n\\# not a heading');
+    expect(htmlToMarkdown('<div>a\n- not a list</div>')).toBe('a\\\n\\- not a list');
+    expect(htmlToMarkdown('<div>a\n+ not a list</div>')).toBe('a\\\n\\+ not a list');
+    expect(htmlToMarkdown('<div>a\n1. not ordered</div>')).toBe('a\\\n1\\. not ordered');
+    expect(htmlToMarkdown('<div>a\n2) not ordered</div>')).toBe('a\\\n2\\) not ordered');
+    expect(htmlToMarkdown('<div>a\n| not a table</div>')).toBe('a\\\n\\| not a table');
+    // The escape must actually protect the words on the way back:
+    // '# not a heading' stays paragraph text, never an <h1>.
+    const round = markdownToNoteHtml(htmlToMarkdown('<div>a\n# not a heading</div>')).html;
+    expect(round).toContain('# not a heading');
+    expect(round).not.toMatch(/<h[1-6][\s>]/);
+  });
+
+  it('an empty nested list contributes nothing — the outer list stays tight', () => {
+    // An inner list with no surviving LI emits no markdown at all; a
+    // blank line there would loosen the list on re-parse.
+    expect(htmlToMarkdown('<ul><li>a<ul></ul></li><li>b</li></ul>')).toBe('- a\n- b');
+    expect(htmlToMarkdown('<ul><li>a<ol></ol></li></ul>')).toBe('- a');
+  });
+
   it('turns a blank editor note into nothing (no brace soup, no stray breaks)', () => {
     expect(htmlToMarkdown('')).toBe('');
     expect(htmlToMarkdown('<div><br></div>')).toBe('');

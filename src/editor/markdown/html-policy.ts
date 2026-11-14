@@ -119,7 +119,10 @@ const GLOBAL_ATTRS = new Set(['title']);
 const URL_ATTRS = new Set(['href', 'src']);
 
 /** Attributes whose values must be plain non-negative integers. */
-const NUMERIC_ATTRS = new Set(['width', 'height', 'colspan', 'rowspan']);
+const NUMERIC_ATTRS = new Set(['width', 'height', 'colspan', 'rowspan', 'start']);
+
+/** Plain text-valued attributes, escaped on emission (img alt). */
+const TEXT_ATTRS = new Set(['alt']);
 
 /**
  * Boolean-valued attributes: present with any value (or bare), they
@@ -215,7 +218,8 @@ export function sanitizeHtmlTag(raw: string): string | null {
       GLOBAL_ATTRS.has(attrName) ||
       URL_ATTRS.has(attrName) ||
       NUMERIC_ATTRS.has(attrName) ||
-      BOOLEAN_ATTRS.has(attrName)
+      BOOLEAN_ATTRS.has(attrName) ||
+      TEXT_ATTRS.has(attrName)
     ) {
       seen.add(attrName);
       const emitted = emitAttr(attrName, value);

@@ -4151,7 +4151,8 @@ var ALLOWED_TAGS = /* @__PURE__ */ new Set([
 ]);
 var GLOBAL_ATTRS = /* @__PURE__ */ new Set(["title"]);
 var URL_ATTRS = /* @__PURE__ */ new Set(["href", "src"]);
-var NUMERIC_ATTRS = /* @__PURE__ */ new Set(["width", "height", "colspan", "rowspan"]);
+var NUMERIC_ATTRS = /* @__PURE__ */ new Set(["width", "height", "colspan", "rowspan", "start"]);
+var TEXT_ATTRS = /* @__PURE__ */ new Set(["alt"]);
 var BOOLEAN_ATTRS = /* @__PURE__ */ new Set(["open"]);
 function markdownTagAllowed(name) {
   return ALLOWED_TAGS.has(name.toLowerCase());
@@ -4212,7 +4213,7 @@ function sanitizeHtmlTag(raw) {
     if (seen.has(attrName)) {
       continue;
     }
-    if (GLOBAL_ATTRS.has(attrName) || URL_ATTRS.has(attrName) || NUMERIC_ATTRS.has(attrName) || BOOLEAN_ATTRS.has(attrName)) {
+    if (GLOBAL_ATTRS.has(attrName) || URL_ATTRS.has(attrName) || NUMERIC_ATTRS.has(attrName) || BOOLEAN_ATTRS.has(attrName) || TEXT_ATTRS.has(attrName)) {
       seen.add(attrName);
       const emitted = emitAttr(attrName, value);
       if (emitted !== "") {

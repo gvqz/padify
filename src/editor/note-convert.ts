@@ -73,6 +73,35 @@ function escapeMarkdown(text: string): string {
   return text.replace(MD_SPECIALS, (ch) => `\\${ch}`);
 }
 
+/**
+ * Escapes the structure characters that matter only at the HEAD of an
+ * emitted markdown line — bullets, headings, setext underlines, table
+ * pipes, ordered-list markers. Everything else at line start (`>` and
+ * `*` among them) is already covered by the intraline set above. The
+ * backslash lands before the PUNCTUATION: a backslash before a digit is
+ * not an escape in CommonMark, and `\1.` would smuggle a literal
+ * backslash into the words.
+ */
+function escapeMarkdownLineHeads(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => {
+      const ordered = line.match(/^(\d{1,9})([.)])(?=\s|$)/);
+      if (ordered) {
+        return `${ordered[1]}\\${ordered[2]}${line.slice(ordered[0].length)}`;
+      }
+      return line.replace(/^[#=+\-|]/, (ch) => `\\${ch}`);
+    })
+    .join('\n');
+}
+
+/** A text run as markdown: intraline specials escaped, real newlines as
+ *  hard breaks, and every line head that would re-parse as block
+ *  structure escaped with it. */
+function markdownText(text: string): string {
+  return escapeMarkdownLineHeads(escapeMarkdown(text).replace(/\n/g, '\\\n'));
+}
+
 /** A safe inline link target: () and spaces break the (…) form. */
 function markdownHref(href: string): string {
   return /[\s()]/.test(href) ? `<${href.replace(/</g, '%3C').replace(/>/g, '%3E')}>` : href;
@@ -97,8 +126,10 @@ export function htmlToMarkdown(html: string): string {
   const inline = (node: Node): string => {
     if (node.nodeType === Node.TEXT_NODE) {
       // pre-wrap kept real newlines in the stored text; markdown needs an
-      // explicit hard break for the same visual line.
-      return escapeMarkdown(node.nodeValue ?? '').replace(/\n/g, '\\\n');
+      // explicit hard break for the same visual line — and a line that
+      // STARTS with block-structure punctuation gets its head escaped, or
+      // the words re-parse as a heading/list on the way back.
+      return markdownText(node.nodeValue ?? '');
     }
     if (node.nodeType !== Node.ELEMENT_NODE) {
       return '';
@@ -143,7 +174,7 @@ export function htmlToMarkdown(html: string): string {
   /** Block-level emitter — one or more markdown blocks, '\n\n'-joined. */
   const block = (node: Node, depth: number): string => {
     if (node.nodeType === Node.TEXT_NODE) {
-      const text = escapeMarkdown(node.nodeValue ?? '').replace(/\n/g, '\\\n');
+      const text = markdownText(node.nodeValue ?? '');
       return isBlankMarkdown(text) ? '' : text;
     }
     if (node.nodeType !== Node.ELEMENT_NODE) {
@@ -226,9 +257,17 @@ export function htmlToMarkdown(html: string): string {
       }
       const own = parts.join('').replace(/\n/g, ' ');
       lines.push(`${indent}${marker} ${own.trim()}`);
-      lines.push(...nested);
+      // An EMPTY nested list (no LI survived the subset) contributes no
+      // markdown — a blank line here would loosen the list on re-parse.
+      // The old output filter approximated this by dropping blanks that
+      // were not last, so the trailing one leaked as a stray newline.
+      for (const block of nested) {
+        if (block !== '') {
+          lines.push(block);
+        }
+      }
     }
-    return lines.filter((line, at) => line !== '' || at === lines.length - 1).join('\n');
+    return lines.join('\n');
   };
 
   /** A GFM pipe table; the first row (thead's, else the first tr) is the header. */

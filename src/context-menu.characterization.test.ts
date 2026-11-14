@@ -164,6 +164,7 @@ function createFakePort(): EditorPort {
     ensureCaretInside: vi.fn(() => true),
     charBeforeCaret: vi.fn(() => ''),
     insertText: vi.fn(() => true),
+    deleteSelection: vi.fn(() => true),
     insertHtml: vi.fn(() => false),
     applyFormat: vi.fn(() => true),
     queryFormat: vi.fn(() => false),
@@ -620,7 +621,7 @@ describe('actions through the EditorPort', () => {
     expect(vi.mocked(port.redo)).toHaveBeenCalledTimes(1);
   });
 
-  it('delete replaces the selection through port.insertText("")', async () => {
+  it('delete removes the selection through the engine — port.deleteSelection, one undo step', async () => {
     const port = await richNoteSetup();
     selectInNote(0, 5);
     await openMenuAt();
@@ -628,7 +629,11 @@ describe('actions through the EditorPort', () => {
 
     clickItem('[data-action="delete"]');
 
-    expect(vi.mocked(port.insertText)).toHaveBeenCalledWith('');
+    // The engine's own deletion (insertText('') refuses by contract, and
+    // the raw-Range fallback the old path took mutated the DOM behind
+    // the engine's back — Ctrl+Z could not restore the deleted words).
+    expect(vi.mocked(port.deleteSelection)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(port.insertText)).not.toHaveBeenCalledWith('');
     // Delete closes the menu like every other action — it used to leave
     // it hanging open over the text it had just removed.
     expect(menu().hidden).toBe(true);
@@ -792,10 +797,23 @@ describe('clipboard flows', () => {
     // The deletion never blocks on the async clipboard (jsdom has no
     // execCommand copy, so the fallback write fires in the background).
     expect(clipboardWriteText).toHaveBeenCalledWith('world');
-    expect(vi.mocked(port.insertText)).toHaveBeenCalledWith('');
+    // The deletion is the engine's own (see the delete test above) — the
+    // clipboard mirror rides along in the background.
+    expect(vi.mocked(port.deleteSelection)).toHaveBeenCalledTimes(1);
     // Cut closes the menu like every other action — it used to leave it
     // hanging open after the deletion.
     expect(menu().hidden).toBe(true);
+  });
+
+  it('the markdown format row renders its glyphs — inline code is not blank', async () => {
+    await richNoteSetup();
+    selectInNote(0, 5);
+    await openMenuAt();
+
+    // `</>` is a parse error the HTML parser silently drops — the button
+    // rendered blank until the glyph was entity-escaped.
+    const code = menu().querySelector<HTMLElement>('.padify-fmt-code span[aria-hidden="true"]');
+    expect(code?.textContent).toBe('</>');
   });
 });
 

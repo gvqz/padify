@@ -412,8 +412,13 @@ function wireLinkPopover(): void {
   });
   elements.linkOpen?.addEventListener('click', () => {
     const href = chipHref();
-    if (href) {
-      window.open(href, '_blank', 'noopener,noreferrer');
+    // The same gate every other path enforces (applyLink below, the
+    // renderer, storage): the chip's href is raw note source, and a
+    // javascript:/data: scheme the renderer would refuse must not slip
+    // through the one button that hands a URL to the browser.
+    const safe = href ? sanitizeHref(href) : null;
+    if (safe) {
+      window.open(safe, '_blank', 'noopener,noreferrer');
     }
     closeLinkPopover();
   });

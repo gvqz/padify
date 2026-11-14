@@ -28,7 +28,7 @@ import type {
   ScriptType,
   TableCellContext,
 } from './port';
-import { rgbStringToHex } from './color-picker';
+import { normalizeHex, rgbStringToHex } from './color-picker';
 import { ensureMathId, MATH_ID_ATTR, renderMathIn } from './math';
 import {
   parse,
@@ -57,6 +57,7 @@ import {
   clearStyledCaretRun,
   exitPreBlock,
   flipChecklistItem,
+  deleteCoveredRange,
   insertPlainText,
   nestListItem,
   plantLink,
@@ -688,6 +689,37 @@ export class ModelPort implements EditorPort {
   }
 
   /**
+   * The engine's own deletion of the current selection (see the port
+   * interface): one history group, one undo step, the caret collapses at
+   * the deletion point. The context menu's Cut and Delete used to fall
+   * into a raw Range fallback here (insertText('') refuses by contract),
+   * mutating the DOM behind the engine's back — Ctrl+Z could not restore
+   * the cut words.
+   */
+  deleteSelection(): boolean {
+    const selection = captureOffsets(this.element);
+    if (!selection) {
+      return false;
+    }
+    const coverage = ordered(selection);
+    if (coverage[1] <= coverage[0]) {
+      return false;
+    }
+    const done = this.command((model, covered) => {
+      const result = deleteCoveredRange(model, covered);
+      // Collapse at the deletion point — a zero-length range places the
+      // caret there (see applyPlacement).
+      return result.changed ? { ...result, intent: { range: [covered[0], covered[0]] } } : result;
+    });
+    if (done) {
+      // The emptied-note skeleton rule the native delete path follows
+      // (same normalization, inside the group the command just closed).
+      this.normalizeAfterDelete();
+    }
+    return done;
+  }
+
+  /**
    * The styled-paste path: an HTML fragment goes in at the caret after a
    * pass through the note's own sanitizer — the formatting subset (bold,
    * italic, lists, links…) survives, external junk never enters. The
@@ -957,7 +989,9 @@ export class ModelPort implements EditorPort {
     if (!run) {
       return null;
     }
-    return rgbStringToHex(run);
+    // The engine itself writes hex (setInlineStyle stores the picked
+    // #rrggbb); rgb(...) is the legacy execCommand dialect — accept both.
+    return normalizeHex(run) ?? rgbStringToHex(run);
   }
 
   setHighlight(color: string): boolean {
@@ -1922,9 +1956,13 @@ export class ModelPort implements EditorPort {
     }
     const node = selection.getRangeAt(0).startContainer;
     let el: HTMLElement | null = node instanceof HTMLElement ? node : node.parentElement;
+    // Anchored: `color:` must open the style or follow a declaration —
+    // an unanchored match also hit the tail of `background-color:` and
+    // reported the highlight's hex as the text ink.
+    const decl = new RegExp(`(?:^|;\\s*)${prop}:\\s*([^;]+)`);
     while (el && el !== this.element) {
       if (el.tagName === 'SPAN') {
-        const value = el.getAttribute('style')?.match(new RegExp(`${prop}:\\s*([^;]+)`))?.[1];
+        const value = el.getAttribute('style')?.match(decl)?.[1];
         if (value) {
           return value.trim();
         }

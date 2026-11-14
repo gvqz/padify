@@ -173,6 +173,18 @@ describe('lists and checklists', () => {
     expect(out(model)).toBe('<ol><li>done</li></ol>');
   });
 
+  it('numbered -> checklist converts in place, on the list that lives in the model', () => {
+    const model = modelOf('<ol start="3"><li>late one</li><li>late two</li></ol>');
+    toggleListKind(model, [0, 6], 'checklist');
+    // The OL branch detaches `current` when the UL replaces it — the
+    // attribute and the per-item unchecked default must land on the
+    // replacement, not on the detached node (where they were no-ops and
+    // the items rendered stateless).
+    expect(out(model)).toBe(
+      '<ul data-rich-checklist="true"><li data-checked="false">late one</li><li data-checked="false">late two</li></ul>',
+    );
+  });
+
   it('checklist OFF lifts items out as paragraphs', () => {
     const model = modelOf(
       '<ul data-rich-checklist="true"><li data-checked="false">a</li><li data-checked="false">b</li></ul>',

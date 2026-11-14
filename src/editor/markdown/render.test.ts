@@ -119,6 +119,24 @@ describe('renderMarkdownToHtml — paragraphs & text', () => {
     );
   });
 
+  it('raw HTML: the rebuild keeps img alt and ol start (the walk already promised them)', () => {
+    // markdownHtmlAttrAllowed has always listed these — the policy just
+    // never emitted them, so every pasted image lost its alt text and
+    // every pasted numbered list restarted at 1.
+    expect(renderMarkdownToHtml('<img src=x alt="a red door">')).toBe(
+      '<img src="x" alt="a red door" loading="lazy" decoding="async" referrerpolicy="no-referrer">',
+    );
+    expect(renderMarkdownToHtml('<ol start="3"><li>late</li></ol>')).toBe(
+      '<ol start="3"><li>late</li></ol>',
+    );
+    // alt is TEXT: it is entity-escaped on emission, never markup.
+    expect(renderMarkdownToHtml('<img src=x alt="a &quot;quoted&quot; <b>bold</b>">')).toBe(
+      '<img src="x" alt="a &quot;quoted&quot; &lt;b&gt;bold&lt;/b&gt;" loading="lazy" decoding="async" referrerpolicy="no-referrer">',
+    );
+    // start is NUMERIC: anything but digits drops the attribute.
+    expect(renderMarkdownToHtml('<ol start="3,5"><li>x</li></ol>')).toBe('<ol><li>x</li></ol>');
+  });
+
   it('CRLF input behaves like LF', () => {
     expect(renderMarkdownToHtml('a\r\n\r\nb')).toBe('<p>a</p>\n<p>b</p>');
   });

@@ -27,7 +27,7 @@
 import 'fake-indexeddb/auto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   MarkdownNoteSurface,
@@ -41,6 +41,7 @@ import {
 } from './surface';
 import {
   initMarkdownToolbar,
+  openMarkdownLinkPopover,
   resetMarkdownToolbarForTests,
   runMarkdownToolbarAction,
 } from './toolbar';
@@ -426,6 +427,42 @@ describe('the toolbar (real shell markup)', () => {
     expect(runMarkdownToolbarAction('bold')).toBe(true);
     expect(surface.capture(host())).toBe('plain **words**');
     expect(document.activeElement).toBe(ta);
+  });
+
+  it('the link chip hands the href to the browser only through the scheme gate', () => {
+    // The chip's href is raw note source — everything else that consumes
+    // it (applyLink, the renderer, storage) runs it through sanitizeHref;
+    // the Open button must not be the one path that skips the gate.
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    try {
+      const ta = source();
+      ta.focus();
+      ta.value = 'see [docs](https://example.dev/guide) now';
+      ta.setSelectionRange(7, 7); // inside the link span
+      openMarkdownLinkPopover();
+      const popover = document.getElementById('markdownLinkPopover')!;
+      expect(popover.hidden).toBe(false);
+
+      document.getElementById('markdownLinkOpen')!.click();
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(open).toHaveBeenCalledWith(
+        'https://example.dev/guide',
+        '_blank',
+        'noopener,noreferrer',
+      );
+      expect(popover.hidden).toBe(true);
+
+      // A hostile scheme typed in the source never reaches window.open.
+      ta.value = 'see [trap](javascript:alert(1)) now';
+      ta.setSelectionRange(7, 7);
+      openMarkdownLinkPopover();
+      expect(popover.hidden).toBe(false);
+      document.getElementById('markdownLinkOpen')!.click();
+      expect(open).toHaveBeenCalledTimes(1); // still exactly one — refused
+      expect(popover.hidden).toBe(true);
+    } finally {
+      open.mockRestore();
+    }
   });
 
   it('the pressed states follow the caret through the selection state', () => {

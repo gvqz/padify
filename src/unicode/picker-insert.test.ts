@@ -77,6 +77,7 @@ function fakePort(): EditorPort {
     ensureCaretInside: () => true,
     charBeforeCaret: () => '',
     insertText: vi.fn(() => true),
+    deleteSelection: vi.fn(() => true),
     insertHtml: emptyAnswer,
     applyFormat: emptyAnswer,
     queryFormat: emptyAnswer,

@@ -167,6 +167,35 @@ describe('the command pipeline', () => {
     expect(port.queryFormat('bold')).toBe(false);
   });
 
+  it('deleteSelection removes the covered words — and one undo restores them', () => {
+    const { port, surface } = makePort('hello world');
+    selectRange(surface, 6, 11); // "world"
+    expect(port.deleteSelection()).toBe(true);
+    expect(surface.innerHTML).toBe('hello ');
+    expect(caretStreamOffset(surface)).toBe(6); // collapsed at the deletion point
+    // ONE undo step brings the words back — the raw Range fallback the
+    // context menu's Cut/Delete used to take was invisible to the
+    // history, and Ctrl+Z could not restore the cut text.
+    expect(port.undo()).toBe(true);
+    expect(surface.innerHTML).toBe('hello world');
+  });
+
+  it('deleteSelection spans blocks; each block keeps its surviving words', () => {
+    const { port, surface } = makePort('<p>one two</p><p>three four</p>');
+    selectRange(surface, 4, 12); // "two" + "three"
+    expect(port.deleteSelection()).toBe(true);
+    expect(surface.innerHTML).toBe('<p>one </p><p> four</p>');
+    expect(port.undo()).toBe(true);
+    expect(surface.innerHTML).toBe('<p>one two</p><p>three four</p>');
+  });
+
+  it('deleteSelection refuses a collapsed caret and deletes nothing', () => {
+    const { port, surface } = makePort('hello');
+    caretAt(surface, 2);
+    expect(port.deleteSelection()).toBe(false);
+    expect(surface.innerHTML).toBe('hello');
+  });
+
   it('getHtml is canonical and a fixed point of the sanitizer', () => {
     const { port, surface } = makePort();
     port.renderHtml('');
@@ -712,6 +741,22 @@ describe('the styled caret run', () => {
     selectRange(surface, 0, 9);
     port.setHighlight('transparent');
     expect(surface.innerHTML).toBe('glow zone');
+  });
+
+  it('queryTextColor reads ink, never the highlight under the same caret', () => {
+    const { port, surface } = makePort('glow zone');
+    selectRange(surface, 0, 9);
+    port.setHighlight('#d0ebff');
+    caretAt(surface, 2); // inside the highlighted run
+    // `color:` must be read anchored at a declaration head — the tail of
+    // `background-color:` used to satisfy an unanchored match and the
+    // picker prefilled with the highlight's hex as if it were ink.
+    expect(port.queryTextColor()).toBeNull();
+
+    selectRange(surface, 0, 4);
+    expect(port.setTextColor('#123456')).toBe(true);
+    caretAt(surface, 2);
+    expect(port.queryTextColor()).toBe('#123456');
   });
 });
 
