@@ -80,6 +80,34 @@ describe('sheetDayKey / sheetDayLabel — the local calendar day', () => {
     expect(sheetDayLabel(new Date(2024, 11, 31, 10, 0).getTime(), now)).toBe('December 31, 2024');
   });
 
+  // DST edges, forced into America/New_York (Node re-reads TZ per
+  // conversion): the labels run deterministically on UTC runners too,
+  // where the 25-hour day does not exist and old and new code agree.
+  // Nov 2 2025 is the US fall-back day; Mar 9 2025 the spring-forward.
+  it('Yesterday survives the DST fall-back — calendar days, not 24-hour blocks', () => {
+    process.env.TZ = 'America/New_York';
+    try {
+      // Noon the day after the 25-hour day; an entry from 00:30 of the
+      // long day is one calendar day back. The flat startOfToday - 24 h
+      // landed the cutoff at 01:00 (an hour late) and handed the entry a
+      // bare date instead of its label.
+      const now = new Date(2025, 10, 3, 12, 0).getTime();
+      expect(sheetDayLabel(new Date(2025, 10, 2, 0, 30).getTime(), now)).toBe('Yesterday');
+    } finally {
+      delete process.env.TZ;
+    }
+  });
+
+  it('Yesterday survives the DST spring-forward', () => {
+    process.env.TZ = 'America/New_York';
+    try {
+      const now = new Date(2025, 2, 10, 12, 0).getTime();
+      expect(sheetDayLabel(new Date(2025, 2, 9, 0, 30).getTime(), now)).toBe('Yesterday');
+    } finally {
+      delete process.env.TZ;
+    }
+  });
+
   it('the clock is a short time string with digits', () => {
     expect(formatSheetClock(now)).toMatch(/^\d{1,2}:\d{2}/);
   });

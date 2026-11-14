@@ -244,7 +244,7 @@ export class TaskListPageController {
   private completedTasks(): Task[] {
     return this.model.tasks
       .filter((task) => task.completed)
-      .sort((a, b) => (a.completedAt < b.completedAt ? 1 : -1));
+      .sort((a, b) => b.completedAt.localeCompare(a.completedAt));
   }
 
   private taskById(id: string): Task | null {

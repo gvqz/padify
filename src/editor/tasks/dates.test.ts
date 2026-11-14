@@ -3,7 +3,7 @@
  * Every test passes `now` explicitly: nothing here may read the clock.
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   dateAndTimeToIso,
   daysAway,
@@ -13,6 +13,7 @@ import {
   isOverdue,
   isToday,
   isTomorrow,
+  isYesterday,
   isoToDateAndTime,
   isoToLocalInput,
   localInputToIso,
@@ -140,5 +141,44 @@ describe('quick presets', () => {
     const next = nextWeekendEvening(satAfternoon);
     expect(next.getDate()).toBe(22);
     expect(next.getTime()).toBeGreaterThan(satAfternoon.getTime());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DST edges — calendar days, never flat 24-hour blocks.
+// ---------------------------------------------------------------------------
+
+describe('DST transitions (America/New_York, forced)', () => {
+  // Node re-reads TZ per conversion, so the describe can force a
+  // DST-observing zone: the tests run deterministically on UTC runners
+  // too, where the 25-hour day does not exist and old and new code agree.
+  const originalTz = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = 'America/New_York';
+  });
+  afterAll(() => {
+    process.env.TZ = originalTz;
+  });
+
+  it('the Tomorrow preset stays tomorrow across the 25-hour fall-back day', () => {
+    // Nov 2 2025, 00:30 in New York: +24 h lands at 23:30 the SAME
+    // calendar day, so the flat-millisecond version filed "Tomorrow"
+    // for today.
+    const now = new Date(2025, 10, 2, 0, 30);
+    expect(quickPresetIso('tomorrow', now, '09:00')).toBe(iso(2025, 11, 3, 9, 0));
+  });
+
+  it('isTomorrow / isYesterday on the 25-hour day', () => {
+    const now = new Date(2025, 10, 2, 0, 30);
+    expect(isTomorrow(iso(2025, 11, 3), now)).toBe(true);
+    // A task due TODAY must not read as tomorrow.
+    expect(isTomorrow(iso(2025, 11, 2), now)).toBe(false);
+    expect(isYesterday(iso(2025, 11, 1), now)).toBe(true);
+    expect(isYesterday(iso(2025, 11, 2), now)).toBe(false);
+  });
+
+  it('nextWeek crosses the transition by calendar days', () => {
+    const now = new Date(2025, 10, 2, 0, 30);
+    expect(quickPresetIso('nextWeek', now, '08:00')).toBe(iso(2025, 11, 9, 8, 0));
   });
 });

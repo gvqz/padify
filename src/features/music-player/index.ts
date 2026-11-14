@@ -852,11 +852,11 @@ class MusicPlayerApp {
   // Rows (shared by every list)
   // ========================================================================
 
-  private renderTrackRows(
-    container: HTMLElement,
-    tracks: SpotifyTrack[],
-    queueId = `q-${Math.random().toString(36).slice(2, 8)}`,
-  ): void {
+  private renderTrackRows(container: HTMLElement, tracks: SpotifyTrack[], queueId: string): void {
+    // queueId is required on purpose: the random default this replaces
+    // minted a fresh key per call, and any caller that relied on it
+    // stored a new queues entry on every render without ever releasing
+    // the old one — an unbounded map hiding behind a "convenience".
     const withArt: SpotifyTrack[] = tracks.filter((t) => t && t.uri);
     this.queues.set(queueId, withArt);
     container.dataset.queueId = queueId;

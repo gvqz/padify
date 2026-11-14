@@ -39,12 +39,19 @@ export function isToday(iso: string, now: Date): boolean {
 
 export function isTomorrow(iso: string, now: Date): boolean {
   const date = parseWhen(iso);
-  return date !== null && isSameDay(date, new Date(now.getTime() + MS_PER_DAY));
+  if (date === null) return false;
+  // Calendar-day arithmetic, not +24 h — see quickPresetIso.
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return isSameDay(date, tomorrow);
 }
 
 export function isYesterday(iso: string, now: Date): boolean {
   const date = parseWhen(iso);
-  return date !== null && isSameDay(date, new Date(now.getTime() - MS_PER_DAY));
+  if (date === null) return false;
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  return isSameDay(date, yesterday);
 }
 
 /** Whole days between a due date and `now` (negative = overdue). */
@@ -223,11 +230,21 @@ export function quickPresetIso(
   switch (preset) {
     case 'today':
       return dateAndTimeToIso(dateToInput(now), timeValue);
-    case 'tomorrow':
-      return dateAndTimeToIso(dateToInput(new Date(now.getTime() + MS_PER_DAY)), timeValue);
+    case 'tomorrow': {
+      // Calendar-day arithmetic, not +24 h: on the 25-hour fall-back day
+      // a flat day of milliseconds can land the chip's "Tomorrow" on
+      // TODAY (00:30 + 24 h = 23:30 the same calendar day). setDate
+      // crosses month and year boundaries and DST correctly.
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return dateAndTimeToIso(dateToInput(tomorrow), timeValue);
+    }
     case 'weekend':
       return nextWeekendEvening(now).toISOString();
-    case 'nextWeek':
-      return dateAndTimeToIso(dateToInput(new Date(now.getTime() + 7 * MS_PER_DAY)), timeValue);
+    case 'nextWeek': {
+      const nextWeek = new Date(now);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      return dateAndTimeToIso(dateToInput(nextWeek), timeValue);
+    }
   }
 }

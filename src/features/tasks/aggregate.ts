@@ -195,7 +195,10 @@ class TaskNotesAggregate {
         (task.completed ? completed : active).push(row);
       }
     }
-    completed.sort((a, b) => (a.task.completedAt < b.task.completedAt ? 1 : -1));
+    // Descending by completion time. A valid ordering (localeCompare
+    // returns 0 on equals — the ternary this replaces never did, an
+    // inconsistent comparator with engine-dependent results).
+    completed.sort((a, b) => b.task.completedAt.localeCompare(a.task.completedAt));
 
     switch (view) {
       case 'today': {
@@ -286,7 +289,7 @@ class TaskNotesAggregate {
           .map((task) => ({ task, note: ref })),
       );
     }
-    completed.sort((a, b) => (a.task.completedAt < b.task.completedAt ? 1 : -1));
+    completed.sort((a, b) => b.task.completedAt.localeCompare(a.task.completedAt));
     return { sections, completed };
   }
 

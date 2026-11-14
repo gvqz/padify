@@ -44,39 +44,49 @@ let dataPromise: Promise<LoadedData> | null = null;
 
 function loadData(): Promise<LoadedData> {
   if (!dataPromise) {
-    dataPromise = import('./symbols-data').then((mod) => {
-      const symbols = mod.UNICODE_SYMBOLS;
-      const byChar = new Map<string, UnicodeSymbol>();
-      const categoryLabels: string[] = [];
-      const categoryGlyphs = new Map<string, string>();
-      const categoryCounts = new Map<string, number>();
+    // Cache the SUCCESS, never the failure: a rejected promise cached
+    // here made the error state's retry button replay the same rejection
+    // forever — one offline moment at first open killed the picker for
+    // the whole session, connectivity or not. Clearing the cache on the
+    // way out means every retry performs a fresh import().
+    dataPromise = import('./symbols-data')
+      .then((mod) => {
+        const symbols = mod.UNICODE_SYMBOLS;
+        const byChar = new Map<string, UnicodeSymbol>();
+        const categoryLabels: string[] = [];
+        const categoryGlyphs = new Map<string, string>();
+        const categoryCounts = new Map<string, number>();
 
-      for (const symbol of symbols) {
-        byChar.set(symbol.char, symbol);
-        if (!categoryCounts.has(symbol.category)) {
-          categoryLabels.push(symbol.category);
-          categoryGlyphs.set(symbol.category, symbol.char);
-          categoryCounts.set(symbol.category, 0);
+        for (const symbol of symbols) {
+          byChar.set(symbol.char, symbol);
+          if (!categoryCounts.has(symbol.category)) {
+            categoryLabels.push(symbol.category);
+            categoryGlyphs.set(symbol.category, symbol.char);
+            categoryCounts.set(symbol.category, 0);
+          }
+          categoryCounts.set(symbol.category, (categoryCounts.get(symbol.category) ?? 0) + 1);
         }
-        categoryCounts.set(symbol.category, (categoryCounts.get(symbol.category) ?? 0) + 1);
-      }
 
-      const categories: CategoryInfo[] = categoryLabels.map((label) => ({
-        label,
-        glyph: categoryGlyphs.get(label) ?? '•',
-        count: categoryCounts.get(label) ?? 0,
-      }));
+        const categories: CategoryInfo[] = categoryLabels.map((label) => ({
+          label,
+          glyph: categoryGlyphs.get(label) ?? '•',
+          count: categoryCounts.get(label) ?? 0,
+        }));
 
-      // Lowercased so search is case-insensitive end to end: the query is
-      // lowercased by normalizeQuery, so the haystack must meet it there.
-      // Without this, the placeholder's own suggestion (“superscript”)
-      // found nothing — names are Title Case (“Superscript two”).
-      const haystacks = symbols.map((symbol) =>
-        `${symbol.char} ${symbol.name} ${symbol.category} u+${symbol.codepoint.toString(16)}`.toLowerCase(),
-      );
+        // Lowercased so search is case-insensitive end to end: the query is
+        // lowercased by normalizeQuery, so the haystack must meet it there.
+        // Without this, the placeholder's own suggestion (“superscript”)
+        // found nothing — names are Title Case (“Superscript two”).
+        const haystacks = symbols.map((symbol) =>
+          `${symbol.char} ${symbol.name} ${symbol.category} u+${symbol.codepoint.toString(16)}`.toLowerCase(),
+        );
 
-      return { symbols, categories, byChar, haystacks, totalCount: symbols.length };
-    });
+        return { symbols, categories, byChar, haystacks, totalCount: symbols.length };
+      })
+      .catch((error: unknown) => {
+        dataPromise = null;
+        throw error;
+      });
   }
   return dataPromise;
 }

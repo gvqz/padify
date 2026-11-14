@@ -56,6 +56,20 @@ let breakReminderState = loadBreakReminderState();
 let breakReminderCountdownTimer: ReturnType<typeof setInterval> | null = null;
 let breakRemindersEnabled = false;
 
+/** The pending close-cleanup (the 300 ms class-strip + re-dock). */
+let breakPopupCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Cancels a pending close-cleanup — re-entry during the fade (Take break
+ *  clicked inside the 300 ms window after a Snooze/Dismiss) must not have
+ *  its classes stripped and its card re-docked out from under a countdown
+ *  that just went live. The cancelVoiceBarExit pattern (voice.ts). */
+function cancelBreakPopupCleanup(): void {
+  if (breakPopupCleanupTimer) {
+    clearTimeout(breakPopupCleanupTimer);
+    breakPopupCleanupTimer = null;
+  }
+}
+
 /** Dev/test seam — the e2e suite lowers the threshold so the flow can be
  *  exercised inside seconds instead of half an hour. Dev builds only. */
 function setBreakThresholdForTests(ms: number): void {
@@ -107,7 +121,9 @@ function closeBreakReminderPopup(): void {
   const $breakPopup = $('#breakReminderPopup');
   $breakPopup.addClass('hide');
   $('#breakVeil').removeClass('active');
-  setTimeout(function () {
+  cancelBreakPopupCleanup();
+  breakPopupCleanupTimer = setTimeout(function () {
+    breakPopupCleanupTimer = null;
     $breakPopup.removeClass('show hide break-active ' + BREAK_FULLSCREEN_CLASS);
     $('#breakReminderActions').show();
     $('#takeBreakAction').text('Take break');
@@ -306,6 +322,10 @@ function formatBreakCountdown(msRemaining: number): string {
 }
 
 function startBreakCountdown(): void {
+  // A cleanup left over from the fade this countdown interrupts would
+  // strip 'show'/'break-active' off the live countdown and re-dock the
+  // card mid-countdown — an invisible timer ticking behind a stuck veil.
+  cancelBreakPopupCleanup();
   const breakEndsAt = Date.now() + breakReminderConfig.breakDurationMs;
 
   breakReminderState.snoozedUntil = breakEndsAt;

@@ -114,6 +114,8 @@ const NO_SPEECH_STRIKE_LIMIT = 2;
 const VOICE_BAR_EXIT_MS = 240;
 
 let voiceBarExitTimer: ReturnType<typeof setTimeout> | null = null;
+/** Detaches the exit's animationend listener — see hideVoiceBar. */
+let voiceBarExitDetach: (() => void) | null = null;
 
 function voiceBarElement(): HTMLElement | null {
   const el = voiceBar().get(0);
@@ -127,6 +129,11 @@ function cancelVoiceBarExit(): void {
     clearTimeout(voiceBarExitTimer);
     voiceBarExitTimer = null;
   }
+  // The pending listener must go with the timer: animationend bubbles,
+  // and a stray listener from a cancelled exit used to consume the next
+  // text-swap's end event and hide the freshly re-shown bar.
+  voiceBarExitDetach?.();
+  voiceBarExitDetach = null;
   const el = voiceBarElement();
   if (el) {
     el.classList.remove('closing');
@@ -141,19 +148,31 @@ function hideVoiceBar(): void {
   }
   cancelVoiceBarExit();
   el.classList.add('closing');
-  const finish = (): void => {
+  const settle = (): void => {
     if (voiceBarExitTimer) {
       clearTimeout(voiceBarExitTimer);
       voiceBarExitTimer = null;
     }
+    voiceBarExitDetach?.();
+    voiceBarExitDetach = null;
     el.classList.remove('closing');
     voiceBar().attr('hidden', 'hidden');
   };
-  el.addEventListener('animationend', finish, { once: true });
+  // animationend BUBBLES: the bar's own text child runs its swap
+  // keyframes on every interim result, and its end event used to fire
+  // this listener early — the bar snapped away mid-exit instead of
+  // fading. Only the bar's own animation settles it; the timer stays
+  // the fallback for every swallowed-event case.
+  const onAnimationEnd = (event: Event): void => {
+    if (event.target === el) {
+      settle();
+    }
+  };
+  el.addEventListener('animationend', onAnimationEnd);
+  voiceBarExitDetach = () => el.removeEventListener('animationend', onAnimationEnd);
   voiceBarExitTimer = setTimeout(() => {
     voiceBarExitTimer = null;
-    el.removeEventListener('animationend', finish);
-    finish();
+    settle();
   }, VOICE_BAR_EXIT_MS);
 }
 

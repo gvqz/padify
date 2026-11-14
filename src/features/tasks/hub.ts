@@ -565,8 +565,17 @@ function toggleComplete(id: string): void {
     taskEl.classList.add('is-done');
     taskEl.querySelector('.tk-check')?.setAttribute('aria-checked', 'true');
   }
-  // Let the row sink before the view repaints around it.
-  window.setTimeout(renderHub, 460);
+  // Let the row sink before the view repaints around it — but re-check
+  // the guard WHEN the timer fires, exactly like the change listener
+  // above: an inline editor opened inside the 460 ms sink window used
+  // to be rebuilt out from under (removing the focused node fires no
+  // focusout, so closeEditor(true) never committed — the typed title
+  // and notes simply vanished).
+  window.setTimeout(() => {
+    if (editingId === null && whenTarget === null) {
+      renderHub();
+    }
+  }, 460);
 }
 
 function toggleEditor(id: string): void {

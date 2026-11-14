@@ -393,6 +393,10 @@ export function initTypingEffects(
     flash.style.setProperty('--burst-color', randomFrom(['#ffd166', '#ff9f6b', '#fff3b0']));
     layer.appendChild(flash);
     flash.addEventListener('animationend', () => flash.remove());
+    // The failsafe every particle below gets (see spawnParticle): a
+    // disabled-mid-flight animation never fires animationend, and these
+    // spans then accumulate in the layer for the rest of the session.
+    setTimeout(() => flash.remove(), 2_000);
 
     // …then the sparks fly UP AND OUT ONLY — the old full-circle fan let
     // half the sparks arc down onto the fresh glyphs at full opacity. The

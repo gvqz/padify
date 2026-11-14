@@ -93,11 +93,20 @@ export function sheetDayLabel(timestamp: number, now: number = Date.now()): stri
     nowDate.getMonth(),
     nowDate.getDate(),
   ).getTime();
-  const dayMs = 24 * 60 * 60 * 1000;
+  // Yesterday's start via the Date constructor, NOT startOfToday - 24 h:
+  // calendar days run 23 or 25 hours on DST transitions, so the flat
+  // subtraction mislabeled entries for an hour a year in every timezone
+  // (the day after fall-back lost "Yesterday" for early-morning entries;
+  // the day after spring-forward handed it to two-days-ago entries).
+  const startOfYesterday = new Date(
+    nowDate.getFullYear(),
+    nowDate.getMonth(),
+    nowDate.getDate() - 1,
+  ).getTime();
   if (timestamp >= startOfToday) {
     return 'Today';
   }
-  if (timestamp >= startOfToday - dayMs) {
+  if (timestamp >= startOfYesterday) {
     return 'Yesterday';
   }
   const sameYear = date.getFullYear() === nowDate.getFullYear();
