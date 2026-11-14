@@ -4,6 +4,7 @@ import {
   extractWordTokens,
   countSyllables,
   calculateNoteStatistics,
+  splitSentences,
   STOP_WORDS,
 } from './text-stats';
 
@@ -148,5 +149,78 @@ describe('CJK and CRLF accounting', () => {
     const stats = calculateNoteStatistics('你好 你好 世界');
     expect(stats.uniqueWords).toBeGreaterThan(0);
     expect(stats.mostCommonWord).not.toBe('N/A');
+  });
+});
+
+describe('the one unit model (the QA impossibilities, pinned)', () => {
+  it('a URL is one word and never vocabulary: unique words cannot exceed words', () => {
+    // The QA report's exact class: "Unique words 10 > Words 7". The old
+    // unique-words tokenizer split the URL into https/one/com/… while the
+    // word counter saw one whitespace chunk.
+    const stats = calculateNoteStatistics('Check https://one.com and https://two.com please.');
+    expect(stats.words).toBe(5);
+    expect(stats.uniqueWords).toBe(3); // check, and, please — the URLs are not vocabulary
+    expect(stats.uniqueWords).toBeLessThanOrEqual(stats.words);
+  });
+
+  it('lexical density is bounded by construction, even on equation soup', () => {
+    // The QA report saw 142.9%: content TOKENS over whitespace WORDS, two
+    // different units. Both sides of the fraction are units now.
+    const stats = calculateNoteStatistics('e^{i\\pi}+1=0 and x_2 = 3.14!');
+    expect(stats.words).toBe(4); // the equation, and, x_2, 3.14
+    expect(stats.uniqueWords).toBe(3);
+    expect(stats.lexicalDensity).toBe('50.0%'); // 2 content of 4 units
+    expect(parseFloat(stats.lexicalDensity)).toBeLessThanOrEqual(100);
+  });
+
+  it('dots inside URLs, e-mails, decimals and bare domains do not end sentences', () => {
+    expect(splitSentences('Pi is 3.14 rounded.')).toHaveLength(1); // was 2
+    expect(splitSentences('See https://example.com/docs now. Thanks.')).toHaveLength(2);
+    expect(splitSentences('Visit example.com today.')).toHaveLength(1);
+    expect(splitSentences('Mail me at a.b@host.com or not.')).toHaveLength(1);
+    expect(calculateNoteStatistics('See https://example.com/docs now. Thanks.').sentences).toBe(2);
+  });
+
+  it('an ellipsis run ends one sentence, and fullwidth stops end CJK ones', () => {
+    expect(splitSentences('wait... then go!')).toHaveLength(2);
+    expect(splitSentences('你好。再见！')).toHaveLength(2);
+  });
+
+  it('punctuation-only chunks are not words (the fullwidth-comma fix)', () => {
+    // The old whitespace split counted 你好，世界。 as SIX words — four
+    // characters plus the comma and the stop as standalone "words".
+    expect(countWords('你好，世界。')).toBe(4);
+    expect(countWords('hello — world')).toBe(2);
+  });
+
+  it('CJK particles are stop words: a pure-CJK note is not 100% dense', () => {
+    const stats = calculateNoteStatistics('我是中国人');
+    expect(stats.words).toBe(5);
+    expect(stats.lexicalDensity).toBe('80.0%'); // 是 is a function character
+  });
+
+  it('syllables: CJK characters count, other scripts get a nonzero floor', () => {
+    expect(countSyllables('你好')).toBe(2);
+    expect(countSyllables('مرحبا')).toBe(1);
+    expect(countSyllables('abc你好')).toBe(3); // 1 ASCII + 2 CJK
+  });
+
+  it('the invariants hold across a battery of hostile inputs', () => {
+    const battery = [
+      'Visit https://example.com/page?a=1&b=2 for more. It helps.',
+      'e^{i\\pi}+1=0 and x_2 = 3.14!',
+      '你好，世界。我是中国人。',
+      'one two three four five six seven eight nine ten.',
+      'Mr. Jones went to Washington. He returned!',
+      '123 456 789 !!! ??? ...',
+      'a',
+      'https://only-a-url.example.com',
+    ];
+    for (const text of battery) {
+      const stats = calculateNoteStatistics(text);
+      expect(stats.uniqueWords).toBeLessThanOrEqual(stats.words);
+      expect(parseFloat(stats.lexicalDensity)).toBeLessThanOrEqual(100);
+      expect(stats.words).toBeGreaterThanOrEqual(0);
+    }
   });
 });
