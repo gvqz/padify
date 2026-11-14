@@ -923,6 +923,11 @@ function initDurableStorage(): void {
   });
 
   const reask = (): void => {
+    // BOTH listeners must go, not just the pointer one: with only the
+    // pointerdown removed, a click followed by any keypress fired the
+    // armed-once keydown handler too and persistence was asked for a
+    // THIRD time (the "once more" the comment promises became twice).
+    window.removeEventListener('keydown', reask);
     window.removeEventListener('pointerdown', reask);
     void requestPersistentStorage();
   };

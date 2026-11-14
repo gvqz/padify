@@ -32,6 +32,12 @@ interface PanelState {
   anchor: HTMLElement | null;
   onClose?: (reason: PanelCloseReason) => void;
   shown: boolean;
+  /** This panel's pending fade-out cleanup (null: none pending). Owned
+   *  PER PANEL, not module-global: the global timer meant opening B
+   *  while A faded CANCELLED A's cleanup outright — no display:none, no
+   *  hidden attribute, no panel:hidden, no onClose — and two overlapping
+   *  fades overwrote each other's handle. */
+  hideTimer: number | null;
 }
 
 const SHEET_QUERY = '(max-width: 640px)';
@@ -45,7 +51,6 @@ const stateOf = (root: HTMLElement): PanelState | undefined => PANELS.get(root);
 const PANELS = new WeakMap<HTMLElement, PanelState>();
 /** At most one panel is ever open; this is it (or null). */
 let openPanelRoot: HTMLElement | null = null;
-let hideTimer: number | null = null;
 
 function fire(root: HTMLElement, type: string): void {
   root.dispatchEvent(new CustomEvent(type, { bubbles: false }));
@@ -148,9 +153,13 @@ export function openPanel(
   if (openPanelRoot) {
     closePanel(openPanelRoot, 'programmatic');
   }
-  if (hideTimer !== null) {
-    window.clearTimeout(hideTimer);
-    hideTimer = null;
+  // Reopening THIS panel cancels its own pending fade-out — the reopen
+  // wins. Another panel's pending cleanup is deliberately left alone so
+  // it still lands (see PanelState.hideTimer).
+  const pending = stateOf(root);
+  if (pending && pending.hideTimer !== null) {
+    window.clearTimeout(pending.hideTimer);
+    pending.hideTimer = null;
   }
 
   const state: PanelState = {
@@ -158,6 +167,7 @@ export function openPanel(
     anchor: anchor instanceof HTMLElement ? anchor : null,
     onClose: opts.onClose,
     shown: true,
+    hideTimer: null,
   };
   PANELS.set(root, state);
   openPanelRoot = root;
@@ -206,12 +216,17 @@ export function closePanel(
   root.classList.remove('in');
   state.anchor?.setAttribute('aria-expanded', 'false');
 
-  hideTimer = window.setTimeout(() => {
-    hideTimer = null;
+  state.hideTimer = window.setTimeout(() => {
+    state.hideTimer = null;
     root.style.display = 'none';
     root.setAttribute('hidden', 'hidden');
-    document.body.classList.remove('panel-sheet-open');
-    unwatchPanel();
+    // Another panel may have taken the stage while this one faded: its
+    // open re-added the sheet lock and pointed the watcher at itself.
+    // Only the LAST panel standing may take those back.
+    if (!openPanelRoot) {
+      document.body.classList.remove('panel-sheet-open');
+      unwatchPanel();
+    }
     fire(root, 'panel:hidden');
     // Focus goes home to the anchor — the panel opened from it. The
     // anchor may be a plain wrapper (the cloud nav's span): fall back to

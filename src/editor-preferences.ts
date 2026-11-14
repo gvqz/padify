@@ -232,6 +232,20 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
 
   // ---- preferences-modal change handlers ---------------------------
 
+  /** Applies spellcheck to the host AND any live WYSIWYG root — the
+   *  mounted Markdown editor pins its own at mount (the ProseMirror root
+   *  reads the host once, markdown/surface.ts), so the setting must be
+   *  written there too or it takes effect only after the next note
+   *  switch (issue #116). Both the change handler and the reset path go
+   *  through here — the reset used to skip the live write. */
+  function applySpellCheck(enabled: boolean): void {
+    notepad.note.attr('spellcheck', enabled as unknown as string);
+    const proseRoot = document.querySelector('#note .ProseMirror');
+    if (proseRoot) {
+      proseRoot.setAttribute('spellcheck', enabled ? 'true' : 'false');
+    }
+  }
+
   notepad.fontSize.on('change', function () {
     const fontSizeSelected = (this as HTMLSelectElement).value;
 
@@ -299,16 +313,7 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
 
   notepad.spellCheck.on('change', function () {
     const enabled = $(this).is(':checked');
-    notepad.note.attr('spellcheck', enabled as unknown as string);
-    // The mounted Markdown WYSIWYG pins its own spellcheck at MOUNT (the
-    // ProseMirror root reads the host once, markdown/surface.ts) — write
-    // the live view too, or the setting takes effect only after the next
-    // note switch (issue #116). The source textarea inherits the host,
-    // so the host write already covers it.
-    const proseRoot = document.querySelector('#note .ProseMirror');
-    if (proseRoot) {
-      proseRoot.setAttribute('spellcheck', enabled ? 'true' : 'false');
-    }
+    applySpellCheck(enabled);
     setState('userChosenSpellCheck', enabled ? 'Yes' : 'No');
   });
 
@@ -464,7 +469,7 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
 
       if (getSetting('userChosenSpellCheck')) {
         removeState('userChosenSpellCheck');
-        notepad.note.attr('spellcheck', String(editorConfig.defaultSpellCheck));
+        applySpellCheck(editorConfig.defaultSpellCheck);
         notepad.spellCheck.prop('checked', editorConfig.defaultSpellCheck);
       }
     },
