@@ -173,3 +173,56 @@ test.describe('cloud round trip (real API)', () => {
     );
   });
 });
+
+test.describe("the cloud panel's focus manners", () => {
+  /** The panel's open transition — keep in sync with panel.ts. */
+  const TRANSITION = 150;
+
+  test('the delayed autofocus never steals a caret already inside the panel', async ({ page }) => {
+    // The CI auth flake, staged deterministically: the panel's 150 ms
+    // open-transition focus used to fire UNCONDITIONALLY on the email
+    // field. A fill() (or a very fast typist) that reached the password
+    // field inside that window had its caret yanked back mid-keystroke —
+    // the password text landed in the email box, validation rejected the
+    // submit, and the sign-in pane never appeared. The panel must respect
+    // focus that already entered it.
+    await page.goto('/');
+    await page.locator('#cloudNavContainer').click();
+
+    // Reach the password field inside the transition window — the exact
+    // position a fast fill holds when the timer fires.
+    await page.evaluate(() => document.querySelector<HTMLElement>('#cloudAuthPassword')?.focus());
+
+    // Let the delayed autofocus fire (and settle, so a steal would show).
+    await page.waitForTimeout(TRANSITION * 2);
+
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe('cloudAuthPassword');
+  });
+
+  test('with nobody inside, the autofocus lands on the email field', async ({ page }) => {
+    // The designed behavior must survive the fix: open, hands off, and
+    // the caret arrives in the email field after the transition.
+    await page.goto('/');
+    await page.locator('#cloudNavContainer').click();
+    await page.waitForTimeout(TRANSITION * 2);
+
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe('cloudAuthEmail');
+  });
+
+  test('closing the panel never yanks a caret that moved on', async ({ page }) => {
+    // The mirror race: Escape closes the panel, the user clicks into the
+    // editor inside the fade window — the fade-end used to pull focus to
+    // the cloud anchor, stealing the next keystroke (and Space/Enter
+    // there would reopen the panel).
+    await page.goto('/');
+    await page.locator('#cloudNavContainer').click();
+    await page.waitForTimeout(TRANSITION * 2);
+
+    await page.keyboard.press('Escape');
+    // The user's click into the note, inside the fade window.
+    await page.evaluate(() => document.querySelector<HTMLElement>('#note')?.focus());
+    await page.waitForTimeout(TRANSITION * 2);
+
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe('note');
+  });
+});

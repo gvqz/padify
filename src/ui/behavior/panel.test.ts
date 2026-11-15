@@ -189,3 +189,102 @@ describe('the topbar panel lifecycle', () => {
     expect(b.hasAttribute('hidden')).toBe(false);
   });
 });
+
+describe("the panel's focus manners", () => {
+  /** A panel shaped like the cloud one: an autofocus target plus a second
+   *  field a fast typist (or a driver's fill) can reach. */
+  function makeAuthPanel(id: string): {
+    panel: HTMLElement;
+    autofocused: HTMLInputElement;
+    reached: HTMLInputElement;
+  } {
+    const panel = makePanel(id);
+    const autofocused = document.createElement('input');
+    autofocused.id = `${id}Email`;
+    autofocused.setAttribute('data-panel-autofocus', '');
+    const reached = document.createElement('input');
+    reached.id = `${id}Password`;
+    reached.type = 'password';
+    panel.append(autofocused, reached);
+    return { panel, autofocused, reached };
+  }
+
+  it('the open-transition autofocus lands when nothing inside the panel owns focus', () => {
+    const { panel, autofocused } = makeAuthPanel('panelA');
+    const anchor = makeAnchor();
+    anchor.focus(); // the click that opened the panel focused its anchor
+
+    openPanel(panel, anchor);
+    vi.advanceTimersByTime(TRANSITION + 1);
+
+    expect(document.activeElement).toBe(autofocused);
+  });
+
+  it('the open-transition autofocus never steals focus that entered the panel first', () => {
+    // The CI auth flake, staged: a driver focuses the password field
+    // inside the transition window, the delayed autofocus fires, and the
+    // old code yanked the caret back to the email field — the password
+    // text then landed in the email box and the submit was rejected.
+    const { panel, reached, autofocused } = makeAuthPanel('panelA');
+    const anchor = makeAnchor();
+    anchor.focus();
+
+    openPanel(panel, anchor);
+    reached.focus(); // the fast fill's focus() — before the timer
+    vi.advanceTimersByTime(TRANSITION + 1);
+
+    expect(document.activeElement).toBe(reached);
+    expect(document.activeElement).not.toBe(autofocused);
+  });
+
+  it('a caret dropped by the hiding panel rides home to the anchor', () => {
+    const { panel, autofocused } = makeAuthPanel('panelA');
+    const anchor = makeAnchor();
+
+    openPanel(panel, anchor);
+    vi.advanceTimersByTime(TRANSITION + 1);
+    expect(document.activeElement).toBe(autofocused);
+
+    closePanel(panel, 'programmatic');
+    // A real browser blurs the focused element when display:none hides
+    // it; jsdom has no layout, so the blur is staged by hand.
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    vi.advanceTimersByTime(TRANSITION + 1);
+
+    expect(document.activeElement).toBe(anchor);
+  });
+
+  it('focus placed elsewhere during the fade is not yanked to the anchor', () => {
+    // The mirror of the open steal: Escape closes the panel, the user
+    // clicks into the page inside the fade window, and the old code
+    // pulled focus to the anchor — stealing their next keystroke (and
+    // Space/Enter there would have reopened the panel).
+    const { panel } = makeAuthPanel('panelA');
+    const anchor = makeAnchor();
+    const elsewhere = makeAnchor(); // stands in for the editor
+
+    openPanel(panel, anchor);
+    vi.advanceTimersByTime(TRANSITION + 1);
+
+    closePanel(panel, 'programmatic');
+    elsewhere.focus(); // the user's click, inside the fade window
+    vi.advanceTimersByTime(TRANSITION + 1);
+
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
+  it('a panel closed inside its own transition never delivers the delayed focus', () => {
+    const { panel, autofocused } = makeAuthPanel('panelA');
+    const anchor = makeAnchor();
+    anchor.focus();
+
+    openPanel(panel, anchor);
+    closePanel(panel, 'programmatic'); // before the transition elapses
+    vi.advanceTimersByTime(TRANSITION * 2 + 1);
+
+    // The dead opening's timer was cancelled: the autofocus field never
+    // received focus, and home is the anchor (focus was orphaned).
+    expect(document.activeElement).toBe(anchor);
+    expect(document.activeElement).not.toBe(autofocused);
+  });
+});
