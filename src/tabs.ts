@@ -36,6 +36,7 @@ import { $, type Q } from './lib/q';
 import { confirmDialog } from './ui/dialog';
 import { showToast } from './ui/toast';
 import { createTab, domainTabOf, nextUpdatedAt, type NoteTab } from './notes/domain';
+import { NotesModel, validatedTabFromRow } from './notes/model';
 import { TabStripView } from './notes/strip-view';
 import { TrashStore } from './notes/trash-store';
 import {
@@ -124,11 +125,15 @@ export class TabManager {
   /** Every open note, in strip order — read-only for the layers that
    *  aggregate across notes (the tasks feature's views). */
   get allTabs(): readonly NoteTab[] {
-    return this.tabs;
+    return this.model.all();
   }
 
-  private tabs: NoteTab[] = [];
-  private activeId: string | null = null;
+  /** The note list as STATE — who is open, which one is active (see
+   *  notes/model.ts, S2 tranche two). The manager no longer holds the
+   *  array or the pointer: it orchestrates AROUND the model, and the
+   *  active-live and never-empty invariants hold by construction there
+   *  instead of being re-implemented at every mutation site here. */
+  private readonly model: NotesModel;
   private readonly editor: Q;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   /** The one sync-state owner — the dirty set, the push queue and the
@@ -137,17 +142,15 @@ export class TabManager {
    *  through the manager it already holds. */
   readonly syncLedger = new SyncLedger();
   /** The grave lifecycle — the trash's model half (see notes/trash-store.ts):
-   *  the list, the minting, the restore hand-off, the sweeper placeholders.
-   *  The manager orchestrates AROUND it (focus, strip, snapshots, persist);
-   *  the store owns what a grave IS. */
+   *  the list, the minting, the restore hand-off, the sweeper placeholders,
+   *  and the delete-receipt event. The manager orchestrates AROUND it
+   *  (focus, strip, snapshots, persist); the store owns what a grave IS. */
   private readonly trash: TrashStore;
   /** The strip's DOM half (see notes/strip-view.ts): rendering, delegated
    *  events, the inline rename. The manager is its host — commands flow
    *  back through the narrow TabStripHost surface wired in the constructor. */
   private readonly stripView: TabStripView;
   private persistListeners: Set<(payload: TabsSyncPayload) => void> = new Set();
-  private activeListeners: Set<(tab: NoteTab) => void> = new Set();
-  private trashListeners: Set<() => void> = new Set();
   /** The surface that currently paints the host — dismissed before a
    *  different kind takes the stage (the NoteSurface.dismiss contract). */
   private paintedBy: NoteSurface | null = null;
@@ -155,13 +158,14 @@ export class TabManager {
   constructor(editor: Q) {
     this.editor = editor;
     this.trash = new TrashStore(this.syncLedger);
+    this.model = new NotesModel(() => createTab(WELCOME_HTML));
     // The host surface the strip may reach — the god-object antidote: the
     // view sees the model's shape and a handful of commands, nothing else.
     // The reads go through this manager live (the tabs array is replaced,
     // not mutated, on merges), captured lexically by the arrows.
     this.stripView = new TabStripView($('#tabStripTabs'), {
-      modelTabs: () => this.tabs,
-      activeTabId: () => this.activeId,
+      modelTabs: () => this.model.all(),
+      activeTabId: () => this.model.activeTabId(),
       isConflicted: (tabId) => this.syncLedger.conflictOf(tabId) !== undefined,
       onConflictReview: (tabId) => this.onConflictReview?.(tabId),
       switchTo: (tabId) => this.switchTo(tabId),
@@ -175,28 +179,40 @@ export class TabManager {
   /**
    * Loads (or bootstraps) the model and paints the strip + editor. Awaited
    * by app.ts after the storage layer hydrated (see storage/index.ts).
+   *
+   * The boot is one seed call: the model owns the active-id fallback
+   * (stored preference → first row → welcome mint) and the never-empty
+   * invariant, and the boot persists ONLY when it changed something — a
+   * normal boot writes nothing (the stored rows already are the truth);
+   * a minting or migrating boot writes once, with the active id already
+   * settled where the old code's two synchronous writes left it.
    */
   async init(): Promise<void> {
     const snapshot = await loadNotes();
-    this.tabs = this.loadModel(snapshot.tabs);
+    const rows = this.loadModel(snapshot.tabs);
     this.trash.seed(
       snapshot.trashed.filter(
         (entry) => entry && typeof entry.id === 'string' && typeof entry.deletedAt === 'number',
       ),
     );
-    this.migrateLegacyNote();
 
-    const savedActive = stateGet(ACTIVE_TAB_KEY);
-    this.activeId = this.tabs.some((tab) => tab.id === savedActive)
-      ? savedActive
-      : (this.tabs[0]?.id ?? null);
-
-    if (!this.activeId || !this.getActive()) {
-      if (this.tabs.length === 0) {
-        this.tabs.push(createTab(WELCOME_HTML));
-        this.persist();
+    // The legacy single-note migration — the one list policy that must
+    // run BEFORE the seed picks the active tab: the migrated note becomes
+    // the first tab and therefore the active one. The old key leaves
+    // storage either way (an existing tab list wins over the old note; a
+    // blank never lands).
+    const legacy = stateGet(LEGACY_NOTE_KEY);
+    let migrated = false;
+    if (legacy !== null) {
+      stateRemove(LEGACY_NOTE_KEY);
+      if (rows.length === 0 && legacy.trim() !== '') {
+        rows.unshift(createTab(legacyTextToHtml(legacy)));
+        migrated = true;
       }
-      this.activeId = this.tabs[0].id;
+    }
+
+    const seeded = this.model.seed(rows, stateGet(ACTIVE_TAB_KEY));
+    if (seeded.minted || migrated) {
       this.persist();
     }
 
@@ -212,13 +228,15 @@ export class TabManager {
   // ---- model ---------------------------------------------------------------
 
   /**
-   * Validates a stored row into the editor-safe domain shape and adopts
-   * its sync state into the ledger — the boot-side map between the two
-   * spellings (see the ledger's adoptStoredRow). The durable unpushed
-   * flag re-enters the dirty set there: records an earlier session
-   * stamped re-enter as strands, so the sync layer's session start queues
-   * them for a pull-first recovery cycle instead of shipping stale bytes
-   * over a newer remote edit.
+   * Validates a stored snapshot into the editor-safe domain rows and
+   * adopts each row's sync state into the ledger — the boot-side map
+   * between the two spellings. The row VALIDATION is the model module's
+   * pure function (validatedTabFromRow); this loop is the ledger's half
+   * of the same map (see the ledger's adoptStoredRow). The durable
+   * unpushed flag re-enters the dirty set there: records an earlier
+   * session stamped re-enter as strands, so the sync layer's session
+   * start queues them for a pull-first recovery cycle instead of shipping
+   * stale bytes over a newer remote edit.
    */
   private loadModel(entries: StoredNoteTab[]): NoteTab[] {
     return entries
@@ -233,50 +251,8 @@ export class TabManager {
           unseenChange: entry.unseenChange,
           unpushed: entry.unpushed === true ? true : undefined,
         });
-        const noteType = normalizeNoteType(entry.noteType);
-        return {
-          id: entry.id,
-          name: typeof entry.name === 'string' ? entry.name : null,
-          // The sanitizer belongs to html notes ONLY — any other format
-          // passing through it would have its angle brackets rewritten and
-          // its data corrupted in place.
-          content:
-            typeof entry.content === 'string' && isHtmlContent(noteType)
-              ? sanitizeNoteHtml(entry.content)
-              : typeof entry.content === 'string'
-                ? entry.content
-                : '',
-          createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : Date.now(),
-          updatedAt: typeof entry.updatedAt === 'number' ? entry.updatedAt : Date.now(),
-          noteType,
-          colorTheme:
-            entry.colorTheme === 'light' || entry.colorTheme === 'dark'
-              ? entry.colorTheme
-              : undefined,
-          copyOf: typeof entry.copyOf === 'string' && entry.copyOf ? entry.copyOf : undefined,
-        };
+        return validatedTabFromRow(entry);
       });
-  }
-
-  /**
-   * One-time migration from the legacy single-note `note` key. Runs after
-   * the snapshot load so an existing tab list wins over the old note.
-   */
-  private migrateLegacyNote(): void {
-    const legacy = stateGet(LEGACY_NOTE_KEY);
-
-    if (legacy === null) {
-      return;
-    }
-
-    stateRemove(LEGACY_NOTE_KEY);
-
-    if (this.tabs.length > 0 || legacy.trim() === '') {
-      return;
-    }
-
-    this.tabs.unshift(createTab(legacyTextToHtml(legacy)));
-    this.persist();
   }
 
   /**
@@ -293,7 +269,9 @@ export class TabManager {
    */
   private persist(immediate = true): void {
     const payload = this.exportForSync();
-    saveNotes({ tabs: payload.tabs, trashed: payload.trashed }, this.activeId, { immediate });
+    saveNotes({ tabs: payload.tabs, trashed: payload.trashed }, this.model.activeTabId(), {
+      immediate,
+    });
 
     if (this.onPersist) {
       this.onPersist(payload);
@@ -317,26 +295,22 @@ export class TabManager {
    * Fires whenever the active note changed (switch, create, external merge).
    * Used by type-aware editor chrome (e.g. the rich text toolbar) that must
    * follow the note without each feature grabbing the single onActiveChanged
-   * slot.
+   * slot. The registry lives in the model; the TIMING of each fire stays
+   * the manager's (see notes/model.ts's emitActiveChanged).
    */
   addActiveListener(listener: (tab: NoteTab) => void): () => void {
-    this.activeListeners.add(listener);
-    return () => {
-      this.activeListeners.delete(listener);
-    };
+    return this.model.addActiveListener(listener);
   }
 
   /**
    * Fires whenever a note moved to the trash — the delete receipt the
    * History button in the top bar turns into its trash flash (the toast
    * owns the words and the Undo; this owns the "where did it go" gesture
-   * on the door the note just arrived behind).
+   * on the door the note just arrived behind). The registry lives in the
+   * trash store now — the mint IS the moment a note arrives.
    */
   addTrashListener(listener: () => void): () => void {
-    this.trashListeners.add(listener);
-    return () => {
-      this.trashListeners.delete(listener);
-    };
+    return this.trash.addTrashListener(listener);
   }
 
   // ---- sync support ---------------------------------------------------------
@@ -350,7 +324,7 @@ export class TabManager {
    */
   exportForSync(): TabsSyncPayload {
     return {
-      tabs: this.tabs.map((tab) => this.syncLedger.project(tab)),
+      tabs: this.model.all().map((tab) => this.syncLedger.project(tab)),
       dirty: this.syncLedger.dirtyIds(),
       trashed: this.trash.all.map((grave) => this.syncLedger.project(grave)),
     };
@@ -427,7 +401,7 @@ export class TabManager {
     }
     let touchedAny = false;
     for (const row of rows) {
-      if (!this.tabs.some((tab) => tab.id === row.id)) {
+      if (!this.model.has(row.id)) {
         continue;
       }
       touchedAny =
@@ -460,17 +434,17 @@ export class TabManager {
    * repaint costs nothing but the caret's place.
    */
   applyExternalMerge(rows: StoredNoteTab[], forceRepaintIds: readonly string[] = []): void {
-    const activeBefore = this.getActive();
+    const activeBefore = this.model.activeTab();
     const forceRepaint = new Set(forceRepaintIds);
     // The pre-merge model, keyed for the unseen-change stamp below — the
-    // merge's rows replace this.tabs wholesale, so the "what did this
+    // merge's rows replace the list wholesale, so the "what did this
     // device last have" question must be asked before the swap.
-    const beforeById = new Map(this.tabs.map((tab) => [tab.id, tab]));
+    const beforeById = new Map(this.model.all().map((tab) => [tab.id, tab]));
     // …and the pre-adoption ledger baselines: a stamp already present
     // keeps its ORIGINAL baseline (consecutive pulls while the note stays
     // unopened extend the delta, they do not restart it).
     const beforeUnseen = new Map(
-      this.tabs.map((tab) => [tab.id, this.syncLedger.unseenOf(tab.id)]),
+      this.model.all().map((tab) => [tab.id, this.syncLedger.unseenOf(tab.id)]),
     );
 
     const stamped = rows.map((row) => {
@@ -488,25 +462,22 @@ export class TabManager {
       // would be noise).
       const before = beforeById.get(row.id);
       const priorUnseen = beforeUnseen.get(row.id);
-      if (before && !next.conflict && row.id !== this.activeId && before.content !== next.content) {
+      if (
+        before &&
+        !next.conflict &&
+        row.id !== this.model.activeTabId() &&
+        before.content !== next.content
+      ) {
         next.unseenChange = priorUnseen ?? { from: before.content, fromName: before.name };
       }
       return next;
     });
 
     // The merged rows' sync state is the truth now; the model keeps the
-    // domain half.
+    // domain half. One replaceAll owns the active repair and the
+    // never-empty mint (see notes/model.ts).
     stamped.forEach((row) => this.syncLedger.adoptMergedRow(row));
-    this.tabs = stamped.map(domainTabOf);
-
-    if (!this.tabs.some((tab) => tab.id === this.activeId)) {
-      this.activeId = this.tabs[0]?.id ?? null;
-      if (!this.activeId) {
-        const fresh = createTab(WELCOME_HTML);
-        this.tabs.push(fresh);
-        this.activeId = fresh.id;
-      }
-    }
+    this.model.replaceAll(stamped.map(domainTabOf));
 
     this.persist();
     this.stripView.render();
@@ -520,11 +491,11 @@ export class TabManager {
     // then lose the delete. Ids leave the dirty set only through
     // confirmPushed (the server has the bytes) or by leaving the model.
     this.syncLedger.retainOnly([
-      ...this.tabs.map((tab) => tab.id),
+      ...this.model.all().map((tab) => tab.id),
       ...this.trash.all.map((grave) => grave.id),
     ]);
 
-    const active = this.getActive();
+    const active = this.model.activeTab();
     if (active) {
       const editorFocused = this.isEditorFocused();
       const identityChanged = !activeBefore || activeBefore.id !== active.id;
@@ -610,18 +581,18 @@ export class TabManager {
   }
 
   getActive(): NoteTab | null {
-    return this.tabs.find((tab) => tab.id === this.activeId) ?? null;
+    return this.model.activeTab();
   }
 
   /** Read-only view of the rail's notes — the note context menu finds its
    *  target note (the one under the cursor, not the active one) here. */
   getTabs(): readonly NoteTab[] {
-    return this.tabs;
+    return this.model.all();
   }
 
   /** Saves the editor's live content into the active tab. */
   saveActiveFromEditor(): void {
-    const active = this.getActive();
+    const active = this.model.activeTab();
     if (!active) {
       return;
     }
@@ -649,7 +620,7 @@ export class TabManager {
 
   /** Persists the editor content immediately (snapshot restore, clear, …). */
   syncAfterExternalEdit(): void {
-    const active = this.getActive();
+    const active = this.model.activeTab();
     if (!active) {
       return;
     }
@@ -690,19 +661,19 @@ export class TabManager {
    * the tab id it was requested for: a switch that happens mid-retry
    * wins, and a retry never steals focus after the user moved on.
    */
-  focusEditor(attempt = 0, forTabId = this.activeId): void {
+  focusEditor(attempt = 0, forTabId = this.model.activeTabId()): void {
     const host = this.editorHost();
     if (!host) {
       return;
     }
-    const surface = noteSurfaceFor(this.getActive());
+    const surface = noteSurfaceFor(this.model.activeTab());
     if (typeof surface.focusTarget === 'function') {
       const target = surface.focusTarget(host);
       if (target) {
         target.focus();
         return;
       }
-      if (attempt < MAX_FOCUS_RETRIES && this.activeId === forTabId) {
+      if (attempt < MAX_FOCUS_RETRIES && this.model.activeTabId() === forTabId) {
         requestAnimationFrame(() => this.focusEditor(attempt + 1, forTabId));
       }
       return;
@@ -720,7 +691,7 @@ export class TabManager {
     // build can't edit gets the read-only card. The manager no longer
     // knows how — that is the seam a new note kind (Markdown, a board)
     // plugs into.
-    const incoming = noteSurfaceFor(this.getActive());
+    const incoming = noteSurfaceFor(this.model.activeTab());
     // The lifecycle half of that seam: when the PAINTER changes, the
     // outgoing surface stands down first (its editor, history, and any
     // UI it parked outside the host — a markdown note's floating grip
@@ -731,11 +702,11 @@ export class TabManager {
       this.paintedBy.dismiss?.(host);
     }
     this.paintedBy = incoming;
-    incoming.display(host, this.getActive());
+    incoming.display(host, this.model.activeTab());
   }
 
   getActiveText(): string {
-    const active = this.getActive();
+    const active = this.model.activeTab();
     if (!active) {
       return '';
     }
@@ -747,7 +718,7 @@ export class TabManager {
   }
 
   clearActiveTab(): void {
-    const active = this.getActive();
+    const active = this.model.activeTab();
     if (!active) {
       return;
     }
@@ -776,7 +747,7 @@ export class TabManager {
    * because no editing surface exists for it.
    */
   applySnapshotToActive(content: string, noteType?: NoteType, colorTheme?: 'light' | 'dark'): void {
-    const active = this.getActive();
+    const active = this.model.activeTab();
     if (!active) {
       return;
     }
@@ -848,18 +819,23 @@ export class TabManager {
   // ---- actions -----------------------------------------------------------------
 
   switchTo(tabId: string, focusEditor = true): void {
-    if (tabId === this.activeId) {
+    if (tabId === this.model.activeTabId()) {
       return;
     }
 
     this.saveActiveFromEditor();
-    this.activeId = tabId;
+    // The pointer move is the model's one call — and a refusal (unknown
+    // id, or a re-switch that lost the race) ends the switch before any
+    // orchestration fires: nothing painted, nothing announced.
+    if (!this.model.setActive(tabId)) {
+      return;
+    }
     // Opening the note answers the question a parked unseen baseline was
     // holding: the marker is consumed HERE (read-and-clear in one ledger
     // call, before the persist, so the clear rides this very save) and the
     // peek fires after the editor painted the new bytes — once per change,
     // never on re-click.
-    const opened = this.tabs.find((entry) => entry.id === tabId);
+    const opened = this.model.tabOf(tabId);
     const unseen = opened ? this.syncLedger.consumeUnseen(tabId) : undefined;
     this.persist();
     this.stripView.render();
@@ -883,8 +859,7 @@ export class TabManager {
     this.saveActiveFromEditor();
 
     const tab = createTab('', null, noteType);
-    this.tabs.push(tab);
-    this.activeId = tab.id;
+    this.model.append(tab, { activate: true });
     this.syncLedger.markDirty(tab.id);
     this.persist();
 
@@ -915,7 +890,7 @@ export class TabManager {
     if (name) {
       tab.name = name;
     }
-    this.tabs.push(tab);
+    this.model.append(tab);
     this.syncLedger.markDirty(tab.id);
     this.stripView.append(tab);
     this.persist();
@@ -931,11 +906,11 @@ export class TabManager {
    * duplicate the user asked for, not a sync accident.
    */
   duplicateNote(tabId: string): void {
-    const source = this.tabs.find((entry) => entry.id === tabId);
+    const source = this.model.tabOf(tabId);
     if (!source) {
       return;
     }
-    if (source.id === this.activeId) {
+    if (source.id === this.model.activeTabId()) {
       this.saveActiveFromEditor();
     }
 
@@ -947,8 +922,7 @@ export class TabManager {
     if (source.colorTheme) {
       copy.colorTheme = source.colorTheme;
     }
-    const index = this.tabs.findIndex((entry) => entry.id === tabId);
-    this.tabs.splice(index + 1, 0, copy);
+    this.model.insertAfter(tabId, copy);
     this.syncLedger.markDirty(copy.id);
     this.persist();
 
@@ -968,13 +942,13 @@ export class TabManager {
    * snapshot, the same deal closing a tab offers.
    */
   changeNoteType(tabId: string, noteType: NoteType): void {
-    const target = this.tabs.find((entry) => entry.id === tabId);
+    const target = this.model.tabOf(tabId);
     if (!target || (target.noteType ?? DEFAULT_NOTE_TYPE) === noteType) {
       return;
     }
     // The active note's newest words still live in the editor — capture
     // them so the conversion reads what the user sees (duplicateNote's deal).
-    if (tabId === this.activeId) {
+    if (tabId === this.model.activeTabId()) {
       this.saveActiveFromEditor();
     }
     const from = target.noteType ?? DEFAULT_NOTE_TYPE;
@@ -1010,7 +984,7 @@ export class TabManager {
     noteType: NoteType,
     content: string,
   ): Promise<void> {
-    const tab = this.tabs.find((entry) => entry.id === tabId);
+    const tab = this.model.tabOf(tabId);
     if (tab && window.snapshotsManager) {
       try {
         await window.snapshotsManager.createSnapshotFromNote(
@@ -1035,10 +1009,10 @@ export class TabManager {
    *  a task list's dot, a markdown note's icon — the label refresh alone
    *  left a stale badge behind. */
   private applyTypeConversion(tabId: string, noteType: NoteType, content: string): void {
-    if (this.getActive()?.id !== tabId) {
+    if (this.model.activeTabId() !== tabId) {
       this.switchTo(tabId);
     }
-    const active = this.getActive();
+    const active = this.model.activeTab();
     if (!active || active.id !== tabId) {
       return;
     }
@@ -1053,7 +1027,7 @@ export class TabManager {
    * the toast (the caller owns the feedback).
    */
   renameTab(tabId: string, name: string): boolean {
-    const tab = this.tabs.find((entry) => entry.id === tabId);
+    const tab = this.model.tabOf(tabId);
     if (!tab) return false;
     const trimmed = name.trim().slice(0, 60);
     if (!trimmed || trimmed === tab.name) return false;
@@ -1073,12 +1047,12 @@ export class TabManager {
    * takes the bytes. Persistence flows the normal dirty-note path.
    */
   writeNoteContent(tabId: string, content: string): void {
-    const tab = this.tabs.find((entry) => entry.id === tabId);
+    const tab = this.model.tabOf(tabId);
     if (!tab || tab.content === content) return;
     tab.content = content;
     tab.updatedAt = nextUpdatedAt(tab.updatedAt);
     this.syncLedger.markDirty(tab.id);
-    if (tab.id === this.activeId) {
+    if (tab.id === this.model.activeTabId()) {
       // The live surface repaints from the new bytes; commit answers
       // false (the caller owns persistence) so persist exactly once.
       noteSurfaceFor(tab).commit(this.editorHost(), content);
@@ -1100,12 +1074,12 @@ export class TabManager {
    * theater (the same rule the snapshot restore already follows).
    */
   requestCloseTab(tabId: string): void {
-    const tab = this.tabs.find((entry) => entry.id === tabId);
+    const tab = this.model.tabOf(tabId);
     if (!tab) {
       return;
     }
 
-    const isActive = tabId === this.activeId;
+    const isActive = tabId === this.model.activeTabId();
     // Capture the live editor FIRST when trashing the active tab: the model
     // is what moves to the trash, and inside the input debounce window it
     // can lag the surface — the trashed entry must carry the last words.
@@ -1114,22 +1088,22 @@ export class TabManager {
     }
 
     const title = deriveTabTitle(tab);
-    const index = this.tabs.findIndex((entry) => entry.id === tabId);
-    this.tabs = this.tabs.filter((entry) => entry.id !== tabId);
+    // The list surgery is the model's one call — the neighbour policy, the
+    // active repair and the never-empty mint (an EMPTY tab here, not the
+    // welcome: the user just deleted their last note on purpose) live
+    // behind it. The outcome says what the orchestrator must repaint.
+    const outcome = this.model.remove(tabId, () => createTab(''));
+    if (!outcome) {
+      return;
+    }
     // The grave mint (the entry replacement for a re-trash, the stamps, and
     // the ledger's trash rules — the note's life state dies at this door,
-    // the grave's row rides behind the live rows) is the store's one call.
+    // the grave's row rides behind the live rows) is the store's one call;
+    // the delete receipt fires inside it, before the persist below.
     this.trash.mintFromTab(tab);
 
-    // The flash fires BEFORE the persist calls below so its first tick
-    // lands clean — the receipt should never start behind the persist's
-    // own work in the same beat.
-    this.trashListeners.forEach((listener) => listener());
-
-    if (this.tabs.length === 0) {
-      const fresh = createTab('');
-      this.tabs.push(fresh);
-      this.activeId = fresh.id;
+    if (outcome.minted) {
+      // The last note left and a fresh tab took the stage.
       this.persist();
       this.stripView.render();
       this.loadActiveIntoEditor();
@@ -1142,9 +1116,8 @@ export class TabManager {
       return;
     }
 
-    if (isActive) {
-      const neighbour = this.tabs[Math.max(0, index - 1)] ?? this.tabs[0];
-      this.activeId = neighbour.id;
+    if (outcome.activeChanged) {
+      // The closed one was active — the left neighbour is on the stage now.
       this.persist();
       this.stripView.render();
       this.loadActiveIntoEditor();
@@ -1195,7 +1168,7 @@ export class TabManager {
       colorTheme: grave.colorTheme,
       copyOf: grave.copyOf,
     };
-    this.tabs.push(restored);
+    this.model.append(restored);
     // The ledger's entry for the id outlived the trash round trip — the
     // merge base the grave kept (a restored note's next divergence
     // three-way merges against the last cloud-agreed version, not
@@ -1255,12 +1228,13 @@ export class TabManager {
 
   /** Ctrl/Cmd + Alt + ←/→ moves between tabs. */
   cycle(delta: number): void {
-    if (this.tabs.length < 2) {
+    const tabs = this.model.all();
+    if (tabs.length < 2) {
       return;
     }
 
-    const index = this.tabs.findIndex((entry) => entry.id === this.activeId);
-    const next = this.tabs[(index + delta + this.tabs.length) % this.tabs.length];
+    const index = this.model.indexOf(this.model.activeTabId() ?? '');
+    const next = tabs[(index + delta + tabs.length) % tabs.length];
     this.switchTo(next.id);
   }
 
@@ -1287,13 +1261,16 @@ export class TabManager {
 
   /** The note a parked conflict belongs to (the sheet's read). */
   getConflictedNote(tabId: string): NoteTab | null {
-    const tab = this.tabs.find((entry) => entry.id === tabId);
+    const tab = this.model.tabOf(tabId);
     return tab && this.syncLedger.conflictOf(tabId) ? tab : null;
   }
 
   /** Every note carrying an unresolved review (badge state, counts). */
   getConflictedIds(): string[] {
-    return this.tabs.filter((tab) => this.syncLedger.conflictOf(tab.id)).map((tab) => tab.id);
+    return this.model
+      .all()
+      .filter((tab) => this.syncLedger.conflictOf(tab.id))
+      .map((tab) => tab.id);
   }
 
   /**
@@ -1309,7 +1286,7 @@ export class TabManager {
    *    and opening like a duplicate.
    */
   resolveConflict(tabId: string, resolution: 'mine' | 'theirs' | 'both'): boolean {
-    const tab = this.tabs.find((entry) => entry.id === tabId);
+    const tab = this.model.tabOf(tabId);
     const record = this.syncLedger.conflictOf(tabId);
     if (!tab || !record) {
       return false;
@@ -1321,7 +1298,7 @@ export class TabManager {
       tab.content = record.mine.content;
       tab.updatedAt = nextUpdatedAt(tab.updatedAt);
       this.syncLedger.markDirty(tab.id);
-      if (tab.id === this.activeId) {
+      if (tab.id === this.model.activeTabId()) {
         // The active note repaints through the restore seam — the same
         // path a snapshot restore owns (painter swap, html commit).
         this.applySnapshotToActive(record.mine.content, tab.noteType, tab.colorTheme);
@@ -1342,8 +1319,7 @@ export class TabManager {
       if (tab.colorTheme) {
         copy.colorTheme = tab.colorTheme;
       }
-      const index = this.tabs.findIndex((entry) => entry.id === tabId);
-      this.tabs.splice(index + 1, 0, copy);
+      this.model.insertAfter(tabId, copy);
       this.syncLedger.markDirty(copy.id);
       applyMine();
     }
@@ -1356,7 +1332,7 @@ export class TabManager {
   }
 
   private notifyActiveChanged(): void {
-    const active = this.getActive();
+    const active = this.model.activeTab();
     if (!active) {
       return;
     }
@@ -1364,7 +1340,10 @@ export class TabManager {
     if (this.onActiveChanged) {
       this.onActiveChanged(active);
     }
-    this.activeListeners.forEach((listener) => listener(active));
+    // The registered listeners fire last, through the model's registry —
+    // the timing is still the manager's call (the switch must be DONE:
+    // editor painted, title synced) because listeners read surfaces.
+    this.model.emitActiveChanged();
   }
 }
 

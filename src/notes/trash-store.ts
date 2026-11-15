@@ -32,8 +32,24 @@ import type { TrashedNote } from '../storage';
 
 export class TrashStore {
   private graves: TrashedNote[] = [];
+  private readonly trashListeners = new Set<() => void>();
 
   constructor(private readonly ledger: SyncLedger) {}
+
+  /**
+   * The delete receipt — the History button's trash flash and the
+   * snapshots' noteTrashed hook hang off this. Fires on the MINT (a note
+   * just arrived in the trash), not on purge or empty: those are
+   * deliberate forever-deletes with their own surfaces, and a flash on
+   * the door they left through would be noise after the sheet's own
+   * confirmation.
+   */
+  addTrashListener(listener: () => void): () => void {
+    this.trashListeners.add(listener);
+    return () => {
+      this.trashListeners.delete(listener);
+    };
+  }
 
   /** Every grave, in model order — internal reads (the push queue's
    *  resolution, the merge's alive-set) want the raw list. */
@@ -87,6 +103,11 @@ export class TrashStore {
     });
     this.ledger.noteTrashed(tab.id);
     this.ledger.requeue(tab.id);
+    // The receipt fires inside the mint, before the caller persists and
+    // repaints — the same position it held when the manager fired it
+    // after this call, kept deliberate: the flash's first tick lands
+    // clean, never behind the persist's own work in the same beat.
+    this.trashListeners.forEach((listener) => listener());
   }
 
   /**

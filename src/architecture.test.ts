@@ -269,6 +269,42 @@ describe('layering rules', () => {
     }
     expect(violators).toEqual([]);
   });
+
+  it('the note list has one owner — the manager composes the model, it does not hold the state', () => {
+    // S2 tranche two: `tabs: NoteTab[]` and `activeId` left the TabManager
+    // for NotesModel (src/notes/model.ts), where the active-live and
+    // never-empty invariants hold by construction instead of being
+    // re-implemented at every mutation site. The manager re-growing its
+    // own list field is the god object creeping back — every feature
+    // would again reach through it, and the invariant work would again
+    // fork per call site.
+    const source = read(resolve(process.cwd(), 'src/tabs.ts'));
+    expect(source).toContain('private readonly model: NotesModel');
+    expect(source).not.toMatch(/\bprivate\s+(readonly\s+)?tabs\s*:/);
+    expect(source).not.toMatch(/\bprivate\s+(readonly\s+)?activeId\s*:/);
+  });
+
+  it('NotesModel stays pure — state + events, nothing else', () => {
+    // The model is state + events, testable without a browser (see
+    // notes/model.test.ts). Its allowed import set is explicit: the
+    // domain record, the note-kind vocabulary, the html sanitizer (the
+    // seed-side validation's one reach) and the stored row SPELLING
+    // (type-only — the row is the model's input vocabulary). The moment
+    // it imports a surface, the cloud layer or the manager, it stops
+    // being that, and the orchestration moves somewhere untestable —
+    // the strip view and the trash store are DOM/sync-adjacent by
+    // design; the MODEL is not.
+    const ALLOWED_MODEL_IMPORTS = new Set([
+      './domain',
+      '../editor/note-types',
+      '../editor/storage-subset',
+      '../storage',
+    ]);
+    const offenders = importTargets(resolve(process.cwd(), 'src/notes/model.ts')).filter(
+      (t) => !ALLOWED_MODEL_IMPORTS.has(t),
+    );
+    expect(offenders).toEqual([]);
+  });
 });
 
 describe('module graph', () => {
