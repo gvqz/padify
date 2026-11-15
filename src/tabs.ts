@@ -35,6 +35,9 @@
 import { $, type Q } from './lib/q';
 import { confirmDialog } from './ui/dialog';
 import { showToast } from './ui/toast';
+import { createTab, domainTabOf, nextUpdatedAt, type NoteTab } from './notes/domain';
+import { TabStripView } from './notes/strip-view';
+import { TrashStore } from './notes/trash-store';
 import {
   ACTIVE_TAB_KEY,
   loadNotes,
@@ -48,7 +51,7 @@ import {
 } from './storage';
 import { sanitizeNoteHtml } from './editor/storage-subset';
 import { currentThemeMode, transformNoteColors } from './editor/theme-colors';
-import { noteExportHtmlBody, noteStripBadge } from './editor/note-projections';
+import { noteExportHtmlBody } from './editor/note-projections';
 import {
   htmlNoteSurface,
   noteSurfaceFor,
@@ -61,12 +64,9 @@ import {
   DEFAULT_NOTE_TYPE,
   isHtmlContent,
   normalizeNoteType,
-  NOTE_TYPE_ICONS,
   noteTypeLabel,
-  type KnownNoteType,
   type NoteType,
 } from './editor/note-types';
-import { isInstalledDisplayMode } from './install-pwa';
 import { SyncLedger } from './sync/ledger';
 
 export type { NoteType } from './editor/note-types';
@@ -87,58 +87,14 @@ export {
   WELCOME_HTML,
 } from './editor/note-content';
 
-/**
- * One note — the PURE DOMAIN record. Everything the note IS, nothing
- * about what the cloud thinks of it: sync state (the dirty flag, the
- * seq anchor, the merge base, a parked conflict, an unseen baseline)
- * lives in the sync ledger (src/sync/ledger.ts), keyed by id, and is
- * stamped onto the stored/sync spelling ONLY at the projection
- * (TabManager.exportForSync — the one place domain + ledger meet a wire
- * or a disk). The fields below are exactly what a note is to the editor,
- * the features and the UI.
- */
-export interface NoteTab {
-  id: string;
-  /** User-provided name; null derives the title from the content. */
-  name: string | null;
-  /**
-   * The note's content, in the format its type owns (see
-   * editor/note-types.ts — contentKindFor). For the classic types that is
-   * the sanitized HTML subset; for every other type it is that type's
-   * format — Markdown source, JSON, an unknown build's bytes — verbatim,
-   * and the sanitizer never touches it. Named `content` since the typed
-   * content model; it was born as `html` because that is all the first
-   * Padify stored, and the name outlived its accuracy by a year.
-   */
-  content: string;
-  createdAt: number;
-  updatedAt: number;
-  /**
-   * The note kind — absent means the default (standard). See
-   * editor/note-types.ts; kept optional so existing rows need no migration.
-   */
-  noteType?: NoteType;
-  /**
-   * The theme the note's inline colors were last written under — rich text
-   * notes only (editor/theme-colors.ts). Absent on legacy notes, which are
-   * left exactly as stored until their next edit.
-   */
-  colorTheme?: 'light' | 'dark';
-  /**
-   * Conflicted-copy lineage (LEGACY — pre-review builds minted twin notes
-   * and marked them; nothing writes it anymore, existing values ride
-   * storage untouched and unread).
-   */
-  copyOf?: string;
-}
-
 /** One parked version conflict — see the ledger's NoteConflictRecord. */
 export type NoteConflict = NoteConflictRecord;
 
-const LEGACY_NOTE_KEY = 'note';
+// The domain record lives in notes/domain.ts now (S2); re-exported here for
+// the ~20 existing importers. New code imports it from its home.
+export type { NoteTab } from './notes/domain';
 
-/** Notifies the rail's count badge (and any other listener) about tab count. */
-const RAIL_COUNT_ID = 'tabRailCount';
+const LEGACY_NOTE_KEY = 'note';
 
 /**
  * Everything the cloud sync layer needs after the model changed. The
@@ -160,77 +116,6 @@ export interface TabsSyncPayload {
   trashed: TrashedNote[];
 }
 
-function createTabId(): string {
-  return `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-/**
- * The next edit timestamp for a tab: strictly greater than the current
- * one, even when two changes land inside the same millisecond (double
- * restores, programmatic edits, automation). The storage diff and the
- * cloud merge both treat `updatedAt` as the change signal — a same-ms
- * second change would otherwise read as "nothing changed" and never
- * persist.
- */
-function nextUpdatedAt(previous: number): number {
-  return Math.max(Date.now(), previous + 1);
-}
-
-function createTab(
-  content: string = '',
-  name: string | null = null,
-  noteType: NoteType = DEFAULT_NOTE_TYPE,
-): NoteTab {
-  const now = Date.now();
-  const tab: NoteTab = { id: createTabId(), name, content, createdAt: now, updatedAt: now };
-  if (noteType !== DEFAULT_NOTE_TYPE) {
-    tab.noteType = noteType;
-  }
-  return tab;
-}
-
-/**
- * The domain half of a stored row — the pick that keeps the model honest:
- * a field only enters the model by being named here, so sync state can
- * never silently ride a domain object again. Verbatim values (the merge
- * already normalized what needed normalizing); html content was sanitized
- * by the caller before this runs.
- */
-function domainTabOf(row: StoredNoteTab): NoteTab {
-  const tab: NoteTab = {
-    id: row.id,
-    name: row.name,
-    content: row.content,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
-  if (row.noteType !== undefined) {
-    tab.noteType = row.noteType;
-  }
-  if (row.colorTheme !== undefined) {
-    tab.colorTheme = row.colorTheme;
-  }
-  if (row.copyOf !== undefined) {
-    tab.copyOf = row.copyOf;
-  }
-  return tab;
-}
-
-/**
- * The domain half of a grave: the tab pick plus the trash stamps. The
- * grave's sync state stays in the ledger (same id); nothing to copy.
- */
-function domainGraveOf(grave: TrashedNote): TrashedNote {
-  const out: TrashedNote = {
-    ...domainTabOf(grave),
-    deletedAt: grave.deletedAt,
-  };
-  if (grave.purged) {
-    out.purged = true;
-  }
-  return out;
-}
-
 // ---------------------------------------------------------------------------
 // Manager
 // ---------------------------------------------------------------------------
@@ -245,29 +130,46 @@ export class TabManager {
   private tabs: NoteTab[] = [];
   private activeId: string | null = null;
   private readonly editor: Q;
-  private readonly strip: Q;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
-  /** The trash — deleted notes kept restorable for the retention window
-   *  (content included). Lives beside the tabs, syncs as deleted rows.
-   *  Domain + stamp fields only: the sync state (seq/base/unpushed) for a
-   *  grave lives in the ledger under the same id — an entry outlives the
-   *  live↔trash transitions, so nothing is copied at either border. */
-  private trashed: TrashedNote[] = [];
   /** The one sync-state owner — the dirty set, the push queue and the
    *  echo fingerprints in a single structure (see sync/ledger.ts).
    *  Public read-only surface for the cloud layer, which reaches it
    *  through the manager it already holds. */
   readonly syncLedger = new SyncLedger();
+  /** The grave lifecycle — the trash's model half (see notes/trash-store.ts):
+   *  the list, the minting, the restore hand-off, the sweeper placeholders.
+   *  The manager orchestrates AROUND it (focus, strip, snapshots, persist);
+   *  the store owns what a grave IS. */
+  private readonly trash: TrashStore;
+  /** The strip's DOM half (see notes/strip-view.ts): rendering, delegated
+   *  events, the inline rename. The manager is its host — commands flow
+   *  back through the narrow TabStripHost surface wired in the constructor. */
+  private readonly stripView: TabStripView;
   private persistListeners: Set<(payload: TabsSyncPayload) => void> = new Set();
   private activeListeners: Set<(tab: NoteTab) => void> = new Set();
   private trashListeners: Set<() => void> = new Set();
   /** The surface that currently paints the host — dismissed before a
-   * different kind takes the stage (the NoteSurface.dismiss contract). */
+   *  different kind takes the stage (the NoteSurface.dismiss contract). */
   private paintedBy: NoteSurface | null = null;
 
   constructor(editor: Q) {
     this.editor = editor;
-    this.strip = $('#tabStripTabs');
+    this.trash = new TrashStore(this.syncLedger);
+    // The host surface the strip may reach — the god-object antidote: the
+    // view sees the model's shape and a handful of commands, nothing else.
+    // The reads go through this manager live (the tabs array is replaced,
+    // not mutated, on merges), captured lexically by the arrows.
+    this.stripView = new TabStripView($('#tabStripTabs'), {
+      modelTabs: () => this.tabs,
+      activeTabId: () => this.activeId,
+      isConflicted: (tabId) => this.syncLedger.conflictOf(tabId) !== undefined,
+      onConflictReview: (tabId) => this.onConflictReview?.(tabId),
+      switchTo: (tabId) => this.switchTo(tabId),
+      requestCloseTab: (tabId) => this.requestCloseTab(tabId),
+      addTab: () => this.addTab(),
+      focusEditor: () => this.focusEditor(),
+      commitRename: (tabId, name) => this.renameTab(tabId, name),
+    });
   }
 
   /**
@@ -277,19 +179,11 @@ export class TabManager {
   async init(): Promise<void> {
     const snapshot = await loadNotes();
     this.tabs = this.loadModel(snapshot.tabs);
-    this.trashed = snapshot.trashed
-      .filter(
+    this.trash.seed(
+      snapshot.trashed.filter(
         (entry) => entry && typeof entry.id === 'string' && typeof entry.deletedAt === 'number',
-      )
-      .map((grave) => {
-        // The boot-side map for the trash: the grave's sync fields seed
-        // the ledger (same id, same entry), and the model keeps the
-        // domain + stamp half. unpushed re-enters the dirty set here —
-        // the reload-recovery seed for trash rows (a delete that never
-        // pushed is a strand too).
-        this.syncLedger.adoptStoredRow(grave);
-        return domainGraveOf(grave);
-      });
+      ),
+    );
     this.migrateLegacyNote();
 
     const savedActive = stateGet(ACTIVE_TAB_KEY);
@@ -306,13 +200,13 @@ export class TabManager {
       this.persist();
     }
 
-    this.renderStrip();
+    this.stripView.render();
     this.loadActiveIntoEditor();
-    this.bindStripEvents();
+    this.stripView.bind();
     // The title mirrors the active note from the FIRST paint — a restored
     // session (or an installed app booting straight into a note) must not
     // sit on the static "Padify" until the first switch or keystroke.
-    this.syncDocumentTitle();
+    this.stripView.syncDocumentTitle();
   }
 
   // ---- model ---------------------------------------------------------------
@@ -458,7 +352,7 @@ export class TabManager {
     return {
       tabs: this.tabs.map((tab) => this.syncLedger.project(tab)),
       dirty: this.syncLedger.dirtyIds(),
-      trashed: this.trashed.map((grave) => this.syncLedger.project(grave)),
+      trashed: this.trash.all.map((grave) => this.syncLedger.project(grave)),
     };
   }
 
@@ -471,17 +365,14 @@ export class TabManager {
    * keeps the domain + stamp half.
    */
   applyExternalTrash(trashed: TrashedNote[]): void {
-    trashed.forEach((grave) => this.syncLedger.adoptMergedRow(grave));
-    this.trashed = trashed.map((grave) => domainGraveOf(grave));
+    this.trash.adoptMerged(trashed);
     this.persist();
-    this.renderRailCount();
+    this.stripView.renderRailCount();
   }
 
   /** The trash, newest first — the trash sheet's read. */
   getTrashed(): readonly TrashedNote[] {
-    return [...this.trashed]
-      .filter((entry) => !entry.purged)
-      .sort((a, b) => b.deletedAt - a.deletedAt);
+    return this.trash.list();
   }
 
   /**
@@ -506,11 +397,9 @@ export class TabManager {
     const cleared = this.syncLedger.confirmPushed(ids);
     // Purged placeholders leave once their sweeper row is stored — there is
     // nothing left to show, restore or push for them.
-    const confirmed = new Set(ids);
-    const purgedGone = this.trashed.some((entry) => entry.purged && confirmed.has(entry.id));
+    const purgedGone = this.trash.retirePurged(new Set(ids));
     if (purgedGone) {
-      this.trashed = this.trashed.filter((entry) => !(entry.purged && confirmed.has(entry.id)));
-      this.renderRailCount();
+      this.stripView.renderRailCount();
     }
     // Retire the durable unpushed flags in the same breath: a flag left
     // true on a confirmed note re-seeds it as dirty on every future boot,
@@ -620,7 +509,7 @@ export class TabManager {
     }
 
     this.persist();
-    this.renderStrip();
+    this.stripView.render();
 
     // A merged-away tab can never push again — its pending dirty id would
     // otherwise sit in the set forever, re-serialized (and skipped) on
@@ -632,7 +521,7 @@ export class TabManager {
     // confirmPushed (the server has the bytes) or by leaving the model.
     this.syncLedger.retainOnly([
       ...this.tabs.map((tab) => tab.id),
-      ...this.trashed.map((grave) => grave.id),
+      ...this.trash.all.map((grave) => grave.id),
     ]);
 
     const active = this.getActive();
@@ -755,7 +644,7 @@ export class TabManager {
     active.colorTheme = currentThemeMode();
     this.syncLedger.markDirty(active.id);
     this.schedulePersist();
-    this.refreshTabLabel(active.id);
+    this.stripView.refreshLabel(active.id);
   }
 
   /** Persists the editor content immediately (snapshot restore, clear, …). */
@@ -775,7 +664,7 @@ export class TabManager {
     active.colorTheme = currentThemeMode();
     this.syncLedger.markDirty(active.id);
     this.persist();
-    this.refreshTabLabel(active.id);
+    this.stripView.refreshLabel(active.id);
   }
 
   // ---- editor sync -----------------------------------------------------------
@@ -868,7 +757,7 @@ export class TabManager {
     active.updatedAt = nextUpdatedAt(active.updatedAt);
     this.syncLedger.markDirty(active.id);
     this.persist();
-    this.refreshTabLabel(active.id);
+    this.stripView.refreshLabel(active.id);
     this.editor.trigger('focus');
     // The pill (and anything else riding the active-note change) refreshes
     // here too — clear used to leave the old counts up until the next
@@ -946,201 +835,14 @@ export class TabManager {
     // changes (the toolbar visibility sync, the port's inertness, the word
     // pill), so announce the switch the same way a tab change would.
     this.notifyActiveChanged();
-    this.refreshTabLabel(active.id);
+    this.stripView.refreshLabel(active.id);
   }
 
-  // ---- strip rendering --------------------------------------------------------
+  // ---- strip (the DOM half lives in notes/strip-view.ts) ---------------------
 
-  private renderStrip(): void {
-    const stripElement = this.strip.get(0) as HTMLElement | undefined;
-    if (!stripElement) {
-      return;
-    }
-
-    // Rebuild by clearing the node directly so event handlers die with the
-    // children (no retained listeners on surviving parents).
-    stripElement.textContent = '';
-
-    this.tabs.forEach((tab) => {
-      stripElement.appendChild(this.buildTabElement(tab));
-    });
-
-    this.renderRailCount();
-  }
-
-  private renderRailCount(): void {
-    const count = document.getElementById(RAIL_COUNT_ID);
-    if (count) {
-      count.textContent = String(this.tabs.length);
-    }
-  }
-
-  private buildTabElement(tab: NoteTab): HTMLElement {
-    const button = document.createElement('div');
-    button.className = 'tab-strip-tab' + (tab.id === this.activeId ? ' active' : '');
-    button.setAttribute('role', 'tab');
-    button.setAttribute('aria-selected', String(tab.id === this.activeId));
-    button.dataset.tabId = tab.id;
-    button.title = tab.name ? tab.name : 'Double-click to rename';
-
-    // A parked version conflict gets the review badge. Its click is
-    // DELEGATED through the strip (the single listener bindStripEvents
-    // owns), per the listener-lifecycle rules — nothing per-node.
-    if (this.syncLedger.conflictOf(tab.id)) {
-      const conflictBadge = document.createElement('span');
-      conflictBadge.className = 'tab-strip-type tab-strip-conflict';
-      conflictBadge.title = 'Changed on two devices — review the versions';
-      conflictBadge.setAttribute('role', 'button');
-      conflictBadge.innerHTML =
-        '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><circle cx="18" cy="12" r="2.6"/><path d="M8.2 7.4 15.5 11M8.2 16.6 15.5 13"/></svg>';
-      button.appendChild(conflictBadge);
-    }
-
-    const stripBadge = noteStripBadge(tab.content, tab.noteType);
-    if (stripBadge) {
-      // A task list's badge is its own colored circle — the rail shows
-      // the note AS a list (the projection seam reads the model).
-      const listDot = document.createElement('span');
-      listDot.className = 'tab-strip-type tab-strip-list-dot';
-      listDot.title = 'Task list';
-      listDot.setAttribute('aria-hidden', 'true');
-      listDot.dataset.color = stripBadge.color;
-      button.appendChild(listDot);
-    } else if (tab.noteType && tab.noteType !== DEFAULT_NOTE_TYPE) {
-      const typeBadge = document.createElement('span');
-      typeBadge.className = 'tab-strip-type';
-      typeBadge.title = `${noteTypeLabel(tab.noteType)} — created via the type menu`;
-      typeBadge.setAttribute('aria-hidden', 'true');
-      // Icons exist for known types; a future type still badges, with the
-      // registry's plain-text mark standing in until this build learns it.
-      const icon = NOTE_TYPE_ICONS[tab.noteType as KnownNoteType];
-      typeBadge.innerHTML = icon
-        ? icon(10)
-        : `<span style="font-size:9px;font-weight:700;line-height:1">${noteTypeLabel(tab.noteType).charAt(0).toLowerCase()}</span>`;
-      button.appendChild(typeBadge);
-    }
-
-    const title = document.createElement('span');
-    title.className = 'tab-strip-title';
-    title.textContent = deriveTabTitle(tab);
-    button.appendChild(title);
-
-    const close = document.createElement('button');
-    close.type = 'button';
-    close.className = 'tab-strip-close';
-    close.setAttribute('aria-label', `Move ${deriveTabTitle(tab)} to trash`);
-    close.title = 'Move to trash';
-    close.innerHTML =
-      '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-    button.appendChild(close);
-
-    return button;
-  }
-
-  private refreshTabLabel(tabId: string): void {
-    const tab = this.tabs.find((entry) => entry.id === tabId);
-    const element = this.strip.find(`.tab-strip-tab[data-tab-id="${tabId}"]`);
-    if (!tab || element.length === 0) {
-      return;
-    }
-
-    element.find('.tab-strip-title').text(deriveTabTitle(tab));
-    // A task list's strip badge is its color — the same save that lands
-    // the new color in the note repaints the circle (the rail's dot
-    // follows the aggregate; the strip needed its own refresh).
-    const listDot = element.find('.tab-strip-list-dot');
-    if (listDot.length > 0) {
-      const badge = noteStripBadge(tab.content, tab.noteType);
-      if (badge) {
-        listDot.attr('data-color', badge.color);
-      }
-    }
-    if (tab.id === this.activeId) {
-      this.syncDocumentTitle();
-    }
-  }
-
-  /** The browser tab mirrors the note's name so a row of pinned tabs
-   *  says which note each holds. Follows every path the tab strip label
-   *  follows (typing, rename, switch), through the same deriveTabTitle,
-   *  so the two never disagree. Two naming rules from the task list: the
-   *  separator is a plain hyphen-minus " - " (nothing that can read as
-   *  part of the note's own name — emdash and pipe both did), and an
-   *  INSTALLED app gets the bare note name — the standalone window's
-   *  chrome already says "Padify", and "Padify - Padify" is what a
-   *  suffix produced there. */
-  private syncDocumentTitle(): void {
-    const active = this.getActive();
-    if (!active) {
-      document.title = 'Padify';
-      return;
-    }
-    document.title = isInstalledDisplayMode()
-      ? deriveTabTitle(active)
-      : `${deriveTabTitle(active)} - Padify`;
-  }
-
-  private bindStripEvents(): void {
-    const stripElement = this.strip.get(0);
-    if (!stripElement) {
-      return;
-    }
-
-    // Delegated: switch on click, close on ×, rename on double-click.
-    stripElement.addEventListener('click', (event) => {
-      const target = event.target as HTMLElement;
-      const tabElement = target.closest<HTMLElement>('.tab-strip-tab');
-      if (!tabElement) {
-        return;
-      }
-
-      const tabId = tabElement.dataset.tabId!;
-
-      if (target.closest('.tab-strip-conflict')) {
-        // The review badge is its own gesture — opening the review sheet
-        // must not also switch notes under it.
-        event.stopPropagation();
-        this.onConflictReview?.(tabId);
-        return;
-      }
-
-      if (target.closest('.tab-strip-close')) {
-        event.stopPropagation();
-        this.requestCloseTab(tabId);
-        return;
-      }
-
-      if (tabId !== this.activeId) {
-        this.switchTo(tabId);
-      } else {
-        this.focusEditor();
-      }
-    });
-
-    stripElement.addEventListener('auxclick', (event) => {
-      // Middle-click closes, like browser tabs.
-      if ((event as MouseEvent).button !== 1) {
-        return;
-      }
-      const tabElement = (event.target as HTMLElement).closest<HTMLElement>('.tab-strip-tab');
-      if (tabElement) {
-        event.preventDefault();
-        this.requestCloseTab(tabElement.dataset.tabId!);
-      }
-    });
-
-    stripElement.addEventListener('dblclick', (event) => {
-      const target = event.target as HTMLElement;
-      const tabElement = target.closest<HTMLElement>('.tab-strip-tab');
-      if (tabElement && !target.closest('.tab-strip-close')) {
-        event.preventDefault();
-        this.beginRename(tabElement.dataset.tabId!);
-      }
-    });
-
-    $('#addTab').on('click', () => {
-      this.addTab();
-    });
+  /** Double-click-to-rename — the note context menu's entry point. */
+  beginRename(tabId: string): void {
+    this.stripView.beginRename(tabId);
   }
 
   // ---- actions -----------------------------------------------------------------
@@ -1160,7 +862,7 @@ export class TabManager {
     const opened = this.tabs.find((entry) => entry.id === tabId);
     const unseen = opened ? this.syncLedger.consumeUnseen(tabId) : undefined;
     this.persist();
-    this.renderStrip();
+    this.stripView.render();
     this.loadActiveIntoEditor();
 
     if (focusEditor) {
@@ -1186,11 +888,9 @@ export class TabManager {
     this.syncLedger.markDirty(tab.id);
     this.persist();
 
-    this.strip.get(0)!.appendChild(this.buildTabElement(tab));
-    this.setActiveClass();
-    this.renderRailCount();
+    this.stripView.append(tab);
     this.loadActiveIntoEditor();
-    this.scrollTabIntoView(tab.id);
+    this.stripView.scrollTabIntoView(tab.id);
 
     if (focusEditor) {
       this.focusEditor();
@@ -1217,8 +917,7 @@ export class TabManager {
     }
     this.tabs.push(tab);
     this.syncLedger.markDirty(tab.id);
-    this.strip.get(0)!.appendChild(this.buildTabElement(tab));
-    this.renderRailCount();
+    this.stripView.append(tab);
     this.persist();
     return tab;
   }
@@ -1253,7 +952,7 @@ export class TabManager {
     this.syncLedger.markDirty(copy.id);
     this.persist();
 
-    this.renderStrip();
+    this.stripView.render();
     this.switchTo(copy.id);
     showToast(`Created "${deriveTabTitle(copy)}".`);
   }
@@ -1344,7 +1043,7 @@ export class TabManager {
       return;
     }
     this.applySnapshotToActive(content, noteType, active.colorTheme);
-    this.renderStrip();
+    this.stripView.render();
   }
 
   /**
@@ -1362,7 +1061,7 @@ export class TabManager {
     tab.updatedAt = nextUpdatedAt(tab.updatedAt);
     this.syncLedger.markDirty(tab.id);
     this.persist();
-    this.refreshTabLabel(tab.id);
+    this.stripView.refreshLabel(tab.id);
     return true;
   }
 
@@ -1417,31 +1116,10 @@ export class TabManager {
     const title = deriveTabTitle(tab);
     const index = this.tabs.findIndex((entry) => entry.id === tabId);
     this.tabs = this.tabs.filter((entry) => entry.id !== tabId);
-    // A trashed note replaces any stale entry (re-trash after a restore
-    // keeps the newest stamp; the entry never survives a live row).
-    this.trashed = this.trashed.filter((entry) => entry.id !== tabId);
-    this.trashed.push({
-      id: tab.id,
-      name: tab.name,
-      content: tab.content,
-      createdAt: tab.createdAt,
-      updatedAt: nextUpdatedAt(tab.updatedAt),
-      noteType: tab.noteType,
-      colorTheme: tab.colorTheme,
-      copyOf: tab.copyOf,
-      deletedAt: Date.now(),
-    });
-    // The note's life state dies at the trash door (a parked conflict, an
-    // unseen baseline — the review badge must not survive a delete); the
-    // id-history state stays in the ledger under the same id, so a restore
-    // keeps its merge anchor without any field-copying (the copying WAS
-    // this flow's old shape: seq/base hand-moved onto the grave and back
-    // on restore — two more places the fields could drift).
-    this.syncLedger.noteTrashed(tab.id);
-    // The trash row rides the next push — the same dirty set the tabs use
-    // (the sync layer resolves pending ids against tabs FIRST, trash second).
-    // Requeue: the grave's row rides BEHIND the live rows already waiting.
-    this.syncLedger.requeue(tab.id);
+    // The grave mint (the entry replacement for a re-trash, the stamps, and
+    // the ledger's trash rules — the note's life state dies at this door,
+    // the grave's row rides behind the live rows) is the store's one call.
+    this.trash.mintFromTab(tab);
 
     // The flash fires BEFORE the persist calls below so its first tick
     // lands clean — the receipt should never start behind the persist's
@@ -1453,7 +1131,7 @@ export class TabManager {
       this.tabs.push(fresh);
       this.activeId = fresh.id;
       this.persist();
-      this.renderStrip();
+      this.stripView.render();
       this.loadActiveIntoEditor();
       this.focusEditor();
       this.notifyActiveChanged();
@@ -1468,13 +1146,13 @@ export class TabManager {
       const neighbour = this.tabs[Math.max(0, index - 1)] ?? this.tabs[0];
       this.activeId = neighbour.id;
       this.persist();
-      this.renderStrip();
+      this.stripView.render();
       this.loadActiveIntoEditor();
       this.focusEditor();
       this.notifyActiveChanged();
     } else {
       this.persist();
-      this.renderStrip();
+      this.stripView.render();
     }
 
     showToast(`"${title}" moved to trash.`, 'neutral', {
@@ -1503,11 +1181,10 @@ export class TabManager {
    * trash it reverses.
    */
   restoreNote(noteId: string): boolean {
-    const grave = this.trashed.find((entry) => entry.id === noteId);
-    if (!grave || grave.purged) {
+    const grave = this.trash.takeForRestore(noteId);
+    if (!grave) {
       return false;
     }
-    this.trashed = this.trashed.filter((entry) => entry.id !== noteId);
     const restored: NoteTab = {
       id: grave.id,
       name: grave.name,
@@ -1527,7 +1204,7 @@ export class TabManager {
     // seq anchor are already where they belong.
     this.syncLedger.markDirty(restored.id);
     this.persist();
-    this.renderStrip();
+    this.stripView.render();
     return true;
   }
 
@@ -1543,22 +1220,9 @@ export class TabManager {
    * confirms, then confirmPushed retires it.
    */
   purgeNote(noteId: string): boolean {
-    const grave = this.trashed.find((entry) => entry.id === noteId);
-    if (!grave) {
+    if (!this.trash.purge(noteId)) {
       return false;
     }
-    this.trashed = this.trashed.filter((entry) => entry.id !== noteId);
-    const purgedAt = nextUpdatedAt(grave.updatedAt);
-    this.trashed.push({
-      id: grave.id,
-      name: null,
-      content: '',
-      createdAt: grave.createdAt,
-      updatedAt: purgedAt,
-      deletedAt: 1,
-      purged: true,
-    });
-    this.syncLedger.markDirty(grave.id);
     // Delete forever means forever: the note's snapshots go with it, or
     // the History sheet would keep offering a resurrection after the
     // toast said "for good". Best-effort — a snapshots outage must not
@@ -1567,7 +1231,7 @@ export class TabManager {
     // rejection went unhandled instead.
     void window.snapshotsManager?.deleteSnapshotsForNotes([noteId])?.catch(() => undefined);
     this.persist();
-    this.renderRailCount();
+    this.stripView.renderRailCount();
     return true;
   }
 
@@ -1576,106 +1240,17 @@ export class TabManager {
    * same sweeper-row mechanism (see purgeNote). Returns how many went.
    */
   emptyTrash(): number {
-    const visible = this.trashed.filter((entry) => !entry.purged);
-    if (visible.length === 0) {
+    const emptiedIds = this.trash.emptyVisible();
+    if (emptiedIds.length === 0) {
       return 0;
     }
-    const visibleIds = new Set(visible.map((entry) => entry.id));
-    const now = Date.now();
-    this.trashed = this.trashed
-      .filter((entry) => !visibleIds.has(entry.id))
-      .concat(
-        visible.map((grave) => ({
-          id: grave.id,
-          name: null,
-          content: '',
-          createdAt: grave.createdAt,
-          updatedAt: Math.max(now, grave.updatedAt + 1),
-          deletedAt: 1,
-          purged: true,
-        })),
-      );
-    visible.forEach((grave) => this.syncLedger.markDirty(grave.id));
     // Forever means forever — every emptied note's snapshots sweep with
     // it (see purgeNote). Best-effort, never blocking the empty itself;
     // the catch rides the promise (see purgeNote for why).
-    void window.snapshotsManager
-      ?.deleteSnapshotsForNotes(visible.map((grave) => grave.id))
-      ?.catch(() => undefined);
+    void window.snapshotsManager?.deleteSnapshotsForNotes(emptiedIds)?.catch(() => undefined);
     this.persist();
-    this.renderRailCount();
-    return visible.length;
-  }
-
-  beginRename(tabId: string): void {
-    const tab = this.tabs.find((entry) => entry.id === tabId);
-    const element = this.strip.find(`.tab-strip-tab[data-tab-id="${tabId}"]`);
-    if (!tab || element.length === 0 || element.find('.tab-strip-rename').length > 0) {
-      return;
-    }
-
-    const titleElement = element.find('.tab-strip-title');
-    const currentName = tab.name ?? deriveTabTitle(tab);
-
-    const input = $(
-      '<input type="text" class="tab-strip-rename" maxlength="60" aria-label="Tab name">',
-    ).val(currentName);
-    titleElement.replaceWith(input);
-    input.trigger('focus');
-
-    // The commit settles ONCE: Enter fires it, and the blur that follows
-    // (the input is replaced, focus moves) would fire it again — a double
-    // persist, a double "renamed" toast, and two DOM swaps racing the
-    // browser's own blur fixup (Chromium's replaceWith can throw
-    // NotFoundError when the node's focus bookkeeping moves mid-swap —
-    // its error text says as much). The second and later calls no-op.
-    let settled = false;
-    const commit = (keep: boolean): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      const raw = String(input.val() ?? '').trim();
-      if (keep && raw && raw !== currentName) {
-        tab.name = raw;
-        tab.updatedAt = nextUpdatedAt(tab.updatedAt);
-        this.syncLedger.markDirty(tab.id);
-        this.persist();
-        showToast('Tab renamed.');
-      }
-      // Presentation-only swap: the name is already in the model. A sync
-      // merge may have rebuilt the strip while the input was open (the
-      // input then sits in a detached subtree), and the swap itself can
-      // lose the browser's blur race — either way the LIVE strip gets its
-      // label from the model and the user never sees the difference.
-      if (input.get(0)?.isConnected) {
-        try {
-          element
-            .find('.tab-strip-rename')
-            .replaceWith($('<span class="tab-strip-title"></span>').text(deriveTabTitle(tab)));
-        } catch {
-          this.refreshTabLabel(tab.id);
-        }
-        element.attr('title', tab.name ? tab.name : 'Double-click to rename');
-      } else {
-        this.refreshTabLabel(tab.id);
-      }
-    };
-
-    input.on('keydown', (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        commit(true);
-        this.focusEditor();
-      } else if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        commit(false);
-      }
-    });
-    input.on('blur', () => commit(true));
-    input.on('click', (event) => event.stopPropagation());
-    input.on('dblclick', (event) => event.stopPropagation());
+    this.stripView.renderRailCount();
+    return emptiedIds.length;
   }
 
   /** Ctrl/Cmd + Alt + ←/→ moves between tabs. */
@@ -1687,21 +1262,6 @@ export class TabManager {
     const index = this.tabs.findIndex((entry) => entry.id === this.activeId);
     const next = this.tabs[(index + delta + this.tabs.length) % this.tabs.length];
     this.switchTo(next.id);
-  }
-
-  private scrollTabIntoView(tabId: string): void {
-    (
-      this.strip.find(`.tab-strip-tab[data-tab-id="${tabId}"]`).get(0) as HTMLElement | undefined
-    )?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }
-
-  private setActiveClass(): void {
-    this.strip.find('.tab-strip-tab').each((_index, element) => {
-      const $element = $(element);
-      const isActive = $element.data('tab-id') === this.activeId;
-      $element.toggleClass('active', isActive);
-      $element.attr('aria-selected', String(isActive));
-    });
   }
 
   /** Hook for app.ts to refresh the word-count pill on tab switches. */
@@ -1791,7 +1351,7 @@ export class TabManager {
     // record ever needed to move.
 
     this.persist();
-    this.renderStrip();
+    this.stripView.render();
     return true;
   }
 
@@ -1800,7 +1360,7 @@ export class TabManager {
     if (!active) {
       return;
     }
-    this.syncDocumentTitle();
+    this.stripView.syncDocumentTitle();
     if (this.onActiveChanged) {
       this.onActiveChanged(active);
     }
