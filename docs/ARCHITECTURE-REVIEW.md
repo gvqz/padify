@@ -90,6 +90,8 @@ Three persistence subsystems, three UI surfaces, three sets of retention rules �
 
 **Fix (decision first):** either declare the split intentional (local safety net vs cloud truth) and *document* it in one place with one shared vocabulary, or unify snapshots into the notes store as a record type. The current state — neither — is the expensive one.
 
+**Progress (2026-11-15): DECIDED — intentional, documented.** `docs/NOTE-HISTORY.md` is the one place: the three questions ("what did it say before?" / "can I get it back?" / "what do my other devices think?"), the shared vocabulary (snapshot / grave / cloud row), each system's rules (caps, retention, restore semantics, sync behavior), the seams where they meet, and the explicit triggers that would reopen the decision (version sync as a product request being the big one). Reversible by design — it is a recorded intent, not a lock.
+
 ### S6. Statistics has two definitions of "word" in one file
 
 `lib/text-stats.ts` counts words as whitespace-split + CJK ranges (line ~22-30) but counts *unique* words with a `\p{L}+` unicode match (line 39) — the QA-verified "Unique words 10 > Words 7" impossibility, plus lexical density >100% and URL dots counted as sentences. The module grew field-by-field without one tokenizer.
@@ -143,7 +145,7 @@ None of this is carelessness — it is the standard cost of a solo project shipp
 | 1 | **CSS consolidation** — ~~vercel/ wins, legacy 16 + bootstrap deleted or folded~~ **DONE (2026-11-15)**: 36 links → 22 under vercel/, bootstrap extracted-and-unshipped, three-layer rendering-neutrality proof (see S3) | landed in two tranches | Low (visual regressions caught by QA) |
 | 2 | ~~One markdown renderer~~ **already the design** — `build-share.mjs` generates the share bundle from `render.ts` with a drift test; no work left | none | none |
 | 3 | **Sync ledger extraction** (S1) — the fix for the data-loss bug class; then **TabManager split** (S2) | 2–3 weeks | Medium — this is the one that needs the full test suite green at every step |
-| 4 | ~~**Statistics unification** (S6), **tasks-land rename/decision** (S7)~~ **DONE** — S6 in `f32c7d0`, S7 in two tranches (2026-11-15, see S7); **snapshots-vs-trash decision** (S5) remains | ~1 week combined | Low |
+| 4 | ~~**Statistics unification** (S6), **tasks-land rename/decision** (S7), **snapshots-vs-trash decision** (S5)~~ **DONE** — S6 in `f32c7d0`, S7 in two tranches (2026-11-15, see S7), S5 decided + documented in `docs/NOTE-HISTORY.md` | ~1 week combined | Low |
 | 5 | **Legacy amputation** (S8) after a dated migration release; history rewrite (S10) as a coordinated one-off | small + one event | Low once scheduled |
 
 Phase 1 is pure deletion and immediately shrinks the "mess" feeling. Phase 3 is the real overhaul and pays for itself by retiring a whole bug class. Nothing here requires a big-bang.

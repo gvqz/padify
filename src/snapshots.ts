@@ -1,7 +1,9 @@
 /**
  * History — the one sheet, answering the three questions a person
  * actually brings to it (src/snapshots.ts owns the versions; the trash
- * rides along from the tab model, TabManager.trashed).
+ * rides along from the tab model, TabManager.trashed). The DECISION
+ * that this split is intentional — snapshots local, trash synced, cloud
+ * the truth — and the shared vocabulary live in docs/NOTE-HISTORY.md.
  *
  * The structural contract:
  *
