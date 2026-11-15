@@ -13,7 +13,7 @@ Everything through `99eee77` is committed and pushed. Every tranche below was ga
 |------|---------|--------|
 | S1 — sync state smeared across 5+ structures | the root cause of the data-loss bug class | **DONE** — one ledger + one write index, three tranches (`5906876`, `98ea017`, `affe5cc`) |
 | S2 — TabManager, a 1,922-line god object | no seam inside it | **DONE** — model / strip view / trash store / domain extracted, two tranches (`c23351e`, `99eee77`) |
-| S3 — two design systems on every page (36 links, ~632 KB) | every visual bug is a two-system interaction | **DONE** — 22 links under `vercel/`, bootstrap extracted-and-un-shipped, fold proven rendering-neutral three independent ways (`0b64fec`, `c1cdad9`) |
+| S3 — two design systems on every page (36 links, ~632 KB) | every visual bug is a two-system interaction | **DONE** — 22 links under `vercel/`, bootstrap extracted-and-un-shipped, fold proven rendering-neutral three independent ways (`0b64fec`, `c1cdad9`) + the 2026-11-16 steady-state prune (subset halved, same three-layer proof) |
 | S4 — suspected twin markdown renderer | didn't exist — the share bundle is generated + drift-pinned | **No action** (`93d8bb4`) |
 | S5 — a note's past lives in three systems | split was never declared intentional or unified | **DECIDED + DOCUMENTED** — intentional; `docs/NOTE-HISTORY.md` (`f1cc8de`) |
 | S6 — two definitions of "word" in one file | impossible statistics | **DONE** — one tokenizer, every stat derived from it (`f32c7d0`) |
@@ -72,14 +72,9 @@ The pack is mostly deleted MP3s. The fix is a coordinated one-off: `git filter-r
 
 **Decision needed: do it at all, and when.** No urgency — the weight only costs cloners. Recommendation: schedule it for a quiet moment (e.g. right after a release, with a HEADS-UP note), not mid-overhaul.
 
-### D6 — Optional: prune the conservative bootstrap subset now? (S3 steady-state)
+### D6 — ~~Optional: prune the conservative bootstrap subset now?~~ DONE (2026-11-16)
 
-The ~42 KB bootstrap subset inside `vercel/02-base.css` is conservative by design — the token-level extraction kept some groups that are provably dead (`.table-hover` variants and friends). The three-layer rendering-neutrality harness (static cascade check, computed-style diff, byte-identical pixels) is in place and can re-prove a prune.
-
-- **(a) Prune now** — autonomous, verified, ships a smaller 02-base.
-- **(b) Leave it** — the `[phase-1 fold]` banners already mark the provenance for future hygiene passes.
-
-**Recommendation: (a) — it's cheap now that the harness exists.** This one needs no input; it's listed because it's the only ungated work left, and saying "do it" just moves it up the queue.
+Pruned autonomously as recommended: 171 of 382 rule groups removed, 38 stripped of dead complex selectors, the orphaned keyframes dropped — `02-base.css` went from 54,230 to 29,624 bytes. The criterion was exact (a selector died only if it required a class the app can neither emit by any mechanism nor show on live DOM — note content is sanitized class-free, so app code is the only source), with the dormant tooltip module's placement vocabulary deliberately saved. Proof: computed-style diff across 22 views reports zero differences; pixels byte-identical on 21/22 shots with the one delta proven to be environmental antialiasing (it reproduces shooting the same build twice). Gates: typecheck, ESLint, Prettier, 1,774 unit tests, e2e green (rotating real-API flakes re-run green in isolation). No decision needed anymore — recorded here so the list stays complete.
 
 ---
 
@@ -90,7 +85,7 @@ The ~42 KB bootstrap subset inside `vercel/02-base.css` is conservative by desig
 3. **After D3:** the tooltip/dim (a) or the read-only projection (b).
 4. **After D4:** the migration release, then the deletion tranche (the mirror, the fallback backend, the legacy key migration, `copyOf` reconciliation).
 5. **After D5:** the coordinated rewrite event (filter-repo, force push, clone-reset announcement).
-6. **Optional, ungated:** D6's prune, and a human visual-QA pass across themes/devices on top of the automated pixel-diff (belt-and-braces for the CSS consolidation).
+6. **Remaining, ungated:** only the human visual-QA pass across themes/devices on top of the automated pixel-diff (belt-and-braces for the CSS consolidation). D6's prune is done (see above).
 
 ## What is deliberately NOT on this list
 

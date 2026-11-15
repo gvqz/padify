@@ -92,12 +92,16 @@ describe('bootstrap stays out entirely', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('the bootstrap subset inside 02-base stays the extracted one (content-hash pin)', () => {
+  it('the bootstrap subset inside 02-base stays the extracted+pruned one (content-hash pin)', () => {
     // The extracted block is delimited by the banner the extractor writes;
     // hand edits inside it would silently fork the vendored reset. Bump the
-    // hash only by re-running scripts/bootstrap-extract.mjs deliberately.
+    // hash only deliberately: by re-running scripts/bootstrap-extract.mjs
+    // (from a checkout that still has bootstrap.min.css) or
+    // scripts/bootstrap-prune.py (the 2026-11-16 prune that removed the
+    // groups whose every complex selector needed a class token the app can
+    // neither emit nor show on live DOM — bootstrap's JS-only vocabulary).
     const VENDORED_SUBSET_SHA256 =
-      '740a13026bd95c8eea9655b2498f50533608d96ec42b5e83ecac3534b9e26c68';
+      '50eec79d2e792f6e1063cbe705369d52810462e7e7ae15ddb5eec1bc6d9285bd';
     const base = read(join(process.cwd(), 'public', 'css', 'vercel', '02-base.css'));
     const start = base.indexOf('/* Bootstrap 3.4.1 — the surviving subset.');
     const end = base.indexOf('/* [phase-1 fold]');

@@ -40,11 +40,7 @@ import type { NoteRow } from './sync';
 import { SyncLedger } from '../sync/ledger';
 import { confirmDialog } from '../ui/dialog';
 
-function fakeManager(
-  tabs: StoredNoteTab[],
-  dirty: string[] = [],
-  trashed: TrashedNote[] = [],
-) {
+function fakeManager(tabs: StoredNoteTab[], dirty: string[] = [], trashed: TrashedNote[] = []) {
   const state = {
     tabs: tabs.map((tab) => ({ ...tab })),
     trashed: trashed.map((entry) => ({ ...entry })),

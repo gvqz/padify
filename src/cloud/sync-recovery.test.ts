@@ -58,11 +58,7 @@ interface FakeState {
   appliedMerge: StoredNoteTab[] | null;
 }
 
-function fakeManager(
-  tabs: StoredNoteTab[],
-  dirty: string[] = [],
-  trashed: TrashedNote[] = [],
-) {
+function fakeManager(tabs: StoredNoteTab[], dirty: string[] = [], trashed: TrashedNote[] = []) {
   const state: FakeState = {
     tabs: tabs.map((tab) => ({ ...tab })),
     trashed: trashed.map((entry) => ({ ...entry })),
