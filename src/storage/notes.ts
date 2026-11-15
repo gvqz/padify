@@ -30,6 +30,7 @@ import { stateSet } from './kv';
 import { reportSaveFailure, reportSaveRecovered } from './persistence';
 import { normalizeNoteType, type NoteType } from '../editor/note-types';
 import { TRASH_RETENTION_MS } from '../../shared/wire';
+import { WriteIndex, type RetiredEntry } from '../sync/write-index';
 
 /** A live note, structurally identical to NoteTab in tabs.ts. */
 export interface StoredNoteTab {
@@ -290,15 +291,13 @@ const MIRROR_MIN_INTERVAL_MS = 10_000;
 let bootSnapshot: NotesSnapshot | null = null;
 
 /**
- * Note ids deleted by ANOTHER tab of this browser (learned from the
- * compatibility mirror's `storage` events — a tab's own writes never fire
- * them). Without this, a stale tab that still holds a deleted note live
- * would upsert the row back over the tombstone on its next save: the note
- * resurrects locally AND rides the next cloud push to every device. The
- * diff refuses to write live rows for these ids; the model catches up on
- * the next re-hydrate (reload) like every other cross-tab change.
+ * The last-written index powering the diff — the ledger's write-side
+ * view (see sync/write-index.ts). One canonical signature per id,
+ * compared structurally; the externally-deleted blacklist and the
+ * swept-trash seeding live in the same structure so the diff consults
+ * ONE thing.
  */
-const externallyDeletedIds = new Set<string>();
+const writeIndex = new WriteIndex();
 
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   window.addEventListener('storage', (event) => {
@@ -310,10 +309,10 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
       if (!Array.isArray(parsed)) {
         return;
       }
-      const fresh = new Set<string>();
+      const fresh: string[] = [];
       for (const entry of parsed) {
         if (entry && typeof entry.id === 'string') {
-          fresh.add(entry.id);
+          fresh.push(entry.id);
         }
       }
       // Mirror, never merge: the blob IS the trash as the other tab
@@ -321,8 +320,7 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
       // an add-only set would keep the note blacklisted for the rest of
       // this session — every later save would skip its live upsert, so
       // edits to the restored note never reached IndexedDB again.
-      externallyDeletedIds.clear();
-      fresh.forEach((id) => externallyDeletedIds.add(id));
+      writeIndex.replaceExternallyDeleted(fresh);
     } catch {
       /* the other tab wrote a partial blob — ignore it */
     }
@@ -334,35 +332,6 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
  * write needs the freshest model, which only TabManager knows.
  */
 let currentSnapshotForMirror: NotesSnapshot | null = null;
-
-/**
- * The last-written index powering the diff. Values are the fields that
- * matter for persistence — content changes always bump `updatedAt` in
- * TabManager, so content does not need to be compared (or copied) here.
- * `deletedAt` keys the trash-diff; `swept` marks retention-retired rows
- * seeded only so the next save deletes them.
- */
-interface LastWrittenEntry {
-  name: string | null;
-  position: number;
-  updatedAt: number;
-  deleted: boolean;
-  deletedAt: number;
-  noteType: NoteType | undefined;
-  swept: boolean;
-  syncBase: { content: string; name: string | null } | undefined;
-  unseenChange: { from: string; fromName: string | null } | undefined;
-  conflict:
-    | {
-        mine: { content: string; name: string | null };
-        theirs: { content: string; updatedAt: number };
-      }
-    | undefined;
-  /** The durable sync-dirty flag as last written (see StoredNoteTab.unpushed). */
-  unpushed?: boolean;
-}
-
-const lastWritten = new Map<string, LastWrittenEntry>();
 
 // ---- compatibility mirror state ---------------------------------------------
 
@@ -478,57 +447,37 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
 
   // Seed the diff index from the records as loaded: live tabs get their
   // position in the SORTED live list (that is the index saveNotes will use
-  // when it diffs), the surviving trash gets -1 — and swept rows seed too,
-  // so the next saveNotes deletes them from the database.
+  // when it diffs), and the surviving trash seeds its own true shape —
+  // sweeping stamps the row's real values, so the first save of a session
+  // does not rewrite the whole trash once per boot. Swept rows seed too
+  // (flagged), so the next saveNotes deletes them from the database.
   live.forEach((tab, index) => {
-    lastWritten.set(tab.id, {
-      name: tab.name,
-      position: index,
-      updatedAt: tab.updatedAt,
-      deleted: false,
-      deletedAt: 0,
-      noteType: tab.noteType,
-      swept: false,
-      syncBase: tab.syncBase,
-      unseenChange: tab.unseenChange,
-      conflict: tab.conflict
-        ? {
-            mine: tab.conflict.mine,
-            theirs: {
-              content: tab.conflict.theirs.content,
-              updatedAt: tab.conflict.theirs.updatedAt,
-            },
-          }
-        : undefined,
-      unpushed: tab.unpushed === true,
-    });
+    writeIndex.seed(tab, { position: index, deleted: false, deletedAt: 0 });
   });
   const survivingTrashById = new Map(trashed.map((entry) => [entry.id, entry]));
   valid
     .filter((record) => record.deleted)
     .forEach((record) => {
-      const swept = !survivingTrashById.has(record.id);
-      lastWritten.set(record.id, {
-        name: null,
-        position: -1,
-        updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now(),
-        deleted: true,
-        noteType: undefined,
-        // A swept row must LOOK unchanged to the diff (nothing about it
-        // re-writes) while sitting in the index's delete path — the purge
-        // write removes it by id. Surviving trash seeds its own syncBase:
-        // seeding undefined would flag every grave as changed on every
-        // boot and rewrite each row once per session.
-        deletedAt: 0,
-        swept,
-        syncBase: swept ? undefined : survivingTrashById.get(record.id)?.syncBase,
-        unseenChange: undefined,
-        conflict: undefined,
-        // Surviving trash keeps its sync-dirty flag so the first save
-        // doesn't needlessly rewrite the row (swept rows are deleted on
-        // their next save anyway — the flag is moot for them).
-        unpushed: (record as { unpushed?: unknown }).unpushed === true,
-      });
+      const surviving = survivingTrashById.get(record.id);
+      if (surviving) {
+        writeIndex.seed(surviving, {
+          position: -1,
+          deleted: true,
+          deletedAt: surviving.deletedAt,
+        });
+      } else {
+        // Retention-swept: indexed only for the delete path.
+        writeIndex.seed(
+          {
+            id: record.id,
+            name: null,
+            createdAt: typeof record.createdAt === 'number' ? record.createdAt : Date.now(),
+            updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now(),
+          },
+          { position: -1, deleted: true, deletedAt: 0 },
+          { swept: true },
+        );
+      }
     });
 
   bootSnapshot = { tabs: live, trashed };
@@ -540,13 +489,7 @@ export function hydrateNotes(records: NoteRecord[]): NotesSnapshot {
  * the database right after boot so they don't linger until the first save.
  */
 export function sweptTrashIds(): string[] {
-  const ids: string[] = [];
-  lastWritten.forEach((signature, id) => {
-    if (signature.deleted && signature.swept) {
-      ids.push(id);
-    }
-  });
-  return ids;
+  return writeIndex.sweptIds();
 }
 
 /**
@@ -559,7 +502,7 @@ export function purgeNoteRecords(ids: string[]): void {
   if (ids.length === 0) {
     return;
   }
-  ids.forEach((id) => lastWritten.delete(id));
+  writeIndex.forget(ids);
   if (storageBackend() === 'local-storage') {
     // Fallback mode: rewrite the legacy blobs without the purged ids. The
     // tombstones mirror drops them; a live row with a purged id (a torn
@@ -861,8 +804,8 @@ export function saveNotes(
         // model today"), so dropping it there on failure meant the
         // delete was never re-issued and the orphaned row re-hydrated
         // live at the next boot.
-        upserts.forEach((record) => lastWritten.delete(record.id));
-        retired.forEach((entry, id) => lastWritten.set(id, entry));
+        writeIndex.forget(upserts.map((record) => record.id));
+        writeIndex.restore(retired);
       });
     trackWrite(write);
   }
@@ -876,11 +819,15 @@ export function saveNotes(
  * (purged trash, merges) are deletes — whose index entries leave with
  * this diff but are returned as `retired`, so a failed write can put
  * them back and the next save re-issues the delete.
+ *
+ * The comparison itself is the write index's (sync/write-index.ts): one
+ * canonical signature per row, compared structurally. This function only
+ * walks the model and builds the records.
  */
 function diffAgainstLastWritten(snapshot: NotesSnapshot): {
   upserts: NoteRecord[];
   deletes: string[];
-  retired: Map<string, LastWrittenEntry>;
+  retired: Map<string, RetiredEntry>;
 } {
   const upserts: NoteRecord[] = [];
   const seen = new Set<string>();
@@ -888,78 +835,25 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
   snapshot.tabs.forEach((tab, index) => {
     seen.add(tab.id);
     // Another tab of this browser deleted this note after we hydrated:
-    // never upsert a live row back over its trash row (see
-    // externallyDeletedIds). The id stays "seen" so the trailing
-    // delete-sweep below doesn't drop the trash row either.
-    if (externallyDeletedIds.has(tab.id)) {
+    // never upsert a live row back over its trash row (the externally-
+    // deleted blacklist inside the write index). The id stays "seen" so
+    // the trailing delete-sweep below doesn't drop the trash row either.
+    if (writeIndex.isExternallyDeleted(tab.id)) {
       return;
     }
-    const previous = lastWritten.get(tab.id);
-    const signature = {
-      name: tab.name,
-      position: index,
-      updatedAt: tab.updatedAt,
-      deleted: false,
-      deletedAt: 0,
-      noteType: tab.noteType,
-      swept: false,
-      syncBase: tab.syncBase,
-      unseenChange: tab.unseenChange,
-      conflict: tab.conflict
-        ? {
-            mine: tab.conflict.mine,
-            theirs: {
-              content: tab.conflict.theirs.content,
-              updatedAt: tab.conflict.theirs.updatedAt,
-            },
-          }
-        : undefined,
-      unpushed: tab.unpushed === true,
-    };
-    const sameSyncBase =
-      previous?.syncBase?.content === tab.syncBase?.content &&
-      previous?.syncBase?.name === tab.syncBase?.name;
-    const sameUnseen =
-      previous?.unseenChange?.from === tab.unseenChange?.from &&
-      previous?.unseenChange?.fromName === tab.unseenChange?.fromName;
-    const sameConflict =
-      previous?.conflict?.mine.content === tab.conflict?.mine.content &&
-      previous?.conflict?.mine.name === tab.conflict?.mine.name &&
-      previous?.conflict?.theirs.content === tab.conflict?.theirs.content &&
-      previous?.conflict?.theirs.updatedAt === tab.conflict?.theirs.updatedAt;
-    if (
-      !previous ||
-      previous.name !== signature.name ||
-      previous.position !== index ||
-      previous.updatedAt !== tab.updatedAt ||
-      previous.noteType !== signature.noteType ||
-      previous.deleted ||
-      !sameSyncBase ||
-      !sameUnseen ||
-      !sameConflict ||
-      previous.unpushed !== signature.unpushed
-    ) {
+    const layout = { position: index, deleted: false, deletedAt: 0 };
+    if (writeIndex.changed(tab, layout)) {
       // Every writer stamps the current schema version (see
       // NOTE_RECORD_VERSION); v is local-only and never crosses the wire.
       upserts.push({ ...tab, position: index, deleted: false, v: NOTE_RECORD_VERSION });
-      lastWritten.set(tab.id, signature);
+      writeIndex.commit(tab, layout);
     }
   });
 
   snapshot.trashed.forEach((grave) => {
     seen.add(grave.id);
-    const previous = lastWritten.get(grave.id);
-    const sameGraveBase =
-      previous?.syncBase?.content === grave.syncBase?.content &&
-      previous?.syncBase?.name === grave.syncBase?.name;
-    if (
-      !previous ||
-      !previous.deleted ||
-      previous.deletedAt !== grave.deletedAt ||
-      previous.updatedAt !== grave.updatedAt ||
-      !sameGraveBase ||
-      (previous.unpushed === true) !== (grave.unpushed === true)
-    ) {
+    const layout = { position: -1, deleted: true, deletedAt: grave.deletedAt };
+    if (writeIndex.changed(grave, layout)) {
       upserts.push({
         id: grave.id,
         name: grave.name,
@@ -980,36 +874,11 @@ function diffAgainstLastWritten(snapshot: NotesSnapshot): {
         ...(grave.unpushed ? { unpushed: true } : {}),
         v: NOTE_RECORD_VERSION,
       });
-      lastWritten.set(grave.id, {
-        name: grave.name,
-        position: -1,
-        updatedAt: grave.updatedAt,
-        deleted: true,
-        deletedAt: grave.deletedAt,
-        noteType: grave.noteType,
-        swept: false,
-        syncBase: grave.syncBase,
-        unseenChange: undefined,
-        conflict: undefined,
-        unpushed: grave.unpushed === true,
-      });
+      writeIndex.commit(grave, layout);
     }
   });
 
-  const deletes: string[] = [];
-  const retired = new Map<string, LastWrittenEntry>();
-  lastWritten.forEach((_signature, id) => {
-    if (!seen.has(id)) {
-      deletes.push(id);
-    }
-  });
-  deletes.forEach((id) => {
-    const entry = lastWritten.get(id);
-    if (entry) {
-      retired.set(id, entry);
-    }
-    lastWritten.delete(id);
-  });
+  const { deletes, retired } = writeIndex.retireAbsent(seen);
 
   return { upserts, deletes, retired };
 }
@@ -1162,13 +1031,12 @@ export function whenNotesIdle(): Promise<void> {
 
 /** Test hook: resets diff/mirror state. */
 export function resetNotesForTests(): void {
-  lastWritten.clear();
+  writeIndex.reset();
   bootSnapshot = null;
   inFlightWrites.splice(0);
   currentSnapshotForMirror = null;
   lastMirrorWriteAt = 0;
   mirrorDirty = false;
-  externallyDeletedIds.clear();
   warnedMirrorQuota = false;
   if (mirrorTimer !== null) {
     clearTimeout(mirrorTimer);
