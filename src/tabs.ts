@@ -48,17 +48,15 @@ import {
 } from './storage';
 import { sanitizeNoteHtml } from './editor/storage-subset';
 import { currentThemeMode, transformNoteColors } from './editor/theme-colors';
-import { parseTaskNoteContent } from './editor/tasks/content';
-import { formatDueChip } from './editor/tasks/dates';
+import { noteExportHtmlBody, noteStripBadge } from './editor/note-projections';
 import {
   htmlNoteSurface,
   noteSurfaceFor,
   noteSurfaceForKind,
   type NoteSurface,
 } from './editor/surface';
-import { renderMarkdownToHtml } from './editor/markdown/render';
 import { convertNoteContent } from './editor/note-convert';
-import { deriveTabTitle, escapeHtml, legacyTextToHtml, WELCOME_HTML } from './editor/note-content';
+import { deriveTabTitle, legacyTextToHtml, WELCOME_HTML } from './editor/note-content';
 import {
   DEFAULT_NOTE_TYPE,
   isHtmlContent,
@@ -993,14 +991,15 @@ export class TabManager {
       button.appendChild(conflictBadge);
     }
 
-    if (tab.noteType === 'tasks') {
+    const stripBadge = noteStripBadge(tab.content, tab.noteType);
+    if (stripBadge) {
       // A task list's badge is its own colored circle — the rail shows
-      // the note AS a list (see editor/tasks/content.ts for the model).
+      // the note AS a list (the projection seam reads the model).
       const listDot = document.createElement('span');
       listDot.className = 'tab-strip-type tab-strip-list-dot';
       listDot.title = 'Task list';
       listDot.setAttribute('aria-hidden', 'true');
-      listDot.dataset.color = parseTaskNoteContent(tab.content).color;
+      listDot.dataset.color = stripBadge.color;
       button.appendChild(listDot);
     } else if (tab.noteType && tab.noteType !== DEFAULT_NOTE_TYPE) {
       const typeBadge = document.createElement('span');
@@ -1046,7 +1045,10 @@ export class TabManager {
     // follows the aggregate; the strip needed its own refresh).
     const listDot = element.find('.tab-strip-list-dot');
     if (listDot.length > 0) {
-      listDot.attr('data-color', parseTaskNoteContent(tab.content).color);
+      const badge = noteStripBadge(tab.content, tab.noteType);
+      if (badge) {
+        listDot.attr('data-color', badge.color);
+      }
     }
     if (tab.id === this.activeId) {
       this.syncDocumentTitle();
@@ -1880,6 +1882,8 @@ export function insertTextIntoActiveNote(text: string): boolean {
  * HTML. Markdown is the one exception — its source IS meant to become
  * markup, and the owned renderer (editor/markdown/render.ts) produces
  * exactly what the preview and a share link show, safe by construction.
+ * The per-kind bodies live behind the projection seam
+ * (editor/note-projections.ts) — this flow asks, it does not branch.
  * Returns null when no note is open.
  */
 export function getActiveNoteExportBody(): string | null {
@@ -1887,35 +1891,5 @@ export function getActiveNoteExportBody(): string | null {
   if (!captured) {
     return null;
   }
-  if (captured.noteType === 'markdown') {
-    return renderMarkdownToHtml(captured.content);
-  }
-  if (captured.noteType === 'tasks') {
-    // A task list exports as the checklist it is — the same projection
-    // the word count reads, dressed for HTML (all strings escaped).
-    return renderTaskListExportBody(captured.content);
-  }
-  if (isHtmlContent(captured.noteType)) {
-    return sanitizeNoteHtml(captured.content);
-  }
-  return `<pre>${escapeHtml(captured.content)}</pre>`;
-}
-
-/** The tasks note's HTML export: a quiet checklist, list color included. */
-function renderTaskListExportBody(content: string): string {
-  const model = parseTaskNoteContent(content);
-  const items = model.tasks
-    .map((task) => {
-      const title = escapeHtml(task.title);
-      let line = `<li class="padify-task${task.completed ? ' is-done' : ''}"><span class="padify-task-title">${title}</span>`;
-      if (task.dueDate) {
-        line += `<span class="padify-task-meta">due ${escapeHtml(formatDueChip(task.dueDate, new Date()))}</span>`;
-      }
-      if (task.notes) {
-        line += `<span class="padify-task-meta">${escapeHtml(task.notes)}</span>`;
-      }
-      return `${line}</li>`;
-    })
-    .join('');
-  return `<ul class="padify-task-list" data-color="${model.color}">${items}</ul>`;
+  return noteExportHtmlBody(captured.content, captured.noteType);
 }

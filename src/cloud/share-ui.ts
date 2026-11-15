@@ -34,12 +34,14 @@ import {
   createShare,
   isShareAvailable,
   listOwnedShares,
-  noteContentIsEmpty,
   revokeShare,
   shareUrlFor,
   updateShareExpiry,
   type ShareRecord,
 } from './share';
+// The share gate lives behind the projection seam now — the per-kind
+// emptiness dispatch is editor/note-projections.ts's to own.
+import { noteContentIsEmpty } from '../editor/note-projections';
 
 const DAY_MS = 86_400_000;
 /** How long a cancel button stays armed before it disarms itself. */

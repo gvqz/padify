@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { noteContentIsEmpty, shareUrlFor } from './share';
+import { shareUrlFor } from './share';
+import { noteContentIsEmpty } from '../editor/note-projections';
+// The tasks kind registers its content readings with the projection
+// seam at import time — the same wiring the app's import graph gives
+// the share gate for free. The drawing kind registers statically
+// inside the seam itself.
+import '../editor/tasks/projection';
 import {
   DRAWING_SCENE_VERSION,
   emptyDrawingScene,

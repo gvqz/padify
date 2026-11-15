@@ -79,21 +79,20 @@
 import { $ } from './lib/q';
 import { closeCollapse } from './ui/behavior/collapse';
 import { openModal } from './ui/behavior/modal';
-import { getActiveNoteContent, getEditorText, getTabManager, htmlToText } from './tabs';
+import { getActiveNoteContent, getEditorText, getTabManager } from './tabs';
 import {
   DEFAULT_NOTE_TYPE,
-  isHtmlContent,
   normalizeNoteType,
   noteTypeLabel,
   type NoteType,
 } from './editor/note-types';
-import {
-  drawingSceneContentIdentity,
-  drawingScenePlainText,
-  parseDrawingScene,
-} from './editor/drawing/scene';
 import { drawingSceneThumb } from './editor/drawing/thumb';
-import { parseTaskNoteContent, taskNotePlainText } from './editor/tasks/content';
+import {
+  noteContentHasSubstance,
+  noteContentIdentity,
+  notePlainText,
+  noteUnitCount,
+} from './editor/note-projections';
 import { showToast } from './ui/toast';
 import { hydrateModifierKeyElements } from './ui/platform-hints';
 import { updateWordCountPill } from './word-count-pill';
@@ -140,20 +139,17 @@ interface SnapshotState {
 
 /**
  * The CONTENT identity of a capture — what "the same snapshot twice"
- * compares. Drawings canonicalize through the scene module (their stored
- * envelope carries a volatile savedAt stamp that refreshes on every save,
- * so byte-comparing two saves of the SAME drawing answers "different" —
- * see drawingSceneContentIdentity); every other kind is its bytes, which
- * its surface serializes deterministically. Normalizing the note type
- * here would be wrong — a content/type pair is the identity, and the
- * callers normalize types themselves (isSameSnapshotState) or specialize
- * (isCurrentSnapshotState).
+ * compares. The per-kind identity lives behind the projection seam
+ * (drawings canonicalize — their stored envelope carries a volatile
+ * savedAt stamp that refreshes on every save, so byte-comparing two
+ * saves of the SAME drawing answers "different"); every other kind is
+ * its bytes, which its surface serializes deterministically. Normalizing
+ * the note type here would be wrong — a content/type pair is the
+ * identity, and the callers normalize types themselves
+ * (isSameSnapshotState) or specialize (isCurrentSnapshotState).
  */
 function snapshotContentIdentity(content: string, noteType?: string): string {
-  if (noteType === 'drawing') {
-    return drawingSceneContentIdentity(content);
-  }
-  return content;
+  return noteContentIdentity(content, noteType);
 }
 
 /**
@@ -287,35 +283,21 @@ export function pruneSnapshots(
 // ---------------------------------------------------------------------------
 
 /**
- * Whether a note's content is worth a snapshot, judged by its kind.
- * Html notes read their TEXT PROJECTION — the storage subset holds
- * words and formatting only (images are rendered as chips, never stored
- * as <img> — see editor/markdown/nodes.ts), so an html note without
- * words is empty, full stop. Drawings and task lists are JSON envelopes
- * whose bytes are never empty — their MEANING is: a scene with no
- * elements (a stroke undone away) and a list with no rows are nothing a
- * safety copy adds. Drawing bytes this build cannot parse (a newer
- * build's scene) stay real content — the app refuses to edit them but
- * keeps them, and a safety copy of exactly those bytes is the point.
- * Text/json/opaque kinds are their raw bytes.
+ * Whether a note's content is worth a snapshot, judged by its kind —
+ * the substance reading behind the projection seam
+ * (editor/note-projections.ts). Html notes read their TEXT PROJECTION
+ * (the storage subset holds words and formatting only — images are
+ * rendered as chips, never stored as <img> — see
+ * editor/markdown/nodes.ts), so an html note without words is empty,
+ * full stop. Drawings and task lists are JSON envelopes whose bytes are
+ * never empty — their MEANING is: a scene with no visible elements (a
+ * stroke undone away) and a list with no rows are nothing a safety copy
+ * adds. Drawing bytes this build cannot parse (a newer build's scene)
+ * stay real content — the app refuses to edit them but keeps them, and
+ * a safety copy of exactly those bytes is the point.
  */
 export function snapshotHasContent(content: string, noteType?: string): boolean {
-  if (isHtmlContent(noteType)) {
-    return htmlToText(content).trim() !== '';
-  }
-  if (noteType === 'drawing') {
-    const scene = parseDrawingScene(content);
-    if (scene !== null) {
-      return scene.elements.some(
-        (element) => (element as { isDeleted?: boolean } | null)?.isDeleted !== true,
-      );
-    }
-    return content.trim() !== '';
-  }
-  if (noteType === 'tasks') {
-    return parseTaskNoteContent(content).tasks.length > 0;
-  }
-  return content.trim() !== '';
+  return noteContentHasSubstance(content, noteType);
 }
 
 /** Two captures are the same snapshot when their CONTENT IDENTITY and
@@ -414,27 +396,16 @@ export function formatSnapshotTimestamp(timestamp: number): string {
 }
 
 /**
- * What a row's expandable panel and the readable previews show: html
- * kinds read their text projection; drawings read their text elements'
- * plain projection; task lists read their rows' titles. Markdown and
- * unknown kinds are their raw bytes — a markdown note's source IS its
- * text. Unparseable drawing/tasks bytes (corrupt or hand-edited) fall
- * back to the raw content rather than an empty panel.
+ * What a row's expandable panel and the readable previews show — the
+ * plain-text reading behind the projection seam. Html kinds read their
+ * text projection; drawings read their text elements' plain projection;
+ * task lists read their rows' titles. Markdown and unknown kinds are
+ * their raw bytes — a markdown note's source IS its text. Unparseable
+ * drawing/tasks bytes (corrupt or hand-edited) fall back to the raw
+ * content rather than an empty panel.
  */
 export function snapshotReadableText(content: string, noteType?: string): string {
-  if (isHtmlContent(noteType)) {
-    return htmlToText(content);
-  }
-  // Both projections carry their own fallbacks: a corrupt scene/list
-  // answers its raw bytes, an empty one answers '' (which the preview
-  // renders as 'No content' — not a wall of JSON braces).
-  if (noteType === 'drawing') {
-    return drawingScenePlainText(content);
-  }
-  if (noteType === 'tasks') {
-    return taskNotePlainText(parseTaskNoteContent(content));
-  }
-  return content;
+  return notePlainText(content, noteType);
 }
 
 /**
@@ -534,18 +505,7 @@ export interface SnapshotChangeBadge {
 }
 
 function snapshotUnitCount(content: string, noteType?: string): { count: number; unit: string } {
-  if (noteType === 'tasks') {
-    return { count: parseTaskNoteContent(content).tasks.length, unit: 'task' };
-  }
-  if (noteType === 'drawing') {
-    const scene = parseDrawingScene(content);
-    const elements = scene?.elements.filter(
-      (element) => (element as { isDeleted?: boolean } | null)?.isDeleted !== true,
-    );
-    return { count: elements?.length ?? 0, unit: 'shape' };
-  }
-  const words = snapshotReadableText(content, noteType).trim();
-  return { count: words === '' ? 0 : words.split(/\s+/).length, unit: 'word' };
+  return noteUnitCount(content, noteType);
 }
 
 export function snapshotChangeBadge(

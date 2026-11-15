@@ -50,6 +50,10 @@ import {
   type Task,
   type TaskNoteContent,
 } from './content';
+// The shell's content readings register with the projection seam the
+// moment this kind is present — the same import-time wiring as the
+// surface registration at the bottom of this file.
+import './projection';
 
 // ---------------------------------------------------------------------------
 // The environment — what the feature layer supplies

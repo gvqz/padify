@@ -29,6 +29,10 @@ import {
   trashRowModel,
   trashRowSearchText,
 } from './snapshots';
+// The tasks kind registers its content readings (empty list, checklist
+// prose, row counting) with the projection seam at import time — the
+// wiring the app's import graph gives the snapshot gates for free.
+import './editor/tasks/projection';
 
 /**
  * Three contracts live here:
