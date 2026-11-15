@@ -87,6 +87,16 @@ export {
   WELCOME_HTML,
 } from './editor/note-content';
 
+/**
+ * One note — the PURE DOMAIN record. Everything the note IS, nothing
+ * about what the cloud thinks of it: sync state (the dirty flag, the
+ * seq anchor, the merge base, a parked conflict, an unseen baseline)
+ * lives in the sync ledger (src/sync/ledger.ts), keyed by id, and is
+ * stamped onto the stored/sync spelling ONLY at the projection
+ * (TabManager.exportForSync — the one place domain + ledger meet a wire
+ * or a disk). The fields below are exactly what a note is to the editor,
+ * the features and the UI.
+ */
 export interface NoteTab {
   id: string;
   /** User-provided name; null derives the title from the content. */
@@ -115,54 +125,6 @@ export interface NoteTab {
    */
   colorTheme?: 'light' | 'dark';
   /**
-   * Sync v2: the server sequence stamped on the version this row last
-   * synced as (see cloud/sync.ts). Ordering across devices keys off it —
-   * client clocks only arbitrate rows that never carried one. Sync
-   * metadata, never user content: it rides storage and the merge, and
-   * edits clear nothing (an edit keeps the seq of the version it edits
-   * FROM, until its own push lands a new one).
-   */
-  syncSeq?: number;
-  /**
-   * The last version the cloud agreed to (content + name) — the common
-   * ancestor of a three-way merge (see src/merge/ and storage/notes.ts's
-   * StoredNoteTab.syncBase). Cloud-only metadata: adopted on confirmed
-   * pushes and clean adoptions, never on local edits, so it always names
-   * a version that exists on the server.
-   */
-  syncBase?: { content: string; name: string | null };
-  /**
-   * An unresolved divergence awaiting review: the note was changed on
-   * two devices at once, their version took the canonical row, and THIS
-   * device's unpushed words wait in `mine` (see cloud/sync.ts — the merge
-   * parks instead of minting a "conflicted copy" twin). The strip badges
-   * it; the review sheet resolves it; editing the note does not clear it
-   * (only a resolution or the note's death does).
-   */
-  conflict?: NoteConflict;
-  /**
-   * The note changed on another device while it was NOT the active one
-   * (a sync merge repainted an unopened tab). `from` holds the bytes this
-   * device last had — the baseline the next open diffs against to show
-   * what arrived since. Consumed by the next switchTo: cleared from the
-   * note (the peek fires once per change, never on every re-open) and
-   * handed to onUnseenPeek. Rides storage so a change that outlives a
-   * reload still peeks on the next open; never crosses the wire. A note
-   * with a parked `conflict` never gains one — the review badge owns it.
-   */
-  unseenChange?: { from: string; fromName: string | null };
-  /**
-   * DURABLE sync-dirty marker: these bytes differ from what the cloud last
-   * agreed to (or the cloud has never seen them). Written by persist() in
-   * the SAME record write as the content, so it is exactly as crash-safe
-   * as the words it describes; TabManager.init() re-seeds the sync
-   * ledger's dirty set from it (see sync/ledger.ts), and the sync layer's
-   * session start arms a pull-first recovery cycle for it (see
-   * cloud/sync.ts). Cloud-only metadata: never crosses the wire, cleared
-   * by confirmPushed's persist once the server has the bytes.
-   */
-  unpushed?: boolean;
-  /**
    * Conflicted-copy lineage (LEGACY — pre-review builds minted twin notes
    * and marked them; nothing writes it anymore, existing values ride
    * storage untouched and unread).
@@ -170,7 +132,7 @@ export interface NoteTab {
   copyOf?: string;
 }
 
-/** One parked version conflict — see NoteTab.conflict. */
+/** One parked version conflict — see the ledger's NoteConflictRecord. */
 export type NoteConflict = NoteConflictRecord;
 
 const LEGACY_NOTE_KEY = 'note';
@@ -183,10 +145,15 @@ const RAIL_COUNT_ID = 'tabRailCount';
  * `trashed` list rides along so the sync layer can push trash rows (and
  * the share layer can revoke links) — entries stay in the model until
  * retention retires them, unlike the tombstones they replaced.
+ *
+ * The tabs and trashed rows are the PROJECTED view — domain records with
+ * the ledger's sync state stamped on (the stored spelling) — so the
+ * merge can arbitrate on seq/base/conflict exactly as it always did,
+ * from one projection built in one place (exportForSync).
  */
 export interface TabsSyncPayload {
-  /** Current tab list (already persisted to localStorage). */
-  tabs: NoteTab[];
+  /** Current tab list, domain + ledger (the stored spelling). */
+  tabs: StoredNoteTab[];
   /** Tab ids whose content/name changed since the last persist. */
   dirty: string[];
   /** The trash: deleted notes kept restorable for the retention window. */
@@ -222,6 +189,48 @@ function createTab(
   return tab;
 }
 
+/**
+ * The domain half of a stored row — the pick that keeps the model honest:
+ * a field only enters the model by being named here, so sync state can
+ * never silently ride a domain object again. Verbatim values (the merge
+ * already normalized what needed normalizing); html content was sanitized
+ * by the caller before this runs.
+ */
+function domainTabOf(row: StoredNoteTab): NoteTab {
+  const tab: NoteTab = {
+    id: row.id,
+    name: row.name,
+    content: row.content,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+  if (row.noteType !== undefined) {
+    tab.noteType = row.noteType;
+  }
+  if (row.colorTheme !== undefined) {
+    tab.colorTheme = row.colorTheme;
+  }
+  if (row.copyOf !== undefined) {
+    tab.copyOf = row.copyOf;
+  }
+  return tab;
+}
+
+/**
+ * The domain half of a grave: the tab pick plus the trash stamps. The
+ * grave's sync state stays in the ledger (same id); nothing to copy.
+ */
+function domainGraveOf(grave: TrashedNote): TrashedNote {
+  const out: TrashedNote = {
+    ...domainTabOf(grave),
+    deletedAt: grave.deletedAt,
+  };
+  if (grave.purged) {
+    out.purged = true;
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Manager
 // ---------------------------------------------------------------------------
@@ -239,7 +248,10 @@ export class TabManager {
   private readonly strip: Q;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   /** The trash — deleted notes kept restorable for the retention window
-   *  (content included). Lives beside the tabs, syncs as deleted rows. */
+   *  (content included). Lives beside the tabs, syncs as deleted rows.
+   *  Domain + stamp fields only: the sync state (seq/base/unpushed) for a
+   *  grave lives in the ledger under the same id — an entry outlives the
+   *  live↔trash transitions, so nothing is copied at either border. */
   private trashed: TrashedNote[] = [];
   /** The one sync-state owner — the dirty set, the push queue and the
    *  echo fingerprints in a single structure (see sync/ledger.ts).
@@ -265,26 +277,19 @@ export class TabManager {
   async init(): Promise<void> {
     const snapshot = await loadNotes();
     this.tabs = this.loadModel(snapshot.tabs);
-    this.trashed = snapshot.trashed.filter(
-      (entry) => entry && typeof entry.id === 'string' && typeof entry.deletedAt === 'number',
-    );
-    // Durable sync-dirty recovery: records an earlier session stamped
-    // `unpushed` re-enter the ledger's dirty set here. The push queue and
-    // the dirty set used to be memory-only while the pull cursor survived
-    // reloads — an edit made just before a reload was then silently
-    // overwritten when another device later pushed the same note. Seeding
-    // the ledger (tabs AND trash) lets the sync layer's session start
-    // queue these ids for a pull-first recovery cycle instead.
-    this.tabs.forEach((tab) => {
-      if (tab.unpushed === true) {
-        this.syncLedger.markDirty(tab.id);
-      }
-    });
-    this.trashed.forEach((grave) => {
-      if (grave.unpushed === true) {
-        this.syncLedger.markDirty(grave.id);
-      }
-    });
+    this.trashed = snapshot.trashed
+      .filter(
+        (entry) => entry && typeof entry.id === 'string' && typeof entry.deletedAt === 'number',
+      )
+      .map((grave) => {
+        // The boot-side map for the trash: the grave's sync fields seed
+        // the ledger (same id, same entry), and the model keeps the
+        // domain + stamp half. unpushed re-enters the dirty set here —
+        // the reload-recovery seed for trash rows (a delete that never
+        // pushed is a strand too).
+        this.syncLedger.adoptStoredRow(grave);
+        return domainGraveOf(grave);
+      });
     this.migrateLegacyNote();
 
     const savedActive = stateGet(ACTIVE_TAB_KEY);
@@ -312,11 +317,28 @@ export class TabManager {
 
   // ---- model ---------------------------------------------------------------
 
-  /** Validates + sanitises a stored row into the editor-safe model shape. */
+  /**
+   * Validates a stored row into the editor-safe domain shape and adopts
+   * its sync state into the ledger — the boot-side map between the two
+   * spellings (see the ledger's adoptStoredRow). The durable unpushed
+   * flag re-enters the dirty set there: records an earlier session
+   * stamped re-enter as strands, so the sync layer's session start queues
+   * them for a pull-first recovery cycle instead of shipping stale bytes
+   * over a newer remote edit.
+   */
   private loadModel(entries: StoredNoteTab[]): NoteTab[] {
     return entries
       .filter((entry) => entry && typeof entry.id === 'string')
       .map((entry) => {
+        this.syncLedger.adoptStoredRow({
+          id: entry.id,
+          syncSeq:
+            typeof entry.syncSeq === 'number' && entry.syncSeq > 0 ? entry.syncSeq : undefined,
+          syncBase: entry.syncBase,
+          conflict: readNoteConflict(entry.conflict),
+          unseenChange: entry.unseenChange,
+          unpushed: entry.unpushed === true ? true : undefined,
+        });
         const noteType = normalizeNoteType(entry.noteType);
         return {
           id: entry.id,
@@ -337,12 +359,6 @@ export class TabManager {
             entry.colorTheme === 'light' || entry.colorTheme === 'dark'
               ? entry.colorTheme
               : undefined,
-          syncSeq:
-            typeof entry.syncSeq === 'number' && entry.syncSeq > 0 ? entry.syncSeq : undefined,
-          syncBase: entry.syncBase,
-          unseenChange: entry.unseenChange,
-          conflict: readNoteConflict(entry.conflict),
-          unpushed: entry.unpushed === true ? true : undefined,
           copyOf: typeof entry.copyOf === 'string' && entry.copyOf ? entry.copyOf : undefined,
         };
       });
@@ -374,41 +390,21 @@ export class TabManager {
    * the sync layer + persist listeners. `immediate=false` marks the typing
    * path: the IndexedDB diff still runs, the legacy blob mirror is
    * throttled.
+   *
+   * One projection per persist: exportForSync() builds the stored view
+   * (domain + ledger), and the SAME view feeds saveNotes and the sync
+   * payload — the durable `unpushed` flag is stamped from the ledger
+   * there, in the same write as the bytes it describes, so the two can
+   * never drift apart across a crash.
    */
   private persist(immediate = true): void {
-    // The durable dirty marker rides the same write as the content — the
-    // flag and the bytes it describes can never drift apart across a crash.
-    this.stampUnpushedFlags();
-    saveNotes({ tabs: this.tabs, trashed: this.trashed }, this.activeId, { immediate });
-
     const payload = this.exportForSync();
+    saveNotes({ tabs: payload.tabs, trashed: payload.trashed }, this.activeId, { immediate });
+
     if (this.onPersist) {
       this.onPersist(payload);
     }
     this.persistListeners.forEach((listener) => listener(payload));
-  }
-
-  /**
-   * Mirrors the ledger's dirty set onto the records before every write
-   * (see NoteTab.unpushed): every dirty mutation funnels through a
-   * persist eventually, so one stamp point keeps the flag exactly as
-   * fresh as the content beside it. `undefined` keeps the stored records
-   * lean — the overwhelming majority of notes are confirmed at any given
-   * moment.
-   */
-  private stampUnpushedFlags(): void {
-    this.tabs.forEach((tab) => {
-      const unpushed = this.syncLedger.isDirty(tab.id);
-      if (unpushed !== (tab.unpushed === true)) {
-        tab.unpushed = unpushed || undefined;
-      }
-    });
-    this.trashed.forEach((grave) => {
-      const unpushed = this.syncLedger.isDirty(grave.id);
-      if (unpushed !== (grave.unpushed === true)) {
-        grave.unpushed = unpushed || undefined;
-      }
-    });
   }
 
   /**
@@ -451,12 +447,18 @@ export class TabManager {
 
   // ---- sync support ---------------------------------------------------------
 
-  /** Snapshot of the model for the cloud sync layer. */
+  /**
+   * Snapshot of the model for the cloud sync layer — and THE projection
+   * where the domain records and the ledger's sync state meet the stored
+   * spelling. persist() feeds the very same view to saveNotes, so the
+   * disk, the legacy mirror and the wire always see the same fields from
+   * one truth. Fresh copies every call: the merge treats rows as data.
+   */
   exportForSync(): TabsSyncPayload {
     return {
-      tabs: this.tabs.map((tab) => ({ ...tab })),
+      tabs: this.tabs.map((tab) => this.syncLedger.project(tab)),
       dirty: this.syncLedger.dirtyIds(),
-      trashed: this.trashed.map((entry) => ({ ...entry })),
+      trashed: this.trashed.map((grave) => this.syncLedger.project(grave)),
     };
   }
 
@@ -464,10 +466,13 @@ export class TabManager {
    * Replaces the trash list after a sync merge. Called only when the merge
    * actually changed it — the strip never depends on trash rows, so this
    * is a silent model+persist swap (the rail badge refresh is the UI's to
-   * own through its persist listener).
+   * own through its persist listener). The incoming rows carry the graves'
+   * sync state in the stored spelling; the ledger adopts it and the model
+   * keeps the domain + stamp half.
    */
   applyExternalTrash(trashed: TrashedNote[]): void {
-    this.trashed = trashed.map((entry) => ({ ...entry }));
+    trashed.forEach((grave) => this.syncLedger.adoptMergedRow(grave));
+    this.trashed = trashed.map((grave) => domainGraveOf(grave));
     this.persist();
     this.renderRailCount();
   }
@@ -522,7 +527,8 @@ export class TabManager {
    * adopts its fresh seq AND its merge base — the exact (content, name)
    * the server now holds, the ancestor every future three-way merge diffs
    * from. A note whose words moved on since the snapshot keeps them; only
-   * the sync metadata moves.
+   * the sync metadata moves. Live tabs only (today's contract): graves
+   * keep whatever anchor they carried.
    */
   adoptPushedRows(
     rows: Array<{ id: string; seq: number; content: string; name: string | null }>,
@@ -532,19 +538,12 @@ export class TabManager {
     }
     let touchedAny = false;
     for (const row of rows) {
-      const tab = this.tabs.find((entry) => entry.id === row.id);
-      if (!tab) {
+      if (!this.tabs.some((tab) => tab.id === row.id)) {
         continue;
       }
-      if (row.seq > 0 && row.seq !== tab.syncSeq) {
-        tab.syncSeq = row.seq;
-        touchedAny = true;
-      }
-      const nextBase = { content: row.content, name: row.name };
-      if (tab.syncBase?.content !== nextBase.content || tab.syncBase?.name !== nextBase.name) {
-        tab.syncBase = nextBase;
-        touchedAny = true;
-      }
+      touchedAny =
+        this.syncLedger.adoptPushed(row.id, row.seq, { content: row.content, name: row.name }) ||
+        touchedAny;
     }
     if (touchedAny) {
       this.persist();
@@ -556,6 +555,13 @@ export class TabManager {
    * The editor only reloads when the user is not actively typing in it, so a
    * background pull can never swallow keystrokes.
    *
+   * The incoming rows are the merge's PROJECTED copies — domain + sync
+   * state in the stored spelling (the merge arbitrates on seq/base and
+   * may park a conflict or leave a marker riding). The unseen stamp is
+   * minted on them FIRST (it needs the pre-merge model's bytes and the
+   * ledger's pre-adoption baseline), then the ledger adopts each row's
+   * sync state, and the model keeps the domain half.
+   *
    * `forceRepaintIds` names notes the sync layer AUTO-MERGED (both devices'
    * edits now live in one version, see src/merge/): those repaint even when
    * the editor holds the caret — the editor's pre-merge bytes do NOT
@@ -564,40 +570,45 @@ export class TabManager {
    * capture that fed the merge already saved the local words, so the
    * repaint costs nothing but the caret's place.
    */
-  applyExternalMerge(nextTabs: NoteTab[], forceRepaintIds: readonly string[] = []): void {
+  applyExternalMerge(rows: StoredNoteTab[], forceRepaintIds: readonly string[] = []): void {
     const activeBefore = this.getActive();
     const forceRepaint = new Set(forceRepaintIds);
     // The pre-merge model, keyed for the unseen-change stamp below — the
     // merge's rows replace this.tabs wholesale, so the "what did this
     // device last have" question must be asked before the swap.
     const beforeById = new Map(this.tabs.map((tab) => [tab.id, tab]));
+    // …and the pre-adoption ledger baselines: a stamp already present
+    // keeps its ORIGINAL baseline (consecutive pulls while the note stays
+    // unopened extend the delta, they do not restart it).
+    const beforeUnseen = new Map(
+      this.tabs.map((tab) => [tab.id, this.syncLedger.unseenOf(tab.id)]),
+    );
 
-    this.tabs = nextTabs.map((tab) => {
-      const next: NoteTab = {
-        ...tab,
+    const stamped = rows.map((row) => {
+      const next: StoredNoteTab = {
+        ...row,
         // Sanitize is the html discipline; every other kind crosses the
         // merge byte-exact.
-        content: isHtmlContent(tab.noteType) ? sanitizeNoteHtml(tab.content) : tab.content,
+        content: isHtmlContent(row.noteType) ? sanitizeNoteHtml(row.content) : row.content,
       };
       // Words arrived on a note nobody is looking at — park what this
-      // device last had, so opening it can show the delta (see
-      // NoteTab.unseenChange). The note you are watching is exempt (the
+      // device last had, so opening it can show the delta (the ledger's
+      // unseen baseline). The note you are watching is exempt (the
       // merge toast already speaks for it), and so is a parked conflict
       // (the review badge is the louder surface; stacking a peek on it
-      // would be noise). A stamp already present keeps its ORIGINAL
-      // baseline: consecutive pulls while the note stays unopened extend
-      // the delta, they do not restart it.
-      const before = beforeById.get(tab.id);
-      if (
-        before &&
-        !next.conflict &&
-        next.id !== this.activeId &&
-        before.content !== next.content
-      ) {
-        next.unseenChange = before.unseenChange ?? { from: before.content, fromName: before.name };
+      // would be noise).
+      const before = beforeById.get(row.id);
+      const priorUnseen = beforeUnseen.get(row.id);
+      if (before && !next.conflict && row.id !== this.activeId && before.content !== next.content) {
+        next.unseenChange = priorUnseen ?? { from: before.content, fromName: before.name };
       }
       return next;
     });
+
+    // The merged rows' sync state is the truth now; the model keeps the
+    // domain half.
+    stamped.forEach((row) => this.syncLedger.adoptMergedRow(row));
+    this.tabs = stamped.map(domainTabOf);
 
     if (!this.tabs.some((tab) => tab.id === this.activeId)) {
       this.activeId = this.tabs[0]?.id ?? null;
@@ -975,7 +986,7 @@ export class TabManager {
     // A parked version conflict gets the review badge. Its click is
     // DELEGATED through the strip (the single listener bindStripEvents
     // owns), per the listener-lifecycle rules — nothing per-node.
-    if (tab.conflict) {
+    if (this.syncLedger.conflictOf(tab.id)) {
       const conflictBadge = document.createElement('span');
       conflictBadge.className = 'tab-strip-type tab-strip-conflict';
       conflictBadge.title = 'Changed on two devices — review the versions';
@@ -1141,15 +1152,13 @@ export class TabManager {
 
     this.saveActiveFromEditor();
     this.activeId = tabId;
-    // Opening the note answers the question a parked unseenChange was
-    // holding: the marker is consumed HERE (before the persist, so the
-    // clear rides this very save) and the peek fires after the editor
-    // painted the new bytes — once per change, never on re-click.
+    // Opening the note answers the question a parked unseen baseline was
+    // holding: the marker is consumed HERE (read-and-clear in one ledger
+    // call, before the persist, so the clear rides this very save) and the
+    // peek fires after the editor painted the new bytes — once per change,
+    // never on re-click.
     const opened = this.tabs.find((entry) => entry.id === tabId);
-    const unseen = opened?.unseenChange;
-    if (opened && unseen) {
-      delete opened.unseenChange;
-    }
+    const unseen = opened ? this.syncLedger.consumeUnseen(tabId) : undefined;
     this.persist();
     this.renderStrip();
     this.loadActiveIntoEditor();
@@ -1163,7 +1172,7 @@ export class TabManager {
     // The peek defers to a parked conflict: the review badge on the same
     // note is the louder, more demanding surface — two sheets over one
     // open would be the stacking the review flow just removed.
-    if (opened && unseen && !opened.conflict) {
+    if (opened && unseen && !this.syncLedger.conflictOf(opened.id)) {
       this.onUnseenPeek?.(opened, unseen);
     }
   }
@@ -1419,15 +1428,16 @@ export class TabManager {
       updatedAt: nextUpdatedAt(tab.updatedAt),
       noteType: tab.noteType,
       colorTheme: tab.colorTheme,
-      syncSeq: tab.syncSeq,
-      // The merge base rides along: a restore that meets a remote edit
-      // must still three-way merge instead of parking a review conflict
-      // (the base names the last version the cloud agreed to — see
-      // NoteTab.syncBase).
-      syncBase: tab.syncBase,
       copyOf: tab.copyOf,
       deletedAt: Date.now(),
     });
+    // The note's life state dies at the trash door (a parked conflict, an
+    // unseen baseline — the review badge must not survive a delete); the
+    // id-history state stays in the ledger under the same id, so a restore
+    // keeps its merge anchor without any field-copying (the copying WAS
+    // this flow's old shape: seq/base hand-moved onto the grave and back
+    // on restore — two more places the fields could drift).
+    this.syncLedger.noteTrashed(tab.id);
     // The trash row rides the next push — the same dirty set the tabs use
     // (the sync layer resolves pending ids against tabs FIRST, trash second).
     // Requeue: the grave's row rides BEHIND the live rows already waiting.
@@ -1506,17 +1516,15 @@ export class TabManager {
       updatedAt: nextUpdatedAt(grave.updatedAt),
       noteType: normalizeNoteType(grave.noteType),
       colorTheme: grave.colorTheme,
-      syncSeq: grave.syncSeq,
-      // Back comes the merge base the trash kept — the next divergence
-      // diffs against the last cloud-agreed version, not against nothing
-      // (a missing base degrades the three-way merge into a parked
-      // conflict for exactly the notes people delete and restore).
-      syncBase: grave.syncBase,
+      copyOf: grave.copyOf,
     };
-    if (grave.copyOf) {
-      restored.copyOf = grave.copyOf;
-    }
     this.tabs.push(restored);
+    // The ledger's entry for the id outlived the trash round trip — the
+    // merge base the grave kept (a restored note's next divergence
+    // three-way merges against the last cloud-agreed version, not
+    // against nothing; a missing base degrades the merge into a parked
+    // conflict for exactly the notes people delete and restore) and the
+    // seq anchor are already where they belong.
     this.syncLedger.markDirty(restored.id);
     this.persist();
     this.renderStrip();
@@ -1720,12 +1728,12 @@ export class TabManager {
   /** The note a parked conflict belongs to (the sheet's read). */
   getConflictedNote(tabId: string): NoteTab | null {
     const tab = this.tabs.find((entry) => entry.id === tabId);
-    return tab?.conflict ? tab : null;
+    return tab && this.syncLedger.conflictOf(tabId) ? tab : null;
   }
 
   /** Every note carrying an unresolved review (badge state, counts). */
   getConflictedIds(): string[] {
-    return this.tabs.filter((tab) => tab.conflict).map((tab) => tab.id);
+    return this.tabs.filter((tab) => this.syncLedger.conflictOf(tab.id)).map((tab) => tab.id);
   }
 
   /**
@@ -1742,11 +1750,11 @@ export class TabManager {
    */
   resolveConflict(tabId: string, resolution: 'mine' | 'theirs' | 'both'): boolean {
     const tab = this.tabs.find((entry) => entry.id === tabId);
-    if (!tab || !tab.conflict) {
+    const record = this.syncLedger.conflictOf(tabId);
+    if (!tab || !record) {
       return false;
     }
-    const record = tab.conflict;
-    delete tab.conflict;
+    this.syncLedger.clearConflict(tabId);
 
     const applyMine = (): void => {
       tab.name = record.mine.name;

@@ -34,13 +34,17 @@ vi.mock('./api', () => {
 vi.mock('../ui/toast', () => ({ showToast: vi.fn() }));
 vi.mock('../ui/dialog', () => ({ confirmDialog: vi.fn() }));
 
-import type { TabManager, NoteTab, TabsSyncPayload } from '../tabs';
-import type { TrashedNote } from '../storage';
+import type { TabManager, TabsSyncPayload } from '../tabs';
+import type { StoredNoteTab, TrashedNote } from '../storage';
 import type { NoteRow } from './sync';
 import { SyncLedger } from '../sync/ledger';
 import { confirmDialog } from '../ui/dialog';
 
-function fakeManager(tabs: NoteTab[], dirty: string[] = [], trashed: TrashedNote[] = []) {
+function fakeManager(
+  tabs: StoredNoteTab[],
+  dirty: string[] = [],
+  trashed: TrashedNote[] = [],
+) {
   const state = {
     tabs: tabs.map((tab) => ({ ...tab })),
     trashed: trashed.map((entry) => ({ ...entry })),
@@ -60,7 +64,7 @@ function fakeManager(tabs: NoteTab[], dirty: string[] = [], trashed: TrashedNote
         trashed: state.trashed.map((entry) => ({ ...entry })),
       }) as TabsSyncPayload,
     saveActiveFromEditor: () => {},
-    applyExternalMerge: (next: NoteTab[]) => {
+    applyExternalMerge: (next: StoredNoteTab[]) => {
       state.tabs = next.map((tab) => ({ ...tab }));
     },
     applyExternalTrash: (next: TrashedNote[]) => {
@@ -85,7 +89,7 @@ function fakeManager(tabs: NoteTab[], dirty: string[] = [], trashed: TrashedNote
   return { manager: manager as unknown as TabManager, state };
 }
 
-const tab = (id: string, overrides: Partial<NoteTab> = {}): NoteTab => ({
+const tab = (id: string, overrides: Partial<StoredNoteTab> = {}): StoredNoteTab => ({
   id,
   name: null,
   content: `<p>${id}</p>`,

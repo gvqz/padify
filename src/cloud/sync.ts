@@ -33,8 +33,8 @@ import { DEFAULT_NOTE_TYPE, normalizeNoteType } from '../editor/note-types';
 // future seed edit can never desync the check).
 import { WELCOME_HTML } from '../editor/note-content';
 import { mergeNoteVersions } from '../merge/notes';
-import type { NoteTab, TabManager, TabsSyncPayload } from '../tabs';
-import type { TrashedNote } from '../storage';
+import type { TabManager, TabsSyncPayload } from '../tabs';
+import type { StoredNoteTab, TrashedNote } from '../storage';
 // The wire contract both sides of the HTTP boundary share — types below,
 // and the one request-body ceiling the client batches under.
 import { MAX_BODY_BYTES, MAX_ROWS_PER_PUSH, TRASH_RETENTION_MS } from '../../shared/wire';
@@ -1052,7 +1052,7 @@ async function pullNotes(userId: string): Promise<PullResult> {
 }
 
 interface MergeResult {
-  tabs: NoteTab[];
+  tabs: StoredNoteTab[];
   changed: boolean;
   /**
    * One sentence per rescued divergence this merge, phrased for the toast.
@@ -1112,7 +1112,7 @@ export type OwnEchoMap = Map<string, OwnEcho>;
  * the note is theirs forever. Only the pristine boilerplate qualifies for
  * the seed-twin drop in mergeRemote.
  */
-function isUntouchedWelcomeSeed(tab: NoteTab): boolean {
+function isUntouchedWelcomeSeed(tab: StoredNoteTab): boolean {
   return (
     tab.name === null &&
     tab.content === WELCOME_HTML &&
@@ -1171,12 +1171,12 @@ export function mergeRemote(
   payload: TabsSyncPayload,
   options: { order?: string[]; ownEchoes?: OwnEchoMap } = {},
 ): MergeResult {
-  const tabs: NoteTab[] = payload.tabs.map((tab) => ({ ...tab }));
+  const tabs: StoredNoteTab[] = payload.tabs.map((tab) => ({ ...tab }));
   const byId = new Map(tabs.map((tab) => [tab.id, tab]));
   // The local trash, by id — restorable rows the retention clock still owns.
   const trashById = new Map(payload.trashed.map((entry) => [entry.id, { ...entry }]));
   const trashed = [...trashById.values()];
-  const freshRemote: NoteTab[] = [];
+  const freshRemote: StoredNoteTab[] = [];
   const conflicts: string[] = [];
   const dirty = new Set(payload.dirty);
   const droppedSeedIds: string[] = [];
@@ -1211,7 +1211,7 @@ export function mergeRemote(
    *  version this row edited from — an unpushed edit never saw it, so the
    *  clock arbitrates exactly as in v1 (later local edit survives, an
    *  identical copy goes with the delete). */
-  const localSurvivesDelete = (local: NoteTab, row: NoteRow): boolean => {
+  const localSurvivesDelete = (local: StoredNoteTab, row: NoteRow): boolean => {
     if (row.seq && local.syncSeq) {
       if (local.syncSeq !== row.seq) {
         return local.syncSeq > row.seq;
@@ -1222,7 +1222,7 @@ export function mergeRemote(
 
   /** Whether a remote row's (name, content) differs from the local tab's —
    *  the "did anything actually change" test behind every edit arbitration. */
-  const differsFromRow = (local: NoteTab, row: NoteRow): boolean =>
+  const differsFromRow = (local: StoredNoteTab, row: NoteRow): boolean =>
     wireRowContent(row) !== local.content || row.name !== local.name;
 
   /** The remote row wins the edit: by seq when both carry one, by clock
@@ -1232,7 +1232,7 @@ export function mergeRemote(
    *  versions, one number: a clean local defers to the row (its words
    *  leave a copy behind), a dirty local is the newer branch and keeps
    *  the note. */
-  const remoteWinsEdit = (local: NoteTab, row: NoteRow, localDirty: boolean): boolean => {
+  const remoteWinsEdit = (local: StoredNoteTab, row: NoteRow, localDirty: boolean): boolean => {
     const differs = differsFromRow(local, row);
     if (row.seq && local.syncSeq) {
       if (row.seq === local.syncSeq) {
@@ -1251,7 +1251,7 @@ export function mergeRemote(
 
   /** True when the row carries the same seq as the local tab's last sync
    *  — the fingerprint of the race this merge now has to heal. */
-  const tieRaced = (local: NoteTab, row: NoteRow): boolean =>
+  const tieRaced = (local: StoredNoteTab, row: NoteRow): boolean =>
     !!row.seq && !!local.syncSeq && row.seq === local.syncSeq;
 
   /**
@@ -1269,7 +1269,7 @@ export function mergeRemote(
    * those are the original lost words — and only refreshes theirs to the
    * row that just won; nothing multiplies, nothing stacks names.
    */
-  const parkLosingVersion = (local: NoteTab, row: NoteRow): void => {
+  const parkLosingVersion = (local: StoredNoteTab, row: NoteRow): void => {
     const mine = local.conflict?.mine ?? { name: local.name, content: local.content };
     const theirs = {
       name: row.name,
@@ -1716,7 +1716,7 @@ export function batchRowsForPush(rows: NoteRow[]): NoteRow[][] {
   return batches;
 }
 
-function tabToRow(tab: NoteTab, position: number): IncomingNoteRow {
+function tabToRow(tab: StoredNoteTab, position: number): IncomingNoteRow {
   return {
     id: tab.id,
     name: tab.name,

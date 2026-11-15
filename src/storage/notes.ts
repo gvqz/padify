@@ -31,8 +31,12 @@ import { reportSaveFailure, reportSaveRecovered } from './persistence';
 import { normalizeNoteType, type NoteType } from '../editor/note-types';
 import { TRASH_RETENTION_MS } from '../../shared/wire';
 import { WriteIndex, type RetiredEntry } from '../sync/write-index';
+import type { NoteConflictRecord, SyncBase, UnseenBaseline } from '../sync/ledger';
 
-/** A live note, structurally identical to NoteTab in tabs.ts. */
+/** A live note, structurally the domain record (tabs.ts NoteTab) plus
+ *  the sync metadata the ledger owns in memory — the PERSISTED spelling
+ *  of both halves (sync/ledger.ts: project maps domain + ledger onto
+ *  this shape, adoptStoredRow maps it back). */
 export interface StoredNoteTab {
   id: string;
   /** User-provided name; null derives the title from the content. */
@@ -52,7 +56,7 @@ export interface StoredNoteTab {
   /** The theme the note's inline colors were last written under. */
   colorTheme?: 'light' | 'dark';
   /** Sync v2: the server sequence of the last synced version (sync
-   *  metadata; see tabs.ts NoteTab.syncSeq). */
+   *  metadata; the ledger's in-memory truth, stored spelling). */
   syncSeq?: number;
   /**
    * The last version the CLOUD agreed to (content + name at the last
@@ -60,27 +64,26 @@ export interface StoredNoteTab {
    * diffs against (see src/merge/). Set only while cloud sync is active;
    * absent on signed-out installs, so it costs nothing there.
    */
-  syncBase?: { content: string; name: string | null };
+  syncBase?: SyncBase;
   /**
-   * An unresolved version conflict parked on this note (see tabs.ts —
-   * NoteTab.conflict). Rides storage so a review survives a reload; never
-   * crosses the wire.
+   * An unresolved version conflict parked on this note (the ledger's
+   * in-memory truth, stored spelling). Rides storage so a review survives
+   * a reload; never crosses the wire.
    */
   conflict?: NoteConflictRecord;
   /**
    * The note changed on another device while it was NOT the active one
-   * (see tabs.ts — NoteTab.unseenChange): `from` is the bytes this device
-   * last had open, kept so the next open can show what arrived since.
-   * Rides storage (the change may outlive a reload — that is the point);
-   * never crosses the wire.
+   * (the ledger's in-memory truth, stored spelling): `from` is the bytes
+   * this device last had open, kept so the next open can show what
+   * arrived since. Rides storage (the change may outlive a reload — that
+   * is the point); never crosses the wire.
    */
-  unseenChange?: { from: string; fromName: string | null };
+  unseenChange?: UnseenBaseline;
   /**
-   * DURABLE sync-dirty marker (see tabs.ts — NoteTab.unpushed): these
-   * bytes differ from what the cloud last agreed to. Stamped by
-   * TabManager.persist in the same record write as the content; re-seeded
-   * into the dirty set at boot. Local-only sync metadata: never crosses
-   * the wire.
+   * DURABLE sync-dirty marker: these bytes differ from what the cloud
+   * last agreed to. Stamped by the ledger's projection in the same record
+   * write as the content; re-seeded into the ledger's dirty set at boot.
+   * Local-only sync metadata: never crosses the wire.
    */
   unpushed?: boolean;
   /** Conflicted-copy lineage (LEGACY — pre-review builds minted twin notes
@@ -88,16 +91,10 @@ export interface StoredNoteTab {
   copyOf?: string;
 }
 
-/** An unresolved version conflict parked on a note — see tabs.ts. */
-export interface NoteConflictRecord {
-  kind: 'edit';
-  /** When this device detected the divergence (epoch ms). */
-  detectedAt: number;
-  /** The words THIS device held when the row was lost. */
-  mine: { name: string | null; content: string };
-  /** The version that took the row. */
-  theirs: { name: string | null; content: string; updatedAt: number };
-}
+// The canonical shapes live in the ledger (their in-memory owner); the
+// storage layer re-exports them for the importers that historically
+// reached for them here (tabs.ts, the test suites).
+export type { NoteConflictRecord, SyncBase, UnseenBaseline } from '../sync/ledger';
 
 /** Reads a stored conflict record back — junk reads as absent. */
 export function readNoteConflict(value: unknown): NoteConflictRecord | undefined {

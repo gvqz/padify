@@ -96,7 +96,9 @@ describe('durable unpushed flags — the reload-recovery seed', () => {
 
     // THE regression: the rebooted model knows the note is still unpushed.
     expect(second.exportForSync().dirty).toContain(created!.id);
-    const reloaded = second.allTabs.find((tab) => tab.id === created!.id);
+    // The flag materializes on the projected view now (the note itself is
+    // domain-only) — the storage spelling is where it has always lived.
+    const reloaded = second.exportForSync().tabs.find((tab) => tab.id === created!.id);
     expect(reloaded?.unpushed).toBe(true);
 
     // And the sync layer's session start would queue it for a pull-first
@@ -120,7 +122,7 @@ describe('durable unpushed flags — the reload-recovery seed', () => {
     await second.init();
 
     expect(second.exportForSync().dirty).toEqual([]);
-    const reloaded = second.allTabs.find((tab) => tab.id === created!.id);
+    const reloaded = second.exportForSync().tabs.find((tab) => tab.id === created!.id);
     expect(reloaded?.unpushed).toBeUndefined();
   });
 
@@ -143,6 +145,10 @@ describe('durable unpushed flags — the reload-recovery seed', () => {
     expect(second.exportForSync().dirty).toContain(created!.id);
     const grave = second.getTrashed().find((entry) => entry.id === created!.id);
     expect(grave).toBeTruthy();
-    expect(grave?.unpushed).toBe(true);
+    // The durable flag materializes on the projected view (the stored
+    // spelling) — the domain grave is domain + stamps only now.
+    expect(second.exportForSync().trashed.find((entry) => entry.id === created!.id)?.unpushed).toBe(
+      true,
+    );
   });
 });

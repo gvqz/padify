@@ -44,21 +44,25 @@ vi.mock('./api', () => {
 
 vi.mock('../ui/toast', () => ({ showToast: vi.fn() }));
 
-import type { TabManager, NoteTab, TabsSyncPayload } from '../tabs';
-import type { TrashedNote } from '../storage';
+import type { TabManager, TabsSyncPayload } from '../tabs';
+import type { StoredNoteTab, TrashedNote } from '../storage';
 import type { NoteRow } from './sync';
 import { SyncLedger } from '../sync/ledger';
 
 interface FakeState {
-  tabs: NoteTab[];
+  tabs: StoredNoteTab[];
   trashed: TrashedNote[];
   /** The real structure the real manager owns — the stub speaks it. */
   ledger: SyncLedger;
   confirmed: string[];
-  appliedMerge: NoteTab[] | null;
+  appliedMerge: StoredNoteTab[] | null;
 }
 
-function fakeManager(tabs: NoteTab[], dirty: string[] = [], trashed: TrashedNote[] = []) {
+function fakeManager(
+  tabs: StoredNoteTab[],
+  dirty: string[] = [],
+  trashed: TrashedNote[] = [],
+) {
   const state: FakeState = {
     tabs: tabs.map((tab) => ({ ...tab })),
     trashed: trashed.map((entry) => ({ ...entry })),
@@ -79,7 +83,7 @@ function fakeManager(tabs: NoteTab[], dirty: string[] = [], trashed: TrashedNote
         trashed: state.trashed.map((entry) => ({ ...entry })),
       }) as TabsSyncPayload,
     saveActiveFromEditor: () => {},
-    applyExternalMerge: (next: NoteTab[]) => {
+    applyExternalMerge: (next: StoredNoteTab[]) => {
       state.appliedMerge = next.map((tab) => ({ ...tab }));
       state.tabs = next.map((tab) => ({ ...tab }));
     },
@@ -105,7 +109,7 @@ function fakeManager(tabs: NoteTab[], dirty: string[] = [], trashed: TrashedNote
   return { manager: manager as unknown as TabManager, state };
 }
 
-const tab = (id: string, overrides: Partial<NoteTab> = {}): NoteTab => ({
+const tab = (id: string, overrides: Partial<StoredNoteTab> = {}): StoredNoteTab => ({
   id,
   name: null,
   content: `<p>${id}</p>`,

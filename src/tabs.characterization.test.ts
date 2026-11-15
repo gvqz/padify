@@ -804,7 +804,7 @@ describe('TabManager (characterization)', () => {
     // (and the review sheet's version of events) with it.
     const manager = await bootedManager();
     const base = manager.getActive()!;
-    const conflicted: NoteTab = {
+    const conflicted: StoredNoteTab = {
       ...base,
       conflict: {
         kind: 'edit',
@@ -825,7 +825,7 @@ describe('TabManager (characterization)', () => {
   it('the strip badges a note with a parked conflict — and only that note', async () => {
     const manager = await bootedManager();
     const base = manager.getActive()!;
-    const conflicted: NoteTab = {
+    const conflicted: StoredNoteTab = {
       ...base,
       conflict: {
         kind: 'edit',
@@ -851,7 +851,7 @@ describe('TabManager (characterization)', () => {
   it('resolveConflict — restoring my version re-applies the parked words', async () => {
     const manager = await bootedManager();
     const base = manager.getActive()!;
-    const conflicted: NoteTab = {
+    const conflicted: StoredNoteTab = {
       ...base,
       content: '<p>their words</p>',
       conflict: {
@@ -867,7 +867,7 @@ describe('TabManager (characterization)', () => {
     const after = manager.getTabs().find((entry) => entry.id === base.id)!;
     expect(after.content).toBe('<p>my words</p>');
     expect(after.name).toBe('Mine');
-    expect(after.conflict).toBeUndefined();
+    expect(manager.syncLedger.conflictOf(base.id)).toBeUndefined();
     expect(manager.exportForSync().dirty).toContain(base.id); // re-pushes
   });
 });
@@ -1463,7 +1463,7 @@ describe('TabManager — the note menu actions', () => {
     expect(copy.id).not.toBe('src');
     expect(copy.id).not.toBe('other');
     expect(copy.copyOf).toBeUndefined(); // a deliberate duplicate, never a conflict branch
-    expect(copy.conflict).toBeUndefined();
+    expect(manager.syncLedger.conflictOf(copy.id)).toBeUndefined();
     expect(copy.name).toBe('Copy of Field notes');
     expect(copy.content).toBe('<p>original words</p>');
     // The copy is now the active note and its content reached storage.

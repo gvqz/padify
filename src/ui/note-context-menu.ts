@@ -195,7 +195,7 @@ export function initNoteContextMenu(): void {
     const tab = tabs?.getTabs().find((entry) => entry.id === targetTabId);
     const item = root.querySelector<HTMLElement>('.note-ctx-review');
     if (item) {
-      item.hidden = !tab?.conflict;
+      item.hidden = !(tabs && tab && tabs.syncLedger.conflictOf(tab.id));
     }
   }
 

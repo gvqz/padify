@@ -8,6 +8,7 @@ import {
   WELCOME_HTML,
   type NoteTab,
 } from './tabs';
+import { SyncLedger } from './sync/ledger';
 
 const tab = (overrides: Partial<NoteTab> = {}): NoteTab => ({
   id: 't1',
@@ -306,19 +307,24 @@ describe('WELCOME_HTML', () => {
 });
 
 describe('the parked-conflict badge — a reviewable note flags itself', () => {
-  it('a note with a parked conflict record is reviewable', () => {
+  // The record lives in the sync ledger now (the note is a pure domain
+  // record), so "is this note reviewable?" is a ledger question.
+  it('a note whose ledger entry parks a conflict record is reviewable', () => {
     const record = {
       kind: 'edit' as const,
       detectedAt: 1,
       mine: { name: null, content: 'my words' },
       theirs: { name: null, content: 'their words', updatedAt: 2 },
     };
-    expect(tab({ conflict: record }).conflict?.kind).toBe('edit');
+    const ledger = new SyncLedger();
+    ledger.adoptMergedRow({ id: 't1', conflict: record });
+    expect(ledger.conflictOf('t1')?.kind).toBe('edit');
   });
 
   it('an ordinary note — even one mentioning copies mid-name — carries no record', () => {
-    expect(tab({ name: 'conflicted copy notes I keep' }).conflict).toBeUndefined();
-    expect(tab({ name: 'Groceries — conflicted copy' }).conflict).toBeUndefined();
-    expect(tab().conflict).toBeUndefined();
+    const ledger = new SyncLedger();
+    ledger.adoptMergedRow({ id: 't1' });
+    expect(ledger.conflictOf('t1')).toBeUndefined();
+    expect(ledger.conflictOf('never-seen')).toBeUndefined();
   });
 });

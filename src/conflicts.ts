@@ -178,16 +178,19 @@ function renderConflictSheet(tabId: string): void {
   if (!manager || !diffHost || !meta || !subtitle) {
     return;
   }
+  // The record lives in the manager's sync ledger now (the note itself is
+  // a pure domain record) — the sheet asks it directly.
   const tab = manager.getConflictedNote(tabId);
-  if (!tab || !tab.conflict) {
+  const conflict = manager.syncLedger.conflictOf(tabId);
+  if (!tab || !conflict) {
     return;
   }
   reviewingTabId = tabId;
 
-  const when = new Date(tab.conflict.theirs.updatedAt || tab.conflict.detectedAt);
+  const when = new Date(conflict.theirs.updatedAt || conflict.detectedAt);
   subtitle.textContent = 'It changed on another device while this one had unsynced edits.';
   meta.textContent = `Their edit landed ${when.toLocaleString()}.`;
-  const diffHtml = renderTrackedDiff(tab.conflict, tab.noteType);
+  const diffHtml = renderTrackedDiff(conflict, tab.noteType);
   diffHost.innerHTML = diffHtml;
   document.getElementById('conflictLegend')!.innerHTML = renderDiffLegend(diffHtml, {
     del: "this device's words — not kept in the current version",

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { NoteTab, TabsSyncPayload } from '../tabs';
+import type { TabsSyncPayload } from '../tabs';
+import type { StoredNoteTab } from '../storage';
 import { WELCOME_HTML } from '../editor/note-content';
 import { mergeRemote, type NoteRow } from './sync';
 
@@ -8,7 +9,7 @@ import { mergeRemote, type NoteRow } from './sync';
 // newer edit; a newer remote edit must land; and the local list must stay
 // untouched when nothing actually changed.
 
-const tab = (id: string, overrides: Partial<NoteTab> = {}): NoteTab => ({
+const tab = (id: string, overrides: Partial<StoredNoteTab> = {}): StoredNoteTab => ({
   id,
   name: null,
   content: `<p>${id}</p>`,
@@ -31,7 +32,7 @@ const row = (id: string, overrides: Partial<NoteRow> = {}): NoteRow => ({
 });
 
 const payloadOf = (
-  tabs: NoteTab[],
+  tabs: StoredNoteTab[],
   dirty: string[] = tabs.map((entry) => entry.id),
   trashed: TabsSyncPayload['trashed'] = [],
 ): TabsSyncPayload => ({
@@ -140,7 +141,7 @@ describe('mergeRemote — edits and arrivals', () => {
 });
 
 describe('mergeRemote — ordering convergence', () => {
-  const payloadOf = (tabs: NoteTab[], dirty: string[] = []): TabsSyncPayload => ({
+  const payloadOf = (tabs: StoredNoteTab[], dirty: string[] = []): TabsSyncPayload => ({
     tabs,
     dirty,
     trashed: [],
@@ -399,7 +400,7 @@ describe('mergeRemote — the three-way auto-merge', () => {
 // ---------------------------------------------------------------------------
 // Conflict preservation — the contract that nothing is silently discarded.
 // A version about to be overwritten that the cloud never confirmed parks on
-// its own note (NoteTab.conflict): the strip badges it, the review sheet
+// its own note (the ledger's conflict record): the strip badges it, the review sheet
 // resolves it, and the strip never again fills with "— conflicted copy"
 // twins (the pre-review mechanism, kept working for years by a lineage
 // system that is gone with it).
@@ -936,7 +937,7 @@ describe('mergeRemote — the untouched welcome seed', () => {
   // twin its own note id, which broke note-id-keyed behavior (the share
   // panel's one-active-link-per-note match, for one). The merge now
   // drops the pristine seed when the pull proves the account is alive.
-  const seed = (id: string): NoteTab => tab(id, { content: WELCOME_HTML });
+  const seed = (id: string): StoredNoteTab => tab(id, { content: WELCOME_HTML });
   const otherNote = row('real', { content: '<p>years of real notes</p>' });
 
   it('a pristine seed is dropped when the pull delivers a live account', () => {

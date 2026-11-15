@@ -47,24 +47,14 @@
  */
 
 import type { NoteType } from '../editor/note-types';
-
-/**
- * The conflict record as it rides a stored row — structurally the storage
- * shape (see storage/notes.ts — NoteConflictRecord) so the index can
- * signature rows without importing the storage layer (that import would
- * be a cycle: storage/notes.ts is this module's consumer).
- */
-export interface WriteConflictRecord {
-  kind: 'edit';
-  detectedAt: number;
-  mine: { name: string | null; content: string };
-  theirs: { name: string | null; content: string; updatedAt: number };
-}
+import type { NoteConflictRecord, SyncBase, UnseenBaseline } from './ledger';
 
 /**
  * A row in signature range: the stored shape's sync-carrying fields plus
  * the domain fields the write diff must see. Structural on purpose —
- * StoredNoteTab and TrashedNote both satisfy it without an import edge.
+ * StoredNoteTab and TrashedNote both satisfy it without an import edge
+ * back into the storage layer (that import would be a cycle:
+ * storage/notes.ts is this module's consumer).
  */
 export interface WriteSignatureRow {
   id: string;
@@ -73,9 +63,9 @@ export interface WriteSignatureRow {
   updatedAt: number;
   noteType?: NoteType;
   syncSeq?: number;
-  syncBase?: { content: string; name: string | null };
-  unseenChange?: { from: string; fromName: string | null };
-  conflict?: WriteConflictRecord;
+  syncBase?: SyncBase;
+  unseenChange?: UnseenBaseline;
+  conflict?: NoteConflictRecord;
   unpushed?: boolean;
 }
 
@@ -100,9 +90,9 @@ interface WriteSignature {
   deleted: boolean;
   deletedAt: number;
   syncSeq: number | undefined;
-  syncBase: { content: string; name: string | null } | undefined;
-  unseenChange: { from: string; fromName: string | null } | undefined;
-  conflict: WriteConflictRecord | undefined;
+  syncBase: SyncBase | undefined;
+  unseenChange: UnseenBaseline | undefined;
+  conflict: NoteConflictRecord | undefined;
   unpushed: boolean;
 }
 
