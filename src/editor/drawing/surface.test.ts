@@ -73,7 +73,7 @@ vi.mock('../../ui/toast', () => ({
 import { showToast } from '../../ui/toast';
 // The tasks surface registers itself for the 'json' kind at import time
 // — importing it here is what makes the coexistence test honest.
-import '../tasks/surface';
+import '../../features/tasks/note/surface';
 import {
   DRAWING_ANNOUNCE_DEBOUNCE_MS,
   DrawingNoteSurface,

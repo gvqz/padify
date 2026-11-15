@@ -4,7 +4,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
  * Reminders — task lists as notes, pinned end to end.
  *
  * The pure logic (view math, sanitization, the sweep's once-guard) is
- * unit-tested in src/editor/tasks/*.test.ts and src/features/tasks/
+ * unit-tested in src/features/tasks/note/*.test.ts and src/features/tasks/hub/
  * aggregate.test.ts; what only a browser can prove is the wiring: the
  * type menu creates a task list NOTE, its page composes tasks that
  * persist through the real notes storage, the rail appears ONLY in

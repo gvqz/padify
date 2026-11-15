@@ -12,8 +12,12 @@ import {
 // The tasks kind's adapter registers at import time — the same wiring
 // the app's import graph performs; the drawing adapter registers
 // statically inside the seam module itself.
-import './tasks/projection';
-import { buildTask, emptyTaskNoteContent, serializeTaskNoteContent } from './tasks/content';
+import '../features/tasks/note/projection';
+import {
+  buildTask,
+  emptyTaskNoteContent,
+  serializeTaskNoteContent,
+} from '../features/tasks/note/content';
 import { escapeHtml } from '../lib/escape';
 import { sanitizeNoteHtml } from './storage-subset';
 

@@ -23,8 +23,8 @@
  * stays available there (the calendar page starts with it closed).
  */
 
-import { getTabManager } from '../../tabs';
-import { closeTabRailDrawer } from '../../tab-rail-drawer';
+import { getTabManager } from '../../../tabs';
+import { closeTabRailDrawer } from '../../../tab-rail-drawer';
 import { taskNotes } from './aggregate';
 import {
   closeTasksHub,

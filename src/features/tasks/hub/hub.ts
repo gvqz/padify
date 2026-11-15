@@ -15,11 +15,11 @@
  * inline editor, a popover) is open, which consume Escape themselves.
  */
 
-import { registerLayer } from '../../ui/behavior/layers';
-import { getTabManager } from '../../tabs';
-import { confirmDialog } from '../../ui/dialog';
-import { showToast } from '../../ui/toast';
-import { ICONS } from '../../editor/tasks/icons';
+import { registerLayer } from '../../../ui/behavior/layers';
+import { getTabManager } from '../../../tabs';
+import { confirmDialog } from '../../../ui/dialog';
+import { showToast } from '../../../ui/toast';
+import { ICONS } from '../note/icons';
 import {
   completedToggle,
   editor as editorMarkup,
@@ -31,16 +31,16 @@ import {
   taskRow,
   whenPopover,
   type ListRef,
-} from '../../editor/tasks/rows';
-import { parseQuickAdd } from '../../editor/tasks/nl-dates';
+} from '../note/rows';
+import { parseQuickAdd } from '../note/nl-dates';
 import {
   dateAndTimeToIso,
   formatDueChip,
   formatReminderChip,
   isoToDateAndTime,
   quickPresetIso,
-} from '../../editor/tasks/dates';
-import type { Task } from '../../editor/tasks/content';
+} from '../note/dates';
+import type { Task } from '../note/content';
 import { taskNotes, type AggSection, type AggTask, type HubViewId } from './aggregate';
 import { dismissReminderToasts } from './toasts';
 import {

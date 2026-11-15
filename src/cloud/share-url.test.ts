@@ -5,14 +5,14 @@ import { noteContentIsEmpty } from '../editor/note-projections';
 // seam at import time — the same wiring the app's import graph gives
 // the share gate for free. The drawing kind registers statically
 // inside the seam itself.
-import '../editor/tasks/projection';
+import '../features/tasks/note/projection';
 import {
   DRAWING_SCENE_VERSION,
   emptyDrawingScene,
   serializeDrawingScene,
 } from '../editor/drawing/scene';
 import type { DrawingScene } from '../editor/drawing/scene';
-import { serializeTaskNoteContent, emptyTaskNoteContent } from '../editor/tasks/content';
+import { serializeTaskNoteContent, emptyTaskNoteContent } from '../features/tasks/note/content';
 
 // The share link must live NEXT TO the app, wherever the host mounts it:
 // a root deploy serves /share/?t=…, a subpath deploy (alwaysdata-style

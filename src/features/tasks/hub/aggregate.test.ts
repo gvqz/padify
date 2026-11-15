@@ -9,13 +9,13 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { getTabManager, setTabManager, type NoteTab, type TabManager } from '../../tabs';
+import { getTabManager, setTabManager, type NoteTab, type TabManager } from '../../../tabs';
 import {
   parseTaskNoteContent,
   serializeTaskNoteContent,
   type Task,
   type TaskNoteContent,
-} from '../../editor/tasks/content';
+} from '../note/content';
 import { taskNotes } from './aggregate';
 
 const iso = (y: number, m: number, d: number, h = 0, min = 0): string =>

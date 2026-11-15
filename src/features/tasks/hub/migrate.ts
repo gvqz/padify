@@ -19,9 +19,9 @@
  * in list order — the strip the user already knows gains their lists.
  */
 
-import { stateGet, stateSet } from '../../storage';
-import { getTabManager } from '../../tabs';
-import { serializeTaskNoteContent, type ListColor, type Task } from '../../editor/tasks/content';
+import { stateGet, stateSet } from '../../../storage';
+import { getTabManager } from '../../../tabs';
+import { serializeTaskNoteContent, type ListColor, type Task } from '../note/content';
 
 const OLD_KEY = 'padify-tasks';
 const OLD_LEGACY_KEY = 'tasks';

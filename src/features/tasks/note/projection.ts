@@ -16,8 +16,8 @@
  * is present its projections are too — one import, both registrations.
  */
 
-import { escapeHtml } from '../../lib/escape';
-import { registerNoteProjection } from '../note-projections';
+import { escapeHtml } from '../../../lib/escape';
+import { registerNoteProjection } from '../../../editor/note-projections';
 import { formatDueChip } from './dates';
 import { parseTaskNoteContent, taskNotePlainText } from './content';
 

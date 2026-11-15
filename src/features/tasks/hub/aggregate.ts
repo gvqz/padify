@@ -8,14 +8,14 @@
  * through TabManager.writeNoteContent so a task edited in the hub lands
  * in its note (and a note open behind the hub repaints truthfully).
  *
- * Writes consult the surface's LIVE model first (editor/tasks/surface.ts
+ * Writes consult the surface's LIVE model first (note/surface.ts
  * keeps the active note's model ahead of tab.content between saves), so
  * a hub edit never clobbers words still sitting in the page's debounce
  * window. Reads refresh on every persist, on the surface's mutation
  * signal, and on demand.
  */
 
-import { getTabManager, type NoteTab } from '../../tabs';
+import { getTabManager, type NoteTab } from '../../../tabs';
 import {
   buildTask,
   parseTaskNoteContent,
@@ -23,9 +23,9 @@ import {
   type Task,
   type TaskDraft,
   type TaskNoteContent,
-} from '../../editor/tasks/content';
-import { liveTasksModelFor, refreshTasksPageForNote } from '../../editor/tasks/surface';
-import type { ListRef } from '../../editor/tasks/rows';
+} from '../note/content';
+import { liveTasksModelFor, refreshTasksPageForNote } from '../note/surface';
+import type { ListRef } from '../note/rows';
 import {
   daysAway,
   dueBucket,
@@ -33,7 +33,7 @@ import {
   isToday,
   parseWhen,
   startOfDay,
-} from '../../editor/tasks/dates';
+} from '../note/dates';
 
 /** One task with its owning note's facts attached. */
 export interface AggTask {

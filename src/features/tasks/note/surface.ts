@@ -5,7 +5,7 @@
  * header (list color + inline-editable title + count), the task rows,
  * and the composer bar riding the bottom of the editor area. The note's
  * NAME is the list's name (renaming the title renames the note); the
- * note's CONTENT is the JSON model (editor/tasks/content.ts) — mutated
+ * note's CONTENT is the JSON model (this layer's content.ts) — mutated
  * through the page and captured back on save, exactly like the Markdown
  * surface rides its source.
  *
@@ -27,18 +27,18 @@
  * pattern. Other 'json' note kinds this build hasn't met ride the opaque
  * fallback: this surface only claims notes it knows how to draw.
  *
- * The seam OUT to the tasks feature (rail + hub + sweep live in
- * features/tasks — the architecture's feature-import rule): the
- * environment below. features/tasks/configure (via app.ts bootstrapping)
+ * The seam OUT to the hub layer (rail + hub + sweep live in hub/ —
+ * the architecture's feature-import rule): the environment below. The
+ * feature's composition (features/tasks/index.ts, via app.ts bootstrapping)
  * supplies the list of other task notes, the move handler, and the toast
  * dismissal; before that wiring lands the page still works, just without
  * its cross-note affordances. Editor code never imports the feature —
  * the feature reaches in.
  */
 
-import { registerNoteSurface, type NoteSurface, type SurfaceNote } from '../surface';
-import { opaqueNoteSurface } from '../surface';
-import { getTabManager } from '../../tabs';
+import { registerNoteSurface, type NoteSurface, type SurfaceNote } from '../../../editor/surface';
+import { opaqueNoteSurface } from '../../../editor/surface';
+import { getTabManager } from '../../../tabs';
 import { taskListPageMarkup } from './markup';
 import { TaskListPageController } from './controller';
 import type { ListRef } from './rows';

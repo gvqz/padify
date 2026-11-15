@@ -1,5 +1,9 @@
 /**
- * Task list notes — the surface's page markup (pure HTML string).
+ * Task list notes — the NOTE layer's markup (pure HTML string).
+ *
+ * One feature root, two layers: note/ is the task note KIND (the model,
+ * the surface, this page markup); hub/ is the cross-note feature (the
+ * rail, the views, the calendar). This file is the note layer's.
  *
  * The page that paints inside the editor host when a task list note is
  * open: a header (list color + inline-editable title + count), the

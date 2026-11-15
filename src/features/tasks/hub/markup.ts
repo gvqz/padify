@@ -1,19 +1,21 @@
 /**
- * The tasks feature's mounted markup — the hub container.
+ * The tasks feature's mounted markup — the HUB layer's container.
  *
- * The rail is app chrome (editor-shell.html); the HUB is the feature's
- * page host: a sibling of the note surface inside #textareaContainer
- * that takes over the editor area while a Reminders view (Today /
- * Scheduled / All / Flagged / Completed / search / the calendar) is
- * open. Mounted at boot (boot.ts calls mountTasksMarkup before app
- * init), hidden until the first destination opens it.
+ * One feature root, two layers: note/ is the task note KIND; hub/ is
+ * the cross-note feature (this file's layer — the rail, the views, the
+ * calendar). The rail is app chrome (editor-shell.html); the HUB is the
+ * feature's page host: a sibling of the note surface inside
+ * #textareaContainer that takes over the editor area while a Reminders
+ * view (Today / Scheduled / All / Flagged / Completed / search / the
+ * calendar) is open. Mounted at boot (boot.ts calls mountTasksMarkup
+ * before app init), hidden until the first destination opens it.
  *
  * The skeleton: header (title + count + actions), the quick-add row at
  * the top of the list, and the scroll area (sections + empty state).
  * Pure markup: the controllers (rail.ts, hub.ts) own behavior.
  */
 
-import { quickAddRow } from '../../editor/tasks/rows';
+import { quickAddRow } from '../note/rows';
 
 const tasksHubHtml = `
 <section id="tasksHub" class="tk-scope tkh" hidden aria-label="Reminders">

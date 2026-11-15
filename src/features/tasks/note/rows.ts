@@ -16,7 +16,7 @@
 import { ICONS } from './icons';
 import { formatDueChip, formatReminderChip, isOverdue } from './dates';
 import { type Task } from './content';
-import { escapeHtml } from '../../lib/escape';
+import { escapeHtml } from '../../../lib/escape';
 
 /** The list facts a row chip (or a move menu) needs about a note. */
 export interface ListRef {

@@ -5,12 +5,12 @@
  * content is this module's JSON shape. The type rides the note-type
  * registry as contentKind 'json' (editor/note-types.ts), so storage,
  * sync, snapshots and share treat it as an opaque structured string —
- * and the tasks surface (editor/tasks/surface.ts) is the only thing
+ * and the tasks surface (this layer's surface.ts) is the only thing
  * that interprets it.
  *
  * Everything here is shape + parse + serialize — no DOM, no storage,
  * no TabManager. The aggregation across notes lives in features/tasks
- * (aggregate.ts); this module is what both sides share.
+ * (hub/aggregate.ts); this module is what both sides share.
  *
  * Robustness contract (same as the retired modal's store): every field
  * falls back when missing or wrong-typed, so a corrupted or hostile

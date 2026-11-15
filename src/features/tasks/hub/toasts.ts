@@ -12,9 +12,9 @@
  * the hub/sweep import pair would otherwise cycle.
  */
 
-import { formatReminderChip } from '../../editor/tasks/dates';
-import { ICONS } from '../../editor/tasks/icons';
-import type { Task } from '../../editor/tasks/content';
+import { formatReminderChip } from '../note/dates';
+import { ICONS } from '../note/icons';
+import type { Task } from '../note/content';
 
 const TOAST_LIFETIME_MS = 10_000;
 

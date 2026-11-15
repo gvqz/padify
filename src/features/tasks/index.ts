@@ -15,13 +15,13 @@
 
 import { getTabManager } from '../../tabs';
 import { showToast } from '../../ui/toast';
-import { configureTasksEnvironment, onTasksPageMutated } from '../../editor/tasks/surface';
-import { taskNotes } from './aggregate';
-import { initTasksRail } from './rail';
-import { initTasksHub } from './hub';
-import { initTaskReminderSweep } from './reminders';
-import { migrateLegacyTasksToNotes } from './migrate';
-import { dismissReminderToasts } from './toasts';
+import { configureTasksEnvironment, onTasksPageMutated } from './note/surface';
+import { taskNotes } from './hub/aggregate';
+import { initTasksRail } from './hub/rail';
+import { initTasksHub } from './hub/hub';
+import { initTaskReminderSweep } from './hub/reminders';
+import { migrateLegacyTasksToNotes } from './hub/migrate';
+import { dismissReminderToasts } from './hub/toasts';
 
 let initialized = false;
 

@@ -48,10 +48,10 @@ import { initMarkdownToolbar } from './editor/markdown/toolbar';
 // import time (editor/markdown/surface.ts) — one import, and every
 // NoteSurface consumer (tabs, snapshots, share) can open markdown notes.
 import './editor/markdown/surface';
-// The tasks surface does the same for 'json' (editor/tasks/surface.ts):
-// task list notes restore at boot, so the surface must be registered
-// before the first note paints.
-import './editor/tasks/surface';
+// The tasks surface does the same for 'json'
+// (features/tasks/note/surface.ts): task list notes restore at boot, so
+// the surface must be registered before the first note paints.
+import './features/tasks/note/surface';
 // The drawing surface claims its TYPE (editor/drawing/surface.ts) —
 // 'drawing' shares the 'json' kind with 'tasks', so it registers through
 // the type-keyed layer. The canvas phase: display() mounts the

@@ -32,7 +32,7 @@ import { initSnapshots } from './snapshots';
 import { initTimer } from './timer';
 import { mountMusicPlayer } from './features/music-player/markup';
 import { loadPlayerState } from './features/music-player/state';
-import { mountTasksMarkup } from './features/tasks/markup';
+import { mountTasksMarkup } from './features/tasks/hub/markup';
 import { initContextMenu } from './context-menu';
 import { initBreakReminder } from './break-reminder';
 import { mountModals } from './ui/modals';

@@ -102,6 +102,10 @@ Three persistence subsystems, three UI surfaces, three sets of retention rules �
 
 **Fix:** rename/move to `tasks/note` and `tasks/hub` under one feature root; decide whether a reminder can exist without a note (that decision, not code, resolves the UX finding).
 
+**Progress (2026-11-15): DONE, in two tranches.** One feature root now: `features/tasks/note/` (the note KIND — model, surface, page markup, projections) and `features/tasks/hub/` (the cross-note feature — rail, views, calendar, sweep), with `index.ts` the feature's composition at the root; the two `markup.ts` files say which layer they belong to in their headers. The move forced the missing seam into existence first: `editor/note-projections.ts` (see S3's sibling tranche notes for the pattern) — the shell's read-only view of note content (share gate, snapshot gate, plain text, unit counting, identity, strip badge, export body). tabs.ts, snapshots.ts, share.ts and share-ui.ts ask the seam; the tasks adapter registers from the note layer at import time (so editor/ still never imports feature code), the drawing adapter registers statically, and architecture.test.ts pins both the allowlist exception (note-convert.ts, the conversion pair-matrix) and the border itself (the shell never imports a kind model directly).
+
+**The open decision (user's to ratify): can a reminder exist without a note?** Today a reminder IS a row in a task note — the calendar's "hijacks the editor" behavior falls out of that. Options: (a) keep reminders note-bound and document it as the model (the rail/hub already read as "your lists"; cheapest, zero sync surface change); (b) allow free-standing reminders as a hub-only record (fixes the hijack, adds a second synced entity + its conflict story); (c) hybrid — reminders stay note-bound but the calendar opens the DATED ROW instead of the whole note (a UX diff, not a model change). Recommendation: (c) first — it resolves the QA finding without touching the sync surface; revisit (b) only if real usage asks for note-less reminders.
+
 ### S8. Legacy compatibility weight
 
 The localStorage blob mirror (`padifyTabs`), the legacy `note` key migration, `copyOf` lineage, the localStorage fallback backend, `reconcileNotesFromMirror` — several hundred lines keeping pre-storage builds alive. Each was justified when written; together they double the storage layer's surface area. The mirror alone accounts for four module globals in `storage/notes.ts`.
@@ -139,7 +143,7 @@ None of this is carelessness — it is the standard cost of a solo project shipp
 | 1 | **CSS consolidation** — ~~vercel/ wins, legacy 16 + bootstrap deleted or folded~~ **DONE (2026-11-15)**: 36 links → 22 under vercel/, bootstrap extracted-and-unshipped, three-layer rendering-neutrality proof (see S3) | landed in two tranches | Low (visual regressions caught by QA) |
 | 2 | ~~One markdown renderer~~ **already the design** — `build-share.mjs` generates the share bundle from `render.ts` with a drift test; no work left | none | none |
 | 3 | **Sync ledger extraction** (S1) — the fix for the data-loss bug class; then **TabManager split** (S2) | 2–3 weeks | Medium — this is the one that needs the full test suite green at every step |
-| 4 | **Statistics unification** (S6), **tasks-land rename/decision** (S7), **snapshots-vs-trash decision** (S5) | ~1 week combined | Low |
+| 4 | ~~**Statistics unification** (S6), **tasks-land rename/decision** (S7)~~ **DONE** — S6 in `f32c7d0`, S7 in two tranches (2026-11-15, see S7); **snapshots-vs-trash decision** (S5) remains | ~1 week combined | Low |
 | 5 | **Legacy amputation** (S8) after a dated migration release; history rewrite (S10) as a coordinated one-off | small + one event | Low once scheduled |
 
 Phase 1 is pure deletion and immediately shrinks the "mess" feeling. Phase 3 is the real overhaul and pays for itself by retiring a whole bug class. Nothing here requires a big-bang.

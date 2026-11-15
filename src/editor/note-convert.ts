@@ -46,7 +46,7 @@ import {
   serializeTaskNoteContent,
   taskNotePlainText,
   type Task,
-} from './tasks/content';
+} from '../features/tasks/note/content';
 
 /** What a type change should store under the new kind. */
 export interface NoteConversion {

@@ -174,10 +174,16 @@ describe('layering rules', () => {
   // Each feature's public surface is its init/mount pair; the shell (app.ts,
   // which may load engines as a lazy chunk) and the composition root
   // (boot.ts, which mounts markup) are the only legitimate consumers.
-  // Everything else must go through seams (settings, ports, storage).
+  // Everything else must go through seams (settings, ports, storage,
+  // note-projections). One declared exception: note-convert.ts is the
+  // type-conversion PAIR MATRIX — it must parse, build and serialize every
+  // kind's model (checklists become tasks, scenes become fresh canvases),
+  // and scattering the matrix into per-kind adapters would trade one
+  // coherent module for five fragmentary ones. It is allowlisted as that
+  // matrix, not as a general license.
   const FEATURE_IMPORT_ALLOWLIST: Record<string, string[]> = {
     'features/music-player': ['src/app.ts', 'src/boot.ts'],
-    'features/tasks': ['src/app.ts', 'src/boot.ts'],
+    'features/tasks': ['src/app.ts', 'src/boot.ts', 'src/editor/note-convert.ts'],
   };
 
   it('features are imported only by the composition roots', () => {
@@ -220,6 +226,33 @@ describe('layering rules', () => {
       }
     }
     expect(violators).toEqual([]);
+  });
+
+  it('the shell reads note content through the projection seam, not kind models', () => {
+    // S7's border, enforced: tabs, snapshots and the share layers used to
+    // import the tasks content model and the drawing scene to branch on
+    // noteType themselves — the same dispatch three times, with no answer
+    // to "who may interpret a note kind's bytes?". The projection seam
+    // (editor/note-projections.ts) is that answer now; these files ask
+    // it, and the per-kind MODELS are the seam's and note-convert's
+    // business alone. Visual renderers are exempt (drawingSceneThumb
+    // paints a snapshot card the way app.ts paints the PNG export) —
+    // rendering is a surface concern, not a content reading.
+    const readers = [
+      'src/tabs.ts',
+      'src/snapshots.ts',
+      'src/cloud/share.ts',
+      'src/cloud/share-ui.ts',
+    ];
+    const offenders: string[] = [];
+    for (const reader of readers) {
+      for (const target of importTargets(resolve(process.cwd(), reader))) {
+        if (/editor\/drawing\/scene/.test(target) || /tasks\/(note|content|dates)/.test(target)) {
+          offenders.push(`${reader} -> ${target}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 
   it('the engine implementation is wired only by the shell', () => {

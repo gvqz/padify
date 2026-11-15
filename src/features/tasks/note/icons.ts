@@ -2,7 +2,7 @@
  * Task list notes — the icon set (inline, currentColor — the same stroke
  * language as the music player and the retired modal's icons).
  *
- * Shared by the note surface (editor/tasks), the right rail, the hub
+ * Shared by the note surface (this layer), the right rail, the hub
  * pages and the reminder sweep, so every tasks-flavored pixel speaks the
  * same iconography.
  */

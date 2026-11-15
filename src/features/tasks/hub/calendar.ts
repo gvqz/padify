@@ -43,10 +43,10 @@
  */
 
 import { taskNotes, type AggTask } from './aggregate';
-import { taskRow } from '../../editor/tasks/rows';
-import { hasTime, parseWhen, startOfDay } from '../../editor/tasks/dates';
-import { escapeHtml } from '../../lib/escape';
-import type { Task } from '../../editor/tasks/content';
+import { taskRow } from '../note/rows';
+import { hasTime, parseWhen, startOfDay } from '../note/dates';
+import { escapeHtml } from '../../../lib/escape';
+import type { Task } from '../note/content';
 
 /** The page's modes — Day the wide sheet, Week the seven columns,
  * Month the ruled grid, Year the twelve spreads. */

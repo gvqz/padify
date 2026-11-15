@@ -43,8 +43,8 @@ import {
   quickPresetIso,
 } from './dates';
 import { buildTask, sanitizeTask, type Task, type TaskNoteContent } from './content';
-import { confirmDialog } from '../../ui/dialog';
-import { showToast } from '../../ui/toast';
+import { confirmDialog } from '../../../ui/dialog';
+import { showToast } from '../../../ui/toast';
 
 /** What the page asks the world around it to do. */
 export interface TaskPageHooks {
