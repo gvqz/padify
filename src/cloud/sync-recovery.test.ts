@@ -47,11 +47,13 @@ vi.mock('../ui/toast', () => ({ showToast: vi.fn() }));
 import type { TabManager, NoteTab, TabsSyncPayload } from '../tabs';
 import type { TrashedNote } from '../storage';
 import type { NoteRow } from './sync';
+import { SyncLedger } from '../sync/ledger';
 
 interface FakeState {
   tabs: NoteTab[];
   trashed: TrashedNote[];
-  dirty: Set<string>;
+  /** The real structure the real manager owns — the stub speaks it. */
+  ledger: SyncLedger;
   confirmed: string[];
   appliedMerge: NoteTab[] | null;
 }
@@ -60,16 +62,20 @@ function fakeManager(tabs: NoteTab[], dirty: string[] = [], trashed: TrashedNote
   const state: FakeState = {
     tabs: tabs.map((tab) => ({ ...tab })),
     trashed: trashed.map((entry) => ({ ...entry })),
-    dirty: new Set(dirty),
+    ledger: new SyncLedger(),
     confirmed: [],
     appliedMerge: null,
   };
+  for (const id of dirty) {
+    state.ledger.markDirty(id);
+  }
   const manager = {
+    syncLedger: state.ledger,
     onPersist: null as ((payload: TabsSyncPayload) => void) | null,
     exportForSync: () =>
       ({
         tabs: state.tabs.map((tab) => ({ ...tab })),
-        dirty: [...state.dirty],
+        dirty: state.ledger.dirtyIds(),
         trashed: state.trashed.map((entry) => ({ ...entry })),
       }) as TabsSyncPayload,
     saveActiveFromEditor: () => {},
@@ -82,7 +88,7 @@ function fakeManager(tabs: NoteTab[], dirty: string[] = [], trashed: TrashedNote
     },
     confirmPushed: (ids: string[]) => {
       state.confirmed.push(...ids);
-      ids.forEach((id) => state.dirty.delete(id));
+      state.ledger.confirmPushed(ids);
     },
     adoptPushedRows: (
       rows: Array<{ id: string; seq: number; content: string; name: string | null }>,
@@ -231,7 +237,7 @@ describe('recovery cycle — a strand that outlived a reload', () => {
     expect(shipped[0].content).toBe('<p>stranded words</p>');
     // …and the queue retired once the server took it.
     expect(state.confirmed).toEqual(['x']);
-    expect(state.dirty.has('x')).toBe(false);
+    expect(state.ledger.isDirty('x')).toBe(false);
   });
 
   it('parks the stranded words when a NEWER remote edit won — never a silent overwrite', async () => {
@@ -344,8 +350,12 @@ describe('recovery cycle — a strand that outlived a reload', () => {
     await vi.advanceTimersByTimeAsync(0);
     const afterBoot = calls.length;
 
-    // A fresh local edit: the registered persist hook fires with a dirty
-    // id, the 1.2s debounce elapses, the cycle runs — push, THEN pull.
+    // A fresh local edit: the model marks the ledger FIRST, then the
+    // registered persist hook fires describing it (the payload is built
+    // from the ledger in the real manager — the mark is what queues the
+    // push; the payload is the announcement). The 1.2s debounce elapses,
+    // the cycle runs — push, THEN pull.
+    manager.syncLedger.markDirty('y');
     (manager as unknown as { onPersist: (payload: TabsSyncPayload) => void }).onPersist!({
       tabs: [],
       dirty: ['y'],

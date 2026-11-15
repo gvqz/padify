@@ -185,26 +185,27 @@ let syncTimer: ReturnType<typeof setInterval> | null = null;
  */
 let syncWarning: string | null = null;
 
-/** Local tab ids that changed and still need a push. */
-const pendingPush = new Set<string>();
-
 /**
- * What this device pushed and the server may echo back: the (content,
- * updated_at) each pushed row carried, keyed by note id. Every push —
- * the pending queue (step 1) and the pull-revealed diff (step 3) — lands
- * here before it ships; the next cycle's pull hands the rows back with
- * fresh seqs, and mergeRemote matches them against this map so a device's
- * own writes never outrank the typing that followed them. One entry per
- * note: the latest push replaces the last, and a stale entry is harmless
- * (a row matching it is this device's own bytes no matter when it was
- * sent).
+ * The push queue and the echo fingerprints live in the manager's sync
+ * ledger now (src/sync/ledger.ts) — one structure the model marks and
+ * this layer drains, so the queue can no longer disagree with the dirty
+ * set it was fed from. What this device pushed and the server may echo
+ * back rides the same entries: the next cycle's pull hands the rows
+ * back with fresh seqs, and mergeRemote matches them against the
+ * ledger's echo map so a device's own writes never outrank the typing
+ * that followed them.
  */
-const ownEchoes: OwnEchoMap = new Map();
 
 /** Remembers the bytes a push carried so the echo can be recognized. */
 function rememberEchoes(rows: NoteRow[]): void {
+  if (!manager) {
+    return;
+  }
   for (const row of rows) {
-    ownEchoes.set(row.id, { content: wireRowContent(row), updatedAt: row.updated_at });
+    manager.syncLedger.setEcho(row.id, {
+      content: wireRowContent(row),
+      updatedAt: row.updated_at,
+    });
   }
 }
 
@@ -339,7 +340,7 @@ export async function initCloudSync(tabManager: TabManager): Promise<void> {
       }
       setStatus(signedInStatus('syncing'));
       startSyncTimer();
-      seedPendingFromModel();
+      armRecoveryForStrands();
       void syncCycle('session-restored');
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
@@ -414,11 +415,13 @@ function handleSignedOut(): void {
   currentUserEmail = null;
   lastSyncAt = null;
   syncWarning = null;
-  // The in-memory queue dies with the session; the durable unpushed flags
-  // on the note records deliberately do NOT — the bytes are still unconfirmed
-  // by the cloud, so the next sign-in re-seeds them (seedPendingFromModel)
+  // The session's timers die here; the ledger's dirty state deliberately
+  // does NOT — the bytes are still unconfirmed by the cloud, and the next
+  // sign-in arms the recover-first cycle for them (armRecoveryForStrands)
   // instead of leaving them to be silently outranked by a newer remote row.
-  pendingPush.clear();
+  // The old queue was cleared here and re-seeded from the model; with the
+  // ledger those are the same structure, and clearing it would be the
+  // data loss the durable flags exist to prevent.
   stopSyncTimer();
   setStatus({ state: 'signed-out' });
 }
@@ -452,7 +455,7 @@ async function signIn(email: string, password: string): Promise<AuthResult> {
     currentUserEmail = data.user.email;
     setStatus(syncingStatus());
     startSyncTimer();
-    seedPendingFromModel();
+    armRecoveryForStrands();
     void syncCycle('sign-in');
     return { ok: true };
   } catch (error) {
@@ -481,7 +484,7 @@ async function signUp(email: string, password: string): Promise<AuthResult> {
     currentUserEmail = data.user.email;
     setStatus(syncingStatus());
     startSyncTimer();
-    seedPendingFromModel();
+    armRecoveryForStrands();
     void syncCycle('sign-up');
     return { ok: true };
   } catch (error) {
@@ -568,17 +571,17 @@ async function accountSwitchDeclined(userId: string, email: string): Promise<boo
 
 /**
  * True when the next cycle must PULL AND MERGE BEFORE pushing — the recovery
- * order for edits that outlived their session (see seedPendingFromModel).
+ * order for edits that outlived their session (see armRecoveryForStrands).
  * Cleared only after a pull's merge actually ran; a cycle that fails earlier
  * (offline) retries in the same mode.
  */
 let recoverOnNextCycle = false;
 
 /**
- * Re-seeds the push queue from the model's durable dirty state at every
- * session start (boot with a restored session, sign-in, sign-up).
+ * Arms the recover-first cycle for strands at every session start (boot
+ * with a restored session, sign-in, sign-up).
  *
- * The bug this closes: pendingPush and TabManager's dirtyIds were memory-only,
+ * The bug this closes: the push queue and the dirty set were memory-only,
  * while the pull cursor lives in sessionStorage and SURVIVES a reload. Edit a
  * note, reload before the 1.2s push debounce fires, and the post-reload cycle
  * had an empty queue, an empty dirty set and a cursor that delivered nothing
@@ -588,44 +591,37 @@ let recoverOnNextCycle = false;
  * silently overwrote the stranded words: no three-way merge, no conflict
  * park, no trash copy. Last keystrokes before a reload simply vanished.
  *
- * The durable half now lives on the note records themselves (NoteTab.unpushed,
+ * The durable half lives on the note records themselves (NoteTab.unpushed,
  * stamped by TabManager.persist in the same write as the content), so the
- * dirty state is exactly as crash-safe as the bytes it describes. Seeding it
- * back here restores the merge's protection — and sets recoverOnNextCycle so
- * the strand is reconciled against the remote truth BEFORE it is pushed
+ * dirty state is exactly as crash-safe as the bytes it describes. The
+ * ledger re-seeds from those flags at TabManager.init, and this hook arms
+ * recoverOnNextCycle so the strand is reconciled against the remote truth
+ * BEFORE it is pushed
  * (the server's upsert is unconditional for live-vs-live rows, so pushing a
  * stale strand first would clobber another device's newer words instead).
  */
-function seedPendingFromModel(): void {
-  if (!manager) {
-    return;
-  }
-  const dirty = manager.exportForSync().dirty;
-  if (dirty.length === 0) {
-    return;
-  }
-  let added = false;
-  for (const id of dirty) {
-    if (!pendingPush.has(id)) {
-      pendingPush.add(id);
-      added = true;
-    }
-  }
-  if (added) {
+function armRecoveryForStrands(): void {
+  // The ledger's dirty set IS the queue now — nothing to re-seed. What
+  // survives here is the TIMING rule: bytes that were already dirty
+  // when the session started are strands (they predate this session's
+  // first pull), so the cycle must reconcile against the remote truth
+  // BEFORE it ships them (see runSyncOnce's recover handling).
+  if (manager?.syncLedger.hasDirty()) {
     recoverOnNextCycle = true;
   }
 }
 
-function onLocalChange(payload: TabsSyncPayload): void {
+function onLocalChange(_payload: TabsSyncPayload): void {
   if (!currentUserId) {
     return;
   }
 
-  // Trash rides the same queue as edits: a trashed, restored or purged note
-  // marks itself dirty in TabManager's dirtyIds set, so `dirty` covers both.
-  payload.dirty.forEach((id) => pendingPush.add(id));
-
-  if (pendingPush.size === 0) {
+  // Trash rides the same queue as edits: a trashed, restored or purged
+  // note marks itself dirty in the ledger, and the ledger's dirty set IS
+  // the push queue now — there is nothing to feed. The gate stays: a
+  // persist with nothing dirty (and nothing awaiting retry) must not
+  // wake the debounce.
+  if (!manager?.syncLedger.hasDirty()) {
     return;
   }
 
@@ -660,7 +656,7 @@ async function syncCycle(_reason: string): Promise<void> {
     await runSyncOnce();
     lastSyncAt = Date.now();
     markAccountOwner();
-    setStatus(signedInStatus(pendingPush.size > 0 ? 'pending' : 'idle'));
+    setStatus(signedInStatus(manager.syncLedger.hasDirty() ? 'pending' : 'idle'));
     // Attachments ride along after the cycle — never inside it, so a
     // multi-megabyte upload can never delay note sync. Fire-and-forget:
     // the flush reports its own failures to the console.
@@ -697,7 +693,7 @@ async function syncCycle(_reason: string): Promise<void> {
  * alone.
  */
 async function pushPendingQueue(): Promise<void> {
-  if (!manager || pendingPush.size === 0) {
+  if (!manager || !manager.syncLedger.hasDirty()) {
     return;
   }
   const payload = manager.exportForSync();
@@ -705,7 +701,7 @@ async function pushPendingQueue(): Promise<void> {
   const byId = new Map(payload.tabs.map((tab) => [tab.id, tab]));
   const trashById = new Map(payload.trashed.map((grave) => [grave.id, grave]));
 
-  pendingPush.forEach((id) => {
+  manager.syncLedger.dirtyIds().forEach((id) => {
     const tab = byId.get(id);
     if (tab) {
       rows.push(tabToRow(tab, payload.tabs.indexOf(tab)));
@@ -766,7 +762,9 @@ async function pushPendingQueue(): Promise<void> {
     // made it out still count as pushed and stop re-announcing on every
     // future persist. The ids the server never saw stay queued for the
     // next cycle — nothing is dropped.
-    pushed.forEach((id) => pendingPush.delete(id));
+    // One call cleans the ledger (the queue and the dirty set are the
+    // same structure now) and retires the durable unpushed flags in the
+    // same persist.
     manager.confirmPushed(pushed);
     if (adopted.length > 0) {
       manager.adoptPushedRows(adopted);
@@ -784,12 +782,12 @@ async function runSyncOnce(): Promise<void> {
   // An empty queue means nothing is stuck: clear any size warning that
   // no longer has a note behind it (the oversized note was shortened, or
   // its tab — now a small tombstone — finally left the device).
-  if (pendingPush.size === 0) {
+  if (!manager.syncLedger.hasDirty()) {
     syncWarning = null;
   }
 
   // 1. Push whatever is pending — UNLESS this cycle is recovering edits
-  //    that outlived a reload (seedPendingFromModel). The server's upsert
+  //    that outlived a reload (armRecoveryForStrands). The server's upsert
   //    takes live rows unconditionally, so a strand pushed before the pull
   //    could clobber a newer remote edit with stale bytes; the merge must
   //    see the remote truth first, and the strand ships afterwards with
@@ -814,7 +812,10 @@ async function runSyncOnce(): Promise<void> {
   manager.saveActiveFromEditor();
 
   const payload = manager.exportForSync();
-  const merge = mergeRemote(remoteRows, payload, { order: pull.order, ownEchoes });
+  const merge = mergeRemote(remoteRows, payload, {
+    order: pull.order,
+    ownEchoes: manager.syncLedger.echoMap(),
+  });
 
   // The pull's merge has run — recovery mode has served its purpose. A
   // failure above (offline pull, merge throw) keeps the flag armed so the
@@ -842,11 +843,11 @@ async function runSyncOnce(): Promise<void> {
     }
   }
   // A dropped seed may sit in the push queue (its boot-time creation
-  // persisted → dirty → pendingPush). Its tab is gone from the model and
+  // persisted → dirty → queued). Its tab is gone from the model and
   // it never reached the server, so nothing will ever confirm it — a
   // queued id with no tab behind it would keep the status pegged
   // at "pending" forever. Take it out.
-  merge.droppedSeedIds.forEach((id) => pendingPush.delete(id));
+  manager.syncLedger.drop(merge.droppedSeedIds);
   // NOW the cursor may advance: the pulled rows are merged and the
   // persist has been issued. A throw above leaves the cursor where it
   // was, so the next cycle re-pulls instead of skipping.
@@ -885,7 +886,7 @@ async function runSyncOnce(): Promise<void> {
   //    at or below the cursor): they are only pushed for position drift, so
   //    an untouched account stops re-publishing its whole list every cycle.
   //    Trash never lands here — a trash row only ever rides the
-  //    pendingPush queue (one the pull didn't deliver is unchanged-and-
+  //    push queue (one the pull didn't deliver is unchanged-and-
   //    known; a pending one left in step 1).
   const diffRows: NoteRow[] = [];
   const remoteById = new Map(remoteRows.map((row) => [row.id, row]));
@@ -911,11 +912,12 @@ async function runSyncOnce(): Promise<void> {
     ...mergedTabs.map((tab) => tab.id),
     ...mergedExport.trashed.map((grave) => grave.id),
   ]);
-  for (const id of [...pendingPush]) {
+  const ledger = manager.syncLedger;
+  ledger.dirtyIds().forEach((id) => {
     if (!modelIds.has(id)) {
-      pendingPush.delete(id);
+      ledger.drop([id]);
     }
-  }
+  });
 
   mergedTabs.forEach((tab, index) => {
     const remote = remoteById.get(tab.id);
@@ -1078,7 +1080,7 @@ interface MergeResult {
   reassertTrashIds: string[];
   /**
    * Local untouched welcome-seed tabs this merge dropped (see
-   * dropSeedTwins). The caller must take them out of pendingPush — a
+   * dropSeedTwins). The caller must drop them from the sync ledger — a
    * queued id whose tab and trash entry are both gone would keep the
    * status pegged at "pending" forever.
    */

@@ -37,21 +37,26 @@ vi.mock('../ui/dialog', () => ({ confirmDialog: vi.fn() }));
 import type { TabManager, NoteTab, TabsSyncPayload } from '../tabs';
 import type { TrashedNote } from '../storage';
 import type { NoteRow } from './sync';
+import { SyncLedger } from '../sync/ledger';
 import { confirmDialog } from '../ui/dialog';
 
 function fakeManager(tabs: NoteTab[], dirty: string[] = [], trashed: TrashedNote[] = []) {
   const state = {
     tabs: tabs.map((tab) => ({ ...tab })),
     trashed: trashed.map((entry) => ({ ...entry })),
-    dirty: new Set(dirty),
+    ledger: new SyncLedger(),
     confirmed: [] as string[],
   };
+  for (const id of dirty) {
+    state.ledger.markDirty(id);
+  }
   const manager = {
+    syncLedger: state.ledger,
     onPersist: null as ((payload: TabsSyncPayload) => void) | null,
     exportForSync: () =>
       ({
         tabs: state.tabs.map((tab) => ({ ...tab })),
-        dirty: [...state.dirty],
+        dirty: state.ledger.dirtyIds(),
         trashed: state.trashed.map((entry) => ({ ...entry })),
       }) as TabsSyncPayload,
     saveActiveFromEditor: () => {},
@@ -63,7 +68,7 @@ function fakeManager(tabs: NoteTab[], dirty: string[] = [], trashed: TrashedNote
     },
     confirmPushed: (ids: string[]) => {
       state.confirmed.push(...ids);
-      ids.forEach((id) => state.dirty.delete(id));
+      state.ledger.confirmPushed(ids);
     },
     adoptPushedRows: (
       rows: Array<{ id: string; seq: number; content: string; name: string | null }>,

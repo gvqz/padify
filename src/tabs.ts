@@ -67,6 +67,7 @@ import {
   type NoteType,
 } from './editor/note-types';
 import { isInstalledDisplayMode } from './install-pwa';
+import { SyncLedger } from './sync/ledger';
 
 export type { NoteType } from './editor/note-types';
 
@@ -154,11 +155,11 @@ export interface NoteTab {
    * DURABLE sync-dirty marker: these bytes differ from what the cloud last
    * agreed to (or the cloud has never seen them). Written by persist() in
    * the SAME record write as the content, so it is exactly as crash-safe
-   * as the words it describes; TabManager.init() re-seeds the in-memory
-   * dirtyIds set from it, and the sync layer's session start re-queues the
-   * id for a pull-first recovery cycle (see cloud/sync.ts —
-   * seedPendingFromModel). Cloud-only metadata: never crosses the wire,
-   * cleared by confirmPushed's persist once the server has the bytes.
+   * as the words it describes; TabManager.init() re-seeds the sync
+   * ledger's dirty set from it (see sync/ledger.ts), and the sync layer's
+   * session start arms a pull-first recovery cycle for it (see
+   * cloud/sync.ts). Cloud-only metadata: never crosses the wire, cleared
+   * by confirmPushed's persist once the server has the bytes.
    */
   unpushed?: boolean;
   /**
@@ -240,7 +241,11 @@ export class TabManager {
   /** The trash — deleted notes kept restorable for the retention window
    *  (content included). Lives beside the tabs, syncs as deleted rows. */
   private trashed: TrashedNote[] = [];
-  private dirtyIds: Set<string> = new Set();
+  /** The one sync-state owner — the dirty set, the push queue and the
+   *  echo fingerprints in a single structure (see sync/ledger.ts).
+   *  Public read-only surface for the cloud layer, which reaches it
+   *  through the manager it already holds. */
+  readonly syncLedger = new SyncLedger();
   private persistListeners: Set<(payload: TabsSyncPayload) => void> = new Set();
   private activeListeners: Set<(tab: NoteTab) => void> = new Set();
   private trashListeners: Set<() => void> = new Set();
@@ -264,20 +269,20 @@ export class TabManager {
       (entry) => entry && typeof entry.id === 'string' && typeof entry.deletedAt === 'number',
     );
     // Durable sync-dirty recovery: records an earlier session stamped
-    // `unpushed` re-enter the in-memory dirty set here. The push queue and
+    // `unpushed` re-enter the ledger's dirty set here. The push queue and
     // the dirty set used to be memory-only while the pull cursor survived
     // reloads — an edit made just before a reload was then silently
     // overwritten when another device later pushed the same note. Seeding
-    // the set (tabs AND trash) lets the sync layer's session start queue
-    // these ids for a pull-first recovery cycle instead.
+    // the ledger (tabs AND trash) lets the sync layer's session start
+    // queue these ids for a pull-first recovery cycle instead.
     this.tabs.forEach((tab) => {
       if (tab.unpushed === true) {
-        this.dirtyIds.add(tab.id);
+        this.syncLedger.markDirty(tab.id);
       }
     });
     this.trashed.forEach((grave) => {
       if (grave.unpushed === true) {
-        this.dirtyIds.add(grave.id);
+        this.syncLedger.markDirty(grave.id);
       }
     });
     this.migrateLegacyNote();
@@ -384,21 +389,22 @@ export class TabManager {
   }
 
   /**
-   * Mirrors the dirty set onto the records before every write (see
-   * NoteTab.unpushed): every dirtyIds mutation funnels through a persist
-   * eventually, so one stamp point keeps the flag exactly as fresh as the
-   * content beside it. `undefined` keeps the stored records lean — the
-   * overwhelming majority of notes are confirmed at any given moment.
+   * Mirrors the ledger's dirty set onto the records before every write
+   * (see NoteTab.unpushed): every dirty mutation funnels through a
+   * persist eventually, so one stamp point keeps the flag exactly as
+   * fresh as the content beside it. `undefined` keeps the stored records
+   * lean — the overwhelming majority of notes are confirmed at any given
+   * moment.
    */
   private stampUnpushedFlags(): void {
     this.tabs.forEach((tab) => {
-      const unpushed = this.dirtyIds.has(tab.id);
+      const unpushed = this.syncLedger.isDirty(tab.id);
       if (unpushed !== (tab.unpushed === true)) {
         tab.unpushed = unpushed || undefined;
       }
     });
     this.trashed.forEach((grave) => {
-      const unpushed = this.dirtyIds.has(grave.id);
+      const unpushed = this.syncLedger.isDirty(grave.id);
       if (unpushed !== (grave.unpushed === true)) {
         grave.unpushed = unpushed || undefined;
       }
@@ -449,7 +455,7 @@ export class TabManager {
   exportForSync(): TabsSyncPayload {
     return {
       tabs: this.tabs.map((tab) => ({ ...tab })),
-      dirty: [...this.dirtyIds],
+      dirty: this.syncLedger.dirtyIds(),
       trashed: this.trashed.map((entry) => ({ ...entry })),
     };
   }
@@ -475,7 +481,7 @@ export class TabManager {
 
   /**
    * Called by the cloud sync layer after a push confirmed that the given
-   * note ids are now stored on the server. Without this, the local dirtyIds
+   * note ids are now stored on the server. Without this, the local dirty
    * set grew monotonically — every persist notification re-added every
    * historical dirty id to the pendingPush set, so the same rows were
    * pushed on every 30 s sync cycle forever, byte-for-byte identical.
@@ -492,12 +498,7 @@ export class TabManager {
     if (ids.length === 0) {
       return;
     }
-    let cleared = false;
-    for (const id of ids) {
-      if (this.dirtyIds.delete(id)) {
-        cleared = true;
-      }
-    }
+    const cleared = this.syncLedger.confirmPushed(ids);
     // Purged placeholders leave once their sweeper row is stored — there is
     // nothing left to show, restore or push for them.
     const confirmed = new Set(ids);
@@ -618,17 +619,10 @@ export class TabManager {
     // flag on the next persist — a reload before the push lands could
     // then lose the delete. Ids leave the dirty set only through
     // confirmPushed (the server has the bytes) or by leaving the model.
-    if (this.dirtyIds.size > 0) {
-      const alive = new Set<string>([
-        ...this.tabs.map((tab) => tab.id),
-        ...this.trashed.map((grave) => grave.id),
-      ]);
-      for (const id of [...this.dirtyIds]) {
-        if (!alive.has(id)) {
-          this.dirtyIds.delete(id);
-        }
-      }
-    }
+    this.syncLedger.retainOnly([
+      ...this.tabs.map((tab) => tab.id),
+      ...this.trashed.map((grave) => grave.id),
+    ]);
 
     const active = this.getActive();
     if (active) {
@@ -748,7 +742,7 @@ export class TabManager {
     active.content = html;
     active.updatedAt = nextUpdatedAt(active.updatedAt);
     active.colorTheme = currentThemeMode();
-    this.dirtyIds.add(active.id);
+    this.syncLedger.markDirty(active.id);
     this.schedulePersist();
     this.refreshTabLabel(active.id);
   }
@@ -768,7 +762,7 @@ export class TabManager {
     active.content = surface.capture(this.editorHost()) ?? active.content;
     active.updatedAt = nextUpdatedAt(active.updatedAt);
     active.colorTheme = currentThemeMode();
-    this.dirtyIds.add(active.id);
+    this.syncLedger.markDirty(active.id);
     this.persist();
     this.refreshTabLabel(active.id);
   }
@@ -861,7 +855,7 @@ export class TabManager {
     noteSurfaceFor(active).clear(this.editorHost()!);
     active.content = '';
     active.updatedAt = nextUpdatedAt(active.updatedAt);
-    this.dirtyIds.add(active.id);
+    this.syncLedger.markDirty(active.id);
     this.persist();
     this.refreshTabLabel(active.id);
     this.editor.trigger('focus');
@@ -932,7 +926,7 @@ export class TabManager {
     } else {
       active.content = content;
       active.updatedAt = nextUpdatedAt(active.updatedAt);
-      this.dirtyIds.add(active.id);
+      this.syncLedger.markDirty(active.id);
       this.persist();
       this.loadActiveIntoEditor();
     }
@@ -1180,7 +1174,7 @@ export class TabManager {
     const tab = createTab('', null, noteType);
     this.tabs.push(tab);
     this.activeId = tab.id;
-    this.dirtyIds.add(tab.id);
+    this.syncLedger.markDirty(tab.id);
     this.persist();
 
     this.strip.get(0)!.appendChild(this.buildTabElement(tab));
@@ -1213,7 +1207,7 @@ export class TabManager {
       tab.name = name;
     }
     this.tabs.push(tab);
-    this.dirtyIds.add(tab.id);
+    this.syncLedger.markDirty(tab.id);
     this.strip.get(0)!.appendChild(this.buildTabElement(tab));
     this.renderRailCount();
     this.persist();
@@ -1247,7 +1241,7 @@ export class TabManager {
     }
     const index = this.tabs.findIndex((entry) => entry.id === tabId);
     this.tabs.splice(index + 1, 0, copy);
-    this.dirtyIds.add(copy.id);
+    this.syncLedger.markDirty(copy.id);
     this.persist();
 
     this.renderStrip();
@@ -1357,7 +1351,7 @@ export class TabManager {
     if (!trimmed || trimmed === tab.name) return false;
     tab.name = trimmed;
     tab.updatedAt = nextUpdatedAt(tab.updatedAt);
-    this.dirtyIds.add(tab.id);
+    this.syncLedger.markDirty(tab.id);
     this.persist();
     this.refreshTabLabel(tab.id);
     return true;
@@ -1375,7 +1369,7 @@ export class TabManager {
     if (!tab || tab.content === content) return;
     tab.content = content;
     tab.updatedAt = nextUpdatedAt(tab.updatedAt);
-    this.dirtyIds.add(tab.id);
+    this.syncLedger.markDirty(tab.id);
     if (tab.id === this.activeId) {
       // The live surface repaints from the new bytes; commit answers
       // false (the caller owns persistence) so persist exactly once.
@@ -1414,7 +1408,6 @@ export class TabManager {
     const title = deriveTabTitle(tab);
     const index = this.tabs.findIndex((entry) => entry.id === tabId);
     this.tabs = this.tabs.filter((entry) => entry.id !== tabId);
-    this.dirtyIds.delete(tabId);
     // A trashed note replaces any stale entry (re-trash after a restore
     // keeps the newest stamp; the entry never survives a live row).
     this.trashed = this.trashed.filter((entry) => entry.id !== tabId);
@@ -1437,7 +1430,8 @@ export class TabManager {
     });
     // The trash row rides the next push — the same dirty set the tabs use
     // (the sync layer resolves pending ids against tabs FIRST, trash second).
-    this.dirtyIds.add(tab.id);
+    // Requeue: the grave's row rides BEHIND the live rows already waiting.
+    this.syncLedger.requeue(tab.id);
 
     // The flash fires BEFORE the persist calls below so its first tick
     // lands clean — the receipt should never start behind the persist's
@@ -1523,7 +1517,7 @@ export class TabManager {
       restored.copyOf = grave.copyOf;
     }
     this.tabs.push(restored);
-    this.dirtyIds.add(restored.id);
+    this.syncLedger.markDirty(restored.id);
     this.persist();
     this.renderStrip();
     return true;
@@ -1556,7 +1550,7 @@ export class TabManager {
       deletedAt: 1,
       purged: true,
     });
-    this.dirtyIds.add(grave.id);
+    this.syncLedger.markDirty(grave.id);
     // Delete forever means forever: the note's snapshots go with it, or
     // the History sheet would keep offering a resurrection after the
     // toast said "for good". Best-effort — a snapshots outage must not
@@ -1593,7 +1587,7 @@ export class TabManager {
           purged: true,
         })),
       );
-    visible.forEach((grave) => this.dirtyIds.add(grave.id));
+    visible.forEach((grave) => this.syncLedger.markDirty(grave.id));
     // Forever means forever — every emptied note's snapshots sweep with
     // it (see purgeNote). Best-effort, never blocking the empty itself;
     // the catch rides the promise (see purgeNote for why).
@@ -1637,7 +1631,7 @@ export class TabManager {
       if (keep && raw && raw !== currentName) {
         tab.name = raw;
         tab.updatedAt = nextUpdatedAt(tab.updatedAt);
-        this.dirtyIds.add(tab.id);
+        this.syncLedger.markDirty(tab.id);
         this.persist();
         showToast('Tab renamed.');
       }
@@ -1758,7 +1752,7 @@ export class TabManager {
       tab.name = record.mine.name;
       tab.content = record.mine.content;
       tab.updatedAt = nextUpdatedAt(tab.updatedAt);
-      this.dirtyIds.add(tab.id);
+      this.syncLedger.markDirty(tab.id);
       if (tab.id === this.activeId) {
         // The active note repaints through the restore seam — the same
         // path a snapshot restore owns (painter swap, html commit).
@@ -1782,7 +1776,7 @@ export class TabManager {
       }
       const index = this.tabs.findIndex((entry) => entry.id === tabId);
       this.tabs.splice(index + 1, 0, copy);
-      this.dirtyIds.add(copy.id);
+      this.syncLedger.markDirty(copy.id);
       applyMine();
     }
     // 'theirs': the note already holds their version — nothing but the
