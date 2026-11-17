@@ -796,9 +796,11 @@ test.describe('note types — consistent behavior', () => {
     // noise); the tooltip carries it, hydrated platform-correct by
     // data-shortcut-title.
     await expect(page.locator('#noSnapshotsHint kbd').first()).toHaveText('Ctrl');
+    // The chord is the D2 split's snapshot binding — Ctrl+Alt+S (Ctrl+U
+    // belongs to the rich editor's underline again).
     await expect(page.locator('#createSnapshotBtn')).toHaveAttribute(
       'title',
-      'Take snapshot [Ctrl + U]',
+      'Take snapshot [Ctrl + Alt + S]',
     );
   });
 
