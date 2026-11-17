@@ -436,15 +436,25 @@ test.describe('floating window gating', () => {
     await page.goto('/');
     const pip = page.locator('#pipContainer');
 
-    // The welcome note is standard — the entry point shows.
+    // The welcome note is standard — the entry point shows, fully able.
     await expect(pip).toBeVisible();
+    await expect(pip).not.toHaveClass(/is-unavailable/);
 
-    // A rich note active — the entry point hides.
+    // A rich note active — the entry point dims and explains itself
+    // (D3(a): it never silently vanishes).
     await createRichNote(page);
-    await expect(pip).toBeHidden();
+    await expect(pip).toBeVisible();
+    await expect(pip).toHaveClass(/is-unavailable/);
+    await expect(pip).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.locator('#pip')).toHaveAttribute(
+      'title',
+      'Floating Window works on plain notes only',
+    );
 
-    // Back to the standard note — it returns.
+    // Back to the standard note — it recovers.
     await page.locator('#tabStripTabs .tab-strip-tab').first().click();
     await expect(pip).toBeVisible();
+    await expect(pip).not.toHaveClass(/is-unavailable/);
+    await expect(page.locator('#pip')).toHaveAttribute('title', 'Activate Floating Window');
   });
 });

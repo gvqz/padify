@@ -190,7 +190,7 @@ test.describe('the rebuilt menu', () => {
     await page.goto('/');
     // A version on the welcome note — the row the reader will expand.
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
 
     // A second note with words of its own, then into the trash. The
@@ -231,11 +231,64 @@ test.describe('the rebuilt menu', () => {
     const editor = page.locator('#note');
     await editor.click();
 
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
 
     await openSnapshots(page);
     await expect(snapshotRows(page)).toHaveCount(1);
+  });
+
+  test('the chord split — Ctrl+U belongs to the editor again, the snapshot lives on Ctrl+Alt+S', async ({
+    page,
+  }) => {
+    await page.goto('/');
+
+    // A rich note with one word to underline (the type menu is the door).
+    await page.locator('#addTabTypeMenu').click();
+    await page
+      .locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Rich text note' })
+      .click();
+    await expect(page.locator('#richToolbar')).toBeVisible();
+    const editor = page.locator('#note');
+    await editor.click();
+    await page.keyboard.type('underline me');
+    await page.keyboard.press('Control+Shift+ArrowLeft'); // selects "me"
+
+    // Ctrl+U underlines the selection — native contenteditable, parity
+    // with every editor the user has ever used. The old document-level
+    // snapshot listener used to swallow this press whole.
+    await page.keyboard.press('Control+U');
+    await expect(editor.locator('u')).toHaveCount(1);
+    await expect(editor.locator('u')).toHaveText('me');
+
+    // And it mints nothing: History's empty state is still the empty
+    // state — and its hint now teaches the snapshot's real chord.
+    await openSnapshots(page);
+    await expect(page.locator('#noSnapshots')).toBeVisible();
+    await expect(page.locator('#noSnapshotsHint')).toContainText('Ctrl + Alt + S');
+
+    // The snapshot's own chord lands (document-level, sheet open)…
+    await page.keyboard.press('Control+Alt+S');
+    await toastSays(page, 'Snapshot created!');
+    await expect(page.locator('#noSnapshots')).toBeHidden();
+    await expect(snapshotRows(page)).toHaveCount(1);
+    await page.keyboard.press('Escape');
+
+    // …and the shortcuts reference lists Ctrl+U exactly once — on
+    // Underline — never twice (the QA double-claim finding).
+    await page.locator('#brandMenuButton').click();
+    await page.locator('#brandMenu .brand-menu-item', { hasText: 'Keyboard shortcuts' }).click();
+    const reference = page.locator('#keyboardShortcutsModal');
+    await expect(reference).toHaveClass(/in/);
+    await expect(reference.locator('.shortcut-keys').filter({ hasText: 'Ctrl + U' })).toHaveCount(
+      1,
+    );
+    await expect(
+      reference.locator('.shortcut-row', { hasText: 'Underline' }).locator('.shortcut-keys'),
+    ).toHaveText('Ctrl + U');
+    await expect(
+      reference.locator('.shortcut-row', { hasText: 'Take a snapshot' }).locator('.shortcut-keys'),
+    ).toHaveText('Ctrl + Alt + S');
   });
 
   test('the note view follows the note — a switch under an open sheet re-answers it', async ({
@@ -248,10 +301,10 @@ test.describe('the rebuilt menu', () => {
     await editor.click();
     await page.keyboard.press('Control+A');
     await page.keyboard.type('first note body');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await page.locator('#addTab').click();
     await page.keyboard.type('second note body');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
 
     await openSnapshots(page);
     // The sheet answers the note on stage.
@@ -349,10 +402,10 @@ test.describe('the rebuilt menu', () => {
   test('an unchanged note is declined — no duplicate rows', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
 
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'No changes since the last snapshot.');
 
     await openSnapshots(page);
@@ -363,7 +416,7 @@ test.describe('the rebuilt menu', () => {
     await page.goto('/');
     await page.locator('#note').click();
 
-    await Promise.all([page.keyboard.press('Control+U'), page.keyboard.press('Control+U')]);
+    await Promise.all([page.keyboard.press('Control+Alt+S'), page.keyboard.press('Control+Alt+S')]);
 
     await openSnapshots(page);
     await expect(snapshotRows(page)).toHaveCount(1);
@@ -374,10 +427,10 @@ test.describe('the rebuilt menu', () => {
     const editor = page.locator('#note');
     await editor.click();
     await page.keyboard.type(' version one');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
 
     await page.keyboard.type(' version two words');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
 
     // Restore v1: v1's bytes return to the note...
     await openSnapshots(page);
@@ -392,7 +445,7 @@ test.describe('the rebuilt menu', () => {
     // is the deeper one: this exact version is already saved.
     await page.keyboard.press('Escape');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'This version is already saved.');
 
     await openSnapshots(page);
@@ -407,10 +460,10 @@ test.describe('the rebuilt menu', () => {
     await page.keyboard.press('Control+A');
     await page.keyboard.press('Delete');
     await page.keyboard.type('first words');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
 
     await page.keyboard.type(' second words');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
 
     await openSnapshots(page);
     const rows = snapshotRows(page);
@@ -428,7 +481,7 @@ test.describe('the rebuilt menu', () => {
     await page.keyboard.press('Control+A');
     await page.keyboard.press('Delete');
 
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Note is empty. Nothing to save as snapshot.');
 
     await openSnapshots(page);
@@ -455,7 +508,7 @@ test.describe('search', () => {
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' grocery run');
 
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
     await expect(snapshotRows(page)).toHaveCount(1);
 
@@ -477,7 +530,7 @@ test.describe('search', () => {
   test('html markup never answers a search for tags', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
 
     await openSnapshots(page);
     await page.locator('#searchSnapshots').fill('div');
@@ -493,7 +546,7 @@ test.describe('restore — to the note it came from', () => {
     await editor.click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' version A');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
 
     // The note drifts on — the snapshot no longer matches it.
@@ -528,7 +581,7 @@ test.describe('restore — to the note it came from', () => {
     await editor.click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' version A');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
 
     await page.keyboard.type(' and then some more words');
@@ -552,7 +605,7 @@ test.describe('restore — to the note it came from', () => {
     await page.goto('/');
     const editor = page.locator('#note');
     await editor.click();
-    await page.keyboard.press('Control+U'); // snapshot the Welcome note
+    await page.keyboard.press('Control+Alt+S'); // snapshot the Welcome note
     await toastSays(page, 'Snapshot created!');
 
     // A second note, being edited, with its own words.
@@ -600,7 +653,7 @@ test.describe('restore — to the note it came from', () => {
     await page.keyboard.press('Control+a');
     await page.keyboard.type('Phoenix');
     await page.keyboard.press('Enter');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
 
     // The row carries the note's name — identity on the shared
@@ -677,7 +730,7 @@ test.describe('note types — consistent behavior', () => {
     const editor = page.locator('#note .markdown-source');
     await editor.click();
     await page.keyboard.type('# Trail log');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
 
     await openSnapshots(page);
@@ -712,7 +765,7 @@ test.describe('note types — consistent behavior', () => {
     const editor = page.locator('#note');
     await editor.click();
     await page.keyboard.type('rich words');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
 
     await openSnapshots(page);
@@ -755,7 +808,7 @@ test.describe('note types — consistent behavior', () => {
     await page.goto('/');
     // Snapshot the welcome note while it is plain.
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
 
     // A markdown note with its own content and chrome, now on stage.
@@ -813,7 +866,7 @@ test.describe('note types — consistent behavior', () => {
     const md = page.locator('#note .markdown-source');
     await md.click();
     await page.keyboard.type('# markdown words');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
 
     await page.keyboard.press('Escape');
@@ -821,7 +874,7 @@ test.describe('note types — consistent behavior', () => {
     const editor = page.locator('#note');
     await editor.click();
     await page.keyboard.type('plain words');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
 
     await openSnapshots(page);
@@ -851,7 +904,7 @@ test.describe('deleting', () => {
     await page.locator('#addTab').click();
     await editor.click();
     await page.keyboard.type('gone for good');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
     await page.locator('#tabStripTabs .tab-strip-tab').first().click();
     await page
@@ -949,17 +1002,17 @@ test.describe('deleting', () => {
   }) => {
     await page.goto('/');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' two');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
 
     // A SECOND note with its own version — the scoped delete must leave
     // it standing (the old global button would have swept it).
     await page.locator('#addTab').click();
     await page.locator('#note').click();
     await page.keyboard.type('bystander note');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
     await page.locator('#tabStripTabs .tab-strip-tab').first().click();
 
@@ -991,9 +1044,9 @@ test.describe('the day-anchored timeline', () => {
   test('a same-day history still anchors under Today', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await page.keyboard.type(' more words');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
 
     await openSnapshots(page);
     // One day, one anchor — always present, a run of entries needs it
@@ -1007,7 +1060,7 @@ test.describe('the day-anchored timeline', () => {
   test('day anchors split a history that spans days', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await seedSnapshotDaysAgo(page, 2);
 
     // The seeded row belongs to another chain — the all-notes view
@@ -1027,7 +1080,7 @@ test.describe('the day-anchored timeline', () => {
     await page.locator('#note').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' expandable body copy lives here');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
 
     const row = snapshotRows(page).first();
@@ -1052,9 +1105,9 @@ test.describe('the day-anchored timeline', () => {
   test('one entry opens at a time — the accordion keeps the rail readable', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await page.keyboard.type(' more words');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
 
     const rows = snapshotRows(page);
@@ -1067,7 +1120,7 @@ test.describe('the day-anchored timeline', () => {
   test('Enter toggles the expansion from the keyboard', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
 
     const main = snapshotRows(page).first().locator('.snap-row');
@@ -1081,7 +1134,7 @@ test.describe('the day-anchored timeline', () => {
   test('the matching row wears the Current chip; an edit drops it', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
 
     const row = snapshotRows(page).first();
@@ -1107,7 +1160,7 @@ test.describe('the day-anchored timeline', () => {
     // The chip belongs to the newest identical row alone.
     await page.goto('/');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
 
     // Seed the older twin: identical content, another chain, an older
@@ -1164,7 +1217,7 @@ test.describe('the day-anchored timeline', () => {
   test('the detail card owns the actions — nothing opens a second dialog', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
 
     const row = snapshotRows(page).first();
@@ -1183,7 +1236,7 @@ test.describe('the day-anchored timeline', () => {
     await page.locator('#note').click();
     await page.keyboard.press('Control+A');
     await page.keyboard.type('plain words to copy');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
 
     const row = snapshotRows(page).first();
@@ -1219,7 +1272,7 @@ test.describe('the day-anchored timeline', () => {
     // Enough rows to overflow the sheet's scroll area at this height.
     for (let i = 0; i < 8; i++) {
       await page.keyboard.type(` row number ${i}`);
-      await page.keyboard.press('Control+U');
+      await page.keyboard.press('Control+Alt+S');
     }
     await seedSnapshotDaysAgo(page, 2);
     await openSnapshots(page);
@@ -1248,7 +1301,7 @@ test.describe('the day-anchored timeline', () => {
     await page.goto('/');
     await page.setViewportSize({ width: 375, height: 667 });
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
 
     // The navbar collapses its tools behind the hamburger at this width.
     await page.locator('.navbar-toggle').click();
@@ -1280,11 +1333,11 @@ test.describe('the version diffstat', () => {
   test('a row carries its change against the previous snapshot of its note', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U'); // the baseline — no badge
+    await page.keyboard.press('Control+Alt+S'); // the baseline — no badge
 
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' two new words'); // +3 words: "two new words"
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
 
     await openSnapshots(page);
     const rows = snapshotRows(page);
@@ -1304,11 +1357,11 @@ test.describe('the version diffstat', () => {
     await page.keyboard.press('Control+A');
     await page.keyboard.press('Delete');
     await page.keyboard.type('trail log');
-    await page.keyboard.press('Control+U'); // the baseline
+    await page.keyboard.press('Control+Alt+S'); // the baseline
 
     await page.keyboard.press('Control+End');
     await page.keyboard.type('\nmet a fox at the ridge');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
 
     await openSnapshots(page);
     const rows = snapshotRows(page);
@@ -1338,7 +1391,7 @@ test.describe('the search and the footer', () => {
   test('Escape clears the query first; the second Escape closes the sheet', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
 
     const search = page.locator('#searchSnapshots');
@@ -1362,9 +1415,9 @@ test.describe('the search and the footer', () => {
     await page.locator('#note').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' tail copy');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await page.keyboard.type(' xylophone concert');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
 
     // No filters: the chain first, the store beside it.
@@ -1395,7 +1448,7 @@ test.describe('the search and the footer', () => {
     await page.locator('#note').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' grocery run');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
 
     await openSnapshots(page);
     // A query the new snapshot still answers: the refresh honors the
@@ -1435,7 +1488,7 @@ test.describe('the search and the footer', () => {
     await page.locator('#note').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' grocery run');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
 
     await openSnapshots(page);
     // A query that matches nothing, under which a NEW snapshot is taken.
@@ -1473,7 +1526,7 @@ test.describe('the search and the footer', () => {
   test('the search field clears itself with the × and focuses from "/"', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
 
     const search = page.locator('#searchSnapshots');
@@ -1501,7 +1554,7 @@ test.describe('the search and the footer', () => {
   test('the no-match state offers the way out: Clear the filter', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
 
     await page.locator('#searchSnapshots').fill('zzz-nothing-matches');
@@ -1523,7 +1576,7 @@ test.describe('the three views', () => {
   async function seedVersionsAndTrash(page: Page): Promise<void> {
     await page.goto('/');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
 
     // A second note, trashed — its grave waits in the trash view.
@@ -1585,12 +1638,12 @@ test.describe('the three views', () => {
 
     // Two live notes, one version each.
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
     await page.locator('#addTab').click();
     await page.locator('#note').click();
     await page.keyboard.type('second note words');
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
 
     // Open — the second note's chain alone (it is on stage).
@@ -1635,7 +1688,7 @@ test.describe('the three views', () => {
   test('the trash view empty state explains what waits here', async ({ page }) => {
     await page.goto('/');
     await page.locator('#note').click();
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
 
     await openSnapshots(page);
     // No trash, no count chip.
@@ -1667,7 +1720,7 @@ test.describe('the three views', () => {
     );
     await expect(trashRows(page)).toHaveCount(1);
 
-    await page.keyboard.press('Control+U');
+    await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
 
     // The view gave way to the note — the new snapshot is the thing

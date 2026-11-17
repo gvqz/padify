@@ -354,6 +354,19 @@ input[type=radio]:focus {
   cursor: pointer;
 }
 
+/* The dimmed entry point — QA A13: on non-plain notes the floating
+   window's button stays visible and explains itself instead of
+   silently vanishing. Hover must keep working (the tooltip is the
+   explanation), so pointer-events stay on and the click handler
+   refuses via aria-disabled. */
+#pipContainer.is-unavailable .pip-icon {
+  cursor: not-allowed;
+}
+
+#pipContainer.is-unavailable {
+  opacity: 0.45;
+}
+
 @media all and (display-mode: picture-in-picture) {
   body {
     padding-top: 0px;

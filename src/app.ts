@@ -771,12 +771,20 @@ export async function initApp(): Promise<void> {
       shortcutTarget !== notepad.note.get(0) &&
       !notepad.note.get(0)?.contains(shortcutTarget);
 
-    if ((event.ctrlKey || event.metaKey) && event.code === 'KeyS') {
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && event.code === 'KeyS') {
       saveTextAsFile(getEditorText(), getFileName());
       event.preventDefault();
     }
 
-    if (event.altKey && event.code === 'KeyS' && !altComboBlocked) {
+    // Alt+S without the primary modifier — exact match, so Ctrl+Alt+S
+    // (the snapshot chord, see snapshots.ts) never rides along.
+    if (
+      event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      event.code === 'KeyS' &&
+      !altComboBlocked
+    ) {
       exportNotesAsPDF(getEditorText(), getPdfFileName());
       event.preventDefault();
     }

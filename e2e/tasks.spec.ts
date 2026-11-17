@@ -330,10 +330,56 @@ test.describe('the rail — task contexts only', () => {
       page.locator('#tkhSections .tk-task-wrap', { hasText: 'Book ryokan' }),
     ).toHaveCount(0);
 
-    // The origin chip opens that note (and closes the hub).
+    // The origin chip opens that note — and lands ON the task's row
+    // (D1(c): the dated row is the answer, bloomed once, not a cold
+    // note top the user must scan).
     await milk.locator('.tk-origin').click();
     await expect(page.locator('#tasksHub')).toBeHidden();
     await expect(page.locator('.tkp-title')).toHaveValue('Home');
+    const milkRow = page.locator('#note .tk-task-wrap', { hasText: 'Buy milk' });
+    await expect(milkRow).toHaveClass(/is-revealed/);
+  });
+
+  test('an origin chip lands a below-the-fold row centered in the editor', async ({ page }) => {
+    await page.goto('/');
+    await newTaskList(page);
+    await page.locator('.tkp-title').fill('Deep list');
+    await page.locator('.tkp-title').press('Enter');
+    const input = page.locator('.tkp [data-composer-input]');
+
+    // Fifteen dated tasks. The first-created lands LAST in the page
+    // (newest first) — far below the fold of a 800px-tall editor.
+    await input.fill('The bottom row today');
+    await input.press('Enter');
+    for (let i = 1; i <= 14; i++) {
+      await input.fill(`Filler number ${i} today`);
+      await input.press('Enter');
+    }
+
+    // Today lists them all, each with its origin chip.
+    await page.locator('#taskRail').hover();
+    await page.locator('.tr-card[data-view="today"]').click();
+    await expect(page.locator('#tkhTitle')).toHaveText('Today');
+    await expect(page.locator('#tkhSections .tk-task-wrap')).toHaveCount(15);
+
+    // Open the OLDEST task's note from its chip: the reveal must scroll
+    // the row into the editor's view (it started far outside it).
+    const bottom = page
+      .locator('#tkhSections .tk-task-wrap', { hasText: 'The bottom row' })
+      .first();
+    await expect(bottom).toBeVisible();
+    await bottom.locator('.tk-origin').click();
+    await expect(page.locator('#tasksHub')).toBeHidden();
+    await expect(page.locator('.tkp-title')).toHaveValue('Deep list');
+
+    const row = page.locator('#note .tk-task-wrap', { hasText: 'The bottom row' });
+    await expect(row).toHaveClass(/is-revealed/);
+    const rowBox = await row.boundingBox();
+    const editorBox = await page.locator('#textareaContainer').boundingBox();
+    expect(rowBox).not.toBeNull();
+    expect(editorBox).not.toBeNull();
+    expect(rowBox!.y).toBeGreaterThanOrEqual(editorBox!.y);
+    expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(editorBox!.y + editorBox!.height);
   });
 
   test("the All view's heads name the lists; the rows don't repeat them", async ({ page }) => {
@@ -382,8 +428,14 @@ test.describe('the rail — task contexts only', () => {
     await page.locator('#tkhSections .tk-done-rows .tk-task-wrap .tk-origin').first().click();
     await expect(page.locator('#tasksHub')).toBeHidden();
     // The note's own page carries the trailer (scope matters: the hidden
-    // hub still holds its own DOM, trailer and all).
+    // hub still holds its own DOM, trailer and all)…
     await expect(page.locator('#note .tk-done-toggle')).toBeVisible();
+    // …and the reveal lands on the COMPLETED row: the trailer stood
+    // itself open for it and the row wears the bloom (D1(c) — even a
+    // sunk row is the answer, not a note top to dig through).
+    await expect(page.locator('#note .tk-done-rows .tk-task-wrap').first()).toHaveClass(
+      /is-revealed/,
+    );
   });
 
   test('search spans notes from the rail', async ({ page }) => {
@@ -463,6 +515,51 @@ test.describe('the calendar', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('[data-cal-quickadd]')).toBeHidden();
     await expect(page.locator('#tasksHub')).toBeVisible();
+  });
+
+  test("the calendar's FIRST quick-add creates its list in the background — no editor hijack", async ({
+    page,
+  }) => {
+    await page.goto('/');
+
+    // No task lists exist yet — the state the QA finding lived in. The
+    // calendar opens from the rail head door with the welcome note (a
+    // plain note) as the active editor view underneath.
+    await page.locator('#tabRailCalendar').click();
+    await expect(page.locator('#tasksHub')).toBeVisible();
+
+    // The day pane's Add → the inline quick-add row, on a bare install.
+    await page.locator('[data-cal-add]').click();
+    const quick = page.locator('[data-cal-quickadd-input]');
+    await expect(quick).toBeFocused();
+    await quick.fill('Renew the passport');
+    await quick.press('Enter');
+
+    // The reminder lands: a row in the day pane…
+    await expect(
+      page.locator('[data-cal-day-rows] .tk-task-wrap', { hasText: 'Renew the passport' }),
+    ).toBeVisible();
+
+    // …and THE HIJACK IS GONE: the calendar keeps the stage (no hub
+    // close, no switch to a brand-new "Untitled list" note)…
+    await expect(page.locator('#tasksHub')).toBeVisible();
+
+    // …the editor underneath is still the note the user left it on, and
+    // the first list was born in the BACKGROUND — a second strip tab,
+    // never an editor takeover. (Two Escapes: the first puts the still-
+    // open quick-add row away, the second leaves the calendar page.)
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-cal-quickadd]')).toBeHidden();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#tasksHub')).toBeHidden();
+    await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(2);
+    await expect(page.locator('#tabStripTabs .tab-strip-tab.active')).toContainText(/Welcome/i);
+
+    // The background list is real: it carries the reminder.
+    await page.locator('#tabStripTabs .tab-strip-tab', { hasText: /Task list/i }).click();
+    await expect(
+      page.locator('#note .tk-task-wrap', { hasText: 'Renew the passport' }),
+    ).toBeVisible();
   });
 
   test('dated tasks chip their day and the day panel lists them', async ({ page }) => {

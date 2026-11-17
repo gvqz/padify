@@ -170,6 +170,12 @@ async function migrateLegacyLocalStorage(): Promise<void> {
     if (existing.length === 0) {
       try {
         await writeAll(NOTES_STORE, records, []);
+        // Visible in the console for the amputation window (see
+        // docs/STORAGE-AMPUTATION.md): a pre-storage install landing
+        // here is the exact event the window exists to catch.
+        console.info(
+          `[storage] imported ${records.length} note(s) from the legacy localStorage blobs`,
+        );
       } catch (error) {
         console.warn('[storage] legacy notes import failed — will retry next boot', error);
         return; // do not set the migrated flag

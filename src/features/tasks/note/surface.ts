@@ -155,8 +155,29 @@ export function liveTasksModelFor(noteId: string): TaskNoteContent | null {
 export function refreshTasksPageForNote(noteId: string, content: string, name?: string): void {
   const current = live;
   if (!current || current.noteId !== noteId || !current.controller.rootIsConnected()) return;
-  if (serializeTaskNoteContent(current.controller.getModel()) === content) return;
+  if (serializeTaskNoteContent(current.controller.getModel()) === content) {
+    // Bytes unchanged — but a rename may still ride along: sync the
+    // title alone rather than returning (an early return here is how a
+    // hub-renamed list went stale on the page open behind it).
+    if (name !== undefined && name !== current.controller.titleElement().value) {
+      current.controller.setModel(current.controller.getModel(), name);
+    }
+    return;
+  }
   current.controller.setModel(parseTaskNoteContent(content), name);
+}
+
+/**
+ * Reveals a task's row on the live page — the D1(c) landing: an open
+ * gesture from the tasks surfaces (origin chip, calendar, reminder
+ * toast) answers with the dated row, centered and bloomed, not a cold
+ * note top. Called right after the switch made the note live; a no-op
+ * whenever it isn't (wrong note, no page mounted, task gone).
+ */
+export function revealTaskRowOnLivePage(noteId: string, taskId: string): void {
+  const current = live;
+  if (!current || current.noteId !== noteId || !current.controller.rootIsConnected()) return;
+  current.controller.revealTaskRow(taskId);
 }
 
 // ---------------------------------------------------------------------------
@@ -246,10 +267,20 @@ export class TasksNoteSurface implements NoteSurface {
   }
 
   commit(host: HTMLElement | null, content: string): boolean {
-    if (host) {
-      // This surface serves 'tasks' notes only (a future json kind
-      // registers its own surface over the key); the snapshot restore
-      // repaints the page from the restored bytes.
+    // The live page repaints FROM THE BYTES without remounting — critical:
+    // display() with a bare { content, noteType } would reassign the live
+    // page to a note with NO id, and every identity-sensitive hook (the
+    // rename target, the Move menu's self-exclusion, the D1(c) row
+    // reveal) reads live.noteId. writeNoteContent lands here on every
+    // hub edit of the active note; the identity must survive the repaint.
+    const current = liveFor(host);
+    if (current) {
+      if (serializeTaskNoteContent(current.controller.getModel()) !== content) {
+        current.controller.setModel(parseTaskNoteContent(content));
+      }
+    } else if (host) {
+      // Not the live page (nothing mounted, or another host): the bare
+      // paint. Safe here — there is no live identity to lose.
       this.display(host, { content, noteType: 'tasks' });
     }
     // The caller owns the persist — no port channel exists for this kind.

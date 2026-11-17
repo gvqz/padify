@@ -43,6 +43,7 @@ import {
 import type { Task } from '../note/content';
 import { taskNotes, type AggSection, type AggTask, type HubViewId } from './aggregate';
 import { dismissReminderToasts } from './toasts';
+import { revealTaskRowOnLivePage } from '../note/surface';
 import {
   calendarQuickAddOpen,
   closeCalendarQuickAdd,
@@ -138,10 +139,16 @@ export function closeTasksHub(): void {
   emit();
 }
 
-/** Opens a note (origin chips, reminder toasts) — closing the hub first. */
-export function openNoteFromTasks(noteId: string): void {
+/** Opens a note (origin chips, the calendar, reminder toasts) — closing
+ *  the hub first, then landing on the DATED ROW when the gesture named a
+ *  task (D1(c)): the note opens centered on the reminder's row, bloomed
+ *  once, instead of at its top for the user to scan. */
+export function openNoteFromTasks(noteId: string, taskId?: string): void {
   closeTasksHub();
   getTabManager()?.switchTo(noteId);
+  if (taskId) {
+    revealTaskRowOnLivePage(noteId, taskId);
+  }
 }
 
 export function isTasksHubOpen(): boolean {
@@ -463,11 +470,11 @@ function bindRows(): void {
     const wrap = target.closest<HTMLElement>('.tk-task-wrap');
     const id = wrap?.dataset.id ?? null;
 
-    // The origin chip opens the task's note.
+    // The origin chip opens the task's note — on the task's row.
     const origin = target.closest<HTMLElement>('[data-list-open]');
     if (origin) {
       const noteId = origin.dataset.listOpen ?? '';
-      if (noteId) openNoteFromTasks(noteId);
+      if (noteId) openNoteFromTasks(noteId, id ?? undefined);
       return;
     }
 
@@ -720,20 +727,31 @@ async function createFirstList(): Promise<void> {
  * the shared composer `draft`: the bottom bar is hidden on the calendar
  * page, and a date leaked into the draft would surface as a stale chip
  * on the next view that shows the bar.
+ *
+ * The no-lists rescue is the QA "hijack" finding's fix (D1(c)): the
+ * first list is born in the BACKGROUND — the editor view stays where
+ * the user put it, the calendar keeps the stage, and the dated row on
+ * the day pane is the whole visible outcome. Reminders stay note-bound
+ * (the model is untouched); it is only the view that stopped moving.
  */
 function quickAddOnDay(title: string, iso: string): void {
-  const lists = taskNotes.lists();
-  if (lists.length === 0) {
-    // No lists yet: the first one is created for the task to land in.
+  let targetId: string | null;
+  if (taskNotes.lists().length === 0) {
+    // No lists yet: the first one is created for the task to land in —
+    // without stealing the editor or closing the calendar.
     const manager = getTabManager();
     if (!manager) return;
-    manager.addTab(true, 'tasks');
-    void taskNotes.addTaskToNote(manager.getActive()!.id, { title, dueDate: iso });
-    closeTasksHub();
+    const note = manager.addBackgroundNote('', 'tasks', '');
+    if (!note) return;
+    targetId = note.id;
+    taskNotes.addTaskToNote(note.id, { title, dueDate: iso });
+    taskNotes.rememberTargetList(note.id);
     showToast('Task list created with your first reminder');
+    renderHub();
     return;
   }
-  const targetId = taskNotes.targetListId() ?? lists[0]!.id;
+  const lists = taskNotes.lists();
+  targetId = taskNotes.targetListId() ?? lists[0]!.id;
   const target = lists.find((list) => list.id === targetId) ?? lists[0]!;
   const added = taskNotes.addTaskToNote(target.id, { title, dueDate: iso });
   taskNotes.rememberTargetList(target.id);
@@ -784,21 +802,27 @@ function submitQuickAdd(): void {
   const reminderAt = parsed.reminderAt;
   const lists = taskNotes.lists();
   if (lists.length === 0) {
-    // No lists yet: the first one is created for the task to land in.
+    // No lists yet: the first one is created for the task to land in —
+    // in the BACKGROUND (D1(c), same as the calendar's quick-add): no
+    // editor switch, no hub close, the view the user is in keeps the
+    // stage and the new row is right there in it.
     const manager = getTabManager();
     if (!manager) return;
-    manager.addTab(true, 'tasks');
+    const note = manager.addBackgroundNote('', 'tasks', '');
+    if (!note) return;
     input.value = '';
     draft = { ...DEFAULT_DRAFT };
     renderQuickAddChips();
-    void taskNotes.addTaskToNote(manager.getActive()!.id, {
+    taskNotes.addTaskToNote(note.id, {
       title,
       dueDate,
       reminderAt,
       flagged: draft.flagged,
     });
-    closeTasksHub();
+    taskNotes.rememberTargetList(note.id);
     showToast('Task list created with your first reminder');
+    renderHub();
+    input.focus();
     return;
   }
   const targetId = taskNotes.targetListId() ?? lists[0]!.id;

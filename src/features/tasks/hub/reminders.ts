@@ -52,7 +52,9 @@ export async function sweep(): Promise<void> {
     for (const row of due) {
       // Marks first so a throwing toast can never re-notify on the next pass.
       taskNotes.markReminderNotified(row.task.id);
-      showReminderToast(row.task, () => openNoteFromTasks(row.note.id));
+      // The toast's open lands on the reminder's ROW in its note (D1(c)) —
+      // the answer to "what fired?" is the row, not a note top to scan.
+      showReminderToast(row.task, () => openNoteFromTasks(row.note.id, row.task.id));
       notifyOs(row.task);
     }
   } finally {

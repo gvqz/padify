@@ -176,6 +176,34 @@ export class TaskListPageController {
     return this.composerInput;
   }
 
+  /**
+   * Reveals a task's row: expands the completed trailer when the row
+   * hides inside it, centers the row in the page and blooms it once.
+   *
+   * This is the landing half of the D1(c) decision — every "open this
+   * reminder" gesture from the tasks surfaces (origin chips, the
+   * calendar, reminder toasts) arrives HERE, on the dated row, instead
+   * of at the top of an undifferentiated note the user must scan.
+   */
+  revealTaskRow(taskId: string): void {
+    const task = this.taskById(taskId);
+    if (!task) return;
+    if (task.completed && !this.completedExpanded) {
+      this.completedExpanded = true;
+      this.render();
+    }
+    const row = this.wrapFor(taskId);
+    if (!row) return;
+    row.scrollIntoView({ block: 'center' });
+    // The bloom class stays until the next render replaces the rows —
+    // the animation itself runs exactly once, and staying marked keeps
+    // the reveal observable (tests, and a user wondering "why am I
+    // here") without a timer to clean it up.
+    row.classList.remove('is-revealed');
+    void row.offsetWidth; // reflow — back-to-back reveals restart the bloom
+    row.classList.add('is-revealed');
+  }
+
   /** The list's title input (the rename field in the page header). */
   titleElement(): HTMLInputElement {
     return this.titleInput;

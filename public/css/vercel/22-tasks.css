@@ -3086,9 +3086,29 @@ body.tasks-rail-on #textareaContainer .bottom-line {
   animation: tkcal-land 0.9s var(--vz-ease) 1;
 }
 
+/* The dated row, revealed: every "open this reminder" gesture from the
+   tasks surfaces (origin chip, calendar, reminder toast) lands ON the
+   row — one accent bloom and a soft wash so the eye finds it in the
+   list without a scan. Same grammar as the calendar's retime landing. */
+@keyframes tk-reveal {
+  from {
+    background: color-mix(in srgb, var(--tk-accent) 14%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--tk-accent) 45%, transparent);
+  }
+  to {
+    background: transparent;
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--tk-accent) 0%, transparent);
+  }
+}
+
+.tk-task-wrap.is-revealed .tk-task {
+  animation: tk-reveal 1.1s var(--vz-ease) 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tkcal-chip.is-landed,
-  .tkcal .tk-task-wrap.is-landed .tk-task {
+  .tkcal .tk-task-wrap.is-landed .tk-task,
+  .tk-task-wrap.is-revealed .tk-task {
     animation: none;
   }
 }

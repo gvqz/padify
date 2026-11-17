@@ -305,7 +305,7 @@ test.describe('floating window', () => {
     await expect(popup.locator('#pipHeaderTitle')).toHaveText(/Padify/i);
   });
 
-  test('a rich note active closes the floating window and hides the entry point', async ({
+  test('a rich note active closes the floating window and dims — never hides — the entry point', async ({
     page,
   }) => {
     await page.goto('/');
@@ -321,7 +321,28 @@ test.describe('floating window', () => {
 
     // The floating window closed itself and the editor came home.
     await expect(page.locator('#note')).toBeVisible();
-    await expect(page.locator('#pipContainer')).toBeHidden();
     await expect(page.locator('.pip-dock')).toHaveCount(0);
+
+    // The entry point stays put, dimmed, with the reason on hover — the
+    // silent vanishing (QA A13) is the behavior this replaced.
+    const entry = page.locator('#pipContainer');
+    await expect(entry).toBeVisible();
+    await expect(entry).toHaveClass(/is-unavailable/);
+    await expect(entry).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.locator('#pip')).toHaveAttribute(
+      'title',
+      'Floating Window works on plain notes only',
+    );
+
+    // The dimmed button refuses the click — no floating window opens.
+    await page.locator('#pip').click();
+    await page.waitForTimeout(400);
+    await expect(page.locator('.pip-dock')).toHaveCount(0);
+
+    // Back on a plain note the entry point recovers completely.
+    await page.locator('.tab-strip-tab').first().click();
+    await expect(entry).not.toHaveClass(/is-unavailable/);
+    await expect(entry).not.toHaveAttribute('aria-disabled');
+    await expect(page.locator('#pip')).toHaveAttribute('title', 'Activate Floating Window');
   });
 });

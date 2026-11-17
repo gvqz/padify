@@ -38,7 +38,7 @@
  *    twice. Identity is CONTENT identity — drawings compare their
  *    canonical scene, so the envelope's volatile savedAt stamp never
  *    makes the same drawing twice (snapshotContentIdentity). Captures
- *    serialize through a queue so two rapid Ctrl+U presses cannot both
+ *    serialize through a queue so two rapid Ctrl+Alt+S presses cannot both
  *    pass the check.
  *  • EMPTINESS — judged per content kind (see snapshotHasContent), so
  *    an image-bearing note is not "empty" because its text projection
@@ -155,7 +155,7 @@ function snapshotContentIdentity(content: string, noteType?: string): string {
 }
 
 /**
- * Snapshots are safety copies, not an archive: every Ctrl+U, every
+ * Snapshots are safety copies, not an archive: every Ctrl+Alt+S, every
  * delete-safety capture adds one, and an unbounded store grows forever on
  * a long-lived install. The cap keeps the oldest history — the newest
  * MAX_SNAPSHOTS entries stay, older ones go (the timestamp index's
@@ -765,7 +765,7 @@ export class SnapshotsManager {
    *  this row (and scrolls it into view) once, then clears the flag. */
   private pendingFlashKey: string | null = null;
 
-  /** Captures serialize through here: two rapid Ctrl+U presses must see
+  /** Captures serialize through here: two rapid Ctrl+Alt+S presses must see
    *  each other's writes, or both pass the duplicate check and both
    *  land. The chain swallows errors so one failed write cannot wedge
    *  the next; the caller still observes its own capture's outcome. */
@@ -1153,9 +1153,14 @@ export class SnapshotsManager {
       this.setSegment(this.segment === 'all' ? 'trash' : 'all');
     });
 
-    // Keyboard shortcut: the platform's primary modifier + U
+    // Keyboard shortcut: the platform's primary modifier + Alt + S.
+    // Ctrl+U belonged to the rich editor's underline (every editor the
+    // user has ever used binds it); the snapshot moved off it, and the
+    // chord is exclusive — the save handlers in app.ts match their
+    // modifiers exactly, so Ctrl+S, Alt+S and Ctrl+Alt+S are three
+    // different commands, never a double fire.
     document.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyU') {
+      if ((e.ctrlKey || e.metaKey) && e.altKey && e.code === 'KeyS') {
         e.preventDefault();
         void this.createSnapshot();
       }
@@ -1917,8 +1922,8 @@ export class SnapshotsManager {
       const hint = document.getElementById('noSnapshotsHint');
       if (hint) {
         hint.innerHTML = noteFace
-          ? 'Take one with the button above, or <span class="snap-kbd-inline"><kbd data-mod-key>Ctrl</kbd> + <kbd>U</kbd></span>.'
-          : 'Take one with the button above, or <span class="snap-kbd-inline"><kbd data-mod-key>Ctrl</kbd> + <kbd>U</kbd></span>. Deleted notes wait in the trash.';
+          ? 'Take one with the button above, or <span class="snap-kbd-inline"><kbd data-mod-key>Ctrl</kbd> + <kbd data-alt-key>Alt</kbd> + <kbd>S</kbd></span>.'
+          : 'Take one with the button above, or <span class="snap-kbd-inline"><kbd data-mod-key>Ctrl</kbd> + <kbd data-alt-key>Alt</kbd> + <kbd>S</kbd></span>. Deleted notes wait in the trash.';
         hydrateModifierKeyElements(hint);
       }
     }

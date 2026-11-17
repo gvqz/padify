@@ -16,11 +16,13 @@ import {
  * Picture-in-Picture floating window — moves the editor into a small
  * always-on-top window (Document Picture-in-Picture API), keeps its
  * theme in sync with the main window and supports the formatting
- * shortcuts while floating. The button only shows when supported AND
- * only for standard notes: the floating window hosts the bare editor
- * surface (no rich toolbar, no type-specific chrome), so it is a
- * plain-typing feature — a rich or Markdown note active means the
- * button hides and an open floating window closes itself.
+ * shortcuts while floating. The button only shows when supported; on
+ * non-standard notes it stays put but dims and explains itself (a
+ * button that silently vanishes reads as a bug, not a boundary): the
+ * floating window hosts the bare editor surface (no rich toolbar, no
+ * type-specific chrome), so it is a plain-typing feature — a rich or
+ * Markdown note active means the button dims and an open floating
+ * window closes itself.
  *
  * The floating window carries a NOTE BROWSER in its header — browse
  * every note, switch the plain ones, start a fresh one — so it works
@@ -54,18 +56,43 @@ export function initPipWindow(tabManager: TabManager): void {
   let pipNotesPanel: HTMLElement | null = null;
   let pipNotesOutsideClick: ((event: Event) => void) | null = null;
 
-  /** The floating window is a plain-typing surface — standard notes only. */
+  /** The dimmed entry point's explanation — the QA A13 wording. */
+  const PIP_TIP_OFF = 'Floating Window works on plain notes only';
+
+  /** The entry point's tooltip, derived in one place so the open/close
+   *  toggle and the availability dim can never race each other's title. */
+  const syncPipButtonTitle = (): void => {
+    const standard = normalizeNoteType(tabManager.getActive()?.noteType) === undefined;
+    $('#pip').attr(
+      'title',
+      pipWindow ? 'Close Floating Window' : standard ? 'Activate Floating Window' : PIP_TIP_OFF,
+    );
+  };
+
+  const syncPipButton = () => {
+    syncPipButtonTitle();
+  };
+
+  /** The floating window is a plain-typing surface — standard notes only.
+   *  Unavailable never means invisible: the entry point dims, carries the
+   *  reason on hover, and refuses the click (aria-disabled) instead of
+   *  leaving the navbar one icon short with no explanation. */
   const syncAvailability = (): void => {
     const standard = normalizeNoteType(tabManager.getActive()?.noteType) === undefined;
+    const $container = $('#pipContainer');
+    // Always shown once the module owns it (the unsupported-browser early
+    // return above is the visibility gate); availability only dims.
+    $container.show();
     if (standard) {
-      $('#pipContainer').show();
+      $container.removeClass('is-unavailable').removeAttr('aria-disabled');
     } else {
       // Closing returns the editor to the main window (pagehide below).
       if (pipWindow) {
         pipWindow.close();
       }
-      $('#pipContainer').hide();
+      $container.addClass('is-unavailable').attr('aria-disabled', 'true');
     }
+    syncPipButtonTitle();
   };
 
   // Visibility follows the active note — boot, switch, create, cloud merge.
@@ -107,10 +134,6 @@ export function initPipWindow(tabManager: TabManager): void {
         document.body.classList.contains(themeClass),
       );
     }
-  };
-
-  const syncPipButton = () => {
-    $('#pip').attr('title', pipWindow ? 'Close Floating Window' : 'Activate Floating Window');
   };
 
   // ---- note browser ---------------------------------------------------------
@@ -354,6 +377,10 @@ export function initPipWindow(tabManager: TabManager): void {
 
   pipButton.addEventListener('click', async () => {
     if (pipSwitching) return;
+
+    // The dimmed entry point refuses the click — the anchor is not a
+    // button, so aria-disabled is a contract this handler keeps itself.
+    if ($('#pipContainer').attr('aria-disabled') === 'true') return;
 
     // The button toggles: while a floating window is open,
     // clicking again closes it instead of opening a second
