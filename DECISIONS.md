@@ -21,7 +21,9 @@ are in the commit history.
    left in it, only the date.
 2. **Human visual-QA pass** across themes/devices on top of the automated
    pixel-diff — belt-and-braces for the CSS consolidation (S3). Optional;
-   the automated proof is three-layered already.
+   the automated proof is three-layered already. **In progress (2026-11-17):**
+   a vision-model pass is running it — brief, change list and rules of
+   engagement are `qa/VISUAL-QA-HANDOFF.md`; findings will land in `qa/`.
 3. **D3(b), parked:** render non-plain note kinds read-only in the
    Floating Window via the note-projections seam. Deliberately parked —
    do only if real usage asks.
