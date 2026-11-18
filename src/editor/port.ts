@@ -123,6 +123,25 @@ export interface EditorPort {
   deleteSelection(): boolean;
 
   /**
+   * The typing-substitution seam (the autocorrect path): replaces the
+   * `find` occurrence that ends exactly at the collapsed caret with
+   * `replacement`. The engine verifies the match before anything moves,
+   * and `appliesAfterPrefix` — the rule's boundary veto, handed in by the
+   * caller (typing-substitutions.ts owns the rules) — gets the last word:
+   * the text the current line holds before the pair. The splice lands in
+   * one history group of its own — undo #1 hands the raw characters
+   * back, the typing burst around the substitution keeps its own shape.
+   * Returns false when the engine did not apply it (ranged selection, no
+   * match, boundary veto, parked engine); the caller then leaves the
+   * typed characters alone.
+   */
+  replaceBeforeCaret(
+    find: string,
+    replacement: string,
+    appliesAfterPrefix?: (linePrefix: string) => boolean,
+  ): boolean;
+
+  /**
    * Inserts an HTML fragment at the caret, replacing the selection — the
    * styled-paste path. The fragment is sanitized into the note's own
    * formatting subset first (external fonts, colors and scripts never

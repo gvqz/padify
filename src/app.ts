@@ -26,6 +26,10 @@ import {
   sanitizeNoteHtml,
 } from './tabs';
 import { setEditorPort, getEditorPort } from './editor/port';
+import {
+  initTypingSubstitutions,
+  setTypingSubstitutionsEnabled,
+} from './editor/typing-substitutions';
 import { ModelPort } from './editor/model-port';
 import { registerPreFlushHook, storageReady } from './storage';
 import { initCloudSync } from './cloud/sync';
@@ -326,6 +330,23 @@ export async function initApp(): Promise<void> {
   applyBreakReminders(getSetting('userChosenBreakReminders'));
   onChangeSetting('userChosenBreakReminders', ({ value }) => {
     applyBreakReminders(value);
+  });
+
+  // Typing substitutions (the em-dash pair — see typing-substitutions.ts)
+  // listen on the editor host and react to the setting the same way the
+  // break reminders do: the checkbox, the boot restore and "Reset to
+  // defaults" all flow through one subscription instead of three copies
+  // of the same apply logic.
+  if (noteElement) {
+    initTypingSubstitutions({ host: noteElement });
+  }
+  const applyEmDashSubstitution = (value: string | null): void => {
+    const isEnabled = value === null ? editorConfig.defaultEmDashSubstitution : value === 'Yes';
+    setTypingSubstitutionsEnabled(isEnabled);
+  };
+  applyEmDashSubstitution(getSetting('userChosenEmDashSubstitution'));
+  onChangeSetting('userChosenEmDashSubstitution', ({ value }) => {
+    applyEmDashSubstitution(value);
   });
 
   notepad.note.on(
@@ -731,6 +752,10 @@ export async function initApp(): Promise<void> {
     // The break-reminders subscription applies the default when the
     // setting clears — no separate restore call needed here.
     removeSetting('userChosenBreakReminders');
+
+    // Same manners for the em-dash substitution: the clear notifies the
+    // subscription, which re-arms the listener at the shipped default.
+    removeSetting('userChosenEmDashSubstitution');
 
     themeController.resetToDevice();
   });

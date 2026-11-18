@@ -21,6 +21,7 @@ import {
   MAX_INDENT_PX,
   ZERO_WIDTH_SPACE,
   setStyleProp,
+  textStreamOf,
   walkTextStream,
 } from './document';
 import { boundaryToStream, spotAtStream, spotElement, type DomSpot } from './selection';
@@ -1634,6 +1635,73 @@ export function deleteCoveredRange(model: HTMLElement, coverage: [number, number
     }
   }
   return changed ? { changed: true } : UNCHANGED;
+}
+
+// ---------------------------------------------------------------------------
+// The typing-substitution splice (the em-dash pair).
+// ---------------------------------------------------------------------------
+
+/**
+ * The global stream offset where `block`'s first text node begins — the
+ * coordinate the substitution's line-prefix check counts from. -1 when
+ * the walk finds no text in the block (it cannot host a caret through
+ * the typed-hyphen trigger; the caller treats it as a veto).
+ */
+function streamStartOfBlock(model: HTMLElement, block: HTMLElement): number {
+  let start = -1;
+  walkTextStream(model, (node, nodeStart) => {
+    if (start < 0 && block.contains(node)) {
+      start = nodeStart;
+    }
+  });
+  return start;
+}
+
+/**
+ * Replaces the `find` occurrence that ends exactly at a collapsed `caret`
+ * with `replacement` — the typing-substitution splice (the em-dash pair
+ * being the tenant). Everything that could make the rewrite a mistake
+ * vetoes BEFORE anything moves:
+ *
+ *  - the text before the caret is not exactly `find`;
+ *  - the pair straddles a block boundary (it opened the line);
+ *  - the rule's line-prefix predicate refuses (see
+ *    typing-substitutions.ts — the markdown horizontal rule and the
+ *    table separator must never convert).
+ *
+ * The port wraps this in one history group of its own: undo #1 hands the
+ * raw characters back, Word's autocorrect manners. The caret lands right
+ * after the replacement (insertPlainText's spot intent).
+ */
+export function replaceBeforeCaretOp(
+  model: HTMLElement,
+  caret: number,
+  find: string,
+  replacement: string,
+  appliesAfterPrefix: (linePrefix: string) => boolean,
+): OpResult {
+  if (caret < find.length) {
+    return UNCHANGED;
+  }
+  const stream = textStreamOf(model);
+  const from = caret - find.length;
+  if (stream.slice(from, caret) !== find) {
+    return UNCHANGED;
+  }
+  const spot = spotAtStream(model, caret);
+  const block = blockAtSpot(spot, model) ?? model;
+  const blockStart = streamStartOfBlock(model, block);
+  if (blockStart < 0 || from < blockStart) {
+    return UNCHANGED; // the pair straddles a block boundary — it opened the line
+  }
+  if (!appliesAfterPrefix(stream.slice(blockStart, from))) {
+    return UNCHANGED;
+  }
+  const removed = deleteCoveredRange(model, [from, caret]);
+  if (!removed.changed) {
+    return UNCHANGED;
+  }
+  return insertPlainText(model, [from, from], replacement);
 }
 
 // ---------------------------------------------------------------------------

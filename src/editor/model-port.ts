@@ -66,6 +66,7 @@ import {
   plantStyledCaret,
   plantTable,
   removeInlineFormatting,
+  replaceBeforeCaretOp,
   retargetAnchorAt,
   retargetMath,
   runTableActionAt,
@@ -397,7 +398,6 @@ export class ModelPort implements EditorPort {
     if (this.inert) {
       return false;
     }
-    this.typingGroupOpen = false;
     const selection = captureOffsets(this.element);
     if (!selection) {
       return false;
@@ -407,8 +407,14 @@ export class ModelPort implements EditorPort {
     const pre = serialize(this.model);
     const result = build(this.model, coverage);
     if (!result.changed) {
+      // A refused command is not an edit: it must not close the typing
+      // burst that happens to be open (the substitution seam probes the
+      // model on every typed hyphen — a veto has to leave the burst
+      // exactly as it stood, or undo granularity would split at each
+      // hyphen a vetoed pair sits behind).
       return false;
     }
+    this.typingGroupOpen = false;
     const placement = result.intent ? this.convert(result.intent) : null;
     const preserve = result.intent && 'preserve' in result.intent ? selection : null;
     this.history.openGroup(pre, selection);
@@ -721,6 +727,38 @@ export class ModelPort implements EditorPort {
       this.normalizeAfterDelete();
     }
     return done;
+  }
+
+  /**
+   * The typing-substitution seam (see the port contract): the substitution
+   * rule and its boundary veto live in typing-substitutions.ts; the engine
+   * contributes the one thing only it can — the splice through the
+   * canonical model, in one history group of its own. The typed burst
+   * around the substitution keeps its own shape, so undo #1 hands the raw
+   * characters back (Word's autocorrect manners) and undo #2 continues
+   * with the burst — no new history vocabulary was invented for this.
+   */
+  replaceBeforeCaret(
+    find: string,
+    replacement: string,
+    appliesAfterPrefix?: (linePrefix: string) => boolean,
+  ): boolean {
+    if (this.inert || this.composing) {
+      return false;
+    }
+    const selection = captureOffsets(this.element);
+    if (!selection || selection.anchor !== selection.focus) {
+      return false; // ranged selection — the substitution is a typing-time gesture
+    }
+    return this.command((model, coverage) =>
+      replaceBeforeCaretOp(
+        model,
+        coverage[0],
+        find,
+        replacement,
+        appliesAfterPrefix ?? (() => true),
+      ),
+    );
   }
 
   /**

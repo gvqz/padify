@@ -44,6 +44,7 @@ export const SETTING_KEYS = [
   'dyslexicFont',
   'serifFont',
   'userChosenSpellCheck',
+  'userChosenEmDashSubstitution',
   'userChosenBreakReminders',
   'userChosenExplodingEffect',
   'userChosenExplodingEffectStyle',
@@ -69,6 +70,7 @@ export interface EditorDefaults {
   defaultOptimalLineLength: boolean;
   defaultOptimalLineLengthPadding: string;
   defaultSpellCheck: boolean;
+  defaultEmDashSubstitution: boolean;
   defaultBreakReminders: boolean;
   defaultExplodingEffect: boolean;
   defaultExplodingEffectStyle: string;
@@ -86,6 +88,7 @@ export const DEFAULT_EDITOR_CONFIG: EditorDefaults = {
   defaultOptimalLineLength: false,
   defaultOptimalLineLengthPadding: '15px 24px 80px',
   defaultSpellCheck: true,
+  defaultEmDashSubstitution: false,
   defaultBreakReminders: false,
   defaultExplodingEffect: false,
   defaultExplodingEffectStyle: 'classic',

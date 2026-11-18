@@ -27,6 +27,7 @@ const editorConfig: EditorConfig = {
   defaultPillContent: 'both',
   defaultTypingSpeed: false,
   defaultSpellCheck: true,
+  defaultEmDashSubstitution: false,
   defaultWriteDirection: 'ltr',
   defaultTexture: 'normal',
   defaultFont: 'default',
@@ -44,6 +45,7 @@ function mountShell(): void {
     <select id="font"><option value="default">default</option></select>
     <input type="checkbox" id="optimalLineLength" />
     <input type="checkbox" id="spellCheck" checked />
+    <input type="checkbox" id="emDashSubstitution" />
     <input type="checkbox" id="showWordCountPill" checked />
     <select id="pillContent"><option value="both">both</option></select>
     <input type="checkbox" id="typingSpeed" />
@@ -61,6 +63,7 @@ function wirePreferences(): void {
     texture: $('#texture'),
     optimalLineLength: $('#optimalLineLength'),
     spellCheck: $('#spellCheck'),
+    emDashSubstitution: $('#emDashSubstitution'),
     showWordCountPill: $('#showWordCountPill'),
     pillContent: $('#pillContent'),
     typingSpeed: $('#typingSpeed'),

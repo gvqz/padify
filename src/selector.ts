@@ -42,6 +42,7 @@ export interface NotepadUI {
   optimalLineLength: Q;
   shareNotes: Q;
   spellCheck: Q;
+  emDashSubstitution: Q;
   breakReminders: Q;
   explodingEffect: Q;
   bottomLine: Q;
@@ -60,6 +61,7 @@ export interface EditorConfig {
   defaultOptimalLineLength: boolean;
   defaultOptimalLineLengthPadding: string;
   defaultSpellCheck: boolean;
+  defaultEmDashSubstitution: boolean;
   defaultBreakReminders: boolean;
   defaultExplodingEffect: boolean;
   defaultExplodingEffectStyle: string;
@@ -149,6 +151,7 @@ export function selector(): AppSelector {
       optimalLineLength: selectById('optimalLineLength'),
       shareNotes: selectById('shareNotes'),
       spellCheck: selectById('spellCheck'),
+      emDashSubstitution: selectById('emDashSubstitution'),
       breakReminders: selectById('breakReminders'),
       explodingEffect: selectById('explodingEffect'),
       bottomLine: selectByClassName('bottom-line'),

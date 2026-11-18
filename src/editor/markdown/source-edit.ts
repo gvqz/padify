@@ -27,29 +27,32 @@ export const SOURCE_INDENT = '  ';
  * Replaces [from, to) with text and leaves the selection where the caller
  * wants it — one undo step, one input event. The execCommand path keeps
  * the browser's native undo alive (typing and toolbar actions share the
- * same stack, exactly like GitHub's source editor).
+ * same stack, exactly like GitHub's source editor). Field-generic: the
+ * markdown source textarea and the task composer's inputs ride the same
+ * write path (the typing substitutions' field splice included).
  */
 export function applyEdit(
-  ta: HTMLTextAreaElement,
+  field: HTMLTextAreaElement | HTMLInputElement,
   from: number,
   to: number,
   text: string,
   selectionStart: number,
   selectionEnd: number = selectionStart,
 ): void {
-  ta.focus();
-  ta.setSelectionRange(from, to);
+  field.focus();
+  field.setSelectionRange(from, to);
   try {
-    if (!document.execCommand('insertText', false, text)) {
+    const doc = field.ownerDocument;
+    if (typeof doc.execCommand !== 'function' || !doc.execCommand('insertText', false, text)) {
       throw new Error('insertText refused');
     }
   } catch {
     // setRangeText never fires input — the announce contract (autosave,
     // the word pill) must hear this edit, so dispatch it by hand.
-    ta.setRangeText(text, from, to, 'end');
-    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    field.setRangeText(text, from, to, 'end');
+    field.dispatchEvent(new Event('input', { bubbles: true }));
   }
-  ta.setSelectionRange(selectionStart, selectionEnd);
+  field.setSelectionRange(selectionStart, selectionEnd);
 }
 
 /** True when the textarea has a selection (not a bare caret). */

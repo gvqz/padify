@@ -230,6 +230,17 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
     notepad.spellCheck.prop('checked', true);
   }
 
+  // The em-dash substitution's master switch: the checkbox restores the
+  // stored choice; the LISTENER that applies it (typing-substitutions.ts,
+  // wired in app.ts) subscribes to the setting itself — the same manners
+  // the break reminders use.
+  const userChosenEmDashSubstitution = getSetting('userChosenEmDashSubstitution');
+  if (userChosenEmDashSubstitution) {
+    notepad.emDashSubstitution.prop('checked', userChosenEmDashSubstitution === 'Yes');
+  } else {
+    notepad.emDashSubstitution.prop('checked', editorConfig.defaultEmDashSubstitution);
+  }
+
   // ---- preferences-modal change handlers ---------------------------
 
   /** Applies spellcheck to the host AND any live WYSIWYG root — the
@@ -315,6 +326,11 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
     const enabled = $(this).is(':checked');
     applySpellCheck(enabled);
     setState('userChosenSpellCheck', enabled ? 'Yes' : 'No');
+  });
+
+  notepad.emDashSubstitution.on('change', function () {
+    const enabled = $(this).is(':checked');
+    setState('userChosenEmDashSubstitution', enabled ? 'Yes' : 'No');
   });
 
   // ---- font selection ----------------------------------------------
@@ -471,6 +487,11 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
         removeState('userChosenSpellCheck');
         applySpellCheck(editorConfig.defaultSpellCheck);
         notepad.spellCheck.prop('checked', editorConfig.defaultSpellCheck);
+      }
+
+      if (getSetting('userChosenEmDashSubstitution')) {
+        removeState('userChosenEmDashSubstitution');
+        notepad.emDashSubstitution.prop('checked', editorConfig.defaultEmDashSubstitution);
       }
     },
   };
