@@ -644,29 +644,26 @@ export class ModelPort implements EditorPort {
   }
 
   charBeforeCaret(): string {
+    return this.textBeforeCaret(1);
+  }
+
+  textBeforeCaret(n: number): string {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
       return '';
     }
     const range = selection.getRangeAt(0);
-    const anchor = range.startContainer;
-    const offset = range.startOffset;
-    if (anchor.nodeType === Node.TEXT_NODE) {
-      return (anchor.nodeValue ?? '').slice(0, offset).slice(-1);
-    }
-    // An element boundary: the character immediately before the caret is
-    // the last character of the note's text before it — not the containing
-    // element's whole textContent (a caret at (block, 0) used to answer
-    // the ENTIRE block, and dictation then read it as "something precedes
-    // this word" and skipped its capitalisation).
+    // The probe reads the note's WHOLE text before the caret — across
+    // text nodes, not just the one hosting the caret (a fresh keystroke
+    // lands in its own node, and a pair like `--` must still be found).
     const probe = document.createRange();
     probe.selectNodeContents(this.element);
     try {
-      probe.setEnd(anchor, offset);
+      probe.setEnd(range.startContainer, range.startOffset);
     } catch {
       return '';
     }
-    return probe.toString().slice(-1);
+    return probe.toString().slice(-n);
   }
 
   // -------------------------------------------------------------------------
@@ -742,6 +739,7 @@ export class ModelPort implements EditorPort {
     find: string,
     replacement: string,
     appliesAfterPrefix?: (linePrefix: string) => boolean,
+    appliesInDocument?: (textBeforePair: string) => boolean,
   ): boolean {
     if (this.inert || this.composing) {
       return false;
@@ -757,6 +755,7 @@ export class ModelPort implements EditorPort {
         find,
         replacement,
         appliesAfterPrefix ?? (() => true),
+        appliesInDocument,
       ),
     );
   }

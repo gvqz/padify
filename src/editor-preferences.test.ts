@@ -46,6 +46,9 @@ function mountShell(): void {
     <input type="checkbox" id="optimalLineLength" />
     <input type="checkbox" id="spellCheck" checked />
     <input type="checkbox" id="emDashSubstitution" />
+    <input type="checkbox" id="ellipsisSubstitution" />
+    <input type="checkbox" id="arrowSubstitution" />
+    <input type="checkbox" id="symbolSubstitution" />
     <input type="checkbox" id="showWordCountPill" checked />
     <select id="pillContent"><option value="both">both</option></select>
     <input type="checkbox" id="typingSpeed" />
@@ -64,6 +67,9 @@ function wirePreferences(): void {
     optimalLineLength: $('#optimalLineLength'),
     spellCheck: $('#spellCheck'),
     emDashSubstitution: $('#emDashSubstitution'),
+    ellipsisSubstitution: $('#ellipsisSubstitution'),
+    arrowSubstitution: $('#arrowSubstitution'),
+    symbolSubstitution: $('#symbolSubstitution'),
     showWordCountPill: $('#showWordCountPill'),
     pillContent: $('#pillContent'),
     typingSpeed: $('#typingSpeed'),

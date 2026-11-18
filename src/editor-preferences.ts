@@ -230,15 +230,36 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
     notepad.spellCheck.prop('checked', true);
   }
 
-  // The em-dash substitution's master switch: the checkbox restores the
-  // stored choice; the LISTENER that applies it (typing-substitutions.ts,
-  // wired in app.ts) subscribes to the setting itself — the same manners
-  // the break reminders use.
+  // The substitution family's switches (em dash, ellipsis, arrows,
+  // symbols): each checkbox restores the stored choice; the LISTENER that
+  // applies them (typing-substitutions.ts, wired in app.ts) subscribes to
+  // each setting itself — the same manners the break reminders use.
   const userChosenEmDashSubstitution = getSetting('userChosenEmDashSubstitution');
   if (userChosenEmDashSubstitution) {
     notepad.emDashSubstitution.prop('checked', userChosenEmDashSubstitution === 'Yes');
   } else {
     notepad.emDashSubstitution.prop('checked', editorConfig.defaultEmDashSubstitution);
+  }
+
+  const userChosenEllipsisSubstitution = getSetting('userChosenEllipsisSubstitution');
+  if (userChosenEllipsisSubstitution) {
+    notepad.ellipsisSubstitution.prop('checked', userChosenEllipsisSubstitution === 'Yes');
+  } else {
+    notepad.ellipsisSubstitution.prop('checked', editorConfig.defaultEllipsisSubstitution);
+  }
+
+  const userChosenArrowSubstitution = getSetting('userChosenArrowSubstitution');
+  if (userChosenArrowSubstitution) {
+    notepad.arrowSubstitution.prop('checked', userChosenArrowSubstitution === 'Yes');
+  } else {
+    notepad.arrowSubstitution.prop('checked', editorConfig.defaultArrowSubstitution);
+  }
+
+  const userChosenSymbolSubstitution = getSetting('userChosenSymbolSubstitution');
+  if (userChosenSymbolSubstitution) {
+    notepad.symbolSubstitution.prop('checked', userChosenSymbolSubstitution === 'Yes');
+  } else {
+    notepad.symbolSubstitution.prop('checked', editorConfig.defaultSymbolSubstitution);
   }
 
   // ---- preferences-modal change handlers ---------------------------
@@ -331,6 +352,21 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
   notepad.emDashSubstitution.on('change', function () {
     const enabled = $(this).is(':checked');
     setState('userChosenEmDashSubstitution', enabled ? 'Yes' : 'No');
+  });
+
+  notepad.ellipsisSubstitution.on('change', function () {
+    const enabled = $(this).is(':checked');
+    setState('userChosenEllipsisSubstitution', enabled ? 'Yes' : 'No');
+  });
+
+  notepad.arrowSubstitution.on('change', function () {
+    const enabled = $(this).is(':checked');
+    setState('userChosenArrowSubstitution', enabled ? 'Yes' : 'No');
+  });
+
+  notepad.symbolSubstitution.on('change', function () {
+    const enabled = $(this).is(':checked');
+    setState('userChosenSymbolSubstitution', enabled ? 'Yes' : 'No');
   });
 
   // ---- font selection ----------------------------------------------
@@ -492,6 +528,21 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
       if (getSetting('userChosenEmDashSubstitution')) {
         removeState('userChosenEmDashSubstitution');
         notepad.emDashSubstitution.prop('checked', editorConfig.defaultEmDashSubstitution);
+      }
+
+      if (getSetting('userChosenEllipsisSubstitution')) {
+        removeState('userChosenEllipsisSubstitution');
+        notepad.ellipsisSubstitution.prop('checked', editorConfig.defaultEllipsisSubstitution);
+      }
+
+      if (getSetting('userChosenArrowSubstitution')) {
+        removeState('userChosenArrowSubstitution');
+        notepad.arrowSubstitution.prop('checked', editorConfig.defaultArrowSubstitution);
+      }
+
+      if (getSetting('userChosenSymbolSubstitution')) {
+        removeState('userChosenSymbolSubstitution');
+        notepad.symbolSubstitution.prop('checked', editorConfig.defaultSymbolSubstitution);
       }
     },
   };

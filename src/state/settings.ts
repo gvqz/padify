@@ -45,6 +45,9 @@ export const SETTING_KEYS = [
   'serifFont',
   'userChosenSpellCheck',
   'userChosenEmDashSubstitution',
+  'userChosenEllipsisSubstitution',
+  'userChosenArrowSubstitution',
+  'userChosenSymbolSubstitution',
   'userChosenBreakReminders',
   'userChosenExplodingEffect',
   'userChosenExplodingEffectStyle',
@@ -71,6 +74,9 @@ export interface EditorDefaults {
   defaultOptimalLineLengthPadding: string;
   defaultSpellCheck: boolean;
   defaultEmDashSubstitution: boolean;
+  defaultEllipsisSubstitution: boolean;
+  defaultArrowSubstitution: boolean;
+  defaultSymbolSubstitution: boolean;
   defaultBreakReminders: boolean;
   defaultExplodingEffect: boolean;
   defaultExplodingEffectStyle: string;
@@ -89,6 +95,9 @@ export const DEFAULT_EDITOR_CONFIG: EditorDefaults = {
   defaultOptimalLineLengthPadding: '15px 24px 80px',
   defaultSpellCheck: true,
   defaultEmDashSubstitution: false,
+  defaultEllipsisSubstitution: false,
+  defaultArrowSubstitution: false,
+  defaultSymbolSubstitution: false,
   defaultBreakReminders: false,
   defaultExplodingEffect: false,
   defaultExplodingEffectStyle: 'classic',

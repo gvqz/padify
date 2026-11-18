@@ -163,6 +163,7 @@ function createFakePort(): EditorPort {
     isCaretInside: vi.fn(() => true),
     ensureCaretInside: vi.fn(() => true),
     charBeforeCaret: vi.fn(() => ''),
+    textBeforeCaret: vi.fn(() => ''),
     insertText: vi.fn(() => true),
     deleteSelection: vi.fn(() => true),
     replaceBeforeCaret: vi.fn(() => false),

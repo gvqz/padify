@@ -1660,14 +1660,18 @@ function streamStartOfBlock(model: HTMLElement, block: HTMLElement): number {
 /**
  * Replaces the `find` occurrence that ends exactly at a collapsed `caret`
  * with `replacement` — the typing-substitution splice (the em-dash pair
- * being the tenant). Everything that could make the rewrite a mistake
- * vetoes BEFORE anything moves:
+ * being the first tenant of a small family). Everything that could make
+ * the rewrite a mistake vetoes BEFORE anything moves:
  *
  *  - the text before the caret is not exactly `find`;
  *  - the pair straddles a block boundary (it opened the line);
  *  - the rule's line-prefix predicate refuses (see
  *    typing-substitutions.ts — the markdown horizontal rule and the
- *    table separator must never convert).
+ *    table separator must never convert);
+ *  - the caret's block chain runs through a `<pre>` — code never
+ *    converts, in any rule, whatever the note kind;
+ *  - the rule's document predicate refuses (see typing-substitutions.ts
+ *    — the code-fence scan over everything before the pair).
  *
  * The port wraps this in one history group of its own: undo #1 hands the
  * raw characters back, Word's autocorrect manners. The caret lands right
@@ -1679,6 +1683,7 @@ export function replaceBeforeCaretOp(
   find: string,
   replacement: string,
   appliesAfterPrefix: (linePrefix: string) => boolean,
+  appliesInDocument?: (textBeforePair: string) => boolean,
 ): OpResult {
   if (caret < find.length) {
     return UNCHANGED;
@@ -1690,6 +1695,11 @@ export function replaceBeforeCaretOp(
   }
   const spot = spotAtStream(model, caret);
   const block = blockAtSpot(spot, model) ?? model;
+  for (let el: HTMLElement | null = block; el && el !== model; el = el.parentElement) {
+    if (el.tagName === 'PRE') {
+      return UNCHANGED; // the caret sits in a code block — code never converts
+    }
+  }
   const blockStart = streamStartOfBlock(model, block);
   if (blockStart < 0 || from < blockStart) {
     return UNCHANGED; // the pair straddles a block boundary — it opened the line
@@ -1697,9 +1707,26 @@ export function replaceBeforeCaretOp(
   if (!appliesAfterPrefix(stream.slice(blockStart, from))) {
     return UNCHANGED;
   }
+  if (appliesInDocument && !appliesInDocument(stream.slice(0, from))) {
+    return UNCHANGED; // inside a fenced code block — the fence keeps its code
+  }
   const removed = deleteCoveredRange(model, [from, caret]);
   if (!removed.changed) {
     return UNCHANGED;
+  }
+  if (from === blockStart) {
+    // The pair is the block's whole content: the insertion offset is the
+    // block boundary itself, which the resolver can only answer as the
+    // previous run's end (both sides share the number) — without this,
+    // the replacement lands one line up and the block goes empty. The
+    // block is known — the veto just read its prefix — so the replacement
+    // goes at the block's own start.
+    const node = document.createTextNode(replacement);
+    block.insertBefore(node, block.firstChild ?? null);
+    return {
+      changed: true,
+      intent: { spot: { kind: 'text', node, raw: replacement.length } },
+    };
   }
   return insertPlainText(model, [from, from], replacement);
 }

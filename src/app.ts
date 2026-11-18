@@ -26,10 +26,7 @@ import {
   sanitizeNoteHtml,
 } from './tabs';
 import { setEditorPort, getEditorPort } from './editor/port';
-import {
-  initTypingSubstitutions,
-  setTypingSubstitutionsEnabled,
-} from './editor/typing-substitutions';
+import { initTypingSubstitutions, setSubstitutionEnabled } from './editor/typing-substitutions';
 import { ModelPort } from './editor/model-port';
 import { registerPreFlushHook, storageReady } from './storage';
 import { initCloudSync } from './cloud/sync';
@@ -332,22 +329,49 @@ export async function initApp(): Promise<void> {
     applyBreakReminders(value);
   });
 
-  // Typing substitutions (the em-dash pair — see typing-substitutions.ts)
-  // listen on the editor host and react to the setting the same way the
-  // break reminders do: the checkbox, the boot restore and "Reset to
-  // defaults" all flow through one subscription instead of three copies
-  // of the same apply logic.
+  // Typing substitutions (see typing-substitutions.ts) listen on the
+  // editor host and react to their settings the way the break reminders
+  // do: each checkbox, the boot restore and "Reset to defaults" all flow
+  // through one subscription per family instead of copies of the same
+  // apply logic. The ids are the catalog's own (one per settings row —
+  // the arrows row arms all three arrow pairs at once).
+  const SUBSTITUTION_SETTINGS = [
+    {
+      id: 'em-dash',
+      key: 'userChosenEmDashSubstitution',
+      fallback: editorConfig.defaultEmDashSubstitution,
+    },
+    {
+      id: 'ellipsis',
+      key: 'userChosenEllipsisSubstitution',
+      fallback: editorConfig.defaultEllipsisSubstitution,
+    },
+    {
+      id: 'arrow',
+      key: 'userChosenArrowSubstitution',
+      fallback: editorConfig.defaultArrowSubstitution,
+    },
+    {
+      id: 'symbol',
+      key: 'userChosenSymbolSubstitution',
+      fallback: editorConfig.defaultSymbolSubstitution,
+    },
+  ] as const;
   if (noteElement) {
     initTypingSubstitutions({ host: noteElement });
   }
-  const applyEmDashSubstitution = (value: string | null): void => {
-    const isEnabled = value === null ? editorConfig.defaultEmDashSubstitution : value === 'Yes';
-    setTypingSubstitutionsEnabled(isEnabled);
-  };
-  applyEmDashSubstitution(getSetting('userChosenEmDashSubstitution'));
-  onChangeSetting('userChosenEmDashSubstitution', ({ value }) => {
-    applyEmDashSubstitution(value);
-  });
+  for (const substitution of SUBSTITUTION_SETTINGS) {
+    const applySubstitution = (value: string | null): void => {
+      setSubstitutionEnabled(
+        substitution.id,
+        value === null ? substitution.fallback : value === 'Yes',
+      );
+    };
+    applySubstitution(getSetting(substitution.key));
+    onChangeSetting(substitution.key, ({ value }) => {
+      applySubstitution(value);
+    });
+  }
 
   notepad.note.on(
     'input',
@@ -753,9 +777,11 @@ export async function initApp(): Promise<void> {
     // setting clears — no separate restore call needed here.
     removeSetting('userChosenBreakReminders');
 
-    // Same manners for the em-dash substitution: the clear notifies the
-    // subscription, which re-arms the listener at the shipped default.
-    removeSetting('userChosenEmDashSubstitution');
+    // Same manners for the substitution family: the clears notify each
+    // subscription, which re-arms its rule at the shipped default.
+    for (const substitution of SUBSTITUTION_SETTINGS) {
+      removeSetting(substitution.key);
+    }
 
     themeController.resetToDevice();
   });
