@@ -653,6 +653,93 @@ describe('history — one undo discipline for everything', () => {
   });
 });
 
+/**
+ * The caret rides the history: undo/redo restore the state AND the caret
+ * that state was left with. The live-caret restore this replaces drifted
+ * the caret into the restored text whenever the undone edit changed the
+ * length BEFORE the caret — the tab/undo/redo dance typed mid-word.
+ */
+describe('undo and redo walk the caret with the state', () => {
+  it('redo of a tab puts the caret back AFTER the tab (the reported bug)', () => {
+    const { port, surface } = makePort();
+    port.renderHtml('');
+    caretAt(surface, 0);
+    port.insertText('hello'); // caret 5
+    port.insertText('\t'); // the tab gesture — caret lands after the tab
+    expect(port.getText()).toBe('hello\t');
+    expect(caretStreamOffset(surface)).toBe(6);
+
+    expect(port.undo()).toBe(true);
+    expect(port.getText()).toBe('hello');
+    expect(caretStreamOffset(surface)).toBe(5);
+
+    expect(port.redo()).toBe(true);
+    expect(port.getText()).toBe('hello\t');
+    // THE regression: the redo entry carries the caret the tab left
+    // (6). The live-offset restore used 5 — the next keystroke typed
+    // BETWEEN the word and its tab ("helloZ\t").
+    expect(caretStreamOffset(surface)).toBe(6);
+  });
+
+  it('undo of a line-start tab returns the caret to the line start', () => {
+    const { port, surface } = makePort();
+    port.renderHtml('');
+    caretAt(surface, 0);
+    port.insertText('hello'); // caret 5
+    caretAt(surface, 0); // Home
+    port.insertText('\t'); // "\thello", caret 1
+    expect(caretStreamOffset(surface)).toBe(1);
+
+    expect(port.undo()).toBe(true);
+    expect(port.getText()).toBe('hello');
+    // THE regression: the live-offset restore clamped the post-tab
+    // caret (1) onto "hello" — the caret sat AFTER the first letter.
+    expect(caretStreamOffset(surface)).toBe(0);
+
+    expect(port.redo()).toBe(true);
+    expect(port.getText()).toBe('\thello');
+    expect(caretStreamOffset(surface)).toBe(1);
+  });
+
+  it('the multi-line indent gesture keeps its selection through undo and redo', () => {
+    const { port, surface } = makePort();
+    port.renderHtml('one\ntwo');
+    selectRange(surface, 0, 7);
+    const replacement = '\tone\n\ttwo';
+    expect(port.insertText(replacement, { selectInserted: true })).toBe(true);
+    expect(window.getSelection()?.toString()).toBe(replacement);
+
+    expect(port.undo()).toBe(true);
+    expect(port.getText()).toBe('one\ntwo');
+    // The pre-group selection rides back with the state: the same lines
+    // are selected again, ready for the reverse gesture.
+    expect(window.getSelection()?.toString()).toBe('one\ntwo');
+
+    expect(port.redo()).toBe(true);
+    // The redo entry carried the undo-time selection — the whole
+    // replacement, still selected for a repeat Shift+Tab. The clamped
+    // live-range restore used to re-select only what fit the shorter
+    // state: two of the three lines, and the repeat dedent missed the
+    // rest.
+    expect(window.getSelection()?.toString()).toBe(replacement);
+  });
+
+  it('undo places the entry caret even when the live selection was gone', () => {
+    // Undo from the context menu: focus sits on the menu button, the
+    // surface selection is dropped. The entry's caret still restores.
+    const { port, surface } = makePort();
+    port.renderHtml('');
+    caretAt(surface, 0);
+    port.insertText('hello');
+    port.insertText('\t'); // caret 6
+    window.getSelection()?.removeAllRanges();
+
+    expect(port.undo()).toBe(true);
+    expect(port.getText()).toBe('hello');
+    expect(caretStreamOffset(surface)).toBe(5);
+  });
+});
+
 describe('the pending mark (Docs typing style)', () => {
   it('arms at a collapsed caret and wraps the first inserted text', () => {
     const { port, surface } = makePort();

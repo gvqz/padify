@@ -328,7 +328,7 @@ export class ModelPort implements EditorPort {
       if (!this.typingGroupOpen) {
         this.typingGroupOpen = true;
         this.absorb();
-        this.history.openGroup(serialize(this.model));
+        this.history.openGroup(serialize(this.model), captureOffsets(this.element));
       }
     });
     element.addEventListener('compositionend', () => {
@@ -411,7 +411,7 @@ export class ModelPort implements EditorPort {
     }
     const placement = result.intent ? this.convert(result.intent) : null;
     const preserve = result.intent && 'preserve' in result.intent ? selection : null;
-    this.history.openGroup(pre);
+    this.history.openGroup(pre, selection);
     this.paint(serialize(this.model));
     this.applyPlacement(placement, preserve, selection);
     this.announce();
@@ -458,6 +458,10 @@ export class ModelPort implements EditorPort {
    */
   private mutate(build: (model: HTMLElement) => OpResult): boolean {
     this.typingGroupOpen = false;
+    // The caret the pre-group state was left with — captured before the
+    // operation runs (the selection may sit in a popover input, so a null
+    // here is fine; the history entry then restores without one).
+    const preCaret = captureOffsets(this.element);
     this.absorb();
     const pre = serialize(this.model);
     const result = build(this.model);
@@ -465,7 +469,7 @@ export class ModelPort implements EditorPort {
       return false;
     }
     const placement = result.intent ? this.convert(result.intent) : null;
-    this.history.openGroup(pre);
+    this.history.openGroup(pre, preCaret);
     this.paint(serialize(this.model));
     const selection = captureOffsets(this.element);
     if (selection) {
@@ -911,15 +915,24 @@ export class ModelPort implements EditorPort {
     this.typingGroupOpen = false;
     this.absorb();
     const current = serialize(this.model);
-    const restore = this.history.undo(current);
+    // The caret rides BOTH ways: the live one becomes the redo entry's
+    // caret (the state being left), and the popped entry's caret — where
+    // that state was actually left — is where undo puts the caret back.
+    // Reusing the live offsets instead drifts the caret into the restored
+    // text whenever the undone edit changed the length before it (a tab
+    // taken back put the caret after the first letter; a redone tab put
+    // it INSIDE the last word, and the next keystroke typed mid-word).
+    const selection = captureOffsets(this.element);
+    const restore = this.history.undo(current, selection);
     if (restore === null) {
       return false;
     }
-    const selection = captureOffsets(this.element);
     this.pendingMark = null;
-    this.paint(restore);
+    this.paint(restore.state);
     this.element.dispatchEvent(new Event('input', { bubbles: true }));
-    if (selection) {
+    if (restore.caret) {
+      this.reselect(restore.caret, streamLengthOf(this.element));
+    } else if (selection) {
       this.reselect(selection, streamLengthOf(this.element));
     } else {
       placeCaretAtSpot(this.element, spotAtStream(this.element, streamLengthOf(this.element)));
@@ -933,15 +946,17 @@ export class ModelPort implements EditorPort {
     this.typingGroupOpen = false;
     this.absorb();
     const current = serialize(this.model);
-    const restore = this.history.redo(current);
+    const selection = captureOffsets(this.element);
+    const restore = this.history.redo(current, selection);
     if (restore === null) {
       return false;
     }
-    const selection = captureOffsets(this.element);
     this.pendingMark = null;
-    this.paint(restore);
+    this.paint(restore.state);
     this.element.dispatchEvent(new Event('input', { bubbles: true }));
-    if (selection) {
+    if (restore.caret) {
+      this.reselect(restore.caret, streamLengthOf(this.element));
+    } else if (selection) {
       this.reselect(selection, streamLengthOf(this.element));
     } else {
       placeCaretAtSpot(this.element, spotAtStream(this.element, streamLengthOf(this.element)));
@@ -1664,12 +1679,12 @@ export class ModelPort implements EditorPort {
       }
       this.typingGroupOpen = true;
       this.absorb();
-      this.history.openGroup(serialize(this.model));
+      this.history.openGroup(serialize(this.model), captureOffsets(this.element));
       return;
     }
     this.typingGroupOpen = false;
     this.absorb();
-    this.history.openGroup(serialize(this.model));
+    this.history.openGroup(serialize(this.model), captureOffsets(this.element));
   }
 
   /**

@@ -59,3 +59,60 @@ describe('ModelHistory budget', () => {
     expect(undos).toBeGreaterThanOrEqual(2); // a + c both retained
   });
 });
+
+/**
+ * The caret rides the stacks: undo/redo restore the state AND the caret
+ * that state was left with. The live caret at walk time only feeds the
+ * OPPOSITE stack's entry (the state being left) — reusing it for the
+ * restored state drifted the caret into the restored text whenever the
+ * walk crossed a length change before it (a tab taken back, a redone
+ * paste). See model-port's undo/redo for the engine side.
+ */
+describe('ModelHistory carets', () => {
+  it('entries carry the caret they were left with through undo and redo', () => {
+    const history = new ModelHistory();
+    history.openGroup('state-a', { anchor: 1, focus: 1 });
+    history.openGroup('state-b', { anchor: 2, focus: 2 });
+
+    // Undoing pops the most recent group: the entry keeps ITS OWN caret
+    // (where state-b was left), while the state being left — with the
+    // live caret — becomes the redo entry.
+    expect(history.undo('state-b2', { anchor: 3, focus: 4 })).toEqual({
+      state: 'state-b',
+      caret: { anchor: 2, focus: 2 },
+    });
+    expect(history.undo('state-b3', { anchor: 6, focus: 6 })).toEqual({
+      state: 'state-a',
+      caret: { anchor: 1, focus: 1 },
+    });
+
+    // Redoing: the popped redo entry keeps the caret its state was left
+    // with when the undo fired.
+    expect(history.redo('state-a2', { anchor: 5, focus: 5 })).toEqual({
+      state: 'state-b3',
+      caret: { anchor: 6, focus: 6 },
+    });
+  });
+
+  it('a caret-less group undoes to a caret-less entry (the fallback stays)', () => {
+    const history = new ModelHistory();
+    history.openGroup('state-a'); // no caret captured (a selectionless mutate)
+    expect(history.undo('current')).toEqual({ state: 'state-a', caret: null });
+  });
+
+  it('carets do not disturb the byte accounting (states only)', () => {
+    const history = new ModelHistory();
+    const chunk = 'z'.repeat(1_000_000);
+    for (let i = 0; i < 30; i += 1) {
+      history.openGroup(`${chunk}-${i}`, { anchor: i, focus: i });
+    }
+    let undos = 0;
+    while (history.canUndo()) {
+      history.undo('current', { anchor: 0, focus: 0 });
+      undos += 1;
+    }
+    // Same trim behavior as the caret-less budget test above.
+    expect(undos).toBeGreaterThanOrEqual(8);
+    expect(undos).toBeLessThan(30);
+  });
+});

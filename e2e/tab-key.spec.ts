@@ -30,6 +30,21 @@ async function createNoteOfType(page: Page, typeId: string): Promise<void> {
   await page.locator('#note').focus();
 }
 
+/** The caret's stream offset on the note surface (visible chars before it). */
+async function caretOffset(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const host = document.getElementById('note');
+    const selection = window.getSelection();
+    if (!host || !selection || selection.rangeCount === 0) {
+      return -1;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(host);
+    range.setEnd(selection.getRangeAt(0).endContainer, selection.getRangeAt(0).endOffset);
+    return range.toString().replace(/\u200B/g, '').length;
+  });
+}
+
 test.describe('the Tab key', () => {
   test('the welcome note takes a literal tab, never a document-wide margin', async ({ page }) => {
     await page.goto('/');
@@ -130,5 +145,43 @@ test.describe('the Tab key', () => {
     await page.keyboard.press('Shift+Tab');
     expect(await surface.inputValue()).toBe('prose line');
     expect(await focusInEditor()).toBe(true);
+  });
+
+  // The reported typing bug, end to end on the real keyboard: type → Tab
+  // → Ctrl+Z → Ctrl+Y. Undo and redo restore the state AND the caret
+  // that state was left with — the live-offset restore used to drop the
+  // caret INSIDE the line on redo, and the next keystroke typed between
+  // the word and its tab.
+  test('undo and redo walk the caret with the tab (Ctrl+Z / Ctrl+Y)', async ({ page }) => {
+    await page.goto('/');
+    await createNoteOfType(page, 'standard');
+
+    await page.keyboard.type('hello');
+    await page.keyboard.press('Tab'); // "\thello", caret after the tab
+    expect(await caretOffset(page)).toBe(6);
+
+    await page.keyboard.press('Control+z');
+    await page.keyboard.press('Control+y');
+
+    expect(await caretOffset(page)).toBe(6); // the drift left it at 5
+    await page.keyboard.type('X');
+    const text = ((await page.locator('#note').textContent()) ?? '').replace(/\u200B/g, '');
+    expect(text.endsWith('hello\tX')).toBe(true); // the drift typed "helloX\t"
+  });
+
+  test('undo of a line-start tab returns the caret to the line start', async ({ page }) => {
+    await page.goto('/');
+    await createNoteOfType(page, 'standard');
+
+    await page.keyboard.type('hello');
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Tab'); // "\thello", caret 1
+    expect(await caretOffset(page)).toBe(1);
+
+    await page.keyboard.press('Control+z');
+    expect(await caretOffset(page)).toBe(0); // the drift left it at 1, after the 'h'
+
+    await page.keyboard.press('Control+y');
+    expect(await caretOffset(page)).toBe(1);
   });
 });

@@ -1,0 +1,57 @@
+
+== A plain: type, Tab, ^Z, ^Y, type ==
+  after type "hello"         caret=  5  sel=""  text="hello"
+  after Tab                  caret=  6  sel=""  text="hello\t"
+  after Ctrl+Z               caret=  5  sel=""  text="hello"
+  after Ctrl+Y (redo)        caret=  5  sel=""  text="hello\t"
+  after typing "Z"           caret=  6  sel=""  text="helloZ\t"
+
+== B plain: Tab at line start, ^Z ==
+  after Tab (caret 1)        caret=  1  sel=""  text="\thello"
+  after Ctrl+Z (want 0)      caret=  1  sel=""  text="hello"
+  after Ctrl+Y (want 1)      caret=  1  sel=""  text="\thello"
+
+== C rich: block Tab, ^Z, ^Y ==
+  after Tab (indent)         caret= 23  sel=""  text="first blocksecond block"
+  margin blocks: 1
+  after Ctrl+Z (want caret at block start) caret= 23  sel=""  text="first blocksecond block"
+  margin blocks after undo: 0
+  after Ctrl+Y (redo)        caret= 23  sel=""  text="first blocksecond block"
+  margin blocks after redo: 1
+
+== D list: nest, ^Z, ^Y ==
+  after Tab (nested=1)       caret= 11  sel=""  text="parentchild"
+  after ^Z (nested=0)        caret= 11  sel=""  text="parentchild"
+  after ^Y (nested=1)        caret= 11  sel=""  text="parentchild"
+
+== E plain: 3-line select Tab, ^Z, ^Y ==
+  3 lines selected           caret=  6  sel="l1\nl2\nl3"  text="l1l2l3"
+  after Tab (all indented)   caret=  9  sel="\tl1\n\tl2\n\tl3"  text="\tl1\tl2\tl3"
+  after Ctrl+Z               caret=  6  sel="l1\nl2\nl3"  text="l1l2l3"
+  after Ctrl+Y (redo)        caret=  6  sel="\tl1\n\tl2"  text="\tl1\tl2\tl3"
+  after Shift+Tab repeat     caret=  4  sel="l1\nl2"  text="l1l2\tl3"
+
+== F paste at start, ^Z, ^Y ==
+  after paste                caret=  7  sel=""  text="PASTED hello"
+  after Ctrl+Z (want 0)      caret=  5  sel=""  text="hello"
+  after Ctrl+Y (want 7)      caret=  5  sel=""  text="PASTED hello"
+
+== G type, Enter, type, ^Z, ^Y ==
+  after "abc<enter>def"      caret=  6  sel=""  text="abcdef"
+  after Ctrl+Z (want 3)      caret=  3  sel=""  text="abc"
+  after Ctrl+Y (want 7)      caret=  3  sel=""  text="abcdef"
+
+== H fresh note Ctrl+Y no-op ==
+  after two stray ^Y         caret=  2  sel=""  text="hi"
+
+== I type, ^Z, retype, ^Y-dead, ^Z ==
+  after ^Z                   caret=  0  sel=""  text=""
+  after retype               caret=  3  sel=""  text="two"
+  after ^Y (must be no-op)   caret=  3  sel=""  text="two"
+  after ^Z (must drop "two") caret=  0  sel=""  text=""
+
+== J 3-line select Shift+Tab, ^Z ==
+  after Shift+Tab (dedented) caret=  6  sel="l1\nl2\nl3"  text="l1l2l3"
+  after ^Z (tabs back, sel back) caret=  6  sel="\tl1\n\tl2"  text="\tl1\tl2\tl3"
+
+done

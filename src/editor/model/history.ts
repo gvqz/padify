@@ -21,6 +21,27 @@
 const MAX_ENTRIES = 400;
 
 /**
+ * A selection as stream offsets — the caret a state was left with.
+ * Undo and redo restore the state AND its caret: the alternative
+ * (keeping the live caret where it happens to sit) drifts the caret
+ * into the middle of the restored text whenever the undone edit changed
+ * the length BEFORE it — a tab taken back left the caret after the
+ * first letter, a redone tab put it INSIDE the last word, and the next
+ * keystroke typed mid-word.
+ */
+export interface HistoryCaret {
+  anchor: number;
+  focus: number;
+}
+
+/** One stack entry: the serialized document plus the caret it kept. */
+export interface HistoryEntry {
+  state: string;
+  /** The caret this state was left with; null when none was captured. */
+  caret: HistoryCaret | null;
+}
+
+/**
  * Byte budget for the retained history. Entries are full serialized
  * documents — 400 entries on a 1 MB note used to retain ~400 MB of
  * strings for the life of the session. Past the budget the OLDEST groups
@@ -30,8 +51,8 @@ const MAX_ENTRIES = 400;
 const MAX_RETAINED_BYTES = 20 * 1024 * 1024;
 
 export class ModelHistory {
-  private undoStack: string[] = [];
-  private redoStack: string[] = [];
+  private undoStack: HistoryEntry[] = [];
+  private redoStack: HistoryEntry[] = [];
   /** The state the model was last known to be in (after absorb/paint). */
   private known: string | null = null;
   /** Sum of the two stacks' retained string lengths (UTF-16 units). */
@@ -46,17 +67,18 @@ export class ModelHistory {
    * Opens a new event group: the given state (the pre-group state, just
    * absorbed) becomes undoable, and everything redoable is dropped — a new
    * edit always clears the redo branch, like every history there is.
+   * The caret the state was left with rides along (see HistoryCaret).
    */
-  openGroup(preGroupState: string): void {
-    this.undoStack.push(preGroupState);
+  openGroup(preGroupState: string, caret?: HistoryCaret | null): void {
+    this.undoStack.push({ state: preGroupState, caret: caret ?? null });
     this.retainedBytes += preGroupState.length;
     if (this.undoStack.length > MAX_ENTRIES) {
-      this.retainedBytes -= this.undoStack.shift()!.length;
+      this.retainedBytes -= this.undoStack.shift()!.state.length;
     }
     // A new edit clears the redo branch — return its bytes to the budget
     // before trimming, or the accounting drifts upward forever.
-    for (const state of this.redoStack) {
-      this.retainedBytes -= state.length;
+    for (const entry of this.redoStack) {
+      this.retainedBytes -= entry.state.length;
     }
     this.redoStack.length = 0;
     this.trimToBudget();
@@ -70,7 +92,7 @@ export class ModelHistory {
       // the last edit is worse than a deep one on a giant document.
       this.undoStack.length > 8
     ) {
-      this.retainedBytes -= this.undoStack.shift()!.length;
+      this.retainedBytes -= this.undoStack.shift()!.state.length;
     }
   }
 
@@ -96,41 +118,43 @@ export class ModelHistory {
   }
 
   /**
-   * Pops one group: returns the state to restore, or null when there is
-   * nothing to undo. `current` is the model's state now, which becomes
+   * Pops one group: returns the state to restore — with the caret that
+   * state was left with — or null when there is nothing to undo. `current`
+   * is the model's state now (its caret rides along), which becomes
    * redoable the moment the undo lands.
    */
-  undo(current: string): string | null {
+  undo(current: string, caret?: HistoryCaret | null): HistoryEntry | null {
     if (this.undoStack.length === 0) {
       return null;
     }
-    this.redoStack.push(current);
+    this.redoStack.push({ state: current, caret: caret ?? null });
     this.retainedBytes += current.length;
     if (this.redoStack.length > MAX_ENTRIES) {
-      this.retainedBytes -= this.redoStack.shift()!.length;
+      this.retainedBytes -= this.redoStack.shift()!.state.length;
     }
     const restore = this.undoStack.pop()!;
-    this.retainedBytes -= restore.length;
-    this.known = restore;
+    this.retainedBytes -= restore.state.length;
+    this.known = restore.state;
     return restore;
   }
 
   /**
-   * Pushes one group back on: returns the state to restore, or null when
-   * there is nothing to redo. `current` is the model's state now.
+   * Pushes one group back on: returns the state to restore — with the
+   * caret that state was left with — or null when there is nothing to
+   * redo. `current` is the model's state now (its caret rides along).
    */
-  redo(current: string): string | null {
+  redo(current: string, caret?: HistoryCaret | null): HistoryEntry | null {
     if (this.redoStack.length === 0) {
       return null;
     }
-    this.undoStack.push(current);
+    this.undoStack.push({ state: current, caret: caret ?? null });
     this.retainedBytes += current.length;
     if (this.undoStack.length > MAX_ENTRIES) {
-      this.retainedBytes -= this.undoStack.shift()!.length;
+      this.retainedBytes -= this.undoStack.shift()!.state.length;
     }
     const restore = this.redoStack.pop()!;
-    this.retainedBytes -= restore.length;
-    this.known = restore;
+    this.retainedBytes -= restore.state.length;
+    this.known = restore.state;
     return restore;
   }
 }
