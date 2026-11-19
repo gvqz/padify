@@ -307,41 +307,101 @@
   display: block;
 }
 
-/* [phase-1 fold] Wordmark letters tilt on hover
+/* [phase-1 fold] Wordmark hover — "the ink ripple"
    Folded from public/css/fonts.css (Phase 1 consolidation — the file
    itself is gone; see docs/ARCHITECTURE-REVIEW.md and
-   scripts/css-fold-plan.json for the verified mapping). */
-.tilt-css:hover span {
+   scripts/css-fold-plan.json for the verified mapping).
+
+   The folded block scattered the letters at six fixed tilts with no
+   transition — on hover the word snapped into random angles and snapped
+   back out, which reads as broken rather than playful. The hover is now
+   one choreographed move: each letter pops once on the shared spring
+   (--vz-spring), left to right, dipping to muted ink as it flies, while
+   a 1px hairline draws beneath the word — the top bar's own "solid,
+   crisp" language. Every frame ends back at rest, so the word never
+   sits in a scattered pose. All motion is gated behind
+   prefers-reduced-motion: no-preference; those users get the navbar's
+   plain opacity cue instead. */
+.tilt-css {
+  position: relative;
+}
+
+.tilt-css span {
   display: inline-block;
-  transform-origin: 50% 65%;
 }
 
-.tilt-css:hover span:first-child {
-  transform: rotate(6deg) !important;
+/* The hairline — 1px ink, scaleX from the left edge. Stays drawn while
+   the brand menu is open (aria-expanded), so the underline doubles as
+   the menu-open state; focus-visible gives keyboard users the same
+   affordance. */
+.tilt-css::after {
+  content: "";
+  position: absolute;
+  left: 15px;
+  right: 15px;
+  bottom: 11px;
+  height: 1px;
+  background: var(--vz-fg);
+  opacity: 0.9;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 350ms var(--vz-ease);
+  pointer-events: none;
 }
 
-.tilt-css:hover span:nth-child(6n+1) {
-  transform: rotate(-7deg);
+.tilt-css:hover::after,
+.tilt-css:focus-visible::after,
+.tilt-css[aria-expanded="true"]::after {
+  transform: scaleX(1);
 }
 
-.tilt-css:hover span:nth-child(6n+2) {
-  transform: rotate(4deg);
+@media (prefers-reduced-motion: no-preference) {
+  .tilt-css:hover span,
+  .tilt-css:focus-visible span {
+    animation: brand-letter-pop 520ms var(--vz-spring) both;
+  }
+
+  .tilt-css:hover span:nth-child(2),
+  .tilt-css:focus-visible span:nth-child(2) {
+    animation-delay: 45ms;
+  }
+
+  .tilt-css:hover span:nth-child(3),
+  .tilt-css:focus-visible span:nth-child(3) {
+    animation-delay: 90ms;
+  }
+
+  .tilt-css:hover span:nth-child(4),
+  .tilt-css:focus-visible span:nth-child(4) {
+    animation-delay: 135ms;
+  }
+
+  .tilt-css:hover span:nth-child(5),
+  .tilt-css:focus-visible span:nth-child(5) {
+    animation-delay: 180ms;
+  }
+
+  .tilt-css:hover span:nth-child(6),
+  .tilt-css:focus-visible span:nth-child(6) {
+    animation-delay: 225ms;
+  }
 }
 
-.tilt-css:hover span:nth-child(6n+3) {
-  transform: rotate(-2deg);
-}
+@keyframes brand-letter-pop {
+  0% {
+    transform: translateY(0);
+    color: var(--vz-fg);
+  }
 
-.tilt-css:hover span:nth-child(6n+4) {
-  transform: rotate(6deg);
-}
+  38% {
+    transform: translateY(-0.3em);
+    color: var(--vz-fg-muted);
+  }
 
-.tilt-css:hover span:nth-child(6n+5) {
-  transform: rotate(-5deg);
-}
-
-.tilt-css:hover span:nth-child(6n+6) {
-  transform: rotate(3deg);
+  100% {
+    transform: translateY(0);
+    color: var(--vz-fg);
+  }
 }
 /* vercel design system — part 3/17: Top bar — solid, crisp, 1px hairline
    Split from the former vercel.css (cascade order preserved —
