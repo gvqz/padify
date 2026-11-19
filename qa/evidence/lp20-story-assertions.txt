@@ -1,0 +1,60 @@
+
+== light / desktop 1280x800 ==
+  [PASS] light: real glyph rests at identity — none
+  [PASS] light: typo ghost parked below the window — matrix(1, 0, 0, 1, 0, 23)
+  [PASS] light: no squiggle at rest — the word carries nothing
+  [PASS] light: no caret at rest
+  [PASS] light: accessible name is exactly "Padify" (ghosts never leak)
+  [PASS] light: deal staggered left-to-right — P swaps before Y — P=matrix(1, 0, 0, 1, 0, 23) Y=matrix(1, 0, 0, 1, 0, 0)
+  [PASS] light: typo beat — every real glyph parked below its window
+  [PASS] light: typo beat — every qwerty neighbour in the window ("Osfogu")
+  [PASS] light: spellcheck squiggle lit under the typo — opacity 0.85
+  [PASS] light: ghost ink is muted — the typo reads provisional — rgb(102, 102, 102) vs rgb(23, 23, 23)
+  [PASS] light: ghost optically centred on its slot — 0px
+  [PASS] light: link box identical mid-story (navbar never moves) — 40,0,74,50 vs 40,0,74,50
+  [PASS] light: every real glyph lands back at rest
+  [PASS] light: every ghost parked again after the fix
+  [PASS] light: squiggle dead once the word is fixed — opacity 0
+  [PASS] light: link box identical after landing
+  [PASS] light: clean rest after leave
+  [PASS] light: brand menu opens on click
+  [PASS] light: caret blinks (editor's open-state cue) — brand-caret-blink
+  [PASS] light: caret sweeps lit -> dark -> lit over one cycle — 1.00 1.00 0.00 1.00 1.00
+  [PASS] light: story suppressed while the menu is open
+  [PASS] light: word stays still while the menu is open
+
+== dark / desktop 1280x800 ==
+  [PASS] dark: real glyph rests at identity — none
+  [PASS] dark: typo ghost parked below the window — matrix(1, 0, 0, 1, 0, 23)
+  [PASS] dark: no squiggle at rest — the word carries nothing
+  [PASS] dark: no caret at rest
+  [PASS] dark: accessible name is exactly "Padify" (ghosts never leak)
+  [PASS] dark: deal staggered left-to-right — P swaps before Y — P=matrix(1, 0, 0, 1, 0, 23) Y=matrix(1, 0, 0, 1, 0, 0)
+  [PASS] dark: typo beat — every real glyph parked below its window
+  [PASS] dark: typo beat — every qwerty neighbour in the window ("Osfogu")
+  [PASS] dark: spellcheck squiggle lit under the typo — opacity 0.85
+  [PASS] dark: ghost ink is muted — the typo reads provisional — rgb(161, 161, 161) vs rgb(237, 237, 237)
+  [PASS] dark: ghost optically centred on its slot — 0px
+  [PASS] dark: link box identical mid-story (navbar never moves) — 40,0,74,50 vs 40,0,74,50
+  [PASS] dark: every real glyph lands back at rest
+  [PASS] dark: every ghost parked again after the fix
+  [PASS] dark: squiggle dead once the word is fixed — opacity 0
+  [PASS] dark: link box identical after landing
+  [PASS] dark: clean rest after leave
+  [PASS] dark: brand menu opens on click
+  [PASS] dark: caret blinks (editor's open-state cue) — brand-caret-blink
+  [PASS] dark: caret sweeps lit -> dark -> lit over one cycle — 1.00 1.00 0.00 1.00 1.00
+  [PASS] dark: story suppressed while the menu is open
+  [PASS] dark: word stays still while the menu is open
+
+== light / mobile 375x667 ==
+  [PASS] mobile: brand menu opens on tap
+  [PASS] mobile: caret lit on tap
+
+== light / desktop / prefers-reduced-motion: reduce ==
+  [PASS] reduced motion: real glyphs never move
+  [PASS] reduced motion: ghost stays parked — the typo never shows
+  [PASS] reduced motion: no squiggle
+  [PASS] reduced motion: plain opacity dim on hover — 1 -> 0.8
+
+ALL CHECKS PASSED

@@ -307,32 +307,43 @@
   display: block;
 }
 
-/* [phase-1 fold] Wordmark hover — "the letterpress deal"
+/* [phase-1 fold] Wordmark hover — "the typo gets fixed"
    Folded from public/css/fonts.css (Phase 1 consolidation — the file
    itself is gone; see docs/ARCHITECTURE-REVIEW.md and
    scripts/css-fold-plan.json for the verified mapping).
 
-   History: the folded block scattered the letters at fixed tilts with
-   no transition (broken, not playful); the first rework made them pop
-   on the shared spring. This version commits to the writing-app idea —
-   on hover the word RE-SETS ITSELF like a mechanical letter wheel:
-   each glyph rolls up out of its slot and the next copy rises into
-   place, dealt left to right, while the 1px hairline draws beneath —
-   the top bar's own "solid, crisp" language.
+   History: the folded block scattered the letters at fixed tilts (no
+   transition — broken, not playful); the first rework popped them on
+   the spring; the second rolled them like a letterpress. This version
+   stops decorating and tells the editor's own story on hover:
 
-   Anatomy: .brand-slot is a fixed 20px window (the letter wheel's
-   clip — overflow: hidden is what makes the roll read as a slot;
-   a transform on the clipped element itself would carry the window
-   along and clip nothing, which is why the glyph rides in a child).
-   .brand-rider is the glyph that slides inside it. System-font
-   ascent+descent at 15px measures ≈19px inside the 20px line box, so
-   the slot shaves nothing at rest. vertical-align: top pins the slots
-   because an inline-block with hidden overflow aligns by its bottom
-   edge — without it the wordmark would jump on hover.
+     1. each glyph rolls to its QWERTY NEIGHBOUR — the wordmark briefly
+        reads "Osfogu", the fat-finger smear every typist knows;
+     2. a red spellcheck squiggle (the app's one semantic hue,
+        --danger) draws beneath the typo while it stands;
+     3. the wheels spin again and the real word lands, spring-settled,
+        left to right — and the squiggle vanishes with it.
 
-   Every frame ends back at rest. All motion is gated behind
-   prefers-reduced-motion: no-preference; those users keep the
-   hairline state affordance and the navbar's plain opacity cue. */
+   Anatomy: .brand-slot is the letter wheel's clip window;
+   .brand-rider is the real glyph (in flow — it sizes the slot);
+   .brand-typo is the neighbour glyph (absolute, muted ink, parked
+   115% below the window — fully clipped — and aria-hidden so the
+   accessible name stays "Padify"). Symmetric slot padding reaches
+   3px past the glyph on each side so a wider typo (i→o needs 5px)
+   fits mid-story; the negative margins hand the slack straight back,
+   so the word's advance — and the navbar — never move. The typo is
+   text-align: center across that padded box, whose midpoint is the
+   original glyph's optical centre exactly.
+
+   The old hairline is gone: a straight rule under a logo is the
+   corporate move this hover exists to avoid. The squiggle replaces
+   it only while the typo stands — the word at rest carries nothing.
+   While the brand menu is open the story is suppressed and a blinking
+   text caret (::before) takes over as the open-state cue — an editor
+   affordance, static under reduced motion.
+
+   All motion is gated behind prefers-reduced-motion: no-preference;
+   those users get a plain opacity dim on hover, nothing else. */
 .tilt-css {
   position: relative;
 }
@@ -341,91 +352,231 @@
   display: inline-block;
   overflow: hidden;
   vertical-align: top;
+  position: relative;
+  padding: 0 3px;
+  margin: 0 -3px;
 }
 
 .tilt-css .brand-rider {
   display: block;
 }
 
-/* The hairline — 1px ink, scaleX from the left edge. Stays drawn while
-   the brand menu is open (aria-expanded), so the underline doubles as
-   the menu-open state; focus-visible gives keyboard users the same
-   affordance. */
+.tilt-css .brand-typo {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: block;
+  text-align: center;
+  color: var(--vz-fg-muted);
+  transform: translateY(115%);
+}
+
+/* The spellcheck squiggle — red, wavy, provisional. Opacity 0 at rest;
+   the keyframes own it entirely while the story runs. */
 .tilt-css::after {
   content: "";
   position: absolute;
   left: 15px;
   right: 15px;
-  bottom: 11px;
-  height: 1px;
-  background: var(--vz-fg);
-  opacity: 0.9;
-  transform: scaleX(0);
+  bottom: 9px;
+  height: 3px;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--danger) 0 1px,
+    transparent 1px 3px
+  );
+  opacity: 0;
   transform-origin: left center;
-  transition: transform 350ms var(--vz-ease);
   pointer-events: none;
 }
 
-.tilt-css:hover::after,
-.tilt-css:focus-visible::after,
-.tilt-css[aria-expanded="true"]::after {
-  transform: scaleX(1);
+/* The caret — the editor's own "ready to type" cue while the brand
+   menu is open. */
+.tilt-css::before {
+  content: "";
+  position: absolute;
+  right: 12px;
+  bottom: 19px;
+  width: 2px;
+  height: 14px;
+  background: var(--vz-fg);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tilt-css[aria-expanded="true"]::before {
+  opacity: 1;
+  animation: brand-caret-blink 900ms steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tilt-css[aria-expanded="true"]::before {
+    animation: none;
+  }
+
+  .tilt-css:hover {
+    opacity: 0.8;
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .tilt-css:hover .brand-rider,
+  /* The story plays on hover and keyboard focus — but never while the
+     menu is open (the :not keeps the caret calm and the word still
+     under an open menu, without any ordering-dependent suppression). */
+  .tilt-css:hover:not([aria-expanded="true"])::after,
+  .tilt-css:focus-visible::after {
+    animation: brand-squiggle 1050ms both;
+  }
+
+  .tilt-css:hover:not([aria-expanded="true"]) .brand-rider,
   .tilt-css:focus-visible .brand-rider {
-    animation: brand-letter-roll 560ms both;
+    animation: brand-letter-swap 1050ms both;
   }
 
-  .tilt-css:hover .brand-slot:nth-child(2) .brand-rider,
-  .tilt-css:focus-visible .brand-slot:nth-child(2) .brand-rider {
-    animation-delay: 45ms;
+  .tilt-css:hover:not([aria-expanded="true"]) .brand-typo,
+  .tilt-css:focus-visible .brand-typo {
+    animation: brand-typo-roll 1050ms both;
   }
 
-  .tilt-css:hover .brand-slot:nth-child(3) .brand-rider,
-  .tilt-css:focus-visible .brand-slot:nth-child(3) .brand-rider {
-    animation-delay: 90ms;
+  .tilt-css:hover:not([aria-expanded="true"]) .brand-slot:nth-child(2) .brand-rider,
+  .tilt-css:hover:not([aria-expanded="true"]) .brand-slot:nth-child(2) .brand-typo,
+  .tilt-css:focus-visible .brand-slot:nth-child(2) .brand-rider,
+  .tilt-css:focus-visible .brand-slot:nth-child(2) .brand-typo {
+    animation-delay: 35ms;
   }
 
-  .tilt-css:hover .brand-slot:nth-child(4) .brand-rider,
-  .tilt-css:focus-visible .brand-slot:nth-child(4) .brand-rider {
-    animation-delay: 135ms;
+  .tilt-css:hover:not([aria-expanded="true"]) .brand-slot:nth-child(3) .brand-rider,
+  .tilt-css:hover:not([aria-expanded="true"]) .brand-slot:nth-child(3) .brand-typo,
+  .tilt-css:focus-visible .brand-slot:nth-child(3) .brand-rider,
+  .tilt-css:focus-visible .brand-slot:nth-child(3) .brand-typo {
+    animation-delay: 70ms;
   }
 
-  .tilt-css:hover .brand-slot:nth-child(5) .brand-rider,
-  .tilt-css:focus-visible .brand-slot:nth-child(5) .brand-rider {
-    animation-delay: 180ms;
+  .tilt-css:hover:not([aria-expanded="true"]) .brand-slot:nth-child(4) .brand-rider,
+  .tilt-css:hover:not([aria-expanded="true"]) .brand-slot:nth-child(4) .brand-typo,
+  .tilt-css:focus-visible .brand-slot:nth-child(4) .brand-rider,
+  .tilt-css:focus-visible .brand-slot:nth-child(4) .brand-typo {
+    animation-delay: 105ms;
   }
 
-  .tilt-css:hover .brand-slot:nth-child(6) .brand-rider,
-  .tilt-css:focus-visible .brand-slot:nth-child(6) .brand-rider {
-    animation-delay: 225ms;
+  .tilt-css:hover:not([aria-expanded="true"]) .brand-slot:nth-child(5) .brand-rider,
+  .tilt-css:hover:not([aria-expanded="true"]) .brand-slot:nth-child(5) .brand-typo,
+  .tilt-css:focus-visible .brand-slot:nth-child(5) .brand-rider,
+  .tilt-css:focus-visible .brand-slot:nth-child(5) .brand-typo {
+    animation-delay: 140ms;
+  }
+
+  .tilt-css:hover:not([aria-expanded="true"]) .brand-slot:nth-child(6) .brand-rider,
+  .tilt-css:hover:not([aria-expanded="true"]) .brand-slot:nth-child(6) .brand-typo,
+  .tilt-css:focus-visible .brand-slot:nth-child(6) .brand-rider,
+  .tilt-css:focus-visible .brand-slot:nth-child(6) .brand-typo {
+    animation-delay: 175ms;
   }
 }
 
-@keyframes brand-letter-roll {
+/* The real letter: exits up fast, parks below the window while the
+   typo owns it, then rises home with the shared spring's settle. The
+   6%/6.001% jump happens fully clipped — both poses clear the ~19px
+   glyph. */
+@keyframes brand-letter-swap {
   0% {
     transform: translateY(0);
-    /* accelerate out through the top of the slot */
     animation-timing-function: cubic-bezier(0.55, 0, 0.85, 0.4);
   }
 
-  42% {
+  6% {
     transform: translateY(-115%);
   }
 
-  /* the "next copy" enters from below while the window is empty — the
-     jump between 42% and 42.001% is invisible because both poses are
-     fully clipped (115% of 20px clears the ≈19px glyph either way) */
-  42.001% {
+  6.001% {
     transform: translateY(115%);
-    /* rise into place with the shared spring's little settle */
+  }
+
+  55% {
+    transform: translateY(115%);
     animation-timing-function: var(--vz-spring);
+  }
+
+  92% {
+    transform: translateY(0);
   }
 
   100% {
     transform: translateY(0);
+  }
+}
+
+/* The qwerty neighbour: rises in behind the real letter's exit, owns
+   the window through the typo beat, then leaves before the fix. */
+@keyframes brand-typo-roll {
+  0% {
+    transform: translateY(115%);
+  }
+
+  6% {
+    transform: translateY(115%);
+    animation-timing-function: var(--vz-ease);
+  }
+
+  12% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.85, 0.4);
+  }
+
+  56% {
+    transform: translateY(-115%);
+  }
+
+  100% {
+    transform: translateY(-115%);
+  }
+}
+
+/* The spellcheck flag: draws with the typos, stands through the beat,
+   dies the moment the correction is underway. */
+@keyframes brand-squiggle {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.35);
+    animation-timing-function: var(--vz-ease);
+  }
+
+  10% {
+    opacity: 0.85;
+    transform: scaleX(1);
+  }
+
+  50% {
+    opacity: 0.85;
+    transform: scaleX(1);
+    animation-timing-function: var(--vz-ease);
+  }
+
+  62% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes brand-caret-blink {
+  0%,
+  72% {
+    opacity: 1;
+  }
+
+  73%,
+  100% {
+    opacity: 0;
   }
 }
 /* vercel design system — part 3/17: Top bar — solid, crisp, 1px hairline
