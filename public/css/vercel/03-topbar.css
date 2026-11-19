@@ -307,59 +307,186 @@
   display: block;
 }
 
-/* [phase-1 fold] Wordmark hover — "select the name"
+/* [phase-1 fold] Wordmark hover — the deck
    Folded from public/css/fonts.css (Phase 1 consolidation — the file
    itself is gone; see docs/ARCHITECTURE-REVIEW.md and
    scripts/css-fold-plan.json for the verified mapping).
 
-   History: the folded block scattered the letters at fixed tilts (no
-   transition — broken, not playful); the first rework popped them on
-   the spring; the second rolled them like a letterpress; the third
-   told the qwerty-typo story. All four made the LETTERS move — this
-   one stops moving them. Hover is the editor's own selection gesture:
+   History: the folded block scattered the letters at fixed tilts; the
+   reworks popped them on the spring, rolled them like a letterpress,
+   told the qwerty-typo story, then made hover a drag-selection. Six
+   hovers in, the owner dealt the deck instead: hover no longer plays
+   ONE move — it plays the NEXT one. Ten cards, dealt in the owner's
+   order (2, 4, 5, 6, 7, 8, 10, 11, 13, 14 of the shortlist):
 
-     1. an I-beam caret sweeps across the word, left to right — a text
-        cursor being dragged;
-     2. behind it the wordmark inverts: fg band, navbar-surface
-        glyphs, revealed by clip-path — a real text selection forming;
-     3. the name rests SELECTED — hover, keyboard focus and the open
-        menu all hold the band (the name stays selected while you
-        pick what to do with it), and leaving deselects.
+     02 magnetic    the pointer bends the word — letters lean toward
+                    it, clamped, and spring home on leave (JS-driven)
+     04 typo        the d flickers to a b, then an e, in provisional
+                    gray, snaps back and the word shakes it off
+     05 skeleton    the fill drains to an outline wireframe — the
+       re-ink       prepress blueprint — and ink pours back in
+     06 wet ink     the glyphs go soft like ink not yet dry, then dry
+       dries         crisp left to right, unevenly
+     07 inhale      every letter drifts toward the optical center and
+                    relaxes — the word breathes as one
+     08 misreg.     the word splits into two plates a hair out of
+                    register, then snaps back into register
+     10 stamp       the word presses onto the page and leaves a
+                    blurred ink impression that fades
+     11 circle      a thin, imperfect ellipse draws itself around the
+                    name — an editor circling a word
+     13 mirror      the name flips a full turn in 3D — its mirrored
+       to light     back shows through for a beat, then it lands
+     14 pressed     the word arms like a key, rising half a pixel;
+       key           the open menu is what presses it down
 
-   Anatomy: .brand-stage is the wordmark's coordinate space; its own
-   text node is the resting word. .brand-sel is the aria-hidden
-   duplicate stacked pixel-coincident on the base (same text, same
-   inherited metrics), painted in inverted tokens and revealed by
-   animating the RIGHT inset 100% -> 0% — clip-path never reflows, so
-   the glyphs and the link box never move. .brand-caret is a
-   full-stage box translated -100% -> 4px in lockstep with the clip
-   edge (one transform segment, so bar and edge share the bezier); its
-   ::after draws the 2px bar just ahead of the band, over the
-   unselected letters — the dragged cursor. A 1px surface halo keeps
-   the bar legible across glyph stems, the way platform cursors carry
-   contrast outlines. The bar fades out as the sweep lands — a
-   selection doesn't wear a trailing caret, and over the band the bar
-   would be ink-on-ink anyway.
+   Anatomy: .brand-stage stays the wordmark's coordinate space.
+   .brand-word wraps six .brand-L letter spans — letters became spans
+   so cards can take them one at a time (magnetic, dry stagger,
+   inhale), and the wrapper is the whole-word actor (re-ink, register,
+   stamp, armed key). Every card paints on layers that are dark at
+   rest and absent from layout: .brand-wire (the outline plate),
+   .brand-reg (the misregistered plate), .brand-imp (the ink
+   impression) and .brand-ring (the editor's circle — an SVG path
+   with pathLength 100 so dashoffset reads as a percentage). The typo
+   card never reflows: its ghost lives inside the d's own span, the
+   real glyph goes transparent while a wrong key paints over it, so
+   the span's advance holds no matter how the fonts feel about b/e.
 
-   Every underline the brand ever wore is gone for good — hairline,
-   squiggle, blink caret. The selection IS the affordance: menu open
-   and keyboard focus hold the band as the state cue, not a hover
-   echo. Enter takes the sweep's full 380ms (the after-change style
-   wins on state entry); leaving falls back to the base 200ms —
-   quicker to deselect than to select, like a real editor.
+   The deal: each pointerenter deals the next card (the index wraps
+   forever); pointerleave folds the card — one-shot animations are
+   allowed to LAND before the attribute drops, because canceling a
+   flip mid-air visibly snaps the whole word, while transition-driven
+   cards (ring, armed key) fold at once so they retract on the way
+   out. font-kerning is off on the stage so six atomic letter spans
+   and the overlays' plain text measure identically — every copy stays
+   pixel-coincident with the base word, zero fudging.
 
-   Reduced motion: no sweep, no caret — the band applies instantly as
-   the state indicator and hover keeps the plain opacity dim. All
-   motion is gated behind prefers-reduced-motion: no-preference. */
+   The band: hover left the building, so the selection band now holds
+   for STATE only — keyboard focus and the open menu. Still one truth
+   (focus and aria-expanded agree), it just no longer fires on pointer
+   hover, because the pointer belongs to the deck now. The band paints
+   last in the stage, so a card dealt while the menu is open plays
+   UNDER the state, never over it. Every underline the brand ever wore
+   stays gone — the band is a state, not an underline.
+
+   Motion discipline: every card is transform / opacity / dashoffset
+   on absolutely-positioned layers — the link box and the glyph
+   advances never move, the navbar never shifts, and nothing is left
+   behind after a leave (the harness byte-compares rest frames per
+   card). Reduced motion deals no cards: the JS guard never sets
+   data-move, the overlay machinery displays none, and hover keeps
+   the plain opacity dim — the band still applies instantly as the
+   state. */
 .tilt-css {
   position: relative;
   user-select: none;
+  /* the flip card borrows depth from the link; 2D cards are unaffected */
+  perspective: 480px;
 }
 
 .tilt-css .brand-stage {
   position: relative;
   display: inline-block;
   vertical-align: top;
+  /* six atomic letter spans and the overlays' plain text must measure
+     identically — kerning pairs across span boundaries would fudge it */
+  font-kerning: none;
+}
+
+/* the base word — the wrapper is the whole-word actor, the letters
+   the per-letter actors */
+.tilt-css .brand-word {
+  display: inline-block;
+}
+
+.tilt-css .brand-L {
+  display: inline-block;
+  vertical-align: top;
+}
+
+/* per-letter constants: --i paces the dry stagger, --dx is the inhale
+   drift toward the optical center */
+.tilt-css .brand-word .brand-L:nth-child(1) { --i: 0; --dx: 2.4px; }
+.tilt-css .brand-word .brand-L:nth-child(2) { --i: 1; --dx: 1.4px; }
+.tilt-css .brand-word .brand-L:nth-child(3) { --i: 2; --dx: 0.5px; }
+.tilt-css .brand-word .brand-L:nth-child(4) { --i: 3; --dx: -0.5px; }
+.tilt-css .brand-word .brand-L:nth-child(5) { --i: 4; --dx: -1.4px; }
+.tilt-css .brand-word .brand-L:nth-child(6) { --i: 5; --dx: -2.4px; }
+
+/* the typo target: the real d never reflows — it goes transparent and
+   a ghost paints the wrong key on top of its own advance */
+.tilt-css .brand-L-typo {
+  position: relative;
+}
+
+.tilt-css .brand-typo {
+  position: absolute;
+  inset: 0;
+  color: var(--vz-fg-subtle);
+  opacity: 0;
+  pointer-events: none;
+  text-align: center;
+}
+
+.tilt-css .brand-L-typo.typoing {
+  color: transparent;
+}
+
+.tilt-css .brand-L-typo.typoing .brand-typo {
+  opacity: 1;
+}
+
+/* overlays — pixel-coincident, dark at rest, pointer-transparent,
+   absent from layout; the band paints LAST so state outranks cards */
+.tilt-css .brand-wire {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: transparent;
+  -webkit-text-stroke: 0.7px var(--vz-fg);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tilt-css .brand-reg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--vz-fg);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tilt-css .brand-imp {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--vz-fg);
+  opacity: 0;
+  filter: blur(0.6px);
+  pointer-events: none;
+}
+
+.tilt-css .brand-ring {
+  position: absolute;
+  left: -7px;
+  top: -4px;
+  width: calc(100% + 14px);
+  height: calc(100% + 8px);
+  overflow: visible;
+  pointer-events: none;
+  transform: rotate(-1.2deg);
+}
+
+.tilt-css .brand-ring path {
+  fill: none;
+  stroke: var(--vz-fg);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  opacity: 0.85;
 }
 
 .tilt-css .brand-sel {
@@ -372,27 +499,8 @@
   pointer-events: none;
 }
 
-.tilt-css .brand-caret {
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.tilt-css .brand-caret::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 0;
-  width: 2px;
-  background: var(--vz-fg);
-  box-shadow: 0 0 0 1px var(--vz-bg-navbar);
-}
-
-/* The selected state — hover, keyboard focus, open menu: one truth. */
-.tilt-css:hover .brand-sel,
+/* The selected state — keyboard focus, open menu: one truth. Hover
+   plays the deck now; the band belongs to state only. */
 .tilt-css:focus-visible .brand-sel,
 .tilt-css[aria-expanded="true"] .brand-sel {
   clip-path: inset(0 0% 0 0 round 2px);
@@ -403,51 +511,169 @@
     transition: clip-path 200ms var(--vz-ease);
   }
 
-  /* Entering a state reads the after-change style, so the sweep gets
+  /* Entering a state reads the after-change style, so the band gets
      its full 380ms; leaving falls back to the base 200ms. */
-  .tilt-css:hover .brand-sel,
   .tilt-css:focus-visible .brand-sel,
   .tilt-css[aria-expanded="true"] .brand-sel {
     transition-duration: 380ms;
   }
 
-  /* The caret is the pointer's actor: hover drags it, focus and menu
-     open select the name without a cursor dance. */
-  .tilt-css:hover .brand-caret {
-    animation: brand-caret-drag 380ms var(--vz-ease) both;
+  /* The returns: letters spring home, the word settles, the ring
+     un-draws on the way out — leaves share the app's motion vocabulary. */
+  .tilt-css .brand-L {
+    transition: transform 260ms var(--vz-spring);
+  }
+
+  .tilt-css .brand-word {
+    transition: transform 160ms var(--vz-ease);
+  }
+
+  .tilt-css .brand-ring path {
+    transition: stroke-dashoffset 480ms var(--vz-ease);
+  }
+
+  .tilt-css .brand-typo {
+    transition: opacity 120ms var(--vz-ease);
+  }
+
+  .tilt-css .brand-L-typo {
+    transition: color 120ms var(--vz-ease);
+  }
+
+  /* card 02 — magnetic: JS bends the letters while the card is dealt */
+  .tilt-css .brand-stage[data-move="mag"] .brand-L {
+    transition: transform 70ms var(--vz-ease);
+  }
+
+  /* card 04 — typo: the ghost beats are JS-timed; CSS paints the
+     provisional ink and the snap-back shake */
+  .tilt-css .brand-stage.glitching {
+    animation: brand-typo-shake 180ms var(--vz-ease) 1;
+  }
+
+  /* card 05 — skeleton re-ink */
+  .tilt-css .brand-stage[data-move="wire"] .brand-word {
+    animation: brand-reink 760ms var(--vz-ease) 1;
+  }
+
+  .tilt-css .brand-stage[data-move="wire"] .brand-wire {
+    animation: brand-rewire 760ms var(--vz-ease) 1;
+  }
+
+  /* card 06 — wet ink dries, unevenly */
+  .tilt-css .brand-stage[data-move="wet"] .brand-L {
+    animation: brand-dry 460ms var(--vz-ease) both;
+    animation-delay: calc(var(--i) * 45ms);
+  }
+
+  /* card 07 — the word inhales */
+  .tilt-css .brand-stage[data-move="inhale"] .brand-L {
+    transform: translateX(var(--dx));
+    transition: transform 380ms var(--vz-spring);
+  }
+
+  /* card 08 — misregistration: two plates pull apart, then register */
+  .tilt-css .brand-stage[data-move="reg"] .brand-word {
+    animation: brand-reg-a 640ms var(--vz-ease) 1;
+  }
+
+  .tilt-css .brand-stage[data-move="reg"] .brand-reg {
+    animation: brand-reg-b 640ms var(--vz-ease) 1;
+  }
+
+  /* card 10 — the stamp presses and leaves an impression */
+  .tilt-css .brand-stage[data-move="stamp"] .brand-word {
+    animation: brand-stamp 620ms var(--vz-spring) 1;
+  }
+
+  .tilt-css .brand-stage[data-move="stamp"] .brand-imp {
+    animation: brand-stamp-imp 620ms var(--vz-ease) 1;
+  }
+
+  /* card 11 — the editor's circle draws itself around the name */
+  .tilt-css .brand-stage[data-move="ring"] .brand-ring path {
+    stroke-dashoffset: 0;
+  }
+
+  /* card 13 — mirror to the light: a full turn, the mirrored back
+     shows through mid-flight, the name lands front-up */
+  .tilt-css .brand-stage[data-move="flip"] {
+    animation: brand-flip 720ms var(--vz-ease) 1;
+  }
+
+  /* card 14 — pressed key, armed */
+  .tilt-css .brand-stage[data-move="arm"] .brand-word {
+    transform: translateY(-0.5px);
   }
 }
 
+@keyframes brand-typo-shake {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-1.4px); }
+  55% { transform: translateX(1.2px); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes brand-reink {
+  0% { opacity: 1; }
+  38%, 62% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes brand-rewire {
+  0% { opacity: 0; }
+  38%, 62% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes brand-dry {
+  0% { filter: blur(2.4px); opacity: 0.4; }
+  100% { filter: blur(0); opacity: 1; }
+}
+
+@keyframes brand-reg-a {
+  0% { transform: translate(0, 0); }
+  30%, 72% { transform: translate(1.4px, 0.8px); }
+  100% { transform: translate(0, 0); }
+}
+
+@keyframes brand-reg-b {
+  0% { opacity: 0; transform: translate(0, 0); }
+  30%, 72% { opacity: 0.4; transform: translate(-1.6px, -1px); }
+  100% { opacity: 0; transform: translate(0, 0); }
+}
+
+@keyframes brand-stamp {
+  0% { transform: none; }
+  22% { transform: translateY(1.2px) scale(0.985); }
+  55%, 100% { transform: none; }
+}
+
+@keyframes brand-stamp-imp {
+  0%, 8% { opacity: 0; }
+  22%, 48% { opacity: 0.32; }
+  100% { opacity: 0; }
+}
+
+@keyframes brand-flip {
+  0% { transform: rotateY(0deg); }
+  100% { transform: rotateY(360deg); }
+}
+
+/* Reduced motion: no cards are dealt (the JS guard never sets
+   data-move), the overlay machinery is removed outright, and hover
+   keeps the plain opacity dim. The band still applies instantly as
+   the state indicator. */
 @media (prefers-reduced-motion: reduce) {
   .tilt-css:hover {
     opacity: 0.8;
   }
 
-  .tilt-css .brand-caret {
+  .tilt-css .brand-wire,
+  .tilt-css .brand-reg,
+  .tilt-css .brand-imp,
+  .tilt-css .brand-ring {
     display: none;
-  }
-}
-
-/* The drag: opacity pops in fast, holds, dies as the sweep lands.
-   Transform spans the whole run — the bar leads the band edge by a
-   sliver that grows to 4px past the word, then the land erases it. */
-@keyframes brand-caret-drag {
-  0% {
-    transform: translateX(-100%);
-    opacity: 0;
-  }
-
-  8% {
-    opacity: 1;
-  }
-
-  84% {
-    opacity: 1;
-  }
-
-  100% {
-    transform: translateX(4px);
-    opacity: 0;
   }
 }
 

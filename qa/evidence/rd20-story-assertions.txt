@@ -1,0 +1,182 @@
+
+== light / desktop 1280x800 ==
+  [PASS] light: band fully clipped at rest — inset(0px 100% 0px 0px round 2px)
+  [PASS] light: the brand-caret element is gone from the anatomy
+  [PASS] light: wire, register and impression plates are dark at rest — 0/0/0
+  [PASS] light: the editor's circle is undrawn at rest — dashoffset 100
+  [PASS] light: letters carry no inline transforms and no card is dealt
+  [PASS] light: band pixel-coincident with the split-letter base word — sel=55,15,44x20 word=55,15,44x20
+  [PASS] light: band paints in the word's own ink — rgb(23, 23, 23) vs rgb(23, 23, 23)
+  [PASS] light: band glyphs paint in the navbar surface — rgb(255, 255, 255) vs rgb(255, 255, 255)
+  [PASS] light: accessible name is exactly "Padify" (letters, ghost and copies never leak)
+  [PASS] deal 1: light deals "mag" — got "mag"
+  [PASS] deal 1: link box identical while "mag" is dealt
+  [PASS] mag: letters lean toward the pointer (6/6 pulled)
+  [PASS] mag: the lean is clamped — 2.2,2.2,2.2,2.2,2.2,1.3
+  [PASS] mag: link box identical while bent
+  [PASS] mag: letters spring home on leave
+  [PASS] deal 1: leave folds "mag" — data-move="null"
+  [PASS] deal 1: "mag" leaves nothing — frame byte-compares to rest
+  [PASS] deal 2: light deals "typo" — got "typo"
+  [PASS] deal 2: link box identical while "typo" is dealt
+  [PASS] typo: the ghost reads a wrong key in provisional ink ('b')
+  [PASS] typo: the real d is transparent while the ghost shows — rgba(23, 23, 23, 0.004)
+  [PASS] typo: the word shakes as the fix lands
+  [PASS] typo: the ghost folds back to d
+  [PASS] typo: the shake dies with the fix
+  [PASS] deal 2: leave folds "typo" — data-move="null"
+  [PASS] deal 2: "typo" leaves nothing — frame byte-compares to rest
+  [PASS] deal 3: light deals "wire" — got "wire"
+  [PASS] deal 3: link box identical while "wire" is dealt
+  [PASS] wire: frozen t=350ms — the fill has drained — word opacity 0
+  [PASS] wire: frozen t=350ms — the outline plate shows — wire opacity 1
+  [PASS] deal 3: leave folds "wire" — data-move="null"
+  [PASS] deal 3: "wire" leaves nothing — frame byte-compares to rest
+  [PASS] deal 4: light deals "wet" — got "wet"
+  [PASS] deal 4: link box identical while "wet" is dealt
+  [PASS] wet: frozen t=120ms — letters are soft, mid-dry (5/6 blurred) — 0.772465,1.25736,1.90968,2.4,2.4,2.4
+  [PASS] wet: the word dries crisp
+  [PASS] deal 4: leave folds "wet" — data-move="null"
+  [PASS] deal 4: "wet" leaves nothing — frame byte-compares to rest
+  [PASS] deal 5: light deals "inhale" — got "inhale"
+  [PASS] deal 5: link box identical while "inhale" is dealt
+  [PASS] inhale: the word converged on its center — 2.4,1.4,0.5,-0.5,-1.4,-2.4
+  [PASS] inhale: the convergence is symmetric
+  [PASS] deal 5: leave folds "inhale" — data-move="null"
+  [PASS] deal 5: "inhale" leaves nothing — frame byte-compares to rest
+  [PASS] deal 6: light deals "reg" — got "reg"
+  [PASS] deal 6: link box identical while "reg" is dealt
+  [PASS] reg: frozen mid-hold — the base plate is out +1.4px — 1.40
+  [PASS] reg: frozen mid-hold — the ghost plate is at 0.4 ink — 0.40
+  [PASS] deal 6: leave folds "reg" — data-move="null"
+  [PASS] deal 6: "reg" leaves nothing — frame byte-compares to rest
+  [PASS] deal 7: light deals "stamp" — got "stamp"
+  [PASS] deal 7: link box identical while "stamp" is dealt
+  [PASS] stamp: frozen at the press — the word is dipped and squashed — ty 1.12, a 0.986
+  [PASS] stamp: frozen at the press — the impression carries ink — 0.32
+  [PASS] deal 7: leave folds "stamp" — data-move="null"
+  [PASS] deal 7: "stamp" leaves nothing — frame byte-compares to rest
+  [PASS] deal 8: light deals "ring" — got "ring"
+  [PASS] deal 8: link box identical while "ring" is dealt
+  [PASS] ring: the circle is fully drawn while dealt — dashoffset 0
+  [PASS] deal 8: leave folds "ring" — data-move="null"
+  [PASS] deal 8: "ring" leaves nothing — frame byte-compares to rest
+  [PASS] deal 9: light deals "flip" — got "flip"
+  [PASS] deal 9: link box identical while "flip" is dealt
+  [PASS] flip: frozen mid-turn — the stage is in a 3D rotate
+  [PASS] flip: frozen mid-turn — the cosine is negative, the mirrored back shows — -0.88
+  [PASS] flip: the link box holds while the word projects
+  [PASS] deal 9: leave folds "flip" — data-move="null"
+  [PASS] deal 9: "flip" leaves nothing — frame byte-compares to rest
+  [PASS] deal 10: light deals "arm" — got "arm"
+  [PASS] deal 10: link box identical while "arm" is dealt
+  [PASS] arm: the word sits half a pixel up — -0.50
+  [PASS] deal 10: leave folds "arm" — data-move="null"
+  [PASS] deal 10: "arm" leaves nothing — frame byte-compares to rest
+  [PASS] deal 11: light deals "mag" — got "mag"
+  [PASS] deal 11: link box identical while "mag" is dealt
+  [PASS] mag: letters lean toward the pointer (6/6 pulled)
+  [PASS] mag: the lean is clamped — 2.2,2.2,2.2,2.2,2.2,1.3
+  [PASS] mag: link box identical while bent
+  [PASS] mag: letters spring home on leave
+  [PASS] deal 11: leave folds "mag" — data-move="null"
+  [PASS] deal 11: "mag" leaves nothing — frame byte-compares to rest
+  [PASS] deal 12: light deals "typo" — got "typo"
+  [PASS] deal 12: link box identical while "typo" is dealt
+  [PASS] typo: the ghost reads a wrong key in provisional ink ('b')
+  [PASS] typo: the real d is transparent while the ghost shows — rgba(23, 23, 23, 0.004)
+  [PASS] typo: the word shakes as the fix lands
+  [PASS] typo: the ghost folds back to d
+  [PASS] typo: the shake dies with the fix
+  [PASS] deal 12: leave folds "typo" — data-move="null"
+  [PASS] deal 12: "typo" leaves nothing — frame byte-compares to rest
+  [PASS] deal 13: light deals "wire" — got "wire"
+  [PASS] deal 13: link box identical while "wire" is dealt
+  [PASS] wire: frozen t=350ms — the fill has drained — word opacity 0
+  [PASS] wire: frozen t=350ms — the outline plate shows — wire opacity 1
+  [PASS] deal 13: leave folds "wire" — data-move="null"
+  [PASS] deal 13: "wire" leaves nothing — frame byte-compares to rest
+  [PASS] deal 14: light deals "wet" — got "wet"
+  [PASS] deal 14: link box identical while "wet" is dealt
+  [PASS] wet: frozen t=120ms — letters are soft, mid-dry (5/6 blurred) — 0.772465,1.25736,1.90968,2.4,2.4,2.4
+  [PASS] wet: the word dries crisp
+  [PASS] deal 14: leave folds "wet" — data-move="null"
+  [PASS] deal 14: "wet" leaves nothing — frame byte-compares to rest
+  [PASS] deal 15: light deals "inhale" — got "inhale"
+  [PASS] deal 15: link box identical while "inhale" is dealt
+  [PASS] inhale: the word converged on its center — 2.4,1.4,0.5,-0.5,-1.4,-2.4
+  [PASS] inhale: the convergence is symmetric
+  [PASS] deal 15: leave folds "inhale" — data-move="null"
+  [PASS] deal 15: "inhale" leaves nothing — frame byte-compares to rest
+  [PASS] deal 16: light deals "reg" — got "reg"
+  [PASS] deal 16: link box identical while "reg" is dealt
+  [PASS] reg: frozen mid-hold — the base plate is out +1.4px — 1.40
+  [PASS] reg: frozen mid-hold — the ghost plate is at 0.4 ink — 0.40
+  [PASS] deal 16: leave folds "reg" — data-move="null"
+  [PASS] deal 16: "reg" leaves nothing — frame byte-compares to rest
+  [PASS] deal 17: light deals "stamp" — got "stamp"
+  [PASS] deal 17: link box identical while "stamp" is dealt
+  [PASS] stamp: frozen at the press — the word is dipped and squashed — ty 1.12, a 0.986
+  [PASS] stamp: frozen at the press — the impression carries ink — 0.32
+  [PASS] deal 17: leave folds "stamp" — data-move="null"
+  [PASS] deal 17: "stamp" leaves nothing — frame byte-compares to rest
+  [PASS] deal 18: light deals "ring" — got "ring"
+  [PASS] deal 18: link box identical while "ring" is dealt
+  [PASS] ring: the circle is fully drawn while dealt — dashoffset 0
+  [PASS] deal 18: leave folds "ring" — data-move="null"
+  [PASS] deal 18: "ring" leaves nothing — frame byte-compares to rest
+  [PASS] deal 19: light deals "flip" — got "flip"
+  [PASS] deal 19: link box identical while "flip" is dealt
+  [PASS] flip: frozen mid-turn — the stage is in a 3D rotate
+  [PASS] flip: frozen mid-turn — the cosine is negative, the mirrored back shows — -0.88
+  [PASS] flip: the link box holds while the word projects
+  [PASS] deal 19: leave folds "flip" — data-move="null"
+  [PASS] deal 19: "flip" leaves nothing — frame byte-compares to rest
+  [PASS] deal 20: light deals "arm" — got "arm"
+  [PASS] deal 20: link box identical while "arm" is dealt
+  [PASS] arm: the word sits half a pixel up — -0.50
+  [PASS] deal 20: leave folds "arm" — data-move="null"
+  [PASS] deal 20: "arm" leaves nothing — frame byte-compares to rest
+  [PASS] light: brand menu opens on click
+  [PASS] light: the band holds while the menu is open — inset(0px 0% 0px 0px round 2px)
+  [PASS] light: the band persists with the pointer gone — state, not hover echo
+  [PASS] light: the dealt card folded even while the state holds
+  [PASS] light: re-entering deals the next card — "typo"
+  [PASS] light: the card plays under the held band, never over it
+  [PASS] light: closing the menu deselects
+  [PASS] light: Tab reaches the brand button
+  [PASS] light: focus-visible holds the band — inset(0px 0% 0px 0px round 2px)
+  [PASS] light: keyboard focus deals no card
+  [PASS] light: blur releases the band
+
+== dark / desktop 1280x800 ==
+  [PASS] dark: band fully clipped at rest — inset(0px 100% 0px 0px round 2px)
+  [PASS] dark: the brand-caret element is gone from the anatomy
+  [PASS] dark: wire, register and impression plates are dark at rest — 0/0/0
+  [PASS] dark: the editor's circle is undrawn at rest — dashoffset 100
+  [PASS] dark: letters carry no inline transforms and no card is dealt
+  [PASS] dark: band pixel-coincident with the split-letter base word — sel=55,15,44x20 word=55,15,44x20
+  [PASS] dark: band paints in the word's own ink — rgb(237, 237, 237) vs rgb(237, 237, 237)
+  [PASS] dark: band glyphs paint in the navbar surface — rgb(10, 10, 10) vs rgb(10, 10, 10)
+  [PASS] dark: accessible name is exactly "Padify" (letters, ghost and copies never leak)
+  [PASS] dark deal 1: "mag" — got "mag"
+  [PASS] dark deal 2: "typo" — got "typo"
+  [PASS] dark deal 3: "wire" — got "wire"
+  [PASS] dark: wire card drains to the outline plate — 0/1
+  [PASS] dark deal 4: "wet" — got "wet"
+  [PASS] dark deal 5: "inhale" — got "inhale"
+
+== light / mobile 375x667 ==
+  [PASS] mobile: brand menu opens on tap
+  [PASS] mobile: tap holds the band — inset(0px 0% 0px 0px round 2px)
+  [PASS] mobile: outside tap deselects
+
+== light / desktop / prefers-reduced-motion: reduce ==
+  [PASS] reduced motion: no card is dealt on hover — data-move="null"
+  [PASS] reduced motion: nothing in the stage animates — [{"inStage":false,"prop":"opacity","state":"running"}]
+  [PASS] reduced motion: the overlay machinery displays none — none/none/none/none
+  [PASS] reduced motion: plain opacity dim on hover — 1 -> 0.8
+  [PASS] reduced motion: the band applies instantly as the state
+  [PASS] reduced motion: leave deselects instantly
+
+ALL CHECKS PASSED
