@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
  * hover-ripple-test.mjs — proves the wordmark hover choreography end to end.
+ * (The move under test is the letterpress deal: glyphs roll up out of
+ *  their slots, dealt left to right, while the hairline draws beneath.)
  * (Repo tooling lives in scripts/; evidence lands in qa/evidence/.)
  *
  * Serves dist/ on :4177 and drives the brand logo through the full move:
@@ -8,16 +10,16 @@
  * menu open, in light + dark, plus a mobile pass and a reduced-motion gate.
  *
  * Asserts:
- *   1. letters actually animate (computed transform leaves identity mid-wave)
- *   2. the wave is staggered left-to-right (P moves while F still rests)
- *   3. every letter returns to rest after the pop — no scattered pose
+ *   1. glyphs actually animate (computed transform leaves identity mid-wave)
+ *   2. the deal is staggered left-to-right (P moves while Y still rests)
+ *   3. every glyph returns to rest after the roll — no scattered pose
  *   4. the hairline draws on hover, stays while the brand menu is open,
  *      retracts on leave, and is exactly 1px
  *   5. the link's box never shifts (transform-only motion, no layout jump)
  *   6. prefers-reduced-motion: reduce keeps the ripple inert (hairline only)
  *
- * Frames land in qa/evidence/ (lh19-*); the assertion log is printed and
- * saved next to them (lh19-hover-assertions.txt).
+ * Frames land in qa/evidence/ (lp19-*); the assertion log is printed and
+ * saved next to them (lp19-hover-assertions.txt).
  */
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -61,13 +63,13 @@ const expect = (cond, label, detail = '') => {
   say(`  [${mark}] ${label}${detail ? ` — ${detail}` : ''}`);
 };
 
-const letterLocators = (page) => page.locator('#brandMenuButton span');
+const letterLocators = (page) => page.locator('#brandMenuButton .brand-rider');
 // All six letters read in ONE evaluate round-trip — sequential reads drift
 // up to ~200ms apart on a busy runner, which corrupts any snapshot of a
 // 520ms-per-letter wave and made the stagger check flake.
 const snapshotXf = (page) =>
   page.locator('#brandMenuButton').evaluate((el) =>
-    Array.from(el.querySelectorAll('span')).map(
+    Array.from(el.querySelectorAll('.brand-rider')).map(
       (s) => getComputedStyle(s).transform,
     ),
   );
@@ -101,7 +103,7 @@ const runSequence = async (page, scheme, prefix) => {
   const restColor = await letterColor(page, 0);
   const restHairline = await hairlineXf(page);
   await page.screenshot({ path: join(evidenceDir, `${prefix}-rest.png`) });
-  expect(isResting(restXf), `${scheme}: letter P rests at identity`, restXf);
+  expect(isResting(restXf), `${scheme}: glyph P rests at identity`, restXf);
   expect(
     restHairline === 'matrix(0, 0, 0, 1, 0, 0)' || restHairline === 'none',
     `${scheme}: hairline undrawn at rest`,
@@ -134,10 +136,10 @@ const runSequence = async (page, scheme, prefix) => {
       onsetShot = true;
     }
   }
-  expect(firstP !== -1, `${scheme}: the ripple starts on hover`);
+  expect(firstP !== -1, `${scheme}: the deal starts on hover`);
   expect(
     firstY === -1 || firstP <= firstY,
-    `${scheme}: wave staggered left-to-right — Y never moves before P`,
+    `${scheme}: deal staggered left-to-right — Y never rolls before P`,
     `P@${firstP} Y@${firstY}`,
   );
 
@@ -146,12 +148,60 @@ const runSequence = async (page, scheme, prefix) => {
   await page.screenshot({ path: join(evidenceDir, `${prefix}-wave-mid.png`) });
   expect(
     midXf.some(movedOffBaseline),
-    `${scheme}: wave mid — the ripple is travelling`,
+    `${scheme}: deal mid — the roll is travelling`,
     `${midXf.filter(movedOffBaseline).length}/6 moved`,
   );
 
   await page.waitForTimeout(380); // past the trailing letter's landing
   await page.screenshot({ path: join(evidenceDir, `${prefix}-wave-late.png`) });
+
+  // --- frozen pose captures: pause the roll at fixed progress ----------
+  // Realtime screenshots race the 235ms exit phase and keep missing it;
+  // the Web Animations API freezes the exact poses instead — this is
+  // the visual evidence that the roll reads as a letter wheel. Only the
+  // wordmark's own animations are frozen (a CSSTransition on the ::after
+  // hairline included); the rest of the page never pauses. Scoping by
+  // effect target keeps unrelated page animations untouched.
+  const poseAt = async (t, name) => {
+    await page.evaluate((ms) => {
+      document
+        .getAnimations()
+        .filter(
+          (a) =>
+            a.effect &&
+            a.effect.target &&
+            a.effect.target.closest &&
+            a.effect.target.closest('.tilt-css'),
+        )
+        .forEach((a) => {
+          a.pause();
+          a.currentTime = ms;
+        });
+    }, t);
+    await page.screenshot({ path: join(evidenceDir, `${prefix}-${name}.png`) });
+  };
+  if (scheme === 'light') {
+    // 560ms roll, 235ms exit: 140 = P mid-exit; 280 = P entering from
+    // below while d exits; 420 = P two-thirds risen, y mid-exit.
+    await poseAt(140, 'roll-freeze-140');
+    await poseAt(280, 'roll-freeze-280');
+    await poseAt(420, 'roll-freeze-420');
+    // Land everything (fill: both holds the 100% frame = identity) so
+    // the settled checks below run against the true resting state.
+    await page.evaluate(() =>
+      document
+        .getAnimations()
+        .filter(
+          (a) =>
+            a.effect &&
+            a.effect.target &&
+            a.effect.target.closest &&
+            a.effect.target.closest('.tilt-css'),
+        )
+        .forEach((a) => a.finish()),
+    );
+    await page.waitForTimeout(100);
+  }
 
   await page.waitForTimeout(420); // fully settled
   const settledXf = await snapshotXf(page);
@@ -160,11 +210,11 @@ const runSequence = async (page, scheme, prefix) => {
   await page.screenshot({ path: join(evidenceDir, `${prefix}-settled.png`) });
   expect(
     settledXf.every(isResting),
-    `${scheme}: every letter settles back to rest — no scattered pose`,
+    `${scheme}: every glyph settles back to rest — no scattered pose`,
   );
   expect(
     settledColor === restColor,
-    `${scheme}: ink returns after the muted dip`,
+    `${scheme}: ink unchanged — the roll moves glyphs, not color`,
     `${restColor} -> ${settledColor}`,
   );
   expect(
@@ -220,7 +270,7 @@ for (const scheme of ['light', 'dark']) {
     deviceScaleFactor: 1,
   });
   const page = await context.newPage();
-  await runSequence(page, scheme, `lh19-${scheme}`);
+  await runSequence(page, scheme, `lp19-${scheme}`);
   await context.close();
 }
 
@@ -236,17 +286,17 @@ say('\n== light / mobile 375x667 ==');
   const page = await context.newPage();
   await page.goto(URL, { waitUntil: 'networkidle' });
   await page.waitForTimeout(600);
-  await page.screenshot({ path: join(evidenceDir, 'lh19-mobile-rest.png') });
+  await page.screenshot({ path: join(evidenceDir, 'lp19-mobile-rest.png') });
   const brand = page.locator('#brandMenuButton');
   const box = await brand.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.waitForTimeout(1100);
-  await page.screenshot({ path: join(evidenceDir, 'lh19-mobile-hover-settled.png') });
+  await page.screenshot({ path: join(evidenceDir, 'lp19-mobile-hover-settled.png') });
   const hairline = await hairlineXf(page);
   expect(hairline.includes('matrix(1'), 'mobile: hairline draws on hover', hairline);
   await brand.click();
   await page.waitForTimeout(450);
-  await page.screenshot({ path: join(evidenceDir, 'lh19-mobile-menu-open.png') });
+  await page.screenshot({ path: join(evidenceDir, 'lp19-mobile-menu-open.png') });
   expect(
     (await brand.getAttribute('aria-expanded')) === 'true',
     'mobile: brand menu opens on tap',
@@ -276,10 +326,10 @@ say('\n== light / desktop / prefers-reduced-motion: reduce ==');
   // affordance, not decoration) — sample it after the transition lands.
   await page.waitForTimeout(450);
   const hoverHairline = await hairlineXf(page);
-  await page.screenshot({ path: join(evidenceDir, 'lh19-reduced-motion-hover.png') });
+  await page.screenshot({ path: join(evidenceDir, 'lp19-reduced-motion-hover.png') });
   expect(
     hoverXf === restXf,
-    'reduced motion: letters never animate',
+    'reduced motion: glyphs never animate',
     `${restXf} -> ${hoverXf}`,
   );
   expect(
@@ -294,5 +344,5 @@ await browser.close();
 server.kill();
 
 say(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`);
-writeFileSync(join(evidenceDir, 'lh19-hover-assertions.txt'), log.join('\n') + '\n');
+writeFileSync(join(evidenceDir, 'lp19-hover-assertions.txt'), log.join('\n') + '\n');
 process.exit(failures === 0 ? 0 : 1);

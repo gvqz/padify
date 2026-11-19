@@ -1,0 +1,40 @@
+
+== light / desktop 1280x800 ==
+  [PASS] light: glyph P rests at identity — none
+  [PASS] light: hairline undrawn at rest — matrix(0, 0, 0, 1, 0, 0)
+  [PASS] light: the deal starts on hover
+  [PASS] light: deal staggered left-to-right — Y never rolls before P — P@0 Y@2
+  [PASS] light: deal mid — the roll is travelling — 3/6 moved
+  [PASS] light: every glyph settles back to rest — no scattered pose
+  [PASS] light: ink unchanged — the roll moves glyphs, not color — rgb(23, 23, 23) -> rgb(23, 23, 23)
+  [PASS] light: hairline drawn while hovering — matrix(1, 0, 0, 1, 0, 0)
+  [PASS] light: hairline is exactly 1px
+  [PASS] light: link box identical rest vs hover (no layout shift) — 40,0,74,50 vs 40,0,74,50
+  [PASS] light: hairline retracted after leave — matrix(0, 0, 0, 1, 0, 0)
+  [PASS] light: brand menu opens on click
+  [PASS] light: hairline stays drawn while the menu is open — matrix(1, 0, 0, 1, 0, 0)
+
+== dark / desktop 1280x800 ==
+  [PASS] dark: glyph P rests at identity — none
+  [PASS] dark: hairline undrawn at rest — matrix(0, 0, 0, 1, 0, 0)
+  [PASS] dark: the deal starts on hover
+  [PASS] dark: deal staggered left-to-right — Y never rolls before P — P@0 Y@2
+  [PASS] dark: deal mid — the roll is travelling — 3/6 moved
+  [PASS] dark: every glyph settles back to rest — no scattered pose
+  [PASS] dark: ink unchanged — the roll moves glyphs, not color — rgb(237, 237, 237) -> rgb(237, 237, 237)
+  [PASS] dark: hairline drawn while hovering — matrix(1, 0, 0, 1, 0, 0)
+  [PASS] dark: hairline is exactly 1px
+  [PASS] dark: link box identical rest vs hover (no layout shift) — 40,0,74,50 vs 40,0,74,50
+  [PASS] dark: hairline retracted after leave — matrix(0, 0, 0, 1, 0, 0)
+  [PASS] dark: brand menu opens on click
+  [PASS] dark: hairline stays drawn while the menu is open — matrix(1, 0, 0, 1, 0, 0)
+
+== light / mobile 375x667 ==
+  [PASS] mobile: hairline draws on hover — matrix(1, 0, 0, 1, 0, 0)
+  [PASS] mobile: brand menu opens on tap
+
+== light / desktop / prefers-reduced-motion: reduce ==
+  [PASS] reduced motion: glyphs never animate — none -> none
+  [PASS] reduced motion: hairline still draws (the state affordance stays) — matrix(1, 0, 0, 1, 0, 0)
+
+ALL CHECKS PASSED

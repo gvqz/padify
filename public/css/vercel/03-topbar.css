@@ -307,27 +307,44 @@
   display: block;
 }
 
-/* [phase-1 fold] Wordmark hover — "the ink ripple"
+/* [phase-1 fold] Wordmark hover — "the letterpress deal"
    Folded from public/css/fonts.css (Phase 1 consolidation — the file
    itself is gone; see docs/ARCHITECTURE-REVIEW.md and
    scripts/css-fold-plan.json for the verified mapping).
 
-   The folded block scattered the letters at six fixed tilts with no
-   transition — on hover the word snapped into random angles and snapped
-   back out, which reads as broken rather than playful. The hover is now
-   one choreographed move: each letter pops once on the shared spring
-   (--vz-spring), left to right, dipping to muted ink as it flies, while
-   a 1px hairline draws beneath the word — the top bar's own "solid,
-   crisp" language. Every frame ends back at rest, so the word never
-   sits in a scattered pose. All motion is gated behind
-   prefers-reduced-motion: no-preference; those users get the navbar's
-   plain opacity cue instead. */
+   History: the folded block scattered the letters at fixed tilts with
+   no transition (broken, not playful); the first rework made them pop
+   on the shared spring. This version commits to the writing-app idea —
+   on hover the word RE-SETS ITSELF like a mechanical letter wheel:
+   each glyph rolls up out of its slot and the next copy rises into
+   place, dealt left to right, while the 1px hairline draws beneath —
+   the top bar's own "solid, crisp" language.
+
+   Anatomy: .brand-slot is a fixed 20px window (the letter wheel's
+   clip — overflow: hidden is what makes the roll read as a slot;
+   a transform on the clipped element itself would carry the window
+   along and clip nothing, which is why the glyph rides in a child).
+   .brand-rider is the glyph that slides inside it. System-font
+   ascent+descent at 15px measures ≈19px inside the 20px line box, so
+   the slot shaves nothing at rest. vertical-align: top pins the slots
+   because an inline-block with hidden overflow aligns by its bottom
+   edge — without it the wordmark would jump on hover.
+
+   Every frame ends back at rest. All motion is gated behind
+   prefers-reduced-motion: no-preference; those users keep the
+   hairline state affordance and the navbar's plain opacity cue. */
 .tilt-css {
   position: relative;
 }
 
-.tilt-css span {
+.tilt-css .brand-slot {
   display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+}
+
+.tilt-css .brand-rider {
+  display: block;
 }
 
 /* The hairline — 1px ink, scaleX from the left edge. Stays drawn while
@@ -356,51 +373,59 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .tilt-css:hover span,
-  .tilt-css:focus-visible span {
-    animation: brand-letter-pop 520ms var(--vz-spring) both;
+  .tilt-css:hover .brand-rider,
+  .tilt-css:focus-visible .brand-rider {
+    animation: brand-letter-roll 560ms both;
   }
 
-  .tilt-css:hover span:nth-child(2),
-  .tilt-css:focus-visible span:nth-child(2) {
+  .tilt-css:hover .brand-slot:nth-child(2) .brand-rider,
+  .tilt-css:focus-visible .brand-slot:nth-child(2) .brand-rider {
     animation-delay: 45ms;
   }
 
-  .tilt-css:hover span:nth-child(3),
-  .tilt-css:focus-visible span:nth-child(3) {
+  .tilt-css:hover .brand-slot:nth-child(3) .brand-rider,
+  .tilt-css:focus-visible .brand-slot:nth-child(3) .brand-rider {
     animation-delay: 90ms;
   }
 
-  .tilt-css:hover span:nth-child(4),
-  .tilt-css:focus-visible span:nth-child(4) {
+  .tilt-css:hover .brand-slot:nth-child(4) .brand-rider,
+  .tilt-css:focus-visible .brand-slot:nth-child(4) .brand-rider {
     animation-delay: 135ms;
   }
 
-  .tilt-css:hover span:nth-child(5),
-  .tilt-css:focus-visible span:nth-child(5) {
+  .tilt-css:hover .brand-slot:nth-child(5) .brand-rider,
+  .tilt-css:focus-visible .brand-slot:nth-child(5) .brand-rider {
     animation-delay: 180ms;
   }
 
-  .tilt-css:hover span:nth-child(6),
-  .tilt-css:focus-visible span:nth-child(6) {
+  .tilt-css:hover .brand-slot:nth-child(6) .brand-rider,
+  .tilt-css:focus-visible .brand-slot:nth-child(6) .brand-rider {
     animation-delay: 225ms;
   }
 }
 
-@keyframes brand-letter-pop {
+@keyframes brand-letter-roll {
   0% {
     transform: translateY(0);
-    color: var(--vz-fg);
+    /* accelerate out through the top of the slot */
+    animation-timing-function: cubic-bezier(0.55, 0, 0.85, 0.4);
   }
 
-  38% {
-    transform: translateY(-0.3em);
-    color: var(--vz-fg-muted);
+  42% {
+    transform: translateY(-115%);
+  }
+
+  /* the "next copy" enters from below while the window is empty — the
+     jump between 42% and 42.001% is invisible because both poses are
+     fully clipped (115% of 20px clears the ≈19px glyph either way) */
+  42.001% {
+    transform: translateY(115%);
+    /* rise into place with the shared spring's little settle */
+    animation-timing-function: var(--vz-spring);
   }
 
   100% {
     transform: translateY(0);
-    color: var(--vz-fg);
   }
 }
 /* vercel design system — part 3/17: Top bar — solid, crisp, 1px hairline
