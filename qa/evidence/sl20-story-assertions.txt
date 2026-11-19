@@ -1,0 +1,73 @@
+
+== light / desktop 1280x800 ==
+  [PASS] light: band fully clipped at rest — inset(0px 100% 0px 0px round 2px)
+  [PASS] light: caret dark at rest
+  [PASS] light: ::after is gone — no underline layer of any kind — none
+  [PASS] light: ::before is gone — no blink caret layer — none
+  [PASS] light: duplicate pixel-coincident with the base word — sel=55,15,44x20 stage=55,15,44x20
+  [PASS] light: band paints in the word's own ink — rgb(23, 23, 23) vs rgb(23, 23, 23)
+  [PASS] light: band glyphs paint in the navbar surface — rgb(255, 255, 255) vs rgb(255, 255, 255)
+  [PASS] light: accessible name is exactly "Padify" (decorations never leak)
+  [PASS] light: band lands fully open on hover — inset(0px 0% 0px 0px round 2px)
+  [PASS] light: link box identical while selected (navbar never moves) — 40,0,74x50 vs 40,0,74x50
+  [PASS] light: base glyphs never move (clip-path, not layout)
+  [PASS] light: caret self-conceals after the sweep lands
+  [PASS] light: frozen t=70ms — band mid-flight — rightInset 47.3656%
+  [PASS] light: frozen t=70ms — caret visible mid-drag — opacity 1
+  [PASS] light: frozen t=70ms — caret rides the clip edge (lockstep) — lead 2.1px, err 0.0px
+  [PASS] light: frozen t=220ms — band grew strictly left to right — 47.3656% -> 5.19739%
+  [PASS] light: frozen t=220ms — caret still riding the edge — lead 3.8px, err 0.0px
+  [PASS] light: band fully retracted after leave — inset(0px 100% 0px 0px round 2px)
+  [PASS] light: caret dark after leave
+  [PASS] light: unhover frame byte-compares to the rest frame — the word carries nothing after
+  [PASS] light: mid-sweep leave retracts cleanly — inset(0px 100% 0px 0px round 2px)
+  [PASS] light: caret dark after interrupt
+  [PASS] light: brand menu opens on click
+  [PASS] light: name stays selected while the menu is open
+  [PASS] light: no caret dance on the open state
+  [PASS] light: band persists with the pointer gone — state, not hover echo — inset(0px 0% 0px 0px round 2px)
+  [PASS] light: closing the menu deselects
+  [PASS] light: Tab reaches the brand button
+  [PASS] light: focus-visible selects the name — inset(0px 0% 0px 0px round 2px)
+  [PASS] light: keyboard selection is caret-free
+  [PASS] light: blur deselects
+
+== dark / desktop 1280x800 ==
+  [PASS] dark: band fully clipped at rest — inset(0px 100% 0px 0px round 2px)
+  [PASS] dark: caret dark at rest
+  [PASS] dark: ::after is gone — no underline layer of any kind — none
+  [PASS] dark: ::before is gone — no blink caret layer — none
+  [PASS] dark: duplicate pixel-coincident with the base word — sel=55,15,44x20 stage=55,15,44x20
+  [PASS] dark: band paints in the word's own ink — rgb(237, 237, 237) vs rgb(237, 237, 237)
+  [PASS] dark: band glyphs paint in the navbar surface — rgb(10, 10, 10) vs rgb(10, 10, 10)
+  [PASS] dark: accessible name is exactly "Padify" (decorations never leak)
+  [PASS] dark: band lands fully open on hover — inset(0px 0% 0px 0px round 2px)
+  [PASS] dark: link box identical while selected (navbar never moves) — 40,0,74x50 vs 40,0,74x50
+  [PASS] dark: base glyphs never move (clip-path, not layout)
+  [PASS] dark: caret self-conceals after the sweep lands
+  [PASS] dark: band fully retracted after leave — inset(0px 100% 0px 0px round 2px)
+  [PASS] dark: caret dark after leave
+  [PASS] dark: unhover frame byte-compares to the rest frame — the word carries nothing after
+  [PASS] dark: mid-sweep leave retracts cleanly — inset(0px 100% 0px 0px round 2px)
+  [PASS] dark: caret dark after interrupt
+  [PASS] dark: brand menu opens on click
+  [PASS] dark: name stays selected while the menu is open
+  [PASS] dark: no caret dance on the open state
+  [PASS] dark: band persists with the pointer gone — state, not hover echo — inset(0px 0% 0px 0px round 2px)
+  [PASS] dark: closing the menu deselects
+
+== light / mobile 375x667 ==
+  [PASS] mobile: brand menu opens on tap
+  [PASS] mobile: tap selects the name — inset(0px 0% 0px 0px round 2px)
+  [PASS] mobile: no cursor dance on tap
+  [PASS] mobile: outside tap deselects
+
+== light / desktop / prefers-reduced-motion: reduce ==
+  [PASS] reduced motion: band applies instantly (no sweep ramp) — at 120ms: inset(0px 0% 0px 0px round 2px)
+  [PASS] reduced motion: nothing in the stage animates (no sweep machinery) — [{"self":true,"inStage":false,"prop":"opacity"}]
+  [PASS] reduced motion: the only brand animation is the hover dim itself — [{"self":true,"inStage":false,"prop":"opacity"}]
+  [PASS] reduced motion: caret removed entirely
+  [PASS] reduced motion: plain opacity dim on hover — 1 -> 0.8
+  [PASS] reduced motion: leave deselects instantly
+
+ALL CHECKS PASSED
