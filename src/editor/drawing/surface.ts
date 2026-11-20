@@ -314,6 +314,27 @@ function mountLiveCanvas(
     });
 }
 
+/**
+ * Warms the vendor island while the app idles — the first canvas open
+ * stops paying the chunk download on the spot. The mount path (below)
+ * keeps its loading card; a warmed chunk just makes the card a cameo
+ * instead of a wait. One-shot by nature: module evaluation caches the
+ * island for the session, and the service worker keeps the chunk
+ * runtime-cached beyond it.
+ */
+export function warmCanvasIsland(): void {
+  const warm = (): void => {
+    void import('./canvas').catch(() => {
+      /* offline or a corrupted chunk — the mount path owns the honest card */
+    });
+  };
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(() => warm(), { timeout: 4_000 });
+  } else {
+    window.setTimeout(warm, 2_500);
+  }
+}
+
 /** The load/error/read-only card — the unsupported-note look, reused. */
 function buildCard(title: string, body: string): HTMLElement {
   const card = document.createElement('div');

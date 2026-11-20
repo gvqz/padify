@@ -59,7 +59,7 @@ import './features/tasks/note/surface';
 // the type-keyed layer. The canvas phase: display() mounts the
 // Excalidraw island behind a lazy chunk (editor/drawing/canvas.ts) and
 // this import also brings the image-export seam for the download menu.
-import { exportActiveDrawingImage } from './editor/drawing/surface';
+import { exportActiveDrawingImage, warmCanvasIsland } from './editor/drawing/surface';
 import { drawingSceneHasContent } from './editor/drawing/scene';
 import {
   markdownLastWorkingMode,
@@ -400,6 +400,11 @@ export async function initApp(): Promise<void> {
 
   // ---- the offline chip (see offline-indicator.ts) ------------------
   initOfflineIndicator();
+
+  // ---- the drawing island warms while the app idles (see
+  // editor/drawing/surface.ts) — the first canvas open stops paying the
+  // chunk download on the spot.
+  warmCanvasIsland();
 
   // ---- the delete receipt on the History button (see trash-flash.ts) ----
   initTrashFlash(tabManager);
