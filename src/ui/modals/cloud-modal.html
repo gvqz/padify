@@ -96,6 +96,30 @@
         </div>
       </div>
 
+      <!-- Offline honesty: the panel says what is true instead of pushing
+           a sign-in that cannot leave the device. The wiring lives in
+           cloud/ui.ts; the status-bar chip is offline-indicator.ts. -->
+      <div class="cloud-offline" id="cloudOfflineNotice" role="status" hidden>
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5" />
+          <path d="m3 3 18 18" />
+        </svg>
+        <span>
+          You're offline — your notes are safe on this device and will sync when you're back.
+          Sign-in is paused until then.
+        </span>
+      </div>
+
       <form id="cloudAuthForm" class="cloud-auth" novalidate>
         <div class="cloud-field">
           <label class="cloud-label" for="cloudAuthEmail">Email</label>

@@ -228,6 +228,38 @@ body .bottom-line .word-count-container .wc-seg-wpm {
 }
 
 
+/* The offline chip — the bottom line's honest flag. The same quiet
+   capsule voice as the pill beside it: hairline border, muted ink, a
+   cloud-off glyph. It appears when the network is gone and leaves when
+   it is back (offline-indicator.ts owns the hidden flag; the entrance
+   rides the same settle the pill segments use). */
+body .bottom-line .offline-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border: 1px solid var(--vz-border);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--vz-fg-muted);
+  flex: 0 0 auto;
+  animation: wc-seg-in 180ms var(--vz-ease);
+}
+
+body .bottom-line .offline-chip svg {
+  display: block;
+  opacity: 0.72;
+}
+
+/* The hidden flag wins over the capsule's display: the UA's [hidden]
+   rule is a plain display:none that ANY author display value beats, so
+   the guard is explicit — a chip that ignored its own flag would sit
+   in the status bar forever. */
+body .bottom-line .offline-chip[hidden] {
+  display: none;
+}
+
 /* Empty note — "0 words" alone, stood down. A double zero reads as
    noise; the dimming here, the segment hiding in the renderer (which
    keeps "0 characters" alive in characters-only mode). */

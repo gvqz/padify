@@ -1777,6 +1777,36 @@
           </svg>
           <span class="save-state-text">Saved</span>
         </div>
+        <!-- The offline chip — the status bar's honest little flag. Hidden
+             while the network is up; navigator.onLine and its events own
+             it (see offline-indicator.ts). It sits beside the save state
+             because they answer sibling questions: is it written down,
+             can it leave. -->
+        <span
+          id="offlineChip"
+          class="offline-chip"
+          role="status"
+          hidden
+          title="You're offline — changes are saved on this device and will sync when you're back."
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path
+              d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"
+            />
+            <path d="m3 3 18 18" />
+          </svg>
+          <span>Offline</span>
+        </span>
         <div class="timer-pill" style="display: none">
           <div class="timer-display">00:00</div>
           <a href="#" id="stopTimer" title="Stop the timer">

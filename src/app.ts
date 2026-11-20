@@ -41,6 +41,7 @@ import { initPipWindow } from './pip-window';
 import { openModal, closeAllModals } from './ui/behavior/modal';
 import { registerLayer } from './ui/behavior/layers';
 import { initSaveIndicator } from './save-indicator';
+import { initOfflineIndicator } from './offline-indicator';
 import { initTrashFlash } from './trash-flash';
 import { initTabRailDrawer } from './tab-rail-drawer';
 import { initRichToolbar } from './editor/rich-toolbar';
@@ -396,6 +397,9 @@ export async function initApp(): Promise<void> {
 
   // ---- save-state indicator (see save-indicator.ts) -----------------
   initSaveIndicator(notepad, tabManager);
+
+  // ---- the offline chip (see offline-indicator.ts) ------------------
+  initOfflineIndicator();
 
   // ---- the delete receipt on the History button (see trash-flash.ts) ----
   initTrashFlash(tabManager);

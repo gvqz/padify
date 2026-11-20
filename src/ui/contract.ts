@@ -74,6 +74,7 @@ export const MARKUP_CONTRACT: MarkupContractGroup[] = [
       'textareaContainer',
       'note',
       'saveState',
+      'offlineChip',
       'wordCount',
       'taskRail',
       'taskRailBackdrop',

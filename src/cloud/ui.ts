@@ -56,7 +56,9 @@ export function initCloudUI(): void {
         return;
       case 'signed-out':
         dot = DotState.OFF;
-        title = 'Cloud sync — sign in to back up your notes';
+        title = !navigator.onLine
+          ? 'Cloud sync — offline; your notes are saved on this device'
+          : 'Cloud sync — sign in to back up your notes';
         break;
       case 'signed-in':
         switch (status.sync) {
@@ -119,6 +121,7 @@ export function initCloudUI(): void {
   const $password = $('#cloudAuthPassword');
   const $pane = $('#cloudAuthPane');
   const $form = $('#cloudAuthForm');
+  const $offline = $('#cloudOfflineNotice');
 
   const setMode = (next: 'sign-in' | 'sign-up'): void => {
     mode = next;
@@ -138,6 +141,15 @@ export function initCloudUI(): void {
 
   $form.on('submit', async (event) => {
     event.preventDefault();
+
+    // Offline, the attempt cannot leave the device — it would die in
+    // fetch and read back as a wrong password. The panel is already
+    // saying so (the notice, the disabled form); this is the last
+    // resort for a stuck click or a network flap mid-edit.
+    if (!navigator.onLine) {
+      showError("You're offline — sign-in is paused until the network returns.");
+      return;
+    }
 
     const email = String($email.val() ?? '').trim();
     const password = String($password.val() ?? '');
@@ -285,6 +297,22 @@ export function initCloudUI(): void {
   }
 
   setMode('sign-in');
+
+  // ---- connectivity honesty (the status-bar chip: offline-indicator.ts)
+  // Offline, a sign-in form is a promise the network cannot keep. The
+  // notice says what is true, the form stands down, and both hand
+  // control back the moment the network returns.
+  const applyConnectivity = (): void => {
+    const offline = !navigator.onLine;
+    $offline.attr('hidden', offline ? null : 'hidden');
+    $email.prop('disabled', offline);
+    $password.prop('disabled', offline);
+    $submit.prop('disabled', offline);
+    $switch.prop('disabled', offline);
+  };
+  applyConnectivity();
+  window.addEventListener('online', applyConnectivity);
+  window.addEventListener('offline', applyConnectivity);
 
   // Subscribe last: the listener fires immediately with the current status,
   // so every const above must already be initialized.

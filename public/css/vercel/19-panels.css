@@ -208,6 +208,38 @@ body.panel-sheet-open {
   color: var(--vz-fg-muted);
 }
 
+/* The offline notice — the panel's honesty card. It rides above the
+   sign-in form (the form stands down while it shows): the same soft
+   surface the marks use, the star amber for "paused", not the danger
+   red for "broken" — offline is a state, not an error. */
+.cloud-offline {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.cloud-offline svg {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+  color: var(--vz-star);
+}
+
+/* Same explicit guard as the status-bar chip: the notice's display:flex
+   would otherwise override its own hidden flag. */
+.cloud-offline[hidden] {
+  display: none;
+}
+
 /* Sync now — a 30px ghost button in the hero's corner; spins while busy. */
 .cloud-sync-btn {
   flex: 0 0 auto;
