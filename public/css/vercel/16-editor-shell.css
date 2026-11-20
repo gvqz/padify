@@ -461,58 +461,69 @@ body.dark #note[data-empty]::before {
 /* ---- Rich text note vocabulary ----
    Headings, lists, quotes, code blocks and links inside the note surface.
    Sized to sit calmly inside the note's 15px line rhythm; tokens keep dark
-   mode in step automatically. */
+   mode in step automatically.
 
-#note h1,
-#note h2,
-#note h3 {
+   EVERY rule below is scoped :not(.drawing-canvas-open): while a drawing
+   owns the stage, the vendor's chrome mounts INSIDE #note, and an ID-scoped
+   #note h3 (1,0,1) out-cascades everything the vendor (.excalidraw ...,
+   0,2,1) and the skin ([data-drawing-canvas] ..., 0,3,1) can declare — the
+   upgrade audit caught the styles panel's headings rendering at the editor's
+   1.13em/650 document scale instead of the vendor's 0.75rem/400, inflating
+   every row and wrapping the panel half its natural width. The class is the
+   surface's own full-bleed takeover state (added on mount, removed on stand
+   down), so the vocabulary simply does not match while the canvas is up —
+   and nothing changes for text notes. */
+
+#note:not(.drawing-canvas-open) h1,
+#note:not(.drawing-canvas-open) h2,
+#note:not(.drawing-canvas-open) h3 {
   margin: 0.6em 0 0.25em;
   font-weight: 650;
   line-height: 1.25;
   color: var(--vz-fg);
 }
 
-#note h1 {
+#note:not(.drawing-canvas-open) h1 {
   font-size: 1.55em;
   letter-spacing: -0.01em;
 }
 
-#note h2 {
+#note:not(.drawing-canvas-open) h2 {
   font-size: 1.3em;
 }
 
-#note h3 {
+#note:not(.drawing-canvas-open) h3 {
   font-size: 1.13em;
 }
 
-#note h1:first-child,
-#note h2:first-child,
-#note h3:first-child,
-#note > ul:first-child,
-#note > ol:first-child,
-#note > blockquote:first-child,
-#note > pre:first-child {
+#note:not(.drawing-canvas-open) h1:first-child,
+#note:not(.drawing-canvas-open) h2:first-child,
+#note:not(.drawing-canvas-open) h3:first-child,
+#note:not(.drawing-canvas-open) > ul:first-child,
+#note:not(.drawing-canvas-open) > ol:first-child,
+#note:not(.drawing-canvas-open) > blockquote:first-child,
+#note:not(.drawing-canvas-open) > pre:first-child {
   margin-top: 0;
 }
 
-#note ul,
-#note ol {
+#note:not(.drawing-canvas-open) ul,
+#note:not(.drawing-canvas-open) ol {
   margin: 0.35em 0;
   padding-left: 1.5em;
 }
 
-#note li {
+#note:not(.drawing-canvas-open) li {
   margin: 0.15em 0;
 }
 
-#note blockquote {
+#note:not(.drawing-canvas-open) blockquote {
   margin: 0.5em 0;
   padding: 0.15em 0 0.15em 0.9em;
   border-left: 3px solid var(--vz-border-strong);
   color: var(--vz-fg-muted);
 }
 
-#note pre {
+#note:not(.drawing-canvas-open) pre {
   margin: 0.5em 0;
   padding: 0.6em 0.8em;
   border: 1px solid var(--vz-border);
@@ -527,7 +538,7 @@ body.dark #note[data-empty]::before {
   overflow-wrap: break-word;
 }
 
-#note a {
+#note:not(.drawing-canvas-open) a {
   /* The design system is monochrome — links read through the underline,
      like the topbar/footer links, not through a new hue. */
   color: inherit;
@@ -536,12 +547,12 @@ body.dark #note[data-empty]::before {
   text-decoration-color: var(--vz-fg-subtle);
 }
 
-#note a:hover {
+#note:not(.drawing-canvas-open) a:hover {
   text-decoration-thickness: 2px;
   text-decoration-color: var(--vz-fg);
 }
 
-#note hr {
+#note:not(.drawing-canvas-open) hr {
   border: 0;
   border-top: 1px solid var(--vz-border-strong);
   margin: 1em 0;
@@ -607,14 +618,16 @@ body.dark #note[data-empty]::before {
 /* ---- Tables ----
    The stored subset is table > tbody > tr > td/th — borders live here in
    the chrome, not in the note markup. Empty cells keep their height with
-   an nbsp ghost so the caret can reach them. */
-#note table {
+   an nbsp ghost so the caret can reach them. Same :not(.drawing-canvas-open)
+   scoping as the vocabulary above — the vendor's dialogs mount inside #note
+   too. */
+#note:not(.drawing-canvas-open) table {
   border-collapse: collapse;
   margin: 0.5em 0;
 }
 
-#note td,
-#note th {
+#note:not(.drawing-canvas-open) td,
+#note:not(.drawing-canvas-open) th {
   border: 1px solid var(--vz-border-strong);
   padding: 3px 10px;
   min-width: 36px;
@@ -623,18 +636,18 @@ body.dark #note[data-empty]::before {
 }
 
 /* Hovered cells answer the pointer, Docs-style — subtle, never sticky. */
-#note td:hover,
-#note th:hover {
+#note:not(.drawing-canvas-open) td:hover,
+#note:not(.drawing-canvas-open) th:hover {
   background: var(--vz-bg-hover);
 }
 
-#note th {
+#note:not(.drawing-canvas-open) th {
   background: var(--vz-bg-subtle);
   font-weight: 650;
 }
 
-#note td:empty::after,
-#note th:empty::after {
+#note:not(.drawing-canvas-open) td:empty::after,
+#note:not(.drawing-canvas-open) th:empty::after {
   content: '\00a0';
 }
 

@@ -161,6 +161,17 @@
   box-shadow: var(--shadow-card);
 }
 
+/* Master's minimap island — NOT an .Island (its own .minimap class), so the
+   rule above cannot reach it: the vendor floats it borderless on
+   --shadow-island, which the variable bridge already softens to the card
+   shadow, but the 1px border — the app's whole elevation story — needs this
+   structural patch. Geometry (200×140, 8px radius) stays the vendor's; the
+   element/viewport colors ride the bridge (--color-primary → ink). */
+[data-drawing-canvas] .excalidraw .minimap {
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+}
+
 /* The toolbar's hairline separators between tool groups */
 [data-drawing-canvas] .excalidraw .App-toolbar__divider {
   background-color: var(--border);
@@ -275,6 +286,25 @@
   margin: 6px 4px 2px;
 }
 
+/* The zoom menu opens UP — the footer anchors it at the pad's very bottom
+   edge, and the vendor's bundled Radix popper places the menu BELOW its
+   trigger with no collision flip: on excalidraw.com the flip comes from the
+   SITE app's own (newer) Radix resolution, not the npm canary's bundled
+   copy — the same canary commit, opened bare, clips below the fold the
+   same way (verified live; stripping every ancestor's overflow/transform/
+   contain changes nothing). The vendor parks the menu on a 0×0 fixed point
+   at trigger-bottom + sideOffset(8) as inline styles, so the skin hangs it
+   from ABOVE that point instead: top gives way to bottom, and the menu's
+   bottom edge lands one sideOffset above the trigger's top edge — the same
+   gap the site's flipped menu shows. !important is the only thing that
+   beats an inline style. Scoped to the zoom menu only: the main menu and
+   the context menu anchor at the top/middle of the canvas and open
+   downward correctly. */
+[data-drawing-canvas] .excalidraw .zoom-actions .dropdown-menu.zoom-menu {
+  top: auto !important;
+  bottom: calc(var(--lg-button-size, 1.5rem) + 16px) !important;
+}
+
 [data-drawing-canvas] .excalidraw .context-menu {
   background-color: var(--surface-raised);
   border: 1px solid var(--border);
@@ -323,13 +353,50 @@
  * ------------------------------------------------------------------------- */
 
 /* Master's styles panel ships bare <h3> section headings at the vendor's
-   document scale (20px, weight 650) — inside the compact island they dwarf
-   every control and force "Background" to wrap mid-word. The app's
-   card-title scale fits the panel grammar instead. */
+   document scale — inside the compact island they dwarf every control and
+   force "Background" to wrap mid-word. The app's card-title scale fits the
+   panel grammar instead. (The first version of this rule could never take
+   effect: the app's #note h3 typography out-cascaded it on ID specificity —
+   see the :not(.drawing-canvas-open) scoping in 16-editor-shell.css, which
+   is what actually delivers the headings to this rule.) */
 [data-drawing-canvas] .excalidraw .selected-shape-actions h3 {
   font-size: 13px;
   font-weight: 600;
   color: var(--fg);
+}
+
+/* The panel's row captions (legends, control labels, the button lists'
+   "Thin / Bold / …") are sized 0.75rem by the vendor — designed for a 16px
+   root. Padify runs the app on a 10px root (02-base.css, the classic
+   rem-math convention), so every rem-sized vendor value lands at 62.5% of
+   its intended geometry: these captions were rendering at 7.5px, below any
+   legible floor, while the panel's px-sized gaps kept their size — the mix
+   that pushed the color rows past the panel edge and clipped the last
+   swatch. Stating the vendor's intended values in px restores the captions
+   and widens the content-sized panel enough that the swatch rows fit
+   without a clip. The island keeps the app's compact density everywhere
+   else — a deliberate choice over zooming the whole vendor surface back to
+   the site's 16px scale (the zoom tool's coordinate math is not a thing to
+   gamble on, and the compact chrome is what makes the island read as
+   Padify's). */
+[data-drawing-canvas] .excalidraw .selected-shape-actions legend,
+[data-drawing-canvas] .excalidraw .selected-shape-actions .control-label,
+[data-drawing-canvas] .excalidraw .selected-shape-actions .buttonList label {
+  font-size: 12px;
+}
+
+/* The styles-panel island carries a vendor-computed INLINE max-width
+   (125px in this embedding — its responsive panel metrics read the host
+   layout conservatively), and that cap is what pushes the last color
+   swatch under the island's edge: the color rows' rem-sized swatches land
+   at 62.5% (the app's 10px root) while their px-sized gaps keep full size,
+   and the caption fix above grows the content to ~129px. There is a whole
+   editor column to float in — the cap protects nothing here — so the skin
+   lifts it (!important is the only thing that beats an inline style) and
+   lets the island size to its content. The inline max-HEIGHT stays: it is
+   the vendor's own clearance that keeps the panel above the minimap. */
+[data-drawing-canvas] .excalidraw .Island.App-menu__left {
+  max-width: none !important;
 }
 
 [data-drawing-canvas] .excalidraw .color-picker-content {

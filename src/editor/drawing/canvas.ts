@@ -156,11 +156,10 @@ function drawingCanvasElement(
         },
         tools: { image: false },
       },
-      // The minimap is master's new floating island (its footer toggle,
-      // preferences entry and palette rows included) — vendor chrome the
-      // Padify cut list never invited, dropped here at the props layer
-      // where the vendor itself removes every way to summon it.
-      ui: { disabled: { minimap: true } },
+      // Master's minimap stays: the pad opens on the same train as
+      // excalidraw.com, map island included (its footer toggle rides the
+      // zoom controls; see the minimapEnabled default below for why it is
+      // on at every open).
       onExcalidrawAPI: onApi,
     },
     // Children: the curated main menu replaces the vendor default (which
@@ -226,6 +225,16 @@ export function mountDrawingCanvas(
           elements: options.initialScene.elements,
           appState: {
             currentItemFontFamily: FONT_FAMILY.Nunito,
+            // The map opens with the pad — the vendor's own default is off,
+            // and the toggle is a browser-level viewport pref the vendor
+            // classifies as {browser: true, export: false, server: false}:
+            // not scene content, so the appState whitelist (rightly) never
+            // persists it and the vendor's localStorage home belongs to
+            // excalidraw.com's app layer, not the embedded component. A
+            // fresh open therefore falls back to THIS default — the
+            // excalidraw.com look, map and all. The Padify settings menu is
+            // the future home for the preference itself.
+            minimapEnabled: true,
             ...options.initialScene.appState,
           },
         },
@@ -241,13 +250,14 @@ export function mountDrawingCanvas(
     updateScene(scene: DrawingCanvasScene): void {
       api?.updateScene({
         elements: scene.elements,
-        // The same Padify font default as initialData — the note-switch
-        // path (drawing→drawing reuse) never re-runs initialData, so a
-        // fresh scene (appState {}) would otherwise inherit the previous
-        // note's live tool state. A scene that carries its own pick wins
-        // the spread, exactly as at mount.
+        // The same Padify defaults as initialData — the note-switch path
+        // (drawing→drawing reuse) never re-runs initialData, so a fresh
+        // scene (appState {}) would otherwise inherit the previous note's
+        // live tool state. A scene that carries its own pick wins the
+        // spread, exactly as at mount.
         appState: {
           currentItemFontFamily: FONT_FAMILY.Nunito,
+          minimapEnabled: true,
           ...scene.appState,
         },
       } as unknown as UpdateScenePayload);

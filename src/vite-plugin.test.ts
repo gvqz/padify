@@ -1,6 +1,14 @@
 // @vitest-environment node
+import { readdirSync, statSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { stripDependencyEvalSinks, stubExcalidrawFontSubsetting } from '../vite.config';
+import {
+  EXCALIDRAW_FONTS_DIR,
+  copyExcalidrawFonts,
+  stripDependencyEvalSinks,
+  stubExcalidrawFontSubsetting,
+} from '../vite.config';
 
 type TransformFn = (code: string, id: string) => { code: string; map: unknown } | null;
 
@@ -147,5 +155,101 @@ describe('stubExcalidrawFontSubsetting', () => {
     expect(resolve('./main.js', VENDOR)).toBeNull();
     expect(load(`${VENDOR}/chunk-EIO257PC.js`)).toBeNull();
     expect(load('/repo/src/editor/drawing/canvas.ts')).toBeNull();
+  });
+});
+
+/**
+ * The canvas fonts' dev twin, pinned: the configureServer middleware is
+ * dev's ONE live font source (the vendor's CDN fallback was stripped from
+ * the chunk — see stubExcalidrawFontSubsetting), so the mount must line up
+ * with the URL the vendor actually requests,
+ * `${EXCALIDRAW_ASSET_PATH}fonts/<family>/<file>`. The first mount
+ * stopped one segment short: connect left `fonts/...` in req.url, the
+ * join looked for .../fonts/fonts/<family>/<file>, every dev font request
+ * fell through to the SPA fallback, and the browser decoded index.html as
+ * a woff2 (OTS errors, canvas text on fallback metrics) — silently, until
+ * a console-noise sweep caught it.
+ */
+describe('copyExcalidrawFonts (the dev twin)', () => {
+  /** The middleware the plugin registers, as { mount, handler }. */
+  function devMiddleware(): {
+    mount: string;
+    handler: (
+      req: { url?: string },
+      res: { setHeader(name: string, value: string): void; end(body: unknown): void },
+      next: () => void,
+    ) => void;
+  } {
+    const plugin = copyExcalidrawFonts();
+    const hook = plugin.configureServer as unknown as
+      | ((server: {
+          middlewares: { use: (mount: string, handler: never) => void };
+        }) => void)
+      | {
+          handler: (server: {
+            middlewares: { use: (mount: string, handler: never) => void };
+          }) => void;
+        };
+    const configure = typeof hook === 'function' ? hook : hook.handler;
+    let mounted: { mount: string; handler: never } | null = null;
+    configure({
+      middlewares: {
+        use: (mount: string, handler: never) => {
+          mounted = { mount, handler };
+        },
+      },
+    });
+    if (mounted === null) throw new Error('the plugin registered no dev middleware');
+    return mounted as unknown as ReturnType<typeof devMiddleware>;
+  }
+
+  /** Any family/file pair that actually ships in the vendor package. */
+  function anyShippedFont(): { family: string; file: string } {
+    const fontsRoot = fileURLToPath(
+      new URL('../node_modules/@excalidraw/excalidraw/dist/prod/fonts', import.meta.url),
+    );
+    const family = readdirSync(fontsRoot).find((entry) =>
+      statSync(join(fontsRoot, entry)).isDirectory(),
+    );
+    if (!family) throw new Error('no font family found in the vendor package');
+    const file = readdirSync(join(fontsRoot, family)).find((entry) => entry.endsWith('.woff2'));
+    if (!file) throw new Error(`no woff2 found for ${family}`);
+    return { family, file };
+  }
+
+  it('mounts under /vendor/excalidraw/fonts — the full URL prefix the vendor requests', () => {
+    const { mount } = devMiddleware();
+    // A mount that stops at /vendor/excalidraw leaves `fonts/...` in the
+    // stripped remainder and double-prepends it onto the fonts root.
+    expect(mount).toBe(`/${EXCALIDRAW_FONTS_DIR}/fonts`);
+  });
+
+  it('answers a mounted remainder with the real woff2 bytes off disk', () => {
+    const { handler } = devMiddleware();
+    const { family, file } = anyShippedFont();
+    const headers: Record<string, string> = {};
+    let body: unknown = null;
+    handler(
+      { url: `/${family}/${file}` },
+      { setHeader: (name, value) => (headers[name] = value), end: (buf) => (body = buf) },
+      () => {
+        throw new Error('next() must not run for a shipped font');
+      },
+    );
+    expect(headers['Content-Type']).toBe('font/woff2');
+    expect(Buffer.from(body as Uint8Array).subarray(0, 4).toString('latin1')).toBe('wOF2');
+  });
+
+  it('passes unknown files to the next middleware (the SPA fallback\u2019s job)', () => {
+    const { handler } = devMiddleware();
+    let passed = false;
+    handler(
+      { url: '/Nunito/not-a-real-glyph-subset.woff2' },
+      { setHeader: () => undefined, end: () => undefined },
+      () => {
+        passed = true;
+      },
+    );
+    expect(passed).toBe(true);
   });
 });

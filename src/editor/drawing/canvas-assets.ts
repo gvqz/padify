@@ -15,8 +15,10 @@
  * The path target: the build copies the vendor's fonts to
  * dist/vendor/excalidraw/fonts/ (vite.config.ts's copyExcalidrawFonts,
  * defined alongside EXCALIDRAW_FONTS_DIR). BASE_URL keeps a subpath build
- * (VITE_BASE_PATH=/padify/) honest. Dev serves no CSP and builds no
- * dist, so dev degrades to the vendor's CDN fallback — harmless there.
+ * (VITE_BASE_PATH=/padify/) honest. Dev serves the same fonts from
+ * node_modules through the plugin's configureServer middleware — the
+ * vendor's CDN fallback was stripped from the chunk (CSP-blocked anyway),
+ * so this path is the one live source in every mode.
  */
 declare global {
   interface Window {

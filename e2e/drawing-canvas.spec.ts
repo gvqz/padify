@@ -217,6 +217,43 @@ test.describe('the drawing canvas', () => {
     await expect(page.locator('.bottom-line')).toBeVisible();
   });
 
+  test('the map island opens with the pad — the footer toggle owns it', async ({ page }) => {
+    await openDrawingCanvas(page);
+
+    // Parity with excalidraw.com: the minimap is ON at open (the Padify
+    // default — the vendor's own is off, and the toggle is a browser-level
+    // viewport pref the appState whitelist rightly never persists, so
+    // every open falls back to the pad's default), floating above the
+    // footer's zoom controls with its toggle beside them.
+    const island = page.locator('#note .excalidraw .minimap');
+    await expect(island).toBeVisible();
+    const toggle = page.locator('#note .excalidraw .minimap-toggle-button');
+    await expect(toggle).toBeVisible();
+
+    // With the minimap UI on, the zoom controls are the zoom MENU (the
+    // vendor's own footer form for this mode), not the plain
+    // zoom-out / readout / zoom-in buttons.
+    await expect(page.locator('#note [data-testid="zoom-menu-trigger"]')).toBeVisible();
+    await expect(page.locator('#note .excalidraw .zoom-button')).toHaveCount(0);
+
+    // The toggle hides the island.
+    await toggle.click();
+    await expect(island).toBeHidden();
+
+    // A viewport pref, never scene bytes: the vendor itself refuses to
+    // announce the flip (captureUpdate: EVENTUALLY — its own classification
+    // of viewport state), so the fresh pad's content stays '' (the
+    // open-never-writes guard, byte-exact with the map on).
+    const saved = await readDrawingNotes(page);
+    expect(saved).toHaveLength(1);
+    expect(saved[0].content).toBe('');
+
+    // And the default rides every open: a reload brings the island back.
+    await page.reload();
+    await expect(page.locator('#note .excalidraw')).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('#note .excalidraw .minimap')).toBeVisible();
+  });
+
   test('drawing ↔ text switches stand the canvas down and bring it back', async ({ page }) => {
     await openDrawingCanvas(page);
     await drawRectangle(page);

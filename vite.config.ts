@@ -212,9 +212,14 @@ export const EXCALIDRAW_FONTS_DIR = 'vendor/excalidraw';
  *
  * dist-only: the repo never carries 14 MB of woff2 files (Xiaolai alone
  * is 13 MB of CJK subsets); the copy runs on every production build,
- * after the bundle is written. Dev serves no CSP, so dev falls back to
- * the vendor's CDN and stays copy-free. Exported so a test can pin the
- * copy against a fixture tree.
+ * after the bundle is written. Dev serves the SAME fonts straight out of
+ * node_modules via the configureServer middleware below — the CDN
+ * fallback no longer exists to degrade to (stubExcalidrawFontSubsetting
+ * strips the CDN push from the vendor chunk), so the middleware is dev's
+ * one live source, and the dev twin is pinned by test (the first mount
+ * double-prepended `fonts/` onto a root that already ended in it — every
+ * dev font request fell through to the SPA fallback and the browser
+ * decoded index.html as a woff2).
  */
 export function copyExcalidrawFonts(): Plugin {
   return {
@@ -223,9 +228,17 @@ export function copyExcalidrawFonts(): Plugin {
       // Dev twin of the closeBundle copy: serve the fonts straight out of
       // node_modules so canvas-assets.ts's EXCALIDRAW_ASSET_PATH is valid
       // in every mode (dev has no dist to copy into).
+      //
+      // The mount MUST include the /fonts segment: the vendor requests
+      // every face as `${EXCALIDRAW_ASSET_PATH}fonts/<family>/<file>` —
+      // connect strips the mount from req.url, so a shorter mount leaves
+      // `fonts/...` in the remainder and the join below would look for
+      // .../dist/prod/fonts/fonts/<family>/<file> (the double-fonts bug:
+      // silently falls through to the SPA fallback, HTML bytes where a
+      // woff2 belongs).
       const repoRoot = fileURLToPath(new URL('./', import.meta.url));
       const fontsRoot = joinSafe(repoRoot, 'node_modules/@excalidraw/excalidraw/dist/prod/fonts');
-      server.middlewares.use(`/${EXCALIDRAW_FONTS_DIR}`, (req, res, next) => {
+      server.middlewares.use(`/${EXCALIDRAW_FONTS_DIR}/fonts`, (req, res, next) => {
         const url = (req.url ?? '').split('?')[0];
         const file = joinSafe(fontsRoot, url.replace(/^\/+/, ''));
         if (!file.startsWith(fontsRoot) || !existsSync(file) || !statSync(file).isFile()) {
