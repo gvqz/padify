@@ -39,13 +39,22 @@ export type DrawingSceneElement = Record<string, unknown>;
  * parse time so the scene stays a curated payload instead of a dump of
  * whatever appState happened to carry (selection state, scroll offsets,
  * collaborators — none of that is content).
+ *
+ * The names ARE the vendor's — pinned by scene-pin.test.ts against the
+ * installed @excalidraw/excalidraw. Master 0.18.0-9fbeaed renamed the
+ * stroke-width default from the numeric `currentItemStrokeWidth` (1/2/4
+ * — thin/bold/extraBold) to the named `currentItemStrokeWidthKey`
+ * ("thin"|"medium"|"bold"; the numbers 1/2/4 keep their visual weight,
+ * "medium" joins at 2 and extraBold moves to 8). Legacy scenes carry the
+ * numeric key; parseDrawingScene migrates it before the equality guard
+ * ever sees it, so old bytes and the live appState answer canonically.
  */
 export const DRAWING_APP_STATE_KEYS: readonly string[] = [
   'viewBackgroundColor',
   'currentItemStrokeColor',
   'currentItemBackgroundColor',
   'currentItemFillStyle',
-  'currentItemStrokeWidth',
+  'currentItemStrokeWidthKey',
   'currentItemStrokeStyle',
   'currentItemRoughness',
   'currentItemOpacity',
@@ -58,6 +67,22 @@ export const DRAWING_APP_STATE_KEYS: readonly string[] = [
   'gridSize',
   'gridModeEnabled',
 ] as const;
+
+/**
+ * The legacy numeric strokeWidth → the vendor's named key. EXACTLY the
+ * vendor's own mapping (restore.ts getStrokeWidthKey over STROKE_WIDTH):
+ * 1→thin, 2→medium, 4→bold. Old extraBold bytes carried 4 — the closest
+ * canonical key is "bold" (master's extraBold moved to 8); the stroke
+ * renders at the same numeric weight it always did. Any other legacy
+ * number (0, junk) falls back by omission: the key stays unset and the
+ * vendor applies its own default, the same degradation restoreAppState
+ * performs for a null match.
+ */
+const LEGACY_STROKE_WIDTH_TO_KEY: Readonly<Record<number, string>> = {
+  1: 'thin',
+  2: 'medium',
+  4: 'bold',
+};
 
 /** The whitelisted appState subset (values verbatim). */
 export type DrawingPersistedAppState = Record<string, unknown>;
@@ -160,6 +185,18 @@ export function parseDrawingScene(content: string): DrawingScene | null {
       if (key in source) {
         appState[key] = source[key];
       }
+    }
+    // The stroke-width rename, one migration point upstream of everything
+    // (the canvas's initialData, the updateScene feeds, the equality
+    // guard's fed bytes): legacy bytes carry the numeric key, the vendor
+    // answers in the named one. Without this, opening a pre-master note
+    // re-serialized the live scene into DIFFERENT bytes than were fed —
+    // the announce guard would file a save for a note nobody touched.
+    // The legacy number reads off the RAW appState — the whitelist no
+    // longer carries its name, so the loop above never copies it.
+    const legacyWidth = source['currentItemStrokeWidth'];
+    if (typeof legacyWidth === 'number' && LEGACY_STROKE_WIDTH_TO_KEY[legacyWidth] !== undefined) {
+      appState.currentItemStrokeWidthKey ??= LEGACY_STROKE_WIDTH_TO_KEY[legacyWidth];
     }
   }
   return {

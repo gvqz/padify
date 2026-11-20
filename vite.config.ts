@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, cpSync, existsSync } from 'node:fs';
 import { join as joinSafe } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
@@ -75,18 +75,27 @@ export function stripDependencyEvalSinks(): Plugin {
 }
 
 /**
- * Stubs Excalidraw's font-subsetting chunks out of the shipped bundle.
+ * Neuters Excalidraw's font-subsetting chunks out of the shipped bundle —
+ * and degrades the vendor's subset pipeline GRACEFULLY.
  *
- * @excalidraw/excalidraw 0.18 embeds a HarfBuzz-wasm font subsetter: the
+ * @excalidraw/excalidraw embeds a HarfBuzz-wasm font subsetter: the
  * vendor's `subset-shared.chunk.js` re-exports `chunk-EIO257PC.js`, whose
  * Emscripten glue constructs functions from strings (`new Function(...)`
  * — twice) — the exact CSP-incompatible eval sink forbidEvalSinks() exists
- * to keep out of dist. The subsetter only serves the "embed fonts into an
- * exported artifact" path, and the vendor's own font-manager wraps every
- * subsetting call in a try/catch whose fallback references the FULL font
- * URL instead of a base64 subset — so a stub that throws at module
- * evaluation lands in the vendor's documented degradation, not a crash:
- * exports stay valid, they just don't carry a subset font payload.
+ * to keep out of dist. The subsetter only shrinks the font payload a
+ * canvas text render loads to the glyphs actually used.
+ *
+ * WHY THE STUB ANSWERS, NOT THROWS: the vendor's font manager fetches a
+ * family's woff2 from the URL list (first match wins — the same-origin
+ * copy, see copyExcalidrawFonts) and then subsets it. A throwing stub
+ * turns that SUCCESSFUL fetch into a failure, and the manager walks its
+ * URL list to the vendor's esm.sh CDN fallback — which Padify's CSP
+ * (font-src 'self' data:) blocks, leaving text on fallback metrics (the
+ * upgrade audit's loudest console fire). So the stub exports the chunk's
+ * own surface (Commands, subsetToBase64, subsetToBinary, toBase64) with
+ * subsetting as an identity pass-through: the FULL font loads from a
+ * data URL — a few hundred KB on first use per family, offline-safe,
+ * CSP-clean, no CDN contact.
  *
  * The redirect is scoped to the vendor's internal dynamic imports of
  * `./subset-shared.chunk.js` / `./subset-worker.chunk.js`; the wasm chunk
@@ -98,8 +107,24 @@ export function stubExcalidrawFontSubsetting(): Plugin {
   const STUB_ID = '\0padify-excalidraw-subset-stub';
   const STUB_CODE = [
     '// Padify stub: Excalidraw font subsetting is not shipped (eval-free',
-    '// builds; the vendor falls back to referencing the full font URL).',
-    "throw new Error('Padify: Excalidraw font subsetting is not shipped');",
+    '// builds). The chunk\'s own surface answers with an identity',
+    '// pass-through — the full font loads un-subsetted from the',
+    '// same-origin copy; no CDN, no wasm, no eval. The return shapes',
+    '// mirror the vendor\'s own (toBase64 answers a data: URL, all three',
+    '// async) so the font manager\'s injected @font-face rules stay valid.',
+    'const PASS = (buffer) => buffer;',
+    'export const Commands = { Subset: 0 };',
+    'export const toBase64 = async (buffer) => {',
+    '  const bytes = new Uint8Array(buffer);',
+    '  let binary = "";',
+    '  const step = 0x8000;',
+    '  for (let i = 0; i < bytes.length; i += step) {',
+    '    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + step));',
+    '  }',
+    '  return `data:font/woff2;base64,${btoa(binary)}`;',
+    '};',
+    'export const subsetToBase64 = async (buffer) => toBase64(PASS(buffer));',
+    'export const subsetToBinary = async (buffer) => PASS(buffer);',
   ].join('\n');
   /** The vendor's subsetter chunks, however the resolver spelled them. */
   const isSubsetChunk = (id: string): boolean =>
@@ -125,7 +150,7 @@ export function stubExcalidrawFontSubsetting(): Plugin {
       if (isSubsetChunk(id)) {
         console.warn(
           `[vite] stubbed Excalidraw font subsetting (${id.split('/').pop()}) — ` +
-            'exports fall back to the full font URL, no eval shipped.',
+            'the subset pipeline passes fonts through un-subsetted, same-origin, no CDN.',
         );
         return STUB_CODE;
       }
@@ -133,6 +158,100 @@ export function stubExcalidrawFontSubsetting(): Plugin {
         return STUB_CODE;
       }
       return null;
+    },
+    transform(code, id) {
+      // The vendor's font-face builder appends the esm.sh CDN to EVERY
+      // face's URL list as a last-resort fallback. Under Padify's CSP the
+      // CDN is unreachable by policy — the attempts are 230 wasted loads
+      // per session and 230 console errors. The same-origin copy (see
+      // copyExcalidrawFonts) is the one live source, so the fallback push
+      // goes away entirely; scoped to the vendor's own chunk, loud on a
+      // future version that renames the line.
+      const isJsModule = /\.(js|mjs|cjs)$/.test(id) || id.includes('/index.mjs?');
+      if (
+        isJsModule &&
+        id.includes('@excalidraw/excalidraw/dist/') &&
+        code.includes('ASSETS_FALLBACK_URL')
+      ) {
+        const stripped = code.replace(
+          /\w+\.push\(new URL\(\w+,\s*\w+\.ASSETS_FALLBACK_URL\)\),?/g,
+          '',
+        );
+        if (stripped === code) {
+          console.warn(
+            `[vite] ${id}: ASSETS_FALLBACK_URL present but the CDN fallback push was not found to strip — ` +
+              'verify the font-face URL list still has no CDN entry.',
+          );
+          return null;
+        }
+        return { code: stripped, map: null };
+      }
+      return null;
+    },
+  };
+}
+
+/**
+ * The dist-relative home of the copied canvas fonts. Shared by canvas.ts
+ * (which derives EXCALIDRAW_ASSET_PATH from it) and scripts/build-sw.mjs
+ * (which classifies the folder runtime-cached, never precached).
+ */
+export const EXCALIDRAW_FONTS_DIR = 'vendor/excalidraw';
+
+/**
+ * Copies the vendor's canvas fonts into the dist tree, same-origin.
+ *
+ * WHY: master's font manager resolves every FontFace through
+ * `window.EXCALIDRAW_ASSET_PATH` and falls back to the esm.sh CDN
+ * (`ASSETS_FALLBACK_URL`) when the host sets nothing. Padify's CSP is
+ * `font-src 'self' data:` — every CDN font 404s at the policy layer and
+ * canvas text renders with fallback metrics (the upgrade audit's loudest
+ * console fire). Pointing the asset path at a copied
+ * `dist/vendor/excalidraw/` is the vendor's own documented escape hatch,
+ * no CSP loosening.
+ *
+ * dist-only: the repo never carries 14 MB of woff2 files (Xiaolai alone
+ * is 13 MB of CJK subsets); the copy runs on every production build,
+ * after the bundle is written. Dev serves no CSP, so dev falls back to
+ * the vendor's CDN and stays copy-free. Exported so a test can pin the
+ * copy against a fixture tree.
+ */
+export function copyExcalidrawFonts(): Plugin {
+  return {
+    name: 'padify-copy-excalidraw-fonts',
+    configureServer(server) {
+      // Dev twin of the closeBundle copy: serve the fonts straight out of
+      // node_modules so canvas-assets.ts's EXCALIDRAW_ASSET_PATH is valid
+      // in every mode (dev has no dist to copy into).
+      const repoRoot = fileURLToPath(new URL('./', import.meta.url));
+      const fontsRoot = joinSafe(repoRoot, 'node_modules/@excalidraw/excalidraw/dist/prod/fonts');
+      server.middlewares.use(`/${EXCALIDRAW_FONTS_DIR}`, (req, res, next) => {
+        const url = (req.url ?? '').split('?')[0];
+        const file = joinSafe(fontsRoot, url.replace(/^\/+/, ''));
+        if (!file.startsWith(fontsRoot) || !existsSync(file) || !statSync(file).isFile()) {
+          next();
+          return;
+        }
+        res.setHeader('Content-Type', 'font/woff2');
+        res.end(readFileSync(file));
+      });
+    },
+    closeBundle() {
+      const repoRoot = fileURLToPath(new URL('./', import.meta.url));
+      const source = joinSafe(repoRoot, 'node_modules/@excalidraw/excalidraw/dist/prod/fonts');
+      const target = joinSafe(repoRoot, 'dist', EXCALIDRAW_FONTS_DIR, 'fonts');
+      if (!existsSync(source)) {
+        throw new Error(
+          `[vite] @excalidraw/excalidraw fonts not found at ${source} — ` +
+            'install the dependency before building.',
+        );
+      }
+      cpSync(source, target, { recursive: true });
+      const families = readdirSync(target).length;
+      console.warn(
+        `[vite] copied the canvas fonts (${families} families) to dist/${EXCALIDRAW_FONTS_DIR}/fonts — ` +
+          'EXCALIDRAW_ASSET_PATH resolves them same-origin, no CDN.',
+      );
     },
   };
 }
@@ -237,6 +356,7 @@ export default defineConfig({
     htmlIncludes(),
     stripDependencyEvalSinks(),
     stubExcalidrawFontSubsetting(),
+    copyExcalidrawFonts(),
     forbidEvalSinks(),
   ],
   publicDir: 'public',

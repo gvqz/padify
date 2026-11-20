@@ -56,7 +56,11 @@ import {
   type DrawingScene,
   type DrawingSceneElement,
 } from './scene';
-import type { DrawingCanvasHandle, DrawingCanvasScene } from './canvas';
+import type {
+  DrawingCanvasHandle,
+  DrawingCanvasScene,
+  DrawingCanvasTheme,
+} from './canvas';
 
 /** The Gen-2 autosave rhythm: announce 300 ms after the last change. */
 export const DRAWING_ANNOUNCE_DEBOUNCE_MS = 300;
@@ -91,6 +95,13 @@ interface LiveDrawingCanvas {
   /** The live scene as the canvas last reported it (fed values until the
    * first onChange — capture works even while the chunk is loading). */
   snapshot: DrawingCanvasScene;
+  /** The theme the canvas must speak — updated live from the app's
+   * `padify:theme` broadcast (theme-controller.ts), so a switch while the
+   * chunk is still loading is never lost to the mount-time snapshot. */
+  theme: DrawingCanvasTheme;
+  /** The document-level theme listener this instance registered (removed
+   * in standDownLive — never left parked after the stage moves on). */
+  themeListener: (event: Event) => void;
   /** Set once the lazy chunk has mounted; null while loading. */
   handle: DrawingCanvasHandle | null;
   /** The pending announce timer — cancelled on every stand-down so a
@@ -165,12 +176,14 @@ function cancelAnnounce(current: LiveDrawingCanvas): void {
 }
 
 /** Stands the live canvas down: pending announce cancelled, React root
- * unmounted (every vendor listener goes with it), state dropped. */
+ * unmounted (every vendor listener goes with it), theme listener removed,
+ * state dropped. */
 function standDownLive(): void {
   const current = live;
   if (!current) return;
   cancelAnnounce(current);
   current.disposed = true;
+  document.removeEventListener('padify:theme', current.themeListener);
   current.host.classList.remove(DRAWING_CANVAS_OPEN_CLASS);
   current.handle?.unmount();
   live = null;
@@ -248,11 +261,28 @@ function mountLiveCanvas(
     content: serializeDrawingScene(scene),
     savedAt: scene.savedAt,
     snapshot: { elements: scene.elements, appState: scene.appState },
+    theme: document.body.classList.contains('dark') ? 'dark' : 'light',
+    themeListener: () => {},
     handle: null,
     announceTimer: null,
     budgetWarned: false,
     disposed: false,
   };
+
+  // The app's one theme seam (theme-controller.ts broadcasts on every
+  // switch, device mode included). The vendor's theme prop is a mount-
+  // time snapshot: without this, toggling dark/light while a drawing is
+  // open leaves the vendor's JS (popovers, exports) on the stale mode
+  // even though the skin's tokens rescue the CSS. The listener rides the
+  // instance and dies with standDownLive.
+  current.themeListener = (event: Event): void => {
+    const mode = (event as CustomEvent<{ mode?: string }>).detail?.mode;
+    if (mode !== 'light' && mode !== 'dark') return;
+    current.theme = mode;
+    current.handle?.setTheme(mode);
+  };
+  document.addEventListener('padify:theme', current.themeListener);
+
   live = current;
 
   void import('./canvas')
@@ -267,7 +297,7 @@ function mountLiveCanvas(
             elements: current.snapshot.elements,
             appState: current.snapshot.appState,
           },
-          theme: document.body.classList.contains('dark') ? 'dark' : 'light',
+          theme: current.theme,
           name: current.noteName,
           onChange: (next) => {
             current.snapshot = next;

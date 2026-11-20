@@ -322,6 +322,16 @@
  * title carries a hardcoded gray.
  * ------------------------------------------------------------------------- */
 
+/* Master's styles panel ships bare <h3> section headings at the vendor's
+   document scale (20px, weight 650) — inside the compact island they dwarf
+   every control and force "Background" to wrap mid-word. The app's
+   card-title scale fits the panel grammar instead. */
+[data-drawing-canvas] .excalidraw .selected-shape-actions h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
 [data-drawing-canvas] .excalidraw .color-picker-content {
   background-color: var(--surface-raised);
   border: 1px solid var(--border);

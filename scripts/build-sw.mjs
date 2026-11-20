@@ -171,7 +171,16 @@ export function generateServiceWorker(distDir, options = {}) {
 
   const shell = shellAssetPaths(distDir, basePath);
   const isShell = (rel) => shell.has(rel);
-  const isLazyChunk = (rel) => rel.startsWith('assets/') && !shell.has(rel);
+  // The canvas fonts (dist/vendor/excalidraw/, copied by vite.config.ts's
+  // copyExcalidrawFonts) belong with the lazy drawing chunk: they only
+  // matter once a drawing note opens, and precaching 14 MB of woff2 into
+  // every install (each Xiaolai subset sits under the 512 KB cap) would
+  // tax users who never draw. Same class as the lazy chunks — runtime-
+  // cached on first font use.
+  const isLazyChunk =
+    (rel) =>
+      (rel.startsWith('assets/') && !shell.has(rel)) ||
+      rel.startsWith('vendor/excalidraw/');
 
   // Precache: the shell (any size) + other public files up to the cap.
   // Runtime: lazy chunks + oversized files — cached by the fetch handler

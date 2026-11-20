@@ -20,7 +20,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@excalidraw/excalidraw": "^0.18.1",
+    "@excalidraw/excalidraw": "0.18.0-9fbeaed",
     "docx": "^8.5.0",
     "jspdf": "^2.5.2",
     "katex": "^0.18.9",

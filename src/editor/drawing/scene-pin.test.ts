@@ -14,8 +14,8 @@
  * 2D canvas — the probe must see a context before the module loads. The
  * shim answers a minimal stub (the vendor's own feature flag goes to
  * "not supported", which is exactly how the real canvas behaves without
- * CSS filters); `restore`/`serializeAsJSON` themselves are pure data
- * code and never touch it. Everything imports inside beforeAll, after
+ * CSS filters); `restoreAppState`/`serializeAsJSON` themselves are pure
+ * data code and never touch it. Everything imports inside beforeAll, after
  * the shim; nothing else in the suite loads the real package (the
  * surface tests meet the vendor behind the './canvas' mock).
  */
@@ -29,8 +29,9 @@ import {
   serializeDrawingScene,
 } from './scene';
 
-let restoreVendorDefaults: () => { appState: Record<string, unknown> };
+let restoreVendorDefaults: () => Record<string, unknown>;
 let vendorSerialize: (elements: never[], appState: never, files: never, type: 'local') => string;
+let vendorModule: (typeof import('@excalidraw/excalidraw')) | undefined;
 
 beforeAll(async () => {
   const canvasProto = HTMLCanvasElement.prototype as unknown as {
@@ -46,16 +47,20 @@ beforeAll(async () => {
   };
 
   const vendor = await import('@excalidraw/excalidraw');
+  vendorModule = vendor;
+  // Master's restoreAppState IS the appState — the old consolidated
+  // restore() wrapped it in { elements, appState, files }.
   restoreVendorDefaults = () =>
-    vendor.restore(null, null, null) as { appState: Record<string, unknown> };
+    vendor.restoreAppState(null, null) as unknown as Record<string, unknown>;
   vendorSerialize = vendor.serializeAsJSON;
 });
 
 describe('the appState whitelist pins against the installed Excalidraw', () => {
   it('every whitelisted key exists in the vendor’s default appState', () => {
-    // restore(null, …) is the vendor's "give me the defaults" entry.
+    // restoreAppState(null, …) is the vendor's "give me the defaults"
+    // entry (master split the old consolidated restore()).
     const restored = restoreVendorDefaults();
-    const keys = Object.keys(restored.appState);
+    const keys = Object.keys(restored);
     const missing = DRAWING_APP_STATE_KEYS.filter((key) => !keys.includes(key));
     expect(missing, 'whitelist keys the installed Excalidraw no longer carries').toEqual([]);
   });
@@ -64,7 +69,7 @@ describe('the appState whitelist pins against the installed Excalidraw', () => {
     const restored = restoreVendorDefaults();
     const whitelisted: Record<string, unknown> = {};
     for (const key of DRAWING_APP_STATE_KEYS) {
-      whitelisted[key] = restored.appState[key];
+      whitelisted[key] = restored[key];
     }
     const content = serializeDrawingScene({
       version: DRAWING_SCENE_VERSION,
@@ -79,12 +84,30 @@ describe('the appState whitelist pins against the installed Excalidraw', () => {
     }
   });
 
+  it('the legacy numeric strokeWidth migrates to the same key the vendor computes', () => {
+    // scene.ts carries its own LEGACY_STROKE_WIDTH_TO_KEY table for the
+    // parse-time migration. This pin makes that table unable to drift
+    // from the vendor's restore-time getStrokeWidthKey: if master ever
+    // re-maps the numbers, this fails HERE, not in a user's drawing.
+    for (const [numeric, expected] of [
+      [1, 'thin'],
+      [2, 'medium'],
+      [4, 'bold'],
+    ] as const) {
+      const migrated = vendorModule!.restoreAppState(
+        { currentItemStrokeWidth: numeric } as never,
+        null,
+      ) as unknown as Record<string, unknown>;
+      expect(migrated.currentItemStrokeWidthKey, `legacy numeric ${numeric}`).toBe(expected);
+    }
+  });
+
   it('the vendor’s own serializer agrees on every whitelisted key it keeps', () => {
     // The surface reads the LIVE appState at save time; this cross-check
     // pins that the vendor's export path and the whitelist name the same
     // keys — the shapes cannot drift apart without this failing.
     const restored = restoreVendorDefaults();
-    const vendorJson = vendorSerialize([], restored.appState as never, {} as never, 'local');
+    const vendorJson = vendorSerialize([], restored as never, {} as never, 'local');
     const vendorPayload = JSON.parse(vendorJson) as {
       elements: unknown[];
       appState: Record<string, unknown>;

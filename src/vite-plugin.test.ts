@@ -97,26 +97,29 @@ describe('stripDependencyEvalSinks', () => {
 /**
  * The Excalidraw font-subsetting stub, pinned: the vendor's wasm
  * subsetter (an Emscripten blob that constructs functions from strings)
- * must never ship — both interception paths answer the same throwing
+ * must never ship — both interception paths answer the same pass-through
  * stub, scoping is id-tight (only the vendor's own subset chunks), and
- * everything else passes through to the real file. The vendor's font
- * manager wraps every subsetting call in a try/catch that falls back to
- * the full font URL, so the throw degrades embed-fonts exports without
- * breaking them — and forbidEvalSinks() keeps the whole arrangement
- * honest on every future vendor bump.
+ * everything else passes through to the real file. The stub answers with
+ * the chunk's own export surface and subsetting as an identity: a
+ * THROWING stub would turn the font manager's successful same-origin
+ * fetch into a failure and walk it onto the CDN (CSP-blocked), so the
+ * pass-through is what keeps text on the real fonts — and
+ * forbidEvalSinks() keeps the whole arrangement honest on every future
+ * vendor bump.
  */
 describe('stubExcalidrawFontSubsetting', () => {
   const VENDOR = '/repo/node_modules/@excalidraw/excalidraw/dist/prod';
 
-  it('load() answers the throwing stub for the resolved subset chunks', () => {
+  it('load() answers the pass-through stub for the resolved subset chunks', () => {
     const plugin = stubExcalidrawFontSubsetting();
     const load = loadOf(plugin);
     for (const name of ['subset-shared.chunk.js', 'subset-worker.chunk.js']) {
       const code = load(`${VENDOR}/${name}`);
       expect(code, name).not.toBeNull();
-      expect(code).toContain(
-        "throw new Error('Padify: Excalidraw font subsetting is not shipped')",
-      );
+      expect(code).toContain('export const subsetToBase64');
+      expect(code).toContain('export const toBase64');
+      expect(code).toContain('data:font/woff2;base64');
+      expect(code).not.toContain('throw new Error');
     }
   });
 
@@ -133,7 +136,7 @@ describe('stubExcalidrawFontSubsetting', () => {
 
   it('the stub id itself loads (the resolveId arm and the load arm agree)', () => {
     const plugin = stubExcalidrawFontSubsetting();
-    expect(loadOf(plugin)('\0padify-excalidraw-subset-stub')).toContain('throw new Error');
+    expect(loadOf(plugin)('\0padify-excalidraw-subset-stub')).toContain('export const Commands');
   });
 
   it('nothing else is claimed or stubbed — scope is the vendor\u2019s subsetter only', () => {

@@ -36,15 +36,19 @@
  * JSX setup, no prettier JSX surprises) — the mount reads as one prop bag.
  */
 
+// The asset path goes FIRST: the vendor's font registry is built during
+// module evaluation, so window.EXCALIDRAW_ASSET_PATH must exist before
+// this tree's imports run (see canvas-assets.ts — CSP blocks the vendor's
+// CDN fallback, so the same-origin copy is the only live source).
+import './canvas-assets';
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import {
   Excalidraw,
   FONT_FAMILY,
   MainMenu,
-  MIME_TYPES,
-  exportToBlob,
-  exportToSvg,
+  exportScene,
+  getCommonBounds,
 } from '@excalidraw/excalidraw';
 // Types-only subpath (the package's exports map points "/types" at its
 // d.ts tree) — no runtime cost, no phantom-module games.
@@ -74,6 +78,11 @@ export interface DrawingCanvasHandle {
   rename(name: string): void;
   /** Centers the viewport on the scene's content. */
   scrollToContent(): void;
+  /** Follows the app's theme switch without a remount (the vendor's theme
+   * prop is a controlled value — a stale one leaves vendor JS (popovers,
+   * exports) branching on the wrong mode even while the skin's tokens
+   * rescue the CSS). */
+  setTheme(theme: DrawingCanvasTheme): void;
   /** The live scene (non-deleted elements are the caller's business). */
   getScene(): DrawingCanvasScene;
   /** Stands the island down: unmounts React, releasing every listener. */
@@ -108,7 +117,7 @@ export interface MountDrawingCanvasOptions {
 function drawingCanvasElement(
   options: MountDrawingCanvasOptions,
   initialData: object,
-  onApi: (api: ExcalidrawImperativeAPI) => void,
+  onApi: (api: ExcalidrawImperativeAPI | null) => void,
 ): ReturnType<typeof createElement> {
   return createElement(
     Excalidraw,
@@ -147,7 +156,12 @@ function drawingCanvasElement(
         },
         tools: { image: false },
       },
-      excalidrawAPI: onApi,
+      // The minimap is master's new floating island (its footer toggle,
+      // preferences entry and palette rows included) — vendor chrome the
+      // Padify cut list never invited, dropped here at the props layer
+      // where the vendor itself removes every way to summon it.
+      ui: { disabled: { minimap: true } },
+      onExcalidrawAPI: onApi,
     },
     // Children: the curated main menu replaces the vendor default (which
     // ships search, help, "Excalidraw links" and the theme toggle).
@@ -181,6 +195,21 @@ export function mountDrawingCanvas(
   let root: Root | null = createRoot(mount);
   let props = options;
 
+  /** The master replacement for the removed scrollToContent(): navigate
+   * the viewport to the scene's non-deleted bounds. The target goes in as
+   * BOUNDS (not element records) so navigation works the same tick the
+   * elements are fed — setViewport only resolves element records that are
+   * already on the canvas, and updateScene applies on the next render. */
+  const centerOnContent = (elements: readonly Record<string, unknown>[]): void => {
+    if (!api) return;
+    const visible = elements.filter((element) => element.isDeleted !== true);
+    if (visible.length === 0) return;
+    api.setViewport({
+      target: getCommonBounds(visible as never),
+      fit: 'none', // old scrollToContent semantics: center, keep the zoom
+    });
+  };
+
   const render = (): void => {
     if (!root) return;
     // initialData only takes effect on the FIRST render; the rename
@@ -200,7 +229,7 @@ export function mountDrawingCanvas(
             ...options.initialScene.appState,
           },
         },
-        (instance: ExcalidrawImperativeAPI) => {
+        (instance: ExcalidrawImperativeAPI | null) => {
           api = instance;
         },
       ),
@@ -223,7 +252,7 @@ export function mountDrawingCanvas(
         },
       } as unknown as UpdateScenePayload);
       if (scene.elements.length > 0) {
-        api?.scrollToContent();
+        centerOnContent(scene.elements);
       }
     },
     clearHistory(): void {
@@ -234,7 +263,12 @@ export function mountDrawingCanvas(
       render();
     },
     scrollToContent(): void {
-      api?.scrollToContent();
+      centerOnContent(api?.getSceneElements() ?? []);
+    },
+    setTheme(theme: DrawingCanvasTheme): void {
+      if (props.theme === theme) return;
+      props = { ...props, theme };
+      render();
     },
     getScene(): DrawingCanvasScene {
       const elements = (api?.getSceneElements() ?? options.initialScene.elements) as Record<
@@ -261,6 +295,10 @@ export function mountDrawingCanvas(
  * Renders the live scene to an image — the download menu's "Save as
  * image" rows. PNG answers a Blob; SVG answers the serialized markup.
  * Elements marked deleted (the undo ghost trail) never reach an export.
+ *
+ * Master folded exportToBlob/exportToSvg into one exportScene() with the
+ * format as a discriminated member — the defaults (the scene's own
+ * background, 10px padding, scale 1) match what the retired calls did.
  */
 export async function renderDrawingImage(
   kind: 'png' | 'svg',
@@ -269,12 +307,15 @@ export async function renderDrawingImage(
   const elements = scene.elements.filter((element) => element.isDeleted !== true);
   const appState = scene.appState as unknown as Partial<AppState>;
   if (kind === 'svg') {
-    const svg = await exportToSvg({ elements, appState });
+    const svg = await exportScene({
+      data: { elements: elements as never, appState: appState as never },
+      type: 'svg',
+    });
     return new XMLSerializer().serializeToString(svg);
   }
-  return exportToBlob({
-    elements,
-    appState,
-    mimeType: MIME_TYPES.png,
-  });
+  return exportScene({
+    data: { elements: elements as never, appState: appState as never },
+    type: 'png',
+    config: { embedScene: false },
+  }) as Promise<Blob>;
 }
