@@ -792,21 +792,46 @@ body.dark .navbar-default .app-heading {
   filter: none;
 }
 
-/* Hamburger */
+/* Hamburger — the mobile menu button joins the icon system: a borderless
+   ghost chip like every nav-icon-btn, 18px hairline bars instead of the
+   bootstrap 22px slabs, and a fold into an X while the menu is open —
+   aria-expanded is the collapse controller's single truth, so the icon
+   reads it instead of tracking its own class. */
 .navbar.navbar-fixed-top .navbar-toggle {
-  border-color: var(--vz-border);
+  border-color: transparent;
   background: transparent;
-  transition: background-color var(--vz-dur) ease, border-color var(--vz-dur) ease;
+  border-radius: var(--vz-radius-md);
+  transition: background-color var(--vz-dur) ease;
 }
 
 .navbar.navbar-fixed-top .navbar-toggle:hover,
 .navbar.navbar-fixed-top .navbar-toggle:focus {
   background-color: var(--vz-bg-hover) !important;
-  border-color: var(--vz-border-strong);
+  border-color: transparent;
 }
 
 .navbar.navbar-fixed-top .navbar-toggle .icon-bar {
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
   background-color: var(--vz-fg);
+  transition:
+    transform 200ms var(--vz-ease),
+    opacity 200ms var(--vz-ease);
+}
+
+/* The fold: bar one drops to center and turns, bar three rises and
+   turns, bar two — the middle — simply leaves. */
+.navbar.navbar-fixed-top .navbar-toggle[aria-expanded='true'] .icon-bar:nth-child(2) {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.navbar.navbar-fixed-top .navbar-toggle[aria-expanded='true'] .icon-bar:nth-child(3) {
+  opacity: 0;
+}
+
+.navbar.navbar-fixed-top .navbar-toggle[aria-expanded='true'] .icon-bar:nth-child(4) {
+  transform: translateY(-6px) rotate(-45deg);
 }
 
 /* Mobile expanded menu */

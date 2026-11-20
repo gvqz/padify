@@ -13,6 +13,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .navbar.navbar-fixed-top,
+  .navbar.navbar-fixed-top .navbar-toggle .icon-bar,
   .icon-container a,
   .navbar .dropdown-menu,
   .btn,
