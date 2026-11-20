@@ -233,8 +233,7 @@ const foldCard = async (page, settle = 700) => {
   return deckState(page);
 };
 
-const buttonShot = (page, path) =>
-  page.locator('#brandMenuButton').screenshot({ path });
+const buttonShot = (page, path) => page.locator('#brandMenuButton').screenshot({ path });
 
 const runSequence = async (page, scheme, prefix, full) => {
   await page.goto(URL, { waitUntil: 'networkidle' });
@@ -295,11 +294,7 @@ const runSequence = async (page, scheme, prefix, full) => {
   for (let i = 0; i < 20; i += 1) {
     const card = DECK[i % DECK.length];
     const dealt = await dealCard(page);
-    expect(
-      dealt.move === card,
-      `deal ${i + 1}: ${scheme} deals "${card}"`,
-      `got "${dealt.move}"`,
-    );
+    expect(dealt.move === card, `deal ${i + 1}: ${scheme} deals "${card}"`, `got "${dealt.move}"`);
     expect(
       boxStr(dealt.linkRect) === boxStr(rest.linkRect),
       `deal ${i + 1}: link box identical while "${card}" is dealt`,
@@ -341,11 +336,7 @@ const runSequence = async (page, scheme, prefix, full) => {
         (mid.typoGhostText === 'b' || mid.typoGhostText === 'e') && mid.typoGhostOpacity > 0.9,
         `typo: the ghost reads a wrong key in provisional ink ('${mid.typoGhostText}')`,
       );
-      expect(
-        a < 0.5,
-        `typo: the real d is transparent while the ghost shows`,
-        mid.typoLetterColor,
-      );
+      expect(a < 0.5, `typo: the real d is transparent while the ghost shows`, mid.typoLetterColor);
       await buttonShot(page, join(evidenceDir, `rd20-light-card-typo.png`));
       await page.waitForTimeout(230);
       const shook = await deckState(page);
@@ -498,11 +489,7 @@ const runSequence = async (page, scheme, prefix, full) => {
     (await page.locator('#brandMenuButton').getAttribute('aria-expanded')) === 'true',
     `${scheme}: brand menu opens on click`,
   );
-  expect(
-    open.rightInset === 0,
-    `${scheme}: the band holds while the menu is open`,
-    open.clip,
-  );
+  expect(open.rightInset === 0, `${scheme}: the band holds while the menu is open`, open.clip);
   await page.mouse.move(AWAY.x, AWAY.y);
   await page.waitForTimeout(400);
   const openUnhovered = await deckState(page);
@@ -524,18 +511,12 @@ const runSequence = async (page, scheme, prefix, full) => {
     `${scheme}: re-entering deals the next card`,
     `"${again.move}"`,
   );
-  expect(
-    again.rightInset === 0,
-    `${scheme}: the card plays under the held band, never over it`,
-  );
+  expect(again.rightInset === 0, `${scheme}: the card plays under the held band, never over it`);
   await page.mouse.move(AWAY.x, AWAY.y);
   await page.waitForTimeout(300);
   await page.mouse.click(AWAY.x, AWAY.y);
   await page.waitForTimeout(450);
-  expect(
-    (await deckState(page)).rightInset === 100,
-    `${scheme}: closing the menu deselects`,
-  );
+  expect((await deckState(page)).rightInset === 100, `${scheme}: closing the menu deselects`);
 
   // --- keyboard: focus-visible holds the band and deals no card ------------
   await page.evaluate(() => {
@@ -559,16 +540,10 @@ const runSequence = async (page, scheme, prefix, full) => {
     `light: focus-visible holds the band`,
     focusState.clip,
   );
-  expect(
-    focusState.move === null,
-    `light: keyboard focus deals no card`,
-  );
+  expect(focusState.move === null, `light: keyboard focus deals no card`);
   await page.keyboard.press('Tab');
   await page.waitForTimeout(400);
-  expect(
-    (await deckState(page)).rightInset === 100,
-    `light: blur releases the band`,
-  );
+  expect((await deckState(page)).rightInset === 100, `light: blur releases the band`);
 };
 
 const browser = await chromium.launch();
@@ -640,10 +615,7 @@ say('\n== light / mobile 375x667 ==');
   await page.waitForTimeout(650);
   const opened = await deckState(page);
   await page.screenshot({ path: join(evidenceDir, 'rd20-mobile-menu-open.png') });
-  expect(
-    (await brand.getAttribute('aria-expanded')) === 'true',
-    'mobile: brand menu opens on tap',
-  );
+  expect((await brand.getAttribute('aria-expanded')) === 'true', 'mobile: brand menu opens on tap');
   expect(opened.rightInset === 0, 'mobile: tap holds the band', opened.clip);
   await page.mouse.click(360, 500);
   await page.waitForTimeout(450);
@@ -670,11 +642,7 @@ say('\n== light / desktop / prefers-reduced-motion: reduce ==');
   await page.waitForTimeout(150);
   const rm = await deckState(page);
   await page.screenshot({ path: join(evidenceDir, 'rd20-reduced-motion-hover.png') });
-  expect(
-    rm.move === null,
-    'reduced motion: no card is dealt on hover',
-    `data-move="${rm.move}"`,
-  );
+  expect(rm.move === null, 'reduced motion: no card is dealt on hover', `data-move="${rm.move}"`);
   expect(
     rm.brandAnims.every((a) => !a.inStage),
     'reduced motion: nothing in the stage animates',
@@ -698,10 +666,7 @@ say('\n== light / desktop / prefers-reduced-motion: reduce ==');
   );
   await page.mouse.click(AWAY.x, AWAY.y);
   await page.waitForTimeout(300);
-  expect(
-    (await deckState(page)).rightInset === 100,
-    'reduced motion: leave deselects instantly',
-  );
+  expect((await deckState(page)).rightInset === 100, 'reduced motion: leave deselects instantly');
   await context.close();
 }
 
