@@ -26,7 +26,6 @@ function mountPill(): void {
           </span>
           <span class="wc-divider wc-divider-wpm" aria-hidden="true" hidden></span>
           <span class="wc-seg wc-seg-wpm" hidden>
-            <span class="wc-live-dot" aria-hidden="true"></span>
             <span class="wc-num" data-wc="wpm">0</span>
             <span class="wc-unit" data-wc-unit="wpm">wpm</span>
           </span>
@@ -236,22 +235,6 @@ describe('live typing speed segment', () => {
     expect(wpmNum()).toBe('24');
     // The aria-label mentions the speed while it is live.
     expect(pill().getAttribute('aria-label')).toContain('about 24 words per minute');
-  });
-
-  it('the live dot rides the segment and survives every re-render', () => {
-    configureWordCountPill({ typingSpeed: true });
-    for (let i = 0; i < 30; i++) {
-      pulseWordCountPill();
-    }
-    const dot = () => wpmSeg().querySelector('.wc-live-dot');
-    expect(dot()).not.toBeNull();
-
-    // The stand-down and revival do not consume the dot — it is part
-    // of the segment's markup, not something the renderer mints.
-    vi.advanceTimersByTime(7_000);
-    expect(wpmSeg().hidden).toBe(true);
-    pulseWordCountPill();
-    expect(dot()).not.toBeNull();
   });
 
   it('stands down after the live deadline instead of freezing', () => {
