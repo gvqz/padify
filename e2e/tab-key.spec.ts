@@ -3,10 +3,10 @@ import { expect, test, type Page } from '@playwright/test';
 /**
  * The Tab key, end to end — the gestures tasks.txt called "MANY tab bugs".
  *
- * The regression this suite exists for: a bare text stream (the welcome
- * note — a classic note that never grew element blocks) is ONE model
- * block, so a block-indent Tab used to step the margin of the whole
- * document from a single press. The bare stream now takes the
+ * The regression this suite exists for: a bare text stream (plain words
+ * typed into a classic note that never grows element blocks) is ONE
+ * model block, so a block-indent Tab used to step the margin of the
+ * whole document from a single press. The bare stream now takes the
  * line-oriented literal tab, element blocks keep the Docs margin step,
  * and the markdown surface keeps the caret instead of handing focus to
  * the topbar.
@@ -46,12 +46,17 @@ async function caretOffset(page: Page): Promise<number> {
 }
 
 test.describe('the Tab key', () => {
-  test('the welcome note takes a literal tab, never a document-wide margin', async ({ page }) => {
+  test('the bare boot note takes a literal tab, never a document-wide margin', async ({ page }) => {
     await page.goto('/');
     const editor = page.locator('#note');
-    await expect(editor).toContainText('Welcome! Padify is an offline-capable notepad');
+    await expect(editor).toBeVisible();
 
+    // The boot note is a blank classic note — a bare stream waiting for
+    // words. Give it some, then indent from the very start.
     await editor.click();
+    await page.keyboard.type('Welcome! Padify takes a literal tab');
+    await expect(editor).toContainText('Welcome! Padify takes');
+
     await page.keyboard.press('Control+Home');
     await page.keyboard.press('Tab');
 

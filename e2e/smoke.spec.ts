@@ -22,18 +22,28 @@ test.afterEach(async ({ page }) => {
 });
 
 test.describe('editor core', () => {
-  test('boots with the welcome note and a live word pill', async ({ page }) => {
+  test('boots into a blank note and a live word pill', async ({ page }) => {
     await page.goto('/');
 
+    // The welcome prose left: a fresh install starts on an empty note.
     const editor = page.locator('#note');
-    await expect(editor).toContainText('Welcome! Padify is an offline-capable notepad');
+    await expect(editor).toBeVisible();
+    await expect(editor).toHaveText('');
 
-    // The pill's two segments both carry the welcome note's counts and
-    // the button describes them (words lead, characters follow).
+    // The pill reads the blank page as zero and the button describes it
+    // (words lead, characters follow).
     const pill = page.locator('#wordCount');
-    await expect(pill.locator('[data-wc="words"]')).toHaveText(/\d/);
-    await expect(pill.locator('[data-wc="chars"]')).toHaveText(/\d/);
-    await expect(pill).toHaveAttribute('aria-label', /\d+ words?, \d+ characters/);
+    await expect(pill.locator('[data-wc="words"]')).toHaveText('0');
+    await expect(pill.locator('[data-wc="chars"]')).toHaveText('0');
+    // The empty note reads as words only — the characters segment stands
+    // down with it, and the aria keeps the statistics pointer.
+    await expect(pill).toHaveAttribute('aria-label', /^0 words\. View note statistics$/);
+
+    // And the pill is live: typing makes the counts follow the words.
+    await editor.click();
+    await page.keyboard.type('hello world');
+    await expect(pill.locator('[data-wc="words"]')).toHaveText('2');
+    await expect(pill).toHaveAttribute('aria-label', /2 words, 11 characters/);
   });
 
   test('typing updates the pill and survives a reload (IndexedDB autosave)', async ({ page }) => {
@@ -54,14 +64,19 @@ test.describe('editor core', () => {
   test('add tab empties the editor; switching back restores the first note', async ({ page }) => {
     await page.goto('/');
     const editor = page.locator('#note');
-    await expect(editor).toContainText('Welcome!');
+    await expect(editor).toHaveText('');
+
+    // The first note earns its words before the second one blanks the
+    // stage.
+    await editor.click();
+    await page.keyboard.type('First note words');
 
     await page.locator('#addTab').click();
     await expect(editor).toHaveText('');
 
     // Back to the first tab through the strip.
     await page.locator('#tabStripTabs .tab-strip-tab').first().click();
-    await expect(editor).toContainText('Welcome!');
+    await expect(editor).toContainText('First note words');
   });
 });
 

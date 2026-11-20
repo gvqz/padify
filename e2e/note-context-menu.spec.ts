@@ -166,6 +166,16 @@ test('move to trash on a note with content needs no ask — the trash is the ask
   await page.goto('/');
   await page.waitForLoadState('networkidle');
 
+  // The boot barrier: the strip paints after the model wires — words
+  // typed before it land in the pre-boot DOM and die there.
+  await expect(page.locator('#tabStripTabs .tab-strip-tab').first()).toContainText('Untitled');
+  // "A note with content" is this test's own subject — the boot note
+  // starts blank now, so it earns its words first. (A blank note's grave
+  // is tombstone-shaped: no words, no name — and the trash list
+  // deliberately shows neither.)
+  await page.locator('#note').click();
+  await page.keyboard.type('Words worth keeping around.');
+
   await openMenu(page);
   await page.locator(`${MENU} [data-action="close"]`).click();
   await expect(page.locator(MENU)).toBeHidden();

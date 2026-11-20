@@ -41,7 +41,14 @@ export interface TitledNote {
 
 const MAX_TITLE_LENGTH = 42;
 
-/** Welcome note shown for brand-new installs (rich HTML). */
+/**
+ * Legacy welcome prose — the note builds before the blank-page boot used
+ * to mint for brand-new installs. No longer seeded (fresh installs start
+ * on an empty note), but kept BYTE-EXACT: the sync layer still recognizes
+ * untouched legacy seeds by these bytes and drops them from populated
+ * accounts instead of uploading a per-device twin. Editing a character
+ * here would turn every still-pristine legacy seed into a "real" note.
+ */
 export const WELCOME_HTML = [
   'Welcome! Padify is an offline-capable notepad which is a Progressive Web App.',
   '',

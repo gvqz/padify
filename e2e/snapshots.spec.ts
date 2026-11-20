@@ -111,11 +111,31 @@ async function newTypedNote(page: Page, kind: 'Rich text note' | 'Markdown note'
   ).toBeVisible();
 }
 
+/**
+ * The boot note is a BLANK page now (the welcome prose left), and a
+ * blank page is a poor fixture: its title is the anonymous "Untitled",
+ * its grave would be tombstone-shaped, its rows have nothing to show.
+ * Every test that works ON the boot note gives it these words first —
+ * chosen to start with "Welcome" so the derived title keeps every
+ * historical toContainText('Welcome') assertion true. The strip's
+ * re-render is the barrier: it proves the input debounce walked the
+ * words into the model before the test proceeds.
+ */
+async function giveTheBootNoteWords(page: Page): Promise<void> {
+  await expect(page.locator('#tabStripTabs .tab-strip-tab').first()).toContainText('Untitled');
+  await page.locator('#note').click();
+  await page.keyboard.type('Welcome back to the history fixture');
+  await expect(page.locator('#tabStripTabs .tab-strip-tab').first()).toContainText(
+    'Welcome back to the history fixture',
+  );
+}
+
 test.describe('the rebuilt menu', () => {
   test('boots empty: the note view explains itself, its destructive is disabled', async ({
     page,
   }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await openSnapshots(page);
 
     // The sheet opens on THIS note — the welcome note, with no versions
@@ -136,6 +156,7 @@ test.describe('the rebuilt menu', () => {
 
   test('the sheet opens docked to the right edge, full height', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.setViewportSize({ width: 1280, height: 800 });
     await openSnapshots(page);
     // Let the slide-in transition settle before measuring geometry.
@@ -150,6 +171,7 @@ test.describe('the rebuilt menu', () => {
 
   test('the sheet takes focus on open and hands it back on close', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#snapshotsButton').click();
     await expect(page.locator('#snapshotsModal')).toHaveClass(/in/);
 
@@ -166,6 +188,7 @@ test.describe('the rebuilt menu', () => {
 
   test('the take button snapshots the active note and refreshes the count', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await openSnapshots(page);
 
     await page.locator('#createSnapshotBtn').click();
@@ -188,6 +211,7 @@ test.describe('the rebuilt menu', () => {
     page,
   }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     // A version on the welcome note — the row the reader will expand.
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
@@ -228,6 +252,7 @@ test.describe('the rebuilt menu', () => {
 
   test('the keyboard shortcut works with the sheet closed', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     const editor = page.locator('#note');
     await editor.click();
 
@@ -242,6 +267,7 @@ test.describe('the rebuilt menu', () => {
     page,
   }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
 
     // A rich note with one word to underline (the type menu is the door).
     await page.locator('#addTabTypeMenu').click();
@@ -295,6 +321,7 @@ test.describe('the rebuilt menu', () => {
     page,
   }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     const editor = page.locator('#note');
 
     // Two notes, one snapshot each, titled by their single line.
@@ -323,6 +350,7 @@ test.describe('the rebuilt menu', () => {
     page,
   }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     const editor = page.locator('#note');
 
     await page.locator('#addTab').click();
@@ -363,6 +391,7 @@ test.describe('the rebuilt menu', () => {
 
   test("the delete toast's Undo restores the note without opening anything", async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     const editor = page.locator('#note');
 
     // A background note with words — deleting it leaves the Welcome
@@ -401,6 +430,7 @@ test.describe('the rebuilt menu', () => {
 
   test('an unchanged note is declined — no duplicate rows', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
@@ -414,6 +444,7 @@ test.describe('the rebuilt menu', () => {
 
   test('two rapid captures store one row — the second sees the first', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
 
     await Promise.all([page.keyboard.press('Control+Alt+S'), page.keyboard.press('Control+Alt+S')]);
@@ -424,6 +455,7 @@ test.describe('the rebuilt menu', () => {
 
   test('the restore loop cannot save the same version twice', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     const editor = page.locator('#note');
     await editor.click();
     await page.keyboard.type(' version one');
@@ -454,6 +486,7 @@ test.describe('the rebuilt menu', () => {
 
   test('an edited note snapshots again and the newest row comes first', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     // Short content of our own — the welcome template's derived title
     // truncates long before a second edit would show in the name.
     await page.locator('#note').click();
@@ -474,6 +507,7 @@ test.describe('the rebuilt menu', () => {
 
   test('an empty note is declined with a toast, not a row', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     // A fresh note starts empty — make sure the welcome text is gone.
     await page.evaluate(() => localStorage.clear());
     await page.reload();
@@ -492,6 +526,7 @@ test.describe('the rebuilt menu', () => {
 test.describe('the sheet frame', () => {
   test('a backdrop click closes the sheet', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await openSnapshots(page);
 
     // The host element itself is the backdrop area (the sheet hangs off
@@ -504,6 +539,7 @@ test.describe('the sheet frame', () => {
 test.describe('search', () => {
   test('filters by the copy the rows show, and reports a miss honestly', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' grocery run');
@@ -529,6 +565,7 @@ test.describe('search', () => {
 
   test('html markup never answers a search for tags', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
 
@@ -542,6 +579,7 @@ test.describe('search', () => {
 test.describe('restore — to the note it came from', () => {
   test('a restore applies at once: the note is replaced, the menu stays open', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     const editor = page.locator('#note');
     await editor.click();
     await page.keyboard.press('Control+End');
@@ -577,6 +615,7 @@ test.describe('restore — to the note it came from', () => {
 
   test('the restore is undoable: the pre-restore text lands as a snapshot', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     const editor = page.locator('#note');
     await editor.click();
     await page.keyboard.press('Control+End');
@@ -603,6 +642,7 @@ test.describe('restore — to the note it came from', () => {
 
   test('a restore goes to ITS note — the note you are editing is untouched', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     const editor = page.locator('#note');
     await editor.click();
     await page.keyboard.press('Control+Alt+S'); // snapshot the Welcome note
@@ -640,6 +680,7 @@ test.describe('restore — to the note it came from', () => {
     page,
   }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     const editor = page.locator('#note');
 
     // A named note with content, snapshotted.
@@ -699,6 +740,7 @@ test.describe('restore — to the note it came from', () => {
 
   test('a snapshot whose note is GONE resurrects it as its own note', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
 
     // An orphaned snapshot — attributed to a note that is neither open
     // nor trashed (the shape an aged-out or swept grave leaves behind).
@@ -725,6 +767,7 @@ test.describe('note types — consistent behavior', () => {
     page,
   }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await newTypedNote(page, 'Markdown note');
 
     const editor = page.locator('#note .markdown-source');
@@ -760,6 +803,7 @@ test.describe('note types — consistent behavior', () => {
 
   test('a rich note snapshots and restores like any other', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await newTypedNote(page, 'Rich text note');
 
     const editor = page.locator('#note');
@@ -788,6 +832,7 @@ test.describe('note types — consistent behavior', () => {
 
   test('the sheet carries the platform key hints', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await openSnapshots(page);
 
     // The empty-state hint spells the device's modifier — never the
@@ -808,7 +853,8 @@ test.describe('note types — consistent behavior', () => {
     page,
   }) => {
     await page.goto('/');
-    // Snapshot the welcome note while it is plain.
+    await giveTheBootNoteWords(page);
+    // Snapshot the boot note while it is plain.
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
@@ -820,15 +866,15 @@ test.describe('note types — consistent behavior', () => {
     await page.keyboard.type('# Not the welcome note');
     await expect(page.locator('#markdownToolbar')).toBeVisible();
 
-    // Restore the plain snapshot — the row whose name is the Welcome
-    // text. Its note (the Welcome note) is unchanged, and the note
-    // being edited is not the one being written to. (All notes: the
-    // markdown note on stage has no versions of its own.)
+    // Restore the plain snapshot — the row whose name is the boot
+    // note's fixture title. Its note (the plain boot note) is unchanged,
+    // and the note being edited is not the one being written to. (All
+    // notes: the markdown note on stage has no versions of its own.)
     await openSnapshots(page);
     await pickSegment(page, 'all');
     const plainRow = page
       .locator('#snapshotsList .snap-item', {
-        hasText: 'Welcome! Padify is an offline-capable',
+        hasText: 'Welcome back to the history fixture',
       })
       .first();
     await expandRow(page, plainRow);
@@ -860,6 +906,7 @@ test.describe('note types — consistent behavior', () => {
     page,
   }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
 
     // A markdown snapshot taken FIRST, a plain snapshot LATER — a
     // type-sectioned menu would group them apart; the timeline keeps
@@ -900,6 +947,7 @@ test.describe('deleting', () => {
     page,
   }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     const editor = page.locator('#note');
 
     // A note with words and a snapshot of it, then trashed.
@@ -939,6 +987,7 @@ test.describe('deleting', () => {
     page,
   }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     const editor = page.locator('#note');
 
     await editor.click();
@@ -962,6 +1011,7 @@ test.describe('deleting', () => {
 
   test('empty trash arms, then empties on the second press', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     const editor = page.locator('#note');
 
     // Two trashed notes to empty.
@@ -1003,6 +1053,7 @@ test.describe('deleting', () => {
     page,
   }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
     await page.keyboard.press('Control+End');
@@ -1045,6 +1096,7 @@ test.describe('deleting', () => {
 test.describe('the day-anchored timeline', () => {
   test('a same-day history still anchors under Today', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
     await page.keyboard.type(' more words');
@@ -1061,6 +1113,7 @@ test.describe('the day-anchored timeline', () => {
 
   test('day anchors split a history that spans days', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
     await seedSnapshotDaysAgo(page, 2);
@@ -1079,6 +1132,7 @@ test.describe('the day-anchored timeline', () => {
 
   test('an entry expands to its detail card and collapses again', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' expandable body copy lives here');
@@ -1106,6 +1160,7 @@ test.describe('the day-anchored timeline', () => {
 
   test('one entry opens at a time — the accordion keeps the rail readable', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
     await page.keyboard.type(' more words');
@@ -1121,6 +1176,7 @@ test.describe('the day-anchored timeline', () => {
 
   test('Enter toggles the expansion from the keyboard', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
@@ -1135,6 +1191,7 @@ test.describe('the day-anchored timeline', () => {
 
   test('the matching row wears the Current chip; an edit drops it', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
@@ -1161,6 +1218,7 @@ test.describe('the day-anchored timeline', () => {
     // BOTH — which answers "which version am I in?" twice, no answer.
     // The chip belongs to the newest identical row alone.
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
@@ -1209,6 +1267,7 @@ test.describe('the day-anchored timeline', () => {
 
   test('a just-taken row arrives flashing', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await openSnapshots(page);
 
     await page.locator('#createSnapshotBtn').click();
@@ -1218,6 +1277,7 @@ test.describe('the day-anchored timeline', () => {
 
   test('the detail card owns the actions — nothing opens a second dialog', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
@@ -1235,6 +1295,7 @@ test.describe('the day-anchored timeline', () => {
     page,
   }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+A');
     await page.keyboard.type('plain words to copy');
@@ -1256,6 +1317,7 @@ test.describe('the day-anchored timeline', () => {
 
   test('the footer tells the whole story: the chain, the store, the cap', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await openSnapshots(page);
     // The note view's count — the welcome note's chain (none yet), the
     // store beside it.
@@ -1269,6 +1331,7 @@ test.describe('the day-anchored timeline', () => {
 
   test('the toolbar stays pinned while the timeline scrolls', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.setViewportSize({ width: 1280, height: 560 });
     await page.locator('#note').click();
     // Enough rows to overflow the sheet's scroll area at this height.
@@ -1301,6 +1364,7 @@ test.describe('the day-anchored timeline', () => {
 
   test('mobile: the sheet fills the screen and every action stays reachable', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.setViewportSize({ width: 375, height: 667 });
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
@@ -1334,6 +1398,7 @@ test.describe('the day-anchored timeline', () => {
 test.describe('the version diffstat', () => {
   test('a row carries its change against the previous snapshot of its note', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S'); // the baseline — no badge
 
@@ -1355,6 +1420,7 @@ test.describe('the version diffstat', () => {
     page,
   }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+A');
     await page.keyboard.press('Delete');
@@ -1392,6 +1458,7 @@ test.describe('the version diffstat', () => {
 test.describe('the search and the footer', () => {
   test('Escape clears the query first; the second Escape closes the sheet', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
@@ -1414,6 +1481,7 @@ test.describe('the search and the footer', () => {
     page,
   }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' tail copy');
@@ -1447,6 +1515,7 @@ test.describe('the search and the footer', () => {
 
   test('a capture that MATCHES the active filter keeps the query', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' grocery run');
@@ -1487,6 +1556,7 @@ test.describe('the search and the footer', () => {
     page,
   }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' grocery run');
@@ -1527,6 +1597,7 @@ test.describe('the search and the footer', () => {
 
   test('the search field clears itself with the × and focuses from "/"', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
@@ -1555,6 +1626,7 @@ test.describe('the search and the footer', () => {
 
   test('the no-match state offers the way out: Clear the filter', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
     await openSnapshots(page);
@@ -1577,6 +1649,7 @@ test.describe('the three views', () => {
    *  see a view work against a mixed history. */
   async function seedVersionsAndTrash(page: Page): Promise<void> {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
     await toastSays(page, 'Snapshot created!');
@@ -1637,6 +1710,7 @@ test.describe('the three views', () => {
     page,
   }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
 
     // Two live notes, one version each.
     await page.locator('#note').click();
@@ -1689,6 +1763,7 @@ test.describe('the three views', () => {
 
   test('the trash view empty state explains what waits here', async ({ page }) => {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#note').click();
     await page.keyboard.press('Control+Alt+S');
 
@@ -1889,6 +1964,7 @@ test.describe("the trash's two layouts — the timeline or the card gallery", ()
    *  for a card to be a page. */
   async function seedATrashedNote(page: Page): Promise<void> {
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#addTab').click();
     const editor = page.locator('#note');
     await editor.click();
@@ -1981,6 +2057,7 @@ test.describe("the trash's two layouts — the timeline or the card gallery", ()
     // A drawing note with one rectangle in it, drawn the way a person
     // draws (the canvas's own interactive surface).
     await page.goto('/');
+    await giveTheBootNoteWords(page);
     await page.locator('#addTabTypeMenu').click();
     await page
       .locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Drawing' })

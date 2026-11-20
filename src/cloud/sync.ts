@@ -1105,19 +1105,23 @@ interface OwnEcho {
 export type OwnEchoMap = Map<string, OwnEcho>;
 
 /**
- * The brand-new-install tab, byte for byte: the content TabManager.init
- * seeds, never renamed (name null — the title derives from the content),
- * still the default note type. Anything the user did to the note — a
- * rename, a single keystroke, a type switch — breaks one of the three and
- * the note is theirs forever. Only the pristine boilerplate qualifies for
- * the seed-twin drop in mergeRemote.
+ * The brand-new-install tab, byte for byte — BOTH flavors the boot ever
+ * minted. The legacy flavor is the prose welcome note older builds
+ * seeded; the current flavor is the blank page (the prose left — a
+ * fresh install starts on an empty note). Either way: never renamed
+ * (name null — the title derives from the content), still the default
+ * note type, and untouched — a rename, a single keystroke, a type
+ * switch breaks one of the three and the note is theirs forever. Only
+ * the pristine boilerplate qualifies for the seed-twin drop in
+ * mergeRemote — where the blank flavor answers one more question (see
+ * the drop site): bytes prove the legacy flavor untouched; the blank
+ * flavor borrows the merge's dirty set for the same proof.
  */
 function isUntouchedWelcomeSeed(tab: StoredNoteTab): boolean {
-  return (
-    tab.name === null &&
-    tab.content === WELCOME_HTML &&
-    (tab.noteType ?? DEFAULT_NOTE_TYPE) === DEFAULT_NOTE_TYPE
-  );
+  if (tab.name !== null || (tab.noteType ?? DEFAULT_NOTE_TYPE) !== DEFAULT_NOTE_TYPE) {
+    return false;
+  }
+  return tab.content === WELCOME_HTML || tab.content === '';
 }
 
 /**
@@ -1541,18 +1545,27 @@ export function mergeRemote(
   // ordering pass below.
   tabs.push(...freshRemote);
 
-  // The untouched welcome seed never uploads to a populated account (see
-  // the header comment — a per-device "Welcome!" twin broke note-id-keyed
-  // behavior, the share panel's one-link-per-note match for one). A seed
-  // the pull delivered is the account's own note and stays; a seed the
-  // pull never delivered, meeting an account that HAS live notes, is
-  // this boot's boilerplate — dropped from the model, never pushed.
-  // Renamed or edited seeds fail the byte-exact test and always stay.
+  // The untouched boot seed never uploads to a populated account (see
+  // the header comment — a per-device twin broke note-id-keyed
+  // behavior, the share panel's one-link-per-note match for one). A
+  // seed the pull delivered is the account's own note and stays; a
+  // seed the pull never delivered, meeting an account that HAS live
+  // notes, is this boot's boilerplate — dropped from the model, never
+  // pushed. Renamed, edited, type-switched seeds fail the shape test
+  // and always stay. The blank flavor owes one more answer: an empty
+  // default-type note could be this boot's boilerplate or the user's
+  // own brand-new note still riding its first push — the dirty set is
+  // the difference (boilerplate is clean; a note in flight is dirty).
+  // The legacy prose flavor skips that court — its bytes ARE the proof
+  // of untouchedness.
   if (remoteRows.some((row) => !row.deleted)) {
     const remoteIds = new Set(remoteRows.map((row) => row.id));
     for (let i = tabs.length - 1; i >= 0; i -= 1) {
       const tab = tabs[i];
       if (remoteIds.has(tab.id) || !isUntouchedWelcomeSeed(tab)) {
+        continue;
+      }
+      if (tab.content === '' && dirty.has(tab.id)) {
         continue;
       }
       tabs.splice(i, 1);

@@ -8,7 +8,7 @@ import { $ } from '../lib/q';
 // the dirty set from it. These tests run the REAL manager over the REAL
 // storage layer — the exact save/reboot path a browser reload takes.
 
-import { TabManager, WELCOME_HTML } from '../tabs';
+import { TabManager } from '../tabs';
 import { flushPendingWrites, resetStorageForTests, storageReady, whenNotesIdle } from '../storage';
 
 // jsdom lacks scrollIntoView (rendering-dependent); the manager calls it
@@ -85,7 +85,7 @@ describe('durable unpushed flags — the reload-recovery seed', () => {
     const first = trackManager(new TabManager($('#note')));
     await first.init();
     first.addTab(false);
-    const created = first.allTabs.find((tab) => tab.content !== WELCOME_HTML);
+    const created = first.allTabs[first.allTabs.length - 1];
     expect(created).toBeTruthy();
     await whenNotesIdle();
 
@@ -109,7 +109,7 @@ describe('durable unpushed flags — the reload-recovery seed', () => {
     const first = trackManager(new TabManager($('#note')));
     await first.init();
     first.addTab(false);
-    const created = first.allTabs.find((tab) => tab.content !== WELCOME_HTML);
+    const created = first.allTabs[first.allTabs.length - 1];
     await whenNotesIdle();
 
     // The push confirmed: dirty cleared, flag re-stamped false by the
@@ -130,7 +130,7 @@ describe('durable unpushed flags — the reload-recovery seed', () => {
     const first = trackManager(new TabManager($('#note')));
     await first.init();
     first.addTab(false);
-    const created = first.allTabs.find((tab) => tab.content !== WELCOME_HTML);
+    const created = first.allTabs[first.allTabs.length - 1];
     await whenNotesIdle();
 
     // Trash it and die before the trash row ever shipped.

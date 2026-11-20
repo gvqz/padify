@@ -24,7 +24,6 @@ import {
   legacyTextToHtml,
   sanitizeNoteHtml,
   TabManager,
-  WELCOME_HTML,
   type NoteTab,
 } from './tabs';
 import {
@@ -398,17 +397,17 @@ describe('TabManager (characterization)', () => {
     return manager;
   }
 
-  it('bootstraps a welcome tab into empty storage and paints the editor', async () => {
+  it('bootstraps a blank tab into empty storage and paints the editor', async () => {
     const manager = await bootedManager();
 
     expect(manager.getActive()).not.toBeNull();
-    expect(document.getElementById('note')!.innerHTML).toBe(WELCOME_HTML);
+    expect(document.getElementById('note')!.innerHTML).toBe('');
     expect(document.getElementById('tabRailCount')!.textContent).toBe('1');
 
     await flushAndReboot();
     const persisted = await loadNotes();
     expect(persisted.tabs).toHaveLength(1);
-    expect(persisted.tabs[0].content).toBe(WELCOME_HTML);
+    expect(persisted.tabs[0].content).toBe('');
   });
 
   it('rehydrates stored tabs and sanitizes their html on the way in', async () => {
@@ -706,14 +705,14 @@ describe('TabManager (characterization)', () => {
     expect(manager.getActive()!.content).toBe('<div>fresh from the cloud</div>');
   });
 
-  it('applyExternalMerge recreates a welcome tab when the merge empties the list', async () => {
+  it('applyExternalMerge recreates a blank tab when the merge empties the list', async () => {
     const manager = await bootedManager();
 
     manager.applyExternalMerge([]);
 
     const tabs = manager.exportForSync().tabs;
     expect(tabs).toHaveLength(1);
-    expect(tabs[0].content).toBe(WELCOME_HTML);
+    expect(tabs[0].content).toBe('');
   });
 
   it('applyExternalMerge repaints the editor on an identity change even while focused', async () => {

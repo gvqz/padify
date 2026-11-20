@@ -930,13 +930,15 @@ describe('mergeRemote — closed tabs stay closed', () => {
   });
 });
 
-describe('mergeRemote — the untouched welcome seed', () => {
-  // Every fresh browser boots with the welcome note as its only tab.
-  // Signing in from that browser used to upload it, so a populated
+describe('mergeRemote — the untouched legacy welcome seed', () => {
+  // Every fresh browser USED to boot with the prose welcome note as its
+  // only tab. Signing in from that browser uploaded it, so a populated
   // account gained a byte-identical "Welcome!" twin per device — each
   // twin its own note id, which broke note-id-keyed behavior (the share
-  // panel's one-active-link-per-note match, for one). The merge now
-  // drops the pristine seed when the pull proves the account is alive.
+  // panel's one-active-link-per-note match, for one). The merge drops
+  // the pristine seed when the pull proves the account is alive — the
+  // legacy prose flavor, recognized by its bytes (the blank flavor has
+  // its own describe below).
   const seed = (id: string): StoredNoteTab => tab(id, { content: WELCOME_HTML });
   const otherNote = row('real', { content: '<p>years of real notes</p>' });
 
@@ -1000,5 +1002,66 @@ describe('mergeRemote — the untouched welcome seed', () => {
 
     expect(merge.tabs.map((entry) => entry.id)).toEqual(['fresh-boot', 'real']);
     expect(merge.droppedSeedIds).toEqual([]);
+  });
+});
+
+describe('mergeRemote — the blank boot seed', () => {
+  // The welcome prose left: fresh installs boot on a BLANK page now (the
+  // same mint, no bytes). The seed-twin drop recognizes both flavors —
+  // the legacy prose by its bytes, the blank page by its shape — and a
+  // dirty blank note is never boilerplate: a note the user added but
+  // never typed into still rides its pending push.
+  const blank = (id: string): StoredNoteTab => tab(id, { content: '' });
+  const otherNote = row('real', { content: '<p>years of real notes</p>' });
+
+  it('a pristine blank seed is dropped when the pull delivers a live account', () => {
+    const merge = mergeRemote([otherNote], payloadOf([blank('fresh-boot')], []));
+
+    expect(merge.tabs.map((entry) => entry.id)).toEqual(['real']);
+    expect(merge.droppedSeedIds).toEqual(['fresh-boot']);
+    expect(merge.changed).toBe(true);
+  });
+
+  it('a dirty blank seed is a real note and stays — its push is pending', () => {
+    // The blank page a user just added (addTab, not a keystroke yet) is
+    // indistinguishable from the boot seed by bytes alone — the dirty
+    // set is what separates boilerplate from a note in flight.
+    const merge = mergeRemote([otherNote], payloadOf([blank('fresh-boot')], ['fresh-boot']));
+
+    expect(merge.tabs.map((entry) => entry.id)).toEqual(['fresh-boot', 'real']);
+    expect(merge.droppedSeedIds).toEqual([]);
+  });
+
+  it('a renamed blank note is a real note and always stays', () => {
+    const renamed = tab('fresh-boot', { content: '', name: 'Scratch' });
+
+    // Clean device, so the remote ordering wins (real first).
+    const merge = mergeRemote([otherNote], payloadOf([renamed], []));
+
+    expect(merge.tabs.map((entry) => entry.id)).toEqual(['real', 'fresh-boot']);
+    expect(merge.droppedSeedIds).toEqual([]);
+  });
+
+  it('a blank seed switched to another note type is a real note and always stays', () => {
+    const switched = tab('fresh-boot', { content: '', noteType: 'markdown' });
+
+    const merge = mergeRemote([otherNote], payloadOf([switched], []));
+
+    expect(merge.tabs.map((entry) => entry.id)).toEqual(['real', 'fresh-boot']);
+    expect(merge.droppedSeedIds).toEqual([]);
+  });
+
+  it('the blank seed survives an account with only tombstones', () => {
+    // Same rule as the legacy flavor: a wiped-everywhere account must
+    // still adopt its first device's seed — the pull delivering no live
+    // rows means the seed is the only copy of the note that exists.
+    const merge = mergeRemote(
+      [row('gone', { deleted: true, updated_at: 3_000 })],
+      payloadOf([blank('fresh-boot')], []),
+    );
+
+    expect(merge.tabs.map((entry) => entry.id)).toEqual(['fresh-boot']);
+    expect(merge.droppedSeedIds).toEqual([]);
+    expect(merge.changed).toBe(false);
   });
 });

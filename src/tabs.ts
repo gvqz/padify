@@ -60,7 +60,7 @@ import {
   type NoteSurface,
 } from './editor/surface';
 import { convertNoteContent } from './editor/note-convert';
-import { deriveTabTitle, legacyTextToHtml, WELCOME_HTML } from './editor/note-content';
+import { deriveTabTitle, legacyTextToHtml } from './editor/note-content';
 import {
   DEFAULT_NOTE_TYPE,
   isHtmlContent,
@@ -158,7 +158,11 @@ export class TabManager {
   constructor(editor: Q) {
     this.editor = editor;
     this.trash = new TrashStore(this.syncLedger);
-    this.model = new NotesModel(() => createTab(WELCOME_HTML));
+    // The fallback mint is a BLANK page now — the welcome prose left
+    // (fresh installs start on an empty note). WELCOME_HTML survives in
+    // note-content.ts only as the legacy seed marker the sync layer
+    // still recognizes byte-exactly.
+    this.model = new NotesModel(() => createTab(''));
     // The host surface the strip may reach — the god-object antidote: the
     // view sees the model's shape and a handful of commands, nothing else.
     // The reads go through this manager live (the tabs array is replaced,

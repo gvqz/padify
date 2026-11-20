@@ -523,7 +523,7 @@ test.describe('the calendar', () => {
     await page.goto('/');
 
     // No task lists exist yet — the state the QA finding lived in. The
-    // calendar opens from the rail head door with the welcome note (a
+    // calendar opens from the rail head door with the blank boot note (a
     // plain note) as the active editor view underneath.
     await page.locator('#tabRailCalendar').click();
     await expect(page.locator('#tasksHub')).toBeVisible();
@@ -553,7 +553,7 @@ test.describe('the calendar', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('#tasksHub')).toBeHidden();
     await expect(page.locator('#tabStripTabs .tab-strip-tab')).toHaveCount(2);
-    await expect(page.locator('#tabStripTabs .tab-strip-tab.active')).toContainText(/Welcome/i);
+    await expect(page.locator('#tabStripTabs .tab-strip-tab.active')).toContainText(/Untitled/i);
 
     // The background list is real: it carries the reminder.
     await page.locator('#tabStripTabs .tab-strip-tab', { hasText: /Task list/i }).click();

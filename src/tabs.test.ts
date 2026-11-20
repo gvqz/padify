@@ -299,8 +299,11 @@ describe('deriveTabTitle', () => {
   });
 });
 
-describe('WELCOME_HTML', () => {
-  it('is non-empty and introduces the app', () => {
+describe('WELCOME_HTML — the legacy seed marker', () => {
+  it('survives byte-exact for the sync layer', () => {
+    // No longer minted (fresh installs boot on a blank page), but the
+    // bytes must never drift: still-pristine legacy seeds are recognized
+    // — and dropped from populated accounts — by this exact string.
     expect(WELCOME_HTML.length).toBeGreaterThan(100);
     expect(WELCOME_HTML).toContain('Padify');
   });

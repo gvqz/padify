@@ -88,6 +88,20 @@ test.describe('floating window', () => {
     page,
   }) => {
     await page.goto('/');
+    // The boot barrier: the strip paints after the model wires, so the
+    // words typed below land in a listening editor, not the pre-boot DOM.
+    await expect(page.locator('#tabStripTabs .tab-strip-tab').first()).toContainText('Untitled');
+    // The boot note earns the words its title rides on (it boots blank
+    // now — no prose, no derived title).
+    await page.locator('#note').click();
+    await page.keyboard.type('Floating window probe');
+    // The input debounce (500ms) walks the words into the model and the
+    // strip re-renders with the derived title — the popup header reads
+    // the same record and only refreshes on a switch, so the title must
+    // be visibly earned before the window opens.
+    await expect(page.locator('#tabStripTabs .tab-strip-tab').first()).toContainText(
+      'Floating window probe',
+    );
     await expect(page.locator('#pipContainer')).toBeVisible();
 
     const popup = await openFloatingWindow(page);
@@ -101,7 +115,7 @@ test.describe('floating window', () => {
     // The floating window has its compact header with the note's title
     // and the note browser — and no dock button (the window's own close
     // affordances already bring the note home).
-    await expect(popup.locator('#pipHeaderTitle')).toHaveText(/Padify/i);
+    await expect(popup.locator('#pipHeaderTitle')).toHaveText('Floating window probe');
     await expect(popup.locator('.pip-notes-btn')).toBeVisible();
     await expect(popup.locator('.pip-header-dock')).toHaveCount(0);
     // The statistics anchor is dead in a popup — it must not paint.
@@ -224,7 +238,10 @@ test.describe('floating window', () => {
   }) => {
     await page.goto('/');
 
-    // Two plain notes with known content: the welcome note + this one.
+    // Two plain notes with known content: the boot note + this one. The
+    // boot note earns its words first (it boots blank now).
+    await page.locator('#note').click();
+    await page.keyboard.type('Meeting notes');
     await page.locator('#addTab').click();
     await page.locator('#note').click();
     await page.keyboard.type('Grocery list');
@@ -246,12 +263,12 @@ test.describe('floating window', () => {
     await expect(groceryRow).toHaveClass(/active/);
     await expect(groceryRow.locator('.pip-note-preview')).toHaveText('Grocery list');
 
-    // Switch to the welcome note from INSIDE the popup: the panel
+    // Switch to the boot note from INSIDE the popup: the panel
     // closes, the title follows, the editor swaps content in place.
-    await popup.locator('.pip-note-row', { hasText: 'Welcome' }).click();
+    await popup.locator('.pip-note-row', { hasText: 'Meeting notes' }).click();
     await expect(popup.locator('.pip-notes')).toBeHidden();
-    await expect(popup.locator('#pipHeaderTitle')).toHaveText(/Welcome.*Padify/);
-    await expect(popup.locator('#note')).toContainText('offline-capable notepad');
+    await expect(popup.locator('#pipHeaderTitle')).toHaveText('Meeting notes');
+    await expect(popup.locator('#note')).toContainText('Meeting notes');
     await expect(popup.locator('#wordCount [data-wc="chars"]')).not.toHaveText('12');
 
     // A new note started from the browser is a plain, empty one.
@@ -281,6 +298,13 @@ test.describe('floating window', () => {
   }) => {
     await page.goto('/');
 
+    // The boot barrier (see the first test) — then the plain note earns
+    // its words (the boot note starts blank, and the header's title is
+    // the thing this test watches).
+    await expect(page.locator('#tabStripTabs .tab-strip-tab').first()).toContainText('Untitled');
+    await page.locator('#note').click();
+    await page.keyboard.type('Plain note for the window');
+
     // A rich note exists, but a plain note is active when the window opens.
     await page.locator('#addTabTypeMenu').click();
     await page
@@ -302,7 +326,7 @@ test.describe('floating window', () => {
 
     // The window stays open, the plain note stays put.
     await expect(popup.locator('#note')).toBeVisible();
-    await expect(popup.locator('#pipHeaderTitle')).toHaveText(/Padify/i);
+    await expect(popup.locator('#pipHeaderTitle')).toHaveText('Plain note for the window');
   });
 
   test('a rich note active closes the floating window and dims — never hides — the entry point', async ({

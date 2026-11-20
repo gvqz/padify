@@ -16,9 +16,10 @@
  *   I2  after the first seed the list is never empty — closing the last
  *       note mints a fresh tab, and so does a merge that empties the
  *       world. The mint CONTENT is the caller's policy, passed per call:
- *       the welcome note on boot and merge, an empty tab on close (the
- *       user just deleted their last note on purpose — the welcome would
- *       be noise; the toast already says "a fresh tab is ready").
+ *       a blank page on boot and merge (the welcome prose left — fresh
+ *       installs start on an empty note), an empty tab on close (the
+ *       user just deleted their last note on purpose; the toast already
+ *       says "a fresh tab is ready").
  *
  * The record itself (NoteTab) is a domain object and in-place field writes
  * on a record the model handed out are the domain's business, exactly as
@@ -55,10 +56,10 @@ export class NotesModel {
   private currentActiveId: string | null = null;
   private readonly activeListeners = new Set<(tab: NoteTab) => void>();
 
-  /** @param mintWelcome mints the tab that keeps invariant I2 — the boot
-   *      and merge paths' welcome note. Close passes its own (empty) mint
-   *      per call; this is the default. */
-  constructor(private readonly mintWelcome: () => NoteTab) {}
+  /** @param mintFallback mints the tab that keeps invariant I2 — the
+   *      boot and merge paths' blank page. Close passes its own (empty)
+   *      mint per call; this is the default. */
+  constructor(private readonly mintFallback: () => NoteTab) {}
 
   // ---- reads ----------------------------------------------------------------
 
@@ -98,7 +99,7 @@ export class NotesModel {
    * The boot seed: the hydrated (or legacy-migrated) rows become the
    * list, and the active id is the stored preference when it survives,
    * else the first row, else the mint keeps the list from starting
-   * empty. Returns whether a welcome tab had to be minted — the caller
+   * empty. Returns whether a fallback tab had to be minted — the caller
    * persists exactly then (a normal boot writes nothing).
    */
   seed(rows: NoteTab[], preferredActiveId: string | null): { minted: NoteTab | null } {
@@ -107,7 +108,7 @@ export class NotesModel {
       ? preferredActiveId
       : (rows[0]?.id ?? null);
     if (this.currentActiveId === null) {
-      const fresh = this.mintWelcome();
+      const fresh = this.mintFallback();
       this.tabs.push(fresh);
       this.currentActiveId = fresh.id;
       return { minted: fresh };
@@ -120,7 +121,7 @@ export class NotesModel {
    * active note did not survive the merge, the first surviving row takes
    * the stage (the editor's old DOM belonged to a note that no longer
    * exists — the caller repaints on `activeChanged`); an emptied world
-   * mints the welcome back.
+   * mints a blank page back.
    */
   replaceAll(rows: NoteTab[]): ListMutationOutcome {
     const previousActiveId = this.currentActiveId;
@@ -132,7 +133,7 @@ export class NotesModel {
     let minted: NoteTab | null = null;
     if (!survived) {
       if (this.tabs.length === 0) {
-        minted = this.mintWelcome();
+        minted = this.mintFallback();
         this.tabs.push(minted);
       }
       this.currentActiveId = this.tabs[0]!.id;
@@ -177,7 +178,7 @@ export class NotesModel {
    * list mints `mintWhenEmpty` and activates it (invariant I2). Returns
    * null when the id was not open.
    */
-  remove(id: string, mintWhenEmpty: () => NoteTab = this.mintWelcome): ListMutationOutcome | null {
+  remove(id: string, mintWhenEmpty: () => NoteTab = this.mintFallback): ListMutationOutcome | null {
     const index = this.indexOf(id);
     if (index === -1) {
       return null;
