@@ -272,4 +272,44 @@ test.describe('the drawing canvas', () => {
     const saved = await readDrawingNotes(page);
     expect(JSON.parse(saved[0].content).elements).toHaveLength(1);
   });
+
+  test('the shortcuts reference teaches the canvas — the app speaks the vendor chords', async ({
+    page,
+  }) => {
+    await page.goto('/');
+
+    // The app's own shortcuts modal (the brand menu's reference), not the
+    // vendor's help — the integration: the same sheet that teaches Ctrl+B
+    // teaches the canvas.
+    await page.locator('#brandMenuButton').click();
+    await page.locator('#brandMenu .brand-menu-item', { hasText: 'Keyboard shortcuts' }).click();
+    const modal = page.locator('#keyboardShortcutsModal');
+    await expect(modal).toHaveClass(/in/);
+
+    // The Drawing Canvas section lists the tool chords this build's
+    // canvas actually answers to (probe-verified against the installed
+    // vendor): the number row, the letter row, the eraser and the lock.
+    const section = modal.locator('.shortcut-section', { hasText: 'Drawing Canvas' });
+    await expect(section).toBeVisible();
+    await expect(section.locator('.shortcut-row', { hasText: 'Tools by number' })).toContainText(
+      '1 select · 2 rectangle · 3 diamond · 4 ellipse · 5 arrow · 6 line · 7 freedraw · 8 text',
+    );
+    await expect(
+      section.locator('.shortcut-row', { hasText: 'Same tools by letter' }),
+    ).toContainText('X or P freedraw');
+    await expect(section.locator('.shortcut-row', { hasText: 'Eraser' })).toContainText('0');
+    await expect(section.locator('.shortcut-row', { hasText: 'Lock tool' })).toContainText('Q');
+
+    // The chords the canvas shares with the app's platform labeling: the
+    // history family speaks the hydrated Ctrl (never the Cmd hedge).
+    const undoRow = section.locator('.shortcut-row', { hasText: 'Undo / Redo' });
+    await expect(undoRow.locator('kbd[data-mod-key]')).toHaveCount(2);
+    await expect(undoRow).toContainText('Ctrl');
+    await expect(undoRow).not.toContainText('⌘');
+
+    // The search door finds the canvas rows like any other.
+    await page.locator('#shortcutSearch').fill('sticky');
+    await expect(modal.locator('.shortcut-row', { hasText: 'Sticky note' })).toBeVisible();
+    await expect(modal.locator('.shortcut-row', { hasText: 'Bold' })).toBeHidden();
+  });
 });
