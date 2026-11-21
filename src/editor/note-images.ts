@@ -1,28 +1,30 @@
 /**
- * Note images — the client half of image support, riding the blob store
- * the voice-notes foundation shipped (server half: server/attachments.ts;
- * local store: storage/attachments.ts; cloud flush: cloud/attachments.ts).
+ * Note images — the RENDER half of the attachment-reference scheme, riding
+ * the blob store the voice-notes foundation shipped (server half:
+ * server/attachments.ts; local store: storage/attachments.ts; cloud flush:
+ * cloud/attachments.ts).
  *
  * THE SHAPE. A note's content never carries pixels — it carries a tiny
  * reference, `padify-att:<id>`, as the destination of a normal markdown
  * image or a raw-HTML `<img src>`. The bytes live in the attachment store:
- * IndexedDB locally (offline-first, written at capture time), the server
- * in the background (the flush pushes pending attachments after each sync
- * cycle; other devices pull on demand). Note sync, merge and the 2 MB
- * wire cap stay untouched — a reference is ~40 characters.
+ * IndexedDB locally, the server in the background. Note sync, merge and
+ * the 2 MB wire cap stay untouched — a reference is ~40 characters.
  *
- * CAPTURE. A pasted or dropped image file is downscaled to a 1920-px long
- * edge and re-encoded as WebP (~100–400 KB typical) before it lands in
- * the store — the 5 MB server cap then guards against pathology instead
- * of shaping the everyday case. GIFs pass through byte-exact (canvas
- * re-encoding would strip the animation) under the same cap.
+ * THE SCOPE (owner's call, 2026-11-21). Standard notes are TEXT-ONLY: the
+ * markdown surface stopped capturing images (paste/drop/picker came out).
+ * This module stays as graceful degradation — notes that already carry a
+ * reference (from the one day capture lived there, or from an imported
+ * .padify file) keep rendering, and a missing one reads as a dashed
+ * placeholder, never a broken glyph or a mangled construct. The capture
+ * tenant is the DRAWING CANVAS (see editor/drawing/canvas-images.ts),
+ * whose image elements carry fileIds — this scheme's note-content form is
+ * legacy-shaped and nothing new writes it.
  *
  * RESOLUTION. The preview renders `<img src="padify-att:…">` because the
  * renderer's URL gate admits the scheme; this module then swaps the srcs
  * to blob URLs — the local store first, the server's lazy pull when the
- * bytes are another device's — and marks what it could not load, so a
- * missing image reads as a dashed placeholder instead of a broken glyph.
- * One blob URL per id for the surface's lifetime, revoked at teardown.
+ * bytes are another device's — and marks what it could not load. One blob
+ * URL per id for the surface's lifetime, revoked at teardown.
  *
  * THE GATE STAYS PURE. This module is app-only (it imports the storage
  * and cloud layers); the share viewer's generated bundle inherits only
@@ -31,12 +33,7 @@
  * links learn to carry attachments.
  */
 
-import {
-  getAttachmentBlob,
-  newAttachmentId,
-  putAttachment,
-  type AttachmentMeta,
-} from '../storage/attachments';
+import { getAttachmentBlob, putAttachment, type AttachmentMeta } from '../storage/attachments';
 import { fetchAttachment } from '../cloud/attachments';
 
 // ---------------------------------------------------------------------------
@@ -70,9 +67,8 @@ export function padifyAttRef(id: string): string {
 }
 
 /**
- * Every attachment id a note's content references — the capture side's
- * counterpart for the file envelope (which images ride along on export)
- * and any future garbage collection.
+ * Every attachment id a note's content references — the .padify export's
+ * embedding pass (app.ts) and any future garbage collection.
  *
  * Three shapes, the ones the renderer actually resolves: inline images
  * `![alt](padify-att:id)`, image definitions `[ref]: padify-att:id`, and
@@ -107,222 +103,14 @@ export function collectAttachmentRefs(content: string): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Capture
+// Resolution — the preview's blob-URL pass
 // ---------------------------------------------------------------------------
 
-/**
- * The client-side byte ceiling — the server's own cap (5 MB), mirrored
- * so an over-cap image fails at capture time with an honest message
- * instead of poisoning the upload flush for the session.
- */
-export const MAX_IMAGE_BYTES = 5_000_000;
-
-/** The long edge a captured image keeps — beyond it, WebP stops paying. */
-export const MAX_IMAGE_EDGE_PX = 1920;
-
-/** WebP quality for the re-encode (the sweet spot for screenshots). */
-export const IMAGE_WEBP_QUALITY = 0.82;
-
-/** JPEG fallback quality (Safari's canvas has no WebP encoder). */
-export const IMAGE_JPEG_QUALITY = 0.85;
-
-/** The input types capture accepts; anything else refuses honestly. */
-export const IMAGE_INPUT_MIMES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
-
-/** A stored image: the store's meta shape plus the encoded bytes. */
-export interface PreparedImage {
-  id: string;
-  name: string;
-  mime: string;
-  blob: Blob;
-}
-
-/** Why a capture failed — the toast's vocabulary. */
-export type PrepareImageFailure = 'unsupported' | 'too-large' | 'no-storage' | 'failed';
-
-export type PrepareImageResult =
-  { ok: true; image: PreparedImage } | { ok: false; reason: PrepareImageFailure };
-
-/** The pluggable re-encode step (jsdom has no canvas; tests inject). */
-export type ImageCompressor = (file: Blob, mime: string) => Promise<Blob | null>;
-
-/** The pluggable store write (tests inject a spy). */
+/** The pluggable store write (a remote pull caches into the local store). */
 export type AttachmentStore = (
   meta: Omit<AttachmentMeta, 'uploaded' | 'createdAt'>,
   blob: Blob,
 ) => Promise<boolean>;
-
-/**
- * Captures one image file into the attachment store. Order of business:
- * the type gate (unknown types refuse before any decode), GIFs pass
- * through byte-exact under the cap (animation is the content), everything
- * else downscales + re-encodes, the result lands in the store offline-
- * first (uploaded=0; the cloud flush pushes it after the next sync cycle).
- */
-export async function prepareImageAttachment(
-  file: File,
-  deps: { compress?: ImageCompressor; store?: AttachmentStore } = {},
-): Promise<PrepareImageResult> {
-  const mime = (file.type ?? '').toLowerCase();
-  if (!IMAGE_INPUT_MIMES.has(mime)) {
-    return { ok: false, reason: 'unsupported' };
-  }
-  const compress = deps.compress ?? compressImageFile;
-  const store = deps.store ?? putAttachment;
-
-  let blob: Blob;
-  if (mime === 'image/gif') {
-    // Canvas re-encoding strips animation — the bytes ARE the image.
-    if (file.size > MAX_IMAGE_BYTES) {
-      return { ok: false, reason: 'too-large' };
-    }
-    blob = file;
-  } else {
-    const encoded = await compress(file, mime);
-    if (encoded === null || encoded.size === 0) {
-      return { ok: false, reason: 'failed' };
-    }
-    if (encoded.size > MAX_IMAGE_BYTES) {
-      return { ok: false, reason: 'too-large' };
-    }
-    blob = encoded;
-  }
-
-  const id = newAttachmentId();
-  const storedMime = mime === 'image/gif' ? mime : blob.type || mime;
-  const stored = await store(
-    { id, name: file.name.slice(0, 200), mime: storedMime, size: blob.size },
-    blob,
-  );
-  if (!stored) {
-    // The storage layer fell back to localStorage, which cannot hold
-    // bytes — the capture contract says surface this here, not at sync.
-    return { ok: false, reason: 'no-storage' };
-  }
-  return { ok: true, image: { id, name: file.name, mime: storedMime, blob } };
-}
-
-/**
- * The markdown image line for a stored image: the alt is the file name
- * minus its extension, with the characters that would break the inline
- * construct (`[]()` and newlines) flattened — an honest alt beats a
- * mangled construct.
- */
-export function imageMarkdownFor(image: PreparedImage): string {
-  const alt =
-    (image.name ?? '')
-      .replace(/\.[a-z0-9]+$/i, '')
-      .replace(/[[\]()\r\n]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim() || 'image';
-  return `![${alt}](${padifyAttRef(image.id)})`;
-}
-
-/**
- * The image files out of a paste/drop `FileList` — the ones capture
- * accepts, in order. Non-image files stay untouched (a text drop keeps
- * the textarea's native behavior).
- */
-export function imageFilesFrom(files: FileList | undefined | null): File[] {
-  if (!files) {
-    return [];
-  }
-  return [...files].filter((file) => IMAGE_INPUT_MIMES.has((file.type ?? '').toLowerCase()));
-}
-
-/**
- * The canvas re-encode: decode → scale to the 1920-px long edge → WebP,
- * falling back to JPEG when the browser's canvas cannot answer WebP
- * (Safari). Null when the decode fails (a corrupt file) — the caller
- * turns that into the honest refusal.
- */
-export const compressImageFile: ImageCompressor = async (file) => {
-  const source = await decodeImage(file);
-  if (!source) {
-    return null;
-  }
-  try {
-    const scale = Math.min(1, MAX_IMAGE_EDGE_PX / Math.max(source.width, source.height));
-    const width = Math.max(1, Math.round(source.width * scale));
-    const height = Math.max(1, Math.round(source.height * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      return null;
-    }
-    ctx.drawImage(source.image, 0, 0, width, height);
-    const webp = await canvasToBlob(canvas, 'image/webp', IMAGE_WEBP_QUALITY);
-    if (webp && webp.type === 'image/webp') {
-      return webp;
-    }
-    // No WebP encoder (Safari) — the canvas fell back to PNG, which is
-    // a size trap; re-ask for JPEG before giving up.
-    return await canvasToBlob(canvas, 'image/jpeg', IMAGE_JPEG_QUALITY);
-  } finally {
-    source.release();
-  }
-};
-
-/** A decoded image plus how to free it. */
-interface DecodedImage {
-  image: CanvasImageSource & { width: number; height: number };
-  width: number;
-  height: number;
-  release(): void;
-}
-
-/** Decodes a blob to a drawable — ImageBitmap where it exists, `<img>`
- * decode as the fallback (same-origin object URL, revoked on release). */
-async function decodeImage(file: Blob): Promise<DecodedImage | null> {
-  if (typeof createImageBitmap === 'function') {
-    try {
-      const bitmap = await createImageBitmap(file);
-      return {
-        image: bitmap,
-        width: bitmap.width,
-        height: bitmap.height,
-        release: () => bitmap.close(),
-      };
-    } catch {
-      // fall through to the <img> path
-    }
-  }
-  const url = URL.createObjectURL(file);
-  try {
-    const image = new Image();
-    image.decoding = 'async';
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error('decode failed'));
-      image.src = url;
-    });
-    return {
-      image,
-      width: image.naturalWidth,
-      height: image.naturalHeight,
-      release: () => URL.revokeObjectURL(url),
-    };
-  } catch {
-    URL.revokeObjectURL(url);
-    return null;
-  }
-}
-
-function canvasToBlob(
-  canvas: HTMLCanvasElement,
-  mime: string,
-  quality: number,
-): Promise<Blob | null> {
-  return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob), mime, quality);
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Resolution — the preview's blob-URL pass
-// ---------------------------------------------------------------------------
 
 /** The loader seam (tests inject; production reads the local store). */
 export type LocalImageLoader = (id: string) => Promise<Blob | null>;
@@ -443,29 +231,4 @@ export function createNoteImageResolver(deps: NoteImageResolverDeps = {}): NoteI
       failed.clear();
     },
   };
-}
-
-/** The hidden file input the toolbar's image row opens — one per document,
- * created on first use (createElement, per the markup↔JS contract). */
-export function pickImageFiles(): Promise<File[]> {
-  return new Promise((resolve) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = [...IMAGE_INPUT_MIMES].join(',');
-    input.multiple = true;
-    input.hidden = true;
-    input.addEventListener('change', () => {
-      const picked = [...(input.files ?? [])];
-      input.value = '';
-      input.remove();
-      resolve(picked);
-    });
-    // A picker that never fires change (Escape) must not leak the promise.
-    input.addEventListener('cancel', () => {
-      input.remove();
-      resolve([]);
-    });
-    document.body.appendChild(input);
-    input.click();
-  });
 }

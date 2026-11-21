@@ -48,7 +48,6 @@ import {
   markdownViewMode,
   onMarkdownSelection,
   onMarkdownViewMode,
-  openMarkdownImagePicker,
   refreshMarkdownSelectionState,
   setMarkdownViewMode,
   type MarkdownSelectionState,
@@ -217,12 +216,6 @@ function wireCommandButtons(): void {
       }
       if (action === 'math') {
         openMarkdownEquationBubble();
-        return;
-      }
-      if (action === 'image') {
-        // The picker is async (capture + insert follow the pick) and the
-        // caret handling rides insertMarkdownImageFiles itself.
-        void openMarkdownImagePicker();
         return;
       }
       runMarkdownToolbarAction(action);
