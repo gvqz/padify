@@ -104,6 +104,147 @@ honest costs, not blockers.
     backoff and an "n uploads pending" chip closes the last honesty gap in
     the offline story.
 
+## The hygiene review (2026-11-21) — what the whole-repo scan found
+
+*The owner asked for a full scan for poorly designed garbage. The deletable
+weight is already gone (four commits: the phantom image-data amputation
+fd3b7be, dead exports/params eaf1409, the small honest repairs 31cbdc5, the
+escape/class-list dedup 6c9499a, plus the sixteen executed one-off scripts
+95693ee). What remains is the list of DESIGN findings — things that need
+real work or a decision, ranked by how much they can hurt. Every item was
+verified against the code, not grepped on faith.*
+
+### Correctness — the items that can lose or lie about user data
+
+- **H1. The server's seq is arrival-ordered, not recency-ordered; two tabs
+  can silently destroy a confirmed push.** Both tabs hold the same note
+  dirty; the cross-tab listener only syncs tombstones. Tab B (newer bytes,
+  earlier arrival) pushes; tab A (stale bytes) lands after and takes the
+  higher seq; B's model is clean after `confirmPushed` and the next pull
+  answers remote-wins with A's stale bytes — B's words vanish with NO
+  conflicted copy. The delete path has a recency guard; the live-vs-live
+  upsert does not (server/notes.ts:266-301 + sync.ts:1239-1254, 1473-1541).
+  Fix: `and excluded.updated_at >= notes.updated_at` on the upsert's
+  conflict clause, so stale strands are refused server-side and fall to the
+  client's three-way merge. Needs its own commit with a pinning test.
+- **H2. Share PATCH caps truncate silently.** The server caps `note_ids`
+  at 500 and `refresh` at 100 (server/shares.ts:286-306); the client sends
+  ALL tombstones and dirty ids uncapped (cloud/share.ts:253-279). Past the
+  caps the same first-500 re-send forever: tombstones beyond them never
+  revoke public links. Fix: client-side slice-and-loop like the sync
+  batcher, or a `truncated: true` answer.
+- **H3. The wire module's own types are bypassed on the server.**
+  `NotesPutV2` imports nowhere; the server hand-builds the PUT answer
+  (notes.ts:329-338) and the client mirrors its own `NotesPutAnswer`
+  (sync.ts:129-132) — exactly the drift shared/wire.ts exists to prevent.
+  Same for `PullRowV2`, built field-by-field at notes.ts:140-151. Fix:
+  type the server's answers with the wire types, delete the mirror.
+- **H4. `runMany` is only transactional on the local backend.** The Turso
+  HTTP path pipelines bare `execute` with no BEGIN/COMMIT (server/db.ts
+  206-216) while notes.ts:251's comment claims single-transaction parity.
+  Consequences are bounded (re-push converges; the `landed < rows.length`
+  409 is the backstop) but the comment is a lie. Fix: wrap the chunk in
+  begin/commit statements or correct the comment.
+- **H5. The merge engine's silent fallbacks.** Myers past its step budget
+  (a ~150 KB note) returns null → diff3 answers conflict → sync parks,
+  with no log anywhere; notes without a `syncBase` skip the three-way
+  merge entirely; a name conflict after a clean body merge discards the
+  merged body (merge/notes.ts:128-135 computes it, then parks mine's raw
+  bytes). None lose data (the park keeps both sides), but the big-note
+  NEVER-merges case deserves one honest log line, and the merged-body
+  discard is just wasteful.
+- **H6. The attachment GC does not exist, and its endpoints are
+  production-dead.** `DELETE /api/attachments/:id` and the list route have
+  zero non-test callers; client `deleteAttachment`/`clearAttachments` are
+  test-only. Deleting an image element from a drawing, purging a note, and
+  "delete everything" all leave bytes in IndexedDB and on the server until
+  the quota trips. This is NOW-item 5 above — the review's evidence makes
+  it a must, not a nice-to-have: the plumbing exists, unwired.
+
+### Consistency — the drift waiting to bite
+
+- **H7. The 5 MB attachment cap is mirrored in four places** (server
+  MAX_ATTACHMENT_BYTES, padify-file MAX_EMBEDDED_ATTACHMENT_BYTES,
+  canvas-images MAX_CANVAS_IMAGE_BYTES, canvas.ts's literal 5_000_000).
+  The file whose entire purpose is shared constants — shared/wire.ts —
+  should own it.
+- **H8. The id border is three different rules**: attachments
+  `[A-Za-z0-9_-]{8,64}` (defined twice), music `[A-Za-z0-9_-]{6,64}`,
+  note ids any string ≤100. All parameterized (no injection), but the
+  contract should be one wire-level shape check.
+- **H9. "Is this note empty" is answered differently on each side.** The
+  server strips tags crudely; the client's check is per-kind (an empty
+  tasks JSON is empty for the client, non-empty text for the server). A
+  stale client mints a share link the UI would refuse. Minimal per-kind
+  emptiness check belongs in shared/wire.ts.
+- **H10. Two color normalizers diverge**: theme-colors' `canonicalizeColor`
+  vs color-picker's `normalizeHex`+`rgbStringToHex` disagree on
+  `rgb(300,0,0)`, bare hex, 3-digit forms — a stored value one accepts and
+  the other rejects re-inks inconsistently. One line: `canonicalizeColor =
+  normalizeHex(v) ?? rgbStringToHex(v)`.
+- **H11. `getCloudConfig()` can never return null**, so `isShareAvailable`
+  is a tautology and the unconfigured-installs-hide-cloud-surface guards
+  are dead (cloud/config.ts:54-67, share.ts:89-91, ui.ts:33). Either make
+  the config honestly nullable or delete the ceremony.
+
+### Refactors — real but behavior-neutral, each worth its own commit
+
+- **H12. The editor model's coordinate system is written four times.**
+  `coveredTextNodes`/`streamLengthOfNode` (ops.ts) re-implement
+  `walkTextStream`/`streamLength` (document.ts/selection.ts) — the same
+  TreeWalker walk, four independent copies that must never disagree (one
+  drifted member corrupts carets everywhere). Highest-leverage unification
+  in the repo, smallest diff: call the document.ts primitives, keep
+  signatures. The same file also copy-pastes the "insert a node at a
+  DomSpot" primitive FIVE times (the comments on insertPlainText document
+  two shipped bugs it caused) — extract `insertNodeAtSpot`.
+- **H13. `initRichToolbar` is ~1080 lines** doing ten jobs in one closure
+  scope; the sibling markdown/toolbar.ts already shows the decomposition
+  (wire* functions taking `(elements, deps)`). Mirror it.
+- **H14. `initApp` is ~920 lines.** The extraction candidates: the
+  keyboard-shortcut dispatcher and the download-menu/export wiring — the
+  same treatment every other behavior already got.
+- **H15. snapshots' `renderRows` is ~258 lines**; the eleven DOM-chore
+  tail blocks extract into `renderSheetChrome(segment, facts)`.
+- **H16. help.ts's tour hints are hardcoded `ctrl + …`** bypassing
+  `shortcutLabel()` — Apple users see "Ctrl + B" in the tour and ⌘B in the
+  context menu. Route the hints through the one renderer at build time.
+  (Its brand hover-deck block, ~110 lines of animation with nothing to do
+  with help, also wants its own module.)
+- **H17. model-port's internal clones**: undo/redo and indent/outdent are
+  byte-identical pairs; the getSelection→parentElement scaffold opens
+  eight methods. Mechanical `walkHistory(dir)` + `ancestorFromCaret()`.
+- **H18. render.ts duplicates two of its own grammar pieces** (the
+  CommonMark marker-padding rule twice; the destination+title FSM twice —
+  `parseInlineDestination` vs `parseLinkRefDef`'s half). Extract
+  `markerPadding(rest)` and `parseDestinationAndTitle(scanner)`.
+- **H19. The margin-left px parser is hand-rolled three times** (ops,
+  model-port, plain-indent) beside document.ts's `stylePropOf` — one
+  `marginLeftPxOf(block)` beside it.
+- **H20. pip-window re-implements the Mod+B/I/U/⇅X → command map** the
+  context menu owns as data. Export `commandFor(id)` from one place.
+
+### Small chores
+
+- **H21.** shares GET limit 200 with no revoked filter — during the
+  7-day death grace, dead rows can crowd live links out of the owner's
+  inventory.
+- **H22.** `/api/music/resolve` peeks the DB cache before any rate limit —
+  an anonymous caller gets one free Turso round-trip per unknown id; the
+  share route got a bucket for exactly this (an in-memory negative cache
+  is the cheap answer).
+- **H23.** `music_resolutions.resolved_at` is written, never read — drop
+  the column or read it. The seq-backfill migrations also full-scan notes
+  on every boot (fine on Turso free tier, worth a note).
+- **H24.** sync.ts's `api()` is a pure passthrough of `apiCall`, and two
+  modules parse the `padifySession` storage key independently — one
+  `readStoredSession` helper. The dirty-rows loop's `indexOf` is O(n²)
+  where a map already exists.
+- **H25.** The quota constants are function-local on both sides and both
+  checks are TOCTOU (two racing PUTs each pass the sum check) — a shared
+  `quota.ts` plus a comment makes the boundedness a decision, not an
+  accident.
+
 ## PARKED — waiting for the owner (visual)
 11. **The visual pass** — `qa/VISUAL-QA-HANDOFF.md` is the brief; findings
     land in `qa/findings-LIVE.md`. Exildraw "needs a lot of work" per the
@@ -115,10 +256,22 @@ honest costs, not blockers.
 
 ## DONE — so nobody re-plans it
 
+- **The hygiene review (2026-11-21, fd3b7be → e8a9178).** The owner asked
+  for a whole-repo scan for poorly designed garbage. The phantom note-image
+  render path left by the text-only revert is amputated — the owner
+  confirms no standard note ever carried a reference, so the graceful
+  degradation guarded nothing (the gate now refuses the scheme, the
+  refusal is test-pinned, the .padify export unifies on one
+  scene-attachments collector); dead exports, dead params and dead
+  branches deleted across eleven modules; the silent PDF/docx export
+  failures and the CORS DELETE hole fixed; the share island's favicon
+  404 gone; sixteen executed one-off scripts deleted. The design findings
+  that remain are the H-list above.
 - **Notes go text-only; the canvas grows images (2026-11-21, ab22aa9 +
   f18ba24).** Capture left the markdown surface (paste, drop, picker,
-  toolbar row); the renderer's resolver stays for data that already
-  carries a reference. The drawing canvas turned Excalidraw's image tool
+  toolbar row); the renderer's resolver stayed for data that already
+  carried a reference — until the hygiene review above removed it for
+  good. The drawing canvas turned Excalidraw's image tool
   on with the vendor-native insert path — resize and caps at insert — and
   grew the persistence spine: files flush to the attachment store
   offline-first, hydrate at open (local first, the cloud's lazy pull,
