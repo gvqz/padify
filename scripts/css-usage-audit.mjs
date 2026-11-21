@@ -2,11 +2,12 @@
 /**
  * css-usage-audit.mjs — which stylesheet files have selectors the app never uses.
  *
- * Sibling of dead-css-audit.mjs (override analysis): a legacy sheet can be
- * fully "alive" by override rules yet dead by USAGE if the markup only ever
- * matched its vercel twin's class names. This script answers the usage
- * question: for every class selector in every sheet loaded by index.html,
- * does that class string appear anywhere the app could emit it?
+ * Sibling of the retired dead-css-audit (override analysis): a legacy
+ * sheet can be fully "alive" by override rules yet dead by USAGE if the
+ * markup only ever matched its vercel twin's class names. This script
+ * answers the usage question: for every class selector in every sheet
+ * loaded by index.html, does that class string appear anywhere the app
+ * could emit it?
  *
  * Corpus: index.html, every .ts/.html under src, and the share island's
  * sources (public/share) — every place a class name can be written (static
@@ -18,11 +19,11 @@
  * them — .statistics-grid was reported "used" only because it was never
  * reported at all).
  *
- * Known limitations (why this is an audit, not a pruner — the same policy
- * as dead-css-audit): dynamically built class names ('tk-c-' + color,
- * 'padify-fmt-' + id) and library-emitted vocabulary (katex-*) undercount
- * usage; every dead verdict is a lead to verify by grep, not a deletion
- * order. Exit code is always 0.
+ * Known limitations (why this is an audit, not a pruner): dynamically
+ * built class names ('tk-c-' + color, 'padify-fmt-' + id) and
+ * library-emitted vocabulary (katex-*) undercount usage; every dead
+ * verdict is a lead to verify by grep, not a deletion order. Exit code
+ * is always 0.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';

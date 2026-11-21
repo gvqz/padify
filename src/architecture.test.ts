@@ -69,11 +69,11 @@ function referencedElementIds(): Map<string, string[]> {
 describe('bootstrap stays out entirely', () => {
   // Bootstrap 3.4.1 shipped for years as a vendored stylesheet (the first
   // cascade layer) plus class-named markup the app kept. Phase 1 un-shipped
-  // it: the ~9% of its rules the app still matched or could emit were
-  // extracted mechanically (scripts/bootstrap-extract.mjs, driven by the
-  // DOM cascade audit + the emit-corpus analysis) and folded into
-  // vercel/02-base.css; everything else never matched and never will.
-  // These pins keep it from creeping back in by accident.
+  // it (2026-11-16): the ~9% of its rules the app still matched or could
+  // emit were extracted mechanically and folded into vercel/02-base.css;
+  // everything else never matched and never will. The one-off tooling that
+  // did the extraction is gone — git history holds it. These pins keep
+  // bootstrap from creeping back in by accident.
   it('no vendored bootstrap stylesheet exists in public/css', () => {
     const cssDir = resolve(process.cwd(), 'public', 'css');
     const files = readdirSync(cssDir)
@@ -93,13 +93,12 @@ describe('bootstrap stays out entirely', () => {
   });
 
   it('the bootstrap subset inside 02-base stays the extracted+pruned one (content-hash pin)', () => {
-    // The extracted block is delimited by the banner the extractor writes;
+    // The extracted block is delimited by the banner the extractor wrote;
     // hand edits inside it would silently fork the vendored reset. Bump the
-    // hash only deliberately: by re-running scripts/bootstrap-extract.mjs
-    // (from a checkout that still has bootstrap.min.css) or
-    // scripts/bootstrap-prune.py (the 2026-11-16 prune that removed the
-    // groups whose every complex selector needed a class token the app can
-    // neither emit nor show on live DOM — bootstrap's JS-only vocabulary).
+    // hash only deliberately, with a re-derivation of the subset recorded
+    // in the commit (the 2026-11-16 prune removed the groups whose every
+    // complex selector needed a class token the app can neither emit nor
+    // show on live DOM — bootstrap's JS-only vocabulary).
     const VENDORED_SUBSET_SHA256 =
       '50eec79d2e792f6e1063cbe705369d52810462e7e7ae15ddb5eec1bc6d9285bd';
     const base = read(join(process.cwd(), 'public', 'css', 'vercel', '02-base.css'));
