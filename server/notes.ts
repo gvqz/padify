@@ -22,6 +22,9 @@ import {
   type IncomingNoteRow,
   type NotesPullV2,
 } from '../shared/wire';
+// The per-user note-byte quota — one home, one boundedness argument
+// (quota.ts).
+import { NOTE_BYTES_QUOTA } from './quota';
 
 // The PUT row contract lives in shared/wire.ts — the one definition the
 // client (src/cloud/sync.ts) and this parser both read from. Re-exported
@@ -194,8 +197,8 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
   // and JS .length counts UTF-16 code units, so the character-counted
   // version let a CJK-heavy account stand at 3x the intended cap (4x for
   // astral text) while every check passed. cast(content as blob) and the
-  // TextEncoder both count what the disk actually holds.
-  const NOTE_BYTES_QUOTA = 25 * 1024 * 1024;
+  // TextEncoder both count what the disk actually holds. The constant
+  // lives in quota.ts with the race-boundedness note.
   const incomingIds = rows.map((row) => row.id);
   const placeholders = incomingIds.map(() => '?').join(', ');
   const existingRows = await db.all(

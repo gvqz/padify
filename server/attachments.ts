@@ -25,6 +25,9 @@ import type { SessionUser } from './auth';
 // The one definition of the per-file byte ceiling (shared/wire.ts) —
 // re-exported here so the route module's own importers stay put.
 import { MAX_ATTACHMENT_BYTES } from '../shared/wire';
+// The per-user attachment quotas — one home, one boundedness argument
+// (quota.ts).
+import { MAX_ATTACHMENT_COUNT, MAX_TOTAL_ATTACHMENT_BYTES } from './quota';
 
 export { MAX_ATTACHMENT_BYTES };
 
@@ -190,9 +193,8 @@ export async function handleAttachmentPost(
 
   // Per-user quota: unlimited 5 MB uploads from one throwaway account
   // could fill a small host's storage single-handedly. 200 MB / 500
-  // files is far beyond any real voice-note use and far below trouble.
-  const MAX_TOTAL_ATTACHMENT_BYTES = 200 * 1024 * 1024;
-  const MAX_ATTACHMENT_COUNT = 500;
+  // files is far beyond any real use and far below trouble. The
+  // constants live in quota.ts with the race-boundedness note.
   const usageRows = await db.all(
     'select count(*) as files, coalesce(sum(size), 0) as bytes from attachments where user_id = ?',
     [user.id]
