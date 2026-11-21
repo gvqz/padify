@@ -1475,8 +1475,9 @@ export function mergeRemote(
         // over the last version BOTH sides started from (syncBase, pinned
         // by the stamped push answers and the echo/adoptions above). A
         // clean merge keeps everyone's words in the canonical note and
-        // rides the next push; only true overlap falls through to the
-        // copy-mint below (the review flow's territory).
+        // rides the next push; a title collision takes its own path (the
+        // words still merge); only true overlap falls through to the park
+        // below (the review flow's territory).
         const base = local.syncBase;
         if (base && base.content !== local.content && base.content !== wireRowContent(row)) {
           const merged = mergeNoteVersions(
@@ -1509,6 +1510,45 @@ export function mergeRemote(
             conflicts.push(
               `"${merged.name ?? 'A note'}" was changed on two devices — the edits were merged`,
             );
+            return;
+          }
+          if (merged.bail) {
+            // The merge never computed — a side sat past a merge budget
+            // (a heavily-rewritten giant diverges past the diff step
+            // limit every time; past MAX_MERGE_BYTES likewise). One
+            // honest line: the toast says "both versions kept", and the
+            // log says why the splice never ran.
+            console.warn(
+              `[sync] "${local.name ?? local.id}" diverged past the ${merged.bail} merge budget ` +
+                `(base ${base.content.length} / mine ${local.content.length} / theirs ${wireRowContent(row).length} chars) — parking both versions instead of merging`,
+            );
+          }
+          if (merged.wordsMerged) {
+            // The words spliced cleanly; only the TITLES collided. The
+            // canonical note keeps the merged words under the remote
+            // row's title (the row won the note), and mine's whole
+            // version still parks — the rename dispute is the review
+            // sheet's to settle, and doing nothing already keeps both
+            // sides' words. The old path took the remote's RAW body
+            // here, discarding the splice it had just computed — the
+            // user re-did the merge by hand.
+            parkLosingVersion(local, row);
+            conflicts.push(
+              `"${row.name ?? 'A note'}" was renamed on two devices — the edits were merged, both titles kept for review`,
+            );
+            local.name = row.name;
+            local.content = merged.content;
+            local.createdAt = typeof row.created_at === 'number' ? row.created_at : local.createdAt;
+            // Type only ever rides along with the winning row (below);
+            // the kind guard already proved the kinds agree.
+            local.noteType = normalizeNoteType(row.note_type) ?? local.noteType;
+            // The merged words build on their row — they outrank it on
+            // every device once the re-push lands a fresh seq.
+            local.updatedAt = Math.max(Date.now(), row.updated_at + 1, local.updatedAt + 1);
+            local.syncSeq = row.seq && row.seq > 0 ? row.seq : local.syncSeq;
+            local.syncBase = { content: wireRowContent(row), name: row.name };
+            touched = true;
+            mergedIds.push(local.id);
             return;
           }
         }

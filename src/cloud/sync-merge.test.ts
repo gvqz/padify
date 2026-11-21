@@ -370,6 +370,58 @@ describe('mergeRemote — the three-way auto-merge', () => {
     expect(merge.conflicts[0]).toContain('review');
   });
 
+  it('a title collision over cleanly-merging words keeps the splice and parks only the rename', () => {
+    // Two devices both renamed AND edited at different spots. The words
+    // merge cleanly, so the canonical note keeps the spliced body under
+    // the remote's title — the old path took the remote's RAW body and
+    // threw the splice away, making the user redo the merge by hand.
+    // Mine's whole version still parks: the review sheet settles the
+    // rename, and doing nothing already keeps both sides' words.
+    const local = tab('a', {
+      name: 'Mine title',
+      syncSeq: 5,
+      updatedAt: 4_000,
+      content: '<p>oat milk</p><p>bread</p><p>coffee</p>',
+      syncBase: { content: '<p>milk</p><p>bread</p><p>coffee</p>', name: 'Base title' },
+    });
+    const remote = row('a', {
+      seq: 9,
+      updated_at: 9_000,
+      name: 'Theirs title',
+      content: '<p>milk</p><p>bread</p><p>decaf coffee</p>',
+    });
+
+    const merge = mergeRemote([remote], payloadOf([local], ['a']));
+
+    expect(merge.tabs).toHaveLength(1); // no twin mints
+    // The canonical body is the SPLICE, not the remote's raw words…
+    expect(merge.tabs[0].content).toBe('<p>oat milk</p><p>bread</p><p>decaf coffee</p>');
+    // …under the winning row's title…
+    expect(merge.tabs[0].name).toBe('Theirs title');
+    // …outranking the row so the re-push lands it everywhere.
+    expect(merge.tabs[0].updatedAt).toBeGreaterThan(remote.updated_at);
+    expect(merge.tabs[0].syncSeq).toBe(9);
+    expect(merge.tabs[0].syncBase).toEqual({
+      content: '<p>milk</p><p>bread</p><p>decaf coffee</p>',
+      name: 'Theirs title',
+    });
+    // …and the rename dispute rides the review record — mine's title and
+    // pre-merge words both survive untouched.
+    expect(merge.tabs[0].conflict).toEqual({
+      kind: 'edit',
+      detectedAt: expect.any(Number),
+      mine: { name: 'Mine title', content: '<p>oat milk</p><p>bread</p><p>coffee</p>' },
+      theirs: {
+        name: 'Theirs title',
+        content: '<p>milk</p><p>bread</p><p>decaf coffee</p>',
+        updatedAt: 9_000,
+      },
+    });
+    expect(merge.mergedIds).toEqual(['a']); // the editor repaints under the caret
+    expect(merge.conflicts[0]).toContain('renamed');
+    expect(merge.changed).toBe(true);
+  });
+
   it('no syncBase (a fresh install, a v1 server) parks without merging', () => {
     const local = tab('a', {
       syncSeq: 5,

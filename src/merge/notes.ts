@@ -46,6 +46,20 @@ export interface NoteMergeResult {
   status: 'clean' | 'conflict' | 'unmergeable';
   content: string;
   name: string | null;
+  /**
+   * True when `content` carries BOTH sides' words — and on a 'conflict'
+   * that means only the names collided: the spliced body is safe to keep
+   * as canonical while the title goes to review (the review record still
+   * parks mine's whole version, so no rename is ever silently dropped).
+   */
+  wordsMerged?: boolean;
+  /**
+   * Why a 'conflict' never computed a merge: 'size' (a side sat past
+   * MAX_MERGE_BYTES) or 'budget' (the sides sat past the diff step
+   * budget). Undefined means a real overlap was found — the words
+   * genuinely collide.
+   */
+  bail?: 'size' | 'budget';
 }
 
 /** The name's own three-way merge — null when the names collide. */
@@ -79,6 +93,7 @@ export function mergeNoteVersions(
     status: reason === 'kind' ? 'unmergeable' : 'conflict',
     content: mine.content,
     name: mine.name,
+    bail: reason === 'size' ? 'size' : undefined,
   });
 
   // Only prose merges: html (tags stay atomic) and text (markdown source,
@@ -121,7 +136,12 @@ export function mergeNoteVersions(
   const result = mergeThreeWay(baseTokens, mineTokens, theirTokens);
 
   if (result.conflict) {
-    return { status: 'conflict', content: mine.content, name: mine.name };
+    return {
+      status: 'conflict',
+      content: mine.content,
+      name: mine.name,
+      bail: result.reason === 'budget' ? 'budget' : undefined,
+    };
   }
 
   const mergedContent = detokenize(result.merged);
@@ -131,6 +151,6 @@ export function mergeNoteVersions(
   }
 
   return nameMerge.conflict
-    ? { status: 'conflict', content: mergedContent, name: mine.name }
+    ? { status: 'conflict', content: mergedContent, name: mine.name, wordsMerged: true }
     : { status: 'clean', content: mergedContent, name: nameMerge.name };
 }

@@ -41,6 +41,32 @@ describe('mergeNoteVersions — status routing', () => {
     expect(merge.status).toBe('conflict');
   });
 
+  it('a title collision over cleanly-merging words answers wordsMerged', () => {
+    // Two renames, two DIFFERENT-SPOT edits: the splice is safe, only the
+    // titles collide. The result says so — the caller can keep the merged
+    // words canonical and send only the rename to review.
+    const merge = mergeNoteVersions(
+      version('Base', '<p>buy milk</p><p>walk dog</p>'),
+      version('Mine', '<p>buy oat milk</p><p>walk dog</p>'),
+      version('Theirs', '<p>buy milk</p><p>walk the dog</p>'),
+    );
+    expect(merge.status).toBe('conflict');
+    expect(merge.wordsMerged).toBe(true);
+    expect(merge.content).toBe('<p>buy oat milk</p><p>walk the dog</p>');
+    expect(merge.name).toBe('Mine'); // mine's title rides the review record
+  });
+
+  it('a genuine word overlap does not claim wordsMerged', () => {
+    const merge = mergeNoteVersions(
+      version('Base', 'a b c'),
+      version('Base', 'a X c'),
+      version('Base', 'a Y c'),
+    );
+    expect(merge.status).toBe('conflict');
+    expect(merge.wordsMerged).toBeUndefined();
+    expect(merge.bail).toBeUndefined(); // a real overlap was computed
+  });
+
   it('a rename on one side with a clean word merge stays clean', () => {
     const merge = mergeNoteVersions(
       version('Base', 'a b c'),
@@ -88,6 +114,23 @@ describe('mergeNoteVersions — status routing', () => {
       version(null, `${big} theirs`),
     );
     expect(merge.status).toBe('conflict');
+    expect(merge.bail).toBe('size'); // the merge never ran
+  });
+
+  it('a divergence past the diff step budget answers bail: budget', () => {
+    // Two wildly different rewrites of the same note: no hunk is ever
+    // built (the diff itself is over budget), so the conflict is an
+    // admission, not a computation — the bail field says which.
+    const words = (word: string, count: number) =>
+      Array.from({ length: count }, () => word).join(' ');
+    const merge = mergeNoteVersions(
+      version(null, words('base', 6000)),
+      version(null, words('mine', 6000)),
+      version(null, words('theirs', 6000)),
+    );
+    expect(merge.status).toBe('conflict');
+    expect(merge.bail).toBe('budget');
+    expect(merge.content).toBe(words('mine', 6000)); // mine kept for the park
   });
 });
 

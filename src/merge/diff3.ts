@@ -70,6 +70,14 @@ export interface ThreeWayResult {
   merged: Token[];
   /** True when at least one hunk pair could not be reconciled. */
   conflict: boolean;
+  /**
+   * Set when the conflict is an admission, not a computation: the sides
+   * sat past the diff step budget, so no hunks were ever built. The
+   * caller can say so honestly instead of reporting a collision it
+   * never found (a heavily-rewritten big note parks every time it
+   * diverges — that deserves a log line, not silence).
+   */
+  reason?: 'budget';
 }
 
 /**
@@ -100,7 +108,7 @@ export function mergeThreeWay(
   const mineHunks = hunksOf(base, mine);
   const theirHunks = hunksOf(base, theirs);
   if (mineHunks === null || theirHunks === null) {
-    return { merged: [...mine], conflict: true };
+    return { merged: [...mine], conflict: true, reason: 'budget' };
   }
 
   const merged: Token[] = [];
