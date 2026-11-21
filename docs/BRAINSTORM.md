@@ -75,12 +75,10 @@ honest costs, not blockers.
 4. **Workspace envelope** (the design above) — the single-note envelope's
    discipline, composed N times over; reuses the canvas-images machinery
    that just landed.
-5. **Attachment garbage collection.** The store gains tenants without a
-   janitor: sweep attachment ids no longer referenced by any live note's
-   content or any live scene (local: on open/sync idle; server: the orphan
-   GC the schema's collection shape already anticipates). Two-sided, with a
-   grace window — a file referenced only by an unsynced second device must
-   not die under the first device's broom.
+5. ~~**Attachment garbage collection.**~~ DONE 2026-11-22 — see H6 in the
+   ledger below: the shared grammar + verdict, the server sweep on the
+   hourly clock, the local sweep on the post-cycle hook, both under the
+   7-day grace that keeps an unsynced second device's file alive.
 6. **Share links learn images.** Attachments are session-authenticated
    today; a share carrying `padify-att:` refs renders placeholders. The
    honest fix is signed public URLs (short-lived, per-share, server
@@ -141,15 +139,25 @@ below was verified against the code, not grepped on faith.*
   over cleanly-merging words keeps the SPLICE as the canonical body
   (wordsMerged) while mine's whole version still parks for review — the
   old path took the remote's raw body and threw the computed merge away.
-- **H6. The attachment GC does not exist, and its endpoints are
-  production-dead.** `DELETE /api/attachments/:id` and the list route have
-  zero non-test callers; client `deleteAttachment`/`clearAttachments` are
-  test-only. Deleting an image element from a drawing, purging a note,
-  deleting an image-bearing markdown note, and
-  "delete everything" all leave bytes in IndexedDB and on the server until
-  the quota trips. This is NOW-item 5 above — the review's evidence makes
-  it a must, not a nice-to-have: the plumbing exists, unwired. (Rich/gfm
-  capture being back makes it more urgent, not less.)
+- **H6. ~~The attachment GC does not exist, and its endpoints are
+  production-dead.~~ FIXED** — the store has its janitor, two-sided, on
+  the SAME rule: shared/att-refs.ts owns the reference grammar (the
+  padify-att: scan, the scene fileIds walk, the drawing dispatch — the
+  export pass reads it too) and the orphan verdict (referenced → forget
+  the clock; newly unreferenced → stamp it; unreferenced past the
+  shared 7-day grace → garbage). The server's sweepOrphanAttachments
+  rides sweepAll (boot + hourly), reads per-user without ever touching
+  the bytes column, and writes in one runMany; the client's
+  sweepLocalAttachmentGarbage fires after a clean sync cycle + the
+  upload flush, over the live model's projection (never the boot
+  snapshot — a mid-session reference would look unreferenced to it).
+  A DELETE endpoint gained its first real caller; the trash is a
+  tenant (a restore must find its images), snapshots deliberately are
+  not (a restored snapshot shows the honest placeholder — counting
+  them would pin every once-seen image forever). The grace window is
+  the unsynced-second-device promise: the clock starts only when the
+  removal has reached the side doing the sweeping, so a device that
+  reconnects and re-pushes its referencing copy resets it.
 
 ### Consistency — the drift waiting to bite
 
@@ -240,10 +248,9 @@ below was verified against the code, not grepped on faith.*
   server/quota.ts owns the three numbers with the boundedness argument
   written down.
 
-*What remains of the whole review: H6 (the attachment GC — the NOW queue's
-item 5, the one real feature among them), H13 and H14 (the two giant
-closures, each worth its own careful session), and H16's hover-deck module
-move (which belongs to the visual pass).*
+*What remains of the whole review: H13 and H14 (the two giant closures,
+each worth its own careful session), and H16's hover-deck module move
+(which belongs to the visual pass).*
 
 ## PARKED — waiting for the owner (visual)
 11. **The visual pass** — `qa/VISUAL-QA-HANDOFF.md` is the brief; findings
@@ -256,6 +263,18 @@ move (which belongs to the visual pass).*
 
 ## DONE — so nobody re-plans it
 
+- **H6, the attachment GC (2026-11-22).** The review's last real feature,
+  landed two-sided on one rule: shared/att-refs.ts (the grammar AND the
+  verdict, its own test file), the server's sweepOrphanAttachments on the
+  boot+hourly clock with an orphan_since migration, the client's
+  cloud/attachment-gc.ts on the post-cycle hook (throttled to 6h, kv
+  markers, live-model tenants). The reference grammar moved out of
+  note-images.ts and canvas-images.ts into shared — the export pass, the
+  hydration diff and both GCs now read one spelling. Gates green
+  throughout: lint, both tscs (the server tsconfig's pre-existing
+  server-db.test.ts mock-tuple error fixed in passing), 1967 unit tests,
+  and the e2e attachment family (attachments, note-images, padify-file,
+  drawing-canvas) plus smoke + platform-shortcuts.
 - **The hygiene fix batch, day two (2026-11-22).** Everything the review
   found except H6, H13, H14 and the hover-deck move: the server's writes
   became honest (H3's typed PUT answer, H4's all-or-nothing Turso batches
