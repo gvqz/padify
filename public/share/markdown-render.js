@@ -4076,8 +4076,13 @@ var GEMOJI = /* @__PURE__ */ new Map([
   ["zzz", "\u{1F4A4}"]
 ]);
 
+// shared/wire.ts
+var TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1e3;
+var ATTACHMENT_ID_SOURCE = "[A-Za-z0-9_-]{8,64}";
+var ATTACHMENT_ID_PATTERN = new RegExp(`^${ATTACHMENT_ID_SOURCE}$`);
+
 // src/editor/markdown/html-policy.ts
-var PADIFY_ATT_GATE = /^padify-att:[A-Za-z0-9_-]{8,64}$/;
+var PADIFY_ATT_GATE = new RegExp(`^padify-att:${ATTACHMENT_ID_SOURCE}$`);
 function safeHrefForMarkdown(dest) {
   const colon = dest.indexOf(":");
   const slash = dest.indexOf("/");

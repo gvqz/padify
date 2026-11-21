@@ -125,7 +125,9 @@ create index if not exists shares_note_id_idx on shares(note_id);
 -- Keyed by Spotify track id. The cached URL is a time-limited googlevideo
 -- link (~6h lifetime), so expires_at drives both the re-resolve decision
 -- and the boot-time sweep. Rows are tiny (~1 KB) and capped in practice by
--- usage + the daily cleanup in server/index.ts.
+-- usage + the daily cleanup in server/index.ts. (A resolved_at provenance
+-- column lived here once, written on every row and read by nothing — it
+-- left with the drop-column migration in db.ts.)
 -- ---------------------------------------------------------------------------
 
 create table if not exists music_resolutions (
@@ -133,7 +135,6 @@ create table if not exists music_resolutions (
   video_id     text not null,
   url          text not null,
   duration_sec integer,
-  resolved_at  integer not null default 0,
   expires_at   integer not null
 );
 

@@ -16,7 +16,6 @@
  *    never loses note content.
  */
 
-import { getCloudConfig } from './config';
 import { getCloudUserId } from './sync';
 import { type NoteType } from '../editor/note-types';
 import { noteContentIsEmpty } from '../editor/note-projections';
@@ -86,10 +85,6 @@ export function shareUrlFor(token: string): string {
   url.search = '';
   url.searchParams.set('t', token);
   return url.toString();
-}
-
-export function isShareAvailable(): boolean {
-  return getCloudConfig() !== null;
 }
 
 interface ShareRowResponse {

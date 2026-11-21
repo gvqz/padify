@@ -40,7 +40,7 @@ import { fetchAttachment } from '../../cloud/attachments';
 import { getAttachmentBlob, putAttachment, type AttachmentMeta } from '../../storage/attachments';
 // The one per-file byte ceiling every gate enforces (see
 // MAX_CANVAS_IMAGE_BYTES below for this module's stake in it).
-import { MAX_ATTACHMENT_BYTES } from '../../../shared/wire';
+import { ATTACHMENT_ID_PATTERN, MAX_ATTACHMENT_BYTES } from '../../../shared/wire';
 
 /**
  * The vendor's BinaryFileData, mirrored structurally (see the module
@@ -60,11 +60,12 @@ export interface CanvasImageFile {
 export type CanvasImageFiles = Record<string, CanvasImageFile>;
 
 /**
- * The one shape a fileId may take — the store's id contract and the
- * envelope's pattern, one gate. The vendor's content-hashed ids (40 hex)
- * pass; anything else an element might carry is junk this build ignores.
+ * The one shape a fileId may take — the wire's attachment id contract
+ * (shared/wire.ts), the same gate the store and the envelope test. The
+ * vendor's content-hashed ids (40 hex) pass; anything else an element
+ * might carry is junk this build ignores.
  */
-const FILE_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
+const FILE_ID_PATTERN = ATTACHMENT_ID_PATTERN;
 
 /** The data-URL shape this module decodes: an image (or binary) mime and
  * base64 payload. Anything else is not a file the vendor inserted. */

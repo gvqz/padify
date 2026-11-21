@@ -631,6 +631,7 @@ export function setYtDlpRunnerForTests(
 /** Test hook — clears the memory cache and the in-flight dedupe map. */
 export function resetMusicResolverForTests(): void {
   memoryCache.clear();
+  negativeCache.clear();
   inFlight.clear();
   ytSearchRunnerForTests = null;
   spotifySearchRunnerForTests = null;
@@ -782,6 +783,31 @@ interface CacheRow {
 const memoryCache = new Map<string, CacheRow>();
 const inFlight = new Map<string, Promise<ResolvedStream>>();
 
+/**
+ * Recently-missed cache keys, remembered so a repeat miss costs MEMORY,
+ * not a database round-trip. The resolve endpoint peeks the cache before
+ * any rate limit (cached answers are free on purpose — see
+ * handleMusicResolve), so an anonymous caller spraying unknown ids used
+ * to get one free Turso read per request; now the second ask of the same
+ * key is answered from here. Short TTL: a resolution can land at any
+ * moment and writeCache clears the entry in-process.
+ */
+const negativeCache = new Map<string, number>();
+const NEGATIVE_CACHE_TTL_MS = 60_000;
+const NEGATIVE_CACHE_MAX = 1_000;
+
+function rememberMiss(key: string): void {
+  negativeCache.set(key, Date.now() + NEGATIVE_CACHE_TTL_MS);
+  if (negativeCache.size > NEGATIVE_CACHE_MAX) {
+    const oldest = negativeCache.keys().next().value;
+    if (oldest !== undefined) negativeCache.delete(oldest);
+  }
+}
+
+function forgetMiss(key: string): void {
+  negativeCache.delete(key);
+}
+
 function rememberRow(key: string, row: CacheRow): void {
   memoryCache.set(key, row);
   if (memoryCache.size > MEMORY_CACHE_MAX) {
@@ -794,13 +820,22 @@ async function readCache(db: Db, key: string): Promise<CacheRow | null> {
   const mem = memoryCache.get(key);
   if (mem && mem.expires_at > Date.now()) return mem;
 
+  const missUntil = negativeCache.get(key);
+  if (missUntil !== undefined) {
+    if (missUntil > Date.now()) return null;
+    negativeCache.delete(key); // expired negative — the DB gets one more look
+  }
+
   try {
     const rows = await db.all(
       'select video_id, url, duration_sec, expires_at from music_resolutions where key = ?',
       [key],
     );
     const row = rows[0];
-    if (!row) return null;
+    if (!row) {
+      rememberMiss(key);
+      return null;
+    }
     const parsed: CacheRow = {
       video_id: String(row.video_id),
       url: String(row.url),
@@ -808,11 +843,13 @@ async function readCache(db: Db, key: string): Promise<CacheRow | null> {
       expires_at: Number(row.expires_at),
     };
     if (parsed.expires_at <= Date.now()) {
+      rememberMiss(key);
       await db
         .run('delete from music_resolutions where key = ?', [key])
         .catch(() => undefined);
       return null;
     }
+    forgetMiss(key);
     rememberRow(key, parsed);
     return parsed;
   } catch {
@@ -822,17 +859,17 @@ async function readCache(db: Db, key: string): Promise<CacheRow | null> {
 
 async function writeCache(db: Db, key: string, row: CacheRow): Promise<void> {
   rememberRow(key, row);
+  forgetMiss(key);
   try {
     await db.run(
-      `insert into music_resolutions (key, video_id, url, duration_sec, resolved_at, expires_at)
-       values (?, ?, ?, ?, ?, ?)
+      `insert into music_resolutions (key, video_id, url, duration_sec, expires_at)
+       values (?, ?, ?, ?, ?)
        on conflict(key) do update set
          video_id = excluded.video_id,
          url = excluded.url,
          duration_sec = excluded.duration_sec,
-         resolved_at = excluded.resolved_at,
          expires_at = excluded.expires_at`,
-      [key, row.video_id, row.url, row.duration_sec, Date.now(), row.expires_at] as SqlValue[],
+      [key, row.video_id, row.url, row.duration_sec, row.expires_at] as SqlValue[],
     );
   } catch {
     /* cache write is best-effort */
@@ -972,6 +1009,9 @@ export async function sweepMusicCache(db: Db): Promise<void> {
 import { json } from './http';
 import { asInt } from './notes';
 import { rateLimited } from './ratelimit';
+// The track id shape — the id border's one music definition
+// (shared/wire.ts).
+import { MUSIC_TRACK_ID_PATTERN } from '../shared/wire';
 
 export async function handleMusicCapabilities(request: Request): Promise<Response> {
   // The reason string rides along when a capability is off: the client
@@ -1022,7 +1062,7 @@ export async function handleMusicResolve(db: Db, request: Request): Promise<Resp
   const artist = (url.searchParams.get('artist') ?? '').trim().slice(0, 300);
   const durationMs = asInt(url.searchParams.get('durationMs'), 0);
   const fresh = url.searchParams.get('fresh') === '1';
-  if (!/^[A-Za-z0-9_-]{6,64}$/.test(trackId)) {
+  if (!MUSIC_TRACK_ID_PATTERN.test(trackId)) {
     return json(request, { error: 'Missing or invalid track id.' }, 400);
   }
   if (!title) {
@@ -1042,7 +1082,19 @@ export async function handleMusicResolve(db: Db, request: Request): Promise<Resp
   };
   // Cache-first: a cached answer costs the server nothing, so the resolve
   // bucket charges only when real yt-dlp work is about to run. (The route
-  // itself carries no bucket on purpose — see routes.ts.)
+  // itself carries no bucket on purpose — see routes.ts.) But the PEEK is
+  // not free — it is one database read — so it carries its own generous
+  // pace: unknown ids are remembered as misses in memory (readCache's
+  // negative cache) and repeat asks never reach the database, while a
+  // caller spraying fresh unknown ids is bounded here instead of drawing
+  // one free Turso round-trip per request.
+  if (rateLimited(request, 'music-peek')) {
+    return json(
+      request,
+      { error: 'Too many song lookups — take a breath and try again in a minute.' },
+      429,
+    );
+  }
   if (!fresh) {
     const cached = await peekResolvedStream(db, input);
     if (cached) {

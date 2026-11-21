@@ -10,10 +10,11 @@
  * mirrored as two constants kept equal by hope.
  *
  * Rules for this file, so it compiles under BOTH tsconfigs (client: DOM
- * libs; server: Bun): types plus pure constants only — no runtime
- * behavior, no imports. The client imports the constant at runtime (Vite
- * bundles it); the server imports it at runtime too (Bun resolves the
- * path). Neither side imports the other.
+ * libs; server: Bun): types, pure constants and pure FUNCTIONS only — no
+ * imports, nothing platform-specific (no document, no fetch — JSON.parse
+ * and regular expressions are the whole toolbox). The client imports the
+ * runtime pieces (Vite bundles them); the server imports them too (Bun
+ * resolves the path). Neither side imports the other.
  */
 
 /**
@@ -151,3 +152,59 @@ export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
  * it from here.
  */
 export const NOTE_TYPE_ID_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
+
+/**
+ * The id border — the shapes every parameterized id must carry, defined
+ * once here because they were once spelled independently on each side and
+ * drifted (the attachment shape alone lived in six files). The SOURCE
+ * strings exist for composition — the attachments route path and the
+ * `padify-att:` gates embed them; the patterns exist for testing.
+ */
+
+/** Attachment ids: client-chosen, tight and URL-safe. */
+export const ATTACHMENT_ID_SOURCE = '[A-Za-z0-9_-]{8,64}';
+export const ATTACHMENT_ID_PATTERN = new RegExp(`^${ATTACHMENT_ID_SOURCE}$`);
+
+/** Music track ids (Spotify's 22 chars, YouTube's 11, future catalogs). */
+export const MUSIC_TRACK_ID_PATTERN = /^[A-Za-z0-9_-]{6,64}$/;
+
+/** Note ids: opaque client strings, bounded so an IN-clause stays sane. */
+export const MAX_NOTE_ID_CHARS = 100;
+
+/**
+ * The wire's minimal emptiness gate for share creation — the check the
+ * SERVER keeps on its own (shares.ts), so a stale client cannot mint a
+ * link the current UI would refuse to build. The client's own gate
+ * (src/editor/note-projections.ts, noteContentIsEmpty) stays the primary
+ * and the finer one; this one refuses only what both sides can agree is
+ * nothing:
+ *
+ *  • html-like types (null/standard/rich) read through a tag strip — a
+ *    bare <p></p> or <br> is emptiness wearing markup;
+ *  • the structured kinds this wire ships (a task list, a drawing scene)
+ *    read their envelope's one payload array — empty array = an empty
+ *    note. Unparseable bytes answer NOT empty: content this gate cannot
+ *    understand must never become unshareable (the same rule the
+ *    client's registry follows for unknown kinds);
+ *  • everything else (markdown's source is its own text, unknown future
+ *    kinds) is its raw bytes.
+ */
+export function shareContentIsEmpty(noteType: string | null, content: string): boolean {
+  const htmlLike = noteType === null || noteType === 'standard' || noteType === 'rich';
+  if (htmlLike) {
+    return content.replace(/<[^>]*>/g, '').trim() === '';
+  }
+  if (noteType === 'tasks' || noteType === 'drawing') {
+    // The one fact each envelope guarantees: its payload rides a top-level
+    // array. A missing or non-array payload is not this build's empty
+    // shape — it stays shareable, same as unparseable JSON.
+    try {
+      const parsed = JSON.parse(content) as { tasks?: unknown; elements?: unknown } | null;
+      const payload = noteType === 'tasks' ? parsed?.tasks : parsed?.elements;
+      return Array.isArray(payload) && payload.length === 0;
+    } catch {
+      return false;
+    }
+  }
+  return content.trim() === '';
+}

@@ -43,7 +43,7 @@ import { fetchAttachment } from '../cloud/attachments';
 // server's upload cap, the envelope's, the canvas gates'), so an
 // over-cap capture fails HERE with an honest message instead of
 // poisoning the upload flush for the session.
-import { MAX_ATTACHMENT_BYTES } from '../../shared/wire';
+import { ATTACHMENT_ID_SOURCE, MAX_ATTACHMENT_BYTES } from '../../shared/wire';
 
 // ---------------------------------------------------------------------------
 // The reference scheme
@@ -54,11 +54,11 @@ export const PADIFY_ATT_SCHEME = 'padify-att:';
 
 /**
  * The one shape a reference may take: the scheme plus the store's id
- * (client ids are `att-` + 24 hex; the server's pattern admits
- * `[A-Za-z0-9_-]{8,64}` — this gate accepts exactly that shape, so a
- * hand-written ref that the store could never answer renders as text).
+ * (client ids are `att-` + 24 hex; the server's pattern admits the
+ * wire's ATTACHMENT_ID_SOURCE — this gate accepts exactly that shape, so
+ * a hand-written ref that the store could never answer renders as text).
  */
-const PADIFY_ATT_PATTERN = /^padify-att:[A-Za-z0-9_-]{8,64}$/;
+const PADIFY_ATT_PATTERN = new RegExp(`^padify-att:${ATTACHMENT_ID_SOURCE}$`);
 
 /** True when the string is a well-formed attachment reference. */
 export function isPadifyAttRef(value: string): boolean {

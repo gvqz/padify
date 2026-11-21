@@ -16,11 +16,17 @@ import { type Db, type SqlValue, type SqlStatement } from './db';
 import { json, readJson } from './http';
 import type { SessionUser } from './auth';
 import { asInt, asString, parseNoteType } from './notes';
-// The PATCH input caps, defined once where the contract lives — the
-// client chunks its lists on the same numbers (shared/wire.ts).
-import { MAX_SHARE_PATCH_NOTE_IDS, MAX_SHARE_REFRESH_ENTRIES } from '../shared/wire';
+// The PATCH input caps and the emptiness gate, defined once where the
+// contract lives — the client chunks its lists on the caps, and the
+// server's share refusal reads the same emptiness the wire spells
+// (shared/wire.ts).
+import { MAX_NOTE_ID_CHARS, MAX_SHARE_PATCH_NOTE_IDS, MAX_SHARE_REFRESH_ENTRIES, shareContentIsEmpty } from '../shared/wire';
 
 const DAY_MS = 86_400_000;
+
+/** How long a dead link stays visible in the owner's list before it goes
+ * — the grace the inventory filter and the dead-link sweep share. */
+const SHARE_DEATH_GRACE_MS = 7 * DAY_MS;
 
 /**
  * Per-account ceiling on LIVE share bytes. The row cap bounds COUNT, but
@@ -89,10 +95,21 @@ export function createShareToken(): string {
 }
 
 export async function handleSharesGet(db: Db, request: Request, user: SessionUser): Promise<Response> {
+  // The owner's inventory lists what the owner perceives as "my links":
+  // live rows first-class, and dead rows only while their death is still
+  // news (the same 7-day grace the sweep gives — a row the grace has
+  // passed is about to be deleted anyway, and without this filter those
+  // rows crowded live links out of the 200-row window on accounts that
+  // cycle links).
+  const graceCutoff = Date.now() - SHARE_DEATH_GRACE_MS;
   const rows = await db.all(
     `select token, note_id, title, content, created_at, expires_at, revoked
-     from shares where user_id = ? order by created_at desc limit 200`,
-    [user.id]
+     from shares
+     where user_id = ?
+       and (revoked = 0 and expires_at > ?
+            or revoked = 1 and coalesce(revoked_at, expires_at, created_at) > ?)
+     order by created_at desc limit 200`,
+    [user.id, Date.now(), graceCutoff]
   );
   return json(request, {
     // The rename transition: every response carries the content under both
@@ -112,20 +129,19 @@ export async function handleSharesPost(db: Db, request: Request, user: SessionUs
     return json(request, { error: 'Invalid request body.' }, 400);
   }
 
-  const noteId = asString(body.note_id).slice(0, 100) || null;
+  const noteId = asString(body.note_id).slice(0, MAX_NOTE_ID_CHARS) || null;
   const title = asString(body.title).slice(0, 200);
   const content = asString(body.content ?? body.html);
   const noteType = parseNoteType(body.note_type);
   const days = Math.min(3650, Math.max(1, asInt(body.days, 7)));
 
   // An empty note is not shareable — the link would hand a reader a blank
-  // page. Html kinds are blank when their tag-stripped text is blank (a
-  // bare <p></p> or <br> is emptiness wearing markup); every other kind
-  // is stored raw, so blank means blank. The client refuses the create
-  // first; this is the contract the wire keeps on its own.
-  const htmlLike = noteType === null || noteType === 'standard' || noteType === 'rich';
-  const readable = (htmlLike ? content.replace(/<[^>]*>/g, '') : content).trim();
-  if (readable === '') {
+  // page. The emptiness reading is the wire's own (shared/wire.ts
+  // shareContentIsEmpty): html kinds strip tags, the structured kinds read
+  // their payload array, everything else reads raw. The client refuses the
+  // create first and finer; this is the contract the wire keeps on its
+  // own, so a stale client cannot mint a link the UI would refuse.
+  if (shareContentIsEmpty(noteType, content)) {
     return json(
       request,
       { error: 'This note is empty — write something before sharing it.' },
@@ -386,9 +402,6 @@ export async function handlePublicShareGet(db: Db, request: Request, token: stri
 // ---------------------------------------------------------------------------
 // The dead-link sweep
 // ---------------------------------------------------------------------------
-
-/** How long a dead link stays visible in the owner's list before it goes. */
-const SHARE_DEATH_GRACE_MS = 7 * DAY_MS;
 
 /**
  * Prunes dead share rows — revoked links and expired ones, a grace window

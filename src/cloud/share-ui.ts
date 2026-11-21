@@ -32,7 +32,6 @@ import {
 import { getCloudSync } from './sync';
 import {
   createShare,
-  isShareAvailable,
   listOwnedShares,
   revokeShare,
   shareUrlFor,
@@ -72,9 +71,8 @@ const shareRoot = () => $('#shareModal').get(0);
 const shareAnchor = () => $('#shareNotes').get(0);
 
 export function initShareUI(): void {
-  if (!isShareAvailable()) {
-    return;
-  }
+  // Sharing rides the same always-configured cloud as the sync surfaces
+  // (config.ts) — the availability guard here was a tautology.
 
   $('#shareNotesContainer').removeAttr('hidden');
 

@@ -25,6 +25,9 @@
 import { sanitizeHref } from '../storage-subset';
 import { escapeHtmlAttr } from '../../lib/escape';
 import { NAMED_ENTITIES } from './entities.generated';
+// The id border's one attachment shape (shared/wire.ts) — pure constants,
+// bundled into the share viewer with everything else this module needs.
+import { ATTACHMENT_ID_SOURCE } from '../../../shared/wire';
 
 /**
  * The Markdown URL gate — the one the anchors' hrefs already pass. A
@@ -37,10 +40,11 @@ import { NAMED_ENTITIES } from './entities.generated';
  * `padify-att:<id>` is the note-image reference (see editor/note-images.ts):
  * inert as a URL — no navigation, no fetch against any origin — and
  * resolved to a blob URL only by the preview's resolver pass, from the
- * user's own attachment store. The exact id shape is the gate's to keep:
- * a ref the store could never answer renders as literal text.
+ * user's own attachment store. The exact id shape is the wire's one
+ * attachment gate (shared/wire.ts, the id border): a ref the store could
+ * never answer renders as literal text.
  */
-const PADIFY_ATT_GATE = /^padify-att:[A-Za-z0-9_-]{8,64}$/;
+const PADIFY_ATT_GATE = new RegExp(`^padify-att:${ATTACHMENT_ID_SOURCE}$`);
 
 export function safeHrefForMarkdown(dest: string): string | null {
   const colon = dest.indexOf(':');

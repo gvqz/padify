@@ -69,7 +69,7 @@ import {
 // The per-file byte ceiling, defined once where the whole wire contract
 // lives — the envelope holds embedded bytes to the same cap the server's
 // upload route and every capture gate enforce.
-import { MAX_ATTACHMENT_BYTES } from '../shared/wire';
+import { ATTACHMENT_ID_PATTERN, MAX_ATTACHMENT_BYTES } from '../shared/wire';
 
 /** The magic discriminator on the wire. */
 export const PADIFY_FILE_TYPE = 'padify-note';
@@ -210,10 +210,10 @@ export type PadifyParseResult =
  * The envelope's attachment ceilings — the per-file byte cap from the
  * wire contract (MAX_ATTACHMENT_BYTES) and the same row count as the
  * server's per-user quota. A file beyond either is data this app would
- * refuse on upload; the envelope holds it to the same honesty.
+ * refuse on upload; the envelope holds it to the same honesty. The id
+ * shape is the wire's too (the id border, shared/wire.ts).
  */
 const MAX_EMBEDDED_ATTACHMENTS = 500;
-const ATTACHMENT_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 const ATTACHMENT_MIME_PATTERN = /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/i;
 
 /**

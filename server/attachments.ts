@@ -25,14 +25,14 @@ import type { SessionUser } from './auth';
 // The one definition of the per-file byte ceiling (shared/wire.ts) —
 // re-exported here so the route module's own importers stay put.
 import { MAX_ATTACHMENT_BYTES } from '../shared/wire';
+// The one attachment id shape — composed and tested from the wire's
+// single definition (see shared/wire.ts, the id border).
+import { ATTACHMENT_ID_PATTERN } from '../shared/wire';
 // The per-user attachment quotas — one home, one boundedness argument
 // (quota.ts).
 import { MAX_ATTACHMENT_COUNT, MAX_TOTAL_ATTACHMENT_BYTES } from './quota';
 
 export { MAX_ATTACHMENT_BYTES };
-
-/** Attachment ids are client-chosen; keep them tight and URL-safe. */
-const ATTACHMENT_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 
 const MAX_NAME_CHARS = 200;
 const MAX_MIME_CHARS = 100;

@@ -69,7 +69,7 @@ export function clientKey(request: Request): string {
 
 export function rateLimited(
   request: Request,
-  bucket: 'auth' | 'api' | 'music-search' | 'music-resolve' | 'share',
+  bucket: 'auth' | 'api' | 'music-search' | 'music-resolve' | 'music-peek' | 'share',
   subject?: string,
 ): boolean {
   const limits: Record<string, number> = {
@@ -80,6 +80,12 @@ export function rateLimited(
     // see handleMusicResolve): 60 resolutions/min is still a heavy load
     // cap, but it no longer counts plays.
     'music-resolve': 60,
+    // The resolve cache PEEK — one database read per request, paced on
+    // its own generous line so cached answers stay effectively free for
+    // real listeners (several users sharing a proxy bucket stay well
+    // under it) while an anonymous caller spraying unknown ids cannot
+    // draw one free database round-trip per request.
+    'music-peek': 240,
     share: 120
   };
   // Deployment-scale knob: RATE_LIMIT_SCALE multiplies every bucket. The

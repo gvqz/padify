@@ -27,6 +27,9 @@ import { type Db } from './db';
 import { corsHeaders, json } from './http';
 import { rateLimited } from './ratelimit';
 import { userForRequest, destroySession, type SessionUser } from './auth';
+// The id border's one attachment shape (shared/wire.ts) — the route path
+// embeds the same source every gate tests, so a shape change is one edit.
+import { ATTACHMENT_ID_SOURCE } from '../shared/wire';
 import { handleNotesGet, handleNotesPut } from './notes';
 import {
   handleSharesGet,
@@ -78,7 +81,7 @@ export interface Route {
   handler: RouteHandler;
 }
 
-const ATTACHMENT_PATH = /^\/api\/attachments\/([A-Za-z0-9_-]{8,64})$/;
+const ATTACHMENT_PATH = new RegExp(`^/api/attachments/(${ATTACHMENT_ID_SOURCE})$`);
 const SHARE_TOKEN_PATH = /^\/api\/share\/([A-Za-z0-9_-]+)$/;
 
 const ROUTES: Route[] = [

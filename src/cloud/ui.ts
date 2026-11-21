@@ -12,7 +12,6 @@ import { $ } from '../lib/q';
 import { closeModal } from '../ui/behavior/modal';
 import { openPanel } from '../ui/behavior/panel';
 import { showToast } from '../ui/toast';
-import { getCloudConfig } from './config';
 import { getCloudSync, type CloudStatus } from './sync';
 
 const enum DotState {
@@ -26,13 +25,10 @@ let mode: 'sign-in' | 'sign-up' = 'sign-in';
 
 export function initCloudUI(): void {
   const sync = getCloudSync();
-  const config = getCloudConfig();
 
-  // Unconfigured installs keep every cloud surface hidden — the app is a
-  // plain local notepad, exactly as before.
-  if (!config) {
-    return;
-  }
+  // Cloud sync is always configured (the default points at the same
+  // origin — see config.ts); an "unconfigured install" guard here was
+  // dead ceremony around a config that can never be absent.
 
   const $button = $('#cloudNavContainer');
   const $dot = $('#cloudStatusDot');
