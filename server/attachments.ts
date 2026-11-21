@@ -22,9 +22,11 @@ import { createHash } from 'node:crypto';
 import { type Db } from './db';
 import { corsHeaders, json } from './http';
 import type { SessionUser } from './auth';
+// The one definition of the per-file byte ceiling (shared/wire.ts) —
+// re-exported here so the route module's own importers stay put.
+import { MAX_ATTACHMENT_BYTES } from '../shared/wire';
 
-/** Hard ceiling on the decoded size of one attachment, in bytes. */
-export const MAX_ATTACHMENT_BYTES = 5_000_000;
+export { MAX_ATTACHMENT_BYTES };
 
 /** Attachment ids are client-chosen; keep them tight and URL-safe. */
 const ATTACHMENT_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;

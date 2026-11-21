@@ -38,6 +38,9 @@
 
 import { fetchAttachment } from '../../cloud/attachments';
 import { getAttachmentBlob, putAttachment, type AttachmentMeta } from '../../storage/attachments';
+// The one per-file byte ceiling every gate enforces (see
+// MAX_CANVAS_IMAGE_BYTES below for this module's stake in it).
+import { MAX_ATTACHMENT_BYTES } from '../../../shared/wire';
 
 /**
  * The vendor's BinaryFileData, mirrored structurally (see the module
@@ -68,10 +71,11 @@ const FILE_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 const DATA_URL_PATTERN =
   /^data:([a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*);base64,([A-Za-z0-9+/]*={0,2})$/;
 
-/** The byte ceiling one stored image honors — the server's own cap, and
- * the envelope's. The vendor refuses bigger files at insert; the import
- * bridges enforce it here before anything reaches the store. */
-export const MAX_CANVAS_IMAGE_BYTES = 5_000_000;
+/** The byte ceiling one stored image honors — the wire contract's
+ * MAX_ATTACHMENT_BYTES (shared/wire.ts), the one number every gate
+ * enforces: the server's upload route, the envelope's embedded pass,
+ * the vendor's insert refusal, and the import bridges below. */
+export const MAX_CANVAS_IMAGE_BYTES = MAX_ATTACHMENT_BYTES;
 
 /** The per-scene file ceiling — the envelope's own count cap, mirrored. */
 export const MAX_CANVAS_IMAGE_FILES = 500;

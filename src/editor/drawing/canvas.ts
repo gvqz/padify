@@ -61,6 +61,10 @@ import type {
 import '@excalidraw/excalidraw/index.css';
 import './canvas-skin.css';
 import type { CanvasImageFile } from './canvas-images';
+// The vendor's insert-time byte gate speaks the wire contract's number
+// (shared/wire.ts) — the same 5 MB every capture path and the server's
+// upload route enforce.
+import { MAX_ATTACHMENT_BYTES } from '../../../shared/wire';
 
 /** The canvas's theme — the vendor's Theme, spelled without a type import
  * so this module owns its own contract ('light' | 'dark'). */
@@ -165,11 +169,12 @@ function drawingCanvasElement(
         tools: { image: true },
       },
       // The insert-time gates: the app's own capture discipline, spoken
-      // in the vendor's vocabulary — a 1920-px long edge and the server's
-      // 5 MB ceiling. A file over either fails at insert, never at sync.
+      // in the vendor's vocabulary — a 1920-px long edge and the wire
+      // contract's byte ceiling (every gate, one number). A file over
+      // either fails at insert, never at sync.
       imageOptions: {
         maxWidthOrHeight: 1920,
-        maxFileSizeBytes: 5_000_000,
+        maxFileSizeBytes: MAX_ATTACHMENT_BYTES,
       },
       // Master's minimap stays: the pad opens on the same train as
       // excalidraw.com, map island included (its footer toggle rides the

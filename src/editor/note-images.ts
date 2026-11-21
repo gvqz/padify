@@ -39,6 +39,11 @@ import {
   type AttachmentMeta,
 } from '../storage/attachments';
 import { fetchAttachment } from '../cloud/attachments';
+// The per-file byte ceiling — the wire contract's one number (the
+// server's upload cap, the envelope's, the canvas gates'), so an
+// over-cap capture fails HERE with an honest message instead of
+// poisoning the upload flush for the session.
+import { MAX_ATTACHMENT_BYTES } from '../../shared/wire';
 
 // ---------------------------------------------------------------------------
 // The reference scheme
@@ -111,11 +116,12 @@ export function collectAttachmentRefs(content: string): string[] {
 // ---------------------------------------------------------------------------
 
 /**
- * The client-side byte ceiling — the server's own cap (5 MB), mirrored
- * so an over-cap image fails at capture time with an honest message
- * instead of poisoning the upload flush for the session.
+ * The capture-side byte ceiling — the wire contract's MAX_ATTACHMENT_BYTES
+ * (the server's own cap), mirrored here so an over-cap image fails at
+ * capture time with an honest message instead of poisoning the upload
+ * flush for the session.
  */
-export const MAX_IMAGE_BYTES = 5_000_000;
+export const MAX_IMAGE_BYTES = MAX_ATTACHMENT_BYTES;
 
 /** The long edge a captured image keeps — beyond it, WebP stops paying. */
 export const MAX_IMAGE_EDGE_PX = 1920;
