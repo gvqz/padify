@@ -31,7 +31,7 @@ import {
 
 let restoreVendorDefaults: () => Record<string, unknown>;
 let vendorSerialize: (elements: never[], appState: never, files: never, type: 'local') => string;
-let vendorModule: (typeof import('@excalidraw/excalidraw')) | undefined;
+let vendorModule: typeof import('@excalidraw/excalidraw') | undefined;
 
 beforeAll(async () => {
   const canvasProto = HTMLCanvasElement.prototype as unknown as {

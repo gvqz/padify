@@ -177,10 +177,8 @@ export function generateServiceWorker(distDir, options = {}) {
   // every install (each Xiaolai subset sits under the 512 KB cap) would
   // tax users who never draw. Same class as the lazy chunks — runtime-
   // cached on first font use.
-  const isLazyChunk =
-    (rel) =>
-      (rel.startsWith('assets/') && !shell.has(rel)) ||
-      rel.startsWith('vendor/excalidraw/');
+  const isLazyChunk = (rel) =>
+    (rel.startsWith('assets/') && !shell.has(rel)) || rel.startsWith('vendor/excalidraw/');
 
   // Precache: the shell (any size) + other public files up to the cap.
   // Runtime: lazy chunks + oversized files — cached by the fetch handler

@@ -182,9 +182,7 @@ describe('copyExcalidrawFonts (the dev twin)', () => {
   } {
     const plugin = copyExcalidrawFonts();
     const hook = plugin.configureServer as unknown as
-      | ((server: {
-          middlewares: { use: (mount: string, handler: never) => void };
-        }) => void)
+      | ((server: { middlewares: { use: (mount: string, handler: never) => void } }) => void)
       | {
           handler: (server: {
             middlewares: { use: (mount: string, handler: never) => void };
@@ -237,7 +235,11 @@ describe('copyExcalidrawFonts (the dev twin)', () => {
       },
     );
     expect(headers['Content-Type']).toBe('font/woff2');
-    expect(Buffer.from(body as Uint8Array).subarray(0, 4).toString('latin1')).toBe('wOF2');
+    expect(
+      Buffer.from(body as Uint8Array)
+        .subarray(0, 4)
+        .toString('latin1'),
+    ).toBe('wOF2');
   });
 
   it('passes unknown files to the next middleware (the SPA fallback\u2019s job)', () => {

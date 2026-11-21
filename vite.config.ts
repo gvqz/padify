@@ -107,11 +107,11 @@ export function stubExcalidrawFontSubsetting(): Plugin {
   const STUB_ID = '\0padify-excalidraw-subset-stub';
   const STUB_CODE = [
     '// Padify stub: Excalidraw font subsetting is not shipped (eval-free',
-    '// builds). The chunk\'s own surface answers with an identity',
+    "// builds). The chunk's own surface answers with an identity",
     '// pass-through — the full font loads un-subsetted from the',
     '// same-origin copy; no CDN, no wasm, no eval. The return shapes',
-    '// mirror the vendor\'s own (toBase64 answers a data: URL, all three',
-    '// async) so the font manager\'s injected @font-face rules stay valid.',
+    "// mirror the vendor's own (toBase64 answers a data: URL, all three",
+    "// async) so the font manager's injected @font-face rules stay valid.",
     'const PASS = (buffer) => buffer;',
     'export const Commands = { Subset: 0 };',
     'export const toBase64 = async (buffer) => {',

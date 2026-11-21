@@ -56,11 +56,7 @@ import {
   type DrawingScene,
   type DrawingSceneElement,
 } from './scene';
-import type {
-  DrawingCanvasHandle,
-  DrawingCanvasScene,
-  DrawingCanvasTheme,
-} from './canvas';
+import type { DrawingCanvasHandle, DrawingCanvasScene, DrawingCanvasTheme } from './canvas';
 
 /** The Gen-2 autosave rhythm: announce 300 ms after the last change. */
 export const DRAWING_ANNOUNCE_DEBOUNCE_MS = 300;
