@@ -125,3 +125,80 @@ describe('the Turso backend talks to a clock', () => {
     expect(typeof rows[0]!.seq).toBe('number');
   });
 });
+
+describe('runMany on the Turso backend is all-or-nothing per chunk', () => {
+  // The pipeline does NOT stop at a failed request, so a transaction over
+  // it cannot be bare BEGIN/…/COMMIT — a mid-batch error would let the
+  // tail statements run and commit the partial work. The batch's chained
+  // conditions are what make the rollback real; these tests pin that
+  // request shape and the step_errors read-back.
+
+  function batchResponse(stepErrors: Array<unknown>) {
+    const results = [
+      { type: 'ok', response: { type: 'batch', result: { step_results: [], step_errors: stepErrors } } },
+    ];
+    return new Response(JSON.stringify({ results }), { status: 200 });
+  }
+
+  it('wraps the chunk in BEGIN, a condition chain, COMMIT and a guarded ROLLBACK', async () => {
+    const fetchMock = vi.fn(async () => batchResponse([null, null, null, null, null]));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const db = await tursoDb();
+    await db.runMany([
+      { sql: 'insert into t values (?)', args: [1] },
+      { sql: 'insert into t values (?)', args: [2] },
+      { sql: 'insert into t values (?)', args: [3] },
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(String(fetchMock.mock.calls[0]![1]!.body)) as {
+      requests: Array<{ type: string; batch?: { steps: Array<Record<string, unknown>> } }>;
+    };
+    // One batch request plus the close — no bare executes.
+    expect(body.requests.map((request) => request.type)).toEqual(['batch', 'close']);
+    const steps = body.requests[0]!.batch!.steps;
+    expect(steps).toHaveLength(6); // BEGIN + 3 statements + COMMIT + ROLLBACK
+    expect(steps[0]).toEqual({ stmt: { sql: 'BEGIN' } });
+    // Each statement chained on the previous step's ok, args translated.
+    expect(steps[1]).toEqual({
+      condition: { type: 'ok', step: 0 },
+      stmt: { sql: 'insert into t values (?)', args: [{ type: 'integer', value: '1' }] },
+    });
+    expect(steps[3]).toEqual({
+      condition: { type: 'ok', step: 2 },
+      stmt: { sql: 'insert into t values (?)', args: [{ type: 'integer', value: '3' }] },
+    });
+    // COMMIT runs only when the last statement did; ROLLBACK only when
+    // COMMIT did not.
+    expect(steps[4]).toEqual({ condition: { type: 'ok', step: 3 }, stmt: { sql: 'COMMIT' } });
+    expect(steps[5]).toEqual({
+      condition: { type: 'not', cond: { type: 'ok', step: 4 } },
+      stmt: { sql: 'ROLLBACK' },
+    });
+  });
+
+  it('a failed step surfaces as an error, not a silent rollback', async () => {
+    // The condition chain already rolled the batch back; the throw is the
+    // caller's only signal that nothing landed.
+    const fetchMock = vi.fn(async () =>
+      batchResponse([null, { message: 'UNIQUE constraint failed: notes.id' }, null, null, null])
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const db = await tursoDb();
+    await expect(db.runMany([{ sql: 'insert into t values (1)' }])).rejects.toThrow(
+      /UNIQUE constraint failed/
+    );
+  });
+
+  it('an all-ok batch is quiet, and empty input sends nothing', async () => {
+    const fetchMock = vi.fn(async () => batchResponse([null, null, null]));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const db = await tursoDb();
+    await db.runMany([{ sql: 'insert into t values (1)' }]);
+    await db.runMany([]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

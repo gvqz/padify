@@ -24,10 +24,13 @@ export interface Db {
   all(sql: string, args?: SqlValue[]): Promise<Row[]>;
   run(sql: string, args?: SqlValue[]): Promise<void>;
   /**
-   * Executes many statements in as few round-trips as possible — one Turso
-   * pipeline request (chunked to stay under per-request statement limits),
-   * one local transaction. Rows arrive in one network hop instead of one
-   * per row, which matters for sync pushes on an always-on host.
+   * Executes many statements in as few round-trips as possible — the
+   * local backend runs them in ONE transaction; the HTTP backend sends
+   * them as one all-or-nothing batch per ~100-statement chunk (a single
+   * Turso pipeline request per chunk, so rows land in one network hop
+   * instead of one per row — which matters for sync pushes on an
+   * always-on host). A call larger than one chunk is several
+   * transactions, not one.
    */
   runMany(statements: SqlStatement[]): Promise<void>;
   /** Human-readable kind for boot logs. */
@@ -45,8 +48,15 @@ export interface Db {
 // ---------------------------------------------------------------------------
 
 interface TursoStmt {
-  type: 'execute' | 'close';
+  type: 'execute' | 'close' | 'batch';
   stmt?: { sql: string; args?: unknown[] };
+  batch?: { steps: TursoBatchStep[] };
+}
+
+/** One statement inside a batch, optionally gated on an earlier step. */
+interface TursoBatchStep {
+  condition?: { type: 'ok'; step: number } | { type: 'not'; cond: { type: 'ok'; step: number } };
+  stmt: { sql: string; args?: unknown[] };
 }
 
 interface TursoArg {
@@ -161,7 +171,15 @@ class TursoHttpDb implements Db {
     const payload = (await response.json()) as {
       results: Array<{
         type: 'ok' | 'error';
-        response?: { result?: { cols: Array<{ name: string }>; rows: unknown[][] } };
+        response?: {
+          result?: {
+            cols?: Array<{ name: string }>;
+            rows?: unknown[][];
+            /** A batch answer's per-step errors (null where a step
+             *  succeeded or was skipped by its condition). */
+            step_errors?: Array<{ message?: string } | null>;
+          };
+        };
         error?: { message: string };
       }>;
     };
@@ -172,12 +190,25 @@ class TursoHttpDb implements Db {
         throw new Error(`Turso query failed: ${result.error?.message ?? 'unknown error'}`);
       }
       const query = result.response?.result;
-      if (!query) {
+      if (!query || !Array.isArray(query.cols)) {
+        // A batch answer carries step_results/step_errors instead of a
+        // table. runMany ignores step results but must not swallow a
+        // FAILED step: the condition chain already rolled the batch back,
+        // and this throw is what tells the caller the write did not land
+        // (the bare-execute pipeline used to surface the same failure as
+        // a top-level error result).
+        const stepErrors = query?.step_errors;
+        if (Array.isArray(stepErrors)) {
+          const failed = stepErrors.find((entry) => entry != null);
+          if (failed) {
+            throw new Error(`Turso batch statement failed: ${failed.message ?? 'unknown error'}`);
+          }
+        }
         tables.push([]);
         continue;
       }
       const names = query.cols.map(column => column.name);
-      tables.push(query.rows.map(row => {
+      tables.push((query.rows ?? []).map(row => {
         const rowObject: Row = {};
         names.forEach((name, index) => {
           rowObject[name] = fromTursoCell(row[index]);
@@ -206,12 +237,30 @@ class TursoHttpDb implements Db {
   async runMany(statements: SqlStatement[]): Promise<void> {
     for (let offset = 0; offset < statements.length; offset += TursoHttpDb.CHUNK) {
       const chunk = statements.slice(offset, offset + TursoHttpDb.CHUNK);
-      const requests: TursoStmt[] = chunk.map(statement => ({
-        type: 'execute',
-        stmt: { sql: statement.sql, args: (statement.args ?? []).map(toTursoArg) }
-      }));
-      requests.push({ type: 'close' });
-      await this.pipeline(requests);
+      // All-or-nothing per chunk, by the recipe Turso's own protocol doc
+      // prescribes: BEGIN runs unconditionally, every statement is
+      // chained on the previous step's ok, COMMIT is chained on the last
+      // statement, and ROLLBACK runs exactly when COMMIT did not. The
+      // condition chain is the load-bearing part — the pipeline does NOT
+      // stop at a failed request, so bare BEGIN/…/COMMIT would keep
+      // executing the tail statements after a mid-batch error and commit
+      // the partial work; here a failure skips every later statement and
+      // the ROLLBACK lands instead. (The step_errors scan in pipeline()
+      // then surfaces the failure to the caller.)
+      const steps: TursoBatchStep[] = [{ stmt: { sql: 'BEGIN' } }];
+      chunk.forEach((statement, index) => {
+        steps.push({
+          condition: { type: 'ok', step: index },
+          stmt: { sql: statement.sql, args: (statement.args ?? []).map(toTursoArg) }
+        });
+      });
+      const commitStep = steps.length;
+      steps.push({ condition: { type: 'ok', step: commitStep - 1 }, stmt: { sql: 'COMMIT' } });
+      steps.push({
+        condition: { type: 'not', cond: { type: 'ok', step: commitStep } },
+        stmt: { sql: 'ROLLBACK' }
+      });
+      await this.pipeline([{ type: 'batch', batch: { steps } }, { type: 'close' }]);
     }
   }
 }
@@ -319,6 +368,7 @@ export async function applySchema(db: Db): Promise<void> {
 
   await migrateColumns(db);
   await migrateRenames(db);
+  await migrateDroppedColumns(db);
   await migrateSyncCounters(db);
   await migrateSeqBackfill(db);
 }
@@ -428,6 +478,32 @@ async function migrateRenames(db: Db): Promise<void> {
     if (names.has(from) && !names.has(to)) {
       await db.run(`alter table ${table} rename column ${from} to ${to}`);
       console.log(`[padify-api] schema migration: renamed ${table}.${from} -> ${table}.${to}`);
+    }
+  }
+}
+
+/**
+ * Columns the schema no longer carries — `create table if not exists`
+ * cannot drop them from databases that predate the removal, and a dead
+ * column is a lie the schema keeps telling every boot. Each entry drops
+ * only when PRAGMA reports the column present, so startup stays idempotent
+ * on every database state (fresh installs never had it; dropped ones no
+ * longer report it).
+ */
+const DROPPED_COLUMNS: Array<{ table: string; column: string }> = [
+  // Written on every cache row, read by nothing — expires_at already
+  // drives both the re-resolve decision and the boot sweep. Carried from
+  // the first cache table; dropped 2026-11.
+  { table: 'music_resolutions', column: 'resolved_at' }
+];
+
+async function migrateDroppedColumns(db: Db): Promise<void> {
+  for (const { table, column } of DROPPED_COLUMNS) {
+    const rows = await db.all(`pragma table_info(${table})`);
+    const exists = rows.some(row => String(row.name) === column);
+    if (exists) {
+      await db.run(`alter table ${table} drop column ${column}`);
+      console.log(`[padify-api] schema migration: dropped ${table}.${column}`);
     }
   }
 }

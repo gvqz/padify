@@ -16,11 +16,13 @@ import { type Db } from './db';
 import { json, readJson } from './http';
 import type { SessionUser } from './auth';
 import {
+  MAX_NOTE_ID_CHARS,
   MAX_ROWS_PER_PUSH,
   NOTE_TYPE_ID_PATTERN,
   TRASH_RETENTION_MS,
   type IncomingNoteRow,
   type NotesPullV2,
+  type NotesPutV2,
 } from '../shared/wire';
 // The per-user note-byte quota — one home, one boundedness argument
 // (quota.ts).
@@ -85,7 +87,9 @@ export function parseNoteRows(value: unknown): IncomingNoteRow[] | null {
     }
     const row = entry as Record<string, unknown>;
     const id = asString(row.id);
-    if (!id || id.length > 100) {
+    // The id border's one note-id bound (shared/wire.ts) — ids are opaque
+    // client strings, bounded so an IN-clause stays sane.
+    if (!id || id.length > MAX_NOTE_ID_CHARS) {
       return null;
     }
     rows.push({
@@ -251,8 +255,10 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
 
   // The owner comes from the session, never from the payload; the conflict
   // clause pins updates to rows the user already owns (no cross-user writes).
-  // All rows go out as one batched write (single Turso pipeline request,
-  // single local transaction) instead of one round-trip per row.
+  // All rows go out as one batched write — locally one transaction; on the
+  // HTTP backend one all-or-nothing batch per 100-row chunk (a >100-row
+  // push is several transactions, see runMany) — instead of one round-trip
+  // per row.
   //
   // The delete-race guard: the upsert used to take ANY incoming row
   // wholesale, so a live row re-published after a delete (another window's
@@ -338,7 +344,11 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
     );
   }
 
-  return json(request, {
+  // The answer is typed as the wire's NotesPutV2 — the same type the
+  // client adopts its pushed state from (src/cloud/sync.ts), so a field
+  // drifting between the two sides is a compile error here, not a silent
+  // shape change the client only notices on the next pull.
+  const answer: NotesPutV2 = {
     ok: true,
     rows: landedRows.map(row => ({
       id: String(row.id),
@@ -347,7 +357,8 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
       deleted_at: row.deleted_at == null ? null : Number(row.deleted_at) || null,
       seq: Number(row.seq) || 0
     }))
-  });
+  };
+  return json(request, answer);
 }
 
 // ---------------------------------------------------------------------------
