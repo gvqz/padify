@@ -70,31 +70,11 @@ it either way), and the import path needs a progress affordance because
 500-file ceilings × 5 MB caps can decode for a second or two. Both are
 honest costs, not blockers.
 
-## NOW — this session's work (non-visual)
+## NOW — what the working queue holds (non-visual)
 
-1. **Notes go text-only.** Capture (paste, drop, picker, toolbar row) comes
-   out of the markdown surface; the renderer's resolver stays so existing
-   references keep rendering; the `.padify` envelope keeps embedding
-   whatever references still exist in real data.
-2. **Canvas images v1 — the attachment store's real tenant.** The drawing
-   canvas turns Excalidraw's image tool on and grows the persistence spine:
-   vendor-native insert (paste, drop, tool — master resizes at insert via
-   `imageOptions`, content-hashes file ids), bytes flushed to the local
-   store offline-first and uploaded by the existing cloud flush, files
-   re-hydrated at open (local first, the cloud's lazy pull for another
-   device's bytes, cached on arrival). Scene bytes stay tiny: an image
-   element carries a fileId, never pixels — the 2 MB wire cap is untouched.
-3. **The bridges carry images.** `.excalidraw` save embeds the files map
-   (excalidraw.com opens images natively); `.excalidraw` open admits one
-   (today it refuses with `embedded-images` — the refusal flips, the
-   ceilings do not: 5 MB/file, 500 files, junk entries drop). `.padify`
-   export embeds a drawing's referenced bytes; PNG/SVG exports pass the
-   files map so exported images are the real pixels.
-
-## NEXT — ranked, still non-visual
-
-4. **Workspace envelope** (the design above) — lands after canvas images,
-   reuses their machinery.
+4. **Workspace envelope** (the design above) — the single-note envelope's
+   discipline, composed N times over; reuses the canvas-images machinery
+   that just landed.
 5. **Attachment garbage collection.** The store gains tenants without a
    janitor: sweep attachment ids no longer referenced by any live note's
    content or any live scene (local: on open/sync idle; server: the orphan
@@ -125,7 +105,6 @@ honest costs, not blockers.
     the offline story.
 
 ## PARKED — waiting for the owner (visual)
-
 11. **The visual pass** — `qa/VISUAL-QA-HANDOFF.md` is the brief; findings
     land in `qa/findings-LIVE.md`. Exildraw "needs a lot of work" per the
     owner; the canvas-skin misses are the same bucket.
@@ -136,6 +115,15 @@ honest costs, not blockers.
 
 ## DONE — so nobody re-plans it
 
+- **Notes go text-only; the canvas grows images (2026-11-21, ab22aa9 +
+  f18ba24).** Capture left the markdown surface (paste, drop, picker,
+  toolbar row); the renderer's resolver stays for data that already
+  carries a reference. The drawing canvas turned Excalidraw's image tool
+  on with the vendor-native insert path — resize and caps at insert — and
+  grew the persistence spine: files flush to the attachment store
+  offline-first, hydrate at open (local first, the cloud's lazy pull,
+  cached on arrival), and the bridges carry the bytes (.excalidraw both
+  ways, .padify embedding, PNG/SVG with real pixels).
 - Excalidraw master 0.18.0-9fbeaed — the excalidraw.com train: minimap on
   every open (50c511c), same-origin fonts (canvas-assets.ts), theme that
   follows (f26aa84). The "latest version / map" question is closed.
