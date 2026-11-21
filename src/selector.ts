@@ -14,6 +14,7 @@ export interface NotepadUI {
   aboutModal: Q;
   copyToClipboard: Q;
   downloadNotes: Q;
+  downloadNotesPadify: Q;
   downloadNotesPlain: Q;
   downloadNotesPdf: Q;
   downloadNotesDocx: Q;
@@ -21,6 +22,8 @@ export interface NotepadUI {
   downloadNotesMarkdown: Q;
   downloadNotesPng: Q;
   downloadNotesSvg: Q;
+  downloadNotesExcalidraw: Q;
+  openNoteFile: Q;
   previewToggleButton: Q;
   previewToggleContainer: Q;
   fontSize: Q;
@@ -129,6 +132,7 @@ export function selector(): AppSelector {
       aboutModal: selectById('aboutModal'),
       copyToClipboard: selectById('copyToClipboard'),
       downloadNotes: selectById('downloadNotes'),
+      downloadNotesPadify: selectById('downloadNotesPadify'),
       downloadNotesPlain: selectById('downloadNotesPlain'),
       downloadNotesPdf: selectById('downloadNotesPdf'),
       downloadNotesDocx: selectById('downloadNotesDocx'),
@@ -136,6 +140,8 @@ export function selector(): AppSelector {
       downloadNotesMarkdown: selectById('downloadNotesMarkdown'),
       downloadNotesPng: selectById('downloadNotesPng'),
       downloadNotesSvg: selectById('downloadNotesSvg'),
+      downloadNotesExcalidraw: selectById('downloadNotesExcalidraw'),
+      openNoteFile: selectById('openNoteFile'),
       previewToggleButton: selectById('previewToggleButton'),
       previewToggleContainer: selectById('previewToggleContainer'),
       fontSize: selectById('fontSize'),

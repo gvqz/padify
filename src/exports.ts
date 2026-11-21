@@ -19,6 +19,13 @@ function getCurrentDate(): string {
   );
 }
 
+/** The dated stem the note-file names fall back to when a note has no
+ * title of its own — shared by the text family here and the .padify /
+ * .excalidraw saves (see padify-file.ts). */
+export function getDatedFileStem(): string {
+  return 'Notes-' + getCurrentDate();
+}
+
 export function getFileName(): string {
   return 'Notes-' + getCurrentDate() + '.txt';
 }

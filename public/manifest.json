@@ -50,6 +50,15 @@
     }
   ],
   "start_url": "index.html",
+  "file_handlers": [
+    {
+      "action": "index.html",
+      "accept": {
+        "application/x-padify": [".padify"]
+      },
+      "launch_type": "single-client"
+    }
+  ],
   "theme_color": "#3F51B5",
   "background_color": "#EEEEEE",
   "display_override": [

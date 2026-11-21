@@ -174,7 +174,7 @@
           </a>
         </span>
         <span class="downaload-notes-container">
-          <a id="downloadNotes" class="download-icon nav-icon-btn" title="Download Notes">
+          <a id="downloadNotes" class="download-icon nav-icon-btn" title="Download or open notes">
             <svg
               width="18"
               height="18"
@@ -193,6 +193,7 @@
           </a>
           <!-- Dropdown Menu -->
           <div id="iconDropdown" class="dropdown-menu">
+            <li><a class="dropdown-item" id="downloadNotesPadify">Save as Padify file</a></li>
             <li><a class="dropdown-item" id="downloadNotesPlain">Download as plain text</a></li>
             <li><a class="dropdown-item" id="downloadNotesPdf">Download as PDF</a></li>
             <li><a class="dropdown-item" id="downloadNotesDocx">Download as DOCX</a></li>
@@ -206,6 +207,12 @@
             <li>
               <a class="dropdown-item" id="downloadNotesSvg" hidden>Download as SVG image</a>
             </li>
+            <li>
+              <a class="dropdown-item" id="downloadNotesExcalidraw" hidden
+                >Download as Excalidraw file</a
+              >
+            </li>
+            <li><a class="dropdown-item" id="openNoteFile">Open a note file…</a></li>
           </div>
         </span>
         <span>

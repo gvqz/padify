@@ -9,6 +9,7 @@ import {
   exportNotesAsPDF,
   exportNotesAsDocx,
   downloadHTML,
+  getDatedFileStem,
   getFileName,
   getPdfFileName,
   getDocxFileName,
@@ -60,14 +61,26 @@ import './features/tasks/note/surface';
 // Excalidraw island behind a lazy chunk (editor/drawing/canvas.ts) and
 // this import also brings the image-export seam for the download menu.
 import { exportActiveDrawingImage, warmCanvasIsland } from './editor/drawing/surface';
-import { drawingSceneHasContent } from './editor/drawing/scene';
+import { drawingSceneHasContent, parseDrawingScene } from './editor/drawing/scene';
 import {
   markdownLastWorkingMode,
   markdownViewMode,
   onMarkdownViewMode,
   setMarkdownViewMode,
 } from './editor/markdown/surface';
-import { isHtmlContent, isMarkdownNote, isRichNote } from './editor/note-types';
+import { isHtmlContent, isMarkdownNote, isRichNote, DEFAULT_NOTE_TYPE } from './editor/note-types';
+import { deriveTabTitle } from './editor/note-content';
+// The note as a file: the .padify envelope (padify-file.ts owns the
+// format) and the open door behind it (padify-file-ui.ts) — every way
+// a note leaves to disk and comes back.
+import {
+  PADIFY_MIME_TYPE,
+  buildExcalidrawFile,
+  excalidrawFileName,
+  padifyFileName,
+  serializePadifyNoteFile,
+} from './padify-file';
+import { initPadifyFileOpen } from './padify-file-ui';
 // The tasks feature composes statically now (rail + hub + sweep are
 // small; the heavy markdown engine stays lazy but tasks pages ride the
 // note surface, which is core). Imported by the composition root only —
@@ -627,13 +640,70 @@ export async function initApp(): Promise<void> {
     if (exportable) {
       notepad.downloadNotesPng.removeAttr('hidden');
       notepad.downloadNotesSvg.removeAttr('hidden');
+      notepad.downloadNotesExcalidraw.removeAttr('hidden');
     } else {
       notepad.downloadNotesPng.attr('hidden', 'hidden');
       notepad.downloadNotesSvg.attr('hidden', 'hidden');
+      notepad.downloadNotesExcalidraw.attr('hidden', 'hidden');
     }
   };
   tabManager.addActiveListener(syncDrawingExportRows);
   syncDrawingExportRows();
+
+  // ---- the .padify file — the note as a file ------------------------
+  // The app's own save: the whole note (type, name, content, stamps) in
+  // one strict envelope that opens back as the same kind of note. The
+  // file is named what the rail calls the note; an untitled note falls
+  // back to the download family's dated stem.
+  const padifyOpen = initPadifyFileOpen(tabManager);
+  notepad.downloadNotesPadify.click(function () {
+    const active = tabManager.getActive();
+    const captured = getActiveNoteContent();
+    if (!active || !captured) {
+      return;
+    }
+    const title = deriveTabTitle(active);
+    saveTextAsFile(
+      serializePadifyNoteFile(
+        {
+          name: active.name,
+          noteType: captured.noteType ?? DEFAULT_NOTE_TYPE,
+          content: captured.content,
+          createdAt: active.createdAt,
+          updatedAt: active.updatedAt,
+        },
+        Date.now(),
+      ),
+      padifyFileName(title === 'Untitled' ? null : title, getDatedFileStem()),
+      PADIFY_MIME_TYPE,
+    );
+  });
+
+  // The canvas's interop door: a drawing note out as a native
+  // .excalidraw file — excalidraw.com opens it as-is. Rides the same
+  // visibility rule as the PNG/SVG rows (something to save).
+  notepad.downloadNotesExcalidraw.click(function () {
+    const active = tabManager.getActive();
+    const captured = getActiveNoteContent();
+    if (!active || captured?.noteType !== 'drawing') {
+      return;
+    }
+    const scene = parseDrawingScene(captured.content);
+    if (scene === null || scene.elements.length === 0) {
+      return;
+    }
+    saveTextAsFile(
+      buildExcalidrawFile(scene),
+      excalidrawFileName(deriveTabTitle(active), getDatedFileStem()),
+      'application/json',
+    );
+  });
+
+  // The open door: .padify (any note kind) and .excalidraw (a drawing
+  // waiting to happen) come back in as notes — see padify-file-ui.ts.
+  notepad.openNoteFile.click(function () {
+    padifyOpen.openNoteFilePicker();
+  });
 
   // ---- preview toggle — the top bar's Markdown-only button. The eye
   // flips the surface to the owned renderer's output and back to the

@@ -889,7 +889,7 @@ export class TabManager {
    * The strip gets the tab; the editor never notices until the note is
    * opened. Returns the note (null when the cap said no).
    */
-  addBackgroundNote(name: string, noteType: NoteType, content: string): NoteTab | null {
+  addBackgroundNote(name: string | null, noteType: NoteType, content: string): NoteTab | null {
     const tab = createTab(content, name, noteType);
     if (name) {
       tab.name = name;
