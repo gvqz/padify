@@ -20,6 +20,11 @@
 
 export type ThemeMode = 'light' | 'dark';
 
+// The picker's own normalizers — the one spelling a color key may take,
+// so what the picker writes and what the re-ink pass reads can never
+// disagree (see canonicalizeColor).
+import { normalizeHex, rgbStringToHex } from './color-picker';
+
 export interface PalettePair {
   light: string;
   dark: string;
@@ -60,29 +65,16 @@ export function applyPaletteVars(mode: ThemeMode): void {
 }
 
 /**
- * Normalizes a color string (hex, rgb(), rgba() with full alpha) to the
- * lowercase 6-digit hex key used by the palette map — or null.
+ * Normalizes a color string to the lowercase 6-digit hex key used by the
+ * palette map — or null. ONE canonicalizer, composed from the picker's
+ * own parts (normalizeHex + rgbStringToHex): the value the picker writes
+ * and the value this pass reads are the same shapes, so a stored color
+ * the picker accepts can never be one the theme re-ink refuses — the
+ * two disagreeing on `rgb(300,0,0)`-style input (clamp vs reject) and
+ * bare hex was the H10 re-ink inconsistency.
  */
 export function canonicalizeColor(value: string): string | null {
-  const raw = value.trim().toLowerCase();
-  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/.exec(raw);
-  if (hex) {
-    const body = hex[1];
-    if (body.length === 3) {
-      return `#${body[0]}${body[0]}${body[1]}${body[1]}${body[2]}${body[2]}`;
-    }
-    return `#${body}`;
-  }
-  const rgb = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/.exec(raw);
-  if (rgb) {
-    const [r, g, b] = [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
-    if (r > 255 || g > 255 || b > 255) {
-      return null;
-    }
-    const byte = (n: number): string => n.toString(16).padStart(2, '0');
-    return `#${byte(r)}${byte(g)}${byte(b)}`;
-  }
-  return null;
+  return normalizeHex(value) ?? rgbStringToHex(value);
 }
 
 /**
