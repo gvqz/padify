@@ -7,13 +7,13 @@ lines live at the top because everything else defers to them.*
 
 ## The owner's scope lines (2026-11-21)
 
-1. **Standard notes stay text-only.** No images in plain, rich or markdown
-   notes — capture surfaces there come back out. The attachment store keeps
-   its one true tenant: the **drawing canvas** (Excalidraw's image elements).
-   Notes that already carry a `padify-att:` reference (the feature shipped
-   earlier the same day) still *render* — the resolver stays as graceful
-   degradation for existing data, but nothing writes new references into
-   notes anymore.
+1. **Plain notes stay text-only; rich/gfm (markdown) notes carry images.**
+   Restated from the day's back-and-forth: "no images in standard notes"
+   meant the PLAIN surface — the markdown surface keeps capture (paste,
+   drop, the toolbar's image row → the attachment store, `padify-att:`
+   references) and the preview's resolver. The drawing canvas
+   (Excalidraw's image elements) is the store's other tenant, with its
+   own module. No image wiring ever lands on the plain surface.
 2. **No visual work yet.** The visual pass, hover-deck polish and
    canvas-skin misses wait for the owner, who will help drive it
    (`qa/VISUAL-QA-HANDOFF.md` is the standing brief).
@@ -107,12 +107,14 @@ honest costs, not blockers.
 ## The hygiene review (2026-11-21) — what the whole-repo scan found
 
 *The owner asked for a full scan for poorly designed garbage. The deletable
-weight is already gone (four commits: the phantom image-data amputation
-fd3b7be, dead exports/params eaf1409, the small honest repairs 31cbdc5, the
-escape/class-list dedup 6c9499a, plus the sixteen executed one-off scripts
-95693ee). What remains is the list of DESIGN findings — things that need
-real work or a decision, ranked by how much they can hurt. Every item was
-verified against the code, not grepped on faith.*
+weight is gone (dead exports/params eaf1409, the small honest repairs
+31cbdc5, the escape/class-list dedup 6c9499a, plus the sixteen executed
+one-off scripts 95693ee). The phantom image-data amputation fd3b7be was
+reversed the same day — the owner's restatement kept the text-only line at
+the PLAIN surface, and rich/gfm capture + render are back, scoped by
+surface. What remains below is the list of DESIGN findings — things that
+need real work or a decision, ranked by how much they can hurt. Every item
+was verified against the code, not grepped on faith.*
 
 ### Correctness — the items that can lose or lie about user data
 
@@ -257,26 +259,27 @@ verified against the code, not grepped on faith.*
 ## DONE — so nobody re-plans it
 
 - **The hygiene review (2026-11-21, fd3b7be → e8a9178).** The owner asked
-  for a whole-repo scan for poorly designed garbage. The phantom note-image
-  render path left by the text-only revert is amputated — the owner
-  confirms no standard note ever carried a reference, so the graceful
-  degradation guarded nothing (the gate now refuses the scheme, the
-  refusal is test-pinned, the .padify export unifies on one
-  scene-attachments collector); dead exports, dead params and dead
-  branches deleted across eleven modules; the silent PDF/docx export
-  failures and the CORS DELETE hole fixed; the share island's favicon
-  404 gone; sixteen executed one-off scripts deleted. The design findings
-  that remain are the H-list above.
-- **Notes go text-only; the canvas grows images (2026-11-21, ab22aa9 +
-  f18ba24).** Capture left the markdown surface (paste, drop, picker,
-  toolbar row); the renderer's resolver stayed for data that already
-  carried a reference — until the hygiene review above removed it for
-  good. The drawing canvas turned Excalidraw's image tool
-  on with the vendor-native insert path — resize and caps at insert — and
-  grew the persistence spine: files flush to the attachment store
-  offline-first, hydrate at open (local first, the cloud's lazy pull,
-  cached on arrival), and the bridges carry the bytes (.excalidraw both
-  ways, .padify embedding, PNG/SVG with real pixels).
+  for a whole-repo scan for poorly designed garbage. Dead exports, dead
+  params and dead branches deleted across eleven modules; the silent
+  PDF/docx export failures and the CORS DELETE hole fixed; the share
+  island's favicon 404 gone; sixteen executed one-off scripts deleted.
+  The review also amputated the note-image render path on a
+  "no standard note ever carried a reference" reading — corrected the
+  same day (see the scope lines: that call meant PLAIN notes; rich/gfm
+  capture and render are restored, now scoped by surface). The design
+  findings that remain are the H-list above.
+- **Plain notes go text-only; rich/gfm keeps images (2026-11-21,
+  ab22aa9 + f18ba24, restated same day).** The first reading took capture
+  out of the markdown surface entirely; the owner's restatement kept the
+  line at the PLAIN surface — markdown notes capture (paste, drop,
+  picker, toolbar row), render and round-trip their references again,
+  scoped to the markdown surface so plain never sees a picker. The
+  drawing canvas turned Excalidraw's image tool on with the
+  vendor-native insert path — resize and caps at insert — and grew the
+  persistence spine: files flush to the attachment store offline-first,
+  hydrate at open (local first, the cloud's lazy pull, cached on
+  arrival), and the bridges carry the bytes (.excalidraw both ways,
+  .padify embedding, PNG/SVG with real pixels).
 - Excalidraw master 0.18.0-9fbeaed — the excalidraw.com train: minimap on
   every open (50c511c), same-origin fonts (canvas-assets.ts), theme that
   follows (f26aa84). The "latest version / map" question is closed.
@@ -288,5 +291,6 @@ verified against the code, not grepped on faith.*
 - Offline as a state you can see (70d9e54); the mobile hamburger (86ef052).
 - Hover deck live (893e29c → c218c10); substitution family shipped
   (9428257, fd4b3c8).
-- Images-in-notes shipped and then rescoped the same day (379507a) — the
-  capture machinery moves to the canvas, the renderer stays for data.
+- Images-in-notes shipped and was rescoped the same day (379507a →
+  restated): the capture machinery serves the markdown surface (and the
+  canvas keeps its own module), the renderer stays for data.

@@ -892,11 +892,7 @@ function buildCard(row: SheetRowModel, term: string): HTMLLIElement {
       ? page.lines
           .map((line) => {
             const blank = line.trim() === '';
-            const body = blank
-              ? '\u00a0'
-              : term
-                ? highlightMatches(line, term)
-                : escapeHtml(line);
+            const body = blank ? '\u00a0' : term ? highlightMatches(line, term) : escapeHtml(line);
             return `<span class="snap-card-line${blank ? ' is-blank' : ''}">${body}</span>`;
           })
           .join('')

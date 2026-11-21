@@ -293,13 +293,23 @@ describe('renderMarkdownToHtml — links & images', () => {
     );
   });
 
-  it('the retired attachment scheme is refused like any other scheme', () => {
-    // Standard notes are text-only (the owner's call, 2026-11-21): the
-    // padify-att: scheme left the gate, so every shape — well-formed
-    // ids included — renders as the literal text it is. The drawing
-    // canvas owns images now; note content carries no references.
+  it('the app attachment scheme renders for a well-formed ref — the preview resolves it later', () => {
+    expect(renderMarkdownToHtml('![shot](padify-att:att-0123456789abcdef01234567)')).toBe(
+      '<p><img src="padify-att:att-0123456789abcdef01234567" alt="shot" loading="lazy" decoding="async" referrerpolicy="no-referrer"></p>',
+    );
+    // The raw-HTML <img> path meets the same gate (a lone img renders at
+    // block level, without the <p> wrapper).
+    expect(
+      renderMarkdownToHtml('<img src="padify-att:att-0123456789abcdef01234567" alt="raw">'),
+    ).toBe(
+      '<img src="padify-att:att-0123456789abcdef01234567" alt="raw" loading="lazy" decoding="async" referrerpolicy="no-referrer">',
+    );
+  });
+
+  it('a malformed attachment ref is refused like any other scheme', () => {
+    // The id shape is the gate's to keep: traversal dots, a second colon,
+    // junk — none of it is a ref the store could ever answer.
     for (const dest of [
-      'padify-att:att-0123456789abcdef01234567',
       'padify-att:../../etc',
       'padify-att:att-x',
       'padify-att:att-has:colon',
