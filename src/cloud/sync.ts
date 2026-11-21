@@ -25,6 +25,10 @@
  */
 
 import { api as apiCall, ApiError } from './api';
+// The stored session's shape, key and one reader — also api.ts's bearer
+// source. Kept out of './api' on purpose: tests mock that module's
+// network surface wholesale.
+import { readStoredSession, SESSION_STORAGE_KEY, type StoredSession } from './session';
 import { flushAttachmentUploads } from './attachments';
 import { stateGet, stateSet, stateRemove, storageBackend } from '../storage';
 import { DEFAULT_NOTE_TYPE, normalizeNoteType } from '../editor/note-types';
@@ -137,13 +141,6 @@ function wireRowContent(row: { content?: string; html?: string }): string {
   return row.content ?? row.html ?? '';
 }
 
-interface StoredSession {
-  token: string;
-  userId: string;
-  email: string;
-}
-
-const SESSION_KEY = 'padifySession';
 /**
  * The account this device's notes were last synced under (kv, per
  * browser — never synced anywhere). Powers the account-switch guard
@@ -211,33 +208,6 @@ function rememberEchoes(rows: NoteRow[]): void {
 // API plumbing
 // ---------------------------------------------------------------------------
 
-function api<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
-  return apiCall<T>(path, options);
-}
-
-function loadStoredSession(): StoredSession | null {
-  try {
-    const raw = stateGet(SESSION_KEY);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw) as Partial<StoredSession> | null;
-    if (
-      parsed &&
-      typeof parsed.token === 'string' &&
-      parsed.token &&
-      typeof parsed.userId === 'string' &&
-      parsed.userId &&
-      typeof parsed.email === 'string'
-    ) {
-      return { token: parsed.token, userId: parsed.userId, email: parsed.email };
-    }
-  } catch {
-    /* malformed session — treat as signed out */
-  }
-  return null;
-}
-
 function storeSession(next: StoredSession | null): void {
   session = next;
   try {
@@ -250,9 +220,9 @@ function storeSession(next: StoredSession | null): void {
       // the session is read back through the kv mirror, which hydrates
       // from IndexedDB at boot, and the fallback backend keeps writing
       // localStorage because there it is the only store.
-      stateSet(SESSION_KEY, JSON.stringify(next), { localStorage: false });
+      stateSet(SESSION_STORAGE_KEY, JSON.stringify(next), { localStorage: false });
     } else {
-      stateRemove(SESSION_KEY);
+      stateRemove(SESSION_STORAGE_KEY);
     }
   } catch {
     /* storage unavailable — session lives for this page only */
@@ -271,7 +241,7 @@ function scrubLegacySessionMirror(): void {
     return;
   }
   try {
-    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_STORAGE_KEY);
   } catch {
     /* storage unavailable — nothing to scrub */
   }
@@ -316,14 +286,14 @@ export async function initCloudSync(tabManager: TabManager): Promise<void> {
   manager.onPersist = (payload) => onLocalChange(payload);
 
   scrubLegacySessionMirror();
-  session = loadStoredSession();
+  session = readStoredSession();
 
   // Validate any stored session against the API (this also slides the
   // session's expiry forward on the server side).
   if (session) {
     setStatus(syncingStatus());
     try {
-      const me = await api<{ user: { id: string; email: string } }>('/api/me');
+      const me = await apiCall<{ user: { id: string; email: string } }>('/api/me');
       if (await accountSwitchDeclined(me.user.id, me.user.email)) {
         // The device's notes belong to another account and the user chose
         // to keep them local — this restored session does not run.
@@ -438,7 +408,7 @@ async function signIn(email: string, password: string): Promise<AuthResult> {
   storeSession(null);
 
   try {
-    const data = await api<AuthResponse>('/api/auth/signin', {
+    const data = await apiCall<AuthResponse>('/api/auth/signin', {
       method: 'POST',
       body: { email: email.trim(), password },
     });
@@ -467,7 +437,7 @@ async function signUp(email: string, password: string): Promise<AuthResult> {
   storeSession(null);
 
   try {
-    const data = await api<AuthResponse>('/api/auth/signup', {
+    const data = await apiCall<AuthResponse>('/api/auth/signup', {
       method: 'POST',
       body: { email: email.trim(), password },
     });
@@ -494,7 +464,7 @@ async function signUp(email: string, password: string): Promise<AuthResult> {
 async function signOut(): Promise<void> {
   // Best effort: even if the API is unreachable, drop the local session.
   try {
-    await api('/api/auth/signout', { method: 'POST' });
+    await apiCall('/api/auth/signout', { method: 'POST' });
   } catch {
     /* server unreachable or already signed out */
   }
@@ -696,13 +666,13 @@ async function pushPendingQueue(): Promise<void> {
   }
   const payload = manager.exportForSync();
   const rows: NoteRow[] = [];
-  const byId = new Map(payload.tabs.map((tab) => [tab.id, tab]));
+  const byId = new Map(payload.tabs.map((tab, index) => [tab.id, { tab, index }]));
   const trashById = new Map(payload.trashed.map((grave) => [grave.id, grave]));
 
   manager.syncLedger.dirtyIds().forEach((id) => {
-    const tab = byId.get(id);
-    if (tab) {
-      rows.push(tabToRow(tab, payload.tabs.indexOf(tab)));
+    const live = byId.get(id);
+    if (live) {
+      rows.push(tabToRow(live.tab, live.index));
       return;
     }
     const grave = trashById.get(id);
@@ -731,7 +701,7 @@ async function pushPendingQueue(): Promise<void> {
     const batchById = new Map(shippable.map((row) => [row.id, row]));
     for (const batch of batchRowsForPush(shippable)) {
       rememberEchoes(batch);
-      const answer = await api<NotesPutAnswer>('/api/notes', {
+      const answer = await apiCall<NotesPutAnswer>('/api/notes', {
         method: 'PUT',
         body: { v: 2, rows: batch },
       });
@@ -861,7 +831,7 @@ async function runSyncOnce(): Promise<void> {
     const { shippable: reassertShippable } = partitionRowsForPush(reassertRows);
     for (const batch of batchRowsForPush(reassertShippable)) {
       rememberEchoes(batch);
-      await api('/api/notes', { method: 'PUT', body: { v: 2, rows: batch } });
+      await apiCall('/api/notes', { method: 'PUT', body: { v: 2, rows: batch } });
     }
   }
   // A dropped seed may sit in the push queue (its boot-time creation
@@ -976,7 +946,7 @@ async function runSyncOnce(): Promise<void> {
     }
     for (const batch of batchRowsForPush(shippableDiff)) {
       rememberEchoes(batch);
-      await api('/api/notes', { method: 'PUT', body: { v: 2, rows: batch } });
+      await apiCall('/api/notes', { method: 'PUT', body: { v: 2, rows: batch } });
     }
   }
 }
@@ -1044,7 +1014,7 @@ function storeCursor(userId: string, cursor: number): void {
  */
 async function pullNotes(userId: string): Promise<PullResult> {
   const cursor = loadCursor(userId);
-  const data = await api<{
+  const data = await apiCall<{
     v?: number;
     rows?: NoteRow[];
     order?: string[];

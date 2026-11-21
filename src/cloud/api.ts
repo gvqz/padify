@@ -6,7 +6,7 @@
  */
 
 import { getCloudConfig } from './config';
-import { stateGet } from '../storage';
+import { readStoredSession } from './session';
 
 export class ApiError extends Error {
   constructor(
@@ -89,14 +89,5 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
  * can call the API without importing the sync engine (and its side effects).
  */
 function readSessionToken(): string | null {
-  try {
-    const raw = stateGet('padifySession');
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw) as { token?: unknown } | null;
-    return typeof parsed?.token === 'string' && parsed.token ? parsed.token : null;
-  } catch {
-    return null;
-  }
+  return readStoredSession()?.token ?? null;
 }
