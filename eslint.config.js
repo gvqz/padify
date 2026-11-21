@@ -1,6 +1,7 @@
 // ESLint 9 flat config. Scope is the TypeScript app source, the build
-// configs and the API server — the static islands in public/ are legacy
-// pages being folded into the main app (or deleted) and stay excluded.
+// configs and the API server. public/ stays excluded — it holds the
+// design-system sheets and the GENERATED share island (its sources are
+// src/editor/markdown/*, compiled by scripts/build-share.mjs).
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';

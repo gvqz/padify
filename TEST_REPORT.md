@@ -1,5 +1,11 @@
 # Padify — Deep Real-User QA Report
 
+> **Historical snapshot (2026-11-12), kept for the record.** Both criticals it
+> found are fixed since (the `.htaccess` SW-precache bug — `scripts/build-sw.mjs`
+> excludes it; the offline/share gaps — `e2e/offline.spec.ts` and
+> `e2e/share-links.spec.ts` pin them). Nothing here is a live claim; the
+> standing briefs are `qa/VISUAL-QA-HANDOFF.md` and `qa/findings-LIVE.md`.
+
 **Tester:** AI agent operating as a real user (exploratory + scripted passes)
 **Date:** November 12, 2026
 **Targets:**
