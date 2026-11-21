@@ -19,7 +19,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { type Db } from './db';
+import { type Db, type SqlStatement } from './db';
 import { corsHeaders, json } from './http';
 import type { SessionUser } from './auth';
 // The one definition of the per-file byte ceiling (shared/wire.ts) —
@@ -28,6 +28,14 @@ import { MAX_ATTACHMENT_BYTES } from '../shared/wire';
 // The one attachment id shape — composed and tested from the wire's
 // single definition (see shared/wire.ts, the id border).
 import { ATTACHMENT_ID_PATTERN } from '../shared/wire';
+// The reference grammar and the garbage verdict — the same spelling the
+// client's local GC runs (shared/att-refs.ts), so a reference the
+// renderer resolves is a reference every reader sees.
+import {
+  ATTACHMENT_ORPHAN_GRACE_MS,
+  collectNoteAttachmentIds,
+  orphanVerdicts,
+} from '../shared/att-refs';
 // The per-user attachment quotas — one home, one boundedness argument
 // (quota.ts).
 import { MAX_ATTACHMENT_COUNT, MAX_TOTAL_ATTACHMENT_BYTES } from './quota';
@@ -292,4 +300,125 @@ export async function handleAttachmentDelete(
   // Idempotent by design — deleting an already-deleted id is a success.
   await db.run('delete from attachments where id = ? and user_id = ?', [id, user.id]);
   return json(request, { ok: true });
+}
+
+// ---------------------------------------------------------------------------
+// The orphan sweep — the store's janitor (H6)
+// ---------------------------------------------------------------------------
+
+/** The scope-internal empty set (a user with no notes references nothing). */
+const NO_REFERENCES: ReadonlySet<string> = new Set();
+
+/**
+ * Deletes the attachments no note references anymore — with a grace
+ * window, not a guillotine.
+ *
+ * THE RULE is shared/att-refs.ts's orphanVerdicts, the same one the
+ * client's local GC runs: an attachment referenced by any of its
+ * owner's notes (live OR trashed — a restore must find its images) has
+ * any grace clock forgotten; one the sweep sees unreferenced for the
+ * FIRST time gets the clock stamped (never deleted this pass); one
+ * unreferenced past ATTACHMENT_ORPHAN_GRACE_MS is garbage.
+ *
+ * THE PROMISE the grace buys: a file referenced only by an unsynced
+ * second device does not die under this server's broom. The clock
+ * starts only when the unreferenced state has REACHED the server (the
+ * removal was pushed); a device that reconnects inside the window and
+ * pushes its older, referencing copy resets the clock on the next sweep.
+ *
+ * REFERENCES are read per user and never across users: user A's notes
+ * are not evidence that user B's attachment is live (ids are globally
+ * unique, but the scoping is the honest reading, not the collision
+ * odds). Shares are deliberately NOT tenants — their content is a
+ * denormalised snapshot whose images render placeholders today (see
+ * the NOW queue's share-links item; that feature will extend the
+ * tenant set when it lands).
+ *
+ * THE COST, stated: one full scan of notes (content included) plus one
+ * of the attachments table per pass. Hourly is far tighter than the
+ * 7-day window needs, and both scans stay comfortably inside the free
+ * tier — the same trade the seq-backfill migrations already accept.
+ * The reads never touch `data` (the bytes): judging tenants costs
+ * metadata, not blobs.
+ */
+export async function sweepOrphanAttachments(db: Db, now: number = Date.now()): Promise<number> {
+  const noteRows = await db.all('select user_id, content, note_type from notes');
+  const refsByUser = new Map<string, Set<string>>();
+  for (const row of noteRows) {
+    const userId = String(row.user_id ?? '');
+    if (!userId) {
+      continue;
+    }
+    const ids = collectNoteAttachmentIds({
+      content: typeof row.content === 'string' ? row.content : '',
+      noteType: typeof row.note_type === 'string' ? row.note_type : null,
+    });
+    if (ids.length === 0) {
+      continue;
+    }
+    let refs = refsByUser.get(userId);
+    if (!refs) {
+      refs = new Set<string>();
+      refsByUser.set(userId, refs);
+    }
+    for (const id of ids) {
+      refs.add(id);
+    }
+  }
+
+  const attachmentRows = await db.all('select id, user_id, orphan_since from attachments');
+  const entriesByUser = new Map<string, Array<{ id: string; orphanSince: number | null }>>();
+  for (const row of attachmentRows) {
+    const userId = String(row.user_id ?? '');
+    const id = typeof row.id === 'string' ? row.id : '';
+    if (!userId || !id) {
+      continue;
+    }
+    let entries = entriesByUser.get(userId);
+    if (!entries) {
+      entries = [];
+      entriesByUser.set(userId, entries);
+    }
+    entries.push({ id, orphanSince: typeof row.orphan_since === 'number' ? row.orphan_since : null });
+  }
+
+  const clearClock: string[] = [];
+  const stampClock: Array<{ id: string; since: number }> = [];
+  const garbage: string[] = [];
+  for (const [userId, entries] of entriesByUser) {
+    const verdicts = orphanVerdicts(
+      entries,
+      refsByUser.get(userId) ?? NO_REFERENCES,
+      now,
+      ATTACHMENT_ORPHAN_GRACE_MS
+    );
+    clearClock.push(...verdicts.clearClock);
+    for (const id of verdicts.stampClock) {
+      stampClock.push({ id, since: now });
+    }
+    garbage.push(...verdicts.garbage);
+  }
+
+  if (clearClock.length + stampClock.length + garbage.length > 0) {
+    // One batch for the whole pass: three statement shapes, all
+    // idempotent, none order-dependent (stamps and clears touch
+    // disjoint rows from deletes — a row is never stamped and deleted
+    // in the same verdict).
+    const statements: SqlStatement[] = [
+      ...clearClock.map((id): SqlStatement => ({
+        sql: 'update attachments set orphan_since = null where id = ?',
+        args: [id]
+      })),
+      ...stampClock.map(({ id, since }): SqlStatement => ({
+        sql: 'update attachments set orphan_since = ? where id = ?',
+        args: [since, id]
+      })),
+      ...garbage.map((id): SqlStatement => ({
+        sql: 'delete from attachments where id = ?',
+        args: [id]
+      }))
+    ];
+    await db.runMany(statements);
+  }
+  return garbage.length;
 }

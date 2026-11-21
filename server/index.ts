@@ -10,6 +10,7 @@
 
 import { applySchema, createDb } from './db';
 import { sweepMusicCache } from './music';
+import { sweepOrphanAttachments } from './attachments';
 import { sweepTrashedNotes } from './notes';
 import { sweepStaleShares } from './shares';
 import { MAX_BODY_BYTES, json, pathPrefixFromEnv, stripPathPrefix } from './http';
@@ -34,10 +35,12 @@ await applySchema(db);
 
 /**
  * The maintenance pass: expired sessions, dead music-cache rows, dead
- * share links, trash past retention. Runs at boot AND hourly below — the
- * boot pass alone put every one of these windows on the deploy calendar
- * (the alwaysdata box runs for weeks between restarts), so each table
- * just grew until the next deploy.
+ * share links, trash past retention, attachments no note references
+ * anymore (after the shared grace window — see sweepOrphanAttachments).
+ * Runs at boot AND hourly below — the boot pass alone put every one of
+ * these windows on the deploy calendar (the alwaysdata box runs for
+ * weeks between restarts), so each table just grew until the next
+ * deploy.
  */
 async function sweepAll(): Promise<void> {
   await db.run('delete from sessions where expires_at <= ?', [Date.now()]);
@@ -49,6 +52,10 @@ async function sweepAll(): Promise<void> {
   const sweptTrash = await sweepTrashedNotes(db);
   if (sweptTrash > 0) {
     console.log(`[padify-api] trash sweep: retired ${sweptTrash} note(s) past retention`);
+  }
+  const sweptAttachments = await sweepOrphanAttachments(db);
+  if (sweptAttachments > 0) {
+    console.log(`[padify-api] attachment sweep: deleted ${sweptAttachments} orphaned blob(s)`);
   }
 }
 

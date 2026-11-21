@@ -437,7 +437,13 @@ const REQUIRED_COLUMNS: Array<{ table: string; column: string; definition: strin
   // When a share was revoked — the dead-link sweep's grace clock (see
   // sweepStaleShares). Nullable: live rows and rows revoked before the
   // column existed carry null.
-  { table: 'shares', column: 'revoked_at', definition: 'integer' }
+  { table: 'shares', column: 'revoked_at', definition: 'integer' },
+  // The orphan sweep's grace clock — the moment the sweep first saw the
+  // attachment unreferenced by any of the owner's notes (see
+  // sweepOrphanAttachments). Nullable, no default: a 0 would be a 1970
+  // stamp, deleting still-referenced bytes on the first post-migration
+  // sweep past grace.
+  { table: 'attachments', column: 'orphan_since', definition: 'integer' }
 ];
 
 async function migrateColumns(db: Db): Promise<void> {

@@ -10,6 +10,7 @@ import {
   handleAttachmentPost,
   handleAttachmentsList,
   MAX_ATTACHMENT_BYTES,
+  sweepOrphanAttachments,
 } from '../server/attachments';
 import { route } from '../server/routes';
 
@@ -308,3 +309,122 @@ async function sha256Of(bytes: Uint8Array): Promise<string> {
   const { createHash } = await import('node:crypto');
   return createHash('sha256').update(bytes).digest('hex');
 }
+
+// ---------------------------------------------------------------------------
+// The orphan sweep — the store's janitor (the rule is shared/att-refs.ts's;
+// these tests pin the server's READING of it: the per-user scoping, the
+// trash-as-tenant rule, the one runMany batch, and what each verdict does).
+// ---------------------------------------------------------------------------
+
+const SWEEP_NOW = 1_700_000_000_000;
+const GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function sweepDb(notes: Row[], attachments: Row[]): { db: ScriptedDb; verdicts: Promise<number> } {
+  const db = new ScriptedDb([
+    { match: 'from notes', rows: notes },
+    { match: 'from attachments', rows: attachments },
+  ]);
+  return { db, verdicts: sweepOrphanAttachments(db, SWEEP_NOW) };
+}
+
+function noteRow(userId: string, content: string, noteType: string | null = null): Row {
+  return { user_id: userId, content, note_type: noteType };
+}
+
+function attachmentRow(id: string, userId: string, orphanSince: number | null = null): Row {
+  return { id, user_id: userId, orphan_since: orphanSince };
+}
+
+describe('sweepOrphanAttachments — the orphan sweep', () => {
+  it('stamps newcomers, clears revived references, deletes past grace', async () => {
+    const { db, verdicts } = sweepDb(
+      [
+        noteRow(
+          'user-1',
+          '![live](padify-att:att-aaaaaaaaaaaaaaaa)\n\n![revived](padify-att:att-cccccccccccccccc)',
+        ),
+      ],
+      [
+        // Referenced, never judged — nothing to do.
+        attachmentRow('att-aaaaaaaaaaaaaaaa', 'user-1', null),
+        // Unreferenced, no clock yet — stamp it.
+        attachmentRow('att-bbbbbbbbbbbbbbbb', 'user-1', null),
+        // Referenced again but still carrying an old clock — clear it.
+        attachmentRow('att-cccccccccccccccc', 'user-1', SWEEP_NOW - GRACE_MS - 1),
+        // Unreferenced past the window — garbage.
+        attachmentRow('att-dddddddddddddddd', 'user-1', SWEEP_NOW - GRACE_MS - 1),
+      ],
+    );
+
+    expect(await verdicts).toBe(1);
+    const writes = db.statements;
+    expect(writes).toHaveLength(3);
+    expect(writes[0]).toEqual({
+      sql: 'update attachments set orphan_since = null where id = ?',
+      args: ['att-cccccccccccccccc'],
+    });
+    expect(writes[1]).toEqual({
+      sql: 'update attachments set orphan_since = ? where id = ?',
+      args: [SWEEP_NOW, 'att-bbbbbbbbbbbbbbbb'],
+    });
+    expect(writes[2]).toEqual({
+      sql: 'delete from attachments where id = ?',
+      args: ['att-dddddddddddddddd'],
+    });
+  });
+
+  it('never writes when every attachment is referenced without a clock', async () => {
+    const { db, verdicts } = sweepDb(
+      [noteRow('user-1', '<img src="padify-att:att-aaaaaaaaaaaaaaaa">')],
+      [attachmentRow('att-aaaaaaaaaaaaaaaa', 'user-1', null)],
+    );
+
+    expect(await verdicts).toBe(0);
+    expect(db.statements).toHaveLength(0);
+  });
+
+  it("scopes references per user — another user's note does not protect a blob", async () => {
+    const { db, verdicts } = sweepDb(
+      // user-1's note references the id; the ATTACHMENT belongs to user-2.
+      [noteRow('user-1', '![x](padify-att:att-aaaaaaaaaaaaaaaa)')],
+      [attachmentRow('att-aaaaaaaaaaaaaaaa', 'user-2', SWEEP_NOW - GRACE_MS - 1)],
+    );
+
+    expect(await verdicts).toBe(1);
+    expect(db.statements.map((statement) => statement.sql)).toEqual([
+      'delete from attachments where id = ?',
+    ]);
+  });
+
+  it('counts trashed rows as tenants (a restore must find its images)', async () => {
+    // The sweep reads every notes row — the deleted flag is the trash
+    // sweep's business, not this one's; a grave's images stay until the
+    // grave itself is retired.
+    const { verdicts } = sweepDb(
+      [
+        noteRow('user-1', '![grave](padify-att:att-aaaaaaaaaaaaaaaa)'),
+        noteRow('user-1', '', null), // a live empty note rides along
+      ],
+      [attachmentRow('att-aaaaaaaaaaaaaaaa', 'user-1', SWEEP_NOW - GRACE_MS - 1)],
+    );
+
+    expect(await verdicts).toBe(0);
+  });
+
+  it('reads drawing notes through the scene grammar', async () => {
+    const scene = JSON.stringify({
+      version: 1,
+      elements: [{ type: 'image', fileId: 'file-aaaabbbbccccdddd' }],
+    });
+    const { verdicts } = sweepDb(
+      [noteRow('user-1', scene, 'drawing')],
+      [
+        attachmentRow('file-aaaabbbbccccdddd', 'user-1', SWEEP_NOW - GRACE_MS - 1),
+        attachmentRow('att-bbbbbbbbbbbbbbbb', 'user-1', SWEEP_NOW - GRACE_MS - 1),
+      ],
+    );
+
+    // The scene's fileId is live; the unreferenced blob dies.
+    expect(await verdicts).toBe(1);
+  });
+});

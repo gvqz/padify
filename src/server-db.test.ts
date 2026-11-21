@@ -135,13 +135,20 @@ describe('runMany on the Turso backend is all-or-nothing per chunk', () => {
 
   function batchResponse(stepErrors: Array<unknown>) {
     const results = [
-      { type: 'ok', response: { type: 'batch', result: { step_results: [], step_errors: stepErrors } } },
+      {
+        type: 'ok',
+        response: { type: 'batch', result: { step_results: [], step_errors: stepErrors } },
+      },
     ];
     return new Response(JSON.stringify({ results }), { status: 200 });
   }
 
   it('wraps the chunk in BEGIN, a condition chain, COMMIT and a guarded ROLLBACK', async () => {
-    const fetchMock = vi.fn(async () => batchResponse([null, null, null, null, null]));
+    // The mock carries the fetch signature (_url, _init) so the call
+    // tuple can be indexed for the request body below.
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      batchResponse([null, null, null, null, null]),
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const db = await tursoDb();
@@ -182,13 +189,13 @@ describe('runMany on the Turso backend is all-or-nothing per chunk', () => {
     // The condition chain already rolled the batch back; the throw is the
     // caller's only signal that nothing landed.
     const fetchMock = vi.fn(async () =>
-      batchResponse([null, { message: 'UNIQUE constraint failed: notes.id' }, null, null, null])
+      batchResponse([null, { message: 'UNIQUE constraint failed: notes.id' }, null, null, null]),
     );
     vi.stubGlobal('fetch', fetchMock);
 
     const db = await tursoDb();
     await expect(db.runMany([{ sql: 'insert into t values (1)' }])).rejects.toThrow(
-      /UNIQUE constraint failed/
+      /UNIQUE constraint failed/,
     );
   });
 

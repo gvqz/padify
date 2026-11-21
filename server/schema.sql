@@ -152,19 +152,30 @@ create table if not exists music_resolutions (
 -- `id` is chosen by the CLIENT (x-padify-id) so an upload retry after a
 -- dropped connection is idempotent: the server answers 200 for an
 -- identical (id, sha256) pair and 409 for a collision. There is no
--- note→attachment linkage yet — features that reference attachments
--- own their garbage collection; deleting a user cascades.
+-- note→attachment COLUMN — the linkage is defined by content (the
+-- shared/att-refs.ts grammar reads `padify-att:` refs and scene fileIds
+-- out of note content) and enforced by the orphan sweep (see
+-- sweepOrphanAttachments in attachments.ts); deleting a user cascades.
+--
+-- `orphan_since` is the sweep's grace clock: the moment the sweep FIRST
+-- saw the attachment unreferenced by any of the owner's notes (live or
+-- trashed). Null on referenced rows (and rows never yet judged); the
+-- sweep deletes a row only after it has stayed unreferenced past the
+-- shared grace window (ATTACHMENT_ORPHAN_GRACE_MS) — a second device
+-- that reconnects inside the window and re-pushes its referencing copy
+-- resets the clock instead of losing the bytes.
 -- ---------------------------------------------------------------------------
 
 create table if not exists attachments (
-  id         text primary key,
-  user_id    text not null references users(id) on delete cascade,
-  name       text not null default '',
-  mime       text not null default 'application/octet-stream',
-  size       integer not null,
-  sha256     text not null,
-  data       text not null,
-  created_at integer not null
+  id           text primary key,
+  user_id      text not null references users(id) on delete cascade,
+  name         text not null default '',
+  mime         text not null default 'application/octet-stream',
+  size         integer not null,
+  sha256       text not null,
+  data         text not null,
+  created_at   integer not null,
+  orphan_since integer
 );
 
 create index if not exists attachments_user_id_idx on attachments(user_id, created_at);
