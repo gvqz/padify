@@ -662,7 +662,10 @@ export async function initApp(): Promise<void> {
     if (!active || !captured) {
       return;
     }
-    const title = deriveTabTitle(active);
+    // The LIVE title: the model's content lags typing by the save
+    // debounce, and the file is named for the note as it stands — the
+    // share modal's live-title lesson, applied to the file family.
+    const title = deriveTabTitle({ ...active, content: captured.content });
     saveTextAsFile(
       serializePadifyNoteFile(
         {
@@ -692,9 +695,14 @@ export async function initApp(): Promise<void> {
     if (scene === null || scene.elements.length === 0) {
       return;
     }
+    // Live title, same as the Padify save (the model lags the canvas's
+    // announce debounce).
     saveTextAsFile(
       buildExcalidrawFile(scene),
-      excalidrawFileName(deriveTabTitle(active), getDatedFileStem()),
+      excalidrawFileName(
+        deriveTabTitle({ ...active, content: captured.content }),
+        getDatedFileStem(),
+      ),
       'application/json',
     );
   });
