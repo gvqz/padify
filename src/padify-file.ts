@@ -304,11 +304,7 @@ function parseEmbeddedAttachments(raw: unknown): PadifyFileAttachment[] {
       continue;
     }
     const decoded = base64ToBytes(bytes);
-    if (
-      decoded === null ||
-      decoded.byteLength === 0 ||
-      decoded.byteLength > MAX_ATTACHMENT_BYTES
-    ) {
+    if (decoded === null || decoded.byteLength === 0 || decoded.byteLength > MAX_ATTACHMENT_BYTES) {
       continue;
     }
     out.push({ id, name, mime, bytes });
@@ -442,11 +438,7 @@ function attachmentsFromFilesMap(raw: unknown): PadifyFileAttachment[] {
       continue;
     }
     const decoded = base64ToBytes(match[2]!);
-    if (
-      decoded === null ||
-      decoded.byteLength === 0 ||
-      decoded.byteLength > MAX_ATTACHMENT_BYTES
-    ) {
+    if (decoded === null || decoded.byteLength === 0 || decoded.byteLength > MAX_ATTACHMENT_BYTES) {
       continue;
     }
     out.push({ id, name: `${id}.img`, mime, bytes: match[2]! });

@@ -112,35 +112,26 @@ weight is gone (dead exports/params eaf1409, the small honest repairs
 one-off scripts 95693ee). The phantom image-data amputation fd3b7be was
 reversed the same day — the owner's restatement kept the text-only line at
 the PLAIN surface, and rich/gfm capture + render are back, scoped by
-surface. What remains below is the list of DESIGN findings — things that
-need real work or a decision, ranked by how much they can hurt. Every item
-was verified against the code, not grepped on faith.*
+surface. The first fix batch landed the same day too: H1, H2, H7, H10,
+H24, H25 and the NotesPutV2 half of H3 (see DONE). What remains below is
+the rest of the DESIGN findings — things that need real work or a
+decision, ranked by how much they can hurt. Every item was verified
+against the code, not grepped on faith.*
 
 ### Correctness — the items that can lose or lie about user data
 
-- **H1. The server's seq is arrival-ordered, not recency-ordered; two tabs
-  can silently destroy a confirmed push.** Both tabs hold the same note
-  dirty; the cross-tab listener only syncs tombstones. Tab B (newer bytes,
-  earlier arrival) pushes; tab A (stale bytes) lands after and takes the
-  higher seq; B's model is clean after `confirmPushed` and the next pull
-  answers remote-wins with A's stale bytes — B's words vanish with NO
-  conflicted copy. The delete path has a recency guard; the live-vs-live
-  upsert does not (server/notes.ts:266-301 + sync.ts:1239-1254, 1473-1541).
-  Fix: `and excluded.updated_at >= notes.updated_at` on the upsert's
-  conflict clause, so stale strands are refused server-side and fall to the
-  client's three-way merge. Needs its own commit with a pinning test.
-- **H2. Share PATCH caps truncate silently.** The server caps `note_ids`
-  at 500 and `refresh` at 100 (server/shares.ts:286-306); the client sends
-  ALL tombstones and dirty ids uncapped (cloud/share.ts:253-279). Past the
-  caps the same first-500 re-send forever: tombstones beyond them never
-  revoke public links. Fix: client-side slice-and-loop like the sync
-  batcher, or a `truncated: true` answer.
+- **H1. ~~The server's seq is arrival-ordered, not recency-ordered; two
+  tabs can silently destroy a confirmed push.~~ FIXED** — the upsert's
+  live-recency guard plus the client's refusal tell (a refused push is
+  not confirmed, not adopted; it falls to the three-way merge).
+- **H2. ~~Share PATCH caps truncate silently.~~ FIXED** — the caps live
+  in shared/wire.ts and the client chunks to them; a mid-run failure
+  settles nothing.
 - **H3. The wire module's own types are bypassed on the server.**
-  `NotesPutV2` imports nowhere; the server hand-builds the PUT answer
-  (notes.ts:329-338) and the client mirrors its own `NotesPutAnswer`
-  (sync.ts:129-132) — exactly the drift shared/wire.ts exists to prevent.
-  Same for `PullRowV2`, built field-by-field at notes.ts:140-151. Fix:
-  type the server's answers with the wire types, delete the mirror.
+  HALF-FIXED: `NotesPutV2` now IS the client's PUT answer type (the
+  hand-mirrored `NotesPutAnswer` is gone). Remaining: the server
+  hand-builds the PUT answer (notes.ts) and `PullRowV2` is built
+  field-by-field — type the server's answers with the wire types.
 - **H4. `runMany` is only transactional on the local backend.** The Turso
   HTTP path pipelines bare `execute` with no BEGIN/COMMIT (server/db.ts
   206-216) while notes.ts:251's comment claims single-transaction parity.
@@ -158,18 +149,18 @@ was verified against the code, not grepped on faith.*
 - **H6. The attachment GC does not exist, and its endpoints are
   production-dead.** `DELETE /api/attachments/:id` and the list route have
   zero non-test callers; client `deleteAttachment`/`clearAttachments` are
-  test-only. Deleting an image element from a drawing, purging a note, and
+  test-only. Deleting an image element from a drawing, purging a note,
+  deleting an image-bearing markdown note, and
   "delete everything" all leave bytes in IndexedDB and on the server until
   the quota trips. This is NOW-item 5 above — the review's evidence makes
-  it a must, not a nice-to-have: the plumbing exists, unwired.
+  it a must, not a nice-to-have: the plumbing exists, unwired. (Rich/gfm
+  capture being back makes it more urgent, not less.)
 
 ### Consistency — the drift waiting to bite
 
-- **H7. The 5 MB attachment cap is mirrored in four places** (server
-  MAX_ATTACHMENT_BYTES, padify-file MAX_EMBEDDED_ATTACHMENT_BYTES,
-  canvas-images MAX_CANVAS_IMAGE_BYTES, canvas.ts's literal 5_000_000).
-  The file whose entire purpose is shared constants — shared/wire.ts —
-  should own it.
+- **H7. ~~The 5 MB attachment cap is mirrored in four places.~~ FIXED** —
+  shared/wire.ts owns MAX_ATTACHMENT_BYTES; every gate (upload route,
+  envelope, canvas insert, note capture, scene bridges) reads it.
 - **H8. The id border is three different rules**: attachments
   `[A-Za-z0-9_-]{8,64}` (defined twice), music `[A-Za-z0-9_-]{6,64}`,
   note ids any string ≤100. All parameterized (no injection), but the
@@ -179,11 +170,9 @@ was verified against the code, not grepped on faith.*
   tasks JSON is empty for the client, non-empty text for the server). A
   stale client mints a share link the UI would refuse. Minimal per-kind
   emptiness check belongs in shared/wire.ts.
-- **H10. Two color normalizers diverge**: theme-colors' `canonicalizeColor`
-  vs color-picker's `normalizeHex`+`rgbStringToHex` disagree on
-  `rgb(300,0,0)`, bare hex, 3-digit forms — a stored value one accepts and
-  the other rejects re-inks inconsistently. One line: `canonicalizeColor =
-  normalizeHex(v) ?? rgbStringToHex(v)`.
+- **H10. ~~Two color normalizers diverge.~~ FIXED** — canonicalizeColor is
+  the picker's own composition now (normalizeHex ?? rgbStringToHex),
+  pinned in theme-colors.test.ts.
 - **H11. `getCloudConfig()` can never return null**, so `isShareAvailable`
   is a tautology and the unconfigured-installs-hide-cloud-surface guards
   are dead (cloud/config.ts:54-67, share.ts:89-91, ui.ts:33). Either make
@@ -238,14 +227,13 @@ was verified against the code, not grepped on faith.*
 - **H23.** `music_resolutions.resolved_at` is written, never read — drop
   the column or read it. The seq-backfill migrations also full-scan notes
   on every boot (fine on Turso free tier, worth a note).
-- **H24.** sync.ts's `api()` is a pure passthrough of `apiCall`, and two
-  modules parse the `padifySession` storage key independently — one
-  `readStoredSession` helper. The dirty-rows loop's `indexOf` is O(n²)
-  where a map already exists.
-- **H25.** The quota constants are function-local on both sides and both
-  checks are TOCTOU (two racing PUTs each pass the sum check) — a shared
-  `quota.ts` plus a comment makes the boundedness a decision, not an
-  accident.
+- **H24. ~~api() passthrough, twin session parsers, O(n²) dirty loop.~~
+  FIXED** — cloud/session.ts owns the key + shape + one reader; the
+  wrapper is gone (apiCall directly); the push queue's row builder rides
+  an index-carrying map.
+- **H25. ~~Function-local quota constants, unremarked TOCTOU.~~ FIXED** —
+  server/quota.ts owns the three numbers with the boundedness argument
+  written down.
 
 ## PARKED — waiting for the owner (visual)
 11. **The visual pass** — `qa/VISUAL-QA-HANDOFF.md` is the brief; findings
@@ -258,6 +246,17 @@ was verified against the code, not grepped on faith.*
 
 ## DONE — so nobody re-plans it
 
+- **The hygiene fix batch (2026-11-21).** The first H-list batch: H1's
+  live-recency guard on the server upsert plus the client's refusal tell
+  (a refused push stays dirty and takes the three-way merge — the
+  two-tab silent-loss race is closed on both sides of the wire); H2's
+  share-PATCH chunking against wire-owned caps; H7's one 5 MB constant
+  (shared/wire.ts) behind every gate; H10's canonicalizeColor as the
+  picker's own composition; H24's session.ts (one key, one reader) and
+  the de-quadraticized push queue; H25's quota.ts with the race
+  boundedness written down; and H3's client half (NotesPutV2 is the PUT
+  answer's one type). Prettier also folded the format drift the earlier
+  cleanup commits had left in selector.ts and sheet-kit.ts.
 - **The hygiene review (2026-11-21, fd3b7be → e8a9178).** The owner asked
   for a whole-repo scan for poorly designed garbage. Dead exports, dead
   params and dead branches deleted across eleven modules; the silent
