@@ -30,6 +30,9 @@ import { api as apiCall, ApiError } from './api';
 // network surface wholesale.
 import { readStoredSession, SESSION_STORAGE_KEY, type StoredSession } from './session';
 import { flushAttachmentUploads } from './attachments';
+// The local attachment GC — fires after a clean cycle (see the hook in
+// syncCycle below).
+import { sweepLocalAttachmentGarbage } from './attachment-gc';
 import { stateGet, stateSet, stateRemove, storageBackend } from '../storage';
 import { DEFAULT_NOTE_TYPE, normalizeNoteType } from '../editor/note-types';
 // The welcome seed's exact bytes: the untouched-seed test in mergeRemote
@@ -612,6 +615,9 @@ async function syncCycle(_reason: string): Promise<void> {
   if (!manager || !currentUserId || !session) {
     return;
   }
+  // The cycle's async tail (flush → GC) outlives this guard's narrowing —
+  // capture the manager once and let the tail ask `?.` instead of `!`.
+  const tabManager = manager;
   if (syncing) {
     syncQueued = true;
     return;
@@ -627,8 +633,23 @@ async function syncCycle(_reason: string): Promise<void> {
     setStatus(signedInStatus(manager.syncLedger.hasDirty() ? 'pending' : 'idle'));
     // Attachments ride along after the cycle — never inside it, so a
     // multi-megabyte upload can never delay note sync. Fire-and-forget:
-    // the flush reports its own failures to the console.
-    void flushAttachmentUploads();
+    // the flush reports its own failures to the console. The GC sweeps
+    // after the flush on a CLEAN ledger only — judging references
+    // against content that is still moving would be judging a lie — and
+    // reads the live model's projection, never the boot snapshot.
+    void flushAttachmentUploads()
+      .then(() => {
+        if (!tabManager.syncLedger.hasDirty()) {
+          return sweepLocalAttachmentGarbage(async () => {
+            const payload = tabManager.exportForSync();
+            return [...payload.tabs, ...payload.trashed];
+          });
+        }
+        return 0;
+      })
+      .catch((error) => {
+        console.warn('[cloud] attachment gc failed', error);
+      });
   } catch (error) {
     console.warn('[cloud] sync failed', error);
 
