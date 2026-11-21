@@ -112,11 +112,10 @@ weight is gone (dead exports/params eaf1409, the small honest repairs
 one-off scripts 95693ee). The phantom image-data amputation fd3b7be was
 reversed the same day — the owner's restatement kept the text-only line at
 the PLAIN surface, and rich/gfm capture + render are back, scoped by
-surface. The first fix batch landed the same day too: H1, H2, H7, H10,
-H24, H25 and the NotesPutV2 half of H3 (see DONE). What remains below is
-the rest of the DESIGN findings — things that need real work or a
-decision, ranked by how much they can hurt. Every item was verified
-against the code, not grepped on faith.*
+surface. The first fix batch landed the same day (H1, H2, H7, H10, H24,
+H25 and H3's client half), and the second day closed the REST of the
+list except the three items named at the bottom — every remaining entry
+below was verified against the code, not grepped on faith.*
 
 ### Correctness — the items that can lose or lie about user data
 
@@ -127,25 +126,21 @@ against the code, not grepped on faith.*
 - **H2. ~~Share PATCH caps truncate silently.~~ FIXED** — the caps live
   in shared/wire.ts and the client chunks to them; a mid-run failure
   settles nothing.
-- **H3. The wire module's own types are bypassed on the server.**
-  HALF-FIXED: `NotesPutV2` now IS the client's PUT answer type (the
-  hand-mirrored `NotesPutAnswer` is gone). Remaining: the server
-  hand-builds the PUT answer (notes.ts) and `PullRowV2` is built
-  field-by-field — type the server's answers with the wire types.
-- **H4. `runMany` is only transactional on the local backend.** The Turso
-  HTTP path pipelines bare `execute` with no BEGIN/COMMIT (server/db.ts
-  206-216) while notes.ts:251's comment claims single-transaction parity.
-  Consequences are bounded (re-push converges; the `landed < rows.length`
-  409 is the backstop) but the comment is a lie. Fix: wrap the chunk in
-  begin/commit statements or correct the comment.
-- **H5. The merge engine's silent fallbacks.** Myers past its step budget
-  (a ~150 KB note) returns null → diff3 answers conflict → sync parks,
-  with no log anywhere; notes without a `syncBase` skip the three-way
-  merge entirely; a name conflict after a clean body merge discards the
-  merged body (merge/notes.ts:128-135 computes it, then parks mine's raw
-  bytes). None lose data (the park keeps both sides), but the big-note
-  NEVER-merges case deserves one honest log line, and the merged-body
-  discard is just wasteful.
+- **H3. ~~The wire module's own types are bypassed on the server.~~
+  FIXED** — NotesPutV2 is the PUT answer's one type on both sides; the
+  pull's payload rides NotesPullV2.
+- **H4. ~~runMany is only transactional on the local backend.~~ FIXED** —
+  the Turso HTTP path sends each 100-statement chunk as ONE all-or-nothing
+  batch (BEGIN, condition-chained statements, COMMIT, a ROLLBACK gated on
+  COMMIT's failure — Turso's own PROTOCOL.md recipe; a failed step throws
+  via the step_errors scan). The interface docs say what is true: one
+  transaction per chunk, several for a >100-row call.
+- **H5. ~~The merge engine's silent fallbacks.~~ FIXED** — a divergence
+  past a merge budget logs one honest line naming the note and the three
+  sizes (bail: 'size' | 'budget' rides up from diff3); a title collision
+  over cleanly-merging words keeps the SPLICE as the canonical body
+  (wordsMerged) while mine's whole version still parks for review — the
+  old path took the remote's raw body and threw the computed merge away.
 - **H6. The attachment GC does not exist, and its endpoints are
   production-dead.** `DELETE /api/attachments/:id` and the list route have
   zero non-test callers; client `deleteAttachment`/`clearAttachments` are
@@ -161,72 +156,82 @@ against the code, not grepped on faith.*
 - **H7. ~~The 5 MB attachment cap is mirrored in four places.~~ FIXED** —
   shared/wire.ts owns MAX_ATTACHMENT_BYTES; every gate (upload route,
   envelope, canvas insert, note capture, scene bridges) reads it.
-- **H8. The id border is three different rules**: attachments
-  `[A-Za-z0-9_-]{8,64}` (defined twice), music `[A-Za-z0-9_-]{6,64}`,
-  note ids any string ≤100. All parameterized (no injection), but the
-  contract should be one wire-level shape check.
-- **H9. "Is this note empty" is answered differently on each side.** The
-  server strips tags crudely; the client's check is per-kind (an empty
-  tasks JSON is empty for the client, non-empty text for the server). A
-  stale client mints a share link the UI would refuse. Minimal per-kind
-  emptiness check belongs in shared/wire.ts.
+- **H8. ~~The id border is three different rules.~~ FIXED** — the wire's
+  id border (ATTACHMENT_ID_SOURCE/PATTERN, MUSIC_TRACK_ID_PATTERN,
+  MAX_NOTE_ID_CHARS) is the one definition; the six attachment spellings
+  (server gate, route path, the padify-att gates, canvas file ids, the
+  .padify envelope) all compose or test it.
+- **H9. ~~"Is this note empty" is answered differently on each side.~~
+  FIXED** — the wire's shareContentIsEmpty is the server's share gate:
+  html kinds strip tags, the structured kinds this wire ships read their
+  payload array, unknown content stays shareable (a stale client can no
+  longer mint a link the UI would refuse). The client's per-kind registry
+  stays the primary and the finer gate.
 - **H10. ~~Two color normalizers diverge.~~ FIXED** — canonicalizeColor is
   the picker's own composition now (normalizeHex ?? rgbStringToHex),
   pinned in theme-colors.test.ts.
-- **H11. `getCloudConfig()` can never return null**, so `isShareAvailable`
-  is a tautology and the unconfigured-installs-hide-cloud-surface guards
-  are dead (cloud/config.ts:54-67, share.ts:89-91, ui.ts:33). Either make
-  the config honestly nullable or delete the ceremony.
+- **H11. ~~getCloudConfig() can never return null.~~ FIXED** — the dead
+  ceremony left with the guards that could never fire: isShareAvailable
+  (a tautology) and the unconfigured-install early returns in ui.ts and
+  share-ui.ts.
 
 ### Refactors — real but behavior-neutral, each worth its own commit
 
-- **H12. The editor model's coordinate system is written four times.**
-  `coveredTextNodes`/`streamLengthOfNode` (ops.ts) re-implement
-  `walkTextStream`/`streamLength` (document.ts/selection.ts) — the same
-  TreeWalker walk, four independent copies that must never disagree (one
-  drifted member corrupts carets everywhere). Highest-leverage unification
-  in the repo, smallest diff: call the document.ts primitives, keep
-  signatures. The same file also copy-pastes the "insert a node at a
-  DomSpot" primitive FIVE times (the comments on insertPlainText document
-  two shipped bugs it caused) — extract `insertNodeAtSpot`.
+- **H12. ~~The editor model's coordinate system is written four times.~~
+  FIXED** — walkTextStream gains an early-stop and is the one walk
+  (coveredTextNodes rides it); streamLengthOfSubtree is the one counter
+  (ops' and selection's byte-identical twins deleted); insertNodeAtSpot
+  is the one insertion primitive the styled-caret plant, link plant,
+  math shell and plain-text splice all ride (five hand-copies, two
+  shipped caret bugs among them).
 - **H13. `initRichToolbar` is ~1080 lines** doing ten jobs in one closure
   scope; the sibling markdown/toolbar.ts already shows the decomposition
-  (wire* functions taking `(elements, deps)`). Mirror it.
+  (wire* functions taking `(elements, deps)`). Mirror it. **REMAINING.**
 - **H14. `initApp` is ~920 lines.** The extraction candidates: the
   keyboard-shortcut dispatcher and the download-menu/export wiring — the
-  same treatment every other behavior already got.
-- **H15. snapshots' `renderRows` is ~258 lines**; the eleven DOM-chore
-  tail blocks extract into `renderSheetChrome(segment, facts)`.
-- **H16. help.ts's tour hints are hardcoded `ctrl + …`** bypassing
-  `shortcutLabel()` — Apple users see "Ctrl + B" in the tour and ⌘B in the
-  context menu. Route the hints through the one renderer at build time.
-  (Its brand hover-deck block, ~110 lines of animation with nothing to do
-  with help, also wants its own module.)
-- **H17. model-port's internal clones**: undo/redo and indent/outdent are
-  byte-identical pairs; the getSelection→parentElement scaffold opens
-  eight methods. Mechanical `walkHistory(dir)` + `ancestorFromCaret()`.
-- **H18. render.ts duplicates two of its own grammar pieces** (the
-  CommonMark marker-padding rule twice; the destination+title FSM twice —
-  `parseInlineDestination` vs `parseLinkRefDef`'s half). Extract
-  `markerPadding(rest)` and `parseDestinationAndTitle(scanner)`.
-- **H19. The margin-left px parser is hand-rolled three times** (ops,
-  model-port, plain-indent) beside document.ts's `stylePropOf` — one
-  `marginLeftPxOf(block)` beside it.
-- **H20. pip-window re-implements the Mod+B/I/U/⇅X → command map** the
-  context menu owns as data. Export `commandFor(id)` from one place.
+  same treatment every other behavior already got. **REMAINING.**
+- **H15. ~~snapshots' `renderRows` is ~258 lines.~~ FIXED** — the DOM-chore
+  tail blocks live in renderSheetChrome(facts) now; renderRows stays
+  about rows.
+- **H16. ~~help.ts's tour hints are hardcoded `ctrl + …`.~~ FIXED** — the
+  hints render through shortcutLabel() like every other shortcut surface
+  (Apple visitors see ⌘/⌥). Its brand hover-deck block (~110 lines)
+  still wants its own module — deferred to the visual pass, which owns
+  the deck's motion and timing anyway.
+- **H17. ~~model-port's internal clones.~~ FIXED** — walkHistory(dir) and
+  shiftIndent(delta) fold the byte-identical pairs; the five caret
+  queries open with one ancestorFromCaret().
+- **H18. ~~render.ts duplicates two of its own grammar pieces.~~ FIXED** —
+  markerPadding() is the one padding rule; scanDestination()/scanTitle()
+  are the one link grammar (the definition's title folds lines through a
+  hook). Unifying surfaced a real drift: the definition's pointy
+  destination rejected the spaces the spec allows — both grammars answer
+  the spec's one answer now.
+- **H19. ~~The margin-left px parser is hand-rolled three times.~~ FIXED**
+  — document.ts's marginLeftPxOf, beside stylePropOf, is the one margin
+  reader (ops, model-port and plain-indent all import it).
+- **H20. ~~pip-window re-implements the Mod+B/I/U/⇅X → command map.~~
+  FIXED** — both keydown handlers ask the context menu's
+  formatShortcutFor (the menu owns the map as data); the pip's Mod+S
+  export stays its own line.
 
 ### Small chores
 
-- **H21.** shares GET limit 200 with no revoked filter — during the
-  7-day death grace, dead rows can crowd live links out of the owner's
-  inventory.
-- **H22.** `/api/music/resolve` peeks the DB cache before any rate limit —
-  an anonymous caller gets one free Turso round-trip per unknown id; the
-  share route got a bucket for exactly this (an in-memory negative cache
-  is the cheap answer).
-- **H23.** `music_resolutions.resolved_at` is written, never read — drop
-  the column or read it. The seq-backfill migrations also full-scan notes
-  on every boot (fine on Turso free tier, worth a note).
+- **H21. ~~shares GET limit 200 with no revoked filter.~~ FIXED** — the
+  inventory keeps dead rows only while their death is news (the sweep's
+  own 7-day grace), so they can no longer crowd live links out of the
+  window.
+- **H22. ~~/api/music/resolve peeks the DB cache before any rate limit.~~
+  FIXED** — an in-memory negative cache (60 s TTL) makes a repeat unknown
+  id cost memory, not a Turso read, and the peek carries its own generous
+  pace ('music-peek', 240/min) so spraying fresh unknown ids cannot draw
+  one free database round-trip per request. Cached answers stay free for
+  real listeners.
+- **H23. ~~music_resolutions.resolved_at is written, never read.~~ FIXED**
+  — the column left the schema, with an idempotent drop-column migration
+  for databases that predate the removal (expires_at already drives the
+  re-resolve decision and the sweep). The seq-backfill migrations still
+  full-scan notes on every boot — fine on Turso free tier, noted here.
 - **H24. ~~api() passthrough, twin session parsers, O(n²) dirty loop.~~
   FIXED** — cloud/session.ts owns the key + shape + one reader; the
   wrapper is gone (apiCall directly); the push queue's row builder rides
@@ -234,6 +239,11 @@ against the code, not grepped on faith.*
 - **H25. ~~Function-local quota constants, unremarked TOCTOU.~~ FIXED** —
   server/quota.ts owns the three numbers with the boundedness argument
   written down.
+
+*What remains of the whole review: H6 (the attachment GC — the NOW queue's
+item 5, the one real feature among them), H13 and H14 (the two giant
+closures, each worth its own careful session), and H16's hover-deck module
+move (which belongs to the visual pass).*
 
 ## PARKED — waiting for the owner (visual)
 11. **The visual pass** — `qa/VISUAL-QA-HANDOFF.md` is the brief; findings
@@ -246,6 +256,24 @@ against the code, not grepped on faith.*
 
 ## DONE — so nobody re-plans it
 
+- **The hygiene fix batch, day two (2026-11-22).** Everything the review
+  found except H6, H13, H14 and the hover-deck move: the server's writes
+  became honest (H3's typed PUT answer, H4's all-or-nothing Turso batches
+  by the PROTOCOL.md recipe), the merge engine stopped discarding clean
+  splices and started logging its bails (H5), the wire gained its id
+  border and its emptiness gate (H8, H9 — the share-refusal and six id
+  spellings now read one definition), the shares inventory and the music
+  peek got their pacing fixes (H21, H22), a dead column left the schema
+  with a migration (H23), the dead config ceremony left (H11), and the
+  refactors each landed as their own commit: the editor model's one
+  coordinate spelling (H12 — walkTextStream/streamLengthOfSubtree/
+  insertNodeAtSpot), model-port's folded pairs (H17), the one margin
+  reader (H19), the one format keymap (H20), the markdown renderer's one
+  link grammar — which surfaced and fixed a real spec drift in link
+  reference definitions (H18), the snapshots sheet's chrome extraction
+  (H15), and the tour's platform-honest shortcuts (H16). Gates green
+  throughout: 1940 unit tests, the 652-example CommonMark corpus, the
+  full editor characterization suites, and the smoke e2e pair.
 - **The hygiene fix batch (2026-11-21).** The first H-list batch: H1's
   live-recency guard on the server upsert plus the client's refusal tell
   (a refused push stays dirty and takes the three-way merge — the
