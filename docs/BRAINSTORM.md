@@ -192,12 +192,23 @@ below was verified against the code, not grepped on faith.*
   is the one insertion primitive the styled-caret plant, link plant,
   math shell and plain-text splice all ride (five hand-copies, two
   shipped caret bugs among them).
-- **H13. `initRichToolbar` is ~1080 lines** doing ten jobs in one closure
-  scope; the sibling markdown/toolbar.ts already shows the decomposition
-  (wire* functions taking `(elements, deps)`). Mirror it. **REMAINING.**
-- **H14. `initApp` is ~920 lines.** The extraction candidates: the
-  keyboard-shortcut dispatcher and the download-menu/export wiring — the
-  same treatment every other behavior already got. **REMAINING.**
+- **H13. ~~`initRichToolbar` is ~1080 lines~~ FIXED** — the markdown
+  toolbar's discipline, mirrored: one module state bag (elements + the
+  per-feature lets) and a wire* function per feature (grid picker, color
+  pickers, toolbar events, link popover, math popover, document events),
+  the pressed-state/menu/popover logic as module functions reading that
+  bag. The mirror also gained the guard markdown always had — a second
+  init against a wired shell is a no-op (stacked listeners would
+  double-toggle a menu); the characterization suite pins it, and the
+  pin was mutation-tested both ways.
+- **H14. ~~`initApp` is ~920 lines.~~ FIXED** — the two extractions the
+  review named: app-shortcuts.ts (the shortcuts sheet's search + the
+  document-level chord dispatcher) and download-menu.ts (the dismissable
+  layer, every save-as row, the row-visibility syncs, the .padify/
+  .excalidraw saves with the shared attachment collector, the open
+  door). app.ts is the boot orchestrator again at 749 lines, and the
+  listener registration order is preserved exactly — both calls sit
+  where the moved blocks sat.
 - **H15. ~~snapshots' `renderRows` is ~258 lines.~~ FIXED** — the DOM-chore
   tail blocks live in renderSheetChrome(facts) now; renderRows stays
   about rows.
@@ -248,9 +259,9 @@ below was verified against the code, not grepped on faith.*
   server/quota.ts owns the three numbers with the boundedness argument
   written down.
 
-*What remains of the whole review: H13 and H14 (the two giant closures,
-each worth its own careful session), and H16's hover-deck module move
-(which belongs to the visual pass).*
+*What remains of the whole review: H16's hover-deck module move, which
+belongs to the visual pass (the deck's motion and timing are that
+pass's to own). Every line item the review found is closed.*
 
 ## PARKED — waiting for the owner (visual)
 11. **The visual pass** — `qa/VISUAL-QA-HANDOFF.md` is the brief; findings
@@ -262,6 +273,18 @@ each worth its own careful session), and H16's hover-deck module move
     minimap island and vendor popovers have known seams (xv21 evidence).
 
 ## DONE — so nobody re-plans it
+
+- **The two giant closures, closed (2026-11-22).** The hygiene review's
+  last two line items, each its own commit: H13's rich toolbar folds
+  into the markdown twin's wire* shape (module state bag + a wire
+  function per feature + the double-init guard, mutation-tested), and
+  H14's boot orchestrator sheds its two named extractions
+  (app-shortcuts.ts, download-menu.ts) back to 749 lines with listener
+  order preserved. Gates green throughout: lint, both tscs, 1968 unit
+  tests, and the e2e families that own the touched behavior (smoke,
+  platform-shortcuts, docs-toolbar, padify-file, drawing-canvas,
+  markdown-features). The hygiene review is done — only the hover-deck
+  move remains, and it is the visual pass's.
 
 - **H6, the attachment GC (2026-11-22).** The review's last real feature,
   landed two-sided on one rule: shared/att-refs.ts (the grammar AND the
