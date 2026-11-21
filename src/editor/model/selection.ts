@@ -30,11 +30,6 @@ export function ordered(pair: { anchor: number; focus: number }): [number, numbe
   return pair.anchor <= pair.focus ? [pair.anchor, pair.focus] : [pair.focus, pair.anchor];
 }
 
-/** True when the range covers at least one character. */
-export function isRanged(coverage: [number, number]): boolean {
-  return coverage[1] > coverage[0];
-}
-
 /**
  * The stream of a subtree — zero-width runs excluded, math shells skipped.
  */

@@ -9,7 +9,6 @@
 export interface CaseDef {
   id: string;
   label: string;
-  hint?: string;
   convert: (text: string) => string;
 }
 

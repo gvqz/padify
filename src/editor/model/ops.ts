@@ -1933,55 +1933,6 @@ function deleteTable(model: HTMLElement, table: HTMLElement): OpResult {
   return { changed: true, intent };
 }
 
-/** The table + cell an offset sits in, or null. */
-export function tableContextAt(
-  model: HTMLElement,
-  at: number,
-): {
-  table: HTMLTableElement;
-  cell: HTMLTableCellElement;
-  rows: number;
-  cols: number;
-  rowIndex: number;
-  colIndex: number;
-} | null {
-  const spot = spotAtStream(model, at);
-  if (!spot) {
-    return null;
-  }
-  let el: HTMLElement | null = spotElement(spot);
-  let cell: HTMLTableCellElement | null = null;
-  while (el && el !== model) {
-    if (el.tagName === 'TD' || el.tagName === 'TH') {
-      cell = el as HTMLTableCellElement;
-      break;
-    }
-    el = el.parentElement;
-  }
-  if (!cell) {
-    return null;
-  }
-  const table = cell.closest('table');
-  if (!(table instanceof HTMLTableElement) || !model.contains(table)) {
-    return null;
-  }
-  const rows = Array.from(table.querySelectorAll('tr'));
-  const rowIndex = rows.findIndex((row) => row.contains(cell));
-  if (rowIndex === -1) {
-    return null;
-  }
-  const cols = rows[rowIndex]!.children.length;
-  const colIndex = Array.prototype.indexOf.call(rows[rowIndex]!.children, cell);
-  return {
-    table,
-    cell,
-    rows: rows.length,
-    cols,
-    rowIndex,
-    colIndex: colIndex === -1 ? 0 : colIndex,
-  };
-}
-
 /** The block element a spot lives in, or null (root-level content). The
  *  walk is bounded by the root: the model holder itself is a DIV in
  *  BLOCK_SIBLING_TAGS, and answering it as "the block" would splice

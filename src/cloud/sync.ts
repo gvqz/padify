@@ -56,7 +56,7 @@ export type CloudStatus =
     }
   | { state: 'error'; email: string; message: string; retryable: boolean };
 
-export type SyncPhase = 'idle' | 'syncing' | 'pending' | 'offline';
+export type SyncPhase = 'idle' | 'syncing' | 'pending';
 
 export interface AuthResult {
   ok: boolean;

@@ -4,56 +4,27 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 
 /**
- * Strips the shipped eval sinks — the two dependency code paths that
- * construct functions from strings:
+ * Strips the shipped eval sink — the dependency code path that constructs
+ * functions from strings:
  *
- *  1. SweetAlert2's declarative `<swal-function-param value="() => ...">`
- *     parser: `new Function(`return ${value}`)()`. Padify never renders
- *     that markup and the site CSP (`script-src` without 'unsafe-eval')
- *     already makes the call THROW — dead weight that ships a literal
- *     eval-from-attribute signature (the pattern Malwarebytes Browser
- *     Guard's heuristics flag as obfuscated malware in the deployed
- *     bundle). Replaced with `undefined`: the param is ignored, exactly
- *     how the CSP would degrade it.
+ *   The setImmediate polyfill bundled inside docx (YuzuJS):
+ *   `new Function("" + task)` — its fallback when setImmediate is called
+ *   with a NON-function, which docx never does. Replaced with a no-op
+ *   function: same silent degradation, no eval.
  *
- *  2. The setImmediate polyfill bundled inside docx (YuzuJS):
- *     `new Function("" + task)` — its fallback when setImmediate is
- *     called with a NON-function, which docx never does. Replaced with
- *     a no-op function: same silent degradation, no eval.
- *
- * Both rewrites are id-scoped to their package so nothing else can be
+ * The rewrite is id-scoped to the package so nothing else can be
  * collaterally matched, and the forbidEvalSinks() plugin fails the build
  * if any future dependency reintroduces a sink.
  *
- * Exported so a test can pin the transformations (and the not-found
+ * Exported so a test can pin the transformation (and the not-found
  * warnings for future versions that move the lines).
  */
 export function stripDependencyEvalSinks(): Plugin {
-  const SWEALERT_EVAL = /new Function\(`return \$\{(\w+)\}`\)\(\)/g;
   const SETIMMEDIATE_EVAL = /new Function\(""\s*\+\s*(\w+)\)/g;
   return {
     name: 'padify-strip-dependency-eval-sinks',
     transform(code, id) {
       const isJsModule = /\.(js|mjs|cjs)$/.test(id) || id.includes('/index.mjs?');
-      // SweetAlert2's parser. (The id check must skip the package's CSS
-      // entry — `sweetalert2.min.css` also matches the package name but
-      // carries no JavaScript.)
-      if (id.includes('sweetalert2') && isJsModule) {
-        if (!SWEALERT_EVAL.test(code)) {
-          SWEALERT_EVAL.lastIndex = 0;
-          console.warn(
-            `[vite] sweetalert2 module (${id}) changed — the <swal-function-param> ` +
-              'eval sink was not found to strip. Verify no new Function() ships in the bundle.',
-          );
-          return null;
-        }
-        SWEALERT_EVAL.lastIndex = 0;
-        const stripped = code.replace(
-          SWEALERT_EVAL,
-          'undefined /* padify: eval sink stripped — <swal-function-param> is unsupported (CSP has no unsafe-eval) */',
-        );
-        return { code: stripped, map: null };
-      }
 
       // docx's bundled setImmediate polyfill.
       if (id.includes('docx') && isJsModule) {

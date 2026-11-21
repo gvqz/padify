@@ -12,7 +12,7 @@ import { removeSetting, setSetting } from './state/settings';
  */
 
 /** Every selectable explosion style. */
-export const EXPLOSION_STYLES = [
+const EXPLOSION_STYLES = [
   'classic',
   'confetti',
   'fireworks',
@@ -22,7 +22,7 @@ export const EXPLOSION_STYLES = [
   'surprise',
 ] as const;
 
-export type ExplosionStyle = (typeof EXPLOSION_STYLES)[number];
+type ExplosionStyle = (typeof EXPLOSION_STYLES)[number];
 
 /** Styles that draw something concrete ('surprise' rolls among these). */
 const CONCRETE_STYLES: readonly Exclude<ExplosionStyle, 'surprise'>[] = [

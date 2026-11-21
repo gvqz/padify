@@ -13,7 +13,7 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypt
 import type { Db } from './db';
 
 const KEY_LENGTH = 64;
-export const SESSION_TTL_MS = 30 * 86_400_000;
+const SESSION_TTL_MS = 30 * 86_400_000;
 /** Sessions slide forward when they would expire within two weeks. */
 const SESSION_RENEW_THRESHOLD_MS = 15 * 86_400_000;
 
@@ -51,14 +51,6 @@ function verifyAgainst(password: string, parts: string[]): boolean {
   const expected = Buffer.from(parts[2], 'hex');
   const actual = scryptSync(password, salt, expected.length || KEY_LENGTH);
   return expected.length === actual.length && timingSafeEqual(expected, actual);
-}
-
-export function verifyPassword(password: string, stored: string): boolean {
-  const parts = stored.split('$');
-  if (parts.length !== 3 || parts[0] !== 'scrypt') {
-    return false;
-  }
-  return verifyAgainst(password, parts);
 }
 
 function sha256(value: string): string {

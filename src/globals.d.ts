@@ -28,8 +28,7 @@ declare const documentPictureInPicture: DocumentPictureInPicture | undefined;
 
 // Legacy global contract kept for modules that still read window state.
 // (whiteNoisePlayer moved to the module accessor getWhiteNoisePlayer(); the
-// snapshots pair stays until the snapshot rewrite lands.)
+// snapshot manager stays — its consumers read it through window.)
 interface Window {
   snapshotsManager?: import('./snapshots').SnapshotsManager;
-  createSnapshot?: (title?: string) => Promise<void> | void;
 }

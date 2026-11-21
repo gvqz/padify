@@ -1342,7 +1342,7 @@ export class SnapshotsManager {
 
   // Create a new snapshot of the ACTIVE note — or decline politely when
   // it adds nothing.
-  async createSnapshot(title?: string): Promise<void> {
+  async createSnapshot(): Promise<void> {
     // Capture from the note itself, not the editor DOM: a non-html note's
     // editor shows a placeholder card — its real content lives in the model.
     const captured = getActiveNoteContent();
@@ -1354,7 +1354,7 @@ export class SnapshotsManager {
       captured.content,
       captured.noteType,
       activeTab?.id,
-      title,
+      undefined,
       { emptyToast: true, duplicateToast: true },
       activeTab?.colorTheme,
       activeTab?.name ?? undefined,
@@ -1638,16 +1638,15 @@ export class SnapshotsManager {
     }
   }
 
-  /** The change badge of every row that has one — computed against the
-   *  UNFILTERED timeline, so a search that hides the previous snapshot of
-   *  a note still reports the honest delta against the true previous
-   *  version, not whichever neighbor survived the filter. Keyed by the
-   *  row's store id. Rows group by their NOTE (the version chain lives
-   *  inside a note) — cache order is already newest-first, so the first
-   *  earlier row with the same noteId is the previous version. */
-  /** The badge AND the predecessor it was measured against — the
-   *  predecessor is what the detail card's diff needs (one walk, two
-   *  answers, the same pairing rule both read). */
+  /** The badge AND the predecessor it was measured against, of every row
+   *  that has one — computed against the UNFILTERED timeline, so a search
+   *  that hides the previous snapshot of a note still reports the honest
+   *  delta against the true previous version, not whichever neighbor
+   *  survived the filter. Keyed by the row's store id. Rows group by their
+   *  NOTE (the version chain lives inside a note) — cache order is already
+   *  newest-first, so the first earlier row with the same noteId is the
+   *  previous version. The predecessor is what the detail card's diff
+   *  needs (one walk, two answers, the same pairing rule both read). */
   private computeChangeContext(): Map<number, { badge: SnapshotChangeBadge; previous: Snapshot }> {
     const context = new Map<number, { badge: SnapshotChangeBadge; previous: Snapshot }>();
     const rows = this.cache.map((row) => row.snapshot);
@@ -2285,8 +2284,8 @@ export class SnapshotsManager {
 
 /**
  * Wires the History feature: constructs the manager when the snapshots
- * button exists and exposes the window.createSnapshot hook. Called by
- * boot.ts; used to register itself on DOMContentLoaded.
+ * button exists. Called by boot.ts; used to register itself on
+ * DOMContentLoaded.
  */
 export function initSnapshots(): void {
   // Only initialize if the snapshots button exists
@@ -2294,12 +2293,3 @@ export function initSnapshots(): void {
     window.snapshotsManager = new SnapshotsManager();
   }
 }
-
-// Add a global function to create a snapshot (can be called from other parts of the app)
-window.createSnapshot = function (title?: string): Promise<void> {
-  if (window.snapshotsManager) {
-    return window.snapshotsManager.createSnapshot(title);
-  }
-  console.warn('Snapshots manager not initialized');
-  return Promise.resolve();
-};

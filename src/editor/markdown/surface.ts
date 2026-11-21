@@ -131,11 +131,6 @@ export function markdownSourceTextarea(): HTMLTextAreaElement | null {
 const selectionListeners = new Set<(state: MarkdownSelectionState) => void>();
 const viewModeListeners = new Set<(mode: MarkdownViewMode) => void>();
 
-/** The live surface's host — null when no markdown surface is mounted. */
-export function markdownHost(): HTMLElement | null {
-  return live?.root.isConnected ? live.host : null;
-}
-
 /**
  * Puts the caret in the pane that owns the surface — the toolbar's view
  * buttons call this right after a flip (a click parks focus on the

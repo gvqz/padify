@@ -17,7 +17,6 @@ import {
   markdownSelectionStateNow,
   markdownSourceActive,
   markdownSourceTextarea,
-  markdownViewMode,
 } from './surface';
 import { runMarkdownToolbarAction } from './toolbar';
 import { applyEdit, removeLink as removeSourceLink } from './source-edit';
@@ -208,5 +207,3 @@ export function mdRemoveLink(): boolean {
 export function mdTableOp(_op: string): boolean {
   return false;
 }
-
-export { markdownViewMode };

@@ -76,10 +76,6 @@ export function initCloudUI(): void {
               ? `Cloud sync — up to date (last sync ${formatTime(status.lastSyncAt)})`
               : 'Cloud sync — up to date';
             break;
-          case 'offline':
-            dot = DotState.ERROR;
-            title = 'Cloud sync — offline, will retry automatically';
-            break;
         }
         // A stuck note is not an error state — the rest of the queue
         // still syncs — but it must be visible from the navbar, not only
@@ -261,11 +257,7 @@ export function initCloudUI(): void {
   function dotFor(status: CloudStatus): string {
     switch (status.state) {
       case 'signed-in':
-        return status.sync === 'idle'
-          ? DotState.OK
-          : status.sync === 'offline'
-            ? DotState.ERROR
-            : DotState.BUSY;
+        return status.sync === 'idle' ? DotState.OK : DotState.BUSY;
       case 'error':
         return DotState.ERROR;
       default:
@@ -281,8 +273,6 @@ export function initCloudUI(): void {
             return 'Syncing…';
           case 'pending':
             return 'Changes waiting to upload';
-          case 'offline':
-            return 'Offline — will retry automatically';
           default:
             // "Everything is backed up" stops being true the moment one
             // note cannot leave the device: the warning replaces the

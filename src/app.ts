@@ -2,7 +2,6 @@ import { $ } from './lib/q';
 import { selector } from './selector';
 import { calculateNoteStatistics } from './lib/text-stats';
 import { debounce } from './lib/debounce';
-import { shortcutLabel } from './lib/platform';
 import { copyNotesToClipboard, deleteNotes } from './context-menu';
 import {
   saveTextAsFile,
@@ -124,8 +123,6 @@ export async function initApp(): Promise<void> {
   // kicked at module evaluation in main.ts — this await is usually instant).
   await storageReady();
 
-  const darkmodeText = `Enable dark mode [${shortcutLabel('mod+m')}]`;
-  const lightmodeText = `Enable light mode [${shortcutLabel('mod+m')}]`;
   const darkMetaColor = '#0a0a0a';
   const lightMetaColor = '#ffffff';
   const metaThemeColor = document.querySelector('meta[name=theme-color]') as HTMLElement | null;
@@ -135,8 +132,6 @@ export async function initApp(): Promise<void> {
   const editorConfig = selector().defaultConfig;
 
   const themeConfig = {
-    lightmodeText,
-    darkmodeText,
     lightMetaColor,
     darkMetaColor,
     metaThemeColor,
@@ -252,7 +247,6 @@ export async function initApp(): Promise<void> {
       }
     });
   });
-  // Handle editor auto-scroll for long notes
 
   notepad.note.on('input', () => {
     trackWritingActivity();

@@ -428,7 +428,7 @@ export function updateTimer(): void {
   updateTimerDisplay();
 }
 
-export function updateTimerDisplay(): void {
+function updateTimerDisplay(): void {
   $('.timer-display').text(formatClock(timerConfig.remainingTime));
 
   // Live session view inside the modal
@@ -457,7 +457,7 @@ function refreshTimerViews(): void {
 }
 
 // Initialize alarm sound
-export function playChimeSound(): void {
+function playChimeSound(): void {
   playChime(getSelectedChime().id);
 }
 

@@ -1,8 +1,7 @@
 import { $, type Q } from './lib/q';
-import { stateGet, stateSet, stateRemove } from './storage';
+import { stateSet, stateRemove } from './storage';
 import {
   DEFAULT_EDITOR_CONFIG,
-  getSetting,
   isSettingKey,
   removeSetting,
   setSetting,
@@ -11,7 +10,6 @@ import {
 export type StateKey = string;
 
 export interface NotepadUI {
-  aboutModal: Q;
   copyToClipboard: Q;
   downloadNotes: Q;
   downloadNotesPadify: Q;
@@ -37,7 +35,6 @@ export interface NotepadUI {
   showWordCountPill: Q;
   pillContent: Q;
   typingSpeed: Q;
-  wordCount: Q;
   installAppButtonContainer: Q;
   wordCountContainer: Q;
   keyboardShortcutsModal: Q;
@@ -51,7 +48,6 @@ export interface NotepadUI {
   symbolSubstitution: Q;
   breakReminders: Q;
   explodingEffect: Q;
-  bottomLine: Q;
   statisticsModal: Q;
 }
 
@@ -79,25 +75,16 @@ export interface EditorConfig {
 export interface AppSelector {
   notepad: NotepadUI;
   defaultConfig: EditorConfig;
-  get: (context: string | HTMLElement | Q) => Q;
-  getState: (state: StateKey) => string | null;
   setState: (state: StateKey, value: string) => void;
   removeState: (state: StateKey) => void;
-  selectById: (id: string) => Q;
-  selectByClassName: (className: string) => Q;
 }
 
 // Settings persist through the storage layer (IndexedDB + localStorage
-// compatibility mirror — see src/storage/). Signatures are intentionally
-// identical to the localStorage API. Writes and clears route through
+// compatibility mirror — see src/storage/). Writes and clears route through
 // src/state/settings.ts — the typed choke point that also owns the key
 // list, the editor defaults and change notifications — so every legacy
 // setState caller gains change notifications for free. Reads stay direct
 // (they have no side effects to unify).
-function getState(state: StateKey): string | null {
-  return isSettingKey(state) ? getSetting(state) : stateGet(state);
-}
-
 function setState(state: StateKey, value: string): void {
   if (isSettingKey(state)) {
     setSetting(state, value);
@@ -122,14 +109,9 @@ function selectByClassName(className: string): Q {
   return $(`.${className}`);
 }
 
-function get(context: string | HTMLElement | Q): Q {
-  return $(context);
-}
-
 export function selector(): AppSelector {
   return {
     notepad: {
-      aboutModal: selectById('aboutModal'),
       copyToClipboard: selectById('copyToClipboard'),
       downloadNotes: selectById('downloadNotes'),
       downloadNotesPadify: selectById('downloadNotesPadify'),
@@ -155,7 +137,6 @@ export function selector(): AppSelector {
       showWordCountPill: selectById('showWordCountPill'),
       pillContent: selectById('pillContent'),
       typingSpeed: selectById('typingSpeed'),
-      wordCount: selectById('wordCount'),
       installAppButtonContainer: selectByClassName('install-app-btn-container'),
       wordCountContainer: selectByClassName('word-count-container'),
       keyboardShortcutsModal: selectById('keyboardShortcutsModal'),
@@ -169,15 +150,10 @@ export function selector(): AppSelector {
       symbolSubstitution: selectById('symbolSubstitution'),
       breakReminders: selectById('breakReminders'),
       explodingEffect: selectById('explodingEffect'),
-      bottomLine: selectByClassName('bottom-line'),
       statisticsModal: selectById('statisticsModal'),
     },
     defaultConfig: DEFAULT_EDITOR_CONFIG,
-    get,
-    getState,
     setState,
     removeState,
-    selectById,
-    selectByClassName,
   };
 }

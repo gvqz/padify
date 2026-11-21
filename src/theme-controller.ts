@@ -2,18 +2,12 @@ import { $ } from './lib/q';
 import { getSetting, setSetting } from './state/settings';
 
 export interface ThemeConfig {
-  lightmodeText: string;
-  darkmodeText: string;
   lightMetaColor: string;
   darkMetaColor: string;
   metaThemeColor: HTMLElement | null;
 }
 
-function enableDarkMode(
-  lightmodeText: string,
-  darkMetaColor: string,
-  metaThemeColor: HTMLElement | null,
-): void {
+function enableDarkMode(darkMetaColor: string, metaThemeColor: HTMLElement | null): void {
   $(document.body).addClass('dark');
   $('.navbar').removeClass('navbar-default');
   metaThemeColor!.setAttribute('content', darkMetaColor);
@@ -21,11 +15,7 @@ function enableDarkMode(
   announceTheme('dark');
 }
 
-function enableLightMode(
-  darkmodeText: string,
-  lightMetaColor: string,
-  metaThemeColor: HTMLElement | null,
-): void {
+function enableLightMode(lightMetaColor: string, metaThemeColor: HTMLElement | null): void {
   $(document.body).removeClass('dark');
   $('.navbar').addClass('navbar-default');
   metaThemeColor!.setAttribute('content', lightMetaColor);
@@ -40,17 +30,9 @@ function announceTheme(mode: 'light' | 'dark'): void {
 
 function enableDeviceTheme(themeConfig: ThemeConfig): void {
   if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    enableDarkMode(
-      themeConfig.lightmodeText,
-      themeConfig.darkMetaColor,
-      themeConfig.metaThemeColor,
-    );
+    enableDarkMode(themeConfig.darkMetaColor, themeConfig.metaThemeColor);
   } else {
-    enableLightMode(
-      themeConfig.darkmodeText,
-      themeConfig.lightMetaColor,
-      themeConfig.metaThemeColor,
-    );
+    enableLightMode(themeConfig.lightMetaColor, themeConfig.metaThemeColor);
   }
 
   setSetting('mode', 'device');
@@ -79,19 +61,11 @@ export function initThemeController(themeConfig: ThemeConfig): {
   const mode = getSetting('mode');
 
   if (mode === 'dark') {
-    enableDarkMode(
-      themeConfig.lightmodeText,
-      themeConfig.darkMetaColor,
-      themeConfig.metaThemeColor,
-    );
+    enableDarkMode(themeConfig.darkMetaColor, themeConfig.metaThemeColor);
 
     $('input[name="themes"][value="dark"]').prop('checked', true);
   } else if (mode === 'light') {
-    enableLightMode(
-      themeConfig.darkmodeText,
-      themeConfig.lightMetaColor,
-      themeConfig.metaThemeColor,
-    );
+    enableLightMode(themeConfig.lightMetaColor, themeConfig.metaThemeColor);
 
     $('input[name="themes"][value="light"]').prop('checked', true);
   } else {
@@ -106,18 +80,10 @@ export function initThemeController(themeConfig: ThemeConfig): {
     radio.addEventListener('change', (event) => {
       switch ((event.target as HTMLInputElement).value) {
         case 'dark':
-          enableDarkMode(
-            themeConfig.lightmodeText,
-            themeConfig.darkMetaColor,
-            themeConfig.metaThemeColor,
-          );
+          enableDarkMode(themeConfig.darkMetaColor, themeConfig.metaThemeColor);
           break;
         case 'light':
-          enableLightMode(
-            themeConfig.darkmodeText,
-            themeConfig.lightMetaColor,
-            themeConfig.metaThemeColor,
-          );
+          enableLightMode(themeConfig.lightMetaColor, themeConfig.metaThemeColor);
           break;
         case 'device':
           enableDeviceTheme(themeConfig);

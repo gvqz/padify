@@ -111,8 +111,3 @@ export function domainGraveOf(grave: TrashedNote): TrashedNote {
   }
   return out;
 }
-
-/** The visible, newest-first grave list — the trash sheet's read. */
-export function listGraves(graves: readonly TrashedNote[]): TrashedNote[] {
-  return [...graves].filter((entry) => !entry.purged).sort((a, b) => b.deletedAt - a.deletedAt);
-}

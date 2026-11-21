@@ -221,7 +221,6 @@ export interface NoteStatistics {
   readingTime: string;
   uniqueWords: number;
   lexicalDensity: string;
-  lexicalDensityScore: string;
   mostCommonWord: string;
   readabilityScore: string;
   estimatedPages: string;
@@ -244,7 +243,6 @@ export function calculateNoteStatistics(str: string): NoteStatistics {
       readingTime: '0 min',
       uniqueWords: 0,
       lexicalDensity: '0%',
-      lexicalDensityScore: '0%',
       mostCommonWord: 'N/A',
       readabilityScore: '0.0',
       estimatedPages: '0 pages',
@@ -369,7 +367,6 @@ export function calculateNoteStatistics(str: string): NoteStatistics {
     readabilityScore,
     estimatedPages,
     estimatedSpeakingTime,
-    lexicalDensityScore: `${lexicalDensityScore}%`,
     writingTime,
     wordsPerSentence,
     longestWord,

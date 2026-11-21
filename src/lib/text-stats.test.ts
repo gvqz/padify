@@ -68,7 +68,6 @@ describe('calculateNoteStatistics', () => {
       readingTime: '0 min',
       uniqueWords: 0,
       lexicalDensity: '0%',
-      lexicalDensityScore: '0%',
       mostCommonWord: 'N/A',
       readabilityScore: '0.0',
       estimatedPages: '0 pages',
