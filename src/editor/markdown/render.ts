@@ -2157,13 +2157,6 @@ function matchFootnoteRef(text: string, i: number): { markup: string; next: numb
 }
 
 /**
- * The markdown link gate: the storage subset's SAFE_HREF pattern for
- * anything scheme-like, PLUS scheme-less relative destinations — `foo/bar`
- * carries no scheme (a scheme needs its colon before any slash), cannot
- * smuggle javascript:, and the reference implementation links it.
- */
-
-/**
  * A link `[text](url)` or image `![alt](url)` at position `i` — plus the
  * reference forms: `[text][ref]`, collapsed `[text][]` and shortcut
  * `[text]` (the last only when a definition stands somewhere in the

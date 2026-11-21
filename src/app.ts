@@ -61,7 +61,7 @@ import './features/tasks/note/surface';
 // Excalidraw island behind a lazy chunk (editor/drawing/canvas.ts) and
 // this import also brings the image-export seam for the download menu.
 import { exportActiveDrawingImage, warmCanvasIsland } from './editor/drawing/surface';
-import { drawingSceneHasContent, parseDrawingScene } from './editor/drawing/scene';
+import { drawingSceneHasContent, parseDrawingScene, type DrawingScene } from './editor/drawing/scene';
 import { collectSceneFileIds } from './editor/drawing/canvas-images';
 import {
   markdownLastWorkingMode,
@@ -84,11 +84,9 @@ import {
   type PadifyFileAttachment,
 } from './padify-file';
 import { initPadifyFileOpen } from './padify-file-ui';
-// Note images: the render half of the attachment-reference scheme (the
-// capture tenant is the drawing canvas). The shell's only use is the
-// .padify export's embedded-image pass — the editor surfaces own
-// everything interactive.
-import { collectAttachmentRefs } from './editor/note-images';
+// The attachment store's export pass: a drawing's scene fileIds decode to
+// bytes for the .padify and .excalidraw saves. The canvas is the store's
+// one tenant — standard notes are text-only and carry no attachments.
 import { getAttachmentBytes, getAttachmentMeta } from './storage/attachments';
 // The tasks feature composes statically now (rail + hub + sweep are
 // small; the heavy markdown engine stays lazy but tasks pages ride the
@@ -665,6 +663,35 @@ export async function initApp(): Promise<void> {
   // file is named what the rail calls the note; an untitled note falls
   // back to the download family's dated stem.
   const padifyOpen = initPadifyFileOpen(tabManager);
+  // The export image pass, shared by the .padify and .excalidraw saves:
+  // every fileId a drawing's scene references, decoded from this
+  // device's store. A blob that is not on this device (deleted, another
+  // device offline) exports as the bare reference — the importing device
+  // renders the missing placeholder, the same honesty the canvas shows.
+  // Standard notes are text-only; a non-drawing note carries nothing.
+  const collectSceneAttachments = async (
+    scene: DrawingScene | null,
+  ): Promise<PadifyFileAttachment[]> => {
+    const attachments: PadifyFileAttachment[] = [];
+    if (scene === null) {
+      return attachments;
+    }
+    for (const id of collectSceneFileIds(scene.elements)) {
+      // The meta rides along (the store's own name/mime — an exported
+      // webp says webp); a missing meta falls back to the generic
+      // octet-stream, which the importer still hydrates.
+      const [bytes, meta] = await Promise.all([getAttachmentBytes(id), getAttachmentMeta(id)]);
+      if (bytes) {
+        attachments.push({
+          id,
+          name: meta?.name || `${id}.img`,
+          mime: meta?.mime || 'application/octet-stream',
+          bytes: bytesToBase64(bytes),
+        });
+      }
+    }
+    return attachments;
+  };
   notepad.downloadNotesPadify.click(function () {
     void (async function () {
       const active = tabManager.getActive();
@@ -672,32 +699,9 @@ export async function initApp(): Promise<void> {
       if (!active || !captured) {
         return;
       }
-      // The image pass: every binary reference the note carries rides
-      // along in the envelope (bytes base64), so the file stays one
-      // self-contained artifact — a markdown note's `padify-att:` refs,
-      // a drawing's scene fileIds. A blob that is not in this device's
-      // store (deleted, another device offline) exports as the bare
-      // reference — the importing device renders the missing
-      // placeholder, the same honesty the preview shows.
-      const attachments: PadifyFileAttachment[] = [];
-      const referencedIds =
-        captured.noteType === 'drawing'
-          ? collectSceneFileIds(parseDrawingScene(captured.content)?.elements ?? [])
-          : collectAttachmentRefs(captured.content);
-      for (const id of referencedIds) {
-        // The meta rides along (the store's own name/mime — an exported
-        // webp says webp); a missing meta falls back to the generic
-        // octet-stream, which the importer still hydrates and renders.
-        const [bytes, meta] = await Promise.all([getAttachmentBytes(id), getAttachmentMeta(id)]);
-        if (bytes) {
-          attachments.push({
-            id,
-            name: meta?.name || `${id}.img`,
-            mime: meta?.mime || 'application/octet-stream',
-            bytes: bytesToBase64(bytes),
-          });
-        }
-      }
+      const attachments = await collectSceneAttachments(
+        captured.noteType === 'drawing' ? parseDrawingScene(captured.content) : null,
+      );
       // The LIVE title: the model's content lags typing by the save
       // debounce, and the file is named for the note as it stands — the
       // share modal's live-title lesson, applied to the file family.
@@ -735,22 +739,8 @@ export async function initApp(): Promise<void> {
       if (scene === null || scene.elements.length === 0) {
         return;
       }
-      // The image pass, same discipline as the .padify save: every
-      // fileId the scene references, decoded from this device's store;
-      // a missing blob rides as the bare fileId (the vendor's loader
-      // renders the placeholder, the truth).
-      const attachments: PadifyFileAttachment[] = [];
-      for (const id of collectSceneFileIds(scene.elements)) {
-        const [bytes, meta] = await Promise.all([getAttachmentBytes(id), getAttachmentMeta(id)]);
-        if (bytes) {
-          attachments.push({
-            id,
-            name: meta?.name || `${id}.img`,
-            mime: meta?.mime || 'application/octet-stream',
-            bytes: bytesToBase64(bytes),
-          });
-        }
-      }
+      // The image pass rides the same collector as the .padify save.
+      const attachments = await collectSceneAttachments(scene);
       // Live title, same as the Padify save (the model lags the canvas's
       // announce debounce).
       saveTextAsFile(

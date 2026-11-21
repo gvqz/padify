@@ -93,7 +93,7 @@ describe('serializePadifyNoteFile', () => {
     expect('attachments' in parsed).toBe(false);
   });
 
-  it('round-trips embedded attachments — the note AND its bytes', () => {
+  it('round-trips embedded attachments — the scene AND its bytes', () => {
     const original = new TextEncoder().encode('png-bytes-here');
     const attachments: PadifyFileAttachment[] = [
       {
@@ -103,11 +103,17 @@ describe('serializePadifyNoteFile', () => {
         bytes: bytesToBase64(original),
       },
     ];
+    // The attachments tenant is the drawing canvas: a drawing note's
+    // content is the scene JSON, and its image elements reference the
+    // envelope's embedded bytes by fileId.
+    const sceneContent = JSON.stringify({
+      version: 1,
+      savedAt: FIXED_NOW,
+      elements: [{ type: 'image', id: 'elem-1', fileId: 'att-0123456789abcdef01234567' }],
+      appState: {},
+    });
     const text = serializePadifyNoteFile(
-      sampleNote({
-        noteType: 'markdown',
-        content: '![s](padify-att:att-0123456789abcdef01234567)',
-      }),
+      sampleNote({ noteType: 'drawing', content: sceneContent }),
       FIXED_NOW,
       attachments,
     );
@@ -119,8 +125,12 @@ describe('serializePadifyNoteFile', () => {
     expect(back.attachments[0]!.name).toBe('shot.png');
     expect(back.attachments[0]!.mime).toBe('image/png');
     expect([...(base64ToBytes(back.attachments[0]!.bytes) ?? [])]).toEqual([...original]);
-    // The note's content (with its references) rode untouched.
-    expect(back.note.content).toBe('![s](padify-att:att-0123456789abcdef01234567)');
+    // The note's content (the scene, fileIds included) rode untouched.
+    expect(back.note.content).toBe(sceneContent);
+    const element = parseDrawingScene(back.note.content)?.elements[0] as
+      | { fileId?: string }
+      | undefined;
+    expect(element?.fileId).toBe('att-0123456789abcdef01234567');
   });
 
   it('validates embedded attachments — junk entries drop, the file survives', () => {

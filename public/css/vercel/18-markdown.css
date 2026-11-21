@@ -345,19 +345,6 @@
   display: none;
 }
 
-/* A `padify-att:` reference the store could not answer — another device's
-   bytes offline, a deleted blob, a foreign file's note. The dashed frame
-   reads as a placeholder, never as a broken-image glyph; the alt text is
-   the label the reader gets. */
-.markdown-preview img[data-padify-missing] {
-  display: inline-block;
-  min-height: 2.5em;
-  border: 1.5px dashed var(--vz-border-strong);
-  border-radius: var(--vz-radius);
-  background: var(--vz-bg-subtle);
-  opacity: 0.75;
-}
-
 /* ---- The raw-HTML vocabulary (the policy's rebuilt tags) ----
    GitHub's own reading: benign tags render, everything else stays
    escaped text. The shapes below are the extras the note vocabulary

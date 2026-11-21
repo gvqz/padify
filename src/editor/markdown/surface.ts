@@ -68,7 +68,6 @@ import {
   sourceSelectionState,
   toggleWrap,
 } from './source-edit';
-import { createNoteImageResolver, type NoteImageResolver } from '../note-images';
 
 /** What the toolbar's pressed-state pass wants to know about the caret. */
 export type { MarkdownSelectionState } from './selection-state';
@@ -84,8 +83,6 @@ interface LiveMarkdown {
   preview: HTMLElement;
   /** The scroll fraction the last preview↔source flip carried across. */
   scrollFraction: number;
-  /** The preview's image resolver — `padify-att:` refs → blob URLs. */
-  resolver: NoteImageResolver;
 }
 
 let live: LiveMarkdown | null = null;
@@ -380,7 +377,6 @@ export class MarkdownNoteSurface implements NoteSurface {
       source,
       preview,
       scrollFraction: 0,
-      resolver: createNoteImageResolver(),
     };
 
     // The split preview follows the source pane's scroll, proportionally
@@ -575,10 +571,6 @@ function renderLivePreview(): void {
   }
   live.preview.innerHTML = renderMarkdownToHtml(live.source.value);
   renderMathIn(live.preview);
-  // The image pass: `padify-att:` srcs swap to their blob URLs (local
-  // store first, the cloud's lazy pull when the bytes are another
-  // device's); what cannot load reads as the missing-image placeholder.
-  live.resolver.resolve(live.preview);
   if (viewMode === 'split') {
     syncSplitScroll(live.source, live.preview);
   }
@@ -677,10 +669,6 @@ function teardown(target: LiveMarkdown): void {
     clearTimeout(previewRenderTimer);
     previewRenderTimer = null;
   }
-  // The image resolver's blob URLs go with the surface — the next mount
-  // re-resolves from the store (the URL cache must not outlive the DOM
-  // it fed, or an img whose note was deleted would keep its bytes alive).
-  target.resolver.release();
 }
 
 /**

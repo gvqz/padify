@@ -4077,14 +4077,10 @@ var GEMOJI = /* @__PURE__ */ new Map([
 ]);
 
 // src/editor/markdown/html-policy.ts
-var PADIFY_ATT_GATE = /^padify-att:[A-Za-z0-9_-]{8,64}$/;
 function safeHrefForMarkdown(dest) {
   const colon = dest.indexOf(":");
   const slash = dest.indexOf("/");
   if (colon === -1 || slash !== -1 && slash < colon) {
-    return dest;
-  }
-  if (PADIFY_ATT_GATE.test(dest)) {
     return dest;
   }
   return sanitizeHref(dest);
