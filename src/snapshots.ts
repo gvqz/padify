@@ -752,6 +752,22 @@ export function historyScopeDeleteLabels(
 // The manager
 // ---------------------------------------------------------------------------
 
+/** What one sheet render's chrome paints from — the facts renderRows
+ *  computes after its rows land (see renderSheetChrome). */
+interface SheetChromeFacts {
+  /** The query as typed (the miss face quotes it verbatim). */
+  term: string;
+  filtering: boolean;
+  /** Rows the query kept (the hit counter, the empty/miss decision). */
+  rowHits: number;
+  graveCount: number;
+  /** Soonest trash expiry, in days — the footer's "gone in N days". */
+  graveDaysFloor: number | null;
+  noteVersions: number;
+  totalVersions: number;
+  activeNoteName: string | null;
+}
+
 export class SnapshotsManager {
   dbName: string;
   storeName: string;
@@ -1825,11 +1841,43 @@ export class SnapshotsManager {
     // against this to skip rebuilds that would paint the same list.
     this.renderedFingerprint = this.rowsFingerprint();
 
+    // Inline display stays OFF the list (a '' reset, not 'block'): the
+    // card gallery is a CSS grid on .is-card-grid, and an inline block
+    // would out-cascade it.
+    const hasRows = rows.length > 0;
+    list.style.display = hasRows ? '' : 'none';
+    list.classList.toggle('is-card-grid', cardGallery);
+    empty.style.display = hasRows ? 'none' : 'flex';
+
+    this.renderSheetChrome({
+      term: searchTerm.trim(),
+      filtering,
+      rowHits: rows.length,
+      graveCount: graves.length,
+      graveDaysFloor: graves.length
+        ? Math.min(...graves.map((grave) => trashDaysLeft(grave.deletedAt, now)))
+        : null,
+      noteVersions: scoped.length,
+      totalVersions: this.cache.length,
+      activeNoteName: activeTab?.name ?? null,
+    });
+  }
+
+  /**
+   * The sheet's chrome follows its rows — subtitle, field, toolbar, the
+   * empty/miss faces, the hit counter, the footer's count and destructive.
+   * One render's facts painted in one pass, so renderRows stays about
+   * ROWS and this stays about everything else the sheet shows.
+   */
+  private renderSheetChrome(facts: SheetChromeFacts): void {
+    const trashFace = this.segment === 'trash';
+    const noteFace = this.segment === 'note';
+
     // The header's one line follows the view (and, in the note view, the
     // note itself — a restore that switches notes re-names the sheet).
     const subtitle = document.getElementById('snapshotsSubtitle');
     if (subtitle) {
-      subtitle.textContent = historySubtitle(this.segment, activeTab?.name ?? undefined);
+      subtitle.textContent = historySubtitle(this.segment, facts.activeNoteName ?? undefined);
     }
 
     // The field's promise follows the view it filters — "Filter
@@ -1854,7 +1902,7 @@ export class SnapshotsManager {
     // forever, on the rows.
     const takeBtn = document.getElementById('createSnapshotBtn') as HTMLButtonElement | null;
     if (takeBtn) {
-      takeBtn.hidden = this.segment === 'trash';
+      takeBtn.hidden = trashFace;
     }
 
     // The empty state has faces, per view: the view's own emptiness (the
@@ -1862,26 +1910,17 @@ export class SnapshotsManager {
     // nothing IN it (the miss carries two ways out — drop the query, or
     // carry it into the other scope). They share the icon; the copy
     // must not lie.
-    const scopeHasContent =
-      this.segment === 'trash'
-        ? graves.length > 0
-        : this.segment === 'note'
-          ? scoped.length > 0
-          : this.cache.length > 0;
-    const hasRows = rows.length > 0;
-    // Inline display stays OFF the list (a '' reset, not 'block'): the
-    // card gallery is a CSS grid on .is-card-grid, and an inline block
-    // would out-cascade it.
-    list.style.display = hasRows ? '' : 'none';
-    list.classList.toggle('is-card-grid', cardGallery);
-    empty.style.display = hasRows ? 'none' : 'flex';
+    const scopeHasContent = trashFace
+      ? facts.graveCount > 0
+      : noteFace
+        ? facts.noteVersions > 0
+        : facts.totalVersions > 0;
+    const hasRows = facts.rowHits > 0;
     // The miss face belongs to a QUERY that hid rows the view holds. An
     // empty view with a query is that view's empty face — there is
     // nothing for the query to have hidden, and offering to "clear the
     // filter" would claim otherwise.
-    const showMiss = filtering && scopeHasContent && !hasRows;
-    const trashFace = this.segment === 'trash';
-    const noteFace = this.segment === 'note';
+    const showMiss = facts.filtering && scopeHasContent && !hasRows;
     if (showMiss) {
       const miss = document.getElementById('noSnapshotsMiss');
       if (miss) {
@@ -1889,7 +1928,7 @@ export class SnapshotsManager {
         // matcher lowercased to) — the miss is about THESE words, and
         // a bare "Nothing matches." reads as a system failure instead
         // of an answer.
-        miss.textContent = `Nothing matches \u201c${searchTerm.trim()}\u201d.`;
+        miss.textContent = `Nothing matches \u201c${facts.term}\u201d.`;
       }
     }
     document.getElementById('noSnapshotsEmpty')?.toggleAttribute('hidden', showMiss);
@@ -1933,16 +1972,16 @@ export class SnapshotsManager {
     // there is something to clear.
     const searchMeta = document.getElementById('snapshotSearchMeta');
     if (searchMeta) {
-      searchMeta.textContent = filtering
-        ? `${rows.length} ${rows.length === 1 ? 'hit' : 'hits'}`
+      searchMeta.textContent = facts.filtering
+        ? `${facts.rowHits} ${facts.rowHits === 1 ? 'hit' : 'hits'}`
         : '';
-      searchMeta.toggleAttribute('hidden', !filtering);
+      searchMeta.toggleAttribute('hidden', !facts.filtering);
     }
     const clearBtn = document.getElementById('clearSnapshotSearch');
-    clearBtn?.toggleAttribute('hidden', !filtering);
+    clearBtn?.toggleAttribute('hidden', !facts.filtering);
     // The "/" hint retires while a query runs — the × and the count own
     // the field's trailing edge then.
-    document.querySelector('.snap-search')?.classList.toggle('has-query', filtering);
+    document.querySelector('.snap-search')?.classList.toggle('has-query', facts.filtering);
 
     // The footer's count line tells the VIEW's truth (its own number
     // first, the store's beside it); the filtered story lives in the
@@ -1950,15 +1989,12 @@ export class SnapshotsManager {
     // disagreeing.
     const countElement = document.getElementById('snapshotsCount');
     if (countElement) {
-      const nextTrashDays = graves.length
-        ? Math.min(...graves.map((grave) => trashDaysLeft(grave.deletedAt, now)))
-        : null;
       countElement.textContent = historyFooterText({
         segment: this.segment,
-        noteVersions: scoped.length,
-        totalVersions: this.cache.length,
-        trashCount: graves.length,
-        nextTrashDays,
+        noteVersions: facts.noteVersions,
+        totalVersions: facts.totalVersions,
+        trashCount: facts.graveCount,
+        nextTrashDays: facts.graveDaysFloor,
         cap: MAX_SNAPSHOTS,
       });
     }
@@ -1969,7 +2005,7 @@ export class SnapshotsManager {
     // until it disarms (and disarm restores the label it captured).
     const scopeBtn = document.getElementById('historyScopeDeleteBtn') as HTMLButtonElement | null;
     if (scopeBtn) {
-      const labels = historyScopeDeleteLabels(this.segment, scoped.length);
+      const labels = historyScopeDeleteLabels(this.segment, facts.noteVersions);
       if (!scopeBtn.classList.contains('is-armed')) {
         const label = scopeBtn.querySelector('.snap-delete-all-label');
         if (label) {
@@ -1980,12 +2016,13 @@ export class SnapshotsManager {
       // empty (a disabled “Empty trash” over an empty view is noise);
       // the version views keep theirs visible but disabled — the
       // affordance's existence is information even when gray.
-      scopeBtn.toggleAttribute('hidden', trashFace && graves.length === 0);
+      scopeBtn.toggleAttribute('hidden', trashFace && facts.graveCount === 0);
       scopeBtn.disabled =
-        (noteFace && scoped.length === 0) || (this.segment === 'all' && this.cache.length === 0);
+        (noteFace && facts.noteVersions === 0) ||
+        (this.segment === 'all' && facts.totalVersions === 0);
     }
 
-    this.renderSegment(graves.length);
+    this.renderSegment(facts.graveCount);
     this.renderViewToggle();
   }
 

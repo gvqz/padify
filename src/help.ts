@@ -1,6 +1,9 @@
 import { $ } from './lib/q';
 import { closeModal, closeAllModals, openModal } from './ui/behavior/modal';
 import { registerLayer } from './ui/behavior/layers';
+// The one shortcut renderer — Apple visitors see ⌘/⌥ where everyone else
+// sees Ctrl/Alt; the tour's hints used to hardcode the Windows spelling.
+import { shortcutLabel } from './lib/platform';
 
 /**
  * Brand menu + Help tour.
@@ -67,7 +70,7 @@ const steps: HelpStep[] = [
     icon: ICONS.pencil,
     title: 'Write and organize',
     text: 'Keep as many notes as you like and switch between them from the tabs in the sidebar. Everything you type is stored locally — right in your browser — the moment you type it.',
-    hints: [{ keys: 'ctrl + alt + ← →', label: 'switch notes' }],
+    hints: [{ keys: shortcutLabel('mod + alt + ← →'), label: 'switch notes' }],
   },
   {
     accent: 'rose',
@@ -75,8 +78,8 @@ const steps: HelpStep[] = [
     title: 'Format as you write',
     text: 'Bold, italic, underline and strikethrough render right inside the editor. Right-click your text for the full formatting menu, or open the symbol picker for arrows, math and emoji.',
     hints: [
-      { keys: 'ctrl + B', label: 'bold' },
-      { keys: 'ctrl + shift + O', label: 'symbols' },
+      { keys: shortcutLabel('mod + B'), label: 'bold' },
+      { keys: shortcutLabel('mod + shift + O'), label: 'symbols' },
     ],
   },
   {
@@ -84,7 +87,7 @@ const steps: HelpStep[] = [
     icon: ICONS.target,
     title: 'Stay in the zone',
     text: 'Full screen hides everything but your words, a session timer tracks your writing sprints, and optional break reminders nudge you to rest.',
-    hints: [{ keys: 'ctrl + ,', label: 'preferences' }],
+    hints: [{ keys: shortcutLabel('mod + ,'), label: 'preferences' }],
   },
   {
     accent: 'teal',
