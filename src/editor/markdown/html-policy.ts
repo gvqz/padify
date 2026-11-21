@@ -30,14 +30,26 @@ import { NAMED_ENTITIES } from './entities.generated';
  * The Markdown URL gate — the one the anchors' hrefs already pass. A
  * scheme-less value is RELATIVE (no scheme, no danger: it can only ever
  * resolve against the app's own origin); a value with a scheme prefix
- * must carry http/https/mailto or the gate refuses it (javascript:,
- * data:, vbscript:, file:, … never render as URLs).
+ * must carry http/https/mailto, the app's own attachment refs, or the
+ * gate refuses it (javascript:, data:, vbscript:, file:, … never render
+ * as URLs).
+ *
+ * `padify-att:<id>` is the note-image reference (see editor/note-images.ts):
+ * inert as a URL — no navigation, no fetch against any origin — and
+ * resolved to a blob URL only by the preview's resolver pass, from the
+ * user's own attachment store. The exact id shape is the gate's to keep:
+ * a ref the store could never answer renders as literal text.
  */
+const PADIFY_ATT_GATE = /^padify-att:[A-Za-z0-9_-]{8,64}$/;
+
 export function safeHrefForMarkdown(dest: string): string | null {
   const colon = dest.indexOf(':');
   const slash = dest.indexOf('/');
   if (colon === -1 || (slash !== -1 && slash < colon)) {
     return dest; // scheme-less relative — no scheme, no danger
+  }
+  if (PADIFY_ATT_GATE.test(dest)) {
+    return dest; // the app's own attachment refs — resolved by the preview
   }
   return sanitizeHref(dest);
 }

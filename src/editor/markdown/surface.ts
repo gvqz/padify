@@ -68,6 +68,16 @@ import {
   sourceSelectionState,
   toggleWrap,
 } from './source-edit';
+import { showToast } from '../../ui/toast';
+import {
+  createNoteImageResolver,
+  imageFilesFrom,
+  imageMarkdownFor,
+  pickImageFiles,
+  prepareImageAttachment,
+  type NoteImageResolver,
+  type PrepareImageFailure,
+} from '../note-images';
 
 /** What the toolbar's pressed-state pass wants to know about the caret. */
 export type { MarkdownSelectionState } from './selection-state';
@@ -83,6 +93,8 @@ interface LiveMarkdown {
   preview: HTMLElement;
   /** The scroll fraction the last preview↔source flip carried across. */
   scrollFraction: number;
+  /** The preview's image resolver — `padify-att:` refs → blob URLs. */
+  resolver: NoteImageResolver;
 }
 
 let live: LiveMarkdown | null = null;
@@ -377,6 +389,7 @@ export class MarkdownNoteSurface implements NoteSurface {
       source,
       preview,
       scrollFraction: 0,
+      resolver: createNoteImageResolver(),
     };
 
     // The split preview follows the source pane's scroll, proportionally
@@ -513,6 +526,38 @@ function wireSourcePane(source: HTMLTextAreaElement): void {
     }
   });
 
+  // Image capture — paste and drop ride the attachment store (see
+  // note-images.ts): the files compress and land offline-first, the
+  // note's text carries a tiny `padify-att:` reference. A paste or drop
+  // with NO image files keeps the textarea's native behavior untouched.
+  source.addEventListener('paste', (event) => {
+    const files = imageFilesFrom(event.clipboardData?.files);
+    if (files.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    void insertMarkdownImageFiles(files);
+  });
+  source.addEventListener('dragover', (event) => {
+    // Admit the drag only when it actually carries image files — every
+    // other drag (text, links) keeps the browser's default semantics.
+    const dataTransfer = event.dataTransfer;
+    if (imageFilesFrom(dataTransfer?.files).length > 0) {
+      event.preventDefault();
+      if (dataTransfer) {
+        dataTransfer.dropEffect = 'copy';
+      }
+    }
+  });
+  source.addEventListener('drop', (event) => {
+    const files = imageFilesFrom(event.dataTransfer?.files);
+    if (files.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    void insertMarkdownImageFiles(files);
+  });
+
   source.addEventListener('keydown', (event) => {
     // The user's own typed marker right after a continuation replaces the
     // auto one (typing stays literal); the native insert then follows.
@@ -571,6 +616,10 @@ function renderLivePreview(): void {
   }
   live.preview.innerHTML = renderMarkdownToHtml(live.source.value);
   renderMathIn(live.preview);
+  // The image pass: `padify-att:` srcs swap to their blob URLs (local
+  // store first, the cloud's lazy pull when the bytes are another
+  // device's); what cannot load reads as the missing-image placeholder.
+  live.resolver.resolve(live.preview);
   if (viewMode === 'split') {
     syncSplitScroll(live.source, live.preview);
   }
@@ -669,6 +718,10 @@ function teardown(target: LiveMarkdown): void {
     clearTimeout(previewRenderTimer);
     previewRenderTimer = null;
   }
+  // The image resolver's blob URLs go with the surface — the next mount
+  // re-resolves from the store (the URL cache must not outlive the DOM
+  // it fed, or an img whose note was deleted would keep its bytes alive).
+  target.resolver.release();
 }
 
 /**
@@ -710,6 +763,61 @@ export function markdownCharBeforeCaret(): string {
     return '';
   }
   return source.value[selectionStart - 1] ?? '';
+}
+
+// ---------------------------------------------------------------------------
+// Image capture — the shared insert path (paste, drop, the toolbar row)
+// ---------------------------------------------------------------------------
+
+/**
+ * Captures image files into the attachment store and inserts their
+ * markdown references at the caret — the paste and drop handlers and
+ * the toolbar's image row all land here. Each file is independent: one
+ * that fails (unsupported type, over the cap, no IndexedDB) says so in
+ * a toast while the rest still insert.
+ */
+export async function insertMarkdownImageFiles(files: File[]): Promise<void> {
+  if (!live || files.length === 0) {
+    return;
+  }
+  const ta = live.source;
+  const parts: string[] = [];
+  for (const file of files) {
+    const result = await prepareImageAttachment(file);
+    if (!result.ok) {
+      showToast(imageFailureMessage(file.name, result.reason));
+      continue;
+    }
+    parts.push(imageMarkdownFor(result.image));
+  }
+  if (parts.length === 0) {
+    return;
+  }
+  // The textarea's own edit path: native undo, the input announce rides
+  // execCommand (applyEdit's fallback dispatches it by hand).
+  const text = parts.join('\n');
+  applyEdit(ta, ta.selectionStart, ta.selectionEnd, text, ta.selectionStart + text.length);
+  schedulePreviewRender();
+}
+
+/** The toolbar's image row: the file picker, then the shared insert. */
+export async function openMarkdownImagePicker(): Promise<void> {
+  const files = await pickImageFiles();
+  await insertMarkdownImageFiles(files);
+}
+
+/** The capture refusal's toast copy — honest about the why. */
+function imageFailureMessage(name: string, reason: PrepareImageFailure): string {
+  switch (reason) {
+    case 'unsupported':
+      return `"${name}" isn't an image Padify can store (png, jpeg, webp, gif).`;
+    case 'too-large':
+      return `"${name}" is too large — images are capped at 5 MB.`;
+    case 'no-storage':
+      return "This device can't store images (no IndexedDB) — the image was not added.";
+    case 'failed':
+      return `"${name}" couldn't be read as an image.`;
+  }
 }
 
 // The registry entry — the seam everything already routes through.

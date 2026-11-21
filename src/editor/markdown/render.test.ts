@@ -293,6 +293,32 @@ describe('renderMarkdownToHtml — links & images', () => {
     );
   });
 
+  it('the app attachment scheme renders for a well-formed ref — the preview resolves it later', () => {
+    expect(renderMarkdownToHtml('![shot](padify-att:att-0123456789abcdef01234567)')).toBe(
+      '<p><img src="padify-att:att-0123456789abcdef01234567" alt="shot" loading="lazy" decoding="async" referrerpolicy="no-referrer"></p>',
+    );
+    // The raw-HTML <img> path meets the same gate (a lone img renders at
+    // block level, without the <p> wrapper).
+    expect(
+      renderMarkdownToHtml('<img src="padify-att:att-0123456789abcdef01234567" alt="raw">'),
+    ).toBe(
+      '<img src="padify-att:att-0123456789abcdef01234567" alt="raw" loading="lazy" decoding="async" referrerpolicy="no-referrer">',
+    );
+  });
+
+  it('a malformed attachment ref is refused like any other scheme', () => {
+    // The id shape is the gate's to keep: traversal dots, a second colon,
+    // junk — none of it is a ref the store could ever answer.
+    for (const dest of [
+      'padify-att:../../etc',
+      'padify-att:att-x',
+      'padify-att:att-has:colon',
+      'padify-att:att spaces here!!',
+    ]) {
+      expect(renderMarkdownToHtml(`![x](${dest})`)).toBe(`<p>![x](${dest})</p>`);
+    }
+  });
+
   it('an href percent-encodes for the attribute context', () => {
     expect(renderMarkdownToHtml('[x](https://example.com/?q="a&b")')).toContain(
       'href="https://example.com/?q=%22a&amp;b%22"',

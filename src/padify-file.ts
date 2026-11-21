@@ -91,12 +91,78 @@ export interface PadifyNotePayload {
 }
 
 /**
+ * One image (or future blob) the note's content references, embedded in
+ * the envelope so a .padify file stays ONE self-contained file — the
+ * "everything in the envelope" rule the format opened with. Bytes ride
+ * base64; ids are the attachment store's (they re-hydrate into the
+ * importing device's store under the SAME id, so the note's references
+ * resolve without rewriting a byte of content).
+ *
+ * The field is an ADDITIVE v1 extension: older builds' parsers read only
+ * the fields they know, so they import such a file fine (the note opens;
+ * its images render as the missing placeholder) and older writers never
+ * wrote the field at all.
+ */
+export interface PadifyFileAttachment {
+  /** The attachment store id — matches the note content's references. */
+  id: string;
+  name: string;
+  mime: string;
+  /** The bytes, base64. */
+  bytes: string;
+}
+
+// ---------------------------------------------------------------------------
+// Base64 — the envelope's byte encoding (pure string/arraybuffer functions,
+// chunked so a multi-megabyte image cannot blow the call stack).
+// ---------------------------------------------------------------------------
+
+const BASE64_CHUNK = 0x8000;
+
+/** Bytes → base64 (chunked String.fromCharCode + btoa). Accepts a view
+ * or a bare ArrayBuffer (the attachment store hands out ArrayBuffers). */
+export function bytesToBase64(bytes: Uint8Array | ArrayBuffer): string {
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let binary = '';
+  for (let i = 0; i < view.length; i += BASE64_CHUNK) {
+    binary += String.fromCharCode(...view.subarray(i, i + BASE64_CHUNK));
+  }
+  return btoa(binary);
+}
+
+/** Base64 → bytes, or null when the string is not base64. The backing
+ * buffer is always a plain ArrayBuffer, so the result is a BlobPart. */
+export function base64ToBytes(value: string): Uint8Array<ArrayBuffer> | null {
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value) || value.length % 4 !== 0) {
+    return null;
+  }
+  try {
+    const binary = atob(value);
+    const buffer = new ArrayBuffer(binary.length);
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The envelope writer. Fixed key order and a JSON.stringify with no
  * whitespace — deterministic bytes, the same discipline as the scene
- * serializer (identical notes serialize identically).
+ * serializer (identical notes serialize identically). `attachments` is
+ * the optional v1 image extension: embedded, validated blobs for the
+ * references the note's content carries; omitted entirely when empty
+ * (an envelope without images stays byte-identical to the old writer's).
  */
-export function serializePadifyNoteFile(note: PadifyNotePayload, exportedAt: number): string {
-  return JSON.stringify({
+export function serializePadifyNoteFile(
+  note: PadifyNotePayload,
+  exportedAt: number,
+  attachments: PadifyFileAttachment[] = [],
+): string {
+  const envelope: Record<string, unknown> = {
     type: PADIFY_FILE_TYPE,
     format: PADIFY_FORMAT_VERSION,
     generator: PADIFY_GENERATOR,
@@ -108,12 +174,40 @@ export function serializePadifyNoteFile(note: PadifyNotePayload, exportedAt: num
       createdAt: note.createdAt,
       updatedAt: note.updatedAt,
     },
-  });
+  };
+  if (attachments.length > 0) {
+    envelope.attachments = attachments.map((attachment) => ({
+      id: attachment.id,
+      name: attachment.name,
+      mime: attachment.mime,
+      bytes: attachment.bytes,
+    }));
+  }
+  return JSON.stringify(envelope);
 }
 
-/** The reader's answer: a note, a refusal, or "not ours". */
+/** The reader's answer: a note, its embedded attachments (possibly none),
+ * a refusal, or "not ours". */
 export type PadifyParseResult =
-  { kind: 'padify'; note: PadifyNotePayload } | { kind: 'newer-format'; format: number } | null;
+  | {
+      kind: 'padify';
+      note: PadifyNotePayload;
+      /** The envelope's embedded attachments, validated (junk dropped). */
+      attachments: PadifyFileAttachment[];
+    }
+  | { kind: 'newer-format'; format: number }
+  | null;
+
+/**
+ * The envelope's attachment ceiling — the same per-file cap the server
+ * enforces (5 MB decoded) and the same row count as the server's per-user
+ * quota. A file beyond either is data this app would refuse on upload;
+ * the envelope holds it to the same honesty.
+ */
+const MAX_EMBEDDED_ATTACHMENT_BYTES = 5_000_000;
+const MAX_EMBEDDED_ATTACHMENTS = 500;
+const ATTACHMENT_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
+const ATTACHMENT_MIME_PATTERN = /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/i;
 
 /**
  * Reads .padify bytes. Strict at the envelope, opaque past it:
@@ -174,7 +268,45 @@ export function parsePadifyFile(text: string): PadifyParseResult {
           ? noteRecord.updatedAt
           : 0,
     },
+    attachments: parseEmbeddedAttachments(record.attachments),
   };
+}
+
+/**
+ * The envelope's embedded attachments, validated one entry at a time —
+ * malformed entries DROP (a file is data, not code; one junk entry must
+ * not sink the whole file), the count and per-entry size hold the same
+ * ceilings the server's upload route does, and the bytes must genuinely
+ * be base64. Entries beyond the count cap drop rather than fail the file.
+ */
+function parseEmbeddedAttachments(raw: unknown): PadifyFileAttachment[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const out: PadifyFileAttachment[] = [];
+  for (const entry of raw.slice(0, MAX_EMBEDDED_ATTACHMENTS)) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      continue;
+    }
+    const record = entry as Record<string, unknown>;
+    const id = typeof record.id === 'string' ? record.id : '';
+    const name = typeof record.name === 'string' ? record.name.slice(0, 200) : '';
+    const mime = typeof record.mime === 'string' ? record.mime.slice(0, 100) : '';
+    const bytes = typeof record.bytes === 'string' ? record.bytes : '';
+    if (!ATTACHMENT_ID_PATTERN.test(id) || !ATTACHMENT_MIME_PATTERN.test(mime)) {
+      continue;
+    }
+    const decoded = base64ToBytes(bytes);
+    if (
+      decoded === null ||
+      decoded.byteLength === 0 ||
+      decoded.byteLength > MAX_EMBEDDED_ATTACHMENT_BYTES
+    ) {
+      continue;
+    }
+    out.push({ id, name, mime, bytes });
+  }
+  return out;
 }
 
 /** What the importer needs to mint the note: the type registry's answer,

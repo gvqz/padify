@@ -76,11 +76,18 @@ import { deriveTabTitle } from './editor/note-content';
 import {
   PADIFY_MIME_TYPE,
   buildExcalidrawFile,
+  bytesToBase64,
   excalidrawFileName,
   padifyFileName,
   serializePadifyNoteFile,
+  type PadifyFileAttachment,
 } from './padify-file';
 import { initPadifyFileOpen } from './padify-file-ui';
+// Note images: the capture/resolution module riding the attachment store.
+// The shell's only use is the .padify export's embedded-image pass — the
+// editor surfaces own everything interactive.
+import { collectAttachmentRefs } from './editor/note-images';
+import { getAttachmentBytes, getAttachmentMeta } from './storage/attachments';
 // The tasks feature composes statically now (rail + hub + sweep are
 // small; the heavy markdown engine stays lazy but tasks pages ride the
 // note surface, which is core). Imported by the composition root only —
@@ -657,29 +664,53 @@ export async function initApp(): Promise<void> {
   // back to the download family's dated stem.
   const padifyOpen = initPadifyFileOpen(tabManager);
   notepad.downloadNotesPadify.click(function () {
-    const active = tabManager.getActive();
-    const captured = getActiveNoteContent();
-    if (!active || !captured) {
-      return;
-    }
-    // The LIVE title: the model's content lags typing by the save
-    // debounce, and the file is named for the note as it stands — the
-    // share modal's live-title lesson, applied to the file family.
-    const title = deriveTabTitle({ ...active, content: captured.content });
-    saveTextAsFile(
-      serializePadifyNoteFile(
-        {
-          name: active.name,
-          noteType: captured.noteType ?? DEFAULT_NOTE_TYPE,
-          content: captured.content,
-          createdAt: active.createdAt,
-          updatedAt: active.updatedAt,
-        },
-        Date.now(),
-      ),
-      padifyFileName(title === 'Untitled' ? null : title, getDatedFileStem()),
-      PADIFY_MIME_TYPE,
-    );
+    void (async function () {
+      const active = tabManager.getActive();
+      const captured = getActiveNoteContent();
+      if (!active || !captured) {
+        return;
+      }
+      // The image pass: every `padify-att:` reference the content carries
+      // rides along in the envelope (bytes base64), so the file stays one
+      // self-contained artifact. A blob that is not in this device's store
+      // (deleted, another device offline) exports as the bare reference —
+      // the importing device renders the missing placeholder, the same
+      // honesty the preview shows.
+      const attachments: PadifyFileAttachment[] = [];
+      for (const id of collectAttachmentRefs(captured.content)) {
+        // The meta rides along (the store's own name/mime — an exported
+        // webp says webp); a missing meta falls back to the generic
+        // octet-stream, which the importer still hydrates and renders.
+        const [bytes, meta] = await Promise.all([getAttachmentBytes(id), getAttachmentMeta(id)]);
+        if (bytes) {
+          attachments.push({
+            id,
+            name: meta?.name || `${id}.img`,
+            mime: meta?.mime || 'application/octet-stream',
+            bytes: bytesToBase64(bytes),
+          });
+        }
+      }
+      // The LIVE title: the model's content lags typing by the save
+      // debounce, and the file is named for the note as it stands — the
+      // share modal's live-title lesson, applied to the file family.
+      const title = deriveTabTitle({ ...active, content: captured.content });
+      saveTextAsFile(
+        serializePadifyNoteFile(
+          {
+            name: active.name,
+            noteType: captured.noteType ?? DEFAULT_NOTE_TYPE,
+            content: captured.content,
+            createdAt: active.createdAt,
+            updatedAt: active.updatedAt,
+          },
+          Date.now(),
+          attachments,
+        ),
+        padifyFileName(title === 'Untitled' ? null : title, getDatedFileStem()),
+        PADIFY_MIME_TYPE,
+      );
+    })();
   });
 
   // The canvas's interop door: a drawing note out as a native

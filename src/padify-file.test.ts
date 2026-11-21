@@ -3,7 +3,9 @@ import {
   PADIFY_FILE_TYPE,
   PADIFY_FORMAT_VERSION,
   PADIFY_GENERATOR,
+  base64ToBytes,
   buildExcalidrawFile,
+  bytesToBase64,
   excalidrawFileName,
   noteFileStem,
   padifyFileName,
@@ -11,6 +13,7 @@ import {
   parsePadifyFile,
   prepareImportedNote,
   serializePadifyNoteFile,
+  type PadifyFileAttachment,
   type PadifyNotePayload,
 } from './padify-file';
 import { parseDrawingScene } from './editor/drawing/scene';
@@ -75,8 +78,95 @@ describe('serializePadifyNoteFile', () => {
     ];
     for (const note of cases) {
       const back = parsePadifyFile(serializePadifyNoteFile(note, FIXED_NOW));
-      expect(back).toEqual({ kind: 'padify', note });
+      expect(back).toEqual({ kind: 'padify', note, attachments: [] });
     }
+  });
+
+  it('omits the attachments key entirely when the note carries no images', () => {
+    // The additive v1 extension: an imageless note's envelope is
+    // byte-identical to the pre-images writer's — an older build opens
+    // it without ever learning the field existed.
+    const parsed = JSON.parse(serializePadifyNoteFile(sampleNote(), FIXED_NOW)) as Record<
+      string,
+      unknown
+    >;
+    expect('attachments' in parsed).toBe(false);
+  });
+
+  it('round-trips embedded attachments — the note AND its bytes', () => {
+    const original = new TextEncoder().encode('png-bytes-here');
+    const attachments: PadifyFileAttachment[] = [
+      {
+        id: 'att-0123456789abcdef01234567',
+        name: 'shot.png',
+        mime: 'image/png',
+        bytes: bytesToBase64(original),
+      },
+    ];
+    const text = serializePadifyNoteFile(
+      sampleNote({
+        noteType: 'markdown',
+        content: '![s](padify-att:att-0123456789abcdef01234567)',
+      }),
+      FIXED_NOW,
+      attachments,
+    );
+    const back = parsePadifyFile(text);
+    expect(back).not.toBeNull();
+    if (back?.kind !== 'padify') return;
+    expect(back.attachments).toHaveLength(1);
+    expect(back.attachments[0]!.id).toBe('att-0123456789abcdef01234567');
+    expect(back.attachments[0]!.name).toBe('shot.png');
+    expect(back.attachments[0]!.mime).toBe('image/png');
+    expect([...(base64ToBytes(back.attachments[0]!.bytes) ?? [])]).toEqual([...original]);
+    // The note's content (with its references) rode untouched.
+    expect(back.note.content).toBe('![s](padify-att:att-0123456789abcdef01234567)');
+  });
+
+  it('validates embedded attachments — junk entries drop, the file survives', () => {
+    const envelope = JSON.stringify({
+      type: PADIFY_FILE_TYPE,
+      format: PADIFY_FORMAT_VERSION,
+      generator: PADIFY_GENERATOR,
+      exportedAt: FIXED_NOW,
+      note: sampleNote(),
+      attachments: [
+        // valid
+        {
+          id: 'att-0123456789abcdef01234567',
+          name: 'a.png',
+          mime: 'image/png',
+          bytes: bytesToBase64(new TextEncoder().encode('ok')),
+        },
+        // junk id (too short)
+        { id: 'att-x', name: 'b', mime: 'image/png', bytes: 'aGVsbG8=' },
+        // junk mime
+        { id: 'att-0123456789abcdef01234568', name: 'c', mime: 'not a mime', bytes: 'aGVsbG8=' },
+        // junk base64
+        { id: 'att-0123456789abcdef01234569', name: 'd', mime: 'image/png', bytes: 'not base64!!' },
+        // empty bytes
+        { id: 'att-0123456789abcdef0123456a', name: 'e', mime: 'image/png', bytes: '' },
+        // not even an object
+        'junk-entry',
+      ],
+    });
+    const back = parsePadifyFile(envelope);
+    expect(back).not.toBeNull();
+    if (back?.kind !== 'padify') return;
+    expect(back.attachments).toHaveLength(1);
+    expect(back.attachments[0]!.id).toBe('att-0123456789abcdef01234567');
+  });
+
+  it('reads an OLD file (no attachments field) as an empty set', () => {
+    const legacy = JSON.stringify({
+      type: PADIFY_FILE_TYPE,
+      format: 1,
+      generator: 'padify',
+      exportedAt: FIXED_NOW,
+      note: { name: null, noteType: 'markdown', content: 'plain', createdAt: 0, updatedAt: 0 },
+    });
+    const back = parsePadifyFile(legacy);
+    expect(back).toEqual({ kind: 'padify', note: expect.anything(), attachments: [] });
   });
 });
 

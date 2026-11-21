@@ -17,9 +17,15 @@
  * riding a sidecar — it IS a note.
  */
 
-import { parseExcalidrawFile, parsePadifyFile, prepareImportedNote } from './padify-file';
+import {
+  base64ToBytes,
+  parseExcalidrawFile,
+  parsePadifyFile,
+  prepareImportedNote,
+} from './padify-file';
 import { deriveTabTitle } from './editor/note-content';
 import type { NoteType } from './editor/note-types';
+import { getAttachmentMeta, putAttachment } from './storage/attachments';
 import { sanitizeNoteHtml, type TabManager } from './tabs';
 import { showToast } from './ui/toast';
 
@@ -103,6 +109,7 @@ async function importNoteFile(file: File, tabManager: TabManager): Promise<void>
   }
   if (padify !== null) {
     const prepared = prepareImportedNote(padify.note, sanitizeNoteHtml);
+    await hydrateImportedAttachments(padify.attachments);
     openImportedNote(tabManager, prepared.name, prepared.noteType, prepared.content);
     return;
   }
@@ -138,4 +145,35 @@ function openImportedNote(
   }
   tabManager.switchTo(created.id);
   showToast(`Opened "${deriveTabTitle(created)}".`);
+}
+
+/**
+ * The envelope's embedded images → the local attachment store, under
+ * their ORIGINAL ids — the imported note's references then resolve
+ * without rewriting a byte of content. Files this device already holds
+ * (a re-import, or a round trip through a friend) keep their bytes: the
+ * store write is skipped, nothing is duplicated.
+ *
+ * Hydrated records carry uploaded=0, so the cloud flush pushes them up
+ * after the next sync cycle — the server answers the same (id, sha256)
+ * idempotently, so a same-account re-import is free and a fresh account
+ * simply gets its own copies.
+ */
+async function hydrateImportedAttachments(
+  attachments: Array<{ id: string; name: string; mime: string; bytes: string }>,
+): Promise<void> {
+  for (const attachment of attachments) {
+    const bytes = base64ToBytes(attachment.bytes);
+    if (bytes === null) {
+      continue; // parseEmbeddedAttachments already validated; belt and braces
+    }
+    const existing = await getAttachmentMeta(attachment.id);
+    if (existing) {
+      continue;
+    }
+    await putAttachment(
+      { id: attachment.id, name: attachment.name, mime: attachment.mime, size: bytes.byteLength },
+      new Blob([bytes], { type: attachment.mime }),
+    );
+  }
 }
