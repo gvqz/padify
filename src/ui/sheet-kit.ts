@@ -37,15 +37,7 @@
 // Escaping + highlighting
 // ---------------------------------------------------------------------------
 
-/** Escapes the five characters HTML cares about. */
-export function escapeHtmlText(unsafe: string): string {
-  return unsafe
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
+import { escapeHtml } from '../lib/escape';
 
 /**
  * Escapes text, then wraps every literal match of the search term in a
@@ -54,8 +46,8 @@ export function escapeHtmlText(unsafe: string): string {
  * can never inject markup through the query.
  */
 export function highlightMatches(text: string, term: string): string {
-  const escaped = escapeHtmlText(text);
-  const needle = escapeHtmlText(term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escaped = escapeHtml(text);
+  const needle = escapeHtml(term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   if (!needle) {
     return escaped;
   }
@@ -660,14 +652,14 @@ function renderActions(
     return '';
   }
   const buttons = actions.map((action) => {
-    const title = action.title ? ` title="${escapeHtmlText(action.title)}"` : '';
+    const title = action.title ? ` title="${escapeHtml(action.title)}"` : '';
     if (action.kind === 'restore') {
-      return `<button type="button" class="snap-act restore" data-sheet-action="restore" data-row-key="${escapeHtmlText(rowKey)}"${title}>${escapeHtmlText(action.label)}</button>`;
+      return `<button type="button" class="snap-act restore" data-sheet-action="restore" data-row-key="${escapeHtml(rowKey)}"${title}>${escapeHtml(action.label)}</button>`;
     }
     if (action.kind === 'copy') {
-      return `<button type="button" class="snap-act copy" data-sheet-action="copy" data-row-key="${escapeHtmlText(rowKey)}"${title} aria-label="${escapeHtmlText(action.label)}">${COPY_ICON}</button>`;
+      return `<button type="button" class="snap-act copy" data-sheet-action="copy" data-row-key="${escapeHtml(rowKey)}"${title} aria-label="${escapeHtml(action.label)}">${COPY_ICON}</button>`;
     }
-    return `<button type="button" class="snap-act delete" data-sheet-action="delete" data-row-key="${escapeHtmlText(rowKey)}"${title}><span class="confirm-label">${escapeHtmlText(action.label)}</span></button>`;
+    return `<button type="button" class="snap-act delete" data-sheet-action="delete" data-row-key="${escapeHtml(rowKey)}"${title}><span class="confirm-label">${escapeHtml(action.label)}</span></button>`;
   });
   return `<div class="${wrapperClass}">${buttons.join('')}</div>`;
 }
@@ -688,13 +680,13 @@ function buildItem(row: SheetRowModel, term: string, open = false): HTMLLIElemen
   }
   li.dataset.rowKey = row.key;
 
-  const titleHtml = term ? highlightMatches(row.title, term) : escapeHtmlText(row.title);
+  const titleHtml = term ? highlightMatches(row.title, term) : escapeHtml(row.title);
   const noteChip =
     row.noteChip && row.noteChip !== row.title
-      ? `<span class="snap-note" title="From the note \u201c${escapeHtmlText(row.noteChip)}\u201d">${highlightMatches(row.noteChip, term)}</span>`
+      ? `<span class="snap-note" title="From the note \u201c${escapeHtml(row.noteChip)}\u201d">${highlightMatches(row.noteChip, term)}</span>`
       : '';
   const chipHtml = row.chip
-    ? `<span class="snap-chip${row.chip.danger ? ' is-danger' : ''}"${row.chip.title ? ` title="${escapeHtmlText(row.chip.title)}"` : ''}>${escapeHtmlText(row.chip.text)}</span>`
+    ? `<span class="snap-chip${row.chip.danger ? ' is-danger' : ''}"${row.chip.title ? ` title="${escapeHtml(row.chip.title)}"` : ''}>${escapeHtml(row.chip.text)}</span>`
     : '';
   // Current keeps its text pill; the rail's green ring is the scan
   // line. A second dot inside the pill encoded the same fact twice.
@@ -702,9 +694,9 @@ function buildItem(row: SheetRowModel, term: string, open = false): HTMLLIElemen
     ? '<span class="snap-current" title="This version is what the note holds right now">Current</span>'
     : '';
   const preview = row.preview ? previewForDisplay(row.preview, row.title) : '';
-  const previewHtml = term ? highlightMatches(preview, term) : escapeHtmlText(preview);
+  const previewHtml = term ? highlightMatches(preview, term) : escapeHtml(preview);
   const deltaHtml = row.delta
-    ? `<span class="snap-delta ${row.delta.delta > 0 ? 'is-up' : row.delta.delta < 0 ? 'is-down' : 'is-flat'}" title="Change since the previous snapshot of this note">${row.delta.delta > 0 ? '+' : row.delta.delta < 0 ? '\u2212' : '\u00b1'}${Math.abs(row.delta.delta)} ${escapeHtmlText(row.delta.unit)}</span>`
+    ? `<span class="snap-delta ${row.delta.delta > 0 ? 'is-up' : row.delta.delta < 0 ? 'is-down' : 'is-flat'}" title="Change since the previous snapshot of this note">${row.delta.delta > 0 ? '+' : row.delta.delta < 0 ? '\u2212' : '\u00b1'}${Math.abs(row.delta.delta)} ${escapeHtml(row.delta.unit)}</span>`
     : '';
 
   const detailText = (row.detailText ?? '').trim();
@@ -714,30 +706,30 @@ function buildItem(row: SheetRowModel, term: string, open = false): HTMLLIElemen
       : detailText;
   const detailId = `sheet-detail-${row.key}`;
   const metaHtml = (row.detailMeta ?? [])
-    .map((segment) => `<span>${escapeHtmlText(segment)}</span>`)
+    .map((segment) => `<span>${escapeHtml(segment)}</span>`)
     .join('<span class="snap-detail-sep" aria-hidden="true">\u00b7</span>');
-  const hintHtml = row.hint ? `<p class="snap-detail-hint">${escapeHtmlText(row.hint)}</p>` : '';
+  const hintHtml = row.hint ? `<p class="snap-detail-hint">${escapeHtml(row.hint)}</p>` : '';
 
   // The card's body: the DIFF when there is one to show (a version
   // with a predecessor — the question the card exists to answer), else
   // the full readable text (a first version, a trashed note).
   const bodyHtml = row.diff
     ? renderDiff(row.diff)
-    : `<div class="snap-detail-text">${escapeHtmlText(capped) || 'No content'}</div>`;
+    : `<div class="snap-detail-text">${escapeHtml(capped) || 'No content'}</div>`;
 
   li.innerHTML = `
     <button type="button" class="snap-row" aria-expanded="${open ? 'true' : 'false'}" aria-controls="${detailId}" title="${open ? 'Hide details' : 'Show details'}">
-      <span class="snap-when">${escapeHtmlText(formatSheetClock(row.timestamp))}</span>
+      <span class="snap-when">${escapeHtml(formatSheetClock(row.timestamp))}</span>
       <span class="snap-rail" aria-hidden="true"></span>
       <span class="snap-what">
         <span class="snap-line">
-          <span class="snap-name" title="${escapeHtmlText(row.title)}">${titleHtml}</span>
+          <span class="snap-name" title="${escapeHtml(row.title)}">${titleHtml}</span>
           ${noteChip}
           ${currentHtml}
           ${chipHtml}
         </span>
         <span class="snap-subline">
-          <span class="snap-preview" title="${escapeHtmlText(preview)}">${previewHtml}</span>
+          <span class="snap-preview" title="${escapeHtml(preview)}">${previewHtml}</span>
           ${deltaHtml}
         </span>
       </span>
@@ -772,14 +764,14 @@ function renderDiff(rowDiff: SheetRowDiff): string {
       const tag = entry.kind === 'add' ? 'ins' : entry.kind === 'del' ? 'del' : 'div';
       const sign = entry.kind === 'add' ? '+' : entry.kind === 'del' ? '\u2212' : '';
       const cls = entry.kind === 'ctx' ? 'is-ctx' : entry.kind === 'add' ? 'is-add' : 'is-del';
-      const text = entry.text === '' ? '\u00a0' : escapeHtmlText(entry.text);
+      const text = entry.text === '' ? '\u00a0' : escapeHtml(entry.text);
       return `<${tag} class="snap-diff-line ${cls}"><span class="snap-diff-sign" aria-hidden="true">${sign}</span><span class="snap-diff-text">${text}</span></${tag}>`;
     })
     .join('');
   const stat = `<span class="snap-diff-stat"><span class="is-up">+${diff.added}</span> <span class="is-down">\u2212${diff.removed}</span></span>`;
   return `
     <div class="snap-diff">
-      <div class="snap-diff-cap">${escapeHtmlText(caption)} ${stat}</div>
+      <div class="snap-diff-cap">${escapeHtml(caption)} ${stat}</div>
       <div class="snap-diff-body" role="region" aria-label="Changes since the previous version">${body}</div>
       ${diff.truncated ? '<div class="snap-diff-gap is-end">Diff truncated \u2014 restore or copy for the full text.</div>' : ''}
     </div>
@@ -904,25 +896,25 @@ function buildCard(row: SheetRowModel, term: string): HTMLLIElement {
               ? '\u00a0'
               : term
                 ? highlightMatches(line, term)
-                : escapeHtmlText(line);
+                : escapeHtml(line);
             return `<span class="snap-card-line${blank ? ' is-blank' : ''}">${body}</span>`;
           })
           .join('')
       : '<span class="snap-card-line is-empty">No content</span>';
     pageInner = `<div class="snap-card-lines">${pageHtml}</div>`;
   }
-  const titleHtml = term ? highlightMatches(row.title, term) : escapeHtmlText(row.title);
+  const titleHtml = term ? highlightMatches(row.title, term) : escapeHtml(row.title);
   const chipHtml = row.chip
-    ? `<span class="snap-chip${row.chip.danger ? ' is-danger' : ''}"${row.chip.title ? ` title="${escapeHtmlText(row.chip.title)}"` : ''}>${escapeHtmlText(row.chip.text)}</span>`
+    ? `<span class="snap-chip${row.chip.danger ? ' is-danger' : ''}"${row.chip.title ? ` title="${escapeHtml(row.chip.title)}"` : ''}>${escapeHtml(row.chip.text)}</span>`
     : '';
   const when = formatCardWhen(row.timestamp);
 
   li.innerHTML = `
     <div class="${pageClass}"${pageStyle} aria-hidden="true">${pageInner}</div>
     <div class="snap-card-body">
-      <p class="snap-card-title" title="${escapeHtmlText(row.title)}">${titleHtml}</p>
+      <p class="snap-card-title" title="${escapeHtml(row.title)}">${titleHtml}</p>
       <p class="snap-card-meta">
-        <span class="snap-card-when" title="${escapeHtmlText(when)}">${escapeHtmlText(when)}</span>
+        <span class="snap-card-when" title="${escapeHtml(when)}">${escapeHtml(when)}</span>
         ${chipHtml}
       </p>
       ${renderActions(row.actions, row.key, 'snap-card-actions')}

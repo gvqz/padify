@@ -56,21 +56,24 @@ function resetWriteDirection(defaultWriteDirection: string): void {
   $('#writeDirection').val(defaultWriteDirection);
 }
 
+// The retired textures (chessboard/linen/marble/newspaper) stay in the
+// cleanup lists so a body still carrying one of their classes from an old
+// session lands back on a paper that exists. One spelling, two users.
+const RETIRED_TEXTURE_CLASS_LIST =
+  'dotted-paper graph-paper chessboard-paper starfield-paper grain-paper linen-paper recycled-paper newspaper-paper marble-paper';
+
 function resetTexture(defaultTexture: string): void {
-  // The retired textures (chessboard/linen/marble/newspaper) stay in this
-  // cleanup so a body still carrying one of their classes from an old
-  // session lands back on a paper that exists.
-  $(document.body).removeClass(
-    'dotted-paper graph-paper chessboard-paper starfield-paper grain-paper linen-paper recycled-paper newspaper-paper marble-paper',
-  );
+  $(document.body).removeClass(RETIRED_TEXTURE_CLASS_LIST);
   $('#texture').val(defaultTexture);
 }
 
+// The font classes the note body may carry — the cleanup list the apply
+// and reset paths share ('dyslexic' is retired but stays so an old session
+// lands back on a font that exists).
+const FONT_CLASS_LIST = 'dyslexic monospaced serif handwritten humanist pixel typewriter crayon';
+
 function resetFont(defaultFont: string): void {
-  // 'dyslexic' is retired but stays in this cleanup so a note still
-  // carrying the class from an old session lands back on a font that
-  // exists.
-  $('#note').removeClass('dyslexic monospaced serif handwritten humanist pixel typewriter crayon');
+  $('#note').removeClass(FONT_CLASS_LIST);
   $('#font').val(defaultFont);
 }
 
@@ -105,12 +108,7 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
   const allowedTextures = ['normal', 'dotted', 'graph', 'starfield', 'grain', 'recycled'];
 
   function applyTexture(textureSelected: string): void {
-    // Retired textures stay in this cleanup so a body still carrying one
-    // of their classes from an old session lands back on a paper that
-    // exists.
-    $(document.body).removeClass(
-      'dotted-paper graph-paper chessboard-paper starfield-paper grain-paper linen-paper recycled-paper newspaper-paper marble-paper',
-    );
+    $(document.body).removeClass(RETIRED_TEXTURE_CLASS_LIST);
 
     if (textureSelected == 'dotted') {
       $(document.body).addClass('dotted-paper');
@@ -397,12 +395,8 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
 
   // Apply font based on selection
   function applyFont(fontType: string): void {
-    // Remove all font classes first — 'dyslexic' is retired but stays in
-    // the cleanup so a note still carrying it from an old session lands
-    // back on a font that exists.
-    notepad.note.removeClass(
-      'dyslexic monospaced serif handwritten humanist pixel typewriter crayon',
-    );
+    // Remove all font classes first.
+    notepad.note.removeClass(FONT_CLASS_LIST);
 
     // Add the selected font class
     switch (fontType) {

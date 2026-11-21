@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { escapeHtml } from '../lib/escape';
 import {
   cardPageLines,
-  escapeHtmlText,
   formatCardWhen,
   highlightMatches,
   renderSheetTimeline,
@@ -22,15 +22,15 @@ import {
  * Today even when nothing is older).
  */
 
-describe('escapeHtmlText — nothing smuggles markup in', () => {
+describe('escapeHtml — nothing smuggles markup in', () => {
   it('escapes the five dangerous characters', () => {
-    expect(escapeHtmlText('<img src=x onerror="a">&\'')).toBe(
-      '&lt;img src=x onerror=&quot;a&quot;&gt;&amp;&#039;',
+    expect(escapeHtml('<img src=x onerror="a">&\'')).toBe(
+      '&lt;img src=x onerror=&quot;a&quot;&gt;&amp;&#39;',
     );
   });
 
   it('plain text passes through unchanged', () => {
-    expect(escapeHtmlText('just words 123')).toBe('just words 123');
+    expect(escapeHtml('just words 123')).toBe('just words 123');
   });
 });
 
