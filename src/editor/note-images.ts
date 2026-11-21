@@ -8,7 +8,11 @@
  * reference, `padify-att:<id>`, as the destination of a normal markdown
  * image or a raw-HTML `<img src>`. The bytes live in the attachment store:
  * IndexedDB locally, the server in the background. Note sync, merge and
- * the 2 MB wire cap stay untouched — a reference is ~40 characters.
+ * the 2 MB wire cap stay untouched — a reference is ~40 characters. The
+ * reference grammar itself (the scheme, the id gate, the ref collectors
+ * the export pass and both garbage collectors ride) is the wire-shared
+ * spelling in shared/att-refs.ts; this module owns only what the app
+ * does with it: capture, resolution, teardown.
  *
  * THE SCOPE (owner's call, 2026-11-21, restated). PLAIN notes are
  * text-only — their surface wires none of this. Rich/gfm (markdown)
@@ -43,73 +47,9 @@ import { fetchAttachment } from '../cloud/attachments';
 // server's upload cap, the envelope's, the canvas gates'), so an
 // over-cap capture fails HERE with an honest message instead of
 // poisoning the upload flush for the session.
-import { ATTACHMENT_ID_SOURCE, MAX_ATTACHMENT_BYTES } from '../../shared/wire';
-
-// ---------------------------------------------------------------------------
-// The reference scheme
-// ---------------------------------------------------------------------------
-
-/** The URL scheme a note's image reference speaks. */
-export const PADIFY_ATT_SCHEME = 'padify-att:';
-
-/**
- * The one shape a reference may take: the scheme plus the store's id
- * (client ids are `att-` + 24 hex; the server's pattern admits the
- * wire's ATTACHMENT_ID_SOURCE — this gate accepts exactly that shape, so
- * a hand-written ref that the store could never answer renders as text).
- */
-const PADIFY_ATT_PATTERN = new RegExp(`^padify-att:${ATTACHMENT_ID_SOURCE}$`);
-
-/** True when the string is a well-formed attachment reference. */
-export function isPadifyAttRef(value: string): boolean {
-  return PADIFY_ATT_PATTERN.test(value);
-}
-
-/** The id inside a reference, or null when the string isn't one. */
-export function padifyAttId(ref: string): string | null {
-  return isPadifyAttRef(ref) ? ref.slice(PADIFY_ATT_SCHEME.length) : null;
-}
-
-/** The reference for an id (the caller's id must be the store's shape). */
-export function padifyAttRef(id: string): string {
-  return PADIFY_ATT_SCHEME + id;
-}
-
-/**
- * Every attachment id a note's content references — the .padify export's
- * embedding pass (app.ts) and any future garbage collection.
- *
- * Three shapes, the ones the renderer actually resolves: inline images
- * `![alt](padify-att:id)`, image definitions `[ref]: padify-att:id`, and
- * raw-HTML `<img src="padify-att:id">` (both quote styles). The scan is
- * deliberately generous — a ref inside a code span collects too, which
- * only ever over-counts (one extra embedded blob), never under-counts
- * (a silently lost image).
- */
-export function collectAttachmentRefs(content: string): string[] {
-  const ids = new Set<string>();
-  const take = (raw: string): void => {
-    const id = padifyAttId(raw);
-    if (id !== null) {
-      ids.add(id);
-    }
-  };
-  // Inline images: `![…](padify-att:id)` — the alt may itself contain
-  // brackets' escaped forms; the generous reading keeps this a scan, not
-  // a second markdown parser.
-  for (const m of content.matchAll(/!\[[^\]]*\]\((padify-att:[A-Za-z0-9_-]+)\)/g)) {
-    take(m[1]!);
-  }
-  // Reference definitions: a line whose definition is a padify ref.
-  for (const m of content.matchAll(/^\s*\[[^\]]+\]:\s*(padify-att:[A-Za-z0-9_-]+)\s*$/gm)) {
-    take(m[1]!);
-  }
-  // Raw HTML: `<img … src="padify-att:id" …>` (both quote styles).
-  for (const m of content.matchAll(/<img[^>]*\ssrc=["'](padify-att:[A-Za-z0-9_-]+)["']/gi)) {
-    take(m[1]!);
-  }
-  return [...ids];
-}
+import { MAX_ATTACHMENT_BYTES } from '../../shared/wire';
+// The reference grammar's one spelling — scheme, id gate, ref helpers.
+import { padifyAttId, padifyAttRef } from '../../shared/att-refs';
 
 // ---------------------------------------------------------------------------
 // Capture — paste, drop and the toolbar's image row

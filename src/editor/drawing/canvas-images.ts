@@ -41,6 +41,10 @@ import { getAttachmentBlob, putAttachment, type AttachmentMeta } from '../../sto
 // The one per-file byte ceiling every gate enforces (see
 // MAX_CANVAS_IMAGE_BYTES below for this module's stake in it).
 import { ATTACHMENT_ID_PATTERN, MAX_ATTACHMENT_BYTES } from '../../../shared/wire';
+// The fileIds walk is the shared grammar's (shared/att-refs.ts) — the
+// export pass and the garbage collectors read the same ids this module
+// flushes and hydrates.
+import { collectSceneFileIds } from '../../../shared/att-refs';
 
 /**
  * The vendor's BinaryFileData, mirrored structurally (see the module
@@ -80,32 +84,6 @@ export const MAX_CANVAS_IMAGE_BYTES = MAX_ATTACHMENT_BYTES;
 
 /** The per-scene file ceiling — the envelope's own count cap, mirrored. */
 export const MAX_CANVAS_IMAGE_FILES = 500;
-
-/**
- * Every fileId the scene's image elements reference — the flush's diff
- * base (via the handle's live map), the hydration's shopping list, the
- * .padify export's embedding pass and any future garbage collection.
- * Deleted ghosts (the undo trail) never count — the capture path filters
- * them before anything downstream reads the ids.
- */
-export function collectSceneFileIds(elements: Record<string, unknown>[]): string[] {
-  const ids = new Set<string>();
-  for (const element of elements) {
-    if (!element || typeof element !== 'object') {
-      continue;
-    }
-    const record = element as Record<string, unknown>;
-    if (record.isDeleted === true) {
-      continue;
-    }
-    if (record.type === 'image' && typeof record.fileId === 'string') {
-      if (FILE_ID_PATTERN.test(record.fileId)) {
-        ids.add(record.fileId);
-      }
-    }
-  }
-  return [...ids];
-}
 
 /** True when the string is a base64 data URL this module will decode. */
 export function isImageDataURL(value: string): boolean {

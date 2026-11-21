@@ -13,7 +13,6 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   blobFromDataURL,
-  collectSceneFileIds,
   dataURLMime,
   flushSceneFiles,
   idsNeedingHydration,
@@ -51,30 +50,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('collectSceneFileIds', () => {
-  it('collects the image elements fileIds, in first-seen order', () => {
-    const elements = [
-      imageElement(ID_B),
-      { id: 'r', type: 'rectangle', x: 0, y: 0 },
-      imageElement(ID_A),
-      imageElement(ID_B), // duplicate — one set entry
-    ];
-    expect(collectSceneFileIds(elements)).toEqual([ID_B, ID_A]);
-  });
-
-  it('ignores deleted ghosts, non-images and junk fileIds', () => {
-    const elements = [
-      imageElement('short'),
-      imageElement('has:colon'),
-      imageElement(ID_A, true), // deleted ghost
-      { id: 't', type: 'text', text: 'hi' },
-      { id: 'i', type: 'image' }, // no fileId at all
-      null,
-    ] as unknown as Record<string, unknown>[];
-    expect(collectSceneFileIds(elements)).toEqual([]);
-    expect(collectSceneFileIds([])).toEqual([]);
-  });
-});
+// The fileIds walk itself is the shared grammar's (shared/att-refs.test.ts
+// pins it) — these tests exercise the flush/hydration surfaces around it.
 
 describe('data URL decode', () => {
   it('admits exactly the base64 image data-URL shape', () => {

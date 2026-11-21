@@ -8,7 +8,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'jsdom',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'shared/**/*.test.ts'],
     reporters: 'default',
     // The Excalidraw island is the one dependency that ships bare JSON
     // imports (open-color) without Node's import attributes — inlining it

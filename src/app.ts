@@ -61,7 +61,7 @@ import './features/tasks/note/surface';
 // this import also brings the image-export seam for the download menu.
 import { exportActiveDrawingImage, warmCanvasIsland } from './editor/drawing/surface';
 import { drawingSceneHasContent, parseDrawingScene } from './editor/drawing/scene';
-import { collectSceneFileIds } from './editor/drawing/canvas-images';
+import { collectNoteAttachmentIds } from '../shared/att-refs';
 import {
   markdownLastWorkingMode,
   markdownViewMode,
@@ -85,8 +85,9 @@ import {
 import { initPadifyFileOpen } from './padify-file-ui';
 // Note images: the attachment-reference scheme on markdown (rich/gfm)
 // notes. The shell's only use is the .padify export's embedded-image
-// pass — the editor surfaces own everything interactive.
-import { collectAttachmentRefs } from './editor/note-images';
+// pass — the editor surfaces own everything interactive. The referenced-
+// ids question is the shared grammar's (collectNoteAttachmentIds); this
+// file only fetches the bytes it names.
 import { getAttachmentBytes, getAttachmentMeta } from './storage/attachments';
 // The tasks feature composes statically now (rail + hub + sweep are
 // small; the heavy markdown engine stays lazy but tasks pages ride the
@@ -671,10 +672,7 @@ export async function initApp(): Promise<void> {
     content: string;
   }): Promise<PadifyFileAttachment[]> => {
     const attachments: PadifyFileAttachment[] = [];
-    const referencedIds =
-      captured.noteType === 'drawing'
-        ? collectSceneFileIds(parseDrawingScene(captured.content)?.elements ?? [])
-        : collectAttachmentRefs(captured.content);
+    const referencedIds = collectNoteAttachmentIds(captured);
     for (const id of referencedIds) {
       // The meta rides along (the store's own name/mime — an exported
       // webp says webp); a missing meta falls back to the generic

@@ -13,21 +13,17 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  collectAttachmentRefs,
   createNoteImageResolver,
   imageFilesFrom,
   imageMarkdownFor,
-  isPadifyAttRef,
   MAX_IMAGE_BYTES,
-  padifyAttId,
-  padifyAttRef,
   prepareImageAttachment,
   type ImageCompressor,
 } from './note-images';
+import { padifyAttRef } from '../../shared/att-refs';
 import {
   clearAttachments,
   getAttachmentBlob,
-  newAttachmentId,
   putAttachment,
 } from '../storage/attachments';
 import { resetStorageForTests, storageReady } from '../storage';
@@ -39,56 +35,9 @@ function pngFile(name = 'Screenshot 2026-11-21.png', size = 100): File {
   return file;
 }
 
-describe('the reference scheme', () => {
-  it('accepts exactly the store id shape', () => {
-    expect(isPadifyAttRef(`padify-att:${GOOD_ID}`)).toBe(true);
-    expect(isPadifyAttRef('padify-att:voice-2026-abcdef')).toBe(true);
-    expect(isPadifyAttRef('padify-att:att-x')).toBe(false); // too short
-    expect(isPadifyAttRef('padify-att:../../etc')).toBe(false);
-    expect(isPadifyAttRef('padify-att:has:colon')).toBe(false);
-    expect(isPadifyAttRef('https://example.com')).toBe(false);
-    expect(isPadifyAttRef('')).toBe(false);
-  });
-
-  it('round-trips id → ref → id', () => {
-    const id = newAttachmentId();
-    expect(padifyAttId(padifyAttRef(id))).toBe(id);
-    expect(padifyAttId('junk')).toBeNull();
-  });
-
-  it('collects inline images, definitions and raw-html img srcs', () => {
-    const content = [
-      'before',
-      '',
-      '![shot one](padify-att:att-aaaaaaaaaaaaaaaa)',
-      '![ref][pic]',
-      '',
-      '[pic]: padify-att:att-bbbbbbbbbbbbbbbb',
-      '',
-      '<img src="padify-att:att-cccccccccccccccc" alt="raw">',
-      "<img alt='q' src='padify-att:att-dddddddddddddddd'>",
-      '![same again](padify-att:att-aaaaaaaaaaaaaaaa)',
-    ].join('\n');
-    expect(collectAttachmentRefs(content).sort()).toEqual([
-      'att-aaaaaaaaaaaaaaaa',
-      'att-bbbbbbbbbbbbbbbb',
-      'att-cccccccccccccccc',
-      'att-dddddddddddddddd',
-    ]);
-  });
-
-  it('collects nothing from prose and junk (and never a malformed ref)', () => {
-    const content = [
-      'a normal note',
-      '[a link](https://example.com)',
-      '![x](padify-att:short)',
-      '![x](padify-att:../../evil)',
-      '<img src="https://example.com/i.png">',
-    ].join('\n');
-    expect(collectAttachmentRefs(content)).toEqual([]);
-    expect(collectAttachmentRefs('')).toEqual([]);
-  });
-});
+// The reference scheme's shape and the content scan live in
+// shared/att-refs.test.ts — the grammar's own contract. These are the
+// capture/resolver surfaces that ride it.
 
 describe('imageMarkdownFor', () => {
   it('derives the alt from the file name, flattening construct-breakers', () => {
