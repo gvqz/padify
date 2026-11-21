@@ -48,6 +48,8 @@ vi.mock('./canvas', () => {
           elements: [],
           appState: {},
         })),
+        addFiles: vi.fn(),
+        getFiles: vi.fn((): Record<string, unknown> => ({})),
         unmount: vi.fn(),
       };
       mounts.push({ mount, options, handle });
@@ -70,6 +72,17 @@ vi.mock('../../ui/toast', () => ({
   showToast: vi.fn(),
 }));
 
+// The attachment spine, faked at its seam: the surface drives flush and
+// hydration through canvas-images.ts, and these tests control both
+// directions without a real store (the real-store paths are pinned in
+// canvas-images.test.ts).
+vi.mock('./canvas-images', () => ({
+  flushSceneFiles: vi.fn(async () => []),
+  idsNeedingHydration: vi.fn((): string[] => []),
+  loadSceneFiles: vi.fn(async () => []),
+}));
+
+import { flushSceneFiles, idsNeedingHydration, loadSceneFiles } from './canvas-images';
 import { showToast } from '../../ui/toast';
 // The tasks surface registers itself for the 'json' kind at import time
 // — importing it here is what makes the coexistence test honest.
@@ -89,7 +102,6 @@ interface RecordedMount {
     theme: string;
     name: string;
     onChange: (scene: { elements: Record<string, unknown>[]; appState: unknown }) => void;
-    onImagePaste: () => void;
   };
   handle: {
     updateScene: (scene: unknown) => void;
@@ -97,6 +109,8 @@ interface RecordedMount {
     rename: (name: string) => void;
     scrollToContent: () => void;
     getScene: () => { elements: Record<string, unknown>[]; appState: unknown };
+    addFiles: (files: unknown[]) => void;
+    getFiles: () => Record<string, unknown>;
     unmount: () => void;
   };
 }
@@ -546,14 +560,51 @@ describe('the image-export seam', () => {
     expect(canvasMock.renderDrawingImage).toHaveBeenCalledWith(
       'png',
       expect.objectContaining({ elements: [{ id: 'a', type: 'rectangle' }] }),
+      {}, // the live files map (empty here) rides along for image elements
     );
   });
 
-  it('the image-paste refusal toast is wired to the canvas', async () => {
+  it('hydrates the scene fileIds through the canvas handle', async () => {
+    const host = connectedHost();
+    const file = {
+      id: 'file-aaaabbbbccccdddd',
+      mimeType: 'image/webp',
+      dataURL: 'data:image/webp;base64,aGVsbG8=',
+      created: 1,
+      lastRetrieved: 2,
+    };
+    vi.mocked(idsNeedingHydration).mockReturnValue(['file-aaaabbbbccccdddd']);
+    vi.mocked(loadSceneFiles).mockResolvedValue([file]);
+
+    surface.display(host, {
+      content: serializeDrawingScene({
+        version: 1,
+        savedAt: 1700000000000,
+        elements: [{ id: 'img', type: 'image', fileId: 'file-aaaabbbbccccdddd' }],
+        appState: {},
+      }),
+      noteType: 'drawing',
+    });
+    await canvasReady();
+    expect(loadSceneFiles).toHaveBeenCalledWith(['file-aaaabbbbccccdddd']);
+    expect(lastMount().handle.addFiles).toHaveBeenCalledWith([file]);
+  });
+
+  it('flushes the vendor files map on every scene change', async () => {
     const host = connectedHost();
     surface.display(host, { content: '', noteType: 'drawing' });
     await canvasReady();
-    lastMount().options.onImagePaste();
-    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('vector'));
+    const mounted = lastMount();
+    const files = {
+      'file-aaaabbbbccccdddd': {
+        id: 'file-aaaabbbbccccdddd',
+        mimeType: 'image/png',
+        dataURL: 'data:image/png;base64,AAAA',
+      },
+    };
+    mounted.handle.getFiles = () => files;
+
+    mounted.options.onChange({ elements: [{ id: 'img', type: 'image' }], appState: {} });
+    expect(flushSceneFiles).toHaveBeenCalledWith(files, expect.any(Set));
   });
 });

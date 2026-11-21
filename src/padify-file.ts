@@ -42,12 +42,16 @@
  * recognized on open and becomes a drawing note: elements verbatim, the
  * appState whitelisted through the scene module's own discipline, the
  * envelope re-stamped as this build's scene format. Scenes carrying the
- * vendor's `files` map (embedded bitmap images) are refused honestly —
- * 'embedded-images' — because the note model has no binary attachments
- * and a silent loss is the one thing the opaque discipline forbids. The
+ * vendor's `files` map (embedded bitmap images) are ADMITTED since the
+ * attachment store learned the canvas: every well-formed entry decodes
+ * into the envelope's attachment shape (same ceilings, same junk-drops
+ * discipline) and re-hydrates under its ORIGINAL id — the vendor's
+ * content-hashed fileIds — so the scene's references resolve without
+ * rewriting a byte of content. Junk entries drop, never the file. The
  * reverse direction (buildExcalidrawFile) writes a drawing note back out
- * as a file excalidraw.com opens natively: the two-way door that makes
- * the canvas feel native to the pad and the pad native to the canvas.
+ * as a file excalidraw.com opens natively, the referenced bytes riding
+ * the same `files` map — the two-way door that makes the canvas feel
+ * native to the pad and the pad native to the canvas.
  */
 
 import {
@@ -341,19 +345,31 @@ export function prepareImportedNote(
   };
 }
 
-/** The Excalidraw bridge's reader answer. */
-export type ExcalidrawParseResult =
-  { kind: 'scene'; content: string } | { kind: 'embedded-images' } | null;
+/** The Excalidraw bridge's reader answer: a scene (with any embedded
+ * images decoded into the attachment shape) or null. */
+export type ExcalidrawParseResult = {
+  kind: 'scene';
+  content: string;
+  attachments: PadifyFileAttachment[];
+} | null;
+
+/**
+ * The data-URL shape the bridge decodes: a mime and a base64 payload.
+ * The vendor's own BinaryFileData.dataURL is exactly this.
+ */
+const DATA_URL_PATTERN =
+  /^data:([a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*);base64,([A-Za-z0-9+/]*={0,2})$/i;
 
 /**
  * Recognizes a native .excalidraw file and folds it into this build's
  * drawing-note content: elements verbatim, the appState whitelisted and
  * migrated by the scene module's own parse (legacy stroke widths and
  * all), the envelope re-stamped as scene format v1. A scene carrying the
- * vendor's `files` map answers 'embedded-images' — the note model has no
- * binary attachments, and losing bitmaps silently is the one dishonest
- * outcome. Anything else (including a bare elements array without the
- * discriminator, which could be anyone's JSON) answers null.
+ * vendor's `files` map decodes its entries into the attachment shape —
+ * same ceilings as the envelope (5 MB/file, 500 files), junk entries
+ * DROP (a file is data, not code; one junk image must not sink the
+ * drawing it rode in on). Anything else (including a bare elements array
+ * without the discriminator, which could be anyone's JSON) answers null.
  */
 export function parseExcalidrawFile(text: string, now: number): ExcalidrawParseResult {
   if (typeof text !== 'string' || text.trim() === '') {
@@ -372,9 +388,6 @@ export function parseExcalidrawFile(text: string, now: number): ExcalidrawParseR
   if (record.type !== 'excalidraw' || !Array.isArray(record.elements)) {
     return null;
   }
-  if (record.files && typeof record.files === 'object' && Object.keys(record.files).length > 0) {
-    return { kind: 'embedded-images' };
-  }
   const scene = parseDrawingScene(text);
   if (scene === null) {
     // type + elements passed above, so this is unreachable in practice —
@@ -388,24 +401,93 @@ export function parseExcalidrawFile(text: string, now: number): ExcalidrawParseR
       version: DRAWING_SCENE_VERSION,
       savedAt: now,
     }),
+    attachments: attachmentsFromFilesMap(record.files),
   };
+}
+
+/**
+ * The vendor's `files` map → the envelope's attachment shape, one entry
+ * at a time: the id and mime must be the store's shape, the dataURL must
+ * genuinely be a base64 data URL whose decoded bytes fit the ceilings,
+ * and anything else drops. An empty or junk map answers empty — the
+ * import still succeeds, the scene's images just render as their
+ * placeholders.
+ */
+function attachmentsFromFilesMap(raw: unknown): PadifyFileAttachment[] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return [];
+  }
+  const out: PadifyFileAttachment[] = [];
+  for (const [id, entry] of Object.entries(raw as Record<string, unknown>).slice(
+    0,
+    MAX_EMBEDDED_ATTACHMENTS,
+  )) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      continue;
+    }
+    if (!ATTACHMENT_ID_PATTERN.test(id)) {
+      continue;
+    }
+    const record = entry as Record<string, unknown>;
+    const mime = typeof record.mimeType === 'string' ? record.mimeType.slice(0, 100) : '';
+    const dataURL = typeof record.dataURL === 'string' ? record.dataURL : '';
+    if (!ATTACHMENT_MIME_PATTERN.test(mime)) {
+      continue;
+    }
+    const match = DATA_URL_PATTERN.exec(dataURL);
+    if (!match) {
+      continue;
+    }
+    const decoded = base64ToBytes(match[2]!);
+    if (
+      decoded === null ||
+      decoded.byteLength === 0 ||
+      decoded.byteLength > MAX_EMBEDDED_ATTACHMENT_BYTES
+    ) {
+      continue;
+    }
+    out.push({ id, name: `${id}.img`, mime, bytes: match[2]! });
+  }
+  return out;
 }
 
 /**
  * Writes a drawing note's scene back out as a native .excalidraw file —
  * excalidraw.com opens it directly. The appState rides the scene's
  * already-whitelisted subset (the vendor's own key names), elements
- * verbatim; `files` is omitted (this build's scenes are vector-only),
- * which the vendor's loader treats as "no binary assets" — the truth.
+ * verbatim. The scene's referenced image bytes ride the vendor's `files`
+ * map (`attachments`, decoded by the caller from the attachment store —
+ * the same shape the .padify envelope embeds); an empty list omits the
+ * field entirely, which the vendor's loader treats as "no binary
+ * assets". `now` stamps the entries' created/lastRetrieved (the vendor's
+ * BinaryFileData wants both).
  */
-export function buildExcalidrawFile(scene: DrawingScene): string {
-  return JSON.stringify({
+export function buildExcalidrawFile(
+  scene: DrawingScene,
+  attachments: PadifyFileAttachment[] = [],
+  now: number = Date.now(),
+): string {
+  const file: Record<string, unknown> = {
     type: 'excalidraw',
     version: 2,
     source: PADIFY_GENERATOR,
     elements: scene.elements,
     appState: scene.appState,
-  });
+  };
+  if (attachments.length > 0) {
+    const files: Record<string, unknown> = {};
+    for (const attachment of attachments) {
+      files[attachment.id] = {
+        id: attachment.id,
+        mimeType: attachment.mime,
+        dataURL: `data:${attachment.mime};base64,${attachment.bytes}`,
+        created: now,
+        lastRetrieved: now,
+      };
+    }
+    file.files = files;
+  }
+  return JSON.stringify(file);
 }
 
 /**

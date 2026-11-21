@@ -286,16 +286,61 @@ describe('the Excalidraw bridge', () => {
     expect(scene?.appState).toEqual({ viewBackgroundColor: '#fafafa' });
   });
 
-  it('refuses scenes with embedded bitmaps instead of losing them', () => {
+  it('admits embedded bitmaps — well-formed entries become attachments, junk drops', () => {
+    const withFiles = JSON.stringify({
+      type: 'excalidraw',
+      elements: [{ id: 'e1', type: 'image', fileId: 'abcdefgh1234', isDeleted: false }],
+      files: {
+        abcdefgh1234: {
+          mimeType: 'image/png',
+          dataURL: 'data:image/png;base64,AAAA',
+          created: 1,
+          lastRetrieved: 2,
+        },
+        // id too short → drop
+        ij: { mimeType: 'image/png', dataURL: 'data:image/png;base64,AAAA' },
+        // mime not the store's shape → drop
+        klmnopqrst: { mimeType: 'junk!!', dataURL: 'data:image/png;base64,AAAA' },
+        // not a base64 data URL → drop
+        uvwxyz1234: { mimeType: 'image/png', dataURL: 'not-a-data-url' },
+        // empty payload → drop
+        badempty11: { mimeType: 'image/png', dataURL: 'data:image/png;base64,' },
+      },
+    });
+    const back = parseExcalidrawFile(withFiles, FIXED_NOW);
+    expect(back?.kind).toBe('scene');
+    if (back?.kind !== 'scene') return;
+    expect(back.attachments).toEqual([
+      { id: 'abcdefgh1234', name: 'abcdefgh1234.img', mime: 'image/png', bytes: 'AAAA' },
+    ]);
+  });
+
+  it('keeps the scene even when every file entry was junk', () => {
+    const allJunk = JSON.stringify({
+      type: 'excalidraw',
+      elements: [{ id: 'e1', type: 'image', fileId: 'ij', isDeleted: false }],
+      files: { ij: { mimeType: 'image/png', dataURL: 'data:…' } },
+    });
+    const back = parseExcalidrawFile(allJunk, FIXED_NOW);
+    expect(back?.kind).toBe('scene');
+    if (back?.kind !== 'scene') return;
+    expect(back.attachments).toEqual([]);
+  });
+
+  it('drops an over-cap entry and keeps the rest', () => {
+    // 'A'.repeat(6_700_000) decodes to 5_025_000 bytes — over the ceiling.
+    const bigPayload = 'A'.repeat(6_700_000);
     const withFiles = JSON.stringify({
       type: 'excalidraw',
       elements: [],
-      files: { blobId: { mimeType: 'image/png', dataURL: 'data:…' } },
+      files: {
+        abcdefgh1234: { mimeType: 'image/png', dataURL: `data:image/png;base64,${bigPayload}` },
+        bbcdefgh1234: { mimeType: 'image/png', dataURL: 'data:image/png;base64,AAAA' },
+      },
     });
-    expect(parseExcalidrawFile(withFiles, FIXED_NOW)).toEqual({ kind: 'embedded-images' });
-    // An EMPTY files map is the vendor's own "no assets" shape — it passes.
-    const emptyFiles = JSON.stringify({ type: 'excalidraw', elements: [], files: {} });
-    expect(parseExcalidrawFile(emptyFiles, FIXED_NOW)?.kind).toBe('scene');
+    const back = parseExcalidrawFile(withFiles, FIXED_NOW);
+    if (back?.kind !== 'scene') return;
+    expect(back.attachments.map((a) => a.id)).toEqual(['bbcdefgh1234']);
   });
 
   it('answers null for anything that is not a native file', () => {
@@ -316,16 +361,58 @@ describe('the Excalidraw bridge', () => {
       }),
     )!;
     const native = buildExcalidrawFile(scene);
-    const parsed = JSON.parse(native) as { type: string; elements: unknown[]; appState: unknown };
+    const parsed = JSON.parse(native) as {
+      type: string;
+      elements: unknown[];
+      appState: unknown;
+      files?: unknown;
+    };
     expect(parsed.type).toBe('excalidraw');
     expect(parsed.elements).toHaveLength(1);
     expect(parsed.appState).toEqual({ gridSize: 20 });
+    // No attachments → no files field at all (the vendor's "no assets").
+    expect(parsed.files).toBeUndefined();
 
     const back = parseExcalidrawFile(native, FIXED_NOW);
     expect(back?.kind).toBe('scene');
     if (back?.kind === 'scene') {
+      expect(back.attachments).toEqual([]);
       expect(parseDrawingScene(back.content)?.elements).toHaveLength(1);
     }
+  });
+
+  it('embeds referenced bytes as the vendor files map, and they round-trip', () => {
+    const scene = parseDrawingScene(
+      JSON.stringify({
+        version: 1,
+        savedAt: 3,
+        elements: [{ id: 'e', type: 'image', fileId: 'abcdefgh1234', isDeleted: false }],
+        appState: {},
+      }),
+    )!;
+    const native = buildExcalidrawFile(
+      scene,
+      [{ id: 'abcdefgh1234', name: 'shot.img', mime: 'image/webp', bytes: 'BBBB' }],
+      FIXED_NOW,
+    );
+    const parsed = JSON.parse(native) as {
+      files?: Record<
+        string,
+        { id: string; mimeType: string; dataURL: string; created: number; lastRetrieved: number }
+      >;
+    };
+    expect(parsed.files?.abcdefgh1234).toEqual({
+      id: 'abcdefgh1234',
+      mimeType: 'image/webp',
+      dataURL: 'data:image/webp;base64,BBBB',
+      created: FIXED_NOW,
+      lastRetrieved: FIXED_NOW,
+    });
+    const back = parseExcalidrawFile(native, FIXED_NOW);
+    if (back?.kind !== 'scene') return;
+    expect(back.attachments).toEqual([
+      { id: 'abcdefgh1234', name: 'abcdefgh1234.img', mime: 'image/webp', bytes: 'BBBB' },
+    ]);
   });
 });
 

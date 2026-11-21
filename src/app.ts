@@ -62,6 +62,7 @@ import './features/tasks/note/surface';
 // this import also brings the image-export seam for the download menu.
 import { exportActiveDrawingImage, warmCanvasIsland } from './editor/drawing/surface';
 import { drawingSceneHasContent, parseDrawingScene } from './editor/drawing/scene';
+import { collectSceneFileIds } from './editor/drawing/canvas-images';
 import {
   markdownLastWorkingMode,
   markdownViewMode,
@@ -83,9 +84,10 @@ import {
   type PadifyFileAttachment,
 } from './padify-file';
 import { initPadifyFileOpen } from './padify-file-ui';
-// Note images: the capture/resolution module riding the attachment store.
-// The shell's only use is the .padify export's embedded-image pass — the
-// editor surfaces own everything interactive.
+// Note images: the render half of the attachment-reference scheme (the
+// capture tenant is the drawing canvas). The shell's only use is the
+// .padify export's embedded-image pass — the editor surfaces own
+// everything interactive.
 import { collectAttachmentRefs } from './editor/note-images';
 import { getAttachmentBytes, getAttachmentMeta } from './storage/attachments';
 // The tasks feature composes statically now (rail + hub + sweep are
@@ -670,14 +672,19 @@ export async function initApp(): Promise<void> {
       if (!active || !captured) {
         return;
       }
-      // The image pass: every `padify-att:` reference the content carries
-      // rides along in the envelope (bytes base64), so the file stays one
-      // self-contained artifact. A blob that is not in this device's store
-      // (deleted, another device offline) exports as the bare reference —
-      // the importing device renders the missing placeholder, the same
-      // honesty the preview shows.
+      // The image pass: every binary reference the note carries rides
+      // along in the envelope (bytes base64), so the file stays one
+      // self-contained artifact — a markdown note's `padify-att:` refs,
+      // a drawing's scene fileIds. A blob that is not in this device's
+      // store (deleted, another device offline) exports as the bare
+      // reference — the importing device renders the missing
+      // placeholder, the same honesty the preview shows.
       const attachments: PadifyFileAttachment[] = [];
-      for (const id of collectAttachmentRefs(captured.content)) {
+      const referencedIds =
+        captured.noteType === 'drawing'
+          ? collectSceneFileIds(parseDrawingScene(captured.content)?.elements ?? [])
+          : collectAttachmentRefs(captured.content);
+      for (const id of referencedIds) {
         // The meta rides along (the store's own name/mime — an exported
         // webp says webp); a missing meta falls back to the generic
         // octet-stream, which the importer still hydrates and renders.
@@ -714,28 +721,47 @@ export async function initApp(): Promise<void> {
   });
 
   // The canvas's interop door: a drawing note out as a native
-  // .excalidraw file — excalidraw.com opens it as-is. Rides the same
-  // visibility rule as the PNG/SVG rows (something to save).
+  // .excalidraw file — excalidraw.com opens it as-is, the scene's image
+  // bytes riding the vendor's files map. Rides the same visibility rule
+  // as the PNG/SVG rows (something to save).
   notepad.downloadNotesExcalidraw.click(function () {
-    const active = tabManager.getActive();
-    const captured = getActiveNoteContent();
-    if (!active || captured?.noteType !== 'drawing') {
-      return;
-    }
-    const scene = parseDrawingScene(captured.content);
-    if (scene === null || scene.elements.length === 0) {
-      return;
-    }
-    // Live title, same as the Padify save (the model lags the canvas's
-    // announce debounce).
-    saveTextAsFile(
-      buildExcalidrawFile(scene),
-      excalidrawFileName(
-        deriveTabTitle({ ...active, content: captured.content }),
-        getDatedFileStem(),
-      ),
-      'application/json',
-    );
+    void (async function () {
+      const active = tabManager.getActive();
+      const captured = getActiveNoteContent();
+      if (!active || captured?.noteType !== 'drawing') {
+        return;
+      }
+      const scene = parseDrawingScene(captured.content);
+      if (scene === null || scene.elements.length === 0) {
+        return;
+      }
+      // The image pass, same discipline as the .padify save: every
+      // fileId the scene references, decoded from this device's store;
+      // a missing blob rides as the bare fileId (the vendor's loader
+      // renders the placeholder, the truth).
+      const attachments: PadifyFileAttachment[] = [];
+      for (const id of collectSceneFileIds(scene.elements)) {
+        const [bytes, meta] = await Promise.all([getAttachmentBytes(id), getAttachmentMeta(id)]);
+        if (bytes) {
+          attachments.push({
+            id,
+            name: meta?.name || `${id}.img`,
+            mime: meta?.mime || 'application/octet-stream',
+            bytes: bytesToBase64(bytes),
+          });
+        }
+      }
+      // Live title, same as the Padify save (the model lags the canvas's
+      // announce debounce).
+      saveTextAsFile(
+        buildExcalidrawFile(scene, attachments),
+        excalidrawFileName(
+          deriveTabTitle({ ...active, content: captured.content }),
+          getDatedFileStem(),
+        ),
+        'application/json',
+      );
+    })();
   });
 
   // The open door: .padify (any note kind) and .excalidraw (a drawing

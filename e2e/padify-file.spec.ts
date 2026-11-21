@@ -294,18 +294,22 @@ test.describe('the .padify file', () => {
     await expect(page.locator('#toast')).toContainText('is not a Padify or Excalidraw file');
     expect(await railCount(page)).toBe(before);
 
-    // A native drawing with embedded bitmaps — refused, not stripped.
+    // A native drawing with embedded bitmaps — ADMITTED since the canvas
+    // learned images: the files map decodes into the store under the
+    // vendor's fileIds, the drawing opens as a note.
     const imagesPath = testInfo.outputPath('with-images.excalidraw');
     writeFileSync(
       imagesPath,
       JSON.stringify({
         type: 'excalidraw',
-        elements: [],
-        files: { blob1: { mimeType: 'image/png', dataURL: 'data:image/png;base64,AAAA' } },
+        elements: [{ id: 'e1', type: 'image', fileId: 'abcdefgh1234', isDeleted: false }],
+        files: {
+          abcdefgh1234: { mimeType: 'image/png', dataURL: 'data:image/png;base64,AAAA' },
+        },
       }),
     );
     await page.locator('input.padify-open-input').setInputFiles(imagesPath);
-    await expect(page.locator('#toast')).toContainText('embedded images');
-    expect(await railCount(page)).toBe(before);
+    await expect(page.locator('#toast')).toContainText('Opened');
+    expect(await railCount(page)).toBe(before + 1);
   });
 });

@@ -115,14 +115,14 @@ async function importNoteFile(file: File, tabManager: TabManager): Promise<void>
   }
 
   const excalidraw = parseExcalidrawFile(text, Date.now());
-  if (excalidraw !== null && excalidraw.kind === 'embedded-images') {
-    showToast("This drawing has embedded images, which Padify can't open yet.");
-    return;
-  }
   if (excalidraw !== null) {
     // The file's own name is the note's name — "sketch.excalidraw"
-    // opens as a drawing note called "sketch".
+    // opens as a drawing note called "sketch". Embedded images (the
+    // vendor's files map, decoded by the bridge) re-hydrate into the
+    // store under their ORIGINAL fileIds first, so the canvas resolves
+    // them on the very first paint.
     const stem = file.name.replace(/\.(padify|excalidraw)$/i, '').trim();
+    await hydrateImportedAttachments(excalidraw.attachments);
     openImportedNote(tabManager, stem !== '' ? stem : null, 'drawing', excalidraw.content);
     return;
   }

@@ -16,10 +16,10 @@
  *  - `mountDrawingCanvas()` renders the component (via a react-dom root)
  *    with the Generation-2 chrome: open/save `.excalidraw`, save as
  *    PNG/SVG, canvas background — and with the vendor's clear-canvas,
- *    full-export, theme toggle, socials and image tool OFF (the Padify
- *    confirmed flow owns clearing; drawings stay vector until phase 3;
- *    the pad follows the app's theme at mount, exactly like the retired
- *    Drawingpad did).
+ *    full-export, theme toggle, socials OFF (the Padify confirmed flow
+ *    owns clearing; the image tool is ON — its inserts are the pixels the
+ *    attachment store persists, see canvas-images.ts; the pad follows the
+ *    app's theme at mount, exactly like the retired Drawingpad did).
  *  - `renderDrawingImage()` is the export API behind the download menu's
  *    "Save as image" rows (PNG/SVG) — the same exporter the vendor's own
  *    "Save as image" dialog uses.
@@ -52,9 +52,15 @@ import {
 } from '@excalidraw/excalidraw';
 // Types-only subpath (the package's exports map points "/types" at its
 // d.ts tree) — no runtime cost, no phantom-module games.
-import type { AppState, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
+import type {
+  AppState,
+  BinaryFileData,
+  BinaryFiles,
+  ExcalidrawImperativeAPI,
+} from '@excalidraw/excalidraw/types';
 import '@excalidraw/excalidraw/index.css';
 import './canvas-skin.css';
+import type { CanvasImageFile } from './canvas-images';
 
 /** The canvas's theme — the vendor's Theme, spelled without a type import
  * so this module owns its own contract ('light' | 'dark'). */
@@ -85,6 +91,15 @@ export interface DrawingCanvasHandle {
   setTheme(theme: DrawingCanvasTheme): void;
   /** The live scene (non-deleted elements are the caller's business). */
   getScene(): DrawingCanvasScene;
+  /** Feeds the vendor image bytes the scene's fileIds reference (the
+   * hydration pass — canvas-images.ts loads them from the attachment
+   * store). Calls that land before the vendor API is ready queue and
+   * flush the moment it fires. The structural mirror (CanvasImageFile)
+   * crosses into the vendor's BinaryFileData at this module's boundary. */
+  addFiles(files: CanvasImageFile[]): void;
+  /** The vendor's live files map — the flush's diff base (canvas-images.ts
+   * persists the ids this device does not hold yet). */
+  getFiles(): BinaryFiles;
   /** Stands the island down: unmounts React, releasing every listener. */
   unmount(): void;
 }
@@ -96,14 +111,9 @@ export interface MountDrawingCanvasOptions {
   theme: DrawingCanvasTheme;
   /** The file name for exports/`.excalidraw` saves (the note's name). */
   name: string;
-  /** Fires on every canvas mutation (elements, appState, files). */
+  /** Fires on every canvas mutation (elements, appState — and the files
+   * map rides the vendor's third argument, kept for getFiles()). */
   onChange(scene: DrawingCanvasScene): void;
-  /**
-   * Fires when a paste carries an image (file or URL) — v1 keeps scenes
-   * vector (plan decision 2), so the surface answers with a toast and
-   * this module blocks the paste.
-   */
-  onImagePaste(): void;
 }
 
 /**
@@ -118,6 +128,7 @@ function drawingCanvasElement(
   options: MountDrawingCanvasOptions,
   initialData: object,
   onApi: (api: ExcalidrawImperativeAPI | null) => void,
+  onFiles: (files: BinaryFiles) => void,
 ): ReturnType<typeof createElement> {
   return createElement(
     Excalidraw,
@@ -129,20 +140,12 @@ function drawingCanvasElement(
       // The canvas reacts to keys only while it is focused — the app's
       // own shortcuts (tab strip, menus) keep working around it.
       handleKeyboardGlobally: false,
-      onChange: (elements: readonly object[], appState: AppState) => {
+      onChange: (elements: readonly object[], appState: AppState, files: BinaryFiles) => {
+        onFiles(files);
         options.onChange({
           elements: elements as Record<string, unknown>[],
           appState: appState as unknown as Record<string, unknown>,
         });
-      },
-      onPaste: (data: { files?: Record<string, unknown>; mixedContent?: { type: string }[] }) => {
-        const hasFiles = data.files && Object.keys(data.files).length > 0;
-        const hasImageUrls = (data.mixedContent ?? []).some((item) => item.type === 'imageUrl');
-        if (hasFiles || hasImageUrls) {
-          options.onImagePaste();
-          return true; // handled → the vendor drops the paste
-        }
-        return false;
       },
       UIOptions: {
         canvasActions: {
@@ -154,7 +157,19 @@ function drawingCanvasElement(
           export: false,
           toggleTheme: false,
         },
-        tools: { image: false },
+        // The image tool is ON — images are the attachment store's real
+        // tenant (canvas-images.ts owns the persistence spine around
+        // whatever the vendor inserts). The vendor resizes at insert and
+        // refuses over-cap files; the ids it mints are content hashes,
+        // so one image pasted twice is one store row.
+        tools: { image: true },
+      },
+      // The insert-time gates: the app's own capture discipline, spoken
+      // in the vendor's vocabulary — a 1920-px long edge and the server's
+      // 5 MB ceiling. A file over either fails at insert, never at sync.
+      imageOptions: {
+        maxWidthOrHeight: 1920,
+        maxFileSizeBytes: 5_000_000,
       },
       // Master's minimap stays: the pad opens on the same train as
       // excalidraw.com, map island included (its footer toggle rides the
@@ -193,6 +208,13 @@ export function mountDrawingCanvas(
   let api: ExcalidrawImperativeAPI | null = null;
   let root: Root | null = createRoot(mount);
   let props = options;
+  /** The vendor's live files map, kept from every onChange — getFiles()'s
+   * answer and the flush's diff base (canvas-images.ts persists what this
+   * device does not hold). */
+  let latestFiles: BinaryFiles = {};
+  /** Hydration calls that landed before the API callback fired — flushed
+   * the moment it does (the queue is small: a scene's fileIds). */
+  let pendingFiles: CanvasImageFile[] = [];
 
   /** The master replacement for the removed scrollToContent(): navigate
    * the viewport to the scene's non-deleted bounds. The target goes in as
@@ -240,6 +262,13 @@ export function mountDrawingCanvas(
         },
         (instance: ExcalidrawImperativeAPI | null) => {
           api = instance;
+          if (instance && pendingFiles.length > 0) {
+            instance.addFiles(pendingFiles as unknown as BinaryFileData[]);
+            pendingFiles = [];
+          }
+        },
+        (files: BinaryFiles) => {
+          latestFiles = files;
         },
       ),
     );
@@ -291,6 +320,20 @@ export function mountDrawingCanvas(
       >;
       return { elements, appState };
     },
+    addFiles(files: CanvasImageFile[]): void {
+      if (files.length === 0) return;
+      if (api) {
+        // The structural mirror crosses into the vendor's type here —
+        // the one cast at the vendor boundary (see canvas-images.ts's
+        // docstring for why the mirror exists).
+        api.addFiles(files as unknown as BinaryFileData[]);
+      } else {
+        pendingFiles.push(...files);
+      }
+    },
+    getFiles(): BinaryFiles {
+      return latestFiles;
+    },
     unmount(): void {
       api = null;
       if (root) {
@@ -305,6 +348,9 @@ export function mountDrawingCanvas(
  * Renders the live scene to an image — the download menu's "Save as
  * image" rows. PNG answers a Blob; SVG answers the serialized markup.
  * Elements marked deleted (the undo ghost trail) never reach an export.
+ * The scene's image bytes ride along (`files`, from the live handle or a
+ * store hydration) — without them an image element exports as the
+ * vendor's gray placeholder, so the caller always passes what it holds.
  *
  * Master folded exportToBlob/exportToSvg into one exportScene() with the
  * format as a discriminated member — the defaults (the scene's own
@@ -313,18 +359,27 @@ export function mountDrawingCanvas(
 export async function renderDrawingImage(
   kind: 'png' | 'svg',
   scene: DrawingCanvasScene,
+  files?: BinaryFiles | null,
 ): Promise<Blob | string> {
   const elements = scene.elements.filter((element) => element.isDeleted !== true);
   const appState = scene.appState as unknown as Partial<AppState>;
   if (kind === 'svg') {
     const svg = await exportScene({
-      data: { elements: elements as never, appState: appState as never },
+      data: {
+        elements: elements as never,
+        appState: appState as never,
+        files: files ?? null,
+      },
       type: 'svg',
     });
     return new XMLSerializer().serializeToString(svg);
   }
   return exportScene({
-    data: { elements: elements as never, appState: appState as never },
+    data: {
+      elements: elements as never,
+      appState: appState as never,
+      files: files ?? null,
+    },
     type: 'png',
     config: { embedScene: false },
   }) as Promise<Blob>;

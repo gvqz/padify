@@ -57,6 +57,12 @@ import {
   type DrawingSceneElement,
 } from './scene';
 import type { DrawingCanvasHandle, DrawingCanvasScene, DrawingCanvasTheme } from './canvas';
+import {
+  flushSceneFiles,
+  idsNeedingHydration,
+  loadSceneFiles,
+  type CanvasImageFile,
+} from './canvas-images';
 
 /** The Gen-2 autosave rhythm: announce 300 ms after the last change. */
 export const DRAWING_ANNOUNCE_DEBOUNCE_MS = 300;
@@ -105,6 +111,13 @@ interface LiveDrawingCanvas {
   announceTimer: ReturnType<typeof setTimeout> | null;
   /** One over-budget warning per note session (resets when back under). */
   budgetWarned: boolean;
+  /** The attachment ids this device already holds for the open scene —
+   * hydrated ids plus flushed ids. The flush's diff base and the
+   * hydration's skip list (canvas-images.ts). */
+  persistedFileIds: Set<string>;
+  /** Hydration results that landed while the vendor chunk was still
+   * loading — flushed into the handle the moment it mounts. */
+  pendingFiles: CanvasImageFile[];
   /** True once dismiss()/standDown took this instance down. */
   disposed: boolean;
 }
@@ -185,6 +198,48 @@ function standDownLive(): void {
   live = null;
 }
 
+/**
+ * The image spine, hydration side: the scene's fileIds this device does
+ * not hold yet load from the attachment store (local first, the cloud's
+ * lazy pull for another device's bytes) and feed the vendor. A result
+ * that lands while the chunk is still loading waits in pendingFiles —
+ * the mount callback flushes it the moment the handle exists.
+ */
+function hydrateSceneImages(current: LiveDrawingCanvas): void {
+  const needed = idsNeedingHydration(current.snapshot.elements, current.persistedFileIds);
+  if (needed.length === 0) return;
+  void loadSceneFiles(needed)
+    .then((files) => {
+      if (current.disposed) return;
+      for (const file of files) {
+        current.persistedFileIds.add(file.id);
+      }
+      if (current.handle) {
+        current.handle.addFiles(files);
+      } else {
+        current.pendingFiles.push(...files);
+      }
+    })
+    .catch(() => {
+      /* the vendor's loading placeholder stands in; the next open retries */
+    });
+}
+
+/**
+ * The image spine, flush side: whatever the vendor's files map now holds
+ * that this device does not persist yet lands in the store offline-first
+ * (the cloud flush uploads it after the next sync cycle — the same rhythm
+ * the notes ride). Idempotent by id; a failed write retries on the next
+ * onChange.
+ */
+function flushSceneImages(current: LiveDrawingCanvas): void {
+  const handle = current.handle;
+  if (!handle) return;
+  void flushSceneFiles(handle.getFiles(), current.persistedFileIds).catch(() => {
+    /* the next onChange retries — nothing user-visible to say yet */
+  });
+}
+
 /** The trailing-debounce announce: quiet when the scene is byte-identical
  * to what was fed (pan/zoom/selection, or the paint itself), loud the
  * moment a real edit lands. */
@@ -214,6 +269,7 @@ function feedLiveScene(current: LiveDrawingCanvas, scene: DrawingScene, name: st
     elements: scene.elements,
     appState: scene.appState,
   });
+  hydrateSceneImages(current);
   // Exports and `.excalidraw` saves name files after the OPEN note — the
   // re-render swaps the prop without touching the mounted canvas.
   current.handle?.rename(name);
@@ -262,6 +318,8 @@ function mountLiveCanvas(
     handle: null,
     announceTimer: null,
     budgetWarned: false,
+    persistedFileIds: new Set<string>(),
+    pendingFiles: [],
     disposed: false,
   };
 
@@ -297,12 +355,18 @@ function mountLiveCanvas(
           name: current.noteName,
           onChange: (next) => {
             current.snapshot = next;
+            flushSceneImages(current);
             scheduleAnnounce(current);
           },
-          onImagePaste: () => {
-            showToast('Embedded images arrive in a later Padify — drawings stay vector for now.');
-          },
         });
+        // Hydration results that queued while the chunk traveled, then
+        // the open scene's own shopping list (hydrateSceneImages marks
+        // the ids it answers, so this never double-loads).
+        if (current.pendingFiles.length > 0) {
+          current.handle.addFiles(current.pendingFiles);
+          current.pendingFiles = [];
+        }
+        hydrateSceneImages(current);
       } catch {
         // The island crashed mid-mount (or the environment beneath it is
         // gone): the honest card replaces the loading paint when anything
@@ -535,15 +599,19 @@ export async function exportActiveDrawingImage(kind: 'png' | 'svg'): Promise<voi
     showToast('Nothing to export yet — draw something first.');
     return;
   }
+  // The image bytes ride along: the live map holds whatever the vendor
+  // inserted this session plus the hydration — without it an image
+  // element exports as a gray placeholder.
+  const files = current.handle.getFiles();
   const fileName = exportFileName(current.noteName);
   try {
     const canvas = await import('./canvas');
     if (kind === 'svg') {
-      const markup = await canvas.renderDrawingImage('svg', scene);
+      const markup = await canvas.renderDrawingImage('svg', scene, files);
       saveTextAsFile(markup as string, `${fileName}.svg`, 'image/svg+xml');
       return;
     }
-    const blob = await canvas.renderDrawingImage('png', scene);
+    const blob = await canvas.renderDrawingImage('png', scene, files);
     if (blob instanceof Blob) {
       downloadBlob(blob, `${fileName}.png`);
     }
