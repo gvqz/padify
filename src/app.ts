@@ -2,31 +2,14 @@ import { $ } from './lib/q';
 import { selector } from './selector';
 import { calculateNoteStatistics } from './lib/text-stats';
 import { debounce } from './lib/debounce';
-import { copyNotesToClipboard, deleteNotes } from './context-menu';
-import {
-  saveTextAsFile,
-  exportNotesAsPDF,
-  exportNotesAsDocx,
-  downloadHTML,
-  getDatedFileStem,
-  getFileName,
-  getPdfFileName,
-  getDocxFileName,
-  getHtmlFileName,
-  getMarkdownFileName,
-} from './exports';
+import { copyNotesToClipboard } from './context-menu';
 import { pulseWordCountPill, updateWordCountPill } from './word-count-pill';
 import { initUnicodePicker } from './unicode/picker';
-import {
-  TabManager,
-  setTabManager,
-  getEditorText,
-  getActiveNoteContent,
-  getActiveNoteExportBody,
-  sanitizeNoteHtml,
-} from './tabs';
+import { TabManager, setTabManager, getEditorText, sanitizeNoteHtml } from './tabs';
 import { setEditorPort, getEditorPort } from './editor/port';
 import { initTypingSubstitutions, setSubstitutionEnabled } from './editor/typing-substitutions';
+import { initAppShortcuts } from './app-shortcuts';
+import { initDownloadMenu } from './download-menu';
 import { ModelPort } from './editor/model-port';
 import { registerPreFlushHook, storageReady } from './storage';
 import { initCloudSync } from './cloud/sync';
@@ -35,11 +18,10 @@ import { initCloudShare } from './cloud/share';
 import { initShareUI } from './cloud/share-ui';
 import { initConflictReview } from './conflicts';
 import { initUnseenChange } from './unseen';
-import { initVoiceTyping, toggleVoiceTyping, handleTabSwitchedWhileListening } from './voice';
+import { initVoiceTyping, handleTabSwitchedWhileListening } from './voice';
 import { initTypingEffects } from './typing-effects';
 import { initPipWindow } from './pip-window';
-import { openModal, closeAllModals } from './ui/behavior/modal';
-import { registerLayer } from './ui/behavior/layers';
+import { openModal } from './ui/behavior/modal';
 import { initSaveIndicator } from './save-indicator';
 import { initOfflineIndicator } from './offline-indicator';
 import { initTrashFlash } from './trash-flash';
@@ -57,38 +39,16 @@ import './features/tasks/note/surface';
 // The drawing surface claims its TYPE (editor/drawing/surface.ts) —
 // 'drawing' shares the 'json' kind with 'tasks', so it registers through
 // the type-keyed layer. The canvas phase: display() mounts the
-// Excalidraw island behind a lazy chunk (editor/drawing/canvas.ts) and
-// this import also brings the image-export seam for the download menu.
-import { exportActiveDrawingImage, warmCanvasIsland } from './editor/drawing/surface';
-import { drawingSceneHasContent, parseDrawingScene } from './editor/drawing/scene';
-import { collectNoteAttachmentIds } from '../shared/att-refs';
+// Excalidraw island behind a lazy chunk (editor/drawing/canvas.ts); the
+// image-export seam lives with the download menu now (download-menu.ts).
+import { warmCanvasIsland } from './editor/drawing/surface';
 import {
   markdownLastWorkingMode,
   markdownViewMode,
   onMarkdownViewMode,
   setMarkdownViewMode,
 } from './editor/markdown/surface';
-import { isHtmlContent, isMarkdownNote, isRichNote, DEFAULT_NOTE_TYPE } from './editor/note-types';
-import { deriveTabTitle } from './editor/note-content';
-// The note as a file: the .padify envelope (padify-file.ts owns the
-// format) and the open door behind it (padify-file-ui.ts) — every way
-// a note leaves to disk and comes back.
-import {
-  PADIFY_MIME_TYPE,
-  buildExcalidrawFile,
-  bytesToBase64,
-  excalidrawFileName,
-  padifyFileName,
-  serializePadifyNoteFile,
-  type PadifyFileAttachment,
-} from './padify-file';
-import { initPadifyFileOpen } from './padify-file-ui';
-// Note images: the attachment-reference scheme on markdown (rich/gfm)
-// notes. The shell's only use is the .padify export's embedded-image
-// pass — the editor surfaces own everything interactive. The referenced-
-// ids question is the shared grammar's (collectNoteAttachmentIds); this
-// file only fetches the bytes it names.
-import { getAttachmentBytes, getAttachmentMeta } from './storage/attachments';
+import { isHtmlContent, isMarkdownNote, isRichNote } from './editor/note-types';
 // The tasks feature composes statically now (rail + hub + sweep are
 // small; the heavy markdown engine stays lazy but tasks pages ride the
 // note surface, which is core). Imported by the composition root only —
@@ -556,205 +516,9 @@ export async function initApp(): Promise<void> {
     copyNotesToClipboard(getEditorText());
   });
 
-  // The download menu is a registered dismissable layer — the registry
-  // closes every other menu when it opens (and closes it when another
-  // layer opens, or on an outside click / Escape). No stopPropagation:
-  // the capture-phase sweep has already run by the time this click
-  // toggles, so the click cannot stack menus anymore.
-  const downloadLayer = registerLayer({
-    elements: [
-      notepad.downloadNotes.get(0) as HTMLElement,
-      document.getElementById('iconDropdown')!,
-    ],
-    isOpen: () => $('#iconDropdown').hasClass('show'),
-    setOpen: (open) => {
-      $('#iconDropdown').toggleClass('show', open);
-    },
-  });
-
-  notepad.downloadNotes.click(function () {
-    downloadLayer.toggle();
-    // The drawing rows answer "is there anything to save as an image" —
-    // content, not just the active type — so they sync as the menu opens,
-    // fresh off the live surface (a draw since the last active-note
-    // change must be seen without waiting for any save debounce).
-    syncDrawingExportRows();
-  });
-
-  notepad.downloadNotesPlain.click(function () {
-    saveTextAsFile(getEditorText(), getFileName());
-  });
-
-  notepad.downloadNotesPdf.click(function () {
-    exportNotesAsPDF(getEditorText(), getPdfFileName());
-  });
-
-  notepad.downloadNotesDocx.click(function () {
-    const textToWrite = getEditorText();
-    const fileNameToSaveAs = getDocxFileName();
-
-    exportNotesAsDocx(textToWrite, fileNameToSaveAs);
-  });
-
-  notepad.downloadNotesHtml.click(function () {
-    // HTML export carries the note, not the editor surface: for a non-html
-    // note that surface is a read-only card, and the export must read the
-    // model instead (see getActiveNoteExportBody).
-    const body = getActiveNoteExportBody();
-    if (body !== null) {
-      downloadHTML(body, getHtmlFileName());
-    }
-  });
-
-  // The Markdown export ships the SOURCE — the .md a user would hand to
-  // any other tool — captured live through the active note's surface.
-  notepad.downloadNotesMarkdown.click(function () {
-    const captured = getActiveNoteContent();
-    if (captured && captured.noteType === 'markdown') {
-      saveTextAsFile(captured.content, getMarkdownFileName(), 'text/markdown');
-    }
-  });
-
-  // The Markdown row exists only while a Markdown note is active — the
-  // download menu says what THIS note can become, like the toolbar chrome.
-  const syncMarkdownExportRow = (): void => {
-    if (isMarkdownNote(tabManager.getActive())) {
-      notepad.downloadNotesMarkdown.removeAttr('hidden');
-    } else {
-      notepad.downloadNotesMarkdown.attr('hidden', 'hidden');
-    }
-  };
-  tabManager.addActiveListener(syncMarkdownExportRow);
-  syncMarkdownExportRow();
-
-  // The drawing rows follow the same rule — a drawing with something in
-  // it can become a PNG or an SVG (the plan's canvas-phase export seam;
-  // the empty canvas has nothing to save as an image, same rule as the
-  // share modal's emptiness gate).
-  notepad.downloadNotesPng.click(function () {
-    void exportActiveDrawingImage('png');
-  });
-  notepad.downloadNotesSvg.click(function () {
-    void exportActiveDrawingImage('svg');
-  });
-  const syncDrawingExportRows = (): void => {
-    const captured = getActiveNoteContent();
-    const exportable = captured?.noteType === 'drawing' && drawingSceneHasContent(captured.content);
-    if (exportable) {
-      notepad.downloadNotesPng.removeAttr('hidden');
-      notepad.downloadNotesSvg.removeAttr('hidden');
-      notepad.downloadNotesExcalidraw.removeAttr('hidden');
-    } else {
-      notepad.downloadNotesPng.attr('hidden', 'hidden');
-      notepad.downloadNotesSvg.attr('hidden', 'hidden');
-      notepad.downloadNotesExcalidraw.attr('hidden', 'hidden');
-    }
-  };
-  tabManager.addActiveListener(syncDrawingExportRows);
-  syncDrawingExportRows();
-
-  // ---- the .padify file — the note as a file ------------------------
-  // The app's own save: the whole note (type, name, content, stamps) in
-  // one strict envelope that opens back as the same kind of note. The
-  // file is named what the rail calls the note; an untitled note falls
-  // back to the download family's dated stem.
-  const padifyOpen = initPadifyFileOpen(tabManager);
-  // The export image pass, shared by the .padify and .excalidraw saves:
-  // every attachment id the note references — a markdown note's
-  // `padify-att:` refs, a drawing's scene fileIds — decoded from this
-  // device's store. A blob that is not on this device (deleted, another
-  // device offline) exports as the bare reference — the importing device
-  // renders the missing placeholder, the same honesty the preview shows.
-  // Plain notes are text-only and carry no attachments, so they collect
-  // nothing — an empty list is the whole pass.
-  const collectNoteAttachments = async (captured: {
-    noteType?: string | null;
-    content: string;
-  }): Promise<PadifyFileAttachment[]> => {
-    const attachments: PadifyFileAttachment[] = [];
-    const referencedIds = collectNoteAttachmentIds(captured);
-    for (const id of referencedIds) {
-      // The meta rides along (the store's own name/mime — an exported
-      // webp says webp); a missing meta falls back to the generic
-      // octet-stream, which the importer still hydrates and renders.
-      const [bytes, meta] = await Promise.all([getAttachmentBytes(id), getAttachmentMeta(id)]);
-      if (bytes) {
-        attachments.push({
-          id,
-          name: meta?.name || `${id}.img`,
-          mime: meta?.mime || 'application/octet-stream',
-          bytes: bytesToBase64(bytes),
-        });
-      }
-    }
-    return attachments;
-  };
-  notepad.downloadNotesPadify.click(function () {
-    void (async function () {
-      const active = tabManager.getActive();
-      const captured = getActiveNoteContent();
-      if (!active || !captured) {
-        return;
-      }
-      const attachments = await collectNoteAttachments(captured);
-      // The LIVE title: the model's content lags typing by the save
-      // debounce, and the file is named for the note as it stands — the
-      // share modal's live-title lesson, applied to the file family.
-      const title = deriveTabTitle({ ...active, content: captured.content });
-      saveTextAsFile(
-        serializePadifyNoteFile(
-          {
-            name: active.name,
-            noteType: captured.noteType ?? DEFAULT_NOTE_TYPE,
-            content: captured.content,
-            createdAt: active.createdAt,
-            updatedAt: active.updatedAt,
-          },
-          Date.now(),
-          attachments,
-        ),
-        padifyFileName(title === 'Untitled' ? null : title, getDatedFileStem()),
-        PADIFY_MIME_TYPE,
-      );
-    })();
-  });
-
-  // The canvas's interop door: a drawing note out as a native
-  // .excalidraw file — excalidraw.com opens it as-is, the scene's image
-  // bytes riding the vendor's files map. Rides the same visibility rule
-  // as the PNG/SVG rows (something to save).
-  notepad.downloadNotesExcalidraw.click(function () {
-    void (async function () {
-      const active = tabManager.getActive();
-      const captured = getActiveNoteContent();
-      if (!active || captured?.noteType !== 'drawing') {
-        return;
-      }
-      const scene = parseDrawingScene(captured.content);
-      if (scene === null || scene.elements.length === 0) {
-        return;
-      }
-      // The image pass rides the same collector as the .padify save —
-      // the drawing branch, keyed on the same captured note.
-      const attachments = await collectNoteAttachments(captured);
-      // Live title, same as the Padify save (the model lags the canvas's
-      // announce debounce).
-      saveTextAsFile(
-        buildExcalidrawFile(scene, attachments),
-        excalidrawFileName(
-          deriveTabTitle({ ...active, content: captured.content }),
-          getDatedFileStem(),
-        ),
-        'application/json',
-      );
-    })();
-  });
-
-  // The open door: .padify (any note kind) and .excalidraw (a drawing
-  // waiting to happen) come back in as notes — see padify-file-ui.ts.
-  notepad.openNoteFile.click(function () {
-    padifyOpen.openNoteFilePicker();
-  });
+  // The download menu — every save-as row, the drawing/markdown row
+  // visibility and the .padify/.excalidraw doors. See download-menu.ts.
+  initDownloadMenu(notepad, tabManager);
 
   // ---- preview toggle — the top bar's Markdown-only button. The eye
   // flips the surface to the owned renderer's output and back to the
@@ -801,48 +565,9 @@ export async function initApp(): Promise<void> {
     }
   });
 
-  // ---- Keyboard shortcuts search filtering & reset ------------------
-  const shortcutSearchInput = document.getElementById('shortcutSearch') as HTMLInputElement | null;
-  const shortcutNoResults = document.getElementById('shortcutNoResults');
-  const shortcutSections = document.querySelectorAll<HTMLElement>('.shortcut-section');
-
-  const filterShortcuts = (query: string): void => {
-    const q = query.trim().toLowerCase();
-    let totalVisible = 0;
-
-    shortcutSections.forEach((section) => {
-      const rows = section.querySelectorAll<HTMLElement>('.shortcut-row');
-      let sectionVisibleCount = 0;
-
-      rows.forEach((row) => {
-        const searchText = row.getAttribute('data-search') || row.textContent?.toLowerCase() || '';
-        const matches = !q || searchText.includes(q);
-        row.style.display = matches ? 'flex' : 'none';
-        if (matches) sectionVisibleCount++;
-      });
-
-      section.style.display = sectionVisibleCount > 0 ? 'block' : 'none';
-      totalVisible += sectionVisibleCount;
-    });
-
-    if (shortcutNoResults) {
-      shortcutNoResults.style.display = totalVisible === 0 ? 'flex' : 'none';
-    }
-  };
-
-  if (shortcutSearchInput) {
-    shortcutSearchInput.addEventListener('input', (e) => {
-      filterShortcuts((e.target as HTMLInputElement).value);
-    });
-  }
-
-  notepad.keyboardShortcutsModal.on('show.bs.modal', function () {
-    if (shortcutSearchInput) {
-      shortcutSearchInput.value = '';
-      filterShortcuts('');
-      setTimeout(() => shortcutSearchInput.focus(), 150);
-    }
-  });
+  // The app's global keyboard surface — the shortcuts sheet's search and
+  // the document-level chord dispatcher (see app-shortcuts.ts).
+  initAppShortcuts({ notepad, tabManager, unicodePicker });
 
   // ---- statistics modal — the note report ----------------------------------
   // The board is static structure with data-stat keys on every value slot;
@@ -919,109 +644,8 @@ export async function initApp(): Promise<void> {
   // Floating window — see pip-window.ts. Standard notes only.
   initPipWindow(tabManager);
 
-  // This listens for keyboard shortcuts.
-  // Use addEventListener (not document.onkeydown = ...) so the handler composes
-  // with the capture-phase listeners registered elsewhere in the codebase
-  // (context-menu.ts, voice.ts, note-type-menu.ts, help.ts) instead of clobbering
-  // the only `onkeydown` slot on the document.
-  document.addEventListener('keydown', (event: KeyboardEvent) => {
-    if (event.key === 'Escape') {
-      closeAllModals();
-    }
-
-    // On Apple keyboards Option+letter is ordinary character input. The
-    // Alt-combos below call preventDefault unconditionally, which made
-    // Option+S / C / V untypeable in EVERY text field (tab rename,
-    // settings search, share modal, music search, the markdown source
-    // pane) — the shortcut fired instead. The editor itself is the one
-    // place Alt+V is a deliberate gesture, so: editable targets keep
-    // their characters except the editor host.
-    const shortcutTarget = event.target as unknown as HTMLElement | null;
-    const targetTag = shortcutTarget?.tagName ?? '';
-    const targetIsEditable =
-      !!shortcutTarget &&
-      (shortcutTarget.isContentEditable ||
-        targetTag === 'INPUT' ||
-        targetTag === 'TEXTAREA' ||
-        targetTag === 'SELECT');
-    const altComboBlocked =
-      event.altKey &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      targetIsEditable &&
-      shortcutTarget !== notepad.note.get(0) &&
-      !notepad.note.get(0)?.contains(shortcutTarget);
-
-    if ((event.ctrlKey || event.metaKey) && !event.altKey && event.code === 'KeyS') {
-      saveTextAsFile(getEditorText(), getFileName());
-      event.preventDefault();
-    }
-
-    // Alt+S without the primary modifier — exact match, so Ctrl+Alt+S
-    // (the snapshot chord, see snapshots.ts) never rides along.
-    if (
-      event.altKey &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      event.code === 'KeyS' &&
-      !altComboBlocked
-    ) {
-      exportNotesAsPDF(getEditorText(), getPdfFileName());
-      event.preventDefault();
-    }
-
-    if ((event.ctrlKey || event.metaKey) && event.code === 'Comma') {
-      event.preventDefault();
-
-      if (notepad.preferencesModal.hasClass('in')) return;
-
-      closeAllModals();
-      openModal(notepad.preferencesModal.get(0));
-    }
-
-    if ((event.ctrlKey || event.metaKey) && event.code === 'KeyK') {
-      event.preventDefault();
-
-      if (notepad.keyboardShortcutsModal.hasClass('in')) return;
-
-      closeAllModals();
-      openModal(notepad.keyboardShortcutsModal.get(0));
-    }
-
-    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyO') {
-      event.preventDefault();
-      unicodePicker.open();
-    }
-
-    if (event.altKey && event.code === 'KeyC' && !altComboBlocked) {
-      event.preventDefault();
-      copyNotesToClipboard(getEditorText());
-    }
-
-    if (
-      (event.ctrlKey && event.shiftKey && event.code === 'Delete') ||
-      (event.metaKey && event.shiftKey && event.code === 'Backspace')
-    ) {
-      event.preventDefault();
-      void deleteNotes();
-    }
-
-    // Alt/option + v toggles voice typing.
-    if (event.altKey && event.code === 'KeyV' && !altComboBlocked) {
-      event.preventDefault();
-      toggleVoiceTyping();
-    }
-
-    // Ctrl/Cmd + Alt + Arrow keys move between note tabs.
-    if (
-      (event.ctrlKey || event.metaKey) &&
-      event.altKey &&
-      (event.key === 'ArrowRight' || event.key === 'ArrowLeft')
-    ) {
-      event.preventDefault();
-      tabManager.cycle(event.key === 'ArrowRight' ? 1 : -1);
-    }
-  });
+  // The shortcut dispatcher itself lives in app-shortcuts.ts (wired
+  // above with the shortcuts sheet).
 
   document.addEventListener('fullscreenchange', function () {
     if (!document.fullscreenElement) {
