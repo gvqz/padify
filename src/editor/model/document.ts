@@ -183,11 +183,13 @@ export function textStreamOf(root: HTMLElement): string {
  * Visits every text node of the subtree in document order with its stream
  * start offset and its zero-width-excluded content, skipping math shells
  * (inline atoms — never text positions). The shared walker for offset
- * counting and caret placement.
+ * counting and caret placement — returning `false` from the visit stops
+ * the walk there (the coverage windowing in ops.ts rides this instead of
+ * re-spelling the walk).
  */
 export function walkTextStream(
   root: HTMLElement,
-  visit: (node: Text, start: number, visible: string) => void,
+  visit: (node: Text, start: number, visible: string) => void | false,
 ): void {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let consumed = 0;
@@ -200,7 +202,9 @@ export function walkTextStream(
     const visible = (text.nodeValue ?? '').replace(/\u200B/g, '');
     const start = consumed;
     consumed += visible.length;
-    visit(text, start, visible);
+    if (visit(text, start, visible) === false) {
+      return;
+    }
   }
 }
 
@@ -210,6 +214,31 @@ export function walkTextStream(
  */
 export function streamLength(text: Text): number {
   return (text.nodeValue ?? '').replace(/\u200B/g, '').length;
+}
+
+/**
+ * The stream length of any subtree — a text node counts its own
+ * zero-width-excluded content, an element counts its descendants' (math
+ * shells skipped: inline atoms never hold text positions), anything else
+ * counts nothing. THE one counter: selection.ts's restore clamp and ops'
+ * node accounting both read it, on the same rules walkTextStream counts
+ * by — the two hand-rolled twins this replaces could only drift apart.
+ */
+export function streamLengthOfSubtree(node: Node | null): number {
+  if (!node) {
+    return 0;
+  }
+  if (node instanceof HTMLElement && node.classList.contains('padify-math')) {
+    return 0;
+  }
+  if (node.nodeType === Node.TEXT_NODE) {
+    return streamLength(node as Text);
+  }
+  let count = 0;
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    count += streamLengthOfSubtree(child);
+  }
+  return count;
 }
 
 /**
@@ -299,6 +328,23 @@ export function formatStyleAttr(
  */
 export function stylePropOf(element: HTMLElement, prop: string): string | null {
   return parseStyleAttr(element.getAttribute('style')).get(prop) ?? null;
+}
+
+/**
+ * Reads a block's margin-left indent in px, or 0 when it carries none (or
+ * carries it in a form this reader doesn't speak — the stored subset only
+ * ever writes px steps, so anything else reads as none). This is the one
+ * margin reader: the indent op, the plain-note migration and the port's
+ * outdent all asked the same question with three hand-rolled parsers that
+ * had to agree.
+ */
+export function marginLeftPxOf(block: HTMLElement): number {
+  const value = stylePropOf(block, 'margin-left');
+  if (value === null) {
+    return 0;
+  }
+  const px = /^(\d+(?:\.\d+)?)px$/.exec(value.trim());
+  return px ? parseFloat(px[1]!) : 0;
 }
 
 /**

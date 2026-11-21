@@ -16,6 +16,12 @@
  * also editing".
  */
 
+// The subtree counter is the one definition in document.ts
+// (streamLengthOfSubtree) — this module rode a byte-identical private twin
+// for years, and one drifted member of that pair would corrupt every
+// caret in the app.
+import { streamLengthOfSubtree as streamOfSubtree } from './document';
+
 /**
  * A selection in model coordinates. anchor ≤ focus is NOT guaranteed —
  * the user's selection direction is preserved.
@@ -28,26 +34,6 @@ export interface Offsets {
 /** Sorted [min, max] of a pair of stream offsets. */
 export function ordered(pair: { anchor: number; focus: number }): [number, number] {
   return pair.anchor <= pair.focus ? [pair.anchor, pair.focus] : [pair.focus, pair.anchor];
-}
-
-/**
- * The stream of a subtree — zero-width runs excluded, math shells skipped.
- */
-function streamOfSubtree(node: Node | null): number {
-  if (!node) {
-    return 0;
-  }
-  if (node instanceof HTMLElement && node.classList.contains('padify-math')) {
-    return 0;
-  }
-  if (node.nodeType === Node.TEXT_NODE) {
-    return (node.nodeValue ?? '').replace(/\u200B/g, '').length;
-  }
-  let count = 0;
-  for (let child = node.firstChild; child; child = child.nextSibling) {
-    count += streamOfSubtree(child);
-  }
-  return count;
 }
 
 /** The stream held by the first `until` children of a parent. */

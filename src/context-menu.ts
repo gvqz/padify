@@ -135,6 +135,43 @@ const FORMATS: FormatDef[] = [
   },
 ];
 
+/**
+ * The html surface's format keymap — Mod+B/I/U and Mod+Shift+X — asked as
+ * ONE question so it has one answer: the main window's handler applies the
+ * menu's FormatDef through the port, the floating window runs the raw
+ * command in its own document, and neither re-spells the keys. Null when
+ * the keystroke is not a format shortcut (the caller's business carries
+ * on). The modifiers ride inside: a caller that only wants to know
+ * "which format, if any" asks this and nothing else.
+ */
+export function formatShortcutFor(event: {
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+  code: string;
+}): FormatDef | null {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey) {
+    return null;
+  }
+  let id: FormatDef['id'] | null = null;
+  if (event.shiftKey) {
+    if (event.code === 'KeyX') {
+      id = 'strike';
+    }
+  } else if (event.code === 'KeyB') {
+    id = 'bold';
+  } else if (event.code === 'KeyI') {
+    id = 'italic';
+  } else if (event.code === 'KeyU') {
+    id = 'underline';
+  }
+  if (!id) {
+    return null;
+  }
+  return FORMATS.find((entry) => entry.id === id) ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // Icons
 // ---------------------------------------------------------------------------
@@ -983,7 +1020,6 @@ class ContextMenu {
     document.addEventListener(
       'keydown',
       (event: KeyboardEvent) => {
-        if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
         const target = event.target as HTMLElement | null;
         if (!target || (target.id !== 'note' && target.closest('#note') === null)) return;
         // These are the html surface's format commands; a Markdown note's
@@ -991,17 +1027,7 @@ class ContextMenu {
         // park the keystroke on an inert port.
         if (!isHtmlContent(getTabManager()?.getActive()?.noteType)) return;
 
-        let formatId: FormatDef['id'] | null = null;
-        if (event.shiftKey && event.code === 'KeyX') {
-          formatId = 'strike';
-        } else if (!event.shiftKey) {
-          if (event.code === 'KeyB') formatId = 'bold';
-          else if (event.code === 'KeyI') formatId = 'italic';
-          else if (event.code === 'KeyU') formatId = 'underline';
-        }
-        if (!formatId) return;
-
-        const def = FORMATS.find((entry) => entry.id === formatId);
+        const def = formatShortcutFor(event);
         if (!def) return;
         event.preventDefault();
         this.editor = target.closest('#note');

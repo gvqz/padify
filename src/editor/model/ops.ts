@@ -20,7 +20,9 @@ import {
   INDENT_STEP_PX,
   MAX_INDENT_PX,
   ZERO_WIDTH_SPACE,
+  marginLeftPxOf,
   setStyleProp,
+  streamLengthOfSubtree,
   textStreamOf,
   walkTextStream,
 } from './document';
@@ -28,6 +30,34 @@ import { boundaryToStream, spotAtStream, spotElement, type DomSpot } from './sel
 
 /** Where the caret/selection should land after an operation. */
 export type OpIntent = { spot: DomSpot } | { range: [number, number] } | { preserve: true };
+
+/**
+ * Inserts a node at a DomSpot — THE spot-insertion primitive. A text spot
+ * splits its node when the offset sits mid-text and the new node lands at
+ * the offset; an element spot lands at the child index. This shape was
+ * five hand-copies (the plant, the link, the math shell, the plain-text
+ * splice) whose drift shipped real caret bugs — insertPlainText's
+ * boundary comments document two — so it is one spelling now.
+ */
+function insertNodeAtSpot(node: Node, spot: DomSpot): void {
+  if (spot.kind === 'text') {
+    const text = spot.node;
+    if (spot.raw >= (text.nodeValue ?? '').length) {
+      text.parentNode?.insertBefore(node, text.nextSibling);
+    } else if (spot.raw === 0) {
+      text.parentNode?.insertBefore(node, text);
+    } else {
+      const tail = text.splitText(spot.raw);
+      tail.parentNode?.insertBefore(node, tail);
+    }
+    return;
+  }
+  if (spot.childIndex >= spot.node.childNodes.length) {
+    spot.node.append(node);
+  } else {
+    spot.node.insertBefore(node, spot.node.childNodes[spot.childIndex]!);
+  }
+}
 
 /** The standard operation result. */
 export interface OpResult {
@@ -67,29 +97,24 @@ function splitAtEdges(model: HTMLElement, coverage: [number, number]): void {
 
 /**
  * The text nodes the coverage touches (whole nodes after splitAtEdges),
- * document order — the runs a mark or style operation addresses.
+ * document order — the runs a mark or style operation addresses. The
+ * walk is the shared one (walkTextStream); the windowing — stop past the
+ * coverage's end, keep every node whose visible run overlaps it — is all
+ * this adds. It used to re-spell the whole TreeWalker walk, a drift away
+ * from the counting every offset in the engine agrees by.
  */
 function coveredTextNodes(model: HTMLElement, coverage: [number, number]): Text[] {
   const out: Text[] = [];
-  const walker = document.createTreeWalker(model, NodeFilter.SHOW_TEXT);
-  let consumed = 0;
-  let node: Node | null;
-  while ((node = walker.nextNode())) {
-    const text = node as Text;
-    if (text.parentElement?.closest('.padify-math')) {
-      continue;
-    }
-    const visible = (text.nodeValue ?? '').replace(/\u200B/g, '');
-    const start = consumed;
-    consumed += visible.length;
+  walkTextStream(model, (text, start, visible) => {
     if (start >= coverage[1]) {
-      break;
+      return false; // past the window — stop the walk
     }
     const end = start + visible.length;
     if (end > coverage[0] && (visible !== '' || start >= coverage[0])) {
       out.push(text);
     }
-  }
+    return undefined;
+  });
   return out;
 }
 
@@ -251,7 +276,7 @@ function materializeRootRun(model: HTMLElement, coverage: [number, number]): HTM
   let seen = 0;
   let holder = -1;
   for (let index = 0; index < kids.length; index += 1) {
-    const length = streamLengthOfNode(kids[index]!);
+    const length = streamLengthOfSubtree(kids[index]!);
     if (!isBlock(kids[index]!) && seen + length > coverage[0] && length > 0) {
       holder = index;
       break;
@@ -284,19 +309,6 @@ function materializeRootRun(model: HTMLElement, coverage: [number, number]): HTM
   return wrapper;
 }
 
-function streamLengthOfNode(node: Node): number {
-  if (node instanceof HTMLElement && node.classList.contains('padify-math')) {
-    return 0;
-  }
-  if (node.nodeType === Node.TEXT_NODE) {
-    return (node.nodeValue ?? '').replace(/\u200B/g, '').length;
-  }
-  let count = 0;
-  for (let child = node.firstChild; child; child = child.nextSibling) {
-    count += streamLengthOfNode(child);
-  }
-  return count;
-}
 /** Replaces an element with its children. */
 export function unwrap(el: HTMLElement): void {
   const parent = el.parentNode;
@@ -337,7 +349,7 @@ export function toggleMark(
     return UNCHANGED;
   }
   splitAtEdges(model, coverage);
-  const texts = coveredTextNodes(model, coverage).filter((t) => streamLengthOfNode(t) > 0);
+  const texts = coveredTextNodes(model, coverage).filter((t) => streamLengthOfSubtree(t) > 0);
   if (texts.length === 0) {
     return UNCHANGED;
   }
@@ -383,7 +395,7 @@ export function removeInlineFormatting(model: HTMLElement, coverage: [number, nu
     return UNCHANGED;
   }
   splitAtEdges(model, coverage);
-  const texts = coveredTextNodes(model, coverage).filter((t) => streamLengthOfNode(t) > 0);
+  const texts = coveredTextNodes(model, coverage).filter((t) => streamLengthOfSubtree(t) > 0);
   if (texts.length === 0) {
     return UNCHANGED;
   }
@@ -436,7 +448,7 @@ export function setInlineStyle(
     return UNCHANGED;
   }
   splitAtEdges(model, coverage);
-  const texts = coveredTextNodes(model, coverage).filter((t) => streamLengthOfNode(t) > 0);
+  const texts = coveredTextNodes(model, coverage).filter((t) => streamLengthOfSubtree(t) > 0);
   if (texts.length === 0) {
     return UNCHANGED;
   }
@@ -525,23 +537,7 @@ export function plantStyledCaret(
   const span = document.createElement('span');
   span.setAttribute('style', styleAttr);
   span.append(document.createTextNode('\u200B'));
-  if (spot.kind === 'text') {
-    const text = spot.node;
-    if (spot.raw >= (text.nodeValue ?? '').length) {
-      text.parentNode?.insertBefore(span, text.nextSibling);
-    } else if (spot.raw === 0) {
-      text.parentNode?.insertBefore(span, text);
-    } else {
-      const tail = text.splitText(spot.raw);
-      tail.parentNode?.insertBefore(span, tail);
-    }
-  } else {
-    if (spot.childIndex >= spot.node.childNodes.length) {
-      spot.node.append(span);
-    } else {
-      spot.node.insertBefore(span, spot.node.childNodes[spot.childIndex]!);
-    }
-  }
+  insertNodeAtSpot(span, spot);
   return {
     changed: true,
     intent: { spot: { kind: 'text', node: span.firstChild as Text, raw: 1 } },
@@ -805,11 +801,7 @@ export function shiftBlockIndent(
   }
   let changed = false;
   for (const block of blocks) {
-    const current =
-      parseInt(
-        block.getAttribute('style')?.match(/margin-left:\s*(\d+(?:\.\d+)?)px/)?.[1] ?? '0',
-        10,
-      ) || 0;
+    const current = marginLeftPxOf(block);
     const next = Math.min(Math.max(current + delta * INDENT_STEP_PX, 0), MAX_INDENT_PX);
     if (next === current) {
       continue;
@@ -844,7 +836,7 @@ export function firstStreamTextNode(root: HTMLElement): Text | null {
  * went in.
  */
 export function insertLeadingTab(block: HTMLElement): boolean {
-  if (streamLengthOfNode(block) === 0) {
+  if (streamLengthOfSubtree(block) === 0) {
     block.querySelector('br')?.remove();
     block.insertBefore(document.createTextNode('\t'), block.firstChild);
     return true;
@@ -883,7 +875,7 @@ export function stripLeadingTab(block: HTMLElement): boolean {
   } else {
     first.nodeValue = kept;
   }
-  if (streamLengthOfNode(block) === 0 && !block.querySelector('br')) {
+  if (streamLengthOfSubtree(block) === 0 && !block.querySelector('br')) {
     block.appendChild(document.createElement('br'));
   }
   return true;
@@ -1356,7 +1348,7 @@ export function wrapLink(model: HTMLElement, coverage: [number, number], href: s
     return UNCHANGED;
   }
   splitAtEdges(model, coverage);
-  const texts = coveredTextNodes(model, coverage).filter((t) => streamLengthOfNode(t) > 0);
+  const texts = coveredTextNodes(model, coverage).filter((t) => streamLengthOfSubtree(t) > 0);
   if (texts.length === 0) {
     return UNCHANGED;
   }
@@ -1387,21 +1379,7 @@ export function plantLink(model: HTMLElement, at: number, href: string): OpResul
   const anchor = document.createElement('a');
   anchor.setAttribute('href', href);
   anchor.append(document.createTextNode(href));
-  if (spot.kind === 'text') {
-    const text = spot.node;
-    if (spot.raw >= (text.nodeValue ?? '').length) {
-      text.parentNode?.insertBefore(anchor, text.nextSibling);
-    } else if (spot.raw === 0) {
-      text.parentNode?.insertBefore(anchor, text);
-    } else {
-      const tail = text.splitText(spot.raw);
-      tail.parentNode?.insertBefore(anchor, tail);
-    }
-  } else if (spot.childIndex >= spot.node.childNodes.length) {
-    spot.node.append(anchor);
-  } else {
-    spot.node.insertBefore(anchor, spot.node.childNodes[spot.childIndex]!);
-  }
+  insertNodeAtSpot(anchor, spot);
   return {
     changed: true,
     intent: { spot: { kind: 'text', node: anchor.firstChild as Text, raw: href.length } },
@@ -1452,42 +1430,22 @@ export function plantMath(model: HTMLElement, at: number, latex: string): OpResu
   const shell = document.createElement('span');
   shell.setAttribute('class', 'padify-math');
   shell.setAttribute('data-latex', latex);
-  let afterSpot: DomSpot;
-  if (spot.kind === 'text') {
-    const text = spot.node;
-    const parent = text.parentNode!;
-    if (spot.raw >= (text.nodeValue ?? '').length) {
-      parent.insertBefore(shell, text.nextSibling);
-      afterSpot = {
-        kind: 'element',
-        node: parent as Element,
-        childIndex: Array.prototype.indexOf.call(parent.childNodes, shell) + 1,
-      };
-    } else if (spot.raw === 0) {
-      parent.insertBefore(shell, text);
-      afterSpot = {
-        kind: 'element',
-        node: parent as Element,
-        childIndex: Array.prototype.indexOf.call(parent.childNodes, shell) + 1,
-      };
-    } else {
-      const tail = text.splitText(spot.raw);
-      parent.insertBefore(shell, tail);
-      afterSpot = { kind: 'text', node: tail, raw: 0 };
-    }
-  } else {
-    const parent = spot.node;
-    if (spot.childIndex >= parent.childNodes.length) {
-      parent.append(shell);
-    } else {
-      parent.insertBefore(shell, parent.childNodes[spot.childIndex]!);
-    }
-    afterSpot = {
-      kind: 'element',
-      node: parent,
-      childIndex: Array.prototype.indexOf.call(parent.childNodes, shell) + 1,
-    };
-  }
+  insertNodeAtSpot(shell, spot);
+  // The caret lands right after the shell: at a mid-text insertion that
+  // is the tail run's start; everywhere else it is the parent's child
+  // past the shell. Both spellings name the same boundary — each is just
+  // the natural one for where the shell landed.
+  const afterSpot: DomSpot =
+    shell.nextSibling?.nodeType === Node.TEXT_NODE
+      ? { kind: 'text', node: shell.nextSibling as Text, raw: 0 }
+      : {
+          kind: 'element',
+          node: (shell.parentNode ?? spot.node) as Element,
+          childIndex: Array.prototype.indexOf.call(
+            shell.parentNode?.childNodes ?? [],
+            shell,
+          ) + 1,
+        };
   return { changed: true, intent: { spot: afterSpot } };
 }
 
@@ -1582,21 +1540,7 @@ export function insertPlainText(
       intent: { spot: { kind: 'text', node: node, raw: text.length } },
     };
   }
-  if (fresh.kind === 'text') {
-    const target = fresh.node;
-    if (fresh.raw >= (target.nodeValue ?? '').length) {
-      target.parentNode?.insertBefore(node, target.nextSibling);
-    } else if (fresh.raw === 0) {
-      target.parentNode?.insertBefore(node, target);
-    } else {
-      const tail = target.splitText(fresh.raw);
-      tail.parentNode?.insertBefore(node, tail);
-    }
-  } else if (fresh.childIndex >= fresh.node.childNodes.length) {
-    fresh.node.append(node);
-  } else {
-    fresh.node.insertBefore(node, fresh.node.childNodes[fresh.childIndex]!);
-  }
+  insertNodeAtSpot(node, fresh);
   return {
     changed: true,
     intent: { spot: { kind: 'text', node: node, raw: text.length } },
@@ -1610,7 +1554,7 @@ function coverageTouchesFully(node: Text): boolean {
   // styled caret) has raw nodeValue but zero visible characters — the
   // comment contract says those SURVIVE a plain-text splice, and an
   // emptied styled span should not persist.
-  return streamLengthOfNode(node) > 0;
+  return streamLengthOfSubtree(node) > 0;
 }
 
 /**

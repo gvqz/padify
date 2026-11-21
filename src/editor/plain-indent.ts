@@ -16,22 +16,12 @@
  * still manage it.
  */
 
-import { INDENTABLE_TAGS, INDENT_STEP_PX, setStyleProp } from './model/document';
+import { INDENTABLE_TAGS, INDENT_STEP_PX, marginLeftPxOf, setStyleProp } from './model/document';
 import { insertLeadingTab } from './model/ops';
-
-/** Reads a block's margin-left step in px, or 0 when it carries none. */
-function marginLeftPx(block: HTMLElement): number {
-  return (
-    parseInt(
-      block.getAttribute('style')?.match(/margin-left:\s*(\d+(?:\.\d+)?)px/)?.[1] ?? '0',
-      10,
-    ) || 0
-  );
-}
 
 /** True when the block itself steps a margin. */
 function hasMargin(block: HTMLElement): boolean {
-  return marginLeftPx(block) > 0;
+  return marginLeftPxOf(block) > 0;
 }
 
 /**
@@ -61,7 +51,7 @@ export function migrateMarginIndentsToTabs(html: string): string {
   // tab gesture. Lists never carried the margin gesture; their LI blocks
   // are not INDENTABLE and do not match the selector.
   for (const block of candidates) {
-    const steps = Math.max(1, Math.round(marginLeftPx(block) / INDENT_STEP_PX));
+    const steps = Math.max(1, Math.round(marginLeftPxOf(block) / INDENT_STEP_PX));
     for (let step = 0; step < steps; step += 1) {
       insertLeadingTab(block);
     }

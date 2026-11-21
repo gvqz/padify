@@ -34,6 +34,7 @@ import {
   parse,
   serialize,
   streamLength,
+  marginLeftPxOf,
   collapseEmptySurface,
   surfaceIsEmptyForPlaceholder,
   surfaceLooksEmpty,
@@ -944,47 +945,41 @@ export class ModelPort implements EditorPort {
   }
 
   undo(): boolean {
+    return this.walkHistory('undo');
+  }
+
+  redo(): boolean {
+    return this.walkHistory('redo');
+  }
+
+  /**
+   * One history walk, both directions — the pair used to be two
+   * byte-identical bodies that could only drift apart. Absorb, capture,
+   * pop the direction's entry, repaint, reselect with the popped caret
+   * falling back to the live one (end of the note when neither exists).
+   */
+  private walkHistory(direction: 'undo' | 'redo'): boolean {
     // Undoing closes the typing burst: the popped group is gone, so the
     // next keystroke must open a NEW one. The flag otherwise stays armed
     // and every later keystroke on the note silently bypasses the history
     // (type → undo → type → undo did nothing — the second burst continued
-    // a group that no longer existed).
+    // a group that no longer existed). Redo walks the same discipline: a
+    // redo is a history walk, not a burst continuation.
     this.typingGroupOpen = false;
     this.absorb();
     const current = serialize(this.model);
-    // The caret rides BOTH ways: the live one becomes the redo entry's
-    // caret (the state being left), and the popped entry's caret — where
-    // that state was actually left — is where undo puts the caret back.
-    // Reusing the live offsets instead drifts the caret into the restored
-    // text whenever the undone edit changed the length before it (a tab
-    // taken back put the caret after the first letter; a redone tab put
-    // it INSIDE the last word, and the next keystroke typed mid-word).
+    // The caret rides BOTH ways: the live one becomes the popped entry's
+    // pair (the state being left), and the popped entry's caret — where
+    // that state was actually left — is where the walk puts the caret
+    // back. Reusing the live offsets instead drifts the caret into the
+    // restored text whenever the undone edit changed the length before it
+    // (a tab taken back put the caret after the first letter; a redone tab
+    // put it INSIDE the last word, and the next keystroke typed mid-word).
     const selection = captureOffsets(this.element);
-    const restore = this.history.undo(current, selection);
-    if (restore === null) {
-      return false;
-    }
-    this.pendingMark = null;
-    this.paint(restore.state);
-    this.element.dispatchEvent(new Event('input', { bubbles: true }));
-    if (restore.caret) {
-      this.reselect(restore.caret, streamLengthOf(this.element));
-    } else if (selection) {
-      this.reselect(selection, streamLengthOf(this.element));
-    } else {
-      placeCaretAtSpot(this.element, spotAtStream(this.element, streamLengthOf(this.element)));
-    }
-    return true;
-  }
-
-  redo(): boolean {
-    // Same discipline as undo: a redo is a history walk, not a burst
-    // continuation — new typing afterwards opens its own group.
-    this.typingGroupOpen = false;
-    this.absorb();
-    const current = serialize(this.model);
-    const selection = captureOffsets(this.element);
-    const restore = this.history.redo(current, selection);
+    const restore =
+      direction === 'undo'
+        ? this.history.undo(current, selection)
+        : this.history.redo(current, selection);
     if (restore === null) {
       return false;
     }
@@ -1156,17 +1151,35 @@ export class ModelPort implements EditorPort {
   }
 
   indent(): boolean {
+    return this.shiftIndent(1);
+  }
+
+  outdent(): boolean {
+    return this.shiftIndent(-1);
+  }
+
+  /**
+   * The one indent walk, both directions — the pair used to be two
+   * byte-identical bodies. A list nests/un-nests its item; a block steps
+   * its margin by the delta with the caret pinned to the block's start.
+   */
+  private shiftIndent(delta: 1 | -1): boolean {
     // The live caret's spot disambiguates a BLOCK-START caret (its offset
     // alone answers the previous block — see insertPlainText's prefer).
     const caretSpot = liveCollapsedSpot(this.element);
     if (this.queryListKind() !== null) {
+      const nest = delta > 0;
       return this.command((model, coverage) =>
-        nestListItem(model, coverage[0], this.preferInModel(caretSpot, model, coverage[0])),
+        (nest ? nestListItem : unnestListItem)(
+          model,
+          coverage[0],
+          this.preferInModel(caretSpot, model, coverage[0]),
+        ),
       );
     }
     return this.command((model, coverage) => {
       const prefer = this.preferInModel(caretSpot, model, coverage[0]);
-      const result = shiftBlockIndent(model, coverage, 1, prefer);
+      const result = shiftBlockIndent(model, coverage, delta, prefer);
       if (!result.changed) {
         return result;
       }
@@ -1174,23 +1187,6 @@ export class ModelPort implements EditorPort {
       // boundary offset resolves to the END of the line above (the
       // ambiguity the live spot exists to break), and the next keystroke
       // would type into that line instead of the indented one.
-      return { changed: true, intent: prefer ? { spot: prefer } : { preserve: true } };
-    });
-  }
-
-  outdent(): boolean {
-    const caretSpot = liveCollapsedSpot(this.element);
-    if (this.queryListKind() !== null) {
-      return this.command((model, coverage) =>
-        unnestListItem(model, coverage[0], this.preferInModel(caretSpot, model, coverage[0])),
-      );
-    }
-    return this.command((model, coverage) => {
-      const prefer = this.preferInModel(caretSpot, model, coverage[0]);
-      const result = shiftBlockIndent(model, coverage, -1, prefer);
-      if (!result.changed) {
-        return result;
-      }
       return { changed: true, intent: prefer ? { spot: prefer } : { preserve: true } };
     });
   }
@@ -1374,11 +1370,7 @@ export class ModelPort implements EditorPort {
       return null;
     }
 
-    const margin =
-      parseInt(
-        el.getAttribute('style')?.match(/margin-left:\s*(\d+(?:\.\d+)?)px/)?.[1] ?? '0',
-        10,
-      ) || 0;
+    const margin = marginLeftPxOf(el);
     if (margin <= 0) {
       return null;
     }
@@ -1949,12 +1941,7 @@ export class ModelPort implements EditorPort {
   // -------------------------------------------------------------------------
 
   private inlineAtCaret(tag: string): HTMLElement | null {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) {
-      return null;
-    }
-    const node = selection.getRangeAt(0).startContainer;
-    let el: HTMLElement | null = node instanceof HTMLElement ? node : node.parentElement;
+    let el = this.ancestorFromCaret();
     const upper = tag.toUpperCase();
     while (el && el !== this.element) {
       if (el.tagName === upper) {
@@ -1968,13 +1955,23 @@ export class ModelPort implements EditorPort {
     return null;
   }
 
-  private blockAtCaret(): HTMLElement | null {
+  /**
+   * The element the caret sits in — the live selection's start container
+   * wrapped to its HTMLElement, or null when no selection exists. The
+   * caret queries each open with this scaffold; one spelling keeps the
+   * walk's start honest.
+   */
+  private ancestorFromCaret(): HTMLElement | null {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
       return null;
     }
     const node = selection.getRangeAt(0).startContainer;
-    let el: HTMLElement | null = node instanceof HTMLElement ? node : node.parentElement;
+    return node instanceof HTMLElement ? node : node.parentElement;
+  }
+
+  private blockAtCaret(): HTMLElement | null {
+    let el = this.ancestorFromCaret();
     while (el && el !== this.element) {
       if (/^(DIV|P|H1|H2|H3|BLOCKQUOTE|PRE|LI|TD|TH)$/.test(el.tagName)) {
         return el;
@@ -1985,12 +1982,7 @@ export class ModelPort implements EditorPort {
   }
 
   private listAtCaret(): HTMLElement | null {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) {
-      return null;
-    }
-    const node = selection.getRangeAt(0).startContainer;
-    let el: HTMLElement | null = node instanceof HTMLElement ? node : node.parentElement;
+    let el = this.ancestorFromCaret();
     while (el && el !== this.element) {
       if (el.tagName === 'UL' || el.tagName === 'OL') {
         return el;
@@ -2002,12 +1994,7 @@ export class ModelPort implements EditorPort {
 
   /** The innermost styled span at the caret carrying a given property. */
   private styledSpanAtCaret(prop: string): string | null {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) {
-      return null;
-    }
-    const node = selection.getRangeAt(0).startContainer;
-    let el: HTMLElement | null = node instanceof HTMLElement ? node : node.parentElement;
+    let el = this.ancestorFromCaret();
     // Anchored: `color:` must open the style or follow a declaration —
     // an unanchored match also hit the tail of `background-color:` and
     // reported the highlight's hex as the text ink.
@@ -2028,12 +2015,7 @@ export class ModelPort implements EditorPort {
   }
 
   private shellAtCaret(): HTMLElement | null {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) {
-      return null;
-    }
-    const node = selection.getRangeAt(0).startContainer;
-    let el: HTMLElement | null = node instanceof HTMLElement ? node : node.parentElement;
+    let el = this.ancestorFromCaret();
     while (el && el !== this.element) {
       if (el.classList.contains('padify-math')) {
         return el;

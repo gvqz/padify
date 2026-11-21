@@ -1,6 +1,9 @@
 import { $ } from './lib/q';
 import { showToast } from './ui/toast';
 import { saveTextAsFile, getFileName } from './exports';
+// The html surface's one format keymap — the context menu owns the map,
+// the floating window asks it the same question.
+import { formatShortcutFor } from './context-menu';
 import { getEditorText, deriveTabTitle, type NoteTab, type TabManager } from './tabs';
 import { isListening, stopVoiceTyping } from './voice';
 import { htmlToText } from './editor/note-content';
@@ -516,28 +519,23 @@ export function initPipWindow(tabManager: TabManager): void {
         const target = event.target as HTMLElement | null;
         if (!target || (target.id !== 'note' && target.closest('#note') === null)) return;
 
-        if ((event.ctrlKey || event.metaKey) && !event.altKey) {
-          let command: string | null = null;
-          if (event.shiftKey && event.code === 'KeyX') {
-            command = 'strikeThrough';
-          } else if (!event.shiftKey) {
-            if (event.code === 'KeyB') command = 'bold';
-            else if (event.code === 'KeyI') command = 'italic';
-            else if (event.code === 'KeyU') command = 'underline';
-            else if (event.code === 'KeyS') {
-              event.preventDefault();
-              saveTextAsFile(getEditorText(), getFileName());
-              return;
-            }
+        // The format keys are the html surface's one keymap (the context
+        // menu owns it — formatShortcutFor); the raw execCommand runs in
+        // the FLOATING window's document, so the port's commands (bound to
+        // the main document) cannot serve here.
+        const format = formatShortcutFor(event);
+        if (format) {
+          event.preventDefault();
+          try {
+            newPipWindow.document.execCommand(format.command);
+          } catch {
+            /* command unsupported in this browser */
           }
-          if (command) {
-            event.preventDefault();
-            try {
-              newPipWindow.document.execCommand(command);
-            } catch {
-              /* command unsupported in this browser */
-            }
-          }
+          return;
+        }
+        if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.code === 'KeyS') {
+          event.preventDefault();
+          saveTextAsFile(getEditorText(), getFileName());
         }
       });
 
