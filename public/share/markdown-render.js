@@ -4800,6 +4800,9 @@ function canListInterrupt(line) {
   }
   const markerLen = bullet ? 1 : ordered[1].length + 1;
   const rest = stripped.slice(markerLen);
+  return rest.slice(markerPadding(rest)).trim() !== "";
+}
+function markerPadding(rest) {
   let padding = 0;
   while (padding < 4 && rest[padding] === " ") {
     padding += 1;
@@ -4807,7 +4810,7 @@ function canListInterrupt(line) {
   if (padding === 4 && rest[4] === " ") {
     padding = 1;
   }
-  return rest.slice(Math.max(padding, 1)).trim() !== "";
+  return Math.max(padding, 1);
 }
 function listMarkerKind(line) {
   if (indentWidth(line) >= 4) {
@@ -4838,15 +4841,9 @@ function matchListItem(line) {
   }
   const markerLen = bullet ? 1 : ordered[1].length + 1;
   const rest = stripped.slice(markerLen);
-  let padding = 0;
-  while (padding < 4 && rest[padding] === " ") {
-    padding += 1;
-  }
-  if (padding === 4 && rest[4] === " ") {
-    padding = 1;
-  }
-  const contentIndent = rest.trim() === "" ? indent + markerLen + 1 : indent + markerLen + Math.max(padding, 1);
-  const body = rest.slice(Math.max(padding, 1));
+  const padding = markerPadding(rest);
+  const contentIndent = rest.trim() === "" ? indent + markerLen + 1 : indent + markerLen + padding;
+  const body = rest.slice(padding);
   let task = null;
   let content = body;
   const taskMatch = TASK_MARKER.exec(body);
@@ -5711,6 +5708,93 @@ function matchBracket(text, open) {
   }
   return -1;
 }
+function scanDestination(text, pos) {
+  if (text[pos] === "<") {
+    let k2 = pos + 1;
+    let dest2 = "";
+    while (k2 < text.length && text[k2] !== ">") {
+      const ch = text[k2];
+      if (ch === "\\" && k2 + 1 < text.length && ESCAPABLE.has(text[k2 + 1])) {
+        dest2 += text[k2 + 1];
+        k2 += 2;
+        continue;
+      }
+      if (ch === "<" || ch === "\n") {
+        return null;
+      }
+      dest2 += ch;
+      k2 += 1;
+    }
+    if (text[k2] !== ">") {
+      return null;
+    }
+    return { dest: dest2, pos: k2 + 1 };
+  }
+  let k = pos;
+  let dest = "";
+  let depth = 0;
+  while (k < text.length) {
+    const ch = text[k];
+    if (ch === "\\" && k + 1 < text.length && ESCAPABLE.has(text[k + 1])) {
+      dest += text[k + 1];
+      k += 2;
+      continue;
+    }
+    if (ch === " " || ch === "\n" || isControlChar(ch)) {
+      break;
+    }
+    if (ch === "(") {
+      depth += 1;
+    }
+    if (ch === ")") {
+      if (depth === 0) {
+        break;
+      }
+      depth -= 1;
+    }
+    dest += ch;
+    k += 1;
+  }
+  if (depth !== 0) {
+    return null;
+  }
+  return { dest, pos: k };
+}
+function scanTitle(text, pos, fold) {
+  const openChar = text[pos];
+  if (openChar !== '"' && openChar !== "'" && openChar !== "(") {
+    return null;
+  }
+  const closeChar = openChar === "(" ? ")" : openChar;
+  let scanned = "";
+  let k = pos + 1;
+  for (; ; ) {
+    if (k >= text.length) {
+      const next = fold ? fold() : null;
+      if (!next) {
+        return null;
+      }
+      scanned += "\n";
+      text = next.text;
+      k = next.pos;
+      continue;
+    }
+    const ch = text[k];
+    if (ch === "\\" && k + 1 < text.length && ESCAPABLE.has(text[k + 1])) {
+      scanned += text[k + 1];
+      k += 2;
+      continue;
+    }
+    if (ch === closeChar) {
+      return { title: scanned, text, pos: k + 1 };
+    }
+    if (ch === openChar && closeChar === ")") {
+      return null;
+    }
+    scanned += ch;
+    k += 1;
+  }
+}
 function parseInlineDestination(text, open) {
   let k = open + 1;
   const skipSpace = () => {
@@ -5719,84 +5803,21 @@ function parseInlineDestination(text, open) {
     }
   };
   skipSpace();
-  let dest = "";
-  if (text[k] === "<") {
-    k += 1;
-    while (k < text.length && text[k] !== ">") {
-      const ch = text[k];
-      if (ch === "\\" && k + 1 < text.length && ESCAPABLE.has(text[k + 1])) {
-        dest += text[k + 1];
-        k += 2;
-        continue;
-      }
-      if (ch === "<" || ch === "\n") {
-        return null;
-      }
-      dest += ch;
-      k += 1;
-    }
-    if (text[k] !== ">") {
-      return null;
-    }
-    k += 1;
-  } else {
-    let depth = 0;
-    while (k < text.length) {
-      const ch = text[k];
-      if (ch === "\\" && k + 1 < text.length && ESCAPABLE.has(text[k + 1])) {
-        dest += text[k + 1];
-        k += 2;
-        continue;
-      }
-      if (ch === " " || ch === "\n" || isControlChar(ch)) {
-        break;
-      }
-      if (ch === "(") {
-        depth += 1;
-      }
-      if (ch === ")") {
-        if (depth === 0) {
-          break;
-        }
-        depth -= 1;
-      }
-      dest += ch;
-      k += 1;
-    }
-    if (depth !== 0) {
-      return null;
-    }
+  const destResult = scanDestination(text, k);
+  if (!destResult) {
+    return null;
   }
+  const { dest } = destResult;
+  k = destResult.pos;
   skipSpace();
   let title = null;
   if (text[k] === '"' || text[k] === "'" || text[k] === "(") {
-    const openChar = text[k];
-    const closeChar = openChar === "(" ? ")" : openChar;
-    k += 1;
-    let scanned = "";
-    let closed = false;
-    while (k < text.length) {
-      const ch = text[k];
-      if (ch === "\\" && k + 1 < text.length && ESCAPABLE.has(text[k + 1])) {
-        scanned += text[k + 1];
-        k += 2;
-        continue;
-      }
-      if (ch === closeChar) {
-        closed = true;
-        k += 1;
-        break;
-      }
-      if (ch === openChar && closeChar === ")") {
-        return null;
-      }
-      scanned += ch;
-      k += 1;
-    }
-    if (!closed) {
+    const titleResult = scanTitle(text, k);
+    if (!titleResult) {
       return null;
     }
-    title = scanned;
+    title = titleResult.title;
+    k = titleResult.pos;
     skipSpace();
   }
   if (text[k] !== ")") {
@@ -6386,54 +6407,12 @@ function parseLinkRefDef(lines, start) {
     newlines += 1;
   }
   const destLine = index;
-  let dest = "";
-  if (text[cursor] === "<") {
-    cursor += 1;
-    while (cursor < text.length && text[cursor] !== ">") {
-      const ch = text[cursor];
-      if (ch === "\\" && cursor + 1 < text.length && ESCAPABLE.has(text[cursor + 1])) {
-        dest += text[cursor + 1];
-        cursor += 2;
-        continue;
-      }
-      if (ch === "<" || ch === " ") {
-        return null;
-      }
-      dest += ch;
-      cursor += 1;
-    }
-    if (text[cursor] !== ">") {
-      return null;
-    }
-    cursor += 1;
-  } else {
-    let depth = 0;
-    while (cursor < text.length) {
-      const ch = text[cursor];
-      if (ch === "\\" && cursor + 1 < text.length && ESCAPABLE.has(text[cursor + 1])) {
-        dest += text[cursor + 1];
-        cursor += 2;
-        continue;
-      }
-      if (ch === " " || isControlChar(ch)) {
-        break;
-      }
-      if (ch === "(") {
-        depth += 1;
-      }
-      if (ch === ")") {
-        if (depth === 0) {
-          break;
-        }
-        depth -= 1;
-      }
-      dest += ch;
-      cursor += 1;
-    }
-    if (depth !== 0) {
-      return null;
-    }
+  const destScan = scanDestination(text, cursor);
+  if (!destScan) {
+    return null;
   }
+  const { dest } = destScan;
+  cursor = destScan.pos;
   let sawEnding = false;
   for (; ; ) {
     while (cursor < text.length && (text[cursor] === " " || text[cursor] === "	")) {
@@ -6451,42 +6430,15 @@ function parseLinkRefDef(lines, start) {
   if (!atEnd() && (text[cursor] === '"' || text[cursor] === "'" || text[cursor] === "(")) {
     const titleLine = index;
     const onDestLine = titleLine === destLine;
-    const openChar = text[cursor];
-    const closeChar = openChar === "(" ? ")" : openChar;
-    cursor += 1;
-    let scanned = "";
-    let closed = false;
-    while (cursor < text.length || index + 1 < lines.length) {
-      if (cursor >= text.length) {
-        if (!advanceLine()) {
-          break;
-        }
-        scanned += "\n";
-        continue;
-      }
-      const ch = text[cursor];
-      if (ch === "\\" && cursor + 1 < text.length && ESCAPABLE.has(text[cursor + 1])) {
-        scanned += text[cursor + 1];
-        cursor += 2;
-        continue;
-      }
-      if (ch === closeChar) {
-        closed = true;
-        cursor += 1;
-        break;
-      }
-      if (ch === openChar && closeChar === ")") {
-        break;
-      }
-      scanned += ch;
-      cursor += 1;
-    }
-    if (closed) {
+    const scanned = scanTitle(text, cursor, () => advanceLine() ? { text, pos: cursor } : null);
+    if (scanned) {
+      text = scanned.text;
+      cursor = scanned.pos;
       while (cursor < text.length && (text[cursor] === " " || text[cursor] === "	")) {
         cursor += 1;
       }
       if (atEnd()) {
-        title = scanned;
+        title = scanned.title;
       }
     }
     if (title === null) {

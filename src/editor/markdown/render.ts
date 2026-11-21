@@ -978,6 +978,19 @@ function canListInterrupt(line: string): boolean {
   }
   const markerLen = bullet ? 1 : ordered![1]!.length + 1;
   const rest = stripped.slice(markerLen);
+  return rest.slice(markerPadding(rest)).trim() !== '';
+}
+
+/**
+ * The marker-padding rule, one spelling (the reference implementation's):
+ * up to four spaces after a list marker, but whitespace CONTINUING past
+ * four collapses the whole prefix to a single space (the tokenizer's
+ * whitespace attempt rewinds and takes one character) — which is how
+ * `-\t\tfoo` ends up running a code block inside its item while `-   foo`
+ * does not. An absent space still counts as one, so `-` and `- ` share a
+ * content column.
+ */
+function markerPadding(rest: string): number {
   let padding = 0;
   while (padding < 4 && rest[padding] === ' ') {
     padding += 1;
@@ -985,7 +998,7 @@ function canListInterrupt(line: string): boolean {
   if (padding === 4 && rest[4] === ' ') {
     padding = 1;
   }
-  return rest.slice(Math.max(padding, 1)).trim() !== '';
+  return Math.max(padding, 1);
 }
 
 /**
@@ -1024,15 +1037,10 @@ interface ListItem {
 }
 
 /**
- * Matches a single item line into its shell shape (or null).
- *
- * The padding rule is the reference implementation's: up to four spaces
- * after the marker, but if whitespace CONTINUES past four the whole
- * prefix collapses to a single space (the tokenizer's whitespace attempt
- * rewinds and takes one character) — which is how `-\t\tfoo` ends up
- * running a code block inside its item while `-   foo` does not. An
- * absent space still counts as one, so `-` and `- ` share a content
- * column.
+ * Matches a single item line into its shell shape (or null). The padding
+ * after the marker is the reference implementation's rule — see
+ * markerPadding, the one spelling of it (this and the interrupt check
+ * used to carry two hand-copies).
  */
 function matchListItem(line: string): ListItem | null {
   const indent = indentWidth(line);
@@ -1049,19 +1057,13 @@ function matchListItem(line: string): ListItem | null {
 
   const markerLen = bullet ? 1 : ordered![1]!.length + 1;
   const rest = stripped.slice(markerLen);
-  let padding = 0;
-  while (padding < 4 && rest[padding] === ' ') {
-    padding += 1;
-  }
-  if (padding === 4 && rest[4] === ' ') {
-    padding = 1;
-  }
+  const padding = markerPadding(rest);
   // An item whose marker line carries no content starts blank — its
   // content indent is one column past the marker (the spec's blank-first
   // rule), not the padding the bare spaces suggest.
   const contentIndent =
-    rest.trim() === '' ? indent + markerLen + 1 : indent + markerLen + Math.max(padding, 1);
-  const body = rest.slice(Math.max(padding, 1));
+    rest.trim() === '' ? indent + markerLen + 1 : indent + markerLen + padding;
+  const body = rest.slice(padding);
 
   let task: ListItem['task'] = null;
   let content = body;
@@ -2403,29 +2405,24 @@ function matchBracket(text: string, open: number): number {
 }
 
 /**
- * `(dest "title")` after a link's closing bracket. The destination is
- * pointy (`<…>` — spaces allowed, no angle brackets inside) or bare (no
- * spaces, balanced parens, backslash-escaped characters honored); an
- * optional `"title"` / `'title'` / `(title)` may follow. An empty
- * destination is legal (`[a]()` — a self-link); whitespace separates the
- * parts and may carry line endings.
+ * ONE destination scanner, both link grammars' — the inline `(dest
+ * "title")` and the reference definition's `: dest "title"` half. Pointy
+ * (`<…>`: no unescaped angle brackets, no line endings) or bare (no
+ * whitespace or control characters, balanced parens, backslash escapes
+ * honored). Returns the unescaped destination and the position past it.
+ *
+ * The two hand-copies had drifted: the definition's pointy branch
+ * rejected spaces the spec allows (the inline copy kept the honest rule),
+ * so `[foo]: <bar baz>` read as paragraph text instead of the definition
+ * it is. One spelling ends that.
  */
-function parseInlineDestination(
+function scanDestination(
   text: string,
-  open: number,
-): { dest: string; title: string | null; next: number } | null {
-  let k = open + 1;
-
-  const skipSpace = (): void => {
-    while (k < text.length && (text[k] === ' ' || text[k] === '\n' || text[k] === '\t')) {
-      k += 1;
-    }
-  };
-
-  skipSpace();
-  let dest = '';
-  if (text[k] === '<') {
-    k += 1;
+  pos: number,
+): { dest: string; pos: number } | null {
+  if (text[pos] === '<') {
+    let k = pos + 1;
+    let dest = '';
     while (k < text.length && text[k] !== '>') {
       const ch = text[k]!;
       if (ch === '\\' && k + 1 < text.length && ESCAPABLE.has(text[k + 1]!)) {
@@ -2442,66 +2439,125 @@ function parseInlineDestination(
     if (text[k] !== '>') {
       return null;
     }
-    k += 1;
-  } else {
-    let depth = 0;
-    while (k < text.length) {
-      const ch = text[k]!;
-      if (ch === '\\' && k + 1 < text.length && ESCAPABLE.has(text[k + 1]!)) {
-        dest += text[k + 1]!;
-        k += 2;
-        continue;
-      }
-      if (ch === ' ' || ch === '\n' || isControlChar(ch)) {
+    return { dest, pos: k + 1 };
+  }
+  let k = pos;
+  let dest = '';
+  let depth = 0;
+  while (k < text.length) {
+    const ch = text[k]!;
+    if (ch === '\\' && k + 1 < text.length && ESCAPABLE.has(text[k + 1]!)) {
+      dest += text[k + 1]!;
+      k += 2;
+      continue;
+    }
+    if (ch === ' ' || ch === '\n' || isControlChar(ch)) {
+      break;
+    }
+    if (ch === '(') {
+      depth += 1;
+    }
+    if (ch === ')') {
+      if (depth === 0) {
         break;
       }
-      if (ch === '(') {
-        depth += 1;
+      depth -= 1;
+    }
+    dest += ch;
+    k += 1;
+  }
+  if (depth !== 0) {
+    return null; // unbalanced parens — not a destination
+  }
+  return { dest, pos: k };
+}
+
+/**
+ * ONE title scanner, both link grammars' — `"…"`, `'…'` or `(…)`, with
+ * backslash escapes honored and no paren nesting inside a `(title)`.
+ * Returns the unescaped title plus the text and position where the scan
+ * stopped. The optional `fold` hook supplies the next segment when this
+ * one ends: the definition's line advance folds one '\n' in (its titles
+ * may span lines); the inline scan passes nothing, because its newlines
+ * are already in the text it scans.
+ */
+function scanTitle(
+  text: string,
+  pos: number,
+  fold?: () => { text: string; pos: number } | null,
+): { title: string; text: string; pos: number } | null {
+  const openChar = text[pos]!;
+  if (openChar !== '"' && openChar !== "'" && openChar !== '(') {
+    return null;
+  }
+  const closeChar = openChar === '(' ? ')' : openChar;
+  let scanned = '';
+  let k = pos + 1;
+  for (;;) {
+    if (k >= text.length) {
+      const next = fold ? fold() : null;
+      if (!next) {
+        return null;
       }
-      if (ch === ')') {
-        if (depth === 0) {
-          break;
-        }
-        depth -= 1;
-      }
-      dest += ch;
+      scanned += '\n';
+      text = next.text;
+      k = next.pos;
+      continue;
+    }
+    const ch = text[k]!;
+    if (ch === '\\' && k + 1 < text.length && ESCAPABLE.has(text[k + 1]!)) {
+      scanned += text[k + 1]!;
+      k += 2;
+      continue;
+    }
+    if (ch === closeChar) {
+      return { title: scanned, text, pos: k + 1 };
+    }
+    if (ch === openChar && closeChar === ')') {
+      return null; // a (title) cannot nest parens
+    }
+    scanned += ch;
+    k += 1;
+  }
+}
+
+/**
+ * `(dest "title")` after a link's closing bracket — the destination and
+ * title both scan through the shared grammars (scanDestination,
+ * scanTitle), with this wrapper owning what is inline-specific: the
+ * whitespace between the parts may carry line endings, and the whole
+ * group must close with `)`. An empty destination is legal (`[a]()` — a
+ * self-link).
+ */
+function parseInlineDestination(
+  text: string,
+  open: number,
+): { dest: string; title: string | null; next: number } | null {
+  let k = open + 1;
+
+  const skipSpace = (): void => {
+    while (k < text.length && (text[k] === ' ' || text[k] === '\n' || text[k] === '\t')) {
       k += 1;
     }
-    if (depth !== 0) {
-      return null; // unbalanced parens — not a destination
-    }
+  };
+
+  skipSpace();
+  const destResult = scanDestination(text, k);
+  if (!destResult) {
+    return null;
   }
+  const { dest } = destResult;
+  k = destResult.pos;
 
   skipSpace();
   let title: string | null = null;
   if (text[k] === '"' || text[k] === "'" || text[k] === '(') {
-    const openChar = text[k]!;
-    const closeChar = openChar === '(' ? ')' : openChar;
-    k += 1;
-    let scanned = '';
-    let closed = false;
-    while (k < text.length) {
-      const ch = text[k]!;
-      if (ch === '\\' && k + 1 < text.length && ESCAPABLE.has(text[k + 1]!)) {
-        scanned += text[k + 1]!;
-        k += 2;
-        continue;
-      }
-      if (ch === closeChar) {
-        closed = true;
-        k += 1;
-        break;
-      }
-      if (ch === openChar && closeChar === ')') {
-        return null; // a (title) cannot nest parens
-      }
-      scanned += ch;
-      k += 1;
-    }
-    if (!closed) {
+    const titleResult = scanTitle(text, k);
+    if (!titleResult) {
       return null;
     }
-    title = scanned;
+    title = titleResult.title;
+    k = titleResult.pos;
     skipSpace();
   }
 
@@ -3304,54 +3360,15 @@ function parseLinkRefDef(
   }
   const destLine = index;
 
-  let dest = '';
-  if (text[cursor] === '<') {
-    cursor += 1;
-    while (cursor < text.length && text[cursor] !== '>') {
-      const ch = text[cursor]!;
-      if (ch === '\\' && cursor + 1 < text.length && ESCAPABLE.has(text[cursor + 1]!)) {
-        dest += text[cursor + 1]!;
-        cursor += 2;
-        continue;
-      }
-      if (ch === '<' || ch === ' ') {
-        return null;
-      }
-      dest += ch;
-      cursor += 1;
-    }
-    if (text[cursor] !== '>') {
-      return null;
-    }
-    cursor += 1;
-  } else {
-    let depth = 0;
-    while (cursor < text.length) {
-      const ch = text[cursor]!;
-      if (ch === '\\' && cursor + 1 < text.length && ESCAPABLE.has(text[cursor + 1]!)) {
-        dest += text[cursor + 1]!;
-        cursor += 2;
-        continue;
-      }
-      if (ch === ' ' || isControlChar(ch)) {
-        break;
-      }
-      if (ch === '(') {
-        depth += 1;
-      }
-      if (ch === ')') {
-        if (depth === 0) {
-          break;
-        }
-        depth -= 1;
-      }
-      dest += ch;
-      cursor += 1;
-    }
-    if (depth !== 0) {
-      return null; // unbalanced parens — not a destination
-    }
+  // The destination scans through the ONE grammar (scanDestination) —
+  // this copy used to hand-roll its own and had drifted: its pointy
+  // branch rejected the spaces the spec allows.
+  const destScan = scanDestination(text, cursor);
+  if (!destScan) {
+    return null;
   }
+  const { dest } = destScan;
+  cursor = destScan.pos;
 
   // Optional title, on the destination's line or the next one (one line
   // ending in the gap); after the title, the line must be blank.
@@ -3373,42 +3390,18 @@ function parseLinkRefDef(
   if (!atEnd() && (text[cursor] === '"' || text[cursor] === "'" || text[cursor] === '(')) {
     const titleLine = index;
     const onDestLine = titleLine === destLine;
-    const openChar = text[cursor]!;
-    const closeChar = openChar === '(' ? ')' : openChar;
-    cursor += 1;
-    let scanned = '';
-    let closed = false;
-    while (cursor < text.length || index + 1 < lines.length) {
-      if (cursor >= text.length) {
-        if (!advanceLine()) {
-          break;
-        }
-        scanned += '\n';
-        continue;
-      }
-      const ch = text[cursor]!;
-      if (ch === '\\' && cursor + 1 < text.length && ESCAPABLE.has(text[cursor + 1]!)) {
-        scanned += text[cursor + 1]!;
-        cursor += 2;
-        continue;
-      }
-      if (ch === closeChar) {
-        closed = true;
-        cursor += 1;
-        break;
-      }
-      if (ch === openChar && closeChar === ')') {
-        break; // a (title) cannot nest parens
-      }
-      scanned += ch;
-      cursor += 1;
-    }
-    if (closed) {
+    // The title scans through the shared grammar too; the fold hook is
+    // this parser's line advance — a definition's title may span lines,
+    // folding one '\n' in per advance.
+    const scanned = scanTitle(text, cursor, () => (advanceLine() ? { text, pos: cursor } : null));
+    if (scanned) {
+      text = scanned.text;
+      cursor = scanned.pos;
       while (cursor < text.length && (text[cursor] === ' ' || text[cursor] === '\t')) {
         cursor += 1;
       }
       if (atEnd()) {
-        title = scanned;
+        title = scanned.title;
       }
     }
     if (title === null) {
