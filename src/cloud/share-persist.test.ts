@@ -14,6 +14,7 @@ vi.mock('./sync', () => ({ getCloudUserId: () => 'user-1' }));
 vi.mock('./api', () => ({ api: vi.fn(async () => ({})) }));
 
 import type { TabsSyncPayload } from '../tabs';
+import { MAX_SHARE_PATCH_NOTE_IDS } from '../../shared/wire';
 
 const payloadWith = (trashIds: string[]): TabsSyncPayload => ({
   tabs: [],
@@ -121,5 +122,70 @@ describe('onModelPersisted — the share tombstone settle (issue #118)', () => {
 
     const bodies = patches();
     expect(bodies[bodies.length - 1].note_ids).toEqual(['dead-3']);
+  });
+});
+
+describe('the share PATCH chunking — the server caps truncate silently, so the client must split', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  it('more tombstones than one body accepts go out in cap-sized chunks', async () => {
+    const { persist, patches } = await freshHook();
+    const ids = Array.from(
+      { length: MAX_SHARE_PATCH_NOTE_IDS + 250 },
+      (_, index) => `dead-${index}`,
+    );
+
+    persist(payloadWith(ids));
+    await vi.advanceTimersByTimeAsync(2_100);
+
+    // Two chunks, 500 + 250 — a single body would have lost the last
+    // 250 to the server's silent slice() and marked them confirmed:
+    // those deleted notes' public links stayed live forever.
+    const bodies = patches();
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0].note_ids).toEqual(ids.slice(0, MAX_SHARE_PATCH_NOTE_IDS));
+    expect(bodies[1].note_ids).toEqual(ids.slice(MAX_SHARE_PATCH_NOTE_IDS));
+
+    // Every chunk answered ok, so every id settled — the next cumulative
+    // persist re-sends nothing (the issue #118 discipline holds).
+    persist(payloadWith(ids));
+    await vi.advanceTimersByTimeAsync(2_100);
+    expect(patches()).toHaveLength(2);
+  });
+
+  it('a chunk that fails mid-run settles nothing — the next persist retries the batch', async () => {
+    const { api } = await import('./api');
+    const apiMock = vi.mocked(api);
+    let calls = 0;
+    apiMock.mockImplementation(async () => {
+      calls += 1;
+      if (calls === 2) {
+        throw new Error('offline mid-run');
+      }
+      return {};
+    });
+    try {
+      const { persist, patches } = await freshHook();
+      const ids = Array.from({ length: 600 }, (_, index) => `dead-${index}`);
+
+      persist(payloadWith(ids));
+      await vi.advanceTimersByTimeAsync(2_100);
+      // Chunk 1 landed, chunk 2 threw — both PATCHes left the device.
+      expect(patches()).toHaveLength(2);
+
+      // Back online: nothing had settled, so the retry re-sends from the
+      // top (the revokes are idempotent — a resend costs nothing).
+      persist(payloadWith(ids));
+      await vi.advanceTimersByTimeAsync(2_100);
+      expect(patches()).toHaveLength(4);
+      expect(patches()[2].note_ids).toHaveLength(500);
+      expect(patches()[3].note_ids).toHaveLength(100);
+    } finally {
+      apiMock.mockImplementation(async () => ({}));
+    }
   });
 });

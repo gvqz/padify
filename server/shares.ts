@@ -16,6 +16,9 @@ import { type Db, type SqlValue, type SqlStatement } from './db';
 import { json, readJson } from './http';
 import type { SessionUser } from './auth';
 import { asInt, asString, parseNoteType } from './notes';
+// The PATCH input caps, defined once where the contract lives — the
+// client chunks its lists on the same numbers (shared/wire.ts).
+import { MAX_SHARE_PATCH_NOTE_IDS, MAX_SHARE_REFRESH_ENTRIES } from '../shared/wire';
 
 const DAY_MS = 86_400_000;
 
@@ -280,12 +283,11 @@ export async function handleSharesPatch(db: Db, request: Request, user: SessionU
   }
 
   // Revoke every link that points at the given notes (a note was closed).
-  // Cap the input array — without an upper bound a 2 MB request body could
-  // pack ~25,000 UUIDs into one IN-clause, producing a multi-megabyte SQL
-  // statement that Turso rejects.
-  const MAX_NOTE_IDS = 500;
+  // Cap the input array (shared/wire.ts MAX_SHARE_PATCH_NOTE_IDS) — without
+  // an upper bound a 2 MB request body could pack ~25,000 UUIDs into one
+  // IN-clause, producing a multi-megabyte SQL statement that Turso rejects.
   const noteIds = Array.isArray(body.note_ids)
-    ? body.note_ids.map(id => asString(id)).filter(Boolean).slice(0, MAX_NOTE_IDS)
+    ? body.note_ids.map(id => asString(id)).filter(Boolean).slice(0, MAX_SHARE_PATCH_NOTE_IDS)
     : [];
   if (noteIds.length > 0) {
     const placeholders = noteIds.map(() => '?').join(', ');
@@ -298,12 +300,12 @@ export async function handleSharesPatch(db: Db, request: Request, user: SessionU
   }
 
   // Refresh the denormalised content on still-active links (the note changed).
-  // Cap at 100 entries; previously an attacker could pack thousands of refresh
-  // items, each triggering a sequential DB round-trip (one HTTP fetch to Turso
-  // per item) and locking the rate-limit slot for the full 30 s request budget.
-  // Batched via runMany so the writes land in a single pipeline.
-  const MAX_REFRESH = 100;
-  const refresh = Array.isArray(body.refresh) ? body.refresh.slice(0, MAX_REFRESH) : [];
+  // Cap at shared/wire.ts MAX_SHARE_REFRESH_ENTRIES; previously an attacker
+  // could pack thousands of refresh items, each triggering a sequential DB
+  // round-trip (one HTTP fetch to Turso per item) and locking the rate-limit
+  // slot for the full 30 s request budget. Batched via runMany so the writes
+  // land in a single pipeline.
+  const refresh = Array.isArray(body.refresh) ? body.refresh.slice(0, MAX_SHARE_REFRESH_ENTRIES) : [];
   const now = Date.now();
   const statements: SqlStatement[] = [];
   const refreshed: Array<{ noteId: string; bytes: number }> = [];

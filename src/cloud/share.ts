@@ -21,6 +21,8 @@ import { getCloudUserId } from './sync';
 import { type NoteType } from '../editor/note-types';
 import { noteContentIsEmpty } from '../editor/note-projections';
 import { deriveTabTitle, type TabManager, type TabsSyncPayload } from '../tabs';
+// The PATCH input caps — the chunk sizes below (shared/wire.ts).
+import { MAX_SHARE_PATCH_NOTE_IDS, MAX_SHARE_REFRESH_ENTRIES } from '../../shared/wire';
 
 // ---------------------------------------------------------------------------
 // Public surface
@@ -249,18 +251,26 @@ async function flushShareUpdates(): Promise<void> {
   pendingNoteIds.clear();
 
   try {
-    // Deleted notes: revoke every link that points at them.
-    if (tombstones.length > 0) {
+    // Deleted notes: revoke every link that points at them. The server
+    // caps one body at MAX_SHARE_PATCH_NOTE_IDS and drops the excess
+    // SILENTLY — so the list goes out in cap-sized chunks, and only a
+    // run where EVERY chunk answered ok settles the ids (a mid-run
+    // failure re-queues the whole batch on the next persist; the
+    // revokes are idempotent, a resend costs nothing).
+    for (let at = 0; at < tombstones.length; at += MAX_SHARE_PATCH_NOTE_IDS) {
+      const chunk = tombstones.slice(at, at + MAX_SHARE_PATCH_NOTE_IDS);
       await shareApi('/api/shares', {
         method: 'PATCH',
-        body: { note_ids: tombstones, revoked: true },
+        body: { note_ids: chunk, revoked: true },
       });
-      // Only a SUCCESSFUL revoke is settled — a failed one must stay
-      // re-queueable, so the next persist (the natural retry) resends it.
-      tombstones.forEach((id) => confirmedTombstoneIds.add(id));
     }
+    // Only a SUCCESSFUL revoke is settled — a failed one must stay
+    // re-queueable, so the next persist (the natural retry) resends it.
+    tombstones.forEach((id) => confirmedTombstoneIds.add(id));
 
-    // Edited notes: refresh title + content on every still-active link.
+    // Edited notes: refresh title + content on every still-active link —
+    // same chunking against the server's refresh cap, same silent-drop
+    // trap if one body carried more than it accepts.
     if (noteIds.length > 0 && lastPayload) {
       const refresh = noteIds
         .map((noteId) => lastPayload?.tabs.find((entry) => entry.id === noteId))
@@ -274,8 +284,11 @@ async function flushShareUpdates(): Promise<void> {
           note_type: tab.noteType ?? null,
         }));
 
-      if (refresh.length > 0) {
-        await shareApi('/api/shares', { method: 'PATCH', body: { refresh } });
+      for (let at = 0; at < refresh.length; at += MAX_SHARE_REFRESH_ENTRIES) {
+        await shareApi('/api/shares', {
+          method: 'PATCH',
+          body: { refresh: refresh.slice(at, at + MAX_SHARE_REFRESH_ENTRIES) },
+        });
       }
     }
   } catch (error) {

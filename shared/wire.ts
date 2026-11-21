@@ -93,6 +93,35 @@ export const MAX_BODY_BYTES = 2_000_000;
 export const MAX_ROWS_PER_PUSH = 500;
 
 /**
+ * The byte ceiling one attachment honors, everywhere it is enforced:
+ * the server's upload route (server/attachments.ts), the .padify
+ * envelope's embedded pass (padify-file.ts), the canvas's insert gate
+ * and scene bridges (drawing/canvas-images.ts, canvas.ts), and the
+ * markdown note's capture pipeline (editor/note-images.ts). One
+ * number, one definition — a cap that drifts between its enforcers is
+ * a file one door accepts and the next refuses.
+ */
+export const MAX_ATTACHMENT_BYTES = 5_000_000;
+
+/**
+ * The most note ids one PATCH /api/shares revoke body may carry
+ * (server/shares.ts caps the array — an unbounded IN-clause builds a
+ * multi-megabyte SQL statement). The client chunks its tombstone list
+ * on it: past the cap the server drops the excess SILENTLY, and a
+ * tombstone the client then marks confirmed would never be re-sent —
+ * the deleted note's public link stayed live forever.
+ */
+export const MAX_SHARE_PATCH_NOTE_IDS = 500;
+
+/**
+ * The most entries one PATCH /api/shares refresh body may carry
+ * (server/shares.ts — every entry is a write, and an unbounded list
+ * held the rate-limit slot for the whole sequential run). The client
+ * chunks its refresh list on it for the same silent-truncation reason.
+ */
+export const MAX_SHARE_REFRESH_ENTRIES = 100;
+
+/**
  * The PUT /api/notes answer for trash-aware servers: the rows exactly as
  * they landed (id, seq, updated_at, deleted, deleted_at), so the client
  * can adopt its pushed state without waiting for the next pull to echo it
