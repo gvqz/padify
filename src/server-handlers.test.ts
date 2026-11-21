@@ -789,6 +789,50 @@ describe('handleNotesPut — the round-2 storage guardrails', () => {
     expect(response.status).toBe(409);
     expect(String((await bodyOf(response)).error)).toContain('conflict');
   });
+
+  it('the upsert carries the live-recency guard — a stale live write is refused', async () => {
+    // The two-tab race this pins: tab B's newer bytes landed and were
+    // CONFIRMED; tab A's stale window (edit started before, saved after,
+    // pushed last) arrives with older stamps and, unguarded, took the
+    // row wholesale — B's next pull ruled remote-wins on the fresh seq
+    // and B's confirmed words vanished with no conflicted copy. The
+    // guard refuses the stale write server-side; the refusal is a no-op
+    // whose read-back answers the newer row that stayed, and the client
+    // reads that tell off the stamped answer.
+    const db = new ScriptedDb([
+      { match: 'as total', rows: [{ total: 0 }] },
+      {
+        match: 'select id, updated_at, deleted, deleted_at, seq from notes',
+        rows: [{ id: 'n1', updated_at: 9, deleted: 0, deleted_at: null, seq: 4 }],
+      },
+    ]);
+    const response = await handleNotesPut(
+      db,
+      jsonRequest('PUT', {
+        rows: [{ id: 'n1', content: 'stale window bytes', updated_at: 5, deleted: false }],
+      }),
+      user,
+    );
+    // The handler still answers ok — the row exists, the server's state
+    // is the truth — and the stamped row is the REFUSED write's answer:
+    // the newer row that stayed, not the stamps that were sent.
+    expect(response.status).toBe(200);
+    const body = await bodyOf(response);
+    expect(body.rows).toEqual([
+      { id: 'n1', updated_at: 9, deleted: false, deleted_at: null, seq: 4 },
+    ]);
+    // The guard arms, beside the delete-race arms it generalizes.
+    const upsert = db.sqls.find((sql) => sql.includes('on conflict(id)'));
+    expect(upsert).toBeDefined();
+    // A live row may not be overwritten by anything strictly older —
+    // live-vs-live (the race above) and stale-tombstone-over-live in one
+    // arm.
+    expect(upsert).toContain('or (notes.deleted = 0 and excluded.updated_at < notes.updated_at)');
+    // A live write still may not resurrect a tombstone unless strictly
+    // newer (ties go to the delete).
+    expect(upsert).toContain('(notes.deleted = 1 and excluded.deleted = 0');
+    expect(upsert).toContain('and excluded.updated_at <= notes.updated_at)');
+  });
 });
 
 describe('handleSharesPost — the live-share cap', () => {

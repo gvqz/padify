@@ -124,7 +124,19 @@ async function freshSync() {
       }
       if (method === 'PUT' && path === '/api/notes') {
         const rows = (options.body as { rows: NoteRow[] }).rows ?? [];
-        return { ok: true, rows: rows.map((row) => ({ id: row.id, seq: ++seqCounter })) };
+        // The stamped answer a trash-aware server gives (shared/wire.ts
+        // NotesPutV2): the row's own stamps back — the write LANDED —
+        // plus the fresh seq.
+        return {
+          ok: true,
+          rows: rows.map((row) => ({
+            id: row.id,
+            seq: ++seqCounter,
+            updated_at: row.updated_at,
+            deleted: !!row.deleted,
+            deleted_at: row.deleted_at ?? null,
+          })),
+        };
       }
       if (path.startsWith('/api/notes')) {
         return pullAnswer();
@@ -231,7 +243,16 @@ describe('the account-switch guard', () => {
         }
         if (method === 'PUT' && path === '/api/notes') {
           const rows = (options.body as { rows: NoteRow[] }).rows ?? [];
-          return { ok: true, rows: rows.map((row) => ({ id: row.id, seq: ++seqCounter })) };
+          return {
+            ok: true,
+            rows: rows.map((row) => ({
+              id: row.id,
+              seq: ++seqCounter,
+              updated_at: row.updated_at,
+              deleted: !!row.deleted,
+              deleted_at: row.deleted_at ?? null,
+            })),
+          };
         }
         if (path.startsWith('/api/notes')) {
           return pullAnswer();
@@ -313,5 +334,92 @@ describe('pending-queue hygiene', () => {
     if (status.state === 'signed-in') {
       expect(status.sync).toBe('idle');
     }
+  });
+});
+
+describe("the push answer's refusal tell", () => {
+  it('a row the server refused is not confirmed, not adopted, and stays dirty for the merge', async () => {
+    localStorage.setItem(
+      'padifySession',
+      JSON.stringify({ token: FIRST.token, userId: FIRST.userId, email: FIRST.email }),
+    );
+    const { sync } = await freshSync();
+    const { api } = await import('./api');
+    // The server's recency guard refused the stale window's write: the
+    // stamped answer carries the row that STAYED — the newer device's
+    // confirmed bytes, the row's own seq — not the stamps that were
+    // sent. Confirming that push would have pinned a false merge base
+    // (our stale bytes, "what the server holds") and silenced the note
+    // right before a pull could hand it to the three-way merge — the
+    // exact way the two-tab race used to lose a confirmed version.
+    vi.mocked(api).mockImplementation(
+      async (path: string, options: { method?: string; body?: unknown } = {}) => {
+        const method = options.method ?? 'GET';
+        calls.push({ method, path, body: options.body });
+        if (path === '/api/me') {
+          return meAnswer;
+        }
+        if (method === 'PUT' && path === '/api/notes') {
+          return {
+            ok: true,
+            rows: [{ id: 'contested', seq: 4, updated_at: 3000, deleted: false, deleted_at: null }],
+          };
+        }
+        if (path.startsWith('/api/notes')) {
+          return pullAnswer();
+        }
+        return {};
+      },
+    );
+    const { manager, state } = fakeManager(
+      [
+        tab('contested', {
+          content: '<p>my stale window words</p>',
+          updatedAt: 2000,
+          syncSeq: 3,
+          syncBase: { content: '<p>the shared base</p>', name: null },
+        }),
+      ],
+      ['contested'],
+    );
+
+    await sync.initCloudSync(manager);
+    await settle();
+
+    // The push itself shipped (the server heard the stale bytes and
+    // refused them — that is the server's half of the fix)…
+    expect(shippedRowIds()).toContain('contested');
+    // …but the refusal tell means: no confirmation — the id stays dirty,
+    // so the pull's three-way merge (base vs. my stale words vs. their
+    // confirmed words) is its way out, not a silent echo believed.
+    expect(state.confirmed).not.toContain('contested');
+    expect(state.ledger.dirtyIds()).toContain('contested');
+    // And no adoption: the tab's seq and merge base stay exactly where
+    // the last honest sync left them.
+    const contested = state.tabs.find((entry) => entry.id === 'contested');
+    expect(contested?.syncSeq).toBe(3);
+    expect(contested?.syncBase).toEqual({ content: '<p>the shared base</p>', name: null });
+  });
+
+  it('a row whose stamps the answer echoes back IS confirmed and adopted', async () => {
+    localStorage.setItem(
+      'padifySession',
+      JSON.stringify({ token: FIRST.token, userId: FIRST.userId, email: FIRST.email }),
+    );
+    const { sync } = await freshSync();
+    const { manager, state } = fakeManager(
+      [tab('healthy', { content: '<p>words that landed</p>', updatedAt: 2000 })],
+      ['healthy'],
+    );
+
+    await sync.initCloudSync(manager);
+    await settle();
+
+    // The default mock answers the contract shape — the sent stamps back
+    // with a fresh seq — so the healthy push confirms and adopts.
+    expect(state.confirmed).toContain('healthy');
+    const healthy = state.tabs.find((entry) => entry.id === 'healthy');
+    expect(healthy?.syncSeq).toBe(11); // seqCounter starts at 10
+    expect(healthy?.syncBase).toEqual({ content: '<p>words that landed</p>', name: null });
   });
 });

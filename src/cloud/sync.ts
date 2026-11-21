@@ -38,7 +38,7 @@ import type { StoredNoteTab, TrashedNote } from '../storage';
 // The wire contract both sides of the HTTP boundary share — types below,
 // and the one request-body ceiling the client batches under.
 import { MAX_BODY_BYTES, MAX_ROWS_PER_PUSH, TRASH_RETENTION_MS } from '../../shared/wire';
-import type { IncomingNoteRow } from '../../shared/wire';
+import type { IncomingNoteRow, NotesPutV2 } from '../../shared/wire';
 
 // ---------------------------------------------------------------------------
 // Public surface
@@ -122,14 +122,12 @@ export interface PullResult {
 }
 
 /**
- * A PUT /api/notes answer from a trash-aware server: the rows exactly as
- * they landed, stamped. The (content, name) are NOT in the answer — the
- * client knows what it sent; the ids just need their fresh seqs.
+ * A PUT /api/notes answer: the wire type when the server stamps its
+ * rows (NotesPutV2 — the one shape, defined where the contract lives),
+ * or the pre-trash `{ ok: true }` whose readers fall back to the pull
+ * echo. Which one arrived is told by the presence of `rows`.
  */
-interface NotesPutAnswer {
-  ok?: boolean;
-  rows?: Array<{ id: string; seq: number }>;
-}
+type NotesPutAnswer = NotesPutV2 | { ok?: boolean };
 
 /**
  * A wire row's content, whichever key it arrived under. See NoteRow —
@@ -737,19 +735,43 @@ async function pushPendingQueue(): Promise<void> {
         method: 'PUT',
         body: { v: 2, rows: batch },
       });
-      batch.forEach((row) => pushed.push(row.id));
-      // The stamped answer: each pushed note learns its seq AND pins its
-      // merge base without waiting for the pull echo. A server that
-      // answers the old shape ({ ok: true }, no rows) simply contributes
-      // nothing — the fingerprint fallback covers it.
-      for (const landed of answer?.rows ?? []) {
+      // The pre-trash shape answers no per-row truth: the batch left the
+      // device, the pull echo settles the rest (the fingerprint
+      // fallback). A stamping server names every row with what the
+      // server now holds — and a write the server REFUSED (its recency
+      // guard: stale live bytes, an over-tied resurrection) answers the
+      // newer row that stayed, not the stamps we sent. Those rows are
+      // NOT confirmed: they stay dirty, so this cycle's pull hands them
+      // to the three-way merge instead of letting a stale echo silently
+      // revert a confirmed newer version on its next arrival.
+      const stamped = answer && 'rows' in answer ? answer.rows : null;
+      if (stamped === null) {
+        batch.forEach((row) => pushed.push(row.id));
+        continue;
+      }
+      for (const landed of stamped) {
         const sent = batchById.get(landed.id);
-        if (sent && landed.seq > 0) {
+        if (sent === undefined) {
+          continue;
+        }
+        // The refusal tell: a write that landed answers the stamps it
+        // sent — they became the row; anything else is the row that
+        // stayed (refused, or raced past by a newer writer between the
+        // write and the read-back — both mean "not ours anymore").
+        const landedHere =
+          landed.updated_at === sent.updated_at && landed.deleted === !!sent.deleted;
+        if (!landedHere) {
+          continue;
+        }
+        pushed.push(landed.id);
+        // The stamped answer: each pushed note learns its seq AND pins
+        // its merge base without waiting for the pull echo. The answer
+        // carries no bytes — the base is what WE sent, read the same
+        // way the server read it (either key).
+        if (landed.seq > 0) {
           adopted.push({
             id: landed.id,
             seq: landed.seq,
-            // The answer carries no bytes — the base is what WE sent,
-            // read the same way the server read it (either key).
             content: wireRowContent(sent),
             name: sent.name ?? null,
           });

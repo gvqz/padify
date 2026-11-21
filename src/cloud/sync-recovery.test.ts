@@ -142,7 +142,19 @@ async function freshSync() {
       }
       if (method === 'PUT' && path === '/api/notes') {
         const rows = (options.body as { rows: NoteRow[] }).rows ?? [];
-        return { ok: true, rows: rows.map((row) => ({ id: row.id, seq: ++seqCounter })) };
+        // The stamped answer a trash-aware server gives (shared/wire.ts
+        // NotesPutV2): the row's own stamps back — the write LANDED —
+        // plus the fresh seq.
+        return {
+          ok: true,
+          rows: rows.map((row) => ({
+            id: row.id,
+            seq: ++seqCounter,
+            updated_at: row.updated_at,
+            deleted: !!row.deleted,
+            deleted_at: row.deleted_at ?? null,
+          })),
+        };
       }
       if (path.startsWith('/api/notes')) {
         return pullAnswer();

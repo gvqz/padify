@@ -263,6 +263,16 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
   // the client merge already rules. A refused row is a no-op: it still
   // answers ok (the row exists, the server's state is the truth being
   // pushed), and its reserved seqs simply leave a gap.
+  //
+  // The LIVE-recency guard (same shape): a live write may not overwrite a
+  // live row it is strictly OLDER than. The old arrival-ordered upsert let
+  // a stale window (an edit started before, saved after, pushed last)
+  // clobber a confirmed newer version — the newer device's pull then saw
+  // a fresh seq over stale bytes, ruled remote-wins, and the words a
+  // device watched sync simply vanished, no conflicted copy anywhere.
+  // The stale push is now a no-op here; the client reads the refusal off
+  // the stamped answer (its write did not become the row) and hands the
+  // note to the three-way merge instead of confirming its own echo.
   await db.runMany(
     rows.map((row, index) => ({
       sql: `insert into notes (id, user_id, name, content, position, created_at, updated_at, deleted, deleted_at, note_type, seq)
@@ -281,8 +291,7 @@ export async function handleNotesPut(db: Db, request: Request, user: SessionUser
          and not (
            (notes.deleted = 1 and excluded.deleted = 0
              and excluded.updated_at <= notes.updated_at)
-           or (notes.deleted = 0 and excluded.deleted = 1
-             and excluded.updated_at < notes.updated_at)
+           or (notes.deleted = 0 and excluded.updated_at < notes.updated_at)
          )`,
       args: [
         row.id,
