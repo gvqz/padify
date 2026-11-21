@@ -98,7 +98,7 @@ function loadBreakReminderState(): BreakReminderState {
       ...breakReminderDefaults,
       ...JSON.parse(rawState),
     };
-  } catch (error) {
+  } catch {
     return { ...breakReminderDefaults };
   }
 }

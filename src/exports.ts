@@ -11,6 +11,14 @@
  * window's save button (pip-window.ts).
  */
 
+import { showToast } from './ui/toast';
+
+/** The honest answer when a lazy export chunk cannot fetch (offline PWA)
+ *  or the export itself throws — silence would read as a dead button. */
+function announceExportFailure(): void {
+  showToast('Export failed — check your connection and try again.');
+}
+
 function getCurrentDate(): string {
   const currentDate = new Date();
 
@@ -86,73 +94,79 @@ export function saveTextAsFile(
 
 export function exportNotesAsPDF(textToWrite: string, fileNameToSaveAs: string): void {
   // jsPDF is heavy, so it is only fetched when a PDF export is requested.
-  void import('jspdf').then(({ jsPDF }) => {
-    const pdf = new jsPDF();
-    const marginLeft = 10;
-    const marginTop = 10;
+  void import('jspdf')
+    .then(({ jsPDF }) => {
+      const pdf = new jsPDF();
+      const marginLeft = 10;
+      const marginTop = 10;
 
-    // Width of text area
-    const maxWidth = 180;
+      // Width of text area
+      const maxWidth = 180;
 
-    const lineHeight = 10;
+      const lineHeight = 10;
 
-    // Height of a single page
-    const pageHeight = pdf.internal.pageSize.height;
+      // Height of a single page
+      const pageHeight = pdf.internal.pageSize.height;
 
-    // Initial Y position for text
-    let yPosition = marginTop;
+      // Initial Y position for text
+      let yPosition = marginTop;
 
-    // Split content into lines that fit within maxWidth
-    const lines = pdf.splitTextToSize(textToWrite, maxWidth);
+      // Split content into lines that fit within maxWidth
+      const lines = pdf.splitTextToSize(textToWrite, maxWidth);
 
-    lines.forEach((line: string) => {
-      if (yPosition + lineHeight > pageHeight) {
-        pdf.addPage(); // Add a new page if content exceeds page height
-        yPosition = marginTop; // Reset Y position for new page
-      }
-      pdf.text(line, marginLeft, yPosition);
-      yPosition += lineHeight;
-    });
+      lines.forEach((line: string) => {
+        if (yPosition + lineHeight > pageHeight) {
+          pdf.addPage(); // Add a new page if content exceeds page height
+          yPosition = marginTop; // Reset Y position for new page
+        }
+        pdf.text(line, marginLeft, yPosition);
+        yPosition += lineHeight;
+      });
 
-    pdf.save(fileNameToSaveAs);
-  });
+      pdf.save(fileNameToSaveAs);
+    })
+    .catch(announceExportFailure);
 }
 
 export function exportNotesAsDocx(textToWrite: string, fileNameToSaveAs: string): void {
-  // The docx bundle is heavy, so it is only fetched on demand.
-  void import('docx').then(({ Document, Paragraph, TextRun, Packer }) => {
-    // OOXML renders literal newlines inside <w:t> as nothing — the whole
-    // multi-line note used to land as one paragraph on one line. One
-    // Paragraph per line (blank lines become empty paragraphs, exactly
-    // how Word represents a blank line) keeps the note's structure.
-    const paragraphs = textToWrite.split('\n').map(
-      (line) =>
-        new Paragraph({
-          children: line === '' ? [] : [new TextRun({ text: line })],
-        }),
-    );
+  // The docx bundle is heavy, so it is only fetched on demand. The inner
+  // promise returns through the chain, so one catch answers both a failed
+  // chunk fetch and a failed pack.
+  void import('docx')
+    .then(({ Document, Paragraph, TextRun, Packer }) => {
+      // OOXML renders literal newlines inside <w:t> as nothing — the whole
+      // multi-line note used to land as one paragraph on one line. One
+      // Paragraph per line (blank lines become empty paragraphs, exactly
+      // how Word represents a blank line) keeps the note's structure.
+      const paragraphs = textToWrite.split('\n').map(
+        (line) =>
+          new Paragraph({
+            children: line === '' ? [] : [new TextRun({ text: line })],
+          }),
+      );
 
-    const doc = new Document({
-      sections: [
-        {
-          properties: {},
-          children: paragraphs,
-        },
-      ],
-    });
+      const doc = new Document({
+        sections: [
+          {
+            properties: {},
+            children: paragraphs,
+          },
+        ],
+      });
 
-    Packer.toBlob(doc).then((blob) => {
-      const downloadLink = document.createElement('a');
-      const url = window.URL.createObjectURL(blob);
-      downloadLink.href = url;
-      downloadLink.download = fileNameToSaveAs;
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
-      // Release the Blob reference so repeated exports don't leak.
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-    });
-  });
+      return Packer.toBlob(doc).then((blob) => {
+        const downloadLink = document.createElement('a');
+        const url = window.URL.createObjectURL(blob);
+        downloadLink.href = url;
+        downloadLink.download = fileNameToSaveAs;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        // Release the Blob reference so repeated exports don't leak.
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+      });
+    })
+    .catch(announceExportFailure);
 }
 
 export function downloadHTML(htmlContent: string, fileNameToSaveAs: string): void {

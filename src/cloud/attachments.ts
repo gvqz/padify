@@ -66,7 +66,11 @@ async function uploadOne(meta: AttachmentMeta): Promise<boolean> {
       method: 'POST',
       headers: {
         'x-padify-id': meta.id,
-        'x-padify-name': meta.name,
+        // Header values are ByteStrings (Latin-1); a name with any
+        // character above U+00FF — an imported .padify file's filename,
+        // say — would THROW in fetch and poison the id for the session,
+        // every session. Percent-encoded here, decoded server-side.
+        'x-padify-name': encodeURIComponent(meta.name),
         'content-type': meta.mime,
       },
       body: bytes,

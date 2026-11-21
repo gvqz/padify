@@ -563,8 +563,8 @@ function buildCatalog(entries: unknown[], limit: number): SearchTrack[] {
 async function youtubeSearch(q: string, limit: number): Promise<SearchTrack[]> {
   // Over-fetch on purpose: filtering + dedupe trim the raw list back down,
   // so the user still sees `limit` clean rows instead of a thin, junky page.
-  const fetch = Math.min(40, limit + 12);
-  const entries = await runYtSearchWithRetry(q, fetch);
+  const fetchCount = Math.min(40, limit + 12);
+  const entries = await runYtSearchWithRetry(q, fetchCount);
   return buildCatalog(entries, limit);
 }
 

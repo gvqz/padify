@@ -175,7 +175,7 @@ function promptUpdate(waiting: ServiceWorker): void {
 export function initInstallPrompt(): void {
   // This hides the install app button
   // if the app is already installed
-  if (getPWADisplayMode() === 'standalone') {
+  if (isInstalledDisplayMode()) {
     selector().notepad.installApp.hide();
   }
 

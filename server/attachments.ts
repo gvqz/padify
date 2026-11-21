@@ -61,11 +61,21 @@ function stripControlChars(value: string): string {
 }
 
 /**
- * Normalizes the filename header: trimmed, length-capped, control
- * characters stripped. The empty string is a valid "no name".
+ * Normalizes the filename header: percent-decoded (the client encodes
+ * non-Latin-1 names — header values are ByteStrings), then trimmed,
+ * length-capped, control characters stripped. The empty string is a
+ * valid "no name". A raw name that happens to carry `%` sequences
+ * decodes best-effort: a malformed escape falls back to the raw bytes.
  */
 export function attachmentNameFrom(value: string | null): string {
-  return stripControlChars(value ?? '').trim().slice(0, MAX_NAME_CHARS);
+  const raw = stripControlChars(value ?? '');
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    // Not valid percent-encoding — an old client's raw name. Keep it.
+  }
+  return decoded.trim().slice(0, MAX_NAME_CHARS);
 }
 
 /**
