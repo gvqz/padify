@@ -293,6 +293,23 @@ describe('boot + visibility (characterization)', () => {
     expect(bootPort.onInput).toHaveBeenCalled();
   });
 
+  it('a second init against the wired shell is a no-op — listeners never stack', async () => {
+    // The markdown toolbar's guard, mirrored: a re-run of initRichToolbar
+    // on the same shell must not add a second copy of the toolbar's
+    // listeners (a stacked click handler would double-toggle a menu:
+    // open, then straight back closed).
+    const port = createFakePort();
+    setEditorPort(port);
+    initRichToolbar(manager);
+    const sizeButton = toolbar().querySelector<HTMLButtonElement>('[data-rich-menu="size"]')!;
+    const panel = sizeButton.parentElement!.querySelector<HTMLElement>('.rich-menu-panel')!;
+    panel.hidden = true;
+    click(sizeButton);
+    expect(panel.hidden).toBe(false);
+    // And the port seam was not re-registered by the refused second init.
+    expect(port.onInput).not.toHaveBeenCalled();
+  });
+
   it('the toolbar rests hidden on a standard note and shows on a rich note', async () => {
     await activateTab(standardTabId);
     expect(toolbar().hidden).toBe(true);
