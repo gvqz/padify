@@ -5,7 +5,8 @@
  *  • a navbar cloud icon with a live status dot,
  *  • a Cloud panel anchored under that icon (sign-in / sign-up + account
  *    view with the live sync state),
- *  • a "Cloud sync" section inside Settings pointing at the panel.
+ *  • an "Account" section inside Settings — the sync-status row, the
+ *    storage card (cloud/usage.ts) and the shared-links inventory.
  */
 
 import { $ } from '../lib/q';
@@ -196,7 +197,7 @@ export function initCloudUI(): void {
     setMode('sign-in');
   });
 
-  // Settings → Cloud sync → Manage: leave Settings, open the Cloud panel
+  // Settings → Account → Manage: leave Settings, open the Cloud panel
   // under the topbar's cloud icon.
   $('#cloudSettingsManage').on('click', () => {
     closeModal($('#preferencesModal').get(0));

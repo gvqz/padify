@@ -11,7 +11,7 @@
  * via… hands the URL to the OS share sheet when the browser has one;
  * cancelling a link arms its own button (the confirm state IS the
  * button), the same two-step contract the History sheet's deletes
- * follow. The INVENTORY lives in Settings → Cloud sync: the "Shared
+ * follow. The INVENTORY lives in Settings → Account: the "Shared
  * links" card lists every ACTIVE link across the account, newest
  * first. Signed-out visitors get a sign-in gate — sharing is a
  * cloud-account feature.

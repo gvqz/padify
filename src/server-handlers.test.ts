@@ -14,6 +14,8 @@ import { handleSignup } from '../server/auth-routes';
 import { route } from '../server/routes';
 import { hashPassword, verifyPasswordWithCost } from '../server/auth';
 import { handleAttachmentPost } from '../server/attachments';
+import { handleUsageGet } from '../server/usage';
+import { MAX_ATTACHMENT_COUNT, MAX_TOTAL_ATTACHMENT_BYTES, NOTE_BYTES_QUOTA } from '../server/quota';
 
 // The server's first handler tests. The handlers were extracted from
 // index.ts precisely so this file can exist: they are pure functions over
@@ -1231,5 +1233,66 @@ describe('route — the 405 probe is paced on public paths too', () => {
     // needed auth — an all-public path (signin, the share-token route)
     // answered 405 without ever touching a bucket.
     expect(response.status).toBe(429);
+  });
+});
+
+describe('handleUsageGet — the quotas, reported', () => {
+  it('folds the owner\'s notes into per-type slices, the trash into its own', async () => {
+    // Four (type, deleted) groups: the standard default (null type), a
+    // live markdown pair, one trashed markdown row, and a type this
+    // build has never heard of — bytes this account owns regardless.
+    const db = new ScriptedDb([
+      {
+        match: 'group by note_type, deleted',
+        rows: [
+          { note_type: null, deleted: 0, n: 3, bytes: 300 },
+          { note_type: 'markdown', deleted: 0, n: 2, bytes: 2048 },
+          { note_type: 'markdown', deleted: 1, n: 1, bytes: 100 },
+          { note_type: 'newer-build-type', deleted: 0, n: 1, bytes: 10 },
+        ],
+      },
+      { match: 'from attachments', rows: [{ n: 2, bytes: 4096 }] },
+    ]);
+
+    const response = await handleUsageGet(db, jsonRequest('GET', undefined), user);
+
+    expect(response.status).toBe(200);
+    expect(await bodyOf(response)).toEqual({
+      limits: {
+        notes_bytes: NOTE_BYTES_QUOTA,
+        attachments_bytes: MAX_TOTAL_ATTACHMENT_BYTES,
+        attachments_count: MAX_ATTACHMENT_COUNT,
+      },
+      notes: {
+        // Every row, trash included — what the quota check counts.
+        bytes: 300 + 2048 + 100 + 10,
+        live_count: 6,
+        trash: { bytes: 100, count: 1 },
+        // The absent type reads 'standard'; the unknown id stays itself.
+        by_type: [
+          { type: 'standard', bytes: 300, count: 3 },
+          { type: 'markdown', bytes: 2048, count: 2 },
+          { type: 'newer-build-type', bytes: 10, count: 1 },
+        ],
+      },
+      attachments: { bytes: 4096, count: 2 },
+    });
+  });
+
+  it('answers an honest zero report for an empty account', async () => {
+    const db = new ScriptedDb();
+
+    const response = await handleUsageGet(db, jsonRequest('GET', undefined), user);
+
+    expect(response.status).toBe(200);
+    const body = (await bodyOf(response)) as {
+      notes: { bytes: number; live_count: number; trash: { bytes: number }; by_type: unknown[] };
+      attachments: { bytes: number; count: number };
+    };
+    expect(body.notes.bytes).toBe(0);
+    expect(body.notes.live_count).toBe(0);
+    expect(body.notes.trash.bytes).toBe(0);
+    expect(body.notes.by_type).toEqual([]);
+    expect(body.attachments).toEqual({ bytes: 0, count: 0 });
   });
 });

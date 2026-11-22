@@ -14,6 +14,7 @@ import { ModelPort } from './editor/model-port';
 import { registerPreFlushHook, storageReady } from './storage';
 import { initCloudSync } from './cloud/sync';
 import { initCloudUI } from './cloud/ui';
+import { initStorageCard } from './cloud/usage';
 import { initCloudShare } from './cloud/share';
 import { initShareUI } from './cloud/share-ui';
 import { initConflictReview } from './conflicts';
@@ -174,6 +175,7 @@ export async function initApp(): Promise<void> {
   void initCloudSync(tabManager).then(() => {
     initCloudUI();
     initShareUI();
+    initStorageCard();
   });
   // Typing explosion effects (see typing-effects.ts).
   const typingEffects = initTypingEffects(notepad, editorConfig);

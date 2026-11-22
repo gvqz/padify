@@ -123,6 +123,47 @@ export const MAX_SHARE_PATCH_NOTE_IDS = 500;
 export const MAX_SHARE_REFRESH_ENTRIES = 100;
 
 /**
+ * The GET /api/usage answer — the account's storage usage against the
+ * quotas that cap it. The server enforced 25 MB of notes and 200 MB of
+ * attachments before the app could see either; this shape is how the
+ * client sees them (rendered by src/cloud/usage.ts). The quota numbers
+ * themselves stay owned by server/quota.ts — they travel to the client
+ * inside the answer, never as a mirrored constant.
+ */
+export interface UsageTypeSlice {
+  /** The note type id; 'standard' for the absent type (the default). */
+  type: string;
+  /** UTF-8 content bytes — the same measurement the quota check counts. */
+  bytes: number;
+  /** How many live notes of this type the account holds. */
+  count: number;
+}
+
+export interface UsageReport {
+  limits: {
+    notes_bytes: number;
+    attachments_bytes: number;
+    attachments_count: number;
+  };
+  notes: {
+    /** Every row, trashed included — the bytes the notes quota counts. */
+    bytes: number;
+    /** Live (untrashed) note count. */
+    live_count: number;
+    /**
+     * The trash's own slice. It is NOT folded into a type: the trash
+     * keeps its content on purpose (that is what makes it restorable),
+     * so it occupies exactly the storage it looks like — the account
+     * page names it instead of burying it.
+     */
+    trash: { bytes: number; count: number };
+    /** Live rows only, one slice per type. */
+    by_type: UsageTypeSlice[];
+  };
+  attachments: { bytes: number; count: number };
+}
+
+/**
  * The PUT /api/notes answer for trash-aware servers: the rows exactly as
  * they landed (id, seq, updated_at, deleted, deleted_at), so the client
  * can adopt its pushed state without waiting for the next pull to echo it

@@ -603,6 +603,167 @@ body.dark .pref-action-btn:focus {
   box-shadow: none;
 }
 
+/* Storage (Account pane) — the usage card. One stacked bar per quota,
+   segment widths are shares of the QUOTA (not of the used bytes), so a
+   half-full account reads as half full and the track itself is the
+   honest unspent rest. Hues ride the theme's tokens where the theme has
+   one; the three data-viz hues it lacks (task lists, drawings,
+   attachments) are fixed hues readable on both themes, scoped to this
+   card so nothing else inherits them. */
+.storage-card {
+  --storage-seg-standard: var(--vz-primary);
+  --storage-seg-rich: var(--vz-star);
+  --storage-seg-markdown: var(--vz-success);
+  --storage-seg-tasks: #3b82f6;
+  --storage-seg-drawing: #8b5cf6;
+  --storage-seg-other: var(--vz-fg-muted);
+  --storage-seg-trash: var(--vz-danger);
+  --storage-seg-attachments: #14b8a6;
+  --storage-bar-track: var(--vz-bg-subtle);
+}
+
+.storage-summary .pref-row-hint {
+  font-variant-numeric: tabular-nums;
+}
+
+.storage-body {
+  padding: 4px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.storage-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+
+.storage-group-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--vz-fg);
+}
+
+.storage-group-usage {
+  font-size: 11.5px;
+  color: var(--vz-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.storage-bar {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--storage-bar-track);
+  overflow: hidden;
+  display: flex;
+}
+
+.storage-seg {
+  display: block;
+  height: 100%;
+  flex: 0 0 auto;
+  transition: width 400ms var(--vz-ease);
+}
+
+/* The hairline between segments — iOS separates its slices the same
+   way. box-shadow, not border: it must not join the width math. */
+.storage-seg:not(:first-child) {
+  box-shadow: -1px 0 0 var(--vz-bg-elevated);
+}
+
+.seg-standard {
+  background: var(--storage-seg-standard);
+}
+
+.seg-rich {
+  background: var(--storage-seg-rich);
+}
+
+.seg-markdown {
+  background: var(--storage-seg-markdown);
+}
+
+.seg-tasks {
+  background: var(--storage-seg-tasks);
+}
+
+.seg-drawing {
+  background: var(--storage-seg-drawing);
+}
+
+.seg-other {
+  background: var(--storage-seg-other);
+}
+
+.seg-trash {
+  background: var(--storage-seg-trash);
+}
+
+.seg-attachments {
+  background: var(--storage-seg-attachments);
+}
+
+.storage-legend {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.storage-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.storage-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.storage-legend-name {
+  color: var(--vz-fg);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-legend-meta {
+  color: var(--vz-fg-muted);
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.storage-legend-bytes {
+  color: var(--vz-fg);
+  flex: 0 0 auto;
+  min-width: 52px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.storage-legend-total {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--vz-fg-muted);
+  line-height: 1.45;
+}
+
+.storage-group-hint {
+  margin: 7px 0 0;
+  font-size: 11.5px;
+  color: var(--vz-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Search empty state */
 .pref-search-empty {
   padding: 56px 24px;

@@ -44,6 +44,7 @@ import {
   handleAttachmentGet,
   handleAttachmentDelete
 } from './attachments';
+import { handleUsageGet } from './usage';
 import {
   handleMusicCapabilities,
   handleMusicSearch,
@@ -169,6 +170,12 @@ const ROUTES: Route[] = [
     pattern: /^\/api\/notes$/,
     auth: 'required',
     handler: (db, request, user) => handleNotesPut(db, request, user!)
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/usage$/,
+    auth: 'required',
+    handler: (db, request, user) => handleUsageGet(db, request, user!)
   },
   {
     method: 'GET',

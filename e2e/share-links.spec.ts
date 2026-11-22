@@ -21,7 +21,7 @@ import { expect, test, type Page } from '@playwright/test';
  *     twin — and the server backstops it: a raw second POST for the
  *     same note returns the existing row instead of minting another.
  *
- *  5. The inventory — the links list lives in Settings → Cloud sync
+ *  5. The inventory — the links list lives in Settings → Account
  *     (there is no second popup anymore): every ACTIVE link across
  *     the account, newest first, each row naming its note. A
  *     cancelled link leaves the list instead of haunting it.
@@ -96,7 +96,7 @@ async function waitForSettledSync(page: Page): Promise<void> {
 }
 
 /**
- * The links inventory: Settings → Cloud sync → Shared links. The modal's
+ * The links inventory: Settings → Account → Shared links. The modal's
  * open fires the list's refresh — wait for that fetch to land so the
  * rows the test clicks are the settled ones, not a render about to be
  * replaced.
@@ -333,7 +333,7 @@ test.describe('share links (real API)', () => {
     await expect(page.locator('#shareActiveMeta')).toContainText(/expires in (29|30) days/i);
     await expect(page.locator('#shareActiveUrl')).toHaveText(urlBefore ?? '');
 
-    // The inventory (Settings → Cloud sync) still holds exactly one link.
+    // The inventory (Settings → Account) still holds exactly one link.
     await openSharedLinks(page);
     await expect(page.locator('#shareLinkCount')).toHaveText('1');
     await expect(page.locator('.share-link-row')).toHaveCount(1);

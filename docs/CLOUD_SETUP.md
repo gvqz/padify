@@ -265,7 +265,8 @@ mounted. Leave the variable unset for a normal root deploy — both come
 from the same source, which is exactly what keeps them from drifting.
 
 That's it: the **Cloud sync** icon appears in the padify navbar, Settings
-gains a "Cloud sync" section, and users can create accounts and sync.
+gains an "Account" section (sync status, storage, shared links), and users
+can create accounts and sync.
 
 ## 4. Enable share links (/share/)
 

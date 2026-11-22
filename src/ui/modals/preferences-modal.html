@@ -182,13 +182,10 @@
                 stroke-linejoin="round"
                 aria-hidden="true"
               >
-                <path
-                  d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"
-                />
-                <path d="M12 12v6" />
-                <path d="m9.5 15.5 2.5-2.5 2.5 2.5" />
+                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
               </svg>
-              <span class="pref-nav-label">Cloud sync</span>
+              <span class="pref-nav-label">Account</span>
             </button>
           </nav>
           <div class="pref-panes" id="prefPanes">
@@ -744,17 +741,14 @@
                     stroke-linejoin="round"
                     aria-hidden="true"
                   >
-                    <path
-                      d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6.5 6.5 0 0 0-12.7 1.61A4 4 0 0 0 6 19.5h11.5"
-                    />
-                    <path d="M12 12v6" />
-                    <path d="m9.5 15.5 2.5-2.5 2.5 2.5" />
+                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
                   </svg>
                 </span>
                 <div>
-                  <h5 class="pref-section-title">Cloud sync</h5>
+                  <h5 class="pref-section-title">Account</h5>
                   <p class="pref-section-hint">
-                    Your notes, safe in the cloud and on every device.
+                    Your account — sync status, storage, and shared links.
                   </p>
                 </div>
               </header>
@@ -770,6 +764,42 @@
                     <button type="button" class="pref-action-btn" id="cloudSettingsManage">
                       Manage
                     </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Storage — the account's usage against the two quotas the
+                   server actually enforces (25 MB of notes, 200 MB of
+                   attachments — server/quota.ts owns the numbers; they
+                   arrive in the answer, never mirrored here). Apple's
+                   storage-page shape: one stacked bar per quota, a legend
+                   that names each note type's slice, and the trash as its
+                   own segment (it keeps its content on purpose). Rows
+                   render in src/cloud/usage.ts; the card stays hidden
+                   until a signed-in fetch lands. -->
+              <div class="pref-card storage-card" id="storageCard" hidden>
+                <div class="pref-row storage-summary">
+                  <div class="pref-row-copy">
+                    <span class="pref-row-title">Storage</span>
+                    <span class="pref-row-hint" id="storageSummary"></span>
+                  </div>
+                </div>
+                <div class="storage-body">
+                  <div class="storage-group">
+                    <div class="storage-group-head">
+                      <span class="storage-group-name">Notes</span>
+                      <span class="storage-group-usage" id="storageNotesUsage"></span>
+                    </div>
+                    <div class="storage-bar" id="storageNotesBar"></div>
+                    <div class="storage-legend" id="storageLegend"></div>
+                  </div>
+                  <div class="storage-group">
+                    <div class="storage-group-head">
+                      <span class="storage-group-name">Attachments</span>
+                      <span class="storage-group-usage" id="storageAttachmentsUsage"></span>
+                    </div>
+                    <div class="storage-bar" id="storageAttachmentsBar"></div>
+                    <p class="storage-group-hint" id="storageAttachmentsHint"></p>
                   </div>
                 </div>
               </div>

@@ -4,7 +4,7 @@
    scroll lock (desktop). One shared base (.topbar-panel) drives the
    anchor hang, the entry transition and the <640px bottom-sheet shape;
    the two surfaces dress it in their own blocks, and the share links'
-   inventory card rides inside Settings → Cloud sync. Token-driven
+   inventory card rides inside Settings → Account. Token-driven
    throughout, so dark mode needs no extra rules — the aliases invert
    under body.dark (see 01-tokens.css). */
 
@@ -896,7 +896,7 @@ body.panel-sheet-open {
 }
 
 /* ---- the settings card ---------------------------------------------------------
-   The inventory lives in Settings → Cloud sync: the share panel is the
+   The inventory lives in Settings → Account: the share panel is the
    act of sharing one note, this card is every link the account owns.
    The head row is a settings row (13-settings.css); the list below it
    reuses the link-row styles, sized and scrollable like the popup's
