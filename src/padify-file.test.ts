@@ -453,9 +453,10 @@ describe('serializePadifyWorkspaceFile', () => {
   });
 
   it('writes the strict envelope with fixed key order — notes in rail order', () => {
-    const parsed = JSON.parse(
-      serializePadifyWorkspaceFile(samplePad(), FIXED_NOW),
-    ) as Record<string, unknown>;
+    const parsed = JSON.parse(serializePadifyWorkspaceFile(samplePad(), FIXED_NOW)) as Record<
+      string,
+      unknown
+    >;
     expect(Object.keys(parsed)).toEqual([
       'type',
       'format',
@@ -481,7 +482,10 @@ describe('serializePadifyWorkspaceFile', () => {
 
   it('omits the theme and attachments keys when the pad carries neither', () => {
     const parsed = JSON.parse(
-      serializePadifyWorkspaceFile({ notes: [sampleNote()], theme: null, attachments: [] }, FIXED_NOW),
+      serializePadifyWorkspaceFile(
+        { notes: [sampleNote()], theme: null, attachments: [] },
+        FIXED_NOW,
+      ),
     ) as Record<string, unknown>;
     expect('theme' in parsed).toBe(false);
     expect('attachments' in parsed).toBe(false);
@@ -520,10 +524,7 @@ describe('parsePadifyWorkspaceFile', () => {
 
   it('round-trips a written pad — notes, order, theme, attachments', () => {
     const pad: PadifyWorkspaceFile = {
-      notes: [
-        sampleNote(),
-        sampleNote({ name: null, noteType: 'markdown', content: '# x' }),
-      ],
+      notes: [sampleNote(), sampleNote({ name: null, noteType: 'markdown', content: '# x' })],
       theme: { mode: 'dark', userPreferred: true },
       attachments: [
         {
@@ -626,15 +627,14 @@ describe('colorTheme — the additive v1 extension on both envelopes', () => {
   it('rides the single-note envelope when present, and stays byte-identical when absent', () => {
     const bare = serializePadifyNoteFile(sampleNote(), FIXED_NOW);
     expect(bare).not.toContain('colorTheme');
-    const themed = serializePadifyNoteFile(
-      sampleNote({ colorTheme: 'dark' }),
-      FIXED_NOW,
-    );
+    const themed = serializePadifyNoteFile(sampleNote({ colorTheme: 'dark' }), FIXED_NOW);
     expect(JSON.parse(themed).note.colorTheme).toBe('dark');
   });
 
   it('round-trips through the single-note reader', () => {
-    const result = parsePadifyFile(serializePadifyNoteFile(sampleNote({ colorTheme: 'light' }), FIXED_NOW));
+    const result = parsePadifyFile(
+      serializePadifyNoteFile(sampleNote({ colorTheme: 'light' }), FIXED_NOW),
+    );
     expect(result!.kind).toBe('padify');
     if (result!.kind !== 'padify') return;
     expect(result!.note.colorTheme).toBe('light');
@@ -644,7 +644,14 @@ describe('colorTheme — the additive v1 extension on both envelopes', () => {
     const file = JSON.stringify({
       type: 'padify-note',
       format: 1,
-      note: { name: null, noteType: 'standard', content: 'x', createdAt: 0, updatedAt: 0, colorTheme: 'blue' },
+      note: {
+        name: null,
+        noteType: 'standard',
+        content: 'x',
+        createdAt: 0,
+        updatedAt: 0,
+        colorTheme: 'blue',
+      },
     });
     const result = parsePadifyFile(file);
     expect(result!.kind).toBe('padify');

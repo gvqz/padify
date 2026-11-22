@@ -251,9 +251,7 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
       // device that never picked one exports no theme field at all.
       const mode = getSetting('mode');
       const theme: PadifyWorkspaceTheme | null =
-        mode !== null
-          ? { mode, userPreferred: getSetting('isUserPreferredTheme') !== null }
-          : null;
+        mode !== null ? { mode, userPreferred: getSetting('isUserPreferredTheme') !== null } : null;
       saveTextAsFile(
         serializePadifyWorkspaceFile({ notes, theme, attachments }, Date.now()),
         padifyWorkspaceFileName(getDatedFileStem()),

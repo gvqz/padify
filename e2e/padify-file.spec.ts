@@ -315,9 +315,7 @@ test.describe('the .padify file', () => {
 });
 
 test.describe('the workspace file — a whole pad, as one file', () => {
-  test('the whole pad saves as one file and reopens as fresh notes', async ({
-    page,
-  }, testInfo) => {
+  test('the whole pad saves as one file and reopens as fresh notes', async ({ page }, testInfo) => {
     await page.goto('/');
 
     // Two notes, both carrying live text: the first from the fresh pad,
