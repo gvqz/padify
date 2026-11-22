@@ -298,6 +298,16 @@ export interface EditorPort {
   /** Sets the highlight behind the selection ('transparent' clears it). */
   setHighlight(color: string): boolean;
 
+  /**
+   * The highlight behind the caret as '#rrggbb', or null when the caret
+   * sits in unhighlighted text. The model port answers structurally (the
+   * styled span the caret sits in) — the browser's highlight query dialect
+   * is not reliable, which is why this reads from the model instead.
+   * Powers the highlight bar's caret-following preview and the picker's
+   * current-swatch mark.
+   */
+  queryHighlight(): string | null;
+
   /** Toggles superscript/subscript at the selection (re-apply to clear). */
   applyScript(type: ScriptType): boolean;
 

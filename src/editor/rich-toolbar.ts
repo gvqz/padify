@@ -81,6 +81,35 @@ const BLOCK_LABELS: Readonly<Record<BlockFormat, string>> = {
   pre: 'Code block',
 };
 
+/**
+ * The hint pill's word per block format, when the engine refuses it inside
+ * a list item (formatting never destroys a list — ops.applyBlockTag).
+ * "Normal text" is the one whose Docs meaning still exists inside a list:
+ * it is the list toggle itself, so the pill points there.
+ */
+const BLOCK_IN_LIST_HINTS: Readonly<Record<BlockFormat, string>> = {
+  p: 'To return a list item to plain text, toggle the list off.',
+  h1: "Headings can't go inside list items",
+  h2: "Headings can't go inside list items",
+  h3: "Headings can't go inside list items",
+  blockquote: "Quotes can't go inside list items",
+  pre: "Code blocks can't go inside list items",
+};
+
+/**
+ * The same refusals inside a table cell (cells are left alone too).
+ * "Normal text" is omitted: a cell is already plain text, so the button
+ * is a true no-op there and silence is the honest answer.
+ */
+const BLOCK_IN_CELL_HINTS: Readonly<Record<BlockFormat, string>> = {
+  p: '',
+  h1: "Headings can't go inside table cells",
+  h2: "Headings can't go inside table cells",
+  h3: "Headings can't go inside table cells",
+  blockquote: "Quotes can't go inside table cells",
+  pre: "Code blocks can't go inside table cells",
+};
+
 interface RichToolbarElements {
   toolbar: HTMLElement;
   linkButton: HTMLButtonElement | null;
@@ -134,6 +163,10 @@ let paletteMounted = false;
 let textColorPicker: ColorPickerHandle | null = null;
 let highlightPicker: ColorPickerHandle | null = null;
 
+/** The toolbar's hint pill ("Select some text first") and its hide timer. */
+let hintPill: HTMLElement | null = null;
+let hintHideTimer: number | null = null;
+
 /** Test seam: forget the wired toolbar so a fresh shell can boot it. */
 export function resetRichToolbarForTests(): void {
   elements = null;
@@ -146,6 +179,8 @@ export function resetRichToolbarForTests(): void {
   paletteMounted = false;
   textColorPicker = null;
   highlightPicker = null;
+  hideToolbarHint();
+  hintPill = null;
 }
 
 /**
@@ -216,6 +251,9 @@ export function initRichToolbar(manager: TabManager): void {
     if (!show && anyMenuOpen()) {
       closeMenus();
     }
+    if (!show) {
+      hideToolbarHint();
+    }
     if (show) {
       scheduleStateRefresh();
     }
@@ -255,7 +293,9 @@ function refreshStates(): void {
   // switch/cloud merge, or the user clicked elsewhere) leaves queryCommand*
   // answering from a detached selection — the pressed states would go
   // stale garbage. Nothing selected in the note, nothing shown pressed;
-  // the next selectionchange inside the note re-syncs.
+  // the next selectionchange inside the note re-syncs. The color bars
+  // reset to their resting look with the rest — there is no "current
+  // value" to mirror while the caret is elsewhere.
   if (!port.isCaretInside()) {
     toolbar
       .querySelectorAll<HTMLButtonElement>('[aria-pressed]')
@@ -264,6 +304,7 @@ function refreshStates(): void {
     if (tableHost) {
       tableHost.hidden = true;
     }
+    clearColorBars();
     refreshHistoryButtons();
     return;
   }
@@ -317,8 +358,59 @@ function refreshStates(): void {
     el.linkButton.setAttribute('aria-pressed', String(!!inLink));
   }
 
+  // The bars under the ink/highlight buttons mirror the caret's colors —
+  // Docs' font-color button shows the color the cursor sits in, not the
+  // last color anyone picked. Null (plain ink / no highlight) resets the
+  // bar to its CSS fallback, which is the resting look.
+  refreshColorBars(port);
+
   refreshCaretLabels();
   refreshHistoryButtons();
+}
+
+/**
+ * The caret-following color bars: the ink bar reads queryTextColor, the
+ * highlight bar reads queryHighlight (the model port answers the styled
+ * span the caret sits in — the browser's highlight query dialect is not
+ * reliable). One reset, one read, per bar.
+ */
+function refreshColorBars(port: EditorPort): void {
+  const el = elements;
+  if (!el) {
+    return;
+  }
+  const inkPreview = el.toolbar.querySelector<HTMLElement>('[data-rich-ink="color"]');
+  const hilitePreview = el.toolbar.querySelector<HTMLElement>('[data-rich-hilite]');
+  const ink = safeQuery(() => port.queryTextColor());
+  if (inkPreview) {
+    if (ink) {
+      inkPreview.style.setProperty('--rich-ink', ink);
+    } else {
+      inkPreview.style.removeProperty('--rich-ink');
+    }
+  }
+  const hilite = safeQuery(() => port.queryHighlight());
+  if (hilitePreview) {
+    if (hilite && hilite !== 'transparent') {
+      hilitePreview.style.setProperty('--rich-hilite', hilite);
+    } else {
+      hilitePreview.style.removeProperty('--rich-hilite');
+    }
+  }
+}
+
+/** Both bars back to their CSS fallbacks (the resting look). */
+function clearColorBars(): void {
+  const el = elements;
+  if (!el) {
+    return;
+  }
+  el.toolbar
+    .querySelector<HTMLElement>('[data-rich-ink="color"]')
+    ?.style.removeProperty('--rich-ink');
+  el.toolbar
+    .querySelector<HTMLElement>('[data-rich-hilite]')
+    ?.style.removeProperty('--rich-hilite');
 }
 
 /**
@@ -442,7 +534,10 @@ function clampPanelToViewport(panel: HTMLElement): void {
 }
 
 /** Docs marks the size/font/styles the caret sits in; custom sizes echo
- * into the input row so a second visit shows what the caret is in. */
+ * into the input row so a second visit shows what the caret is in. The
+ * color menus mark the swatch matching the caret's ink/highlight (the
+ * highlight query answers structurally from the model port — the browser
+ * highlight query dialect is not reliable). */
 function markCurrentValue(button: HTMLButtonElement, panel: HTMLElement): void {
   const el = elements;
   if (!el) {
@@ -450,10 +545,10 @@ function markCurrentValue(button: HTMLButtonElement, panel: HTMLElement): void {
   }
   const kind = button.dataset.richMenu;
   if (kind === 'color' || kind === 'highlight') {
-    // The picker marks the swatch matching the caret's ink; highlight has
-    // no reliable queryCommandValue dialect, so nothing is marked there.
     const current =
-      kind === 'color' ? (safeQuery(() => getEditorPort()?.queryTextColor()) ?? null) : null;
+      kind === 'color'
+        ? (safeQuery(() => getEditorPort()?.queryTextColor()) ?? null)
+        : (safeQuery(() => getEditorPort()?.queryHighlight()) ?? null);
     (kind === 'color' ? textColorPicker : highlightPicker)?.refresh(current);
     return;
   }
@@ -559,6 +654,90 @@ function selectionIsInNote(): boolean {
   const note = document.getElementById('note');
   const selection = window.getSelection();
   return !!note && !!selection && selection.rangeCount > 0 && note.contains(selection.anchorNode);
+}
+
+/**
+ * True when a RANGED selection (not a bare caret) lives in the note — the
+ * contract clear formatting needs: it strips inline marks, and a caret
+ * carries none.
+ */
+function rangeSelectionIsInNote(): boolean {
+  const note = document.getElementById('note');
+  const selection = window.getSelection();
+  return (
+    !!note &&
+    !!selection &&
+    selection.rangeCount > 0 &&
+    !selection.getRangeAt(0).collapsed &&
+    note.contains(selection.getRangeAt(0).startContainer)
+  );
+}
+
+/**
+ * Docs runs caret-friendly commands against the paragraph the caret sits
+ * in — even when the user never clicked into the note first (a fresh
+ * note, focus parked in a panel). When the caret has drifted outside the
+ * note, focus brings Chrome's remembered selection back; when there was
+ * never one, ensureCaretInside parks it at the note's end. Returns
+ * whether a caret is now available — gated commands show the hint pill
+ * instead of running into silence.
+ */
+function plantCaretIfMissing(port: EditorPort): boolean {
+  if (port.isCaretInside()) {
+    return true;
+  }
+  port.focus();
+  return safeQuery(() => port.ensureCaretInside()) === true;
+}
+
+// ---------------------------------------------------------------------------
+// The hint pill — the small "Select some text first" nudge that replaces
+// silence when a gated command has nothing to work on. One element, reused;
+// anchored under the button that was clicked; fades like the toast does.
+// ---------------------------------------------------------------------------
+
+const HINT_LIFETIME_MS = 2400;
+
+function hideToolbarHint(): void {
+  if (hintHideTimer !== null) {
+    window.clearTimeout(hintHideTimer);
+    hintHideTimer = null;
+  }
+  hintPill?.classList.remove('rich-hint-pill-show');
+}
+
+function showToolbarHint(message: string, anchor?: HTMLElement | null): void {
+  if (!hintPill) {
+    hintPill = document.createElement('div');
+    hintPill.className = 'rich-hint-pill';
+    hintPill.setAttribute('role', 'status');
+    document.body.appendChild(hintPill);
+  }
+  // textContent — the messages are code-owned, but the discipline costs
+  // nothing and matches the toast's XSS posture.
+  hintPill.textContent = message;
+  // The toast's restart trick: a class that is already present would not
+  // re-run the enter transition, so force the reflow between.
+  hintPill.classList.remove('rich-hint-pill-show');
+  void hintPill.offsetWidth;
+  hintPill.classList.add('rich-hint-pill-show');
+
+  // Under the anchor button, clamped to the viewport. jsdom reports zero
+  // rects — the pill still exists and reads; positioning is a no-op there.
+  const rect = anchor?.getBoundingClientRect();
+  if (rect && (rect.width > 0 || rect.height > 0) && hintPill.offsetWidth > 0) {
+    const left = Math.min(
+      Math.max(8, rect.left),
+      Math.max(8, window.innerWidth - hintPill.offsetWidth - 8),
+    );
+    hintPill.style.left = `${Math.round(left)}px`;
+    hintPill.style.top = `${Math.round(rect.bottom + 6)}px`;
+  }
+
+  if (hintHideTimer !== null) {
+    window.clearTimeout(hintHideTimer);
+  }
+  hintHideTimer = window.setTimeout(hideToolbarHint, HINT_LIFETIME_MS);
 }
 
 function restoreParkedRange(): void {
@@ -800,14 +979,41 @@ function wireLinkPopover(): void {
 // Command dispatch — the toolbar's pointerdown/click/keydown contract.
 // ---------------------------------------------------------------------------
 
-function runBlockCommand(target: BlockFormat): void {
+/**
+ * The styles menu's block formats. The quote is caret-friendly — the
+ * issue groups it with the list toggles, and a bare caret quotes the
+ * paragraph it sits in (planting one first when the caret drifted out).
+ * The other formats keep the selection gate: with no caret anywhere they
+ * say so with the hint pill instead of silence. Inside a list item or a
+ * table cell the engine refuses block rewrites by design (formatting
+ * never destroys a list or a table) — the pill turns that refusal into
+ * guidance instead of the old "no change, no feedback" silence.
+ */
+function runBlockCommand(target: BlockFormat, anchor: HTMLElement | null): void {
   const port = getEditorPort();
   if (!port) {
     return;
   }
+  const caretReady = target === 'blockquote' ? plantCaretIfMissing(port) : port.isCaretInside();
+  if (!caretReady) {
+    showToolbarHint('Select some text first', anchor);
+    return;
+  }
+  const inList = safeQuery(() => port.queryListKind()) !== null;
+  if (inList) {
+    showToolbarHint(BLOCK_IN_LIST_HINTS[target], anchor);
+    return;
+  }
+  const inCell = safeQuery(() => port.queryTableContext()) !== null;
+  if (inCell && BLOCK_IN_CELL_HINTS[target]) {
+    showToolbarHint(BLOCK_IN_CELL_HINTS[target], anchor);
+    return;
+  }
   // Clicking the active heading/quote/code block returns it to plain; the
-  // ¶ button always normalizes to a paragraph.
-  const current = safeQuery(() => port.queryBlockFormat());
+  // ¶ button always normalizes to a paragraph. An unanswerable query reads
+  // as plain — the same fallback the button's label uses — so Normal text
+  // never re-applies what is already there.
+  const current = safeQuery(() => port.queryBlockFormat()) ?? 'p';
   const next: BlockFormat = target === 'p' || current === target ? 'p' : target;
   if (current !== next) {
     port.applyBlockFormat(next);
@@ -861,7 +1067,12 @@ function wireToolbarEvents(): void {
     // The styles menu: choosing the active style returns the block to plain.
     const blockItem = target.closest<HTMLButtonElement>('[data-rich-block]');
     if (blockItem) {
-      runBlockCommand(blockItem.dataset.richBlock as BlockFormat);
+      // The pill anchors under the styles-menu BUTTON — the item's panel is
+      // closing as the hint appears.
+      const menuButton = blockItem
+        .closest('.rich-menu-host')
+        ?.querySelector<HTMLElement>('[data-rich-menu="block"]');
+      runBlockCommand(blockItem.dataset.richBlock as BlockFormat, menuButton ?? null);
       closeMenus(true);
       scheduleStateRefresh();
       return;
@@ -966,10 +1177,22 @@ function wireToolbarEvents(): void {
     }
 
     if (button.dataset.richCmd) {
-      port.applyFormat(button.dataset.richCmd as EditorCommand);
+      const command = button.dataset.richCmd as EditorCommand;
+      // Clear formatting needs a RANGED selection (a caret carries no
+      // marks) — with one absent, the hint pill replaces the old silence.
+      if (command === 'removeFormat' && !rangeSelectionIsInNote()) {
+        showToolbarHint('Select some text first', button);
+        scheduleStateRefresh();
+        return;
+      }
+      port.applyFormat(command);
     } else if (button.dataset.richAction) {
       ACTIONS[button.dataset.richAction]?.(port);
     } else if (button.dataset.richList) {
+      // The list toggles are caret-friendly: Docs applies them to the
+      // paragraph the caret sits in, even when the note was never clicked
+      // into — park the caret (last position, else the note's end) first.
+      plantCaretIfMissing(port);
       port.toggleList(button.dataset.richList as ListKind);
     }
 
@@ -1309,6 +1532,7 @@ function wireDocumentEvents(): void {
       if (anyMenuOpen()) {
         closeMenus(true);
       }
+      hideToolbarHint();
     }
   });
 
@@ -1360,8 +1584,9 @@ function wireDocumentEvents(): void {
   // Pressed states follow the caret and the edits.
   document.addEventListener('selectionchange', scheduleStateRefresh);
 
-  // A theme flip re-inks the note (theme-colors) — the session ink preview
-  // would then advertise a color that no longer matches the surface.
+  // A theme flip re-inks the note (theme-colors) — the bars mirror the
+  // caret, so a refresh re-reads the re-inked values (the rAF fires after
+  // both listeners ran; the surface is already re-inked by then).
   document.addEventListener('padify:theme', () => {
     const wired = elements;
     if (!wired) {
@@ -1370,6 +1595,7 @@ function wireDocumentEvents(): void {
     wired.toolbar
       .querySelector<HTMLElement>('[data-rich-ink="color"]')
       ?.style.removeProperty('--rich-ink');
+    scheduleStateRefresh();
   });
   getEditorPort()?.onInput(scheduleStateRefresh);
 }

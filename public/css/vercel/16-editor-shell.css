@@ -1044,6 +1044,40 @@ body.dark #note[data-empty]::before {
   background: var(--rich-hilite, var(--vz-fg));
 }
 
+/* The toolbar's hint pill: the small "Select some text first" nudge that
+   replaces silence when a gated command has nothing to work on. Anchored
+   under the clicked button (fixed coordinates set from its rect), it
+   never takes input and fades out on its own timer. The menu tokens keep
+   it at home in both themes. */
+.rich-hint-pill {
+  position: fixed;
+  z-index: 90;
+  max-width: 320px;
+  padding: 5px 10px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+  box-shadow: var(--vz-shadow-menu);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-2px);
+  transition:
+    opacity 0.18s var(--vz-ease),
+    transform 0.18s var(--vz-ease),
+    visibility 0.18s;
+}
+
+.rich-hint-pill-show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
 .rich-menu-panel {
   position: absolute;
   top: calc(100% + 6px);

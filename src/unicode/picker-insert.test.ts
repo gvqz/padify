@@ -104,6 +104,7 @@ function fakePort(): EditorPort {
     setFontFamily: emptyAnswer,
     setTextColor: emptyAnswer,
     queryTextColor: () => null,
+    queryHighlight: () => null,
     setHighlight: emptyAnswer,
     applyScript: emptyAnswer,
     queryScript: emptyAnswer,

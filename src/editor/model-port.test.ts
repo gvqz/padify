@@ -846,6 +846,30 @@ describe('the styled caret run', () => {
     caretAt(surface, 2);
     expect(port.queryTextColor()).toBe('#123456');
   });
+
+  it('queryHighlight reads the pastel behind the caret, null on plain runs', () => {
+    const { port, surface } = makePort('glow zone');
+    // Plain text answers null — the bar falls back to its resting look.
+    caretAt(surface, 2);
+    expect(port.queryHighlight()).toBeNull();
+
+    selectRange(surface, 0, 9);
+    expect(port.setHighlight('#d0ebff')).toBe(true);
+    caretAt(surface, 2); // inside the highlighted run
+    expect(port.queryHighlight()).toBe('#d0ebff');
+
+    // Ink under the same caret never leaks into the highlight query.
+    selectRange(surface, 0, 9);
+    port.setTextColor('#123456');
+    caretAt(surface, 2);
+    expect(port.queryHighlight()).toBe('#d0ebff');
+
+    // None strips the declaration; the query returns to null.
+    selectRange(surface, 0, 9);
+    port.setHighlight('transparent');
+    caretAt(surface, 2);
+    expect(port.queryHighlight()).toBeNull();
+  });
 });
 
 describe('surface interactions', () => {

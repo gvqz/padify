@@ -212,6 +212,12 @@ async function ensureRichActive(): Promise<void> {
 
 /** A full EditorPort stub — the swap-in contract the toolbar must speak. */
 function createFakePort(overrides: Partial<EditorPort> = {}): EditorPort {
+  // The ink/highlight pair models the real contract: a pick writes the
+  // surface and the caret queries read it back — the toolbar's color bars
+  // mirror the caret through these two, so a stateless fake would fight
+  // the caret-following refresh.
+  let ink: string | null = null;
+  let highlight: string | null = null;
   const base: EditorPort = {
     getHtml: vi.fn(() => ''),
     setHtml: vi.fn(),
@@ -250,9 +256,16 @@ function createFakePort(overrides: Partial<EditorPort> = {}): EditorPort {
     canRedo: vi.fn(() => false),
     setFontSize: vi.fn(() => true),
     setFontFamily: vi.fn(() => true),
-    setTextColor: vi.fn(() => true),
-    queryTextColor: vi.fn((): string | null => null),
-    setHighlight: vi.fn(() => true),
+    setTextColor: vi.fn((color: string) => {
+      ink = color;
+      return true;
+    }),
+    queryTextColor: vi.fn((): string | null => ink),
+    setHighlight: vi.fn((color: string) => {
+      highlight = color === 'transparent' ? null : color;
+      return true;
+    }),
+    queryHighlight: vi.fn((): string | null => highlight),
     applyScript: vi.fn(() => true),
     queryScript: vi.fn(() => false),
     applyAlignment: vi.fn(() => true),
@@ -1289,15 +1302,24 @@ describe('the color pickers (characterization)', () => {
     expect(port.focus).toHaveBeenCalled();
   });
 
-  it('the ink preview adapts to the theme: a padify:theme flip clears it', () => {
+  it('a padify:theme flip re-reads the caret ink (the engine re-inked the surface)', async () => {
     const port = createFakePort();
     setEditorPort(port);
     click(colorButton());
     click(colorPanel().querySelector<HTMLElement>('[data-rich-color="red"]')!);
     expect(inkPreview().style.getPropertyValue('--rich-ink')).toBe('#ea4335');
 
+    // The bars mirror the caret: the theme flip re-inks the note's spans,
+    // and the toolbar's refresh re-reads queryTextColor after both theme
+    // listeners ran. The fake port has no re-ink pass — it still answers
+    // the picked value, which is what the bar must show here; the point
+    // the test pins is the RE-READ (a stale hand-set preview would show
+    // the old hex without one).
+    (port.queryTextColor as ReturnType<typeof vi.fn>).mockClear();
     document.dispatchEvent(new Event('padify:theme'));
-    expect(inkPreview().style.getPropertyValue('--rich-ink')).toBe('');
+    await flushFrames();
+    expect(port.queryTextColor).toHaveBeenCalled();
+    expect(inkPreview().style.getPropertyValue('--rich-ink')).toBe('#ea4335');
   });
 
   it('a highlight pick applies the literal pastel and previews it', () => {
@@ -1323,7 +1345,7 @@ describe('the color pickers (characterization)', () => {
     expect(hilitePreview().style.getPropertyValue('--rich-hilite')).toBe('');
   });
 
-  it("a pick records the color into the picker's recents row", () => {
+  it('a pick records the color into the picker recents row', () => {
     const port = createFakePort();
     setEditorPort(port);
     click(colorButton());
@@ -1333,5 +1355,216 @@ describe('the color pickers (characterization)', () => {
     const recents = colorPanel().querySelectorAll<HTMLElement>('.rich-swatch-recent');
     // Blue in light mode.
     expect(Array.from(recents).some((swatch) => swatch.dataset.cpValue === '#4285f4')).toBe(true);
+  });
+
+  it('the highlight menu marks the swatch the caret sits in', () => {
+    const port = createFakePort();
+    setEditorPort(port);
+    click(highlightButton());
+    click(highlightPanel().querySelector<HTMLElement>('[data-rich-highlight="#fff3bf"]')!);
+
+    // Reopening marks the caret's highlight (the fake port read it back).
+    click(highlightButton());
+    const marked = highlightPanel().querySelector<HTMLElement>('[data-rich-highlight="#fff3bf"]')!;
+    expect(marked.classList.contains('rich-menu-current')).toBe(true);
+    expect(marked.getAttribute('aria-checked')).toBe('true');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// the caret-following color bars
+// ---------------------------------------------------------------------------
+
+describe('the caret-following color bars (characterization)', () => {
+  function inkPreview(): HTMLElement {
+    return toolbar().querySelector<HTMLElement>('[data-rich-ink="color"]')!;
+  }
+
+  function hilitePreview(): HTMLElement {
+    return toolbar().querySelector<HTMLElement>('[data-rich-hilite]')!;
+  }
+
+  it('the ink bar mirrors queryTextColor on selectionchange', async () => {
+    const port = createFakePort({ queryTextColor: vi.fn((): string | null => '#ea4335') });
+    setEditorPort(port);
+    await driveSelectionRefresh();
+    expect(inkPreview().style.getPropertyValue('--rich-ink')).toBe('#ea4335');
+  });
+
+  it('a caret in plain ink clears the bar to its fallback', async () => {
+    const port = createFakePort({ queryTextColor: vi.fn((): string | null => null) });
+    setEditorPort(port);
+    inkPreview().style.setProperty('--rich-ink', '#ea4335'); // a stale preview
+    await driveSelectionRefresh();
+    expect(inkPreview().style.getPropertyValue('--rich-ink')).toBe('');
+  });
+
+  it('the highlight bar mirrors queryHighlight and resets on None', async () => {
+    const port = createFakePort({
+      queryHighlight: vi.fn((): string | null => '#d0ebff'),
+    });
+    setEditorPort(port);
+    hilitePreview().style.setProperty('--rich-hilite', '#fff3bf'); // a stale pick
+    await driveSelectionRefresh();
+    expect(hilitePreview().style.getPropertyValue('--rich-hilite')).toBe('#d0ebff');
+
+    setEditorPort(createFakePort({ queryHighlight: vi.fn((): string | null => null) }));
+    await driveSelectionRefresh();
+    expect(hilitePreview().style.getPropertyValue('--rich-hilite')).toBe('');
+  });
+
+  it('a caret outside the note resets both bars with the pressed states', async () => {
+    const port = createFakePort({
+      isCaretInside: vi.fn(() => false),
+      queryTextColor: vi.fn((): string | null => '#ea4335'),
+      queryHighlight: vi.fn((): string | null => '#d0ebff'),
+    });
+    setEditorPort(port);
+    inkPreview().style.setProperty('--rich-ink', '#ea4335');
+    hilitePreview().style.setProperty('--rich-hilite', '#d0ebff');
+    await driveSelectionRefresh();
+    expect(inkPreview().style.getPropertyValue('--rich-ink')).toBe('');
+    expect(hilitePreview().style.getPropertyValue('--rich-hilite')).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// the hint pill + the gated commands
+// ---------------------------------------------------------------------------
+
+describe('the hint pill and the gated commands (characterization)', () => {
+  function pill(): HTMLElement | null {
+    return document.querySelector<HTMLElement>('.rich-hint-pill');
+  }
+
+  function blockItem(label: string): HTMLElement {
+    const items = toolbar().querySelectorAll<HTMLElement>(
+      '.rich-menu-panel-block [data-rich-block]',
+    );
+    return Array.from(items).find((item) => item.textContent!.trim() === label)!;
+  }
+
+  function openStylesMenu(): void {
+    click(toolbar().querySelector<HTMLElement>('[data-rich-menu="block"]')!);
+  }
+
+  afterEach(() => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  });
+
+  it('clear formatting without a ranged selection shows the hint pill instead of silence', () => {
+    const port = createFakePort();
+    setEditorPort(port);
+    click(toolbar().querySelector<HTMLElement>('[data-rich-cmd="removeFormat"]')!);
+    expect(port.applyFormat).not.toHaveBeenCalled();
+    expect(pill()?.textContent).toBe('Select some text first');
+    expect(pill()?.classList.contains('rich-hint-pill-show')).toBe(true);
+  });
+
+  it('clear formatting over a real selection strips through the port', () => {
+    const port = createFakePort();
+    setEditorPort(port);
+    note().innerHTML = '<div>marked words</div>';
+    selectContentsOf(note());
+    click(toolbar().querySelector<HTMLElement>('[data-rich-cmd="removeFormat"]')!);
+    expect(port.applyFormat).toHaveBeenCalledWith('removeFormat');
+  });
+
+  it('a heading inside a list item shows the list hint and never reaches the port', () => {
+    const port = createFakePort({ queryListKind: vi.fn((): ListKind | null => 'ul') });
+    setEditorPort(port);
+    openStylesMenu();
+    click(blockItem('Heading 1'));
+    expect(port.applyBlockFormat).not.toHaveBeenCalled();
+    expect(pill()?.textContent).toBe("Headings can't go inside list items");
+  });
+
+  it('the quote inside a list item shows the quote hint', () => {
+    const port = createFakePort({ queryListKind: vi.fn((): ListKind | null => 'checklist') });
+    setEditorPort(port);
+    openStylesMenu();
+    click(blockItem('Quote'));
+    expect(port.applyBlockFormat).not.toHaveBeenCalled();
+    expect(pill()?.textContent).toBe("Quotes can't go inside list items");
+  });
+
+  it('Normal text inside a list item points at the list toggle', () => {
+    const port = createFakePort({ queryListKind: vi.fn((): ListKind | null => 'ol') });
+    setEditorPort(port);
+    openStylesMenu();
+    click(blockItem('Normal text'));
+    expect(port.applyBlockFormat).not.toHaveBeenCalled();
+    expect(pill()?.textContent).toBe('To return a list item to plain text, toggle the list off.');
+  });
+
+  it('a heading inside a table cell shows the cell hint; Normal text stays a silent no-op', () => {
+    const port = createFakePort({
+      queryTableContext: vi.fn((): TableCellContext | null => ({
+        rows: 1,
+        cols: 1,
+        rowIndex: 0,
+        colIndex: 0,
+      })),
+    });
+    setEditorPort(port);
+    openStylesMenu();
+    click(blockItem('Heading 2'));
+    expect(port.applyBlockFormat).not.toHaveBeenCalled();
+    expect(pill()?.textContent).toBe("Headings can't go inside table cells");
+
+    (port.applyBlockFormat as ReturnType<typeof vi.fn>).mockClear();
+    // Dismiss the first pill — the second click must not inherit its glow.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    openStylesMenu();
+    click(blockItem('Normal text'));
+    expect(port.applyBlockFormat).not.toHaveBeenCalled();
+    // Silence IS the answer there — no pill, the cell is already plain.
+    expect(pill()?.classList.contains('rich-hint-pill-show')).toBe(false);
+  });
+
+  it('a heading with no caret anywhere shows the selection hint', () => {
+    const port = createFakePort({ isCaretInside: vi.fn(() => false) });
+    setEditorPort(port);
+    openStylesMenu();
+    click(blockItem('Heading 1'));
+    expect(port.applyBlockFormat).not.toHaveBeenCalled();
+    expect(pill()?.textContent).toBe('Select some text first');
+  });
+
+  it('the caret-friendly quote plants a missing caret before quoting', () => {
+    const port = createFakePort({ isCaretInside: vi.fn(() => false) });
+    setEditorPort(port);
+    openStylesMenu();
+    click(blockItem('Quote'));
+    expect(port.focus).toHaveBeenCalled();
+    expect(port.ensureCaretInside).toHaveBeenCalled();
+    expect(port.applyBlockFormat).toHaveBeenCalledWith('blockquote');
+  });
+
+  it('the list toggles plant a missing caret, then toggle', () => {
+    const port = createFakePort({ isCaretInside: vi.fn(() => false) });
+    setEditorPort(port);
+    click(toolbar().querySelector<HTMLElement>('[data-rich-list="checklist"]')!);
+    expect(port.focus).toHaveBeenCalled();
+    expect(port.ensureCaretInside).toHaveBeenCalled();
+    expect(port.toggleList).toHaveBeenCalledWith('checklist');
+  });
+
+  it('a heading outside a list still applies (the gate reads the caret, not everything)', () => {
+    const port = createFakePort();
+    setEditorPort(port);
+    openStylesMenu();
+    click(blockItem('Heading 1'));
+    expect(port.applyBlockFormat).toHaveBeenCalledWith('h1');
+    expect(pill()?.classList.contains('rich-hint-pill-show')).toBe(false);
+  });
+
+  it('Escape dismisses the pill', () => {
+    const port = createFakePort();
+    setEditorPort(port);
+    click(toolbar().querySelector<HTMLElement>('[data-rich-cmd="removeFormat"]')!);
+    expect(pill()?.classList.contains('rich-hint-pill-show')).toBe(true);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(pill()?.classList.contains('rich-hint-pill-show')).toBe(false);
   });
 });

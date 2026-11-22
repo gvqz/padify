@@ -182,6 +182,7 @@ function fakePort(): EditorPort {
     setFontFamily: () => false,
     setTextColor: () => false,
     queryTextColor: () => null,
+    queryHighlight: () => null,
     setHighlight: () => false,
     applyScript: () => false,
     queryScript: () => false,

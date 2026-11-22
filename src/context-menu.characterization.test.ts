@@ -191,6 +191,7 @@ function createFakePort(): EditorPort {
     setFontFamily: vi.fn(() => true),
     setTextColor: vi.fn(() => true),
     queryTextColor: vi.fn((): string | null => null),
+    queryHighlight: vi.fn((): string | null => null),
     setHighlight: vi.fn(() => true),
     applyScript: vi.fn(() => true),
     queryScript: vi.fn(() => false),

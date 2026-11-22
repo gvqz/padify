@@ -1068,6 +1068,16 @@ export class ModelPort implements EditorPort {
     return this.applyInlineStyle('background-color', value);
   }
 
+  queryHighlight(): string | null {
+    const run = this.styledSpanAtCaret('background-color');
+    if (!run) {
+      return null;
+    }
+    // Same dialects as the ink query; 'transparent' reads as none (the
+    // stored spelling of a cleared highlight never carries a declaration).
+    return normalizeHex(run) ?? rgbStringToHex(run);
+  }
+
   /**
    * "None": a collapsed caret in a styled run clears that run's ink; a
    * ranged selection strips the declaration from every span it touches
