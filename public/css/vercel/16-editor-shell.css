@@ -1216,6 +1216,12 @@ body.dark #note[data-empty]::before {
   justify-content: start;
 }
 
+/* The highlight palette holds six pastels + None — seven swatches ride one
+   row, the same rhythm the recents row already uses. */
+.rich-menu-panel-color[data-rich-panel-hilite] > .rich-cp-grid:not(.rich-cp-grid-recent) {
+  grid-template-columns: repeat(7, 22px);
+}
+
 .rich-cp-grid-recent {
   grid-template-columns: repeat(7, 22px);
 }
@@ -1236,6 +1242,12 @@ body.dark #note[data-empty]::before {
   transform: scale(1.12);
   box-shadow: 0 0 0 1px var(--vz-border-strong);
   outline: none;
+}
+
+/* The hardcoded dark hairline disappears on the dark panel — the near-black
+   chips (paper, steel, the None ghost) need a light one to read as chips. */
+body.dark .rich-swatch {
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 /* The 'None' swatch: dashed ghost with a diagonal strike. */
