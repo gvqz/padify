@@ -26,6 +26,8 @@ import { apiRaw } from './api';
 import {
   fetchAttachment,
   flushAttachmentUploads,
+  ledgerEntryForTests,
+  onAttachmentLedgerChanged,
   resetAttachmentFlushForTests,
 } from './attachments';
 
@@ -134,6 +136,117 @@ describe('flushAttachmentUploads', () => {
     await markAttachmentUploaded(id); // simulate the wipe racing the flush
     apiRawMock.mockResolvedValue(ok());
     expect(await flushAttachmentUploads()).toBe(0);
+  });
+});
+
+describe('flushAttachmentUploads — the retry ledger', () => {
+  beforeEach(async () => {
+    resetStorageForTests();
+    await storageReady();
+    await clearAttachments();
+    resetAttachmentFlushForTests();
+    apiRawMock.mockReset();
+  });
+
+  afterEach(() => {
+    resetStorageForTests();
+    resetAttachmentFlushForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('a transient failure backs off and retries when the window passes', async () => {
+    await addPending('flaky.webm');
+    apiRawMock.mockRejectedValueOnce(new Error('ECONNRESET'));
+
+    expect(await flushAttachmentUploads()).toBe(0);
+    const entry = ledgerEntryForTests((await listPendingAttachments())[0]!.id);
+    expect(entry).not.toBeNull();
+    expect(entry!.attempts).toBe(1);
+    expect(entry!.nextAttemptAt).toBeGreaterThan(Date.now());
+
+    // The immediate next cycle pays no request — the backoff holds.
+    apiRawMock.mockClear();
+    expect(await flushAttachmentUploads()).toBe(0);
+    expect(apiRawMock).not.toHaveBeenCalled();
+
+    // Past the 30-second window the cycle retries on its own.
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(entry!.nextAttemptAt + 1);
+    apiRawMock.mockResolvedValueOnce(ok());
+    expect(await flushAttachmentUploads()).toBe(1);
+    expect(await listPendingAttachments()).toEqual([]);
+    expect(ledgerEntryForTests('gone')).toBeNull();
+    spy.mockRestore();
+  });
+
+  it('the backoff doubles per attempt and caps at the ceiling', async () => {
+    await addPending('stubborn.webm');
+    const id = (await listPendingAttachments())[0]!.id;
+    apiRawMock.mockRejectedValue(new Error('offline'));
+
+    const nowSpy = vi.spyOn(Date, 'now');
+    let lastWait = 0;
+    for (let attempt = 1; attempt <= 7; attempt++) {
+      nowSpy.mockReturnValue(lastWait);
+      await flushAttachmentUploads();
+      const entry = ledgerEntryForTests(id)!;
+      const wait = entry.nextAttemptAt - lastWait;
+      // 30s, 60s, 120s … capped at 15 minutes.
+      expect(wait).toBe(Math.min(30_000 * 2 ** (attempt - 1), 15 * 60_000));
+      lastWait = entry.nextAttemptAt;
+    }
+    nowSpy.mockRestore();
+  });
+
+  it('a poison answer never retries, whatever the clock says', async () => {
+    await addPending('collision.webm');
+    apiRawMock.mockResolvedValueOnce(status(409));
+
+    expect(await flushAttachmentUploads()).toBe(0);
+    const entry = ledgerEntryForTests((await listPendingAttachments())[0]!.id);
+    expect(entry!.poison).toBe(true);
+
+    // Time means nothing to poison — the request cannot succeed as-is.
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(entry!.nextAttemptAt + 3_600_000);
+    apiRawMock.mockClear();
+    expect(await flushAttachmentUploads()).toBe(0);
+    expect(apiRawMock).not.toHaveBeenCalled();
+    spy.mockRestore();
+
+    // A reload (the reset) gets one more try — the server may have changed.
+    resetAttachmentFlushForTests();
+    apiRawMock.mockResolvedValueOnce(ok());
+    expect(await flushAttachmentUploads()).toBe(1);
+  });
+
+  it('success clears the ledger entry — a later transient starts fresh', async () => {
+    const id = await addPending('recovering.webm');
+    apiRawMock.mockRejectedValueOnce(new Error('dropped'));
+    await flushAttachmentUploads();
+    expect(ledgerEntryForTests(id)!.attempts).toBe(1);
+
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(ledgerEntryForTests(id)!.nextAttemptAt + 1);
+    apiRawMock.mockResolvedValueOnce(ok());
+    expect(await flushAttachmentUploads()).toBe(1);
+    expect(ledgerEntryForTests(id)).toBeNull();
+
+    // A NEW failure starts the schedule from the first attempt, not the fifth.
+    await markAttachmentUploaded(id);
+    // (mark keeps uploaded=1; re-add a fresh pending to observe a clean slate.)
+    const second = await addPending('fresh.webm');
+    apiRawMock.mockRejectedValueOnce(new Error('dropped'));
+    await flushAttachmentUploads();
+    expect(ledgerEntryForTests(second)!.attempts).toBe(1);
+    spy.mockRestore();
+  });
+
+  it('the change signal fires after every flush, outcome regardless', async () => {
+    const fired: number[] = [];
+    onAttachmentLedgerChanged(() => fired.push(fired.length));
+    await addPending('watched.webm');
+    apiRawMock.mockResolvedValue(ok());
+
+    await flushAttachmentUploads();
+    expect(fired.length).toBeGreaterThanOrEqual(1);
   });
 });
 

@@ -25,6 +25,7 @@ import { initPipWindow } from './pip-window';
 import { openModal } from './ui/behavior/modal';
 import { initSaveIndicator } from './save-indicator';
 import { initOfflineIndicator } from './offline-indicator';
+import { initUploadChip } from './upload-chip';
 import { initTrashFlash } from './trash-flash';
 import { initTabRailDrawer } from './tab-rail-drawer';
 import { initRichToolbar } from './editor/rich-toolbar';
@@ -378,6 +379,9 @@ export async function initApp(): Promise<void> {
 
   // ---- the offline chip (see offline-indicator.ts) ------------------
   initOfflineIndicator();
+
+  // ---- the upload-pending chip (see upload-chip.ts) -----------------
+  initUploadChip();
 
   // ---- the drawing island warms while the app idles (see
   // editor/drawing/surface.ts) — the first canvas open stops paying the

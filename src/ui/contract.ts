@@ -75,6 +75,8 @@ export const MARKUP_CONTRACT: MarkupContractGroup[] = [
       'note',
       'saveState',
       'offlineChip',
+      'uploadChip',
+      'uploadChipText',
       'wordCount',
       'taskRail',
       'taskRailBackdrop',

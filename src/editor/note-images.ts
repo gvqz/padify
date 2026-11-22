@@ -43,7 +43,7 @@ import {
   putAttachment,
   type AttachmentMeta,
 } from '../storage/attachments';
-import { fetchAttachment } from '../cloud/attachments';
+import { fetchAttachment, notifyAttachmentLedgerChanged } from '../cloud/attachments';
 // The per-file byte ceiling — the wire contract's one number (the
 // server's upload cap, the envelope's, the canvas gates'), so an
 // over-cap capture fails HERE with an honest message instead of
@@ -146,6 +146,9 @@ export async function prepareImageAttachment(
     // bytes — the capture contract says surface this here, not at sync.
     return { ok: false, reason: 'no-storage' };
   }
+  // The new pending upload joins the ledger's picture immediately — the
+  // chip's count is honest even offline, where no cycle will run soon.
+  notifyAttachmentLedgerChanged();
   return { ok: true, image: { id, name: file.name, mime: storedMime, blob } };
 }
 

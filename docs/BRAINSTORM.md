@@ -31,10 +31,6 @@ lines live at the top because everything else defers to them.*
    for them; the feature died with the old app. A voice note = an audio
    attachment + a marker — the plumbing is all there. Decide whether it
    wants to be a note type or an attachment in a text note (owner call).
-10. **Sync ledger for attachments.** Notes have seq-backed sync integrity;
-    attachments have flush-and-hope. A pending-set ledger with retry
-    backoff and an "n uploads pending" chip closes the last honesty gap in
-    the offline story.
 
 ## The hygiene review (2026-11-21) — what the whole-repo scan found
 
@@ -207,6 +203,28 @@ pass's to own). Every line item the review found is closed.*
     minimap island and vendor popovers have known seams (xv21 evidence).
 
 ## DONE — so nobody re-plans it
+
+- **Item 10, the attachment sync ledger (2026-11-22).** Notes have
+  seq-backed sync integrity; attachments had flush-and-hope — an image
+  that failed to reach the server was skipped for the SESSION and nobody
+  was told. The flush now keeps a per-id ledger with the failure's MEANING:
+  transient trouble (network, 5xx, 429, auth) gets an exponential backoff
+  (30 s doubling to a 15-minute ceiling) retried on the cycle clock — a
+  flaky connection heals itself instead of waiting for a reload, while
+  never burning a 5 MB request every 30 seconds; poison trouble (409
+  collision, 413 over-cap, 400 — answers that cannot change without user
+  action) is marked and skipped for the session, the old behavior; a
+  success clears the entry. The ledger paces in memory only — the IDB
+  `uploaded` flag stays the durable truth — so a reload restarts the
+  schedule and the first flush re-learns it. SEEING IT: the upload-pending
+  chip (upload-chip.ts) sits beside the offline chip in the same capsule
+  voice and counts what the STORE says has not reached the server — "2
+  uploads pending" — refreshed by cloud/attachments.ts's change signal
+  after every flush and every capture (a file captured offline joins the
+  count immediately, no cycle required). Deliberately auth-blind: pending
+  bytes while signed out are still the truth, and the tooltip says when
+  they leave. Gates: lint, both tscs, 2011 unit tests (+9), smoke,
+  platform-shortcuts, share-links and note-images e2e.
 
 - **Item 6, share links learn their images (2026-11-22).** The public
   viewer's `padify-att:` refs resolve now: `GET /api/share/:token/att/:id`,
