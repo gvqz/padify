@@ -1,0 +1,210 @@
+Adding a transcript later fits right into the attachment-in-a-note model—and in fact, is easier with it than with a separate note type. Because the audio lives inside a normal rich or markdown note, you already have a natural place to put text without inventing a whole new document format.
+
+
+
+How you store and display the transcript depends on how you want to interact with it:
+1. Inline in the Note Body (Simplest & Most Natural)
+When transcription finishes, insert the text directly into the note—for example, right below the audio player card inside a collapsible/blockquote block or labeled transcript section.
+
+Pros: Zero new schema or sync plumbing; searchable immediately with normal note search; easy to edit or copy/paste.
+
+Cons: Mixing raw machine transcript with your own manual notes can feel messy if you heavily edit both.
+2. Linked Sidecar / Metadata on the Attachment (Cleaner Separation)
+Keep the note body clean (just the audio player card plus whatever you type yourself), and attach the transcript text as derived metadata or a linked text/JSON artifact associated with that attachment ID.
+
+Pros: Keeps your manual note text separate from generated transcripts; lets you show a "View transcript" toggle or drawer/panel on the audio player card; makes re-transcribing easy without clobbering edits.
+
+Cons: Requires slightly more UI/state plumbing if you want full-text search across transcripts too.
+Where the Transcription Happens
+
+On-device / browser: Web Speech API (live while speaking, though browser support and accuracy vary) or a local Whisper/WASM model (private, works offline, heavier bundle/compute).
+
+Server / background job: Send the uploaded audio attachment to a speech-to-text API or worker once saved, then push the resulting text back to the note or attachment metadata.
+Does This Change the "Attachment vs. Type" Verdict?
+No. A transcript is just text (or text tied to an audio attachment)—still not a reason to create a 'voice' note type. Only if you ever build a dedicated time-synced interactive transcript/waveform editor with its own structured data model would a specialized surface or type even be worth reconsidering.
+
+
+
+
+
+
+
+
+
+how would I do the transcription?
+
+
+
+
+
+
+
+
+
+
+
+Since your app already has a server, a client capture path (MediaRecorder producing WebM/Opus), and a 5 MB per-attachment limit (~20–28 minutes of voice), you have three realistic ways to transcribe audio. Which one fits best depends on whether you prioritize privacy/offline use, accuracy, or keeping the client light.
+1. Server-Side Speech-to-Text API (Best Accuracy & Zero Client Weight)
+When an audio attachment is uploaded (or when the user clicks "Transcribe"), your server sends the audio bytes to a speech-to-text endpoint or background worker and saves the transcript back to the note or attachment metadata.
+
+Why it fits your setup: Your server already receives attachment bytes and enforces MAX_ATTACHMENT_BYTES = 5_000_000, so audio files are already small enough to ship cleanly without heavy client CPU/memory overhead.
+
+Pros: High accuracy across accents and noisy environments; no model downloads or battery drain on the user's device; works consistently across browsers.
+
+Cons: Requires network access, an API key/quota, and sending audio off-device (privacy consideration for sensitive voice notes).
+2. Local In-Browser Whisper / WebGPU or WASM (Best Privacy & Offline Support)
+Run a small speech-to-text model (such as a quantized Whisper variant via WebGPU/WASM) directly in the browser or a Web Worker against the recorded/stored audio blob.
+
+Why it fits your setup: Keeps voice recordings strictly local—matching an "offline-first / local-friendly" note architecture if privacy is a priority.
+
+Pros: Works offline; zero per-minute API cost; audio never leaves the device.
+
+Cons: Noticeable initial model download (tens to hundreds of MB depending on model size) and slower transcription on lower-powered devices or longer recordings.
+3. Browser Web Speech API (Fastest Prototype, Least Reliable)
+Use the browser's built-in speech recognition during recording to stream live text while the user speaks.
+
+Why it fits your setup: Quickest way to get something working on screen with minimal code.
+
+Pros: No model hosting or API billing; gives real-time live captions while talking.
+
+Cons: Browser support is inconsistent (especially across desktop/mobile engines and offline modes), accuracy trails modern speech models, and it generally expects live mic input rather than cleanly re-transcribing an already-saved attachment later.
+Practical Architecture for "Show It Later"
+If you specifically want to view or generate the text of a recording later (not just live-type while speaking):
+
+Store the audio attachment first so the recording is safe even if transcription fails or is skipped.
+
+Trigger transcription on demand (a "Transcribe" button on the audio player card) or asynchronously right after upload, rather than blocking note saving.
+
+Cache the result (inline in the note or in sidecar metadata tied to the attachment ID) so reopening the note shows the text immediately without re-running transcription.
+If you want to keep things simple to start, server-side transcription triggered on demand is usually the cleanest path—it avoids bloating the client bundle while keeping the UX non-blocking.
+
+
+
+
+
+
+
+
+
+2 or 3 is the only real options
+i need a good result
+
+
+
+
+
+
+
+
+
+
+
+If #2 (local in-browser Whisper via WebGPU/WASM) and #3 (Web Speech API) are your only real constraints—and you want a genuinely good result, not a flaky prototype—#2 (local Whisper in a Web Worker) is the clear winner.
+Web Speech API (#3) is great for quick live dictation, but it struggles when you want reliable transcription after recording, lacks consistent punctuation/accuracy across browsers, and is tied to browser speech engines rather than a predictable model. A local Whisper model gives you actual speech-to-text quality on saved audio without sending recordings anywhere.
+How to Make Local Whisper Actually Good (and Not Painful)
+
+Run it in a Web Worker (never on the main UI thread)
+Keep audio decoding, resampling, and inference inside a dedicated worker so typing, scrolling, and playback stay smooth while transcription runs.
+
+Use WebGPU with a WASM fallbackLibraries like Transformers.js (ONNX Runtime Web) can use WebGPU when available for much faster inference and fall back to WebAssembly when it isn't.   
+
+
+
+Pick a sensible model size
+
+Tiny / Base: Fast download and snappy inference, decent for clear speech, but rougher on noisy audio, proper nouns, or fast talking.
+
+Small / Distilled or Turbo variants: Much better accuracy and punctuation; worth offering or defaulting to once you verify load/memory behavior on your target devices.
+
+Tip: Treat the model download as opt-in or lazy (e.g., on first "Transcribe" click, with a clear progress bar) rather than forcing every user to download tens/hundreds of MB just to open the editor.
+
+Decode and resample to 16 kHz mono before inference
+Your MediaRecorder output (often WebM/Opus at 48 kHz) needs to be decoded to PCM and resampled to 16 kHz mono—the format Whisper expects. Doing this cleanly in the worker prevents subtle audio mismatches and speed issues.
+
+Save the result right after transcription
+Once the worker returns the transcript text, persist it immediately (inline in the note or tied to the attachment ID) and show a clear status state (Idle -> Loading model -> Transcribing -> Done / Error) so users aren't left guessing.
+One Caveat to Watch For
+Whisper can occasionally invent or repeat short phrases during long silences or low-volume background noise, so trimming dead air or showing a "Review / edit transcript" affordance makes the final text much more trustworthy.
+If you want to keep things super lean at first, opt-in local Whisper in a Web Worker on the "Transcribe" button gets you real accuracy and full privacy without slowing down normal note use.
+
+
+
+
+
+
+
+
+
+are all whisper models free?
+
+
+
+
+
+
+
+
+
+
+
+Yes, OpenAI's official open-weight Whisper models are completely free—both to download and to use commercially—as long as you run them locally on the user's device.
+Specifically:
+
+OpenAI's open-weight models (tiny, base, small, medium, large-v2, large-v3, and large-v3-turbo) are released under the permissive MIT license (and large-v3 under Apache 2.0), which means there are zero licensing fees or royalties.
+
+Community/ONNX/distilled variants (such as distil-whisper or Hugging Face ONNX conversions used by Transformers.js) are also almost always MIT or Apache 2.0 licensed, though it is always worth double-checking the specific Hugging Face model card before bundling or pointing to it.
+Where People Get Confused About Cost
+
+OpenAI's hosted API (whisper-1) costs money per minute because OpenAI runs the GPUs on their servers.
+
+Running Whisper in the browser (#2) downloads the open weights directly to the user's browser cache and runs on their CPU/GPU—so your API cost is $0.
+The Only Practical "Cost" to Watch For
+Because the model files are downloaded directly to the user's browser (usually from Hugging Face's CDN or your own static host/CDN):
+
+Bandwidth if you self-host: If you host the .onnx model files yourself, you pay standard static bandwidth/CDN egress if thousands of users download a 150 MB–500 MB model. If you load them from Hugging Face's public CDN (the default in Transformers.js), even that bandwidth is free.
+
+Browser cache / storage: The user's browser caches the downloaded weights in Cache Storage / IndexedDB so they only download the model once.
+For browser apps, whisper-small (or distil-whisper / quantized whisper-base or small) is usually the sweet spot—free, light enough to download once in a few seconds on normal internet, and accurate enough for real voice notes.
+
+
+
+
+
+
+
+
+
+500mb model is WAY too much
+
+
+
+
+
+
+
+
+
+
+
+Totally fair—500 MB is way too heavy for a browser note app.
+Thankfully, you don't have to download anything near 500 MB. Because browser runtimes like Transformers.js use 4-bit / 8-bit quantized ONNX models, the actual download sizes are much smaller:
+Realistic Quantized Browser Sizes (Cached Once)
+
+whisper-tiny / whisper-tiny.en (quantized): ~40–75 MB — Downloads in 1–2 seconds, runs fast even on older laptops/phones, and is plenty good for clean solo voice notes.
+
+whisper-base / whisper-base.en (quantized): ~75–140 MB — Noticeably better punctuation, grammar, and handling of accents/background noise while still staying light.
+
+(And if your app is primarily English, using the .en English-only models gives you noticeably better accuracy at the exact same small file size.)
+Other Ultra-Light Alternatives (~30–80 MB)
+
+Moonshine (moonshine-tiny / moonshine-base via Transformers.js): Specifically built for fast, low-memory on-device speech recognition. Quantized moonshine-tiny is around ~30–50 MB and runs much faster than Whisper on short voice notes because it scales compute to audio length rather than padding everything to 30-second chunks.
+How to Keep Your App Instant Regardless
+
+Zero upfront cost: Only download the model if/when a user explicitly clicks "Transcribe" for the first time (never on app startup or when simply recording audio).
+
+Cache in the browser: Once downloaded, the browser stores it in Cache Storage so every future transcription is instant and offline.
+So you're really looking at ~40–80 MB one-time on demand, not 500 MB.
+
+
+
+
