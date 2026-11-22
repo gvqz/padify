@@ -1,0 +1,55 @@
+name: Box watchdog (revive the API)
+
+# The box's API has gone dark overnight before — most thoroughly on
+# 2026-11-22, when a deploy shipped server code importing
+# shared/att-refs.ts, a file the old hand-picked manifest never
+# uploaded: every boot crashed on the module, the platform's supervisor
+# backed off for an hour per failed start, and nothing revived it until
+# a human with panel credentials showed up.
+#
+# This workflow makes the box self-healing with no credentials beyond
+# the deploy key the deploy workflow already uses: every 30 minutes it
+# probes the public health endpoint, and when the API is down it runs
+# the deploy script's --revive-only mode (kill a stale SSH-owned
+# bridge, boot run.sh detached, verify against /api/health). A healthy
+# box finishes in seconds and touches nothing.
+#
+# When revival CANNOT succeed (broken code on the box, Turso down), the
+# run goes red — GitHub emails workflow failures to the repo owner,
+# which is the "a human must look" signal.
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: box-watchdog
+  cancel-in-progress: false
+
+jobs:
+  check-and-revive:
+    name: Is the box API alive? (revive if not)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install paramiko
+        run: pip install paramiko
+
+      - name: Probe health, revive if down
+        env:
+          AD_SSH_KEY: ${{ secrets.AD_SSH_KEY }}
+          AD_SSH_HOST: ssh-functionhost.alwaysdata.net
+          AD_SSH_USER: functionhost
+        run: python3 scripts/deploy_box.py --revive-only
