@@ -84,10 +84,6 @@ honest costs, not blockers.
    honest fix is signed public URLs (short-lived, per-share, server
    verified) — a real server change, worth its own decision. Until then the
    placeholder IS the honest degradation.
-7. **Usage & quota surface.** 200 MB / 500 files per user exists on the
-   server and is invisible in the app. The cloud panel shows usage, the
-   capture paths warn near the ceiling. Small, and it makes the invisible
-   pipeline legible.
 8. **Canvas open performance.** The island is warmed (25628ec) but the
    open path still pays React mount + font registry + scene restore. Measure
    first (the playwright trace exists); optimize only what the numbers
@@ -273,6 +269,26 @@ pass's to own). Every line item the review found is closed.*
     minimap island and vendor popovers have known seams (xv21 evidence).
 
 ## DONE — so nobody re-plans it
+
+- **Item 7, the usage & quota surface — Settings → Account (2026-11-22).**
+  The owner's instruction folded three moves into one: the settings section
+  "Cloud sync" became **Account** (person icon, same nav/tablist machinery),
+  a **storage card** renders `GET /api/usage` Apple's-storage-page style —
+  one stacked bar per quota with segment widths as shares of the QUOTA
+  (never of the used bytes), a largest-first legend per note type plus the
+  trash as its own slice (it keeps its content, so it occupies exactly the
+  storage it looks like) — and the shared-links inventory stays in the same
+  pane. The endpoint folds the owner's notes by (type, deleted) with the
+  ONE measurement the quota check counts (`length(cast(content as blob))`),
+  attachments by sum(size); the limits travel inside the answer from
+  server/quota.ts — no mirrored constants (the H7 discipline). The wire
+  gained its UsageReport type (shared/wire.ts, both tsconfigs). The client
+  (cloud/usage.ts) fetches on settings-open and the sync engine's settle
+  transitions, gated by a 20 s stand-down, cached per account email so a
+  switch never flashes another account's bytes. Gates green: lint, both
+  tscs, 1976 unit tests, smoke + platform-shortcuts + share-links e2e; the
+  pane shot-verified in both themes (multi-type notes, real attachments,
+  a trashed slice).
 
 - **The two giant closures, closed (2026-11-22).** The hygiene review's
   last two line items, each its own commit: H13's rich toolbar folds
