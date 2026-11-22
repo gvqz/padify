@@ -30,6 +30,15 @@ ways. Understanding this one picture makes the whole rotation plan obvious:
   `AD_SSH_KEY`. That key, the AlwaysData account, and two API tokens
   (Turso, Spotify) are the complete list of production credentials.
 
+**No alwaysdata API token exists.** alwaysdata's REST API (which can
+restart sites — `POST /v1/site/<id>/restart/`) only issues tokens to
+accounts with 2FA enabled, and this account does not have 2FA on
+(verified 2026-11-22). Automation therefore reaches the box the other
+way: over SSH with the deploy key — the deploy workflow, and the box
+watchdog that revives a dead API on a schedule. If you ever enable 2FA
+you can mint an API token as a second revival path; nothing today
+depends on one.
+
 One more habit worth knowing before you rotate anything: GitHub's Actions
 secrets page shows every secret as an **empty box**. That is normal —
 secrets are write-only, so no one (not even you) can read them back after
@@ -75,12 +84,17 @@ briefly.
 1. In the Turso dashboard, create a new token for the `padify` database:
    the CLI equivalent is `turso db tokens create padify`. Copy the new
    token — it is shown once.
-2. Open the AlwaysData panel's **file browser** (Web → File browser) and
-   edit `~/padify/server/.env`: replace the `TURSO_AUTH_TOKEN=` value with
-   the new token. Save.
-3. If the panel also lists these values under the site's **Environment**
-   settings, update the same field there too — the `.env` on the box and
-   the panel's copy are meant to be mirrors of each other.
+2. Edit `~/padify/server/.env` on the box: SSH in
+   (`ssh functionhost@ssh-functionhost.alwaysdata.net` — the SSH user
+   password, or a key of your own) and edit the file with `nano`/`vi`:
+   replace the `TURSO_AUTH_TOKEN=` value with the new token. (The
+   panel's web file browser no longer exists, and the site's
+   **Environment** field in the panel is empty on this account —
+   the `.env` file is the only copy.)
+3. ~~If the panel also lists these values under the site's Environment
+   settings, update the same field there too~~ — verified 2026-11-22:
+   the panel's Environment field is empty, so there is no mirror to
+   keep in sync.
 4. **Restart the site** in the panel (Web → Sites → the padify site →
    Restart). The API only reads the token at startup, which is why the
    restart is required, not optional.
@@ -102,8 +116,8 @@ any urgency:
 
 1. In the Spotify developer dashboard, open the app and either rotate the
    secret or create a new app; copy the new client secret.
-2. Update `SPOTIFY_CLIENT_SECRET` in `~/padify/server/.env` (AlwaysData
-   file browser) and the panel Environment mirror, if present.
+2. Update `SPOTIFY_CLIENT_SECRET` in `~/padify/server/.env` on the box
+   (over SSH, exactly as in step 1).
 3. Restart the site, same as step 1.
 
 **Verify:** the health check from step 1 still answers `{"ok":true}`. That
@@ -123,9 +137,11 @@ fix it over the panel.
    cannot type a passphrase. That is a deliberate trade: the key is one
    gate (an entry in one file on one box), grants access to nothing else,
    and revoking it is deleting that one line.
-2. Install the **public** key: in the AlwaysData file browser, edit
-   `~/.ssh/authorized_keys` and *append* the new `padify-deploy` public
-   key as its own line. Keep the old line for now.
+2. Install the **public** key: SSH into the box (the SSH user password,
+   or a key of your own) and *append* the new `padify-deploy` public
+   key to `~/.ssh/authorized_keys` as its own line:
+   `echo '<the public key line>' >> ~/.ssh/authorized_keys`.
+   Keep the old line for now.
 3. Update the GitHub secret: repo → Settings → Secrets and variables →
    Actions → `AD_SSH_KEY` → Update — paste the **private** key file's full
    contents (`padify-deploy-2026`, the one without `.pub`). The page
@@ -145,7 +161,10 @@ serves the app: <https://functionhost.alwaysdata.net/> loads.
 Two passwords, zero impact:
 
 - **The account password** (the panel login) is used by nothing automated.
-  Change it in the panel (Account → password) whenever you like.
+  Change it in the panel (Profile → AUTHENTICATION) whenever you like.
+  2026-11-22: it was pasted into a support chat so an agent could
+  inspect the panel — worth rotating on principle, and nothing
+  automated will notice the change.
 - **The SSH user password** used to be the fallback for local deploy
   scripts; those scripts now authenticate with the deploy key only
   (key auth — see the glossary). Changing the SSH password in the panel

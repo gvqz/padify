@@ -95,6 +95,26 @@ a VPS, Fly.io, Railway, a home server).
      loudly: `RESTART VERIFICATION FAILED …` — restart the site from the
      panel (Web > Sites > Restart) and re-run the deploy.
 
+   **The hour-long backoff (2026-11-22 lesson).** A start that FAILS
+   puts the platform's supervisor into a backoff — the site logs read
+   `Upstream … previously failed to start, will not start again until …`
+   for roughly an hour. A deploy that uploads code the server cannot
+   boot therefore keeps the API dark long after the files are fixed:
+   the deploy's verification window is minutes, the backoff is sixty of
+   them. The deploy's SSH bridge serves through a backoff, and the
+   **box watchdog** workflow finishes the job: every 30 minutes it
+   probes `/api/health` and, when the API is down, revives it over SSH
+   with the deploy key (`scripts/deploy_box.py --revive-only`). A dead
+   API heals itself within half an hour; a revival that cannot succeed
+   turns the watchdog run red, and GitHub emails workflow failures to
+   the repo owner.
+
+   **The deploy ships every TypeScript source under `server/` and
+   `shared/`** — never a hand-picked file list. The 2026-11-22 outage
+   was exactly a hand-picked list: `shared/` shipped `wire.ts` alone
+   while `server/attachments.ts` imported `shared/att-refs.ts`; the
+   module never reached the box, and every boot crashed on it.
+
 ### 2b. Memory footprint (measured, Bun 1.3)
 
 | Stage | RSS |
