@@ -885,14 +885,25 @@ export class TabManager {
 
   /**
    * Appends a note WITHOUT activating it — the migration and the tasks
-   * rail's "New Task List" use it to add fully-formed notes in a row.
-   * The strip gets the tab; the editor never notices until the note is
-   * opened. Returns the note (null when the cap said no).
+   * rail's "New Task List" use it to add fully-formed notes in a row, and
+   * the file imports land here (the note's ink theme rides along when the
+   * envelope carried one — a rich note's colors deserve to survive the
+   * round trip as much as its bytes do). The strip gets the tab; the
+   * editor never notices until the note is opened. Returns the note
+   * (null when the cap said no).
    */
-  addBackgroundNote(name: string | null, noteType: NoteType, content: string): NoteTab | null {
+  addBackgroundNote(
+    name: string | null,
+    noteType: NoteType,
+    content: string,
+    colorTheme?: 'light' | 'dark',
+  ): NoteTab | null {
     const tab = createTab(content, name, noteType);
     if (name) {
       tab.name = name;
+    }
+    if (colorTheme !== undefined) {
+      tab.colorTheme = colorTheme;
     }
     this.model.append(tab);
     this.syncLedger.markDirty(tab.id);

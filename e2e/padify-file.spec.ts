@@ -313,3 +313,94 @@ test.describe('the .padify file', () => {
     expect(await railCount(page)).toBe(before + 1);
   });
 });
+
+test.describe('the workspace file — a whole pad, as one file', () => {
+  test('the whole pad saves as one file and reopens as fresh notes', async ({
+    page,
+  }, testInfo) => {
+    await page.goto('/');
+
+    // Two notes, both carrying live text: the first from the fresh pad,
+    // the second from a mid-session add — the export must catch the
+    // unsaved tail of whichever note is active (the duplicate gesture's
+    // flush discipline).
+    await page.locator('#note').click();
+    await page.keyboard.type('first note text');
+    await page.locator('#addTab').click();
+    await page.keyboard.type('second note text');
+    const before = await railCount(page);
+    expect(before).toBe(2);
+
+    // The save: the pad-level row, second in the download menu.
+    await page.locator('#downloadNotes').click();
+    await expect(page.locator('#iconDropdown')).toHaveClass(/show/);
+    const download = page.waitForEvent('download');
+    await page.locator('#downloadNotesPadifyWorkspace').click();
+    const file = await download;
+    expect(file.suggestedFilename()).toMatch(/^Notes-\d{2}-\d{2}-\d{4}\.padify$/);
+    const savedPath = testInfo.outputPath('pad.padify');
+    await file.saveAs(savedPath);
+
+    // The manifest: the sibling discriminator, both notes in rail order,
+    // the live text of the note that was active at export time.
+    const envelope = JSON.parse(readFileSync(savedPath, 'utf8')) as {
+      type: string;
+      format: number;
+      generator: string;
+      notes: { name: string | null; noteType: string; content: string }[];
+    };
+    expect(envelope.type).toBe('padify-workspace');
+    expect(envelope.format).toBe(1);
+    expect(envelope.generator).toBe('padify');
+    expect(envelope.notes).toHaveLength(2);
+    expect(envelope.notes[0]!.content).toContain('first note text');
+    expect(envelope.notes[1]!.content).toContain('second note text');
+    expect(envelope.notes.map((note) => note.noteType)).toEqual(['standard', 'standard']);
+
+    // The open: the pad's notes come back as fresh additions — the count
+    // said honestly, the rail doubled, and the first of the batch (the
+    // every-file-opens-what-it-brought rule) takes the stage.
+    await page.locator('input.padify-open-input').setInputFiles(savedPath);
+    await expect(page.locator('#toast')).toContainText('Added 2 notes.');
+    expect(await railCount(page)).toBe(4);
+    const activeTab = page.locator('#tabStripTabs .tab-strip-tab.active');
+    await expect(activeTab).toContainText('first note text');
+    await expect(page.locator('#note')).toContainText('first note text');
+  });
+
+  test('a newer-format workspace is refused with the same honesty', async ({ page }, testInfo) => {
+    await page.goto('/');
+    const before = await railCount(page);
+
+    const newerPath = testInfo.outputPath('future-pad.padify');
+    writeFileSync(
+      newerPath,
+      JSON.stringify({
+        type: 'padify-workspace',
+        format: 99,
+        notes: [{ name: null, noteType: 'standard', content: 'x', createdAt: 0, updatedAt: 0 }],
+      }),
+    );
+    await page.locator('input.padify-open-input').setInputFiles(newerPath);
+    await expect(page.locator('#toast')).toContainText('newer Padify');
+    expect(await railCount(page)).toBe(before);
+  });
+
+  test('a workspace whose entries are junk says the honest nothing', async ({ page }, testInfo) => {
+    await page.goto('/');
+    const before = await railCount(page);
+
+    const emptyPath = testInfo.outputPath('empty-pad.padify');
+    writeFileSync(
+      emptyPath,
+      JSON.stringify({
+        type: 'padify-workspace',
+        format: 1,
+        notes: [{ noContentHere: true }, 42],
+      }),
+    );
+    await page.locator('input.padify-open-input').setInputFiles(emptyPath);
+    await expect(page.locator('#toast')).toContainText('This pad has no notes.');
+    expect(await railCount(page)).toBe(before);
+  });
+});

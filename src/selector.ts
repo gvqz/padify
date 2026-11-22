@@ -8,6 +8,7 @@ export interface NotepadUI {
   copyToClipboard: Q;
   downloadNotes: Q;
   downloadNotesPadify: Q;
+  downloadNotesPadifyWorkspace: Q;
   downloadNotesPlain: Q;
   downloadNotesPdf: Q;
   downloadNotesDocx: Q;
@@ -110,6 +111,7 @@ export function selector(): AppSelector {
       copyToClipboard: selectById('copyToClipboard'),
       downloadNotes: selectById('downloadNotes'),
       downloadNotesPadify: selectById('downloadNotesPadify'),
+      downloadNotesPadifyWorkspace: selectById('downloadNotesPadifyWorkspace'),
       downloadNotesPlain: selectById('downloadNotesPlain'),
       downloadNotesPdf: selectById('downloadNotesPdf'),
       downloadNotesDocx: selectById('downloadNotesDocx'),

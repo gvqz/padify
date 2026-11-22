@@ -52,6 +52,19 @@
  * as a file excalidraw.com opens natively, the referenced bytes riding
  * the same `files` map — the two-way door that makes the canvas feel
  * native to the pad and the pad native to the canvas.
+ *
+ * The workspace envelope (also v1, same extension): a WHOLE pad — note
+ * list in rail order, the pad's theming, one shared attachments pool —
+ * as one self-contained file. It is a NEW discriminator
+ * (`padify-workspace`), never a version bump of `padify-note`: an older
+ * build reading one answers null exactly as it does today, so no older
+ * reader can mangle what it was never taught. Each manifest entry IS
+ * the single-note payload (same fields, same validation — one spelling);
+ * the pool dedupes by id, which is the store's own discipline, so two
+ * drawings sharing a pasted image ride at one copy. Import adds the
+ * file's notes as fresh lives (mint, never merge) and touches nothing
+ * else on the device — the manifest's theme is data about the pad it
+ * came from, not an instruction for the pad it lands on.
  */
 
 import {
@@ -78,6 +91,11 @@ export const PADIFY_FILE_TYPE = 'padify-note';
  * readers — never one without the other. */
 export const PADIFY_FORMAT_VERSION = 1;
 
+/** The workspace envelope's own discriminator and version — a sibling of
+ * `padify-note`, not a newer spelling of it (see the module doc). */
+export const PADIFY_WORKSPACE_TYPE = 'padify-workspace';
+export const PADIFY_WORKSPACE_FORMAT_VERSION = 1;
+
 /** Informational generator tag. The app's product name only — versioning
  * lives in `format`, so this never drifts and is never branched on. */
 export const PADIFY_GENERATOR = 'padify';
@@ -96,6 +114,13 @@ export interface PadifyNotePayload {
   content: string;
   createdAt: number;
   updatedAt: number;
+  /** The ink theme the note's inline colors were last written under
+   * ('light' | 'dark', rich notes' own property — editor/theme-colors).
+   * An ADDITIVE v1 extension, the attachments field's discipline: the
+   * writer includes it only when the note carries one, so files without
+   * it stay byte-identical to the old writer's, and old readers simply
+   * never see it. */
+  colorTheme?: 'light' | 'dark';
 }
 
 /**
@@ -157,6 +182,23 @@ export function base64ToBytes(value: string): Uint8Array<ArrayBuffer> | null {
   }
 }
 
+/** The wire spelling of one note entry — BOTH envelopes' shared writer
+ * (fixed key order; `colorTheme` rides only when present, so the
+ * single-note writer stays byte-identical for theme-less notes). */
+function noteEntryWire(note: PadifyNotePayload): Record<string, unknown> {
+  const entry: Record<string, unknown> = {
+    name: note.name,
+    noteType: note.noteType === '' ? DEFAULT_NOTE_TYPE : note.noteType,
+    content: note.content,
+    createdAt: note.createdAt,
+    updatedAt: note.updatedAt,
+  };
+  if (note.colorTheme !== undefined) {
+    entry.colorTheme = note.colorTheme;
+  }
+  return entry;
+}
+
 /**
  * The envelope writer. Fixed key order and a JSON.stringify with no
  * whitespace — deterministic bytes, the same discipline as the scene
@@ -175,13 +217,7 @@ export function serializePadifyNoteFile(
     format: PADIFY_FORMAT_VERSION,
     generator: PADIFY_GENERATOR,
     exportedAt,
-    note: {
-      name: note.name,
-      noteType: note.noteType === '' ? DEFAULT_NOTE_TYPE : note.noteType,
-      content: note.content,
-      createdAt: note.createdAt,
-      updatedAt: note.updatedAt,
-    },
+    note: noteEntryWire(note),
   };
   if (attachments.length > 0) {
     envelope.attachments = attachments.map((attachment) => ({
@@ -205,6 +241,44 @@ export type PadifyParseResult =
     }
   | { kind: 'newer-format'; format: number }
   | null;
+
+/**
+ * One note entry, read the ONE way both envelopes read them — strict
+ * where the envelope is strict (`content` must be a string; what it
+ * MEANS is the note type's business, this module never does), honest
+ * defaults where the single-note reader always defaulted, and the
+ * additive `colorTheme` kept only when it is one of the two real
+ * values (anything else drops the FIELD, never the note).
+ */
+function parseNoteEntry(raw: unknown): PadifyNotePayload | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null;
+  }
+  const record = raw as Record<string, unknown>;
+  if (typeof record.content !== 'string') {
+    return null;
+  }
+  const note: PadifyNotePayload = {
+    name: typeof record.name === 'string' ? record.name : null,
+    noteType:
+      typeof record.noteType === 'string' && record.noteType !== ''
+        ? record.noteType
+        : DEFAULT_NOTE_TYPE,
+    content: record.content,
+    createdAt:
+      typeof record.createdAt === 'number' && Number.isFinite(record.createdAt)
+        ? record.createdAt
+        : 0,
+    updatedAt:
+      typeof record.updatedAt === 'number' && Number.isFinite(record.updatedAt)
+        ? record.updatedAt
+        : 0,
+  };
+  if (record.colorTheme === 'light' || record.colorTheme === 'dark') {
+    note.colorTheme = record.colorTheme;
+  }
+  return note;
+}
 
 /**
  * The envelope's attachment ceilings — the per-file byte cap from the
@@ -250,31 +324,13 @@ export function parsePadifyFile(text: string): PadifyParseResult {
     return { kind: 'newer-format', format };
   }
   const note = record.note;
-  if (!note || typeof note !== 'object' || Array.isArray(note)) {
-    return null;
-  }
-  const noteRecord = note as Record<string, unknown>;
-  if (typeof noteRecord.content !== 'string') {
+  const parsedNote = parseNoteEntry(note);
+  if (parsedNote === null) {
     return null;
   }
   return {
     kind: 'padify',
-    note: {
-      name: typeof noteRecord.name === 'string' ? noteRecord.name : null,
-      noteType:
-        typeof noteRecord.noteType === 'string' && noteRecord.noteType !== ''
-          ? noteRecord.noteType
-          : DEFAULT_NOTE_TYPE,
-      content: noteRecord.content,
-      createdAt:
-        typeof noteRecord.createdAt === 'number' && Number.isFinite(noteRecord.createdAt)
-          ? noteRecord.createdAt
-          : 0,
-      updatedAt:
-        typeof noteRecord.updatedAt === 'number' && Number.isFinite(noteRecord.updatedAt)
-          ? noteRecord.updatedAt
-          : 0,
-    },
+    note: parsedNote,
     attachments: parseEmbeddedAttachments(record.attachments),
   };
 }
@@ -310,6 +366,148 @@ function parseEmbeddedAttachments(raw: unknown): PadifyFileAttachment[] {
     out.push({ id, name, mime, bytes });
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// The workspace envelope — a whole pad, as one file
+// ---------------------------------------------------------------------------
+
+/** The pad's theming as the manifest carries it: the persisted `mode`
+ * setting's value, plus whether a human ever chose it (the settings
+ * keys' own spelling — see state/settings.ts). Data ABOUT the exported
+ * pad; the importer deliberately does not apply it (v1 adds notes and
+ * touches nothing else — applying a theme would be replace-the-pad's
+ * little brother, and replace is out of v1). */
+export interface PadifyWorkspaceTheme {
+  mode: string;
+  userPreferred: boolean;
+}
+
+/** What one workspace file carries: the pad's notes in rail order, its
+ * theming (null when the exporting device never chose one), and the one
+ * shared attachments pool — every id any note references, deduped by id. */
+export interface PadifyWorkspaceFile {
+  notes: PadifyNotePayload[];
+  theme: PadifyWorkspaceTheme | null;
+  attachments: PadifyFileAttachment[];
+}
+
+/**
+ * The manifest's note-count ceiling. No server quota mirrors it (accounts
+ * are capped by note BYTES, not count) — this is the file's own honesty:
+ * the import mints each entry into the model and the strip renders one
+ * DOM row per note, so a count no honest pad approaches is the line where
+ * a file stops being a pad and starts being someone's database. Entries
+ * past the cap drop, the attachments' junk-drop rule; the importer's
+ * toast says the honest count either way.
+ */
+const MAX_WORKSPACE_NOTES = 2000;
+
+/** The workspace writer — the single-note writer's discipline at N notes:
+ * fixed key order, no whitespace, `theme` and `attachments` omitted
+ * entirely when empty, so identical pads serialize to identical bytes. */
+export function serializePadifyWorkspaceFile(
+  file: PadifyWorkspaceFile,
+  exportedAt: number,
+): string {
+  const envelope: Record<string, unknown> = {
+    type: PADIFY_WORKSPACE_TYPE,
+    format: PADIFY_WORKSPACE_FORMAT_VERSION,
+    generator: PADIFY_GENERATOR,
+    exportedAt,
+  };
+  if (file.theme !== null) {
+    envelope.theme = { mode: file.theme.mode, userPreferred: file.theme.userPreferred };
+  }
+  envelope.notes = file.notes.map(noteEntryWire);
+  if (file.attachments.length > 0) {
+    envelope.attachments = file.attachments.map((attachment) => ({
+      id: attachment.id,
+      name: attachment.name,
+      mime: attachment.mime,
+      bytes: attachment.bytes,
+    }));
+  }
+  return JSON.stringify(envelope);
+}
+
+/** The workspace reader's answer: the pad, a refusal, or "not ours". */
+export type PadifyWorkspaceParseResult =
+  | {
+      kind: 'workspace';
+      notes: PadifyNotePayload[];
+      theme: PadifyWorkspaceTheme | null;
+      attachments: PadifyFileAttachment[];
+    }
+  | { kind: 'newer-format'; format: number }
+  | null;
+
+/**
+ * Reads .padify-workspace bytes with the single-note reader's exact
+ * discipline: a NEWER `format` answers 'newer-format' (the caller's
+ * "update the app" refusal); junk, truncated JSON, a missing `notes`
+ * array, or any other `type` (including `padify-note` — the sibling
+ * dialect) answers null. Note entries validate one at a time — junk
+ * entries drop, the surviving notes keep their manifest order, and a
+ * manifest whose entries all failed still parses (the importer says
+ * "no notes", which is the truth). A junk `theme` drops the field,
+ * never the pad.
+ */
+export function parsePadifyWorkspaceFile(text: string): PadifyWorkspaceParseResult {
+  if (typeof text !== 'string' || text.trim() === '') {
+    return null;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return null;
+  }
+  const record = parsed as Record<string, unknown>;
+  if (record.type !== PADIFY_WORKSPACE_TYPE) {
+    return null;
+  }
+  const format = record.format;
+  if (typeof format !== 'number' || !Number.isFinite(format)) {
+    return null;
+  }
+  if (format > PADIFY_WORKSPACE_FORMAT_VERSION) {
+    return { kind: 'newer-format', format };
+  }
+  const rawNotes = record.notes;
+  if (!Array.isArray(rawNotes)) {
+    return null;
+  }
+  const notes: PadifyNotePayload[] = [];
+  for (const entry of rawNotes.slice(0, MAX_WORKSPACE_NOTES)) {
+    const note = parseNoteEntry(entry);
+    if (note !== null) {
+      notes.push(note);
+    }
+  }
+  return {
+    kind: 'workspace',
+    notes,
+    theme: parseWorkspaceTheme(record.theme),
+    attachments: parseEmbeddedAttachments(record.attachments),
+  };
+}
+
+/** The manifest's theme, validated: a `mode` string a human could have
+ * chosen, a boolean preference flag, nothing else. Junk drops to null —
+ * the notes are the payload, the theme is provenance. */
+function parseWorkspaceTheme(raw: unknown): PadifyWorkspaceTheme | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null;
+  }
+  const record = raw as Record<string, unknown>;
+  if (typeof record.mode !== 'string' || record.mode.trim() === '' || record.mode.length > 40) {
+    return null;
+  }
+  return { mode: record.mode, userPreferred: record.userPreferred === true };
 }
 
 /** What the importer needs to mint the note: the type registry's answer,
@@ -508,6 +706,13 @@ export function noteFileStem(title: string | null, fallback: string): string {
 /** `<stem>.padify` — the download menu's Padify save. */
 export function padifyFileName(title: string | null, fallback: string): string {
   return noteFileStem(title, fallback) + PADIFY_FILE_EXTENSION;
+}
+
+/** `<stem>.padify` for the WHOLE-pad save — the pad has no name of its
+ * own, so the stem is the caller's fallback (the download family's dated
+ * convention) and the extension is the same dialect's. */
+export function padifyWorkspaceFileName(fallback: string): string {
+  return noteFileStem(null, fallback) + PADIFY_FILE_EXTENSION;
 }
 
 /** `<stem>.excalidraw` — the drawing note's interop save. */

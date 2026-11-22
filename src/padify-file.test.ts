@@ -9,12 +9,16 @@ import {
   excalidrawFileName,
   noteFileStem,
   padifyFileName,
+  padifyWorkspaceFileName,
   parseExcalidrawFile,
   parsePadifyFile,
+  parsePadifyWorkspaceFile,
   prepareImportedNote,
   serializePadifyNoteFile,
+  serializePadifyWorkspaceFile,
   type PadifyFileAttachment,
   type PadifyNotePayload,
+  type PadifyWorkspaceFile,
 } from './padify-file';
 import { parseDrawingScene } from './editor/drawing/scene';
 
@@ -431,5 +435,240 @@ describe('file names', () => {
     expect(padifyFileName('Groceries', 'Notes-1')).toBe('Groceries.padify');
     expect(excalidrawFileName('Sketch', 'Notes-1')).toBe('Sketch.excalidraw');
     expect(padifyFileName(null, 'Notes-21-11-2026')).toBe('Notes-21-11-2026.padify');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The workspace envelope — a whole pad, as one file
+// ---------------------------------------------------------------------------
+
+describe('serializePadifyWorkspaceFile', () => {
+  const samplePad = (): PadifyWorkspaceFile => ({
+    notes: [
+      sampleNote(),
+      sampleNote({ name: 'Sketch', noteType: 'drawing', content: '{"version":1}' }),
+    ],
+    theme: { mode: 'dark', userPreferred: true },
+    attachments: [],
+  });
+
+  it('writes the strict envelope with fixed key order — notes in rail order', () => {
+    const parsed = JSON.parse(
+      serializePadifyWorkspaceFile(samplePad(), FIXED_NOW),
+    ) as Record<string, unknown>;
+    expect(Object.keys(parsed)).toEqual([
+      'type',
+      'format',
+      'generator',
+      'exportedAt',
+      'theme',
+      'notes',
+    ]);
+    expect(parsed.type).toBe('padify-workspace');
+    expect(parsed.format).toBe(1);
+    expect(parsed.generator).toBe('padify');
+    const notes = parsed.notes as Array<Record<string, unknown>>;
+    expect(notes).toHaveLength(2);
+    expect(notes[0]!.name).toBe('Groceries');
+    expect(notes[1]!.noteType).toBe('drawing');
+  });
+
+  it('is deterministic — identical pads serialize to identical bytes', () => {
+    expect(serializePadifyWorkspaceFile(samplePad(), FIXED_NOW)).toBe(
+      serializePadifyWorkspaceFile(samplePad(), FIXED_NOW),
+    );
+  });
+
+  it('omits the theme and attachments keys when the pad carries neither', () => {
+    const parsed = JSON.parse(
+      serializePadifyWorkspaceFile({ notes: [sampleNote()], theme: null, attachments: [] }, FIXED_NOW),
+    ) as Record<string, unknown>;
+    expect('theme' in parsed).toBe(false);
+    expect('attachments' in parsed).toBe(false);
+  });
+
+  it('embeds the shared pool once per id, whatever notes reference it', () => {
+    const attachment: PadifyFileAttachment = {
+      id: 'att-1234567890abcdef',
+      name: 'pic.png',
+      mime: 'image/png',
+      bytes: bytesToBase64(new Uint8Array([1, 2, 3])),
+    };
+    const bytes = serializePadifyWorkspaceFile(
+      { notes: [sampleNote()], theme: null, attachments: [attachment] },
+      FIXED_NOW,
+    );
+    const parsed = JSON.parse(bytes) as { attachments: unknown[] };
+    expect(parsed.attachments).toHaveLength(1);
+  });
+});
+
+describe('parsePadifyWorkspaceFile', () => {
+  const workspaceFile = (overrides: Record<string, unknown> = {}): string =>
+    JSON.stringify({
+      type: 'padify-workspace',
+      format: 1,
+      generator: 'padify',
+      exportedAt: FIXED_NOW,
+      theme: { mode: 'light', userPreferred: false },
+      notes: [
+        { name: 'One', noteType: 'standard', content: '<p>a</p>', createdAt: 1, updatedAt: 2 },
+        { name: 'Two', noteType: 'markdown', content: '# two', createdAt: 3, updatedAt: 4 },
+      ],
+      ...overrides,
+    });
+
+  it('round-trips a written pad — notes, order, theme, attachments', () => {
+    const pad: PadifyWorkspaceFile = {
+      notes: [
+        sampleNote(),
+        sampleNote({ name: null, noteType: 'markdown', content: '# x' }),
+      ],
+      theme: { mode: 'dark', userPreferred: true },
+      attachments: [
+        {
+          id: 'att-1234567890abcdef',
+          name: 'pic.png',
+          mime: 'image/png',
+          bytes: bytesToBase64(new Uint8Array([9, 9, 9])),
+        },
+      ],
+    };
+    const result = parsePadifyWorkspaceFile(serializePadifyWorkspaceFile(pad, FIXED_NOW));
+    expect(result).not.toBeNull();
+    expect(result!.kind).toBe('workspace');
+    if (result!.kind !== 'workspace') return;
+    expect(result!.notes).toEqual(pad.notes);
+    expect(result!.theme).toEqual(pad.theme);
+    expect(result!.attachments).toEqual(pad.attachments);
+  });
+
+  it('refuses a newer format version with the honest answer', () => {
+    const result = parsePadifyWorkspaceFile(workspaceFile({ format: 99 }));
+    expect(result).toEqual({ kind: 'newer-format', format: 99 });
+  });
+
+  it('answers null for junk, the sibling dialect, and a missing notes array', () => {
+    expect(parsePadifyWorkspaceFile('')).toBeNull();
+    expect(parsePadifyWorkspaceFile('not json at all')).toBeNull();
+    expect(parsePadifyWorkspaceFile('[]')).toBeNull();
+    // The single-note dialect is NOT a workspace, and vice versa — the
+    // discriminators are the whole point of the sibling split.
+    expect(parsePadifyWorkspaceFile(serializePadifyNoteFile(sampleNote(), FIXED_NOW))).toBeNull();
+    expect(parsePadifyFile(workspaceFile())).toBeNull();
+    expect(parsePadifyWorkspaceFile(workspaceFile({ notes: 'nope' }))).toBeNull();
+    expect(parsePadifyWorkspaceFile(workspaceFile({ type: 'padify-note' }))).toBeNull();
+  });
+
+  it('drops junk note entries and keeps the honest rest, in manifest order', () => {
+    const result = parsePadifyWorkspaceFile(
+      workspaceFile({
+        notes: [
+          { noteType: 'standard', content: 'good one', createdAt: 1, updatedAt: 1 },
+          'just a string',
+          { noteType: 'standard', createdAt: 1, updatedAt: 1 }, // no content
+          null,
+          { name: 'last', noteType: 'tasks', content: '{}', createdAt: 1, updatedAt: 1 },
+        ],
+      }),
+    );
+    expect(result!.kind).toBe('workspace');
+    if (result!.kind !== 'workspace') return;
+    expect(result!.notes.map((note) => note.name)).toEqual([null, 'last']);
+    expect(result!.notes[0]!.content).toBe('good one');
+  });
+
+  it('still parses when every entry failed — the importer says the truth', () => {
+    const result = parsePadifyWorkspaceFile(workspaceFile({ notes: [{ nope: true }, 5] }));
+    expect(result!.kind).toBe('workspace');
+    if (result!.kind !== 'workspace') return;
+    expect(result!.notes).toEqual([]);
+  });
+
+  it('drops a junk theme without losing the pad', () => {
+    for (const theme of ['dark', 7, { mode: '' }, { mode: 'x'.repeat(99) }, null, []]) {
+      const result = parsePadifyWorkspaceFile(workspaceFile({ theme }));
+      expect(result!.kind).toBe('workspace');
+      if (result!.kind !== 'workspace') return;
+      expect(result!.theme).toBeNull();
+      expect(result!.notes).toHaveLength(2);
+    }
+  });
+
+  it('caps the manifest at 2000 note entries — the rest drop', () => {
+    const entry = { noteType: 'standard', content: 'x', createdAt: 1, updatedAt: 1 };
+    const result = parsePadifyWorkspaceFile(
+      workspaceFile({ notes: Array.from({ length: 2005 }, () => entry) }),
+    );
+    expect(result!.kind).toBe('workspace');
+    if (result!.kind !== 'workspace') return;
+    expect(result!.notes).toHaveLength(2000);
+  });
+
+  it('validates the pool with the single-note envelope’s exact discipline', () => {
+    const result = parsePadifyWorkspaceFile(
+      workspaceFile({
+        attachments: [
+          { id: 'att-1234567890abcdef', name: 'a', mime: 'image/png', bytes: 'AAAA' },
+          { id: 'not a real id', name: 'b', mime: 'image/png', bytes: 'AAAA' },
+          { id: 'att-2234567890abcdef', name: 'c', mime: 'image/png', bytes: '!!!' },
+        ],
+      }),
+    );
+    expect(result!.kind).toBe('workspace');
+    if (result!.kind !== 'workspace') return;
+    expect(result!.attachments).toHaveLength(1);
+    expect(result!.attachments[0]!.id).toBe('att-1234567890abcdef');
+  });
+});
+
+describe('colorTheme — the additive v1 extension on both envelopes', () => {
+  it('rides the single-note envelope when present, and stays byte-identical when absent', () => {
+    const bare = serializePadifyNoteFile(sampleNote(), FIXED_NOW);
+    expect(bare).not.toContain('colorTheme');
+    const themed = serializePadifyNoteFile(
+      sampleNote({ colorTheme: 'dark' }),
+      FIXED_NOW,
+    );
+    expect(JSON.parse(themed).note.colorTheme).toBe('dark');
+  });
+
+  it('round-trips through the single-note reader', () => {
+    const result = parsePadifyFile(serializePadifyNoteFile(sampleNote({ colorTheme: 'light' }), FIXED_NOW));
+    expect(result!.kind).toBe('padify');
+    if (result!.kind !== 'padify') return;
+    expect(result!.note.colorTheme).toBe('light');
+  });
+
+  it('keeps only the two real values — anything else drops the field, never the note', () => {
+    const file = JSON.stringify({
+      type: 'padify-note',
+      format: 1,
+      note: { name: null, noteType: 'standard', content: 'x', createdAt: 0, updatedAt: 0, colorTheme: 'blue' },
+    });
+    const result = parsePadifyFile(file);
+    expect(result!.kind).toBe('padify');
+    if (result!.kind !== 'padify') return;
+    expect(result!.note.colorTheme).toBeUndefined();
+    expect(result!.note.content).toBe('x');
+  });
+
+  it('rides the workspace manifest entries the same way', () => {
+    const pad: PadifyWorkspaceFile = {
+      notes: [sampleNote({ colorTheme: 'dark' }), sampleNote()],
+      theme: null,
+      attachments: [],
+    };
+    const result = parsePadifyWorkspaceFile(serializePadifyWorkspaceFile(pad, FIXED_NOW));
+    expect(result!.kind).toBe('workspace');
+    if (result!.kind !== 'workspace') return;
+    expect(result!.notes[0]!.colorTheme).toBe('dark');
+    expect(result!.notes[1]!.colorTheme).toBeUndefined();
+  });
+});
+
+describe('workspace file names', () => {
+  it('uses the fallback stem and the same dialect extension', () => {
+    expect(padifyWorkspaceFileName('Notes-21-11-2026')).toBe('Notes-21-11-2026.padify');
   });
 });

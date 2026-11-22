@@ -27,11 +27,16 @@ import {
   bytesToBase64,
   excalidrawFileName,
   padifyFileName,
+  padifyWorkspaceFileName,
   serializePadifyNoteFile,
+  serializePadifyWorkspaceFile,
   type PadifyFileAttachment,
+  type PadifyNotePayload,
+  type PadifyWorkspaceTheme,
 } from './padify-file';
 import { initPadifyFileOpen } from './padify-file-ui';
 import { getAttachmentBytes, getAttachmentMeta } from './storage/attachments';
+import { getSetting } from './state/settings';
 import { isMarkdownNote, DEFAULT_NOTE_TYPE } from './editor/note-types';
 import { deriveTabTitle } from './editor/note-content';
 import type { NotepadUI } from './selector';
@@ -150,20 +155,26 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
   // file is named what the rail calls the note; an untitled note falls
   // back to the download family's dated stem.
   const padifyOpen = initPadifyFileOpen(tabManager);
-  // The export image pass, shared by the .padify and .excalidraw saves:
-  // every attachment id the note references — a markdown note's
-  // `padify-att:` refs, a drawing's scene fileIds — decoded from this
-  // device's store. A blob that is not on this device (deleted, another
-  // device offline) exports as the bare reference — the importing device
-  // renders the missing placeholder, the same honesty the preview shows.
-  // Plain notes are text-only and carry no attachments, so they collect
-  // nothing — an empty list is the whole pass.
-  const collectNoteAttachments = async (captured: {
-    noteType?: string | null;
-    content: string;
-  }): Promise<PadifyFileAttachment[]> => {
+  // The export image pass, shared by every Padify/Excalidraw save: the
+  // UNION of the attachment ids the given notes reference — a markdown
+  // note's `padify-att:` refs, a drawing's scene fileIds — each fetched
+  // from this device's store once (the id union dedupes, so two notes
+  // sharing an image ride at one copy, the store's own discipline). A
+  // blob that is not on this device (deleted, another device offline)
+  // exports as the bare reference — the importing device renders the
+  // missing placeholder, the same honesty the preview shows. Plain
+  // notes are text-only and carry no attachments, so they contribute
+  // nothing — an empty pool is the whole pass for a plain pad.
+  const collectReferencedAttachments = async (
+    notes: ReadonlyArray<{ noteType?: string | null; content: string }>,
+  ): Promise<PadifyFileAttachment[]> => {
+    const referencedIds = new Set<string>();
+    for (const note of notes) {
+      for (const id of collectNoteAttachmentIds(note)) {
+        referencedIds.add(id);
+      }
+    }
     const attachments: PadifyFileAttachment[] = [];
-    const referencedIds = collectNoteAttachmentIds(captured);
     for (const id of referencedIds) {
       // The meta rides along (the store's own name/mime — an exported
       // webp says webp); a missing meta falls back to the generic
@@ -187,7 +198,7 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
       if (!active || !captured) {
         return;
       }
-      const attachments = await collectNoteAttachments(captured);
+      const attachments = await collectReferencedAttachments([captured]);
       // The LIVE title: the model's content lags typing by the save
       // debounce, and the file is named for the note as it stands — the
       // share modal's live-title lesson, applied to the file family.
@@ -210,6 +221,47 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
     })();
   });
 
+  // ---- the .padify workspace — the whole pad as one file ------------
+  // The pad-level save: every note in rail order, the pad's theming, one
+  // shared attachments pool (see padify-file.ts's workspace section). A
+  // pad always holds at least one note (the model's never-empty
+  // invariant), so the row is always meaningful — no visibility sync.
+  notepad.downloadNotesPadifyWorkspace.click(function () {
+    void (async function () {
+      // The duplicate gesture's discipline: flush the active note's live
+      // edits into the model FIRST, so the file carries what the surfaces
+      // show and every note reads from one honest snapshot.
+      tabManager.saveActiveFromEditor();
+      const tabs = tabManager.getTabs();
+      const notes: PadifyNotePayload[] = tabs.map((tab) => {
+        const note: PadifyNotePayload = {
+          name: tab.name,
+          noteType: tab.noteType ?? DEFAULT_NOTE_TYPE,
+          content: tab.content,
+          createdAt: tab.createdAt,
+          updatedAt: tab.updatedAt,
+        };
+        if (tab.colorTheme !== undefined) {
+          note.colorTheme = tab.colorTheme;
+        }
+        return note;
+      });
+      const attachments = await collectReferencedAttachments(tabs);
+      // The manifest's theming is the pad's own persisted choice — a
+      // device that never picked one exports no theme field at all.
+      const mode = getSetting('mode');
+      const theme: PadifyWorkspaceTheme | null =
+        mode !== null
+          ? { mode, userPreferred: getSetting('isUserPreferredTheme') !== null }
+          : null;
+      saveTextAsFile(
+        serializePadifyWorkspaceFile({ notes, theme, attachments }, Date.now()),
+        padifyWorkspaceFileName(getDatedFileStem()),
+        PADIFY_MIME_TYPE,
+      );
+    })();
+  });
+
   // The canvas's interop door: a drawing note out as a native
   // .excalidraw file — excalidraw.com opens it as-is, the scene's image
   // bytes riding the vendor's files map. Rides the same visibility rule
@@ -227,7 +279,7 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
       }
       // The image pass rides the same collector as the .padify save —
       // the drawing branch, keyed on the same captured note.
-      const attachments = await collectNoteAttachments(captured);
+      const attachments = await collectReferencedAttachments([captured]);
       // Live title, same as the Padify save (the model lags the canvas's
       // announce debounce).
       saveTextAsFile(

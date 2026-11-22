@@ -1,6 +1,6 @@
 /**
  * The .padify open door — the file picker, the OS launch queue and the
- * one import routine behind them (see padify-file.ts for the format).
+ * one import routine behind them (see padify-file.ts for the formats).
  *
  * Every way a note file can ENTER the app funnels through
  * importNoteFile(): the download menu's "Open a note file…" row (a hidden
@@ -9,11 +9,14 @@
  * (window.launchQueue, the manifest's file_handlers entry, feature-
  * detected so plain browsers never notice it exists).
  *
- * The import always MINTS a fresh note (the format module's rule: a file
- * is a copy, not a move) — it lands in the rail, opens, and from then on
- * lives the same local-first life as every other note: autosave,
+ * Both dialects come through: a single-note envelope mints ONE note,
+ * and a workspace envelope mints its whole manifest — each note a fresh
+ * life, none merged, the count said honestly in a toast (see
+ * importWorkspaceFile). An import always MINTS (the format module's
+ * rule: a file is a copy, not a move) — notes land in the rail and from
+ * then on live the same local-first life as every other note: autosave,
  * snapshots, sync, trash. "Everything still synced" falls out of that
- * for free, because the imported note is not a second-class citizen
+ * for free, because an imported note is not a second-class citizen
  * riding a sidecar — it IS a note.
  */
 
@@ -21,7 +24,9 @@ import {
   base64ToBytes,
   parseExcalidrawFile,
   parsePadifyFile,
+  parsePadifyWorkspaceFile,
   prepareImportedNote,
+  type PadifyWorkspaceParseResult,
 } from './padify-file';
 import { deriveTabTitle } from './editor/note-content';
 import type { NoteType } from './editor/note-types';
@@ -110,7 +115,26 @@ async function importNoteFile(file: File, tabManager: TabManager): Promise<void>
   if (padify !== null) {
     const prepared = prepareImportedNote(padify.note, sanitizeNoteHtml);
     await hydrateImportedAttachments(padify.attachments);
-    openImportedNote(tabManager, prepared.name, prepared.noteType, prepared.content);
+    openImportedNote(
+      tabManager,
+      prepared.name,
+      prepared.noteType,
+      prepared.content,
+      padify.note.colorTheme,
+    );
+    return;
+  }
+
+  // The workspace dialect: a whole pad — every note mints fresh, the
+  // count said honestly (the single-note refusal check above already
+  // answered for the padify-note type; this is its sibling's).
+  const workspace = parsePadifyWorkspaceFile(text);
+  if (workspace !== null && workspace.kind === 'newer-format') {
+    showToast('This file is from a newer Padify — update the app to open it.');
+    return;
+  }
+  if (workspace !== null) {
+    await importWorkspaceFile(workspace, tabManager);
     return;
   }
 
@@ -131,20 +155,74 @@ async function importNoteFile(file: File, tabManager: TabManager): Promise<void>
 }
 
 /** The shared landing: append, open, confirm — the duplicate gesture's
- * choreography (duplicateNote), minus the "Copy of" naming. */
+ * choreography (duplicateNote), minus the "Copy of" naming. The ink
+ * theme rides when the envelope carried one (the additive v1 field —
+ * a rich note's colors survive the round trip). */
 function openImportedNote(
   tabManager: TabManager,
   name: string | null,
   noteType: NoteType,
   content: string,
+  colorTheme?: 'light' | 'dark',
 ): void {
-  const created = tabManager.addBackgroundNote(name, noteType, content);
+  const created = tabManager.addBackgroundNote(name, noteType, content, colorTheme);
   if (!created) {
     showToast("Couldn't create the note — the pad is full.");
     return;
   }
   tabManager.switchTo(created.id);
   showToast(`Opened "${deriveTabTitle(created)}".`);
+}
+
+/**
+ * The workspace import — the brainstorm's v1 contract: add the file's
+ * notes (mint fresh, never merge), say so honestly in a toast with a
+ * count, and touch nothing else on this device. The manifest's theme
+ * rides in the file but is deliberately NOT applied — applying it would
+ * be replace-the-pad's little brother, and replace is out of v1.
+ */
+async function importWorkspaceFile(
+  workspace: Extract<PadifyWorkspaceParseResult, { kind: 'workspace' }>,
+  tabManager: TabManager,
+): Promise<void> {
+  if (workspace.notes.length === 0) {
+    showToast('This pad has no notes.');
+    return;
+  }
+  // The pool first, under ORIGINAL ids — every note's references then
+  // resolve on first paint, exactly like the single-note import.
+  await hydrateImportedAttachments(workspace.attachments);
+  let added = 0;
+  let firstId: string | null = null;
+  for (const entry of workspace.notes) {
+    const prepared = prepareImportedNote(entry, sanitizeNoteHtml);
+    const minted = tabManager.addBackgroundNote(
+      prepared.name,
+      prepared.noteType,
+      prepared.content,
+      entry.colorTheme,
+    );
+    if (minted !== null) {
+      added++;
+      if (firstId === null) {
+        firstId = minted.id;
+      }
+    }
+  }
+  if (added === 0 || firstId === null) {
+    showToast("Couldn't add notes — the pad is full.");
+    return;
+  }
+  // The open lands on the FIRST of the batch — every file-open gesture
+  // in the app shows what arrived (the single-note import opens its
+  // note; the duplicate opens its copy), and the toast carries the
+  // count so a 12-note import never reads as one.
+  tabManager.switchTo(firstId);
+  if (added < workspace.notes.length) {
+    showToast(`Added ${added} of ${workspace.notes.length} notes — the pad is full.`);
+  } else {
+    showToast(`Added ${added} ${added === 1 ? 'note' : 'notes'}.`);
+  }
 }
 
 /**
