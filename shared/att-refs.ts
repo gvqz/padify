@@ -90,7 +90,25 @@ export function collectAttachmentRefs(content: string): string[] {
   for (const m of content.matchAll(/<img[^>]*\ssrc=["'](padify-att:[A-Za-z0-9_-]+)["']/gi)) {
     take(m[1]!);
   }
+  // Voice recordings: `<audio … src="padify-att:id" …>` (the rich note's
+  // recording card — editor/voice-notes.ts writes it, the storage subset
+  // admits it with this exact src gate). Same generosity as the img scan.
+  for (const m of content.matchAll(/<audio[^>]*\ssrc=["'](padify-att:[A-Za-z0-9_-]+)["']/gi)) {
+    take(m[1]!);
+  }
   return [...ids];
+}
+
+/**
+ * True when the content carries a voice-recording card (`<audio>` with a
+ * well-formed attachment ref) — the rail badge's cheap read. One test, no
+ * match-all iteration: the strip re-renders on every keystroke. The shape
+ * mirrors the collector's audio branch above; the storage subset strips a
+ * malformed src before it ever stores, so the two never disagree on
+ * stored content.
+ */
+export function hasVoiceRecording(content: string): boolean {
+  return /<audio[^>]*\ssrc=["']padify-att:[A-Za-z0-9_-]+["']/i.test(content);
 }
 
 /**

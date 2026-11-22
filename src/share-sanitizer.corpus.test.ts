@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { sanitizeNoteHtml, type SanitizeOptions } from './editor/storage-subset';
+import { ATTACHMENT_ID_PATTERN } from '../shared/wire';
 
 // Behavioral twin of share-sanitizer.test.ts (the drift guard): the
 // GENERATED module the browser downloads (public/share/sanitize-note.js,
@@ -60,6 +61,17 @@ describe('generated sanitizer ≡ canonical sanitizer', () => {
     '<span class="padify-math" data-latex="x" style="color: red">already-rendered junk</span>',
     'text with <span class="padify-math" data-latex="\\frac{1}{2}"></span> inline math',
     '<div class="padify-math" data-latex="not a span"></div>',
+    // Voice-recording cards: the admitted form plus the refusals — the
+    // canonical card survives both dialects byte-exact, a foreign src
+    // drops whole, junk attributes never ride along. The editor's live
+    // wrapper dissolves to the bare card in both dialects.
+    '<audio src="padify-att:att-0123456789abcdef" data-duration="42000"></audio>',
+    '<audio src="padify-att:att-0123456789abcdef"></audio>',
+    '<audio src="https://evil.example/track.mp3" onerror="alert(1)"></audio>',
+    '<audio src="padify-att:short" data-duration="9">fallback text</audio>',
+    '<audio data-duration="42000"></audio>',
+    '<figure class="padify-voice" contenteditable="false"><audio src="padify-att:att-0123456789abcdef" data-duration="42000"></audio><span class="padify-voice-btn"></span><span class="padify-voice-time">0:00 / 0:42</span></figure>',
+    '<figure class="padify-voice"><audio src="https://evil.example/a.mp3"></audio><span>chrome</span></figure>',
     '<p onclick="alert(1)" style="color: blue" id="x" class="y">multi-attr</p>',
     '<form action="https://evil.example"><input value="x"></form>',
     'unicode π text',
@@ -108,5 +120,30 @@ describe('generated sanitizer ≡ canonical sanitizer', () => {
     const rendered = generated(input, SHARE_OPTIONS);
     expect(rendered).toContain('e^{i\\pi}');
     expect(rendered).not.toContain('padify-math');
+  });
+
+  it("the voice src gate speaks the wire's one attachment id shape", () => {
+    // storage-subset.ts inlines the id shape (it must stay import-free for
+    // the generated share sanitizer); this is the drift guard for that
+    // inline copy — every id the wire admits must pass the voice gate and
+    // every id it refuses must fail it, with room to spare on both sides.
+    const admitted = [
+      'att-0123456789abcdef01234567', // the store's exact 24-hex shape
+      'att-aaaaaaaaaaaaaaaa', // the corpus's short form
+      'voice-2026-abcdef', // an underscore-dashed client id
+      'a2345678', // the 8-char floor
+      'x'.repeat(64), // the 64-char ceiling
+    ];
+    for (const id of admitted) {
+      expect(sanitizeNoteHtml(`<audio src="padify-att:${id}"></audio>`), `admitted: ${id}`).toBe(
+        `<audio src="padify-att:${id}"></audio>`,
+      );
+      expect(ATTACHMENT_ID_PATTERN.test(id), `wire admits: ${id}`).toBe(true);
+    }
+    const refused = ['short', 'x'.repeat(65), 'has:colon', '../../evil', ''];
+    for (const id of refused) {
+      expect(sanitizeNoteHtml(`<audio src="padify-att:${id}"></audio>`), `refused: ${id}`).toBe('');
+      expect(ATTACHMENT_ID_PATTERN.test(id), `wire refuses: ${id}`).toBe(false);
+    }
   });
 });

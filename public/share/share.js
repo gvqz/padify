@@ -206,6 +206,87 @@ function render(row) {
   // branches can carry refs; the raw and task branches' DOM is text this
   // page constructed, so the sweep structurally finds nothing there.
   resolveShareImages(content);
+  resolveShareAudio(content);
+}
+
+/**
+ * Voice recordings ride the same grammar: the rich note's `<audio>` card.
+ * No browser ever shows a controls-less audio (the UA stylesheet hides it
+ * behind an !important no page rule beats), so the card chrome is built
+ * here — the same wrapper the editor paints (editor/voice-notes.ts,
+ * figure.padify-voice) — and the hidden element drives it by events: the
+ * play/pause glyph on the button span, the inked-bars progress on --p,
+ * the stored data-duration (capture-time ms) as the honest total — WebM's
+ * notorious Infinity metadata never gets to lie. The src swap is safe
+ * here: this page holds no model, nothing absorbs the DOM into storage.
+ */
+function resolveShareAudio(container) {
+  var cards = container.querySelectorAll('audio[src^="padify-att:"]');
+  Array.prototype.forEach.call(cards, function (card) {
+    var id = (card.getAttribute('src') || '').slice('padify-att:'.length);
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(id)) {
+      card.setAttribute('data-padify-missing', '');
+      return;
+    }
+    var stored = parseInt(card.getAttribute('data-duration') || '', 10);
+    var totalMs = isFinite(stored) && stored > 0 ? stored : 0;
+    var clock = function (ms) {
+      var s = Math.max(0, Math.round(ms / 1000));
+      return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
+    };
+
+    var wrapper = document.createElement('span');
+    wrapper.className = 'padify-voice';
+    var button = document.createElement('span');
+    button.className = 'padify-voice-btn';
+    var wave = document.createElement('span');
+    wave.className = 'padify-voice-wave';
+    var time = document.createElement('span');
+    time.className = 'padify-voice-time';
+    time.textContent = totalMs > 0 ? '0:00 / ' + clock(totalMs) : 'voice note';
+    card.parentNode.insertBefore(wrapper, card);
+    wrapper.append(card, button, wave, time);
+
+    card.setAttribute('preload', 'none');
+
+    var paint = function () {
+      var total = totalMs || (card.duration && isFinite(card.duration) ? card.duration * 1000 : 0);
+      var played = card.currentTime * 1000;
+      var fraction = total > 0 ? Math.min(1, played / total) : 0;
+      wave.style.setProperty('--p', String(fraction));
+      time.textContent = clock(played) + ' / ' + (total > 0 ? clock(total) : '…');
+    };
+    card.addEventListener('timeupdate', paint);
+    card.addEventListener('ended', function () {
+      wrapper.classList.remove('voice-playing');
+      wave.style.setProperty('--p', '0');
+      time.textContent = '0:00 / ' + (totalMs > 0 ? clock(totalMs) : '…');
+    });
+    card.addEventListener('error', function () {
+      wrapper.setAttribute('data-padify-missing', '');
+      wrapper.classList.remove('voice-playing');
+    });
+    wrapper.addEventListener('click', function () {
+      if (wrapper.classList.contains('voice-playing')) {
+        card.pause();
+        wrapper.classList.remove('voice-playing');
+        return;
+      }
+      container.querySelectorAll('.padify-voice.voice-playing').forEach(function (other) {
+        other.classList.remove('voice-playing');
+        var inner = other.querySelector('audio');
+        if (inner) inner.pause();
+      });
+      wrapper.classList.add('voice-playing');
+      var attempt = card.play();
+      if (attempt) {
+        attempt.catch(function () {
+          wrapper.classList.remove('voice-playing');
+          wrapper.setAttribute('data-padify-missing', '');
+        });
+      }
+    });
+  });
 }
 
 /** A shared task list: colored circles, titles, chips — read-only. */

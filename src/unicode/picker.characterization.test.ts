@@ -173,6 +173,7 @@ function fakePort(): EditorPort {
     insertMath: () => false,
     queryMathAtCaret: () => null,
     updateMath: () => false,
+    insertVoiceCard: () => false,
     undo: () => false,
     redo: () => false,
     canUndo: () => false,

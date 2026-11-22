@@ -73,6 +73,21 @@
       <button type="button" id="voiceBarStop" class="voice-bar-stop">Done</button>
     </div>
 
+    <!-- Voice recording live bar (the rich note's mic) -->
+    <div
+      id="voiceRecordBar"
+      class="voice-bar voice-record-bar"
+      hidden
+      role="status"
+      aria-live="polite"
+    >
+      <span class="voice-record-dot" aria-hidden="true"></span>
+      <span class="voice-bar-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+      <span class="voice-bar-text" id="voiceRecordTime">0:00</span>
+      <button type="button" id="voiceRecordCancel" class="voice-bar-cancel">Cancel</button>
+      <button type="button" id="voiceRecordStop" class="voice-bar-stop">Done</button>
+    </div>
+
     <!--#include src/ui/editor-shell.html -->
 
     <script>

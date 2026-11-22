@@ -47,6 +47,7 @@ const ALLOWED_TAGS = new Set([
   'UL',
   'OL',
   'LI',
+  'AUDIO',
   'BLOCKQUOTE',
   'PRE',
   'SUP',
@@ -113,6 +114,36 @@ const ALLOWED_ATTRS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
  */
 const MATH_CLASS = 'padify-math';
 const MATH_LATEX_PATTERN = /^[\s\S]{1,2000}$/;
+
+/**
+ * The voice-recording card's vocabulary. A recording survives as exactly
+ * `<audio src="padify-att:<id>" data-duration="<ms>"></audio>` — an empty
+ * element (fallback children are never ours), its bytes living in the
+ * attachment store like every image's. The src gate is the attachment
+ * scheme ONLY: no external audio URL ever renders, and a foreign or
+ * malformed src drops the whole element (there is no text inside an
+ * audio tag worth unwrapping).
+ *
+ * The id shape is inlined because this module must stay import-free (the
+ * share viewer's sanitizer is generated from this single file by
+ * scripts/build-share.mjs, which transforms it without bundling). The
+ * shape — `[A-Za-z0-9_-]{8,64}` — is shared/wire.ts's ATTACHMENT_ID_SOURCE;
+ * share-sanitizer.corpus.test.ts keeps the inline copy and the wire's
+ * pattern agreeing on the same strings.
+ */
+const VOICE_SRC_PATTERN = /^padify-att:([A-Za-z0-9_-]{8,64})$/;
+const VOICE_DURATION_PATTERN = /^\d{1,8}$/;
+
+/**
+ * The live wrapper's class (figure.padify-voice — see editor/voice-notes.ts):
+ * the paint pass wraps the stored audio in chrome the browser can actually
+ * show (the UA stylesheet hides a bare controls-less audio behind an
+ * !important no author rule beats), and this vocabulary is what keeps that
+ * chrome out of storage — the walk admits the wrapper's AUDIO child and
+ * drops every other byte of the wrapper. Like the math shell's class, the
+ * name is part of the format contract.
+ */
+const VOICE_CLASS = 'padify-voice';
 
 /**
  * Data-attribute values that may survive, by attribute. The checklist mark
@@ -255,6 +286,37 @@ export function sanitizeNoteHtml(html: string, options: SanitizeOptions = {}): s
       return [];
     }
 
+    /**
+     * The voice-card admission, shared by the two shapes that carry it:
+     * a bare AUDIO tag and the live wrapper's audio child. Gated src,
+     * capped duration, empty element — a forged card (any foreign src,
+     * any smuggled attribute) drops whole; there is nothing inside one
+     * worth unwrapping to text.
+     */
+    const admitVoiceCard = (): Node[] => {
+      const audio = element.tagName === 'AUDIO' ? element : element.querySelector('audio');
+      if (!audio) {
+        return [];
+      }
+      const src = audio.getAttribute('src') ?? '';
+      if (!VOICE_SRC_PATTERN.test(src)) {
+        return [];
+      }
+      const card = document.createElement('AUDIO');
+      card.setAttribute('src', src);
+      const duration = audio.getAttribute('data-duration');
+      if (duration !== null && VOICE_DURATION_PATTERN.test(duration)) {
+        card.setAttribute('data-duration', duration);
+      }
+      return [card];
+    };
+
+    // The voice card's live wrapper — judged BEFORE the unwrap verdict
+    // below, so the chrome never walks out as text (see VOICE_CLASS).
+    if (element.tagName === 'FIGURE' && element.classList.contains(VOICE_CLASS)) {
+      return admitVoiceCard();
+    }
+
     const children: Node[] = [];
     element.childNodes.forEach((child) => {
       children.push(...walk(child));
@@ -265,6 +327,12 @@ export function sanitizeNoteHtml(html: string, options: SanitizeOptions = {}): s
     }
 
     const clone = document.createElement(element.tagName);
+
+    // Voice recordings are their own vocabulary (like the math shells):
+    // the bare stored form.
+    if (element.tagName === 'AUDIO') {
+      return admitVoiceCard();
+    }
 
     // Math shells are their own vocabulary: fixed class + capped LaTeX
     // source, rendered children never store (the shell is the truth).
