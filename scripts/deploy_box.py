@@ -205,24 +205,41 @@ def boot_bridge(client):
     the site's OWN run.sh detached (setsid, nohup), exactly what the
     supervisor would run, and let the front server reconnect to it.
 
-    Two guards, both hard:
+    The data-safety guards, in the order they fire:
 
-    - run.sh must name the Turso database. Without TURSO_DATABASE_URL in
-      its environment the server silently falls back to a local SQLite
-      file at server/local.db — a boot that SERVES EMPTY DATA. Refuse.
+    - Pre-boot: Turso credentials must be reachable from a boot whose
+      cwd is server/ — in run.sh itself or in server/.env (Bun auto-loads
+      that file; the rotation doc keeps the token there). Only match
+      COUNTS are printed, never values. Without a URL+token the server
+      silently falls back to a local SQLite file — a boot that SERVES
+      EMPTY DATA. Refuse.
     - Nothing may already look alive (pgrep). A bridge next to a live
       server just loses the port bind and dies.
+    - Post-boot: the fresh boot.log must name `database: Turso` — the
+      final arbiter. A boot that fell back to local SQLite is killed
+      before it can serve, and the deploy fails loudly.
 
     The bridge is a bridge, not a home: it self-expires after 24 h
     (`timeout`), and a panel restart (Web > Sites > Restart) remains the
     durable fix. The next deploy kills the SSH-visible bridge first and
     converges on its own.
     """
-    run_sh = run(client, f"cat {shlex.quote(REMOTE_SERVER + '/run.sh')} 2>/dev/null")
-    if "TURSO_DATABASE_URL" not in run_sh:
-        print("[bridge] run.sh does not name the Turso database — refusing to "
-              "boot a server that would fall back to an empty local SQLite. "
-              "Restart the site from the alwaysdata panel instead.")
+    probe = run(
+        client,
+        "cd " + shlex.quote(REMOTE_SERVER) + " && "
+        "printf 'url_sh=%s\\ntoken_sh=%s\\nurl_env=%s\\ntoken_env=%s\\n' "
+        "\"$(grep -c 'TURSO_DATABASE_URL' run.sh 2>/dev/null || true)\" "
+        "\"$(grep -c 'TURSO_AUTH_TOKEN' run.sh 2>/dev/null || true)\" "
+        "\"$(grep -c '^TURSO_DATABASE_URL=' .env 2>/dev/null || true)\" "
+        "\"$(grep -c '^TURSO_AUTH_TOKEN=' .env 2>/dev/null || true)\"",
+    )
+    flags = dict(line.strip().split("=", 1) for line in probe.splitlines() if "=" in line)
+    has_url = flags.get("url_sh") not in ("0", "") or flags.get("url_env") not in ("0", "")
+    has_token = flags.get("token_sh") not in ("0", "") or flags.get("token_env") not in ("0", "")
+    if not (has_url and has_token):
+        print(f"[bridge] no Turso credentials reachable (probe: {probe.strip().replace(chr(10), ' ')}) — "
+              "refusing to boot a server that would fall back to an empty local "
+              "SQLite. Restart the site from the alwaysdata panel instead.")
         return False
     live = run(client, "pgrep -f 'bun.*server/index[.]ts' || true").split()
     if live:
@@ -231,7 +248,27 @@ def boot_bridge(client):
     print("[bridge] starting run.sh detached over SSH (supervisor revival never came)")
     run(client,
         f"cd {shlex.quote(REMOTE_SERVER)} && "
+        "cp boot.log boot.log.prev 2>/dev/null || true; : > boot.log; "
         "(setsid nohup timeout 86400 bash ./run.sh >> boot.log 2>&1 < /dev/null &) ; sleep 1")
+    # The fresh boot must name its database within a few seconds — and it
+    # must be Turso. A local-SQLite fallback gets killed before it serves.
+    for _ in range(10):
+        boot_head = run(client, f"grep -m1 'database:' {shlex.quote(REMOTE_SERVER + '/boot.log')} 2>/dev/null || true")
+        if boot_head.strip():
+            break
+        time.sleep(3)
+    if "database: local SQLite" in boot_head:
+        run(client, "pkill -f 'bun.*server/index[.]ts' 2>/dev/null || true")
+        raise SystemExit(
+            "BRIDGE ABORTED — the boot fell back to a LOCAL SQLite database "
+            "(no Turso credentials reached the process) and was killed before "
+            "it could serve empty data. Restart the site from the alwaysdata "
+            "panel instead.")
+    if "database: Turso" not in boot_head:
+        raise SystemExit(
+            "BRIDGE ABORTED — the boot log never named a database. "
+            "boot.log head:\n" + run(client, f"head -10 {shlex.quote(REMOTE_SERVER + '/boot.log')} 2>/dev/null"))
+    print(f"[bridge] {boot_head.strip()}")
     return True
 
 
