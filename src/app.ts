@@ -20,6 +20,7 @@ import { initShareUI } from './cloud/share-ui';
 import { initConflictReview } from './conflicts';
 import { initUnseenChange } from './unseen';
 import { initVoiceTyping, handleTabSwitchedWhileListening } from './voice';
+import { initVoiceRecording, handleTabSwitchedWhileVoiceActive } from './editor/voice-notes';
 import { initTypingEffects } from './typing-effects';
 import { initPipWindow } from './pip-window';
 import { openModal } from './ui/behavior/modal';
@@ -149,6 +150,7 @@ export async function initApp(): Promise<void> {
   tabManager.onActiveChanged = () => {
     updateWordCountPill(tabManager.getActiveText());
     handleTabSwitchedWhileListening();
+    handleTabSwitchedWhileVoiceActive();
   };
   await tabManager.init();
 
@@ -158,6 +160,10 @@ export async function initApp(): Promise<void> {
 
   // Voice typing (Web Speech API) — hides its own UI when unsupported.
   initVoiceTyping();
+
+  // Voice recording (the rich note's mic): the bar's buttons + the
+  // Escape path; the card itself lands through the engine's typed op.
+  initVoiceRecording();
 
   // Music + ambience — the app's heaviest subsystem (~5k lines) loads on
   // demand now. The modal markup is in the DOM from boot (features/

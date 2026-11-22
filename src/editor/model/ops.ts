@@ -1447,6 +1447,38 @@ export function plantMath(model: HTMLElement, at: number, latex: string): OpResu
 }
 
 /**
+ * Plants a voice-recording card at the caret — the same inline-atom
+ * planting plantMath does, carrying the attachment ref (the bytes never
+ * enter the model) and the capture-time duration. The stored form is the
+ * storage subset's voice vocabulary verbatim; the shell lands empty and
+ * the paint pass wires it.
+ */
+export function plantVoiceCard(
+  model: HTMLElement,
+  at: number,
+  ref: string,
+  durationMs: number,
+): OpResult {
+  const spot = spotAtStream(model, at);
+  if (!spot) {
+    return UNCHANGED;
+  }
+  const card = document.createElement('audio');
+  card.setAttribute('src', ref);
+  card.setAttribute('data-duration', String(durationMs));
+  insertNodeAtSpot(card, spot);
+  const afterSpot: DomSpot =
+    card.nextSibling?.nodeType === Node.TEXT_NODE
+      ? { kind: 'text', node: card.nextSibling as Text, raw: 0 }
+      : {
+          kind: 'element',
+          node: (card.parentNode ?? spot.node) as Element,
+          childIndex: Array.prototype.indexOf.call(card.parentNode?.childNodes ?? [], card) + 1,
+        };
+  return { changed: true, intent: { spot: afterSpot } };
+}
+
+/**
  * Repoints the Nth equation (handles are per-render surface artifacts, so
  * the op addresses shells by index — surface and model share structure).
  */

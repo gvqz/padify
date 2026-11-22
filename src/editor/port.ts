@@ -242,6 +242,15 @@ export interface EditorPort {
    */
   updateMath(id: string, latex: string): boolean;
 
+  /**
+   * Plants a voice-recording card at the caret — an inline atom carrying
+   * the attachment ref (the bytes live in the attachment store) and the
+   * capture-time duration. One history group of its own, so a single
+   * undo removes the whole take, exactly like an equation. Returns false
+   * when the engine refused.
+   */
+  insertVoiceCard(ref: string, durationMs: number): boolean;
+
   undo(): boolean;
   redo(): boolean;
 

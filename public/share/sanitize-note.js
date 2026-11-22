@@ -25,6 +25,7 @@ const ALLOWED_TAGS = /* @__PURE__ */ new Set([
   "UL",
   "OL",
   "LI",
+  "AUDIO",
   "BLOCKQUOTE",
   "PRE",
   "SUP",
@@ -70,6 +71,9 @@ const ALLOWED_ATTRS = /* @__PURE__ */ new Map([
 ]);
 const MATH_CLASS = "padify-math";
 const MATH_LATEX_PATTERN = /^[\s\S]{1,2000}$/;
+const VOICE_SRC_PATTERN = /^padify-att:([A-Za-z0-9_-]{8,64})$/;
+const VOICE_DURATION_PATTERN = /^\d{1,8}$/;
+const VOICE_CLASS = "padify-voice";
 const ALLOWED_DATA_ATTR_VALUES = /* @__PURE__ */ new Map([
   ["data-rich-checklist", /^true$/],
   ["data-checked", /^(true|false)$/]
@@ -129,6 +133,27 @@ function sanitizeNoteHtml(html, options = {}) {
     if (DROP_CONTENT_TAGS.has(element.tagName)) {
       return [];
     }
+    const admitVoiceCard = () => {
+      var _a2;
+      const audio = element.tagName === "AUDIO" ? element : element.querySelector("audio");
+      if (!audio) {
+        return [];
+      }
+      const src = (_a2 = audio.getAttribute("src")) != null ? _a2 : "";
+      if (!VOICE_SRC_PATTERN.test(src)) {
+        return [];
+      }
+      const card = document.createElement("AUDIO");
+      card.setAttribute("src", src);
+      const duration = audio.getAttribute("data-duration");
+      if (duration !== null && VOICE_DURATION_PATTERN.test(duration)) {
+        card.setAttribute("data-duration", duration);
+      }
+      return [card];
+    };
+    if (element.tagName === "FIGURE" && element.classList.contains(VOICE_CLASS)) {
+      return admitVoiceCard();
+    }
     const children = [];
     element.childNodes.forEach((child) => {
       children.push(...walk(child));
@@ -137,6 +162,9 @@ function sanitizeNoteHtml(html, options = {}) {
       return children;
     }
     const clone = document.createElement(element.tagName);
+    if (element.tagName === "AUDIO") {
+      return admitVoiceCard();
+    }
     if (element.tagName === "SPAN" && element.classList.contains(MATH_CLASS)) {
       const latex = (_a = element.getAttribute("data-latex")) != null ? _a : "";
       if (latex === "") {

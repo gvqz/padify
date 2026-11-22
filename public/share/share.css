@@ -555,3 +555,110 @@ body {
   font-size: 12.5px;
   color: var(--s-fg-subtle);
 }
+
+
+/* Images — the attachment refs resolve against the public
+   /api/share/:token/att/:id endpoint (see resolveShareAttachments in
+   share.js); whatever loads renders inside the column, and whatever
+   fails gets the app's own missing-image state: a dashed placeholder,
+   never the browser's broken glyph. */
+.share-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+.share-content img[data-padify-missing] {
+  display: inline-block;
+  min-height: 2.5em;
+  min-width: 8em;
+  border: 1.5px dashed var(--s-border);
+  border-radius: 6px;
+  background: var(--s-bg-soft);
+  opacity: 0.75;
+}
+
+/* ---- voice recordings — the editor's card, the share page's tokens ----
+
+   The editor wraps its stored element in .padify-voice chrome (no
+   browser shows a controls-less audio — the UA rule wins), and
+   resolveShareAttachments builds the same wrapper here. The inner audio
+   drives the chrome by events; its src is the public att endpoint. */
+.share-content .padify-voice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(440px, 100%);
+  height: 46px;
+  margin: 8px 0;
+  padding: 0 14px 0 7px;
+  border: 1px solid var(--s-border);
+  border-radius: 999px;
+  background-color: var(--s-bg);
+  cursor: pointer;
+  user-select: none;
+}
+
+.share-content .padify-voice audio {
+  display: none;
+}
+
+.share-content .padify-voice-btn {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background-color: var(--s-accent);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 13px 13px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff'%3E%3Cpath d='M8 5.5v13l11-6.5z'/%3E%3C/svg%3E");
+}
+
+@media (prefers-color-scheme: dark) {
+  .share-content .padify-voice-btn {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Cpath d='M8 5.5v13l11-6.5z'/%3E%3C/svg%3E");
+  }
+}
+
+.share-content .padify-voice-wave {
+  flex: 1 1 auto;
+  align-self: stretch;
+  margin: 12px 0;
+  background-image:
+    repeating-linear-gradient(90deg, var(--s-fg) 0 3px, transparent 3px 7px),
+    repeating-linear-gradient(90deg, var(--s-border) 0 3px, transparent 3px 7px);
+  background-repeat: no-repeat, repeat;
+  background-size:
+    calc(var(--p, 0) * 100%) 100%,
+    100% 100%;
+  background-position: left center, left center;
+}
+
+.share-content .padify-voice-time {
+  flex: 0 0 auto;
+  font-size: 12px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--s-fg-muted);
+}
+
+.share-content .padify-voice.voice-playing .padify-voice-btn {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff'%3E%3Cpath d='M7 5h3.6v14H7zM13.4 5H17v14h-3.6z'/%3E%3C/svg%3E");
+}
+
+@media (prefers-color-scheme: dark) {
+  .share-content .padify-voice.voice-playing .padify-voice-btn {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Cpath d='M7 5h3.6v14H7zM13.4 5H17v14h-3.6z'/%3E%3C/svg%3E");
+  }
+}
+
+.share-content .padify-voice[data-padify-missing] {
+  border-style: dashed;
+  opacity: 0.72;
+  cursor: default;
+}
+
+.share-content .padify-voice[data-padify-missing] .padify-voice-btn {
+  background-color: var(--s-fg-subtle);
+}

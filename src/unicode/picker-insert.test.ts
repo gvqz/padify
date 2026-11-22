@@ -95,6 +95,7 @@ function fakePort(): EditorPort {
     insertMath: emptyAnswer,
     queryMathAtCaret: () => null,
     updateMath: emptyAnswer,
+    insertVoiceCard: () => false,
     undo: emptyAnswer,
     redo: emptyAnswer,
     canUndo: () => false,

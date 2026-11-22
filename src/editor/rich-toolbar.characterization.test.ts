@@ -243,6 +243,7 @@ function createFakePort(overrides: Partial<EditorPort> = {}): EditorPort {
     insertMath: vi.fn(() => true),
     queryMathAtCaret: vi.fn((): { latex: string; id: string } | null => null),
     updateMath: vi.fn(() => true),
+    insertVoiceCard: vi.fn(() => true),
     undo: vi.fn(() => true),
     redo: vi.fn(() => true),
     canUndo: vi.fn(() => false),

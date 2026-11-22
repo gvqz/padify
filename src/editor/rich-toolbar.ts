@@ -30,6 +30,7 @@ import {
   type ListKind,
 } from './port';
 import { isRichNote } from './note-types';
+import { toggleVoiceRecording } from './voice-notes';
 import { currentThemeMode, resolvePaletteColor } from './theme-colors';
 import { mountColorPicker, type ColorPickerEntry, type ColorPickerHandle } from './color-picker';
 import { MATH_CLASS, MATH_ID_ATTR, MATH_LATEX_PATTERN, renderMathPreview } from './math';
@@ -956,6 +957,11 @@ function wireToolbarEvents(): void {
       } else {
         closeMathPopover(true);
       }
+      return;
+    }
+
+    if (button.dataset.richAction === 'voice') {
+      toggleVoiceRecording();
       return;
     }
 

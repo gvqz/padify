@@ -64,6 +64,10 @@ const CORPUS: Record<string, string> = {
     '<ul data-rich-checklist="true"><li style="margin-left: 20px" data-checked="true">indented done</li></ul>',
   math_shell: 'Inline <span class="padify-math" data-latex="\\frac{1}{2}"></span> math.',
   math_shell_display: '<p><span class="padify-math" data-latex="x^2 + y^2 = z^2"></span></p>',
+  // The voice-recording card: gated src, capped duration attribute, empty
+  // element. The bytes live in the attachment store — the ref is ~40 chars.
+  voice_recording: '<audio src="padify-att:att-0123456789abcdef" data-duration="42000"></audio>',
+  voice_recording_no_duration: '<audio src="padify-att:att-0123456789abcdef"></audio>',
   bare_text: 'words with no markup at all',
 };
 
@@ -85,6 +89,13 @@ const HOSTILE = [
   '<ul data-rich-checklist="true"><li data-checked="yes">bad state</li></ul>',
   '<span class="padify-math" data-latex="">empty latex</span>',
   '<span class="padify-math" data-latex="x">rendered children never store<span>inner</span></span>',
+  // Voice cards: a foreign or malformed src drops the whole element, a
+  // junk duration attribute never rides along, nothing inside survives.
+  '<audio src="https://evil.test/track.mp3"></audio>',
+  '<audio src="padify-att:short"></audio>',
+  '<audio src="padify-att:att-0123456789abcdef" data-duration="nine"></audio>',
+  '<audio src="padify-att:att-0123456789abcdef" data-duration="123456789"></audio>',
+  '<audio src="padify-att:att-0123456789abcdef" onerror="alert(1)">fallback text</audio>',
   '<section><b>unknown wrapper</b></section>',
   '<img src=x onerror=alert(1)>',
   '<iframe src="https://evil.test"></iframe>',
@@ -129,6 +140,34 @@ describe('the storage format contract', () => {
     expect(once).toContain('<b>bold</b>');
     expect(once).toContain('click'); // the link's text outlives its href
     expect(once).toContain('after');
+  });
+
+  it('the voice card stores as gated src + duration, nothing else', () => {
+    // The recording card's whole surface: the ref (bytes live in the
+    // attachment store) and the capture-time duration. Every other
+    // attribute is a smuggled payload — dropped, not kept — and a
+    // foreign src is not a voice card at all: the element goes, whole.
+    const stored = sanitizeNoteHtml(
+      '<audio src="padify-att:att-0123456789abcdef" data-duration="42000" onerror="alert(1)" class="x">fallback</audio>',
+    );
+    expect(stored).toBe(
+      '<audio src="padify-att:att-0123456789abcdef" data-duration="42000"></audio>',
+    );
+    expect(sanitizeNoteHtml('<audio src="https://example.test/track.mp3"></audio>')).toBe('');
+  });
+
+  it('the live wrapper dissolves — the model keeps the bare card', () => {
+    // The editor paints the card inside `figure.padify-voice` chrome (the
+    // UA stylesheet hides a bare controls-less audio; see
+    // editor/voice-notes.ts). The wrapper is judged BEFORE the unwrap
+    // verdict, so the chrome never walks out as text — the stored form
+    // stays the corpus's bare card, never a wrapper fossil.
+    const absorbed = sanitizeNoteHtml(
+      '<p>before</p><figure class="padify-voice" contenteditable="false"><audio src="padify-att:att-0123456789abcdef" data-duration="42000"></audio><span class="padify-voice-btn"></span><span class="padify-voice-time">0:00 / 0:42</span></figure>',
+    );
+    expect(absorbed).toBe(
+      '<p>before</p><audio src="padify-att:att-0123456789abcdef" data-duration="42000"></audio>',
+    );
   });
 
   it('the math shell stores as the shell alone, children never', () => {

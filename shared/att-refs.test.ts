@@ -13,6 +13,7 @@ import {
   collectAttachmentRefs,
   collectNoteAttachmentIds,
   collectSceneFileIds,
+  hasVoiceRecording,
   isPadifyAttRef,
   orphanVerdicts,
   padifyAttId,
@@ -70,6 +71,44 @@ describe('collectAttachmentRefs', () => {
     ].join('\n');
     expect(collectAttachmentRefs(content)).toEqual([]);
     expect(collectAttachmentRefs('')).toEqual([]);
+  });
+
+  it('collects voice-recording audio srcs alongside the image spellings', () => {
+    const content = [
+      'meeting notes',
+      '<audio src="padify-att:att-aaaaaaaaaaaaaaaa" data-duration="42000"></audio>',
+      "<audio data-duration='1000' src='padify-att:att-bbbbbbbbbbbbbbbb'></audio>",
+      '<AUDIO SRC="padify-att:att-cccccccccccccccc"></AUDIO>', // case-insensitive tag/attr
+      '<audio src="https://example.com/song.mp3"></audio>', // foreign src — not ours
+      '<audio src="padify-att:short"></audio>', // malformed id — not a ref
+    ].join('\n');
+    expect(collectAttachmentRefs(content).sort()).toEqual([
+      'att-aaaaaaaaaaaaaaaa',
+      'att-bbbbbbbbbbbbbbbb',
+      'att-cccccccccccccccc',
+    ]);
+  });
+});
+
+describe('hasVoiceRecording', () => {
+  it('answers true only for a well-formed audio card', () => {
+    expect(
+      hasVoiceRecording('<audio src="padify-att:att-aaaaaaaaaaaaaaaa" data-duration="1"></audio>'),
+    ).toBe(true);
+    expect(
+      hasVoiceRecording("<AUDIO data-duration='1' SRC='padify-att:att-aaaaaaaaaaaaaaaa'>"),
+    ).toBe(true);
+    // The editor's live wrapper carries the same audio inside — the badge
+    // reads stored content, but the generous read answers it too.
+    expect(
+      hasVoiceRecording(
+        '<figure class="padify-voice"><audio src="padify-att:att-aaaaaaaaaaaaaaaa"></audio></figure>',
+      ),
+    ).toBe(true);
+    expect(hasVoiceRecording('<audio src="https://example.com/a.mp3"></audio>')).toBe(false);
+    expect(hasVoiceRecording('<audio></audio>')).toBe(false);
+    expect(hasVoiceRecording('![x](padify-att:att-aaaaaaaaaaaaaaaa)')).toBe(false);
+    expect(hasVoiceRecording('')).toBe(false);
   });
 });
 

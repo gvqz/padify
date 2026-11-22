@@ -30,6 +30,7 @@ import type {
 } from './port';
 import { normalizeHex, rgbStringToHex } from './color-picker';
 import { ensureMathId, MATH_ID_ATTR, renderMathIn } from './math';
+import { decorateVoiceNotes } from './voice-notes';
 import {
   parse,
   serialize,
@@ -64,6 +65,7 @@ import {
   plantLink,
   plantMath,
   plantRule,
+  plantVoiceCard,
   plantStyledCaret,
   plantTable,
   removeInlineFormatting,
@@ -367,10 +369,11 @@ export class ModelPort implements EditorPort {
     this.model = parse(this.element.innerHTML);
   }
 
-  /** Paints markup onto the surface: replace, render math. */
+  /** Paints markup onto the surface: replace, render math, wire voice cards. */
   private paint(markup: string): void {
     this.element.innerHTML = markup;
     renderMathIn(this.element);
+    decorateVoiceNotes(this.element);
   }
 
   /** Announces a model-made edit (autosave, toolbar, indicator follow). */
@@ -917,6 +920,19 @@ export class ModelPort implements EditorPort {
       return false;
     }
     return this.command((model, coverage) => plantMath(model, coverage[0], value));
+  }
+
+  insertVoiceCard(ref: string, durationMs: number): boolean {
+    // The gate the storage subset enforces on reload — the op refuses a
+    // ref that would not survive it (a junk ref is a junk card).
+    if (
+      !/^padify-att:[A-Za-z0-9_-]{8,64}$/.test(ref) ||
+      !Number.isInteger(durationMs) ||
+      durationMs <= 0
+    ) {
+      return false;
+    }
+    return this.command((model, coverage) => plantVoiceCard(model, coverage[0], ref, durationMs));
   }
 
   queryMathAtCaret(): { latex: string; id: string } | null {

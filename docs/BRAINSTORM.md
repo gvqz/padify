@@ -22,10 +22,21 @@ lines live at the top because everything else defers to them.*
 
 ## NOW — what the working queue holds (non-visual)
 
-9. **Voice notes, revived on the store.** The attachment pipeline was built
-   for them; the feature died with the old app. A voice note = an audio
-   attachment + a marker — the plumbing is all there. Decide whether it
-   wants to be a note type or an attachment in a text note (owner call).
+9. **Voice notes — DECIDED AND SHIPPED (2026-11-22).** The owner's call:
+   an audio attachment in a RICH note, not a note type — the type
+   registry owns content formats, and a recording owns none. What landed:
+   the mic row on the rich toolbar (MediaRecorder → the attachment store,
+   offline-first, the 5 MB wire cap with a 20-minute seatbelt), the card
+   as the storage subset's `<audio src="padify-att:…" data-duration="…">`
+   (both GCs and both .padify envelopes collect it through
+   shared/att-refs.ts), insertion through the engine's typed op (one undo
+   removes the take), the live wrapper chrome (`figure.padify-voice` —
+   the UA stylesheet hides a controls-less audio behind an !important no
+   author rule beats, so the paint pass wraps and every absorb unwraps,
+   exactly like math), the rail's mic badge, and the share story: the
+   token-gated /att endpoint already serves them (mime-agnostic), the
+   viewer builds the wrapper and plays. Plain and markdown notes stay as
+   they were.
 
 ## The hygiene review (2026-11-21) — what the whole-repo scan found
 

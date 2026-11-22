@@ -19,6 +19,7 @@
 import { $, type Q } from '../lib/q';
 import { noteStripBadge } from '../editor/note-projections';
 import { deriveTabTitle } from '../editor/note-content';
+import { hasVoiceRecording } from '../../shared/att-refs';
 import {
   DEFAULT_NOTE_TYPE,
   NOTE_TYPE_ICONS,
@@ -266,6 +267,17 @@ export class TabStripView {
       listDot.setAttribute('aria-hidden', 'true');
       listDot.dataset.color = stripBadge.color;
       button.appendChild(listDot);
+    } else if (hasVoiceRecording(tab.content)) {
+      // A voice note outranks its type badge: what the note CARRIES is
+      // the louder fact about it (the type badge reads the same for every
+      // rich note; the mic says which one holds a recording).
+      const voiceBadge = document.createElement('span');
+      voiceBadge.className = 'tab-strip-type';
+      voiceBadge.title = 'Voice note';
+      voiceBadge.setAttribute('aria-hidden', 'true');
+      voiceBadge.innerHTML =
+        '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11.5" rx="3" /><path d="M5 11a7 7 0 0 0 14 0" /><path d="M12 18.5V21" /></svg>';
+      button.appendChild(voiceBadge);
     } else if (tab.noteType && tab.noteType !== DEFAULT_NOTE_TYPE) {
       const typeBadge = document.createElement('span');
       typeBadge.className = 'tab-strip-type';
