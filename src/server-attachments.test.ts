@@ -12,6 +12,7 @@ import {
   MAX_ATTACHMENT_BYTES,
   sweepOrphanAttachments,
 } from '../server/attachments';
+import { handlePublicShareAttachmentGet } from '../server/shares';
 import { route } from '../server/routes';
 
 /**
@@ -319,9 +320,10 @@ async function sha256Of(bytes: Uint8Array): Promise<string> {
 const SWEEP_NOW = 1_700_000_000_000;
 const GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 
-function sweepDb(notes: Row[], attachments: Row[]): { db: ScriptedDb; verdicts: Promise<number> } {
+function sweepDb(notes: Row[], attachments: Row[], shares: Row[] = []): { db: ScriptedDb; verdicts: Promise<number> } {
   const db = new ScriptedDb([
     { match: 'from notes', rows: notes },
+    { match: 'from shares where revoked', rows: shares },
     { match: 'from attachments', rows: attachments },
   ]);
   return { db, verdicts: sweepOrphanAttachments(db, SWEEP_NOW) };
@@ -426,5 +428,142 @@ describe('sweepOrphanAttachments — the orphan sweep', () => {
 
     // The scene's fileId is live; the unreferenced blob dies.
     expect(await verdicts).toBe(1);
+  });
+
+  it('counts a LIVE share as a tenant — bytes the link still serves are not garbage', async () => {
+    // The owner removed the image from the note, but the link (a
+    // denormalised snapshot) still renders it through the public
+    // attachment endpoint. The snapshot is a promise the store keeps —
+    // and the orphan clock the blob already carried REVIVES: one honest
+    // clear, no delete.
+    const { db, verdicts } = sweepDb(
+      [noteRow('user-1', 'words without the image now')],
+      [attachmentRow('att-aaaaaaaaaaaaaaaa', 'user-1', SWEEP_NOW - GRACE_MS - 1)],
+      [{ user_id: 'user-1', content: '![kept](padify-att:att-aaaaaaaaaaaaaaaa)', note_type: 'markdown' }],
+    );
+
+    expect(await verdicts).toBe(0);
+    expect(db.statements).toEqual([
+      {
+        sql: 'update attachments set orphan_since = null where id = ?',
+        args: ['att-aaaaaaaaaaaaaaaa'],
+      },
+    ]);
+  });
+
+  it('a DEAD share protects nothing — the clock keeps its stamp and the blob dies', async () => {
+    // Revoked or expired, the share answers 404 to its reader — the
+    // sweep's SQL reads live rows only, so the orphan clock the row
+    // already carries runs on to garbage.
+    const { db, verdicts } = sweepDb(
+      [],
+      [attachmentRow('att-aaaaaaaaaaaaaaaa', 'user-1', SWEEP_NOW - GRACE_MS - 1)],
+      // The shares script answers EMPTY for the live-only query.
+    );
+
+    expect(await verdicts).toBe(1);
+    expect(db.statements.map((statement) => statement.sql)).toEqual([
+      'delete from attachments where id = ?',
+    ]);
+  });
+
+  it('a share of a drawing note reads the scene grammar too', async () => {
+    const scene = JSON.stringify({
+      version: 1,
+      elements: [{ type: 'image', fileId: 'file-aaaabbbbccccdddd' }],
+    });
+    const { verdicts } = sweepDb(
+      [],
+      [attachmentRow('file-aaaabbbbccccdddd', 'user-1', SWEEP_NOW - GRACE_MS - 1)],
+      [{ user_id: 'user-1', content: scene, note_type: 'drawing' }],
+    );
+
+    expect(await verdicts).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The public share-attachment endpoint — share links carry their images
+// (the viewer's /api/share/:token/att/:id). The handler lives in
+// server/shares.ts; its read path is the attachment store's, so its
+// contracts sit beside the download contracts above.
+// ---------------------------------------------------------------------------
+
+function shareRow(content: string, noteType: string | null = 'markdown'): Row {
+  return { user_id: 'user-1', content, note_type: noteType };
+}
+
+describe('handlePublicShareAttachmentGet — the share viewer image contract', () => {
+  it('serves the bytes the live share references, with the download contract', async () => {
+    const db = new ScriptedDb([
+      { match: 'from shares', rows: [shareRow('![x](padify-att:att-aaaaaaaaaaaaaaaa)')] },
+      { match: 'from attachments where id', rows: [{ name: 'shot.png', mime: 'image/png', sha256: 'e'.repeat(64), data: encodeAttachmentData(PAYLOAD) }] },
+    ]);
+    const response = await handlePublicShareAttachmentGet(db, new Request('http://api.test/api/share/TOK/att/x'), 'TOK', 'att-aaaaaaaaaaaaaaaa');
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('image/png');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(response.headers.get('cache-control')).toContain('immutable');
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(PAYLOAD);
+  });
+
+  it('answers the unified 404 for a dead token — and never reads the store', async () => {
+    const db = new ScriptedDb();
+    const response = await handlePublicShareAttachmentGet(db, new Request('http://api.test/api/share/TOK/att/x'), 'TOK', 'att-aaaaaaaaaaaaaaaa');
+
+    expect(response.status).toBe(404);
+    expect(await bodyOf(response)).toEqual({ error: 'This link is not available.' });
+    expect(db.sqls).toHaveLength(1); // the share read only
+  });
+
+  it('refuses an id the share does not reference — even one the owner owns', async () => {
+    // The tenant check is the whole authorization: a token names ONE
+    // share's content, not the owner's store.
+    const db = new ScriptedDb([
+      { match: 'from shares', rows: [shareRow('![x](padify-att:att-aaaaaaaaaaaaaaaa)')] },
+      { match: 'from attachments where id', rows: [{ name: 'steal.png', mime: 'image/png', sha256: 'f'.repeat(64), data: encodeAttachmentData(PAYLOAD) }] },
+    ]);
+    const response = await handlePublicShareAttachmentGet(db, new Request('http://api.test/api/share/TOK/att/x'), 'TOK', 'att-zzzzzzzzzzzzzzzz');
+
+    expect(response.status).toBe(404);
+    // The attachment table was never touched — the verdict came from the
+    // snapshot's reference grammar.
+    expect(db.sqls.some((sql) => sql.includes('from attachments'))).toBe(false);
+  });
+
+  it('answers 404 when the referenced bytes are missing (the flush has not landed)', async () => {
+    const db = new ScriptedDb([
+      { match: 'from shares', rows: [shareRow('![x](padify-att:att-aaaaaaaaaaaaaaaa)')] },
+    ]);
+    const response = await handlePublicShareAttachmentGet(db, new Request('http://api.test/api/share/TOK/att/x'), 'TOK', 'att-aaaaaaaaaaaaaaaa');
+
+    expect(response.status).toBe(404);
+  });
+
+  it('dispatches public — no session, the share bucket, both params wired', async () => {
+    // The route row's auth/bucket story, pinned at the dispatcher: the
+    // request carries NO authorization header and still gets bytes — a
+    // required-auth regression here would blank every shared image.
+    const db = new ScriptedDb([
+      { match: 'from shares', rows: [shareRow('![x](padify-att:att-aaaaaaaaaaaaaaaa)')] },
+      { match: 'from attachments where id', rows: [{ name: 's.png', mime: 'image/png', sha256: 'e'.repeat(64), data: encodeAttachmentData(PAYLOAD) }] },
+    ]);
+    const response = await route(db, new Request('http://api.test/api/share/TOK1234/att/att-aaaaaaaaaaaaaaaa'), '/api/share/TOK1234/att/att-aaaaaaaaaaaaaaaa');
+
+    expect(response.status).toBe(200);
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(PAYLOAD);
+  });
+
+  it('the route gate keeps malformed ids from ever reaching the handler', async () => {
+    const db = new ScriptedDb();
+    // 'short' (5 chars) is below the wire's 8-char id floor: no route
+    // matches. The unknown-path gate still runs — a signed-out caller
+    // sees 401, and the handler (and its SQL) is never reached.
+    const response = await route(db, new Request('http://api.test/api/share/TOK1234/att/short'), '/api/share/TOK1234/att/short');
+
+    expect(response.status).toBe(401);
+    expect(db.sqls.some((sql) => sql.includes('from shares'))).toBe(false);
+    expect(db.sqls.some((sql) => sql.includes('from attachments'))).toBe(false);
   });
 });

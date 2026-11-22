@@ -260,7 +260,26 @@ export async function handleAttachmentGet(
   if (rows.length === 0) {
     return json(request, { error: 'Not found.' }, 404);
   }
-  const row = rows[0]!;
+  return attachmentBytesResponse(request, rows[0]!);
+}
+
+/**
+ * Serves one attachment row's bytes — the ETag/304 gate and the hardened
+ * headers, written once for BOTH readers: the session endpoint above and
+ * the public share-attachment endpoint (server/shares.ts). The security
+ * shape is shared because the threat is: the stored mime is
+ * pattern-checked, not allow-listed (text/html passes), and a raw
+ * Response carries none of the json() helper's security headers — an
+ * uploaded HTML attachment opened INLINE executes same-origin script,
+ * and on the API origin that means the visitor's session cookie. So:
+ * disposition `attachment` (a download, never a render) plus an explicit
+ * nosniff, belt-and-braces. `<img>` ignores disposition — shared images
+ * still render in the viewer while direct navigation downloads.
+ */
+export function attachmentBytesResponse(
+  request: Request,
+  row: Record<string, unknown>
+): Response {
   const sha256 = String(row.sha256);
 
   // Attachments are immutable per id, so the digest is a perfect ETag.
@@ -272,11 +291,6 @@ export async function handleAttachmentGet(
   const bytes = decodeAttachmentData(String(row.data));
   const name = typeof row.name === 'string' && row.name ? row.name : 'attachment';
   const mime = typeof row.mime === 'string' && row.mime ? row.mime : 'application/octet-stream';
-  // The stored mime is pattern-checked, not allow-listed (text/html
-  // passes), and this raw Response carries none of the json() helper's
-  // security headers — an owner-uploaded HTML attachment opened inline
-  // executes same-origin script. Disposition: attachment (download),
-  // plus an explicit nosniff for the belt-and-braces.
   return new Response(bytes, {
     status: 200,
     headers: {
@@ -329,32 +343,30 @@ const NO_REFERENCES: ReadonlySet<string> = new Set();
  * REFERENCES are read per user and never across users: user A's notes
  * are not evidence that user B's attachment is live (ids are globally
  * unique, but the scoping is the honest reading, not the collision
- * odds). Shares are deliberately NOT tenants — their content is a
- * denormalised snapshot whose images render placeholders today (see
- * the NOW queue's share-links item; that feature will extend the
- * tenant set when it lands).
+ * odds). LIVE SHARES are tenants now (share links carry their images
+ * through the public /api/share/:token/att/:id endpoint): a denormalised
+ * snapshot that still serves bytes is a promise the store must keep —
+ * the owner can remove an image from the note and the link keeps
+ * rendering it until the link dies. DEAD shares (revoked, expired) are
+ * not tenants: their reader gets the same 404 the body gets, so their
+ * refs protect nothing — the sweep reads only live rows. When the last
+ * live share drops a reference, the ordinary clock starts (stamp →
+ * grace → garbage), the same ladder a note edit climbs.
  *
- * THE COST, stated: one full scan of notes (content included) plus one
- * of the attachments table per pass. Hourly is far tighter than the
- * 7-day window needs, and both scans stay comfortably inside the free
- * tier — the same trade the seq-backfill migrations already accept.
- * The reads never touch `data` (the bytes): judging tenants costs
- * metadata, not blobs.
+ * THE COST, stated: one full scan of notes (content included), one of
+ * the live shares (content included — the tenant set's second leg), and
+ * one of the attachments table per pass. Hourly is far tighter than the
+ * 7-day window needs, and all three scans stay comfortably inside the
+ * free tier — the same trade the seq-backfill migrations already accept
+ * (live shares are bounded by the 200-row per-account cap). The reads
+ * never touch `data` (the bytes): judging tenants costs metadata, not
+ * blobs.
  */
 export async function sweepOrphanAttachments(db: Db, now: number = Date.now()): Promise<number> {
-  const noteRows = await db.all('select user_id, content, note_type from notes');
   const refsByUser = new Map<string, Set<string>>();
-  for (const row of noteRows) {
-    const userId = String(row.user_id ?? '');
-    if (!userId) {
-      continue;
-    }
-    const ids = collectNoteAttachmentIds({
-      content: typeof row.content === 'string' ? row.content : '',
-      noteType: typeof row.note_type === 'string' ? row.note_type : null,
-    });
+  const addRefs = (userId: string, ids: string[]): void => {
     if (ids.length === 0) {
-      continue;
+      return;
     }
     let refs = refsByUser.get(userId);
     if (!refs) {
@@ -364,6 +376,42 @@ export async function sweepOrphanAttachments(db: Db, now: number = Date.now()): 
     for (const id of ids) {
       refs.add(id);
     }
+  };
+
+  const noteRows = await db.all('select user_id, content, note_type from notes');
+  for (const row of noteRows) {
+    const userId = String(row.user_id ?? '');
+    if (!userId) {
+      continue;
+    }
+    addRefs(
+      userId,
+      collectNoteAttachmentIds({
+        content: typeof row.content === 'string' ? row.content : '',
+        noteType: typeof row.note_type === 'string' ? row.note_type : null,
+      }),
+    );
+  }
+
+  // The live shares' snapshot content: the same grammar the note scan
+  // runs, because a share's refs answer to the same renderer the note's
+  // do. Dead shares are excluded at the SQL — see the REFERENCES note.
+  const shareRows = await db.all(
+    'select user_id, content, note_type from shares where revoked = 0 and expires_at > ?',
+    [now]
+  );
+  for (const row of shareRows) {
+    const userId = String(row.user_id ?? '');
+    if (!userId) {
+      continue;
+    }
+    addRefs(
+      userId,
+      collectNoteAttachmentIds({
+        content: typeof row.content === 'string' ? row.content : '',
+        noteType: typeof row.note_type === 'string' ? row.note_type : null,
+      }),
+    );
   }
 
   const attachmentRows = await db.all('select id, user_id, orphan_since from attachments');

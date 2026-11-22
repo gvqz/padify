@@ -121,6 +121,45 @@ async function typeIntoFreshNote(page: Page, text: string): Promise<void> {
   await page.keyboard.type(text);
 }
 
+// The markdown-note + paste helpers mirror note-images.spec.ts (the e2e
+// specs are deliberately self-contained): a canvas-built PNG, grafted onto
+// a synthetic paste event, into a markdown note's source textarea.
+async function newMarkdownNote(page: Page): Promise<void> {
+  await page.locator('#addTabTypeMenu').click();
+  await page
+    .locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Markdown note' })
+    .click();
+  await expect(page.locator('#markdownToolbar')).toBeVisible();
+}
+
+async function realPngBase64(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 640;
+    canvas.height = 400;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('no canvas');
+    ctx.fillStyle = '#4f6df5';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/png').split(',')[1] ?? '';
+  });
+}
+
+async function pasteFile(page: Page, selector: string, base64: string): Promise<void> {
+  await page.evaluate(
+    ([target, bytes]) => {
+      const element = document.querySelector(target) as HTMLTextAreaElement;
+      const transfer = new DataTransfer();
+      const raw = Uint8Array.from(atob(bytes), (c) => c.charCodeAt(0));
+      transfer.items.add(new File([raw], 'shot.png', { type: 'image/png' }));
+      const event = new Event('paste', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'clipboardData', { value: transfer });
+      element.dispatchEvent(event);
+    },
+    [selector, base64] as const,
+  );
+}
+
 test.describe('share links (real API)', () => {
   test('the panel hangs from the share icon and the gate points at the cloud panel', async ({
     page,
@@ -265,6 +304,71 @@ test.describe('share links (real API)', () => {
     // the note from the DISPLAYED URL, byte for byte.
     await page.goto(displayed);
     await expect(page.locator('body')).toContainText('the round trip line');
+  });
+
+  test('a shared note carries its images: real bytes render, a missing id degrades honestly', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await signUp(page, freshAccount());
+    await newMarkdownNote(page);
+
+    // A real paste lands an attachment reference in the markdown source.
+    const source = page.locator('#note .markdown-source');
+    await source.click();
+    const png = await realPngBase64(page);
+    await pasteFile(page, '#note .markdown-source', png);
+    await expect(source).toHaveValue(/^!\[shot\]\(padify-att:att-[a-f0-9]{24}\)$/, {
+      timeout: 10_000,
+    });
+    // …plus a second reference whose bytes exist NOWHERE — the honest
+    // degradation lives on the public page too, so it needs exercising.
+    await source.fill(
+      (await source.inputValue()) + '\n\n![ghost](padify-att:att-00000000000000000000)',
+    );
+
+    // The bytes must be ON the server before the link can show them — the
+    // upload flush rides the sync cycle, so the response waiter goes up
+    // BEFORE the settle wait (a flush that beats the poller must not be
+    // missed) and the await comes after (a flush that trails must be
+    // caught).
+    const uploadLanded = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/attachments') &&
+        response.request().method() === 'POST' &&
+        response.status() < 400,
+      { timeout: 60_000 },
+    );
+    await waitForSettledSync(page);
+    await uploadLanded;
+
+    // Share it, walk the displayed URL, and read the note as a recipient.
+    await openSharePanel(page);
+    await page.locator('#shareCreateBtn').click();
+    await expect(page.locator('#shareActiveCard')).toBeVisible();
+    const displayed = (await page.locator('#shareActiveUrl').textContent()) ?? '';
+    expect(displayed).toContain('/share/?t=');
+    await page.goto(displayed);
+
+    // The real image resolves to the PUBLIC attachment endpoint (the
+    // token itself is the authorization) and loads actual pixels —
+    // naturalWidth > 0 is the one assertion a broken src cannot pass.
+    const img = page.locator('#shareContent img').first();
+    await expect(img).toHaveAttribute('src', /\/api\/share\/[0-9A-Z]+\/att\/att-[a-f0-9]{24}$/, {
+      timeout: 15_000,
+    });
+    await expect
+      .poll(() => img.evaluate((el) => (el as HTMLImageElement).naturalWidth), {
+        timeout: 15_000,
+        message: 'the shared image to decode real bytes',
+      })
+      .toBeGreaterThan(0);
+
+    // The ghost id resolves nowhere — the endpoint 404s it, and the
+    // viewer answers with the app's own missing-image placeholder,
+    // never a broken glyph.
+    const ghost = page.locator('#shareContent img[data-padify-missing]');
+    await expect(ghost).toHaveCount(1, { timeout: 15_000 });
   });
 
   test.describe('the remade anatomy', () => {

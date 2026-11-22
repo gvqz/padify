@@ -16,6 +16,13 @@ import { type Db, type SqlValue, type SqlStatement } from './db';
 import { json, readJson } from './http';
 import type { SessionUser } from './auth';
 import { asInt, asString, parseNoteType } from './notes';
+// The bytes-serving helper — one hardened response shape for both
+// attachment endpoints (this module's public one and the session's).
+import { attachmentBytesResponse } from './attachments';
+// The reference grammar — the one dispatch that decides which ids a
+// share's snapshot content references (the same reading the note scan
+// and both garbage collectors run).
+import { collectNoteAttachmentIds } from '../shared/att-refs';
 // The PATCH input caps and the emptiness gate, defined once where the
 // contract lives — the client chunks its lists on the caps, and the
 // server's share refusal reads the same emptiness the wire spells
@@ -397,6 +404,78 @@ export async function handlePublicShareGet(db: Db, request: Request, token: stri
       expires_at: Number(row.expires_at)
     }
   });
+}
+
+/**
+ * The public share-viewer's image endpoint — `GET /api/share/:token/att/:id`.
+ *
+ * Share links learn images. A shared note's body carries `padify-att:<id>`
+ * references exactly as the app's notes do; this endpoint lets the ANONYMOUS
+ * viewer resolve them, with the authorization carried by the URL itself:
+ *
+ *  • PER-SHARE — the token in the path selects the one share row whose
+ *    content may name this attachment; a different link cannot read it.
+ *  • SERVER-VERIFIED — every request re-reads the share row and confirms
+ *    the id appears in that row's snapshot content (the same grammar the
+ *    garbage collector runs), then reads the bytes from the share OWNER's
+ *    store. An id the share does not reference — or an attachment that
+ *    belongs to someone else — is the same 404 a dead link is.
+ *  • SHORT-LIVED BY CONSTRUCTION — no minted signatures, no expiry
+ *    bookkeeping: the URL is derived from the share token, so it dies
+ *    exactly when the link dies (revoked or expired, the row is the same
+ *    404 the note body gives). A signing scheme was weighed and declined:
+ *    it would add a server secret (a fifth credential to rotate, per
+ *    docs/CREDENTIAL-ROTATION.md) for a property — death with the link —
+ *    the token already carries.
+ *  • RATE-LIMITED on the same 'share' bucket as the body endpoint — the
+ *    route table owns that; a scraper cannot mine the store through a
+ *    token any more than it can mine share rows.
+ *
+ * The orphan sweep (server/attachments.ts) treats LIVE shares as tenants
+ * since this endpoint exists: bytes a link still serves are not garbage.
+ */
+export async function handlePublicShareAttachmentGet(
+  db: Db,
+  request: Request,
+  token: string,
+  id: string
+): Promise<Response> {
+  // The one share row this token names — live only, the same unified
+  // 404 the body endpoint answers (cancelled, expired and never-existed
+  // are indistinguishable on purpose).
+  const shareRows = await db.all(
+    `select user_id, content, note_type from shares
+     where token = ? and revoked = 0 and expires_at > ?`,
+    [token, Date.now()]
+  );
+  const share = shareRows[0];
+  if (!share) {
+    return json(request, { error: 'This link is not available.' }, 404);
+  }
+
+  // Referenced by THIS share's snapshot — the share is the tenant, not
+  // the caller and not "whatever the owner's store holds". The same
+  // collect the note scan and both GCs run; a generous scan may count a
+  // ref the renderer never resolves, which only ever over-serves the
+  // owner's own already-shared image, never under-serves.
+  const content = typeof share.content === 'string' ? share.content : '';
+  const noteType = typeof share.note_type === 'string' ? share.note_type : null;
+  if (!collectNoteAttachmentIds({ content, noteType }).includes(id)) {
+    return json(request, { error: 'Not found.' }, 404);
+  }
+
+  // The bytes — the owner's row, read owner-scoped like every attachment
+  // read. Missing bytes (the flush has not landed yet, or the store's
+  // janitor got there first) are the viewer's missing-image state, not
+  // an error to explain.
+  const attRows = await db.all(
+    'select name, mime, sha256, data from attachments where id = ? and user_id = ?',
+    [id, String(share.user_id)]
+  );
+  if (attRows.length === 0) {
+    return json(request, { error: 'Not found.' }, 404);
+  }
+  return attachmentBytesResponse(request, attRows[0]!);
 }
 
 // ---------------------------------------------------------------------------

@@ -156,6 +156,27 @@ body {
   white-space: normal;
 }
 
+/* Images — the attachment refs resolve against the public
+   /api/share/:token/att/:id endpoint (see resolveShareImages in
+   share.js); whatever loads renders inside the column, and whatever
+   fails gets the app's own missing-image state: a dashed placeholder,
+   never the browser's broken glyph. */
+.share-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+.share-content img[data-padify-missing] {
+  display: inline-block;
+  min-height: 2.5em;
+  min-width: 8em;
+  border: 1.5px dashed var(--s-border);
+  border-radius: 6px;
+  background: var(--s-bg-soft);
+  opacity: 0.75;
+}
+
 .share-content b,
 .share-content strong {
   font-weight: 650;

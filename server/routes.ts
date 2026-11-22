@@ -35,7 +35,8 @@ import {
   handleSharesGet,
   handleSharesPost,
   handleSharesPatch,
-  handlePublicShareGet
+  handlePublicShareGet,
+  handlePublicShareAttachmentGet
 } from './shares';
 import { handleSignup, handleSignin } from './auth-routes';
 import {
@@ -84,6 +85,13 @@ export interface Route {
 
 const ATTACHMENT_PATH = new RegExp(`^/api/attachments/(${ATTACHMENT_ID_SOURCE})$`);
 const SHARE_TOKEN_PATH = /^\/api\/share\/([A-Za-z0-9_-]+)$/;
+// The share viewer's image endpoint — token first (the authorization),
+// then the wire's one attachment id shape, so a malformed id never even
+// reaches the handler. The body route's `$`-anchored token path cannot
+// match this two-segment path; no shadowing, no dispatch surprise.
+const SHARE_ATTACHMENT_PATH = new RegExp(
+  `^/api/share/([A-Za-z0-9_-]+)/att/(${ATTACHMENT_ID_SOURCE})$`
+);
 
 const ROUTES: Route[] = [
   // ---- public ----------------------------------------------------------
@@ -102,6 +110,17 @@ const ROUTES: Route[] = [
     // the shares table (and the database behind it) through it.
     bucket: 'share',
     handler: (db, request, _user, params) => handlePublicShareGet(db, request, params[0]!)
+  },
+  {
+    method: 'GET',
+    pattern: SHARE_ATTACHMENT_PATH,
+    auth: 'public',
+    // The viewer's images ride the SAME bucket as the body — a link with
+    // ten images is one visitor's honest load, and the per-address pace
+    // still caps mining the owner's store through the token.
+    bucket: 'share',
+    handler: (db, request, _user, params) =>
+      handlePublicShareAttachmentGet(db, request, params[0]!, params[1]!)
   },
   {
     method: 'GET',

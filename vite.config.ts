@@ -241,6 +241,55 @@ export function copyExcalidrawFonts(): Plugin {
 }
 
 /**
+ * Dev-only serving of the share viewer (public/share/) for /share/ links.
+ *
+ * WHY: production serves dist/share/ statically — /share/?t=<token>
+ * resolves to dist/share/index.html (Netlify's directory index; the box
+ * host maps the subpath the same way) — but Vite's dev server runs its
+ * SPA fallback before any directory-index reading, so /share/?t=…
+ * answered the APP SHELL: a developer who copies a link out of a locally
+ * run app got the editor instead of the read-only note, and the e2e
+ * share specs' viewer leg silently asserted against the app (whose
+ * editor shows the same words the note carries) instead of the viewer.
+ * The middleware answers from public/share/ only — path-resolved and
+ * prefix-checked like the fonts twin above — with the viewer's own
+ * content types. The build/preview path needs none of this: public/ is
+ * copied verbatim into dist/ and the static host does the rest.
+ */
+function serveShareViewerInDev(): Plugin {
+  const repoRoot = fileURLToPath(new URL('./', import.meta.url));
+  const shareRoot = joinSafe(repoRoot, 'public', 'share');
+  const MIME: Record<string, string> = {
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.ico': 'image/x-icon',
+  };
+  return {
+    name: 'padify-serve-share-viewer-in-dev',
+    configureServer(server) {
+      server.middlewares.use('/share', (req, res, next) => {
+        // connect strips the mount: req.url is '' | '/' | '/<file>' —
+        // plus the query, which never names a file.
+        const path = (req.url ?? '').split('?')[0];
+        const relative = path === '' || path === '/' ? 'index.html' : path.replace(/^\/+/, '');
+        const file = joinSafe(shareRoot, relative);
+        if (!file.startsWith(shareRoot) || !existsSync(file) || !statSync(file).isFile()) {
+          next();
+          return;
+        }
+        const mime = MIME[file.slice(file.lastIndexOf('.'))] ?? 'application/octet-stream';
+        res.setHeader('Content-Type', mime);
+        res.end(readFileSync(file));
+      });
+    },
+  };
+}
+
+/**
  * Build invariant: no eval sinks in any shipped chunk. Runs after the
  * bundle is written; a reintroduced `new Function(` anywhere in dist
  * fails the build instead of shipping a scanner-detectable signature.
@@ -341,6 +390,7 @@ export default defineConfig({
     stripDependencyEvalSinks(),
     stubExcalidrawFontSubsetting(),
     copyExcalidrawFonts(),
+    serveShareViewerInDev(),
     forbidEvalSinks(),
   ],
   publicDir: 'public',

@@ -31,9 +31,10 @@
  *
  * THE GATE STAYS PURE. This module is app-only (it imports the storage
  * and cloud layers); the share viewer's generated bundle inherits only
- * the html-policy gate, where `padify-att:` is an inert scheme that
- * renders as an unresolved image — the honest degradation until share
- * links learn to carry attachments.
+ * the html-policy gate, where `padify-att:` is an inert scheme — the
+ * viewer's own resolve pass swaps it to the public
+ * /api/share/:token/att/:id endpoint (server/shares.ts, the token is the
+ * authorization), so a link's images die exactly when the link dies.
  */
 
 import {

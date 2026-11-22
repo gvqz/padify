@@ -83,11 +83,49 @@ function isHtmlNote(type) {
   return !type || HTML_TYPES.indexOf(String(type)) !== -1;
 }
 
+/**
+ * Share links carry images: a note body's `padify-att:<id>` references
+ * (the app's attachment store grammar — markdown images, image
+ * definitions, raw-HTML img srcs) resolve against the public
+ * /api/share/:token/att/:id endpoint, whose authorization IS the token
+ * this page was opened with. The server re-verifies on every request
+ * that the id appears in the share's snapshot content, so the URL can
+ * mint nothing beyond what the link already shows as text; the link
+ * dying (revoked or expired) kills the images with the body, no
+ * signatures to expire.
+ *
+ * A ref that fails to load lands in the app's own missing-image state —
+ * a dashed placeholder, never a broken glyph. The id shape here mirrors
+ * the server's route gate (the wire's ATTACHMENT_ID_SOURCE); a malformed
+ * ref keeps its literal text src, exactly what the app's preview does.
+ */
+function resolveShareImages(container) {
+  var base = String(config.apiBase || '').replace(/\/+$/, '');
+  var images = container.querySelectorAll('img[src^="padify-att:"]');
+  Array.prototype.forEach.call(images, function (img) {
+    var ref = img.getAttribute('src') || '';
+    var id = ref.slice('padify-att:'.length);
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(id)) {
+      return; // the policy let it through malformed — leave it as text
+    }
+    img.setAttribute(
+      'src',
+      base + '/api/share/' + encodeURIComponent(token) + '/att/' + encodeURIComponent(id),
+    );
+    img.addEventListener(
+      'error',
+      function () {
+        img.setAttribute('data-padify-missing', '');
+      },
+      { once: true },
+    );
+  });
+}
+
 function render(row) {
   clearLoading();
   stateBox.hidden = true;
   article.hidden = false;
-
   const title = row.title && row.title.trim() ? row.title : 'Shared note';
   document.title = title + ' — Padify';
   document.getElementById('shareTitle').textContent = title;
@@ -105,6 +143,10 @@ function render(row) {
   // markdown-content rule in share.css); rich notes keep it.
   content.classList.remove('markdown-content');
 
+  // Which branch handled the body — the fallthrough case (unknown type,
+  // damaged tasks payload) gets the raw-text answer below.
+  let rendered = false;
+
   if (isHtmlNote(row.note_type)) {
     // The rename transition: rows from a newer server say `content`,
     // older ones say `html` — read either, prefer `content`.
@@ -117,10 +159,8 @@ function render(row) {
       hardenLinks: true,
       mathToText: true,
     });
-    return;
-  }
-
-  if (String(row.note_type) === 'markdown') {
+    rendered = true;
+  } else if (String(row.note_type) === 'markdown') {
     // Markdown notes render through the OWNED renderer, generated from
     // src/editor/markdown/render.ts by the same build script — a module
     // that only ever emits tags it wrote itself, with every href past
@@ -137,10 +177,8 @@ function render(row) {
     content.querySelectorAll('.padify-math').forEach((shell) => {
       shell.textContent = shell.getAttribute('data-latex') ?? '';
     });
-    return;
-  }
-
-  if (String(row.note_type) === 'tasks') {
+    rendered = true;
+  } else if (String(row.note_type) === 'tasks') {
     // A shared task list renders as the checklist it is — not the JSON
     // that stores it. Every user string goes through textContent; the
     // only markup here is built by this branch itself.
@@ -148,19 +186,26 @@ function render(row) {
     try {
       const model = JSON.parse(String(body == null ? '' : body));
       renderTaskList(content, model);
-      return;
+      rendered = true;
     } catch {
       /* damaged payload — the raw fallback below is the honest answer */
     }
   }
 
-  // Any other non-html note (a board's JSON, a newer type): honest raw
-  // text, never markup. The <pre> keeps structure readable.
-  const pre = document.createElement('pre');
-  pre.className = 'share-raw-content';
-  const raw = row.content == null ? row.html : row.content;
-  pre.textContent = String(raw == null ? '' : raw);
-  content.appendChild(pre);
+  if (!rendered) {
+    // Any other non-html note (a board's JSON, a newer type): honest raw
+    // text, never markup. The <pre> keeps structure readable.
+    const pre = document.createElement('pre');
+    pre.className = 'share-raw-content';
+    const raw = row.content == null ? row.html : row.content;
+    pre.textContent = String(raw == null ? '' : raw);
+    content.appendChild(pre);
+  }
+
+  // One resolve pass over whatever the branches built — the markup
+  // branches can carry refs; the raw and task branches' DOM is text this
+  // page constructed, so the sweep structurally finds nothing there.
+  resolveShareImages(content);
 }
 
 /** A shared task list: colored circles, titles, chips — read-only. */

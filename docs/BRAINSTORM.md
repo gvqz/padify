@@ -22,15 +22,6 @@ lines live at the top because everything else defers to them.*
 
 ## NOW — what the working queue holds (non-visual)
 
-5. ~~**Attachment garbage collection.**~~ DONE 2026-11-22 — see H6 in the
-   ledger below: the shared grammar + verdict, the server sweep on the
-   hourly clock, the local sweep on the post-cycle hook, both under the
-   7-day grace that keeps an unsynced second device's file alive.
-6. **Share links learn images.** Attachments are session-authenticated
-   today; a share carrying `padify-att:` refs renders placeholders. The
-   honest fix is signed public URLs (short-lived, per-share, server
-   verified) — a real server change, worth its own decision. Until then the
-   placeholder IS the honest degradation.
 8. **Canvas open performance.** The island is warmed (25628ec) but the
    open path still pays React mount + font registry + scene restore. Measure
    first (the playwright trace exists); optimize only what the numbers
@@ -216,6 +207,30 @@ pass's to own). Every line item the review found is closed.*
     minimap island and vendor popovers have known seams (xv21 evidence).
 
 ## DONE — so nobody re-plans it
+
+- **Item 6, share links learn their images (2026-11-22).** The public
+  viewer's `padify-att:` refs resolve now: `GET /api/share/:token/att/:id`,
+  a new public route on the SAME 'share' rate bucket, whose authorization
+  is the token itself. Signed URLs were weighed and declined — a minted
+  signature needs a server secret (a fifth credential to rotate) for a
+  property the token already carries: the URL dies exactly when the link
+  dies, because it IS the link's URL. Per-request the server re-reads the
+  share row (live only — the same unified 404 the body gives), confirms the
+  id appears in the snapshot content through the ONE reference grammar
+  (shared/att-refs.ts), and reads the bytes owner-scoped — an id the share
+  does not reference is a 404, never a store to mine. The response shape is
+  the session endpoint's, extracted once (attachmentBytesResponse):
+  ETag=sha256, 304, disposition attachment + nosniff (an uploaded HTML file
+  must never render inline on the API origin, where session cookies live).
+  The viewer runs one resolve pass over the rendered note (real refs →
+  public URLs, failures → the app's own dashed missing-image placeholder);
+  the markdown/task/raw branches all funnel through it. The orphan sweep's
+  tenant set grew its second leg: LIVE shares pin their bytes (the owner
+  can remove an image from the note; the link keeps rendering it until the
+  link dies), DEAD shares protect nothing, and a revived reference clears
+  the clock as always. Gates: lint, both tscs, 2002 unit tests (+9), and
+  the e2e round trip — a pasted PNG shared to the public page decodes real
+  pixels there while a ghost id degrades to the placeholder.
 
 - **Item 4, the workspace envelope — a whole pad as one .padify file
   (2026-11-22, 0dada39).** The top-of-file question is answered and
