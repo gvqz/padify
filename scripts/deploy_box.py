@@ -246,10 +246,35 @@ def boot_bridge(client):
         print(f"[bridge] a server process IS visible ({', '.join(live)}) — not double-booting")
         return False
     print("[bridge] starting run.sh detached over SSH (supervisor revival never came)")
-    run(client,
+    # The detach tooling is not guaranteed on the box's PATH — the first
+    # bridge attempt produced an EMPTY boot.log (nothing ever started, and
+    # the outer shell's "command not found" died in a discarded stderr).
+    # Probe for what exists and build the start line from that.
+    avail = run(client,
+        "for b in setsid nohup timeout bun; do "
+        "command -v $b >/dev/null 2>&1 && printf '%s=yes\\n' \"$b\" "
+        "|| printf '%s=no\\n' \"$b\"; done")
+    tools = dict(line.strip().split("=", 1) for line in avail.splitlines() if "=" in line)
+    print(f"[bridge] box tools: {tools}")
+    parts = []
+    if tools.get("nohup") == "yes":
+        parts.append("nohup")
+    if tools.get("setsid") == "yes":
+        parts.append("setsid")
+    if tools.get("timeout") == "yes":
+        parts.append("timeout 86400")
+    parts.append("bash ./run.sh")
+    # A non-login SSH shell does not source .bashrc, so bun may be off PATH
+    # even though the supervisor's boots find it. Prepend the install
+    # location when the probe cannot see bun.
+    path_fix = 'PATH="$HOME/.bun/bin:$PATH"; ' if tools.get("bun") != "yes" else ""
+    start_out = run(client,
         f"cd {shlex.quote(REMOTE_SERVER)} && "
         "cp boot.log boot.log.prev 2>/dev/null || true; : > boot.log; "
-        "(setsid nohup timeout 86400 bash ./run.sh >> boot.log 2>&1 < /dev/null &) ; sleep 1")
+        "( " + path_fix + " ".join(parts) + " >> boot.log 2>&1 < /dev/null &) ; sleep 2; "
+        "printf 'bootlog_bytes=%s\\n' \"$(wc -c < boot.log 2>/dev/null || echo 0)\"; "
+        "printf 'server_procs=%s\\n' \"$(pgrep -f 'bun.*server/index' | tr '\\n' ' ')\"")
+    print("[bridge] start: " + start_out.strip().replace("\n", " | "))
     # The fresh boot must name its database within a few seconds — and it
     # must be Turso. A local-SQLite fallback gets killed before it serves.
     for _ in range(10):
@@ -257,6 +282,15 @@ def boot_bridge(client):
         if boot_head.strip():
             break
         time.sleep(3)
+    if not boot_head.strip():
+        diag = run(client,
+            f"cd {shlex.quote(REMOTE_SERVER)} && "
+            "ls -la boot.log boot.log.prev run.sh 2>&1 | head -5; "
+            "echo '--- previous boot tail ---'; tail -5 boot.log.prev 2>/dev/null || true")
+        raise SystemExit(
+            "BRIDGE ABORTED — the boot produced no output at all (its start "
+            "line is dying before bun runs, or the channel close reaps it). "
+            "Diagnostics:\n" + diag)
     if "database: local SQLite" in boot_head:
         run(client, "pkill -f 'bun.*server/index[.]ts' 2>/dev/null || true")
         raise SystemExit(
