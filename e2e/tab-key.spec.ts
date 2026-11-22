@@ -1,7 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * The Tab key, end to end — the gestures tasks.txt called "MANY tab bugs".
+ * The Tab key, end to end — the tab-gesture bug family the owner called
+ * "MANY tab bugs" (the report's file retired into git history; this suite
+ * is the pin).
  *
  * The regression this suite exists for: a bare text stream (plain words
  * typed into a classic note that never grows element blocks) is ONE

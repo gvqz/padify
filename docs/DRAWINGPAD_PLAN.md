@@ -375,10 +375,13 @@ empty task list. If "hide" wins later it is a one-line gate in
       the download menu, `editable` flipped with its test — plus the
       format pin against the installed vendor and the eval-sink stub
       the build invariant demanded.
-- [ ] Images PR: the attachments mapping (upload on insert, hydrate on
-      load, GC on delete), the image tool re-enabled.
+- [x] Images PR: the attachments mapping (upload on insert, hydrate on
+      load, GC on delete), the image tool re-enabled — shipped 2026-11-21
+      (the vendor-native insert path + the persistence spine; the shipped
+      record is BRAINSTORM.md's).
 - [ ] Shares: decide viewer-rendering vs snapshot-export vs hide, then
       ship the gate.
-- [ ] `.padify` file format (the far-future roadmap item): drawings ride
+- [x] `.padify` file format (the far-future roadmap item): drawings ride
       it as one more note kind — the scene envelope already carries its
-      own version number for exactly this.
+      own version number for exactly this — shipped 2026-11-22 (the
+      single-note envelope and the whole-pad workspace envelope).

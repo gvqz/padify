@@ -38,7 +38,7 @@ Built as a Progressive Web App using the [Service Worker API](https://developer.
 
 ## Retired mini tools
 
-The standalone companion-tool pages (Rich Text Notes, Markdown Editor, Voice Notes, Simple Kanban, Text Tools, Text Diff, Teleprompter, Drawingpad, Tasks) have been removed from the app. Their full feature sets were captured before deletion in [legacyfeatures/](legacyfeatures/) — one report per page — to serve as the reference for rebuilding those features as note types inside the main editor's new-note flow.
+The standalone companion-tool pages (Rich Text Notes, Markdown Editor, Voice Notes, Simple Kanban, Text Tools, Text Diff, Teleprompter, Drawingpad, Tasks) have been removed from the app. Their feature references retired into git history (the last copies live at `f2d83e3^:legacyfeatures/`); the rebuilds shipped as note types — Drawingpad is the Drawing note (`docs/DRAWINGPAD_PLAN.md`), Tasks is the Task list — and the two tools not yet rebuilt (Text Tools, Text Diff) are parked on the issue tracker.
 
 ## Privacy
 

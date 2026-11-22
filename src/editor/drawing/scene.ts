@@ -1,9 +1,10 @@
 /**
  * Drawing note scenes — the content model for noteType 'drawing'.
  *
- * The persistence contract is the retired Drawingpad's Generation-2 format
- * (legacyfeatures/drawingpad.md), lifted verbatim into the typed content
- * model: a scene is a versioned JSON payload of
+ * The persistence contract is the retired Drawingpad's Generation-2
+ * format (the feature reference lives in git history —
+ * `git show f2d83e3^:legacyfeatures/drawingpad.md`), lifted verbatim into
+ * the typed content model: a scene is a versioned JSON payload of
  *
  *   { version: 1, savedAt: <epoch ms>, elements: [...], appState: {...} }
  *

@@ -2,8 +2,9 @@
  * The drawing scene content model — the Gen-2 persistence contract,
  * pinned.
  *
- * These tests hold the envelope to the retired Drawingpad's rules (see
- * legacyfeatures/drawingpad.md): a payload missing a valid elements array
+ * These tests hold the envelope to the retired Drawingpad's rules (the
+ * feature reference lives in git history at
+ * `f2d83e3^:legacyfeatures/drawingpad.md`): a payload missing a valid elements array
  * is ignored (fresh canvas), the appState subset is a whitelist (never a
  * dump), serialized bytes are deterministic, and elements round-trip
  * VERBATIM — this module never interprets the canvas's schema, the same

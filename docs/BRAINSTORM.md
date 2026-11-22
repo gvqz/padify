@@ -5,6 +5,12 @@ wrong. Finished work leaves this file (the git log and DECISIONS.md are the
 record); parked work stays parked visibly. The owner's two standing scope
 lines live at the top because everything else defers to them.*
 
+*2026-11-23: the OPEN roadmap moved to the GitHub issue tracker
+(github.com/gvqz/padify/issues — the scattered ledgers: tasks.txt, the
+legacyfeatures/ reports, the qa findings, the owner's notes, all filed
+there). This file keeps the owner's scope lines, the shipped record, and
+the parked items that wait on the owner.*
+
 ## The owner's scope lines (2026-11-21)
 
 1. **Plain notes stay text-only; rich/gfm (markdown) notes carry images.**

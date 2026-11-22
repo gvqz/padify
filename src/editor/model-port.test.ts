@@ -227,8 +227,9 @@ describe('the command pipeline', () => {
     caretAt(surface, 5);
     expect(port.insertText(' brave')).toBe(true);
     expect(port.getText()).toBe('hello brave world');
-    // 5 + 6 = 11 — the caret moved along with the insertion, exactly the
-    // pasted-text expectation from tasks.txt.
+    // 5 + 6 = 11 — the caret moved along with the insertion: the caret
+    // rides the insertion's end, the expectation the owner's pasted-text
+    // report pinned.
     expect(caretStreamOffset(surface)).toBe(11);
   });
 
@@ -246,7 +247,7 @@ describe('the command pipeline', () => {
     // the SAME number as the previous block's end — blocks hold no
     // stream — and the offset resolver answers the A side. The live spot
     // is the one place the boundary's side survives; without it the
-    // paste landed one line up (the cursor-where bug from tasks.txt).
+    // paste landed one line up (the original cursor-where bug).
     caretAtNodeStart(surface, 1);
     expect(port.insertText('XYZ')).toBe(true);
     expect(surface.innerHTML).toBe('<p>first</p><p>XYZsecond</p>');
