@@ -18,6 +18,19 @@ What it does (idempotent — re-running with nothing changed uploads nothing):
   4. Prunes stale hashed/mirrored trees (assets/, sounds/).
   5. SIGTERMs bun so the supervisor cold-boots the new server code.
 
+With --revive-only it deploys nothing: it probes the public health
+endpoint and, when the API is down, boots the server over SSH (the same
+bridge the deploy uses as its fallback). The box watchdog workflow runs
+this on a schedule, so a dead API heals itself without anyone's panel
+credentials.
+
+The manifest ships EVERY TypeScript source under server/ and shared/,
+never a hand-picked file list: the 2026-11-22 outage was exactly a
+hand-picked list — shared/ shipped wire.ts alone while
+server/attachments.ts imported shared/att-refs.ts, the module never
+reached the box, every boot crashed on it, and the platform's start
+backoff (see boot_bridge) kept the site dark for hours.
+
 The site must already be built into dist/ with the box recipe
 (docs/CLOUD_SETUP.md §3):
 
@@ -66,6 +79,19 @@ def collect(root, only_ts=False):
             local = os.path.join(cur, name)
             out[os.path.relpath(local, root)] = local
     return out
+
+
+def collect_sources(root):
+    """rel-path -> absolute local path for every TypeScript SOURCE under
+    root: .ts files, tests excluded. Both server/ and shared/ ship through
+    this — a manifest that names files one by one is precisely how
+    shared/att-refs.ts stayed off the box while the server imported it
+    (the 2026-11-22 outage)."""
+    return {
+        rel: local
+        for rel, local in collect(root, only_ts=True).items()
+        if not rel.endswith(".test.ts")
+    }
 
 
 def connect():
@@ -197,13 +223,15 @@ def wait_for_build(expected_build, seconds):
 def boot_bridge(client):
     """Last-resort revival when the supervisor's cold boot never comes.
 
-    November's deploy proved the supervisor can stay asleep through a
-    process death: the files md5-verified fresh, the endpoint stayed
-    unreachable, and the process table over SSH stayed empty for the
-    whole verification window — the documented remedy was a manual panel
-    restart. This bridge performs that revival from the SSH side: start
-    the site's OWN run.sh detached (setsid, nohup), exactly what the
-    supervisor would run, and let the front server reconnect to it.
+    The site logs of 2026-11-22 explained the "sleeping supervisor" of
+    the October/November stories: after a start that FAILS, the platform
+    backs off — "Upstream … previously failed to start, will not start
+    again until 05:25" — for roughly an hour, so a broken boot leaves
+    the endpoint dark far past any deploy's verification window (the
+    documented remedy was a manual panel restart). This bridge performs
+    the revival from the SSH side instead: start the site's OWN run.sh
+    detached (setsid, nohup), exactly what the supervisor would run, and
+    let the front server reconnect to it.
 
     The data-safety guards, in the order they fire:
 
@@ -435,10 +463,76 @@ def deployed_sha():
     return "local-" + time.strftime("%Y%m%dT%H%M%S")
 
 
+def wait_for_ok(seconds):
+    """Poll until the health endpoint answers ANY build at all (for
+    reviving a tree too old to carry a .build-id stamp)."""
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        build, _stale, _reachable = running_build(allow_errors=True)
+        if build:
+            return True
+        time.sleep(6)
+    return False
+
+
+def read_box_build_id(client):
+    """The build the box's server tree is stamped with — the revive
+    target when the endpoint cannot be asked."""
+    out = run(client, f"cat {shlex.quote(REMOTE_SERVER + '/.build-id')} 2>/dev/null")
+    return out.strip() or None
+
+
+def revive_main():
+    """--revive-only: bring the API back without deploying anything.
+
+    The watchdog's entry point. Mirrors the deploy's own escalation
+    rule: bridge ONLY the unreachable case — when health still ANSWERS
+    (even without a build field) some live process owns the port, and a
+    second boot would just lose the bind; that state stays a hard,
+    loud failure. A stale SSH-owned bridge from an earlier revival must
+    die first, or the fresh boot cannot own the port either.
+    """
+    client = connect()
+    try:
+        build, _stale, reachable = running_build(allow_errors=False)
+        if build:
+            print(f"[revive] endpoint already answers (build {build[:12]}) — nothing to do")
+            print("REVIVE DONE")
+            return
+        if reachable:
+            raise SystemExit(
+                "[revive] endpoint ANSWERS but reports no build — a live process of "
+                "unknown vintage owns the port; refusing to double-boot. A deploy "
+                "(or a panel restart) is the right tool for that state.")
+        expected = read_box_build_id(client)
+        print(f"[revive] endpoint unreachable — reviving "
+              f"(box stamp: {expected[:12] if expected else 'none'})")
+        live = run(client, "pgrep -f 'bun.*server/index[.]ts' || true").split()
+        if live:
+            print(f"[revive] stopping stale SSH-visible server pid(s): {', '.join(live)}")
+            run(client, "kill -TERM " + " ".join(live) + " 2>/dev/null || true")
+            time.sleep(3)
+            run(client, "pkill -KILL -f 'bun.*server/index[.]ts' 2>/dev/null || true")
+        if not boot_bridge(client):
+            raise SystemExit("[revive] the bridge refused to boot — see its diagnostics above")
+        converged = wait_for_build(expected, seconds=240) if expected else wait_for_ok(seconds=240)
+        if not converged:
+            boot_log = run(client, f"tail -20 {shlex.quote(REMOTE_SERVER + '/boot.log')} 2>/dev/null")
+            raise SystemExit("REVIVE DID NOT CONVERGE — health never answered. Boot log tail:\n" + boot_log)
+        print("[revive] the API is serving again")
+        print("REVIVE DONE")
+    finally:
+        client.close()
+
+
 def main():
+    if "--revive-only" in sys.argv:
+        revive_main()
+        return
+
     site = collect(DIST)
-    server = collect(os.path.join(REPO, "server"), only_ts=True)
-    shared = {"wire.ts": os.path.join(REPO, "shared", "wire.ts")}
+    server = collect_sources(os.path.join(REPO, "server"))
+    shared = collect_sources(os.path.join(REPO, "shared"))
 
     plan = {}  # remote abs path -> (local path, md5)
     for rel, local in site.items():
