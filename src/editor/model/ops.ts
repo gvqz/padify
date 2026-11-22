@@ -1441,10 +1441,7 @@ export function plantMath(model: HTMLElement, at: number, latex: string): OpResu
       : {
           kind: 'element',
           node: (shell.parentNode ?? spot.node) as Element,
-          childIndex: Array.prototype.indexOf.call(
-            shell.parentNode?.childNodes ?? [],
-            shell,
-          ) + 1,
+          childIndex: Array.prototype.indexOf.call(shell.parentNode?.childNodes ?? [], shell) + 1,
         };
   return { changed: true, intent: { spot: afterSpot } };
 }

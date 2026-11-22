@@ -533,7 +533,12 @@ export function initPipWindow(tabManager: TabManager): void {
           }
           return;
         }
-        if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.code === 'KeyS') {
+        if (
+          (event.ctrlKey || event.metaKey) &&
+          !event.altKey &&
+          !event.shiftKey &&
+          event.code === 'KeyS'
+        ) {
           event.preventDefault();
           saveTextAsFile(getEditorText(), getFileName());
         }

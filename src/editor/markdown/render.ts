@@ -1061,8 +1061,7 @@ function matchListItem(line: string): ListItem | null {
   // An item whose marker line carries no content starts blank — its
   // content indent is one column past the marker (the spec's blank-first
   // rule), not the padding the bare spaces suggest.
-  const contentIndent =
-    rest.trim() === '' ? indent + markerLen + 1 : indent + markerLen + padding;
+  const contentIndent = rest.trim() === '' ? indent + markerLen + 1 : indent + markerLen + padding;
   const body = rest.slice(padding);
 
   let task: ListItem['task'] = null;
@@ -2416,10 +2415,7 @@ function matchBracket(text: string, open: number): number {
  * so `[foo]: <bar baz>` read as paragraph text instead of the definition
  * it is. One spelling ends that.
  */
-function scanDestination(
-  text: string,
-  pos: number,
-): { dest: string; pos: number } | null {
+function scanDestination(text: string, pos: number): { dest: string; pos: number } | null {
   if (text[pos] === '<') {
     let k = pos + 1;
     let dest = '';

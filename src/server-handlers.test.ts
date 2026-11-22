@@ -15,7 +15,11 @@ import { route } from '../server/routes';
 import { hashPassword, verifyPasswordWithCost } from '../server/auth';
 import { handleAttachmentPost } from '../server/attachments';
 import { handleUsageGet } from '../server/usage';
-import { MAX_ATTACHMENT_COUNT, MAX_TOTAL_ATTACHMENT_BYTES, NOTE_BYTES_QUOTA } from '../server/quota';
+import {
+  MAX_ATTACHMENT_COUNT,
+  MAX_TOTAL_ATTACHMENT_BYTES,
+  NOTE_BYTES_QUOTA,
+} from '../server/quota';
 
 // The server's first handler tests. The handlers were extracted from
 // index.ts precisely so this file can exist: they are pure functions over
@@ -1237,7 +1241,7 @@ describe('route — the 405 probe is paced on public paths too', () => {
 });
 
 describe('handleUsageGet — the quotas, reported', () => {
-  it('folds the owner\'s notes into per-type slices, the trash into its own', async () => {
+  it("folds the owner's notes into per-type slices, the trash into its own", async () => {
     // Four (type, deleted) groups: the standard default (null type), a
     // live markdown pair, one trashed markdown row, and a type this
     // build has never heard of — bytes this account owns regardless.

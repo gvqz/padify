@@ -21,11 +21,7 @@ import {
   type ImageCompressor,
 } from './note-images';
 import { padifyAttRef } from '../../shared/att-refs';
-import {
-  clearAttachments,
-  getAttachmentBlob,
-  putAttachment,
-} from '../storage/attachments';
+import { clearAttachments, getAttachmentBlob, putAttachment } from '../storage/attachments';
 import { resetStorageForTests, storageReady } from '../storage';
 
 const GOOD_ID = 'att-0123456789abcdef01234567';

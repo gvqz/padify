@@ -138,9 +138,11 @@ function render(report: UsageReport): void {
 
   // The attachments bar: one segment against its own quota; the file
   // count is the second ceiling, so it names both.
-  $('#storageAttachmentsBar').empty().append(
-    `<span class="storage-seg seg-attachments" style="width:${percentOf(report.attachments.bytes, report.limits.attachments_bytes)}%" aria-hidden="true"></span>`,
-  );
+  $('#storageAttachmentsBar')
+    .empty()
+    .append(
+      `<span class="storage-seg seg-attachments" style="width:${percentOf(report.attachments.bytes, report.limits.attachments_bytes)}%" aria-hidden="true"></span>`,
+    );
   $('#storageAttachmentsBar').attr(
     'aria-label',
     `Attachments: ${formatBytes(report.attachments.bytes)} of ${formatBytes(report.limits.attachments_bytes)} used`,
@@ -174,9 +176,7 @@ function renderLegend(segments: StorageSegment[], report: UsageReport): void {
         `${segment.count} ${segment.count === 1 ? 'note' : 'notes'}`,
       ),
     );
-    row.append(
-      $('<span class="storage-legend-bytes"></span>').text(formatBytes(segment.bytes)),
-    );
+    row.append($('<span class="storage-legend-bytes"></span>').text(formatBytes(segment.bytes)));
     $legend.append(row);
   }
   // The bar's total, named once under the legend it breaks down —

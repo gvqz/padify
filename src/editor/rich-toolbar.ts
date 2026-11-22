@@ -370,10 +370,7 @@ function refreshCaretLabels(): void {
 
   const fontLabel = toolbar.querySelector<HTMLElement>('[data-rich-label="font"]');
   if (fontLabel) {
-    const family = (style.fontFamily.split(',')[0] ?? '')
-      .replace(/["']/g, '')
-      .trim()
-      .toLowerCase();
+    const family = (style.fontFamily.split(',')[0] ?? '').replace(/["']/g, '').trim().toLowerCase();
     const known = KNOWN_FONTS.find((font) => font === family);
     if (known) {
       fontLabel.textContent = known
@@ -469,9 +466,7 @@ function markCurrentValue(button: HTMLButtonElement, panel: HTMLElement): void {
   let presetMatched = false;
   panel.querySelectorAll<HTMLButtonElement>('[role="menuitem"]').forEach((item) => {
     const matches =
-      current !== undefined &&
-      current !== '' &&
-      item.textContent!.trim().toLowerCase() === current;
+      current !== undefined && current !== '' && item.textContent!.trim().toLowerCase() === current;
     if (matches) {
       presetMatched = true;
     }
