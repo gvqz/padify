@@ -22,11 +22,6 @@ lines live at the top because everything else defers to them.*
 
 ## NOW — what the working queue holds (non-visual)
 
-8. **Canvas open performance.** The island is warmed (25628ec) but the
-   open path still pays React mount + font registry + scene restore. Measure
-   first (the playwright trace exists); optimize only what the numbers
-   name. Images add one async hydration step — keep it off the critical
-   paint.
 9. **Voice notes, revived on the store.** The attachment pipeline was built
    for them; the feature died with the old app. A voice note = an audio
    attachment + a marker — the plumbing is all there. Decide whether it
@@ -203,6 +198,24 @@ pass's to own). Every line item the review found is closed.*
     minimap island and vendor popovers have known seams (xv21 evidence).
 
 ## DONE — so nobody re-plans it
+
+- **Item 8, canvas open performance — measured, the numbers name nothing
+  actionable (2026-11-22).** The ledger's rule was measure first, and the
+  measurement (a temporary playwright harness over the real open path,
+  five opens and five drawing↔text flips, since deleted with the work)
+  says: the WARM open — the one a user actually experiences after the
+  island has warmed — lands at 329–443 ms wall-clock, median ~350 ms, of
+  which the vendor's React mount is only ~60–90 ms; most of the rest is
+  the measuring harness's own actionability overhead, not app time. The
+  COLD open (clicking Drawing inside the idle-warm window) pays the
+  2.6 MB vendor chunk: ~1.7 s in the dev build, first run only. The
+  trigger is requestIdleCallback with a 4 s timeout — a deliberate
+  "warm when the app is idle, never compete with boot" choice; making it
+  eager would trade boot responsiveness for a race the user rarely
+  loses. The scene-restore cost rides the same mount; the images work
+  keeps its standing instruction (async hydration, off the critical
+  paint) for whenever note-type images arrive. Closed without a code
+  change — the honest answer the numbers gave.
 
 - **Item 10, the attachment sync ledger (2026-11-22).** Notes have
   seq-backed sync integrity; attachments had flush-and-hope — an image
