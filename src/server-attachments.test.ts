@@ -320,7 +320,11 @@ async function sha256Of(bytes: Uint8Array): Promise<string> {
 const SWEEP_NOW = 1_700_000_000_000;
 const GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 
-function sweepDb(notes: Row[], attachments: Row[], shares: Row[] = []): { db: ScriptedDb; verdicts: Promise<number> } {
+function sweepDb(
+  notes: Row[],
+  attachments: Row[],
+  shares: Row[] = [],
+): { db: ScriptedDb; verdicts: Promise<number> } {
   const db = new ScriptedDb([
     { match: 'from notes', rows: notes },
     { match: 'from shares where revoked', rows: shares },
@@ -439,7 +443,13 @@ describe('sweepOrphanAttachments — the orphan sweep', () => {
     const { db, verdicts } = sweepDb(
       [noteRow('user-1', 'words without the image now')],
       [attachmentRow('att-aaaaaaaaaaaaaaaa', 'user-1', SWEEP_NOW - GRACE_MS - 1)],
-      [{ user_id: 'user-1', content: '![kept](padify-att:att-aaaaaaaaaaaaaaaa)', note_type: 'markdown' }],
+      [
+        {
+          user_id: 'user-1',
+          content: '![kept](padify-att:att-aaaaaaaaaaaaaaaa)',
+          note_type: 'markdown',
+        },
+      ],
     );
 
     expect(await verdicts).toBe(0);
@@ -497,9 +507,24 @@ describe('handlePublicShareAttachmentGet — the share viewer image contract', (
   it('serves the bytes the live share references, with the download contract', async () => {
     const db = new ScriptedDb([
       { match: 'from shares', rows: [shareRow('![x](padify-att:att-aaaaaaaaaaaaaaaa)')] },
-      { match: 'from attachments where id', rows: [{ name: 'shot.png', mime: 'image/png', sha256: 'e'.repeat(64), data: encodeAttachmentData(PAYLOAD) }] },
+      {
+        match: 'from attachments where id',
+        rows: [
+          {
+            name: 'shot.png',
+            mime: 'image/png',
+            sha256: 'e'.repeat(64),
+            data: encodeAttachmentData(PAYLOAD),
+          },
+        ],
+      },
     ]);
-    const response = await handlePublicShareAttachmentGet(db, new Request('http://api.test/api/share/TOK/att/x'), 'TOK', 'att-aaaaaaaaaaaaaaaa');
+    const response = await handlePublicShareAttachmentGet(
+      db,
+      new Request('http://api.test/api/share/TOK/att/x'),
+      'TOK',
+      'att-aaaaaaaaaaaaaaaa',
+    );
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('image/png');
@@ -510,7 +535,12 @@ describe('handlePublicShareAttachmentGet — the share viewer image contract', (
 
   it('answers the unified 404 for a dead token — and never reads the store', async () => {
     const db = new ScriptedDb();
-    const response = await handlePublicShareAttachmentGet(db, new Request('http://api.test/api/share/TOK/att/x'), 'TOK', 'att-aaaaaaaaaaaaaaaa');
+    const response = await handlePublicShareAttachmentGet(
+      db,
+      new Request('http://api.test/api/share/TOK/att/x'),
+      'TOK',
+      'att-aaaaaaaaaaaaaaaa',
+    );
 
     expect(response.status).toBe(404);
     expect(await bodyOf(response)).toEqual({ error: 'This link is not available.' });
@@ -522,9 +552,24 @@ describe('handlePublicShareAttachmentGet — the share viewer image contract', (
     // share's content, not the owner's store.
     const db = new ScriptedDb([
       { match: 'from shares', rows: [shareRow('![x](padify-att:att-aaaaaaaaaaaaaaaa)')] },
-      { match: 'from attachments where id', rows: [{ name: 'steal.png', mime: 'image/png', sha256: 'f'.repeat(64), data: encodeAttachmentData(PAYLOAD) }] },
+      {
+        match: 'from attachments where id',
+        rows: [
+          {
+            name: 'steal.png',
+            mime: 'image/png',
+            sha256: 'f'.repeat(64),
+            data: encodeAttachmentData(PAYLOAD),
+          },
+        ],
+      },
     ]);
-    const response = await handlePublicShareAttachmentGet(db, new Request('http://api.test/api/share/TOK/att/x'), 'TOK', 'att-zzzzzzzzzzzzzzzz');
+    const response = await handlePublicShareAttachmentGet(
+      db,
+      new Request('http://api.test/api/share/TOK/att/x'),
+      'TOK',
+      'att-zzzzzzzzzzzzzzzz',
+    );
 
     expect(response.status).toBe(404);
     // The attachment table was never touched — the verdict came from the
@@ -536,7 +581,12 @@ describe('handlePublicShareAttachmentGet — the share viewer image contract', (
     const db = new ScriptedDb([
       { match: 'from shares', rows: [shareRow('![x](padify-att:att-aaaaaaaaaaaaaaaa)')] },
     ]);
-    const response = await handlePublicShareAttachmentGet(db, new Request('http://api.test/api/share/TOK/att/x'), 'TOK', 'att-aaaaaaaaaaaaaaaa');
+    const response = await handlePublicShareAttachmentGet(
+      db,
+      new Request('http://api.test/api/share/TOK/att/x'),
+      'TOK',
+      'att-aaaaaaaaaaaaaaaa',
+    );
 
     expect(response.status).toBe(404);
   });
@@ -547,9 +597,23 @@ describe('handlePublicShareAttachmentGet — the share viewer image contract', (
     // required-auth regression here would blank every shared image.
     const db = new ScriptedDb([
       { match: 'from shares', rows: [shareRow('![x](padify-att:att-aaaaaaaaaaaaaaaa)')] },
-      { match: 'from attachments where id', rows: [{ name: 's.png', mime: 'image/png', sha256: 'e'.repeat(64), data: encodeAttachmentData(PAYLOAD) }] },
+      {
+        match: 'from attachments where id',
+        rows: [
+          {
+            name: 's.png',
+            mime: 'image/png',
+            sha256: 'e'.repeat(64),
+            data: encodeAttachmentData(PAYLOAD),
+          },
+        ],
+      },
     ]);
-    const response = await route(db, new Request('http://api.test/api/share/TOK1234/att/att-aaaaaaaaaaaaaaaa'), '/api/share/TOK1234/att/att-aaaaaaaaaaaaaaaa');
+    const response = await route(
+      db,
+      new Request('http://api.test/api/share/TOK1234/att/att-aaaaaaaaaaaaaaaa'),
+      '/api/share/TOK1234/att/att-aaaaaaaaaaaaaaaa',
+    );
 
     expect(response.status).toBe(200);
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(PAYLOAD);
@@ -560,7 +624,11 @@ describe('handlePublicShareAttachmentGet — the share viewer image contract', (
     // 'short' (5 chars) is below the wire's 8-char id floor: no route
     // matches. The unknown-path gate still runs — a signed-out caller
     // sees 401, and the handler (and its SQL) is never reached.
-    const response = await route(db, new Request('http://api.test/api/share/TOK1234/att/short'), '/api/share/TOK1234/att/short');
+    const response = await route(
+      db,
+      new Request('http://api.test/api/share/TOK1234/att/short'),
+      '/api/share/TOK1234/att/short',
+    );
 
     expect(response.status).toBe(401);
     expect(db.sqls.some((sql) => sql.includes('from shares'))).toBe(false);

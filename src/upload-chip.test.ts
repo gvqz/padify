@@ -1,7 +1,12 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetStorageForTests, storageReady } from './storage';
-import { clearAttachments, listPendingAttachments, putAttachment, newAttachmentId } from './storage/attachments';
+import {
+  clearAttachments,
+  listPendingAttachments,
+  putAttachment,
+  newAttachmentId,
+} from './storage/attachments';
 import { notifyAttachmentLedgerChanged, onAttachmentLedgerChanged } from './cloud/attachments';
 import { initUploadChip } from './upload-chip';
 
