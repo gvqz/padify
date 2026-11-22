@@ -20,61 +20,8 @@ lines live at the top because everything else defers to them.*
 
 ---
 
-## The question on the table: `.padify` workspace files — the multi-note envelope
-
-**A whole pad — notes, order, theming, images — as one file. Verdict: yes,
-a good idea, and the timing is finally right. But it is a "next", not a
-"now" — it wants the canvas-images machinery landed first, because the
-workspace's attachments pool is the same machinery wearing a bigger hat.**
-
-Why yes:
-
-- The instinct is real. The single-note `.padify` shipped (fcb235b) because
-  "one note, fully, as a file" is what a notepad owes its users. A pad is
-  more than its notes — the order, the theming, the attached bytes — and a
-  workspace file is the only honest way to hand all of it to someone.
-- The validation discipline is the template, and it is proven twice: the
-  scene envelope (drawing/scene.ts — version, whitelist, byte budget) and
-  the single-note envelope (padify-file.ts — discriminator, format version
-  with the newer-format refusal, additive extensions, opaque payloads,
-  mint-fresh-on-import). The workspace envelope is that discipline applied
-  to a manifest plus N payloads. Nothing new to invent, only compose.
-- The attachments field already exists on envelope v1 (additive), and the
-  re-hydration path under original ids already runs at import. A workspace
-  with drawings-in-it is exactly that path, N times.
-
-The design sketch (so the decision never has to be re-litigated):
-
-- `type: "padify-workspace"`, `format: 1` — a NEW discriminator, not a
-  version bump of `padify-note`. Older builds refuse it with the same
-  "newer-format" honesty the scene format teaches (they answer null today;
-  the workspace import path is the only thing that changes).
-- The manifest carries what the pad UI owns and nothing more: note list in
-  order (each entry = the single-note payload fields), plus the pad-level
-  prefs that exist at export time. No sync state, no timestamps beyond
-  provenance, no ids that pretend to be stable — import mints fresh note
-  lives exactly like the single-note import does.
-- One shared attachments pool (id → bytes), referenced by any note's
-  content refs and any scene's fileIds. The dedupe the store already does
-  by id keeps two drawings sharing a pasted image at one copy.
-- JSON envelope (chunked base64, same as v1), not zip — v2 can graduate to
-  zip when file sizes earn it; the parse discipline does not change shape
-  under it.
-- Import UX is the one genuinely new question: add N notes (mint fresh,
-  never merge) and say so honestly in a toast with a count. Replace-the-pad
-  is a destructive act and stays out of v1.
-
-Costs, stated plainly: base64 inflates a file by 1.33× (a heavy pad with
-images can reach tens of MB — acceptable for a download; the browser saves
-it either way), and the import path needs a progress affordance because
-500-file ceilings × 5 MB caps can decode for a second or two. Both are
-honest costs, not blockers.
-
 ## NOW — what the working queue holds (non-visual)
 
-4. **Workspace envelope** (the design above) — the single-note envelope's
-   discipline, composed N times over; reuses the canvas-images machinery
-   that just landed.
 5. ~~**Attachment garbage collection.**~~ DONE 2026-11-22 — see H6 in the
    ledger below: the shared grammar + verdict, the server sweep on the
    hourly clock, the local sweep on the post-cycle hook, both under the
@@ -269,6 +216,32 @@ pass's to own). Every line item the review found is closed.*
     minimap island and vendor popovers have known seams (xv21 evidence).
 
 ## DONE — so nobody re-plans it
+
+- **Item 4, the workspace envelope — a whole pad as one .padify file
+  (2026-11-22, 0dada39).** The top-of-file question is answered and
+  shipped. A NEW discriminator (`padify-workspace`, format 1) — never a
+  version bump of `padify-note`: older builds answer null exactly as
+  before, so no older reader can mangle what it was never taught. The
+  manifest is the single-note payload composed N times — ONE shared
+  note-entry validation and writer (the hygiene discipline, applied at
+  birth) — notes in rail order, the pad's theming as data, and one
+  shared attachments pool deduped by id. Export flushes the active
+  note's live edits first (the duplicate gesture's discipline), the
+  download menu's image collector became a union pass over all notes,
+  and the menu grew a "Save whole pad as a file" row. Import mints
+  every note fresh (never merge), says the honest count in a toast —
+  partial counts when entries drop, "no notes" when they all did —
+  and lands on the first of the batch. The manifest's theme is
+  deliberately NOT applied on import (replace-the-pad stays out of
+  v1). The additive `colorTheme` field rode along on BOTH envelopes —
+  a rich note's ink colors now survive file round trips, where before
+  they silently didn't. Ceilings with their reasons in the format
+  module: 2000 note entries, attachments the same 500 × 5 MB as the
+  single-note envelope and the server. The planning sketch left with
+  the work, per this file's own convention — padify-file.ts's module
+  doc is the design's home now. Gates: lint, tsc, 1993 unit tests
+  (+13), padify-file + smoke + platform-shortcuts e2e (+3), the new
+  menu row geometry-checked against its siblings.
 
 - **Item 7, the usage & quota surface — Settings → Account (2026-11-22).**
   The owner's instruction folded three moves into one: the settings section
