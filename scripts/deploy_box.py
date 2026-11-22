@@ -183,6 +183,58 @@ def ensure_self_retire(client):
     print("[retire] run.sh now exports PADIFY_EXIT_ON_NEW_BUILD=1")
 
 
+def wait_for_build(expected_build, seconds):
+    """Poll the public health endpoint until it names expected_build."""
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        build, _stale, _reachable = running_build(allow_errors=True)
+        if build == expected_build:
+            return True
+        time.sleep(6)
+    return False
+
+
+def boot_bridge(client):
+    """Last-resort revival when the supervisor's cold boot never comes.
+
+    November's deploy proved the supervisor can stay asleep through a
+    process death: the files md5-verified fresh, the endpoint stayed
+    unreachable, and the process table over SSH stayed empty for the
+    whole verification window — the documented remedy was a manual panel
+    restart. This bridge performs that revival from the SSH side: start
+    the site's OWN run.sh detached (setsid, nohup), exactly what the
+    supervisor would run, and let the front server reconnect to it.
+
+    Two guards, both hard:
+
+    - run.sh must name the Turso database. Without TURSO_DATABASE_URL in
+      its environment the server silently falls back to a local SQLite
+      file at server/local.db — a boot that SERVES EMPTY DATA. Refuse.
+    - Nothing may already look alive (pgrep). A bridge next to a live
+      server just loses the port bind and dies.
+
+    The bridge is a bridge, not a home: it self-expires after 24 h
+    (`timeout`), and a panel restart (Web > Sites > Restart) remains the
+    durable fix. The next deploy kills the SSH-visible bridge first and
+    converges on its own.
+    """
+    run_sh = run(client, f"cat {shlex.quote(REMOTE_SERVER + '/run.sh')} 2>/dev/null")
+    if "TURSO_DATABASE_URL" not in run_sh:
+        print("[bridge] run.sh does not name the Turso database — refusing to "
+              "boot a server that would fall back to an empty local SQLite. "
+              "Restart the site from the alwaysdata panel instead.")
+        return False
+    live = run(client, "pgrep -f 'bun.*server/index[.]ts' || true").split()
+    if live:
+        print(f"[bridge] a server process IS visible ({', '.join(live)}) — not double-booting")
+        return False
+    print("[bridge] starting run.sh detached over SSH (supervisor revival never came)")
+    run(client,
+        f"cd {shlex.quote(REMOTE_SERVER)} && "
+        "(setsid nohup timeout 86400 bash ./run.sh >> boot.log 2>&1 < /dev/null &) ; sleep 1")
+    return True
+
+
 def restart_server(client, expected_build):
     """Kill the running bun and WAIT until the box serves this deploy.
 
@@ -397,7 +449,30 @@ def main():
     # Kill the running bun and wait until the PUBLIC health endpoint
     # answers with this build — see restart_server for the failure story
     # that made the wait non-negotiable.
-    restart_server(client, build_id)
+    try:
+        restart_server(client, build_id)
+    except SystemExit:
+        # restart_server gave up. Bridge ONLY the unreachable case — when
+        # health still ANSWERS (stale build), a live process owns the port
+        # somewhere this user cannot see, and a second boot just loses the
+        # bind; that case stays a hard failure.
+        _build, _stale, reachable = running_build(allow_errors=False)
+        if reachable:
+            raise
+        print("[server] supervisor revival failed and the endpoint is unreachable — "
+              "attempting the SSH bridge boot")
+        if not boot_bridge(client):
+            raise
+        if not wait_for_build(build_id, seconds=240):
+            boot_log = run(client, f"tail -20 {shlex.quote(REMOTE_SERVER + '/boot.log')} 2>/dev/null")
+            raise SystemExit(
+                "BRIDGE BOOT DID NOT CONVERGE — health never named "
+                f"{build_id}. Boot log tail:\n{boot_log}"
+            )
+        print("[bridge] health names the deployed build — the API is serving again")
+        print("[bridge] NOTE: this process is SSH-owned and self-expires after 24 h. "
+              "A panel restart (Web > Sites > Restart) remains the durable fix; "
+              "the next deploy kills the bridge and converges on its own.")
 
     client.close()
     print("DEPLOY DONE")
