@@ -22,3 +22,6 @@ src/editor/markdown/__fixtures__
 # Prose stays as authored
 *.md
 docs
+
+# The icon-picker decision page (a hand-authored artifact to open, not app code)
+qa/icon-picker-2026-11-23.html
