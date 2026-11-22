@@ -4,7 +4,7 @@ import { $, type Q } from './lib/q';
 import type { EditorConfig, NotepadUI } from './selector';
 import { initEditorPreferences } from './editor-preferences';
 import { resetStorageForTests, storageReady } from './storage';
-import { setSetting } from './state/settings';
+import { getSetting, setSetting, type SettingKey } from './state/settings';
 
 /**
  * The spell-check toggle's live-apply contract (issue #116): the Markdown
@@ -50,6 +50,7 @@ function mountShell(): void {
     <input type="checkbox" id="arrowSubstitution" />
     <input type="checkbox" id="symbolSubstitution" />
     <input type="checkbox" id="showWordCountPill" checked />
+    <input type="checkbox" id="showNoteBadges" checked />
     <select id="pillContent"><option value="both">both</option></select>
     <input type="checkbox" id="typingSpeed" />
     <div class="word-count-container"></div>
@@ -57,7 +58,7 @@ function mountShell(): void {
   `;
 }
 
-function wirePreferences(): void {
+function wirePreferences(): ReturnType<typeof initEditorPreferences> {
   const notepad = {
     note: $('#note'),
     fontSize: $('#fontSize'),
@@ -71,14 +72,17 @@ function wirePreferences(): void {
     arrowSubstitution: $('#arrowSubstitution'),
     symbolSubstitution: $('#symbolSubstitution'),
     showWordCountPill: $('#showWordCountPill'),
+    showNoteBadges: $('#showNoteBadges'),
     pillContent: $('#pillContent'),
     typingSpeed: $('#typingSpeed'),
     wordCountContainer: $('.word-count-container'),
   } as unknown as NotepadUI;
 
-  initEditorPreferences({
+  return initEditorPreferences({
     notepad,
-    setState: () => {},
+    // The production selector routes known keys through setSetting — the
+    // same routing here, so persistence assertions can read the store.
+    setState: (key: string, value: string) => setSetting(key as SettingKey, value),
     editorConfig,
     optimalLineLengthPadding: '48px',
   });
@@ -121,6 +125,50 @@ describe('the spell-check toggle applies live to the mounted Markdown WYSIWYG (i
     $('#spellCheck').prop('checked', false).trigger('change');
 
     expect(document.getElementById('note')!.getAttribute('spellcheck')).toBe('false');
+  });
+});
+
+describe('the note-badges toggle (tab-strip badges)', () => {
+  beforeEach(async () => {
+    resetStorageForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    localStorage.clear();
+    await storageReady();
+    mountShell();
+    wirePreferences();
+  });
+
+  it('defaults to shown when nothing is stored', () => {
+    expect(($('#showNoteBadges').get(0) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('a stored No lands the control unchecked on boot', () => {
+    setSetting('userChosenNoteBadges', 'No');
+
+    mountShell();
+    wirePreferences();
+
+    expect(($('#showNoteBadges').get(0) as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('toggling persists the choice and a re-boot honors it', () => {
+    $('#showNoteBadges').prop('checked', false).trigger('change');
+    expect(getSetting('userChosenNoteBadges')).toBe('No');
+
+    $('#showNoteBadges').prop('checked', true).trigger('change');
+    expect(getSetting('userChosenNoteBadges')).toBe('Yes');
+  });
+
+  it('reset to defaults clears the stored choice and rechecks the control', () => {
+    setSetting('userChosenNoteBadges', 'No');
+    mountShell();
+    const prefs = wirePreferences();
+    expect(($('#showNoteBadges').get(0) as HTMLInputElement).checked).toBe(false);
+
+    prefs.resetToDefaults();
+
+    expect(getSetting('userChosenNoteBadges')).toBeNull();
+    expect(($('#showNoteBadges').get(0) as HTMLInputElement).checked).toBe(true);
   });
 });
 

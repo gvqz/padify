@@ -34,6 +34,7 @@ export const SETTING_KEYS = [
   'userChosenLineHeight',
   'hasUserDismissedDonationPopup',
   'userChosenWordCountPillSelected',
+  'userChosenNoteBadges',
   'userChosenTransparentWordCountPillSelected',
   'userChosenPillContent',
   'userChosenTypingSpeed',
@@ -66,6 +67,7 @@ export interface EditorDefaults {
   defaultLineHeight: number;
   defaultFont: string;
   defaultShowWordCountPill: string;
+  defaultShowNoteBadges: string;
   defaultPillContent: string;
   defaultTypingSpeed: boolean;
   defaultWriteDirection: string;
@@ -87,6 +89,7 @@ export const DEFAULT_EDITOR_CONFIG: EditorDefaults = {
   defaultLineHeight: 26,
   defaultFont: 'default',
   defaultShowWordCountPill: 'Yes',
+  defaultShowNoteBadges: 'Yes',
   defaultPillContent: 'both',
   defaultTypingSpeed: false,
   defaultWriteDirection: 'ltr',

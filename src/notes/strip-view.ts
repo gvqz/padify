@@ -26,12 +26,26 @@ import {
   noteTypeLabel,
   type KnownNoteType,
 } from '../editor/note-types';
+import { getSetting, onChangeSetting } from '../state/settings';
 import { isInstalledDisplayMode } from '../install-pwa';
 import { showToast } from '../ui/toast';
 import type { NoteTab } from './domain';
 
 /** Notifies the rail's count badge (and any other listener) about tab count. */
 const RAIL_COUNT_ID = 'tabRailCount';
+
+/**
+ * Whether the identification badges beside each note's name are wanted —
+ * the "Note badges" preference (the voice mic, the type icons, the list
+ * dot). Absent = the default = shown, so existing installs keep their
+ * badges with no migration. The conflict badge is NOT governed by this:
+ * it is an actionable alert (its click opens the review sheet), not
+ * identification, and hiding an alert would strand the user in a
+ * conflict they can no longer see.
+ */
+function noteBadgesWanted(): boolean {
+  return getSetting('userChosenNoteBadges') !== 'No';
+}
 
 /**
  * The commands and reads the strip needs from its host — the manager.
@@ -67,6 +81,10 @@ export class TabStripView {
     private readonly host: TabStripHost,
   ) {
     this.strip = strip;
+    // The strip redraws itself when the Note-badges preference moves: the
+    // view is the thing that paints the badges, so the re-render belongs
+    // here — a pure view concern, no manager round-trip.
+    onChangeSetting('userChosenNoteBadges', () => this.render());
   }
 
   /** Rebuilds the strip from the host's model — the render after any
@@ -257,39 +275,45 @@ export class TabStripView {
       button.appendChild(conflictBadge);
     }
 
-    const stripBadge = noteStripBadge(tab.content, tab.noteType);
-    if (stripBadge) {
-      // A task list's badge is its own colored circle — the rail shows
-      // the note AS a list (the projection seam reads the model).
-      const listDot = document.createElement('span');
-      listDot.className = 'tab-strip-type tab-strip-list-dot';
-      listDot.title = 'Task list';
-      listDot.setAttribute('aria-hidden', 'true');
-      listDot.dataset.color = stripBadge.color;
-      button.appendChild(listDot);
-    } else if (hasVoiceRecording(tab.content)) {
-      // A voice note outranks its type badge: what the note CARRIES is
-      // the louder fact about it (the type badge reads the same for every
-      // rich note; the mic says which one holds a recording).
-      const voiceBadge = document.createElement('span');
-      voiceBadge.className = 'tab-strip-type';
-      voiceBadge.title = 'Voice note';
-      voiceBadge.setAttribute('aria-hidden', 'true');
-      voiceBadge.innerHTML =
-        '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11.5" rx="3" /><path d="M5 11a7 7 0 0 0 14 0" /><path d="M12 18.5V21" /></svg>';
-      button.appendChild(voiceBadge);
-    } else if (tab.noteType && tab.noteType !== DEFAULT_NOTE_TYPE) {
-      const typeBadge = document.createElement('span');
-      typeBadge.className = 'tab-strip-type';
-      typeBadge.title = `${noteTypeLabel(tab.noteType)} — created via the type menu`;
-      typeBadge.setAttribute('aria-hidden', 'true');
-      // Icons exist for known types; a future type still badges, with the
-      // registry's plain-text mark standing in until this build learns it.
-      const icon = NOTE_TYPE_ICONS[tab.noteType as KnownNoteType];
-      typeBadge.innerHTML = icon
-        ? icon(10)
-        : `<span style="font-size:9px;font-weight:700;line-height:1">${noteTypeLabel(tab.noteType).charAt(0).toLowerCase()}</span>`;
-      button.appendChild(typeBadge);
+    // The identification badges (list dot, voice mic, type icon) answer to
+    // the Note-badges preference — off means the tab is just its name and
+    // its close button. The conflict badge above is NOT part of that deal
+    // (see noteBadgesWanted).
+    if (noteBadgesWanted()) {
+      const stripBadge = noteStripBadge(tab.content, tab.noteType);
+      if (stripBadge) {
+        // A task list's badge is its own colored circle — the rail shows
+        // the note AS a list (the projection seam reads the model).
+        const listDot = document.createElement('span');
+        listDot.className = 'tab-strip-type tab-strip-list-dot';
+        listDot.title = 'Task list';
+        listDot.setAttribute('aria-hidden', 'true');
+        listDot.dataset.color = stripBadge.color;
+        button.appendChild(listDot);
+      } else if (hasVoiceRecording(tab.content)) {
+        // A voice note outranks its type badge: what the note CARRIES is
+        // the louder fact about it (the type badge reads the same for every
+        // rich note; the mic says which one holds a recording).
+        const voiceBadge = document.createElement('span');
+        voiceBadge.className = 'tab-strip-type';
+        voiceBadge.title = 'Voice note';
+        voiceBadge.setAttribute('aria-hidden', 'true');
+        voiceBadge.innerHTML =
+          '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11.5" rx="3" /><path d="M5 11a7 7 0 0 0 14 0" /><path d="M12 18.5V21" /></svg>';
+        button.appendChild(voiceBadge);
+      } else if (tab.noteType && tab.noteType !== DEFAULT_NOTE_TYPE) {
+        const typeBadge = document.createElement('span');
+        typeBadge.className = 'tab-strip-type';
+        typeBadge.title = `${noteTypeLabel(tab.noteType)} — created via the type menu`;
+        typeBadge.setAttribute('aria-hidden', 'true');
+        // Icons exist for known types; a future type still badges, with the
+        // registry's plain-text mark standing in until this build learns it.
+        const icon = NOTE_TYPE_ICONS[tab.noteType as KnownNoteType];
+        typeBadge.innerHTML = icon
+          ? icon(10)
+          : `<span style="font-size:9px;font-weight:700;line-height:1">${noteTypeLabel(tab.noteType).charAt(0).toLowerCase()}</span>`;
+        button.appendChild(typeBadge);
+      }
     }
 
     const title = document.createElement('span');

@@ -30,6 +30,13 @@ function resetShowWordCountPill(defaultShowWordCountPill: string): void {
   setPillSubrowsEnabled(defaultShowWordCountPill === 'Yes');
 }
 
+function resetShowNoteBadges(): void {
+  $('#showNoteBadges').prop('checked', true);
+  // The strip's own onChangeSetting listener does the re-render — this
+  // reset only restores the control (and, via removeSetting's notify,
+  // hands the strip its cue).
+}
+
 // The counter-pill card's two follow-ups (content mode, live typing
 // speed) only mean something while the pill itself is shown — they
 // stand down with the master switch: controls carry the native
@@ -157,6 +164,13 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
 
   // The word count pill always uses the counter pill style.
   notepad.wordCountContainer.addClass('transparency');
+
+  // The note badges (voice mic, type icons, list dot) beside each note's
+  // name: on unless the user turned them off. Absent = the default =
+  // shown, so nothing needs migrating — and the strip reads this setting
+  // live at render time, so there is nothing to apply here beyond the
+  // control's own state.
+  notepad.showNoteBadges.prop('checked', getSetting('userChosenNoteBadges') !== 'No');
 
   // What the capsule carries: the content mode and the live typing
   // speed. Unknown stored modes (an old build, a hand-edited store)
@@ -313,6 +327,12 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
       setState('userChosenWordCountPillSelected', 'No');
     }
     setPillSubrowsEnabled($(this).is(':checked'));
+  });
+
+  notepad.showNoteBadges.on('change', function () {
+    setState('userChosenNoteBadges', $(this).is(':checked') ? 'Yes' : 'No');
+    // No direct DOM work — the strip subscribes to the setting itself and
+    // re-renders on the notify this write fires.
   });
 
   notepad.pillContent.on('change', function () {
@@ -477,6 +497,11 @@ export function initEditorPreferences(ctx: EditorPreferencesContext): {
       if (getSetting('userChosenWordCountPillSelected')) {
         removeState('userChosenWordCountPillSelected');
         resetShowWordCountPill(editorConfig.defaultShowWordCountPill);
+      }
+
+      if (getSetting('userChosenNoteBadges')) {
+        removeState('userChosenNoteBadges');
+        resetShowNoteBadges();
       }
 
       if (getSetting('userChosenPillContent')) {

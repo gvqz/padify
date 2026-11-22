@@ -29,6 +29,7 @@ export interface NotepadUI {
   preferencesModal: Q;
   resetPreferences: Q;
   showWordCountPill: Q;
+  showNoteBadges: Q;
   pillContent: Q;
   typingSpeed: Q;
   installAppButtonContainer: Q;
@@ -52,6 +53,7 @@ export interface EditorConfig {
   defaultLineHeight: number;
   defaultFont: string;
   defaultShowWordCountPill: string;
+  defaultShowNoteBadges: string;
   defaultPillContent: string;
   defaultTypingSpeed: boolean;
   defaultWriteDirection: string;
@@ -132,6 +134,7 @@ export function selector(): AppSelector {
       preferencesModal: selectById('preferencesModal'),
       resetPreferences: selectById('resetPreferences'),
       showWordCountPill: selectById('showWordCountPill'),
+      showNoteBadges: selectById('showNoteBadges'),
       pillContent: selectById('pillContent'),
       typingSpeed: selectById('typingSpeed'),
       installAppButtonContainer: selectByClassName('install-app-btn-container'),
