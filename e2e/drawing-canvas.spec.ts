@@ -368,41 +368,76 @@ test.describe('the drawing canvas', () => {
     await expect(page.locator('.bottom-line')).toBeVisible();
   });
 
-  test('the map island opens with the pad — the footer toggle owns it', async ({ page }) => {
+  test('the map starts closed — the footer toggle owns it — and the styles panel keeps its rows', async ({
+    page,
+  }) => {
     await openDrawingCanvas(page);
 
-    // Parity with excalidraw.com: the minimap is ON at open (the Padify
-    // default — the vendor's own is off, and the toggle is a browser-level
-    // viewport pref the appState whitelist rightly never persists, so
-    // every open falls back to the pad's default), floating above the
-    // footer's zoom controls with its toggle beside them.
+    // Parity with excalidraw.com, measured: the vendor's own default has
+    // the minimap CLOSED (its toggle sits in the footer beside the zoom
+    // menu trigger). Forcing it open was tried and reverted — the vendor
+    // reserves 138px of the styles panel's column for an open map
+    // (LayerUI's MINIMAP_RESERVED_HEIGHT) and CLIPPED the panel's Layers
+    // and Actions rows away. The footer form is identical either way —
+    // the zoom readout stays the zoom MENU trigger, not plain buttons.
     const island = page.locator('#note .excalidraw .minimap');
-    await expect(island).toBeVisible();
+    await expect(island).toBeHidden();
     const toggle = page.locator('#note .excalidraw .minimap-toggle-button');
     await expect(toggle).toBeVisible();
-
-    // With the minimap UI on, the zoom controls are the zoom MENU (the
-    // vendor's own footer form for this mode), not the plain
-    // zoom-out / readout / zoom-in buttons.
     await expect(page.locator('#note [data-testid="zoom-menu-trigger"]')).toBeVisible();
     await expect(page.locator('#note .excalidraw .zoom-button')).toHaveCount(0);
 
-    // The toggle hides the island.
+    // The toggle raises and hides the island.
+    await toggle.click();
+    await expect(island).toBeVisible();
     await toggle.click();
     await expect(island).toBeHidden();
 
     // A viewport pref, never scene bytes: the vendor itself refuses to
     // announce the flip (captureUpdate: EVENTUALLY — its own classification
     // of viewport state), so the fresh pad's content stays '' (the
-    // open-never-writes guard, byte-exact with the map on).
+    // open-never-writes guard, byte-exact with the map toggled).
     const saved = await readDrawingNotes(page);
     expect(saved).toHaveLength(1);
     expect(saved[0].content).toBe('');
 
-    // And the default rides every open: a reload brings the island back.
+    // And the default rides every open: a reload keeps the map closed.
     await page.reload();
     await expect(page.locator('#note .excalidraw')).toBeVisible({ timeout: 20_000 });
-    await expect(page.locator('#note .excalidraw .minimap')).toBeVisible();
+    await expect(page.locator('#note .excalidraw .minimap')).toBeHidden();
+    await expect(page.locator('#note .excalidraw .minimap-toggle-button')).toBeVisible();
+  });
+
+  test('the styles panel keeps the native height math at the embedded size', async ({ page }) => {
+    // The full panel (`.App-menu__left`) only exists above the vendor's
+    // compact-form-factor width; the suite's 1280px viewport renders the
+    // compact island instead. This test guards the FULL panel, so it
+    // opens at the embedded-size session: a 1440×900 window gives the
+    // same 1200×850 canvas the side-by-side was measured on.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openDrawingCanvas(page);
+    await drawRectangle(page);
+
+    // The vendor clamps the panel to `appState.height - 166` (its own
+    // LayerUI constant) and lets the panelColumn scroll when the rows
+    // exceed it — at this 800px viewport even excalidraw.com scrolls, so
+    // "no row below the fold" is NOT the native behavior. What IS native:
+    // the clamp's exact value — which is precisely where the old build
+    // regressed (forcing the minimap open subtracted the vendor's
+    // MINIMAP_RESERVED_HEIGHT, 138px more, and hid the panel's bottom).
+    // Assert the formula, not a pixel guess.
+    const panel = page.locator('#note .excalidraw .App-menu__left');
+    const { maxHeight, wrapperHeight } = await panel.evaluate((el) => ({
+      maxHeight: parseFloat(el.style.maxHeight),
+      wrapperHeight: el.closest('.excalidraw')?.getBoundingClientRect().height ?? 0,
+    }));
+    expect(wrapperHeight).toBeGreaterThan(0);
+    expect(maxHeight).toBeCloseTo(wrapperHeight - 166, 0);
+
+    // The full native row set rides in the panel, ending with Layers
+    // then Actions.
+    await expect(panel.locator('fieldset legend', { hasText: 'Layers' })).toBeAttached();
+    await expect(panel.locator('fieldset legend', { hasText: 'Actions' })).toBeAttached();
   });
 
   test('drawing ↔ text switches stand the canvas down and bring it back', async ({ page }) => {

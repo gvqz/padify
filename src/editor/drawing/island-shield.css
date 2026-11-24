@@ -1,0 +1,176 @@
+/**
+ * The island shield — the app's global CSS stops at the vendor's door.
+ *
+ * WHY THIS EXISTS: the vendor ships its stylesheet for a CLEAN document
+ * (excalidraw.com's page declares almost nothing). Padify's app css is a
+ * full design system whose GLOBAL element rules — `*`, `a`, `button`,
+ * `h2`, `textarea`, `img`, `p` — and whose editor-column declarations
+ * (`#note`'s 26px line-height, pre-wrap, text cursor) all reach into the
+ * vendor's subtrees and rewrite them: measured on this build, the island
+ * inherited a 26px line-height, ran content-box→border-box everywhere,
+ * showed bold headings at app line-heights in the help dialog, put the
+ * app's padding/border on the vendor's text editor, and let text wrap
+ * pre-wrap — none of which excalidraw.com does. Those deltas ARE the
+ * "menus unreadable and broken, not properly aligned" report.
+ *
+ * SCOPE — the vendor's own root class, `.excalidraw`. NOT the host
+ * wrapper: the vendor PORTALS its dialogs, toasts and popovers OUT of
+ * the host onto the body (the overlay div itself carries the
+ * `excalidraw` class — that's how the vendor's own `.excalidraw .Dialog`
+ * rules reach them), so any host-scoped shield would spare the app css
+ * exactly the biggest surfaces. The app never emits the class (only
+ * this module mounts the vendor), so the class IS the vendor boundary.
+ *
+ * HOW — three tiers, each exactly as strong as it must be:
+ *
+ *  1. ELEMENT ROLLBACKS — `:where(.excalidraw) element` computes to bare
+ *     element specificity (0,0,1), the same as the app rule it rolls
+ *     back; this file loads AFTER the app css (the drawing chunk's css is
+ *     appended to the head when the chunk loads — see canvas.ts's import
+ *     order), so the rollback wins the tie. Every VENDOR declaration is
+ *     class-scoped (0,1,0+) and beats the rollback everywhere it exists —
+ *     which is exactly how the vendor wins on the native site. `revert`
+ *     then yields the UA value, the very value the native site renders.
+ *  2. THE UNIVERSAL RESET — the app's `*{box-sizing:border-box}` (0,0,0)
+ *     is rolled back island-wide at zero specificity; vendor's own
+ *     border-box declarations (0,1,0+) stand.
+ *  3. THE INHERITED ENVIRONMENT — properties the app's editor column
+ *     leaks by INHERITANCE (line-height, white-space, overflow-wrap,
+ *     cursor) cannot be `revert`ed (revert rolls back declarations,
+ *     never inheritance), so every vendor root declares the UA defaults
+ *     back. It comes LAST in this file so it wins the root's own tier-2
+ *     tie for line-height.
+ *
+ * The one deliberate step OUT of :where() — the focus-ring rollback —
+ * sits at (0,1,1)+ on purpose: the app's `body :focus-visible` ring is a
+ * (0,1,1) rule, a :where()-scoped rollback (0,1,0) would lose to it, and
+ * the vendor declares no focus styles on the bare root, its canvases or
+ * its wysiwyg textarea (verified against the vendor stylesheet), so the
+ * higher specificity can only ever touch what it exists for.
+ */
+
+/* ── 1. element rollbacks ─────────────────────────────────────────── */
+
+/* Headings: the app's bootstrap subset gives every heading its own
+   size/weight/margins/line-height; the vendor sizes its dialog headings
+   through component classes and takes UA defaults for anything else. */
+:where(.excalidraw) h1,
+:where(.excalidraw) h2,
+:where(.excalidraw) h3,
+:where(.excalidraw) h4,
+:where(.excalidraw) h5,
+:where(.excalidraw) h6 {
+  font-family: revert;
+  font-size: revert;
+  font-weight: revert;
+  line-height: revert;
+  margin: revert;
+  padding: revert;
+}
+
+/* Buttons and form controls: the app makes them inherit font AND ink
+   color (`button, input, optgroup, select, textarea { color: inherit }`)
+   and carry the editor surface's padding/border/caret (the `textarea,
+   #note` block paints 15px 24px 80px + a border onto the vendor's wysiwyg
+   editor); the vendor declares sizes and colors through classes where it
+   cares and rides UA defaults otherwise (the zoom readout is UA Arial on
+   the native site, and its buttons are UA's buttontext black, not the
+   app's inherited ink). */
+:where(.excalidraw) button,
+:where(.excalidraw) input,
+:where(.excalidraw) select,
+:where(.excalidraw) textarea {
+  font-family: revert;
+  font-size: revert;
+  line-height: revert;
+  color: revert;
+}
+
+:where(.excalidraw) input,
+:where(.excalidraw) select,
+:where(.excalidraw) textarea {
+  padding: revert;
+  border: revert;
+  border-color: revert;
+  /* caret-color is INHERITED and the editor column declares it (#note's
+     `caret-color: var(--vz-fg)`), so a revert here would roll straight
+     back into the app's inherited value — it must be re-declared to the
+     UA default (auto → currentcolor), the very value the native site's
+     text editors resolve to. */
+  caret-color: auto;
+}
+
+/* Links: the vendor declares its own color/weight at class scope; the
+   app's #337ab7 + bold + no-underline element rule reverts to UA. */
+:where(.excalidraw) a {
+  color: revert;
+  font-weight: revert;
+  text-decoration: revert;
+}
+
+/* The app forces `img{max-width:100%!important}` page-wide — the one
+   author-important leak; the rollback needs the same importance to win
+   (same-tier important rules compare specificity then order). The vendor
+   declares no max-width on its images. */
+:where(.excalidraw) img {
+  max-width: revert !important;
+}
+
+/* Flow boxes: the app's bootstrap subset gives p/ul/ol/table its own
+   margins, paddings and borders; the vendor rides UA defaults. */
+:where(.excalidraw) p,
+:where(.excalidraw) ul,
+:where(.excalidraw) ol {
+  margin: revert;
+}
+
+:where(.excalidraw) table {
+  border-collapse: revert;
+  border-spacing: revert;
+  background-color: revert;
+}
+
+:where(.excalidraw) th,
+:where(.excalidraw) td {
+  padding: revert;
+  border: revert;
+  text-align: revert;
+  vertical-align: revert;
+}
+
+/* The app's focus ring (`body :focus-visible` — a 2px outline, an offset
+   and the app's border-radius on EVERYTHING focusable in the body, at
+   (0,1,1)) — the vendor speaks its own focus language at class scope
+   (buttons, inputs, picker rows), but whatever it leaves to the UA (the
+   root, the canvases, the wysiwyg textarea) picked up the app's ring and
+   radius. See the specificity note in the header. */
+.excalidraw:focus-visible,
+.excalidraw canvas:focus-visible,
+.excalidraw textarea:focus-visible {
+  border-radius: revert;
+  outline: revert;
+  outline-offset: revert;
+}
+
+/* ── 2. the universal reset stops here ────────────────────────────── */
+
+:where(.excalidraw),
+:where(.excalidraw *),
+:where(.excalidraw *::before),
+:where(.excalidraw *::after) {
+  box-sizing: revert;
+  line-height: revert;
+}
+
+/* ── 3. the inherited environment, declared back ──────────────────── */
+
+/* LAST: re-asserts each vendor root's own line-height after tier 2's
+   rollback (a revert can't beat an inherited 26px — only a declaration
+   can), for the island AND the body-level portal overlays alike. */
+:where(.excalidraw) {
+  line-height: normal;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-wrap: normal;
+  cursor: auto;
+}

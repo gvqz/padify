@@ -592,3 +592,42 @@ footer, the Shortcuts & help hint — modulo Padify's own navbar/rail
 around it, and minus the white-label items the policy doors keep off
 (Socials, Excalidraw+/Sign up, Live collaboration) and the site's own
 app-layer text (the storage warning line).
+
+### The 2026-11-24 owner follow-up — the leaks and the map (measured to zero)
+
+The owner's side-by-side caught two more layers after the restart, both
+root-caused in the browser rather than assumed:
+
+1. **The rem baseline** (the previous commit): the app's `html{font-size:
+   10px}` shrank every rem-based vendor token to 62.5%.
+2. **The app's global css reaching into the vendor's subtrees** — this
+   commit. Three verified mechanisms, all measured against excalidraw.com
+   at the same viewport:
+   - `#note`'s editor typography INHERITED into the island (26px
+     line-height, pre-wrap, text cursor) and `#note`'s caret-color
+     var; inheritance survives any author `revert`.
+   - The app's GLOBAL element rules (`*{box-sizing}`, `h1..h6`,
+     `button{color:inherit;font-family:inherit}`, `a`, `img!important`,
+     `p/ul/table`, the `textarea,#note` padding/border block, `body
+     :focus-visible`) — plain element specificity, so they beat every
+     vendor declaration that doesn't exist (the vendor ships for a clean
+     page) while the vendor's own class rules beat them back.
+   - **The forced-open minimap**: mounting with `minimapEnabled: true`
+     made LayerUI subtract its MINIMAP_RESERVED_HEIGHT (138px) from the
+     styles panel's clamp (`appState.height - 166`), clipping the panel's
+     Layers and Actions rows at the embedded size — the vendor's own
+     default (the site's default) has the map closed.
+
+   The fix is `island-shield.css`, loaded last inside the drawing chunk:
+   :where()-scoped `revert` rollbacks keyed on the vendor's own
+   `.excalidraw` root class (the vendor PORTALS dialogs/toasts onto the
+   body with that class on the overlay — a host-scoped shield would have
+   spared exactly the biggest surfaces), plus explicit re-declarations
+   for what inheritance defeats revert, and the map default returned to
+   the vendor's own.
+
+   Measured result: the computed-style sweep (island root, hint, welcome,
+   zoom/undo buttons, menu, help-dialog title/headings, wysiwyg textarea)
+   shows ZERO property deltas against excalidraw.com at the same
+   viewport; the styles panel's clamp computes the vendor's exact native
+   formula (height − 166) and carries Layers and Actions.

@@ -64,6 +64,12 @@ import type {
   ExcalidrawImperativeAPI,
 } from '@excalidraw/excalidraw/types';
 import '@excalidraw/excalidraw/index.css';
+// The leak shield — loads AFTER the vendor css (import order is injection
+// order, and both land after the app's <link>s: the drawing chunk's css is
+// appended to the head when the chunk loads), so its order-tied rollbacks
+// win against the app's global element rules while its :where() scoping
+// keeps it strictly below every vendor declaration. See the file header.
+import './island-shield.css';
 import type { CanvasImageFile } from './canvas-images';
 // The vendor's insert-time byte gate speaks the wire contract's number
 // (shared/wire.ts) — the same 5 MB every capture path and the server's
@@ -387,16 +393,13 @@ export function mountDrawingCanvas(
         {
           elements: options.initialScene.elements,
           appState: {
-            // The map opens with the pad — the vendor's own default is off,
-            // and the toggle is a browser-level viewport pref the vendor
-            // classifies as {browser: true, export: false, server: false}:
-            // not scene content, so the appState whitelist (rightly) never
-            // persists it and the vendor's localStorage home belongs to
-            // excalidraw.com's app layer, not the embedded component. A
-            // fresh open therefore falls back to THIS default — the
-            // excalidraw.com look, map and all. The Padify settings menu is
-            // the future home for the preference itself.
-            minimapEnabled: true,
+            // No appState defaults here — deliberately. The vendor's own
+            // defaults ARE excalidraw.com's defaults (the site renders this
+            // exact component with none either): the minimap starts closed
+            // (its toggle sits in the footer), the theme follows the props.
+            // Anything forced here compounds: forcing the map open made the
+            // vendor reserve its 138px column clearance and CLIP the styles
+            // panel (Layers/Actions rows) — measured, not guessed.
             ...options.initialScene.appState,
           },
         },
@@ -434,9 +437,10 @@ export function mountDrawingCanvas(
         // The note-switch path (drawing→drawing reuse) never re-runs
         // initialData, so a fresh scene (appState {}) would otherwise
         // inherit the previous note's live tool state. A scene that
-        // carries its own pick wins the spread, exactly as at mount.
+        // carries its own pick wins the spread, exactly as at mount. No
+        // baseline appState of our own: the live state carries over, the
+        // scene's pick (none for a fresh note) applies.
         appState: {
-          minimapEnabled: true,
           ...scene.appState,
         },
       } as unknown as UpdateScenePayload);
