@@ -4,7 +4,7 @@
   role="dialog"
   aria-labelledby="keyboardShortcutsTitle"
 >
-  <div class="modal-dialog modal-lg">
+  <div class="modal-dialog sc-dialog">
     <div class="modal-content">
       <div class="modal-header">
         <div class="pref-header-copy">
@@ -12,1142 +12,1385 @@
             Keyboard Shortcuts
           </h4>
         </div>
-        <button
-          type="button"
-          class="close"
-          data-dismiss="modal"
-          aria-label="Close keyboard shortcuts"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M6 6l12 12M18 6L6 18" />
-          </svg>
-        </button>
-      </div>
-      <div class="modal-body">
-        <div class="shortcut-toolbar">
-          <div class="shortcut-search-wrap">
+        <div class="pref-header-tools">
+          <div class="pref-search">
             <svg
-              class="shortcut-search-icon"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              stroke-width="2"
+              stroke-width="1.8"
               stroke-linecap="round"
               stroke-linejoin="round"
               aria-hidden="true"
             >
-              <circle cx="11" cy="11" r="8"></circle>
-              <path d="m21 21-4.35-4.35"></path>
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
             </svg>
             <input
-              type="text"
+              type="search"
               id="shortcutSearch"
-              class="shortcut-search-input"
-              placeholder="Search shortcuts (e.g., save, bold, tab, link)..."
+              placeholder="Search shortcuts…"
               aria-label="Search keyboard shortcuts"
+              aria-controls="shortcutList"
+              autocomplete="off"
+              spellcheck="false"
             />
           </div>
-
-          <div class="shortcut-tabs" role="tablist" aria-label="Shortcut sections">
+          <button
+            type="button"
+            class="close"
+            data-dismiss="modal"
+            aria-label="Close keyboard shortcuts"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="sc-layout" id="scLayout">
+          <!-- The sheet (#179, attempt 3): the Settings dialog's own
+               two-pane shape. Left: the pane nav (a query flattens every
+               pane and the nav steps aside, exactly the settings'
+               is-searching flow). Right: the pane's sections — label left,
+               keycap chips right, hairline dividers between rows. -->
+          <nav class="sc-nav" id="scNav" role="tablist" aria-label="Shortcut sections">
             <button
               type="button"
-              class="shortcut-tab is-active"
+              class="sc-nav-item is-active"
               role="tab"
               aria-selected="true"
               data-pane="all"
             >
-              All
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="7" height="7" rx="1" />
+              </svg>
+              <span class="sc-nav-label">All</span>
             </button>
             <button
               type="button"
-              class="shortcut-tab"
+              class="sc-nav-item"
               role="tab"
               aria-selected="false"
+              tabindex="-1"
               data-pane="general"
             >
-              General
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <path d="M14 2v6h6" />
+                <path d="M8 13h8" />
+                <path d="M8 17h5" />
+              </svg>
+              <span class="sc-nav-label">General</span>
             </button>
             <button
               type="button"
-              class="shortcut-tab"
+              class="sc-nav-item"
               role="tab"
               aria-selected="false"
+              tabindex="-1"
               data-pane="rich"
             >
-              Rich text
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="4 7 4 4 20 4 20 7" />
+                <line x1="9" y1="20" x2="15" y2="20" />
+                <line x1="12" y1="4" x2="12" y2="20" />
+              </svg>
+              <span class="sc-nav-label">Rich text</span>
             </button>
             <button
               type="button"
-              class="shortcut-tab"
+              class="sc-nav-item"
               role="tab"
               aria-selected="false"
+              tabindex="-1"
               data-pane="markdown"
             >
-              Markdown
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect width="20" height="16" x="2" y="4" rx="2" />
+                <path d="M6 9l3 6 3-6 3 6 3-6" />
+              </svg>
+              <span class="sc-nav-label">Markdown</span>
             </button>
             <button
               type="button"
-              class="shortcut-tab"
+              class="sc-nav-item"
               role="tab"
               aria-selected="false"
+              tabindex="-1"
               data-pane="plain"
             >
-              Plain
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M4 6h16" />
+                <path d="M4 10h16" />
+                <path d="M4 14h10" />
+                <path d="M4 18h7" />
+              </svg>
+              <span class="sc-nav-label">Plain</span>
             </button>
             <button
               type="button"
-              class="shortcut-tab"
+              class="sc-nav-item"
               role="tab"
               aria-selected="false"
+              tabindex="-1"
               data-pane="tasks"
             >
-              Tasks
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="3" y="5" width="6" height="6" rx="1" />
+                <path d="m4 8 1.5 1.5L8 7" />
+                <path d="M12 8h9" />
+                <rect x="3" y="14" width="6" height="6" rx="1" />
+                <path d="M12 17h9" />
+              </svg>
+              <span class="sc-nav-label">Tasks</span>
             </button>
             <button
               type="button"
-              class="shortcut-tab"
+              class="sc-nav-item"
               role="tab"
               aria-selected="false"
+              tabindex="-1"
               data-pane="drawing"
             >
-              Drawing
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+              <span class="sc-nav-label">Drawing</span>
             </button>
+          </nav>
+
+          <div class="sc-panes" id="shortcutList">
+            <section
+              class="shortcut-section"
+              aria-label="General and Navigation"
+              data-pane="general"
+            >
+              <header class="sc-section-head">
+                <span class="sc-section-icon" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <path d="M14 2v6h6" />
+                    <path d="M8 13h8" />
+                    <path d="M8 17h5" /></svg
+                ></span>
+                <div class="sc-section-copy">
+                  <h5 class="sc-section-title">General &amp; Navigation</h5>
+                  <p class="sc-section-hint">File operations, note tabs, and app dialogs.</p>
+                </div>
+              </header>
+              <div class="shortcut-card">
+                <div
+                  class="shortcut-row"
+                  data-search="save note plain text ctrl cmd s export text file"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Save as plain text</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>S</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="save note pdf alt option s export pdf document"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Save as PDF</span>
+                    <span class="sc-row-hint"
+                      >On a drawing note the chord belongs to the canvas (snap to objects)</span
+                    >
+                  </div>
+                  <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>S</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="copy note clipboard alt option c full note content system"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Copy to clipboard</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>C</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="preferences settings ctrl cmd comma access app customizations"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Open Preferences</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>,</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="snapshot history version save capture ctrl cmd alt option s"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Take a snapshot</span>
+                    <span class="sc-row-hint">Save a version of the note to History</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd data-alt-key>Alt</kbd> + <kbd>S</kbd>
+                  </div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="delete notes ctrl cmd shift delete backspace remove active"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Delete current note</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Del</kbd>
+                  </div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="switch note tab previous next ctrl cmd alt option left right arrow cycle"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Switch note tabs</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd data-alt-key>Alt</kbd> + <kbd>←</kbd> /
+                    <kbd>→</kbd>
+                  </div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="close modal dialog menu escape esc dismiss popup dropdown"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Close popups &amp; menus</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>Esc</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="keyboard shortcuts sheet this help ctrl cmd k"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Keyboard shortcuts (this sheet)</span>
+                    <span class="sc-row-hint"
+                      >Works anywhere except inside a rich or markdown note — there Ctrl + K is the
+                      link bubble</span
+                    >
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>K</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="history snapshots search slash focus find versions trash"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Focus the History search</span>
+                    <span class="sc-row-hint">With the History modal open</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>/</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="music player seek forward backward arrow left right five seconds song"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Seek in the music player</span>
+                    <span class="sc-row-hint"
+                      >Steps the song 5 seconds back or forward, with the player open</span
+                    >
+                  </div>
+                  <div class="shortcut-keys"><kbd>←</kbd> / <kbd>→</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="floating window pip close escape note browser"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Close the floating window</span>
+                    <span class="sc-row-hint"
+                      >Peels the note browser back first, then closes the window</span
+                    >
+                  </div>
+                  <div class="shortcut-keys"><kbd>Esc</kbd></div>
+                </div>
+              </div>
+            </section>
+            <section class="shortcut-section" aria-label="Insert and Tools" data-pane="general">
+              <header class="sc-section-head">
+                <span class="sc-section-icon" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg
+                ></span>
+                <div class="sc-section-copy">
+                  <h5 class="sc-section-title">Insert &amp; Tools</h5>
+                  <p class="sc-section-hint">Links, symbols, voice typing, and smart tools.</p>
+                </div>
+              </header>
+              <div class="shortcut-card">
+                <div class="shortcut-row" data-search="insert edit link ctrl cmd k">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Insert or edit link</span>
+                    <span class="sc-row-hint"
+                      >In a rich or markdown note, opens the link bubble; elsewhere Ctrl + K opens
+                      this sheet</span
+                    >
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>K</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="unicode symbol character picker emoji ctrl cmd shift o"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Unicode symbol picker</span>
+                    <span class="sc-row-hint">Browse 5,400+ symbols, math, and emojis</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>O</kbd>
+                  </div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="voice typing dictation microphone alt option v dictate text speech"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Voice typing</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>V</kbd></div>
+                </div>
+              </div>
+            </section>
+            <section class="shortcut-section" aria-label="Text Formatting" data-pane="rich">
+              <header class="sc-section-head">
+                <span class="sc-section-icon" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <polyline points="4 7 4 4 20 4 20 7" />
+                    <line x1="9" y1="20" x2="15" y2="20" />
+                    <line x1="12" y1="4" x2="12" y2="20" /></svg
+                ></span>
+                <div class="sc-section-copy">
+                  <h5 class="sc-section-title">Text Formatting</h5>
+                  <p class="sc-section-hint">Styling and inline formatting for selected text.</p>
+                </div>
+              </header>
+              <div class="shortcut-card">
+                <div
+                  class="shortcut-row"
+                  data-search="bold text selection ctrl cmd b make selected"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Bold</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>B</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="italic text selection ctrl cmd i italicize">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Italic</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>I</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="underline text selection ctrl cmd u rich text"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title"
+                      >Underline <span class="sc-badge">Rich Text</span></span
+                    >
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>U</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="strikethrough strike text selection ctrl cmd shift x cross out"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Strikethrough</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>X</kbd>
+                  </div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="superscript text selection ctrl cmd period dot rich text raise above baseline"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title"
+                      >Superscript <span class="sc-badge">Rich Text</span></span
+                    >
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>.</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="clear remove formatting ctrl cmd backslash rich text strip inline styles"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title"
+                      >Clear formatting <span class="sc-badge">Rich Text</span></span
+                    >
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>\</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="undo redo rich text history step back forward ctrl cmd y"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title"
+                      >Undo / Redo <span class="sc-badge">Rich Text</span></span
+                    >
+                    <span class="sc-row-hint">The note editor’s own undo stack</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Z</kbd> / <kbd data-mod-key>Ctrl</kbd> +
+                    <kbd>Shift</kbd> + <kbd>Z</kbd> / <kbd data-mod-key>Ctrl</kbd> + <kbd>Y</kbd>
+                  </div>
+                </div>
+              </div>
+            </section>
+            <section class="shortcut-section" aria-label="Structure and Layout" data-pane="rich">
+              <header class="sc-section-head">
+                <span class="sc-section-icon" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <line x1="21" x2="3" y1="6" y2="6" />
+                    <line x1="15" x2="3" y1="12" y2="12" />
+                    <line x1="17" x2="3" y1="18" y2="18" /></svg
+                ></span>
+                <div class="sc-section-copy">
+                  <h5 class="sc-section-title">Structure &amp; Layout</h5>
+                  <p class="sc-section-hint">Alignments, list controls, and block elements.</p>
+                </div>
+              </header>
+              <div class="shortcut-card">
+                <div
+                  class="shortcut-row"
+                  data-search="align left center right justify ctrl cmd shift l e r j rich text"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title"
+                      >Text alignment <span class="sc-badge">Rich Text</span></span
+                    >
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>L</kbd> / <kbd>E</kbd> /
+                    <kbd>R</kbd> / <kbd>J</kbd>
+                  </div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="bulleted numbered checklist list ctrl cmd shift 7 8 9 rich text"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title"
+                      >Toggle lists <span class="sc-badge">Rich Text</span></span
+                    >
+                    <span class="sc-row-hint">Bulleted (7), Numbered (8), or Checklist (9)</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>7</kbd> / <kbd>8</kbd> /
+                    <kbd>9</kbd>
+                  </div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="indent outdent list table cells tab shift tab"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Indent / Outdent &amp; Table Navigation</span>
+                    <span class="sc-row-hint">Nests list items or walks table cells</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd>Tab</kbd> / <kbd>Shift</kbd> + <kbd>Tab</kbd>
+                  </div>
+                </div>
+              </div>
+            </section>
+            <section class="shortcut-section" aria-label="Markdown notes" data-pane="markdown">
+              <header class="sc-section-head">
+                <span class="sc-section-icon" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect width="20" height="16" x="2" y="4" rx="2" />
+                    <path d="M6 9l3 6 3-6 3 6 3-6" /></svg
+                ></span>
+                <div class="sc-section-copy">
+                  <h5 class="sc-section-title">Markdown</h5>
+                  <p class="sc-section-hint">
+                    The source editor’s GitHub-style chords — everything else rides the General
+                    pane.
+                  </p>
+                </div>
+              </header>
+              <div class="shortcut-card">
+                <div class="shortcut-row" data-search="markdown bold ctrl cmd b source editor">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Bold</span>
+                    <span class="sc-row-hint">Wrap the selection in ** in the source</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>B</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="markdown italic ctrl cmd i source editor">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Italic</span>
+                    <span class="sc-row-hint">Wrap the selection in * in the source</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>I</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="markdown inline code ctrl cmd e source editor"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Inline code</span>
+                    <span class="sc-row-hint">Wrap the selection in backticks</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>E</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="markdown strikethrough strike ctrl cmd shift x source editor"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Strikethrough</span>
+                    <span class="sc-row-hint">Wrap the selection in ~~</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>X</kbd>
+                  </div>
+                </div>
+                <div class="shortcut-row" data-search="markdown link ctrl cmd k bubble">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Link bubble</span>
+                    <span class="sc-row-hint">Insert a link, or edit the chip under the caret</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>K</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="markdown indent outdent lines tab shift tab">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Indent / outdent lines</span>
+                    <span class="sc-row-hint">Nests or unwinds the selected lines</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd>Tab</kbd> / <kbd>Shift</kbd> + <kbd>Tab</kbd>
+                  </div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="markdown continue list enter bullet numbered todo marker"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Continue lists</span>
+                    <span class="sc-row-hint"
+                      >Enter carries the -, 1. or - [ ] marker to the next line</span
+                    >
+                  </div>
+                  <div class="shortcut-keys"><kbd>Enter</kbd></div>
+                </div>
+              </div>
+            </section>
+            <section class="shortcut-section" aria-label="Plain notes" data-pane="plain">
+              <header class="sc-section-head">
+                <span class="sc-section-icon" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M4 6h16" />
+                    <path d="M4 10h16" />
+                    <path d="M4 14h10" />
+                    <path d="M4 18h7" /></svg
+                ></span>
+                <div class="sc-section-copy">
+                  <h5 class="sc-section-title">Plain</h5>
+                  <p class="sc-section-hint">
+                    The chords the plain editor owns — everything else rides the General pane.
+                  </p>
+                </div>
+              </header>
+              <div class="shortcut-card">
+                <div class="shortcut-row" data-search="plain indent line tab literal text">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Indent line</span>
+                    <span class="sc-row-hint">Steps the line in with a literal tab character</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>Tab</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="plain outdent line shift tab unwind">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Outdent line</span>
+                    <span class="sc-row-hint">Unwinds one leading tab</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>Shift</kbd> + <kbd>Tab</kbd></div>
+                </div>
+              </div>
+            </section>
+            <section class="shortcut-section" aria-label="Tasks notes" data-pane="tasks">
+              <header class="sc-section-head">
+                <span class="sc-section-icon" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="3" y="5" width="6" height="6" rx="1" />
+                    <path d="m4 8 1.5 1.5L8 7" />
+                    <path d="M12 8h9" />
+                    <rect x="3" y="14" width="6" height="6" rx="1" />
+                    <path d="M12 17h9" /></svg
+                ></span>
+                <div class="sc-section-copy">
+                  <h5 class="sc-section-title">Tasks</h5>
+                  <p class="sc-section-hint">
+                    The task editor’s own gestures — everything else rides the General pane.
+                  </p>
+                </div>
+              </header>
+              <div class="shortcut-card">
+                <div class="shortcut-row" data-search="tasks add task enter composer submit">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Add the task</span>
+                    <span class="sc-row-hint">Submits the composer’s draft</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>Enter</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="tasks commit rename enter title">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Commit a rename</span>
+                    <span class="sc-row-hint">Accepts the title edit, refocuses the composer</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>Enter</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="tasks close popovers editor escape esc">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Close popovers / the editor</span>
+                    <span class="sc-row-hint"
+                      >Steps back one layer — a popover first, then the editor</span
+                    >
+                  </div>
+                  <div class="shortcut-keys"><kbd>Esc</kbd></div>
+                </div>
+              </div>
+            </section>
+            <section class="shortcut-section" aria-label="Drawing Canvas" data-pane="drawing">
+              <header class="sc-section-head">
+                <span class="sc-section-icon" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg
+                ></span>
+                <div class="sc-section-copy">
+                  <h5 class="sc-section-title">Drawing Canvas</h5>
+                  <p class="sc-section-hint">
+                    The canvas’s complete chord table — the same keys excalidraw.com speaks. The
+                    app’s own chords (save, this sheet, PDF) always win over the canvas’s.
+                  </p>
+                </div>
+              </header>
+              <div class="shortcut-card">
+                <h6 class="shortcut-group-title">Tools</h6>
+                <div class="shortcut-row" data-search="drawing hand panning tool h excalidraw">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Hand (panning tool)</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>H</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing selection tool v 1 excalidraw">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Selection</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>V</kbd> / <kbd>1</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing rectangle r 2 excalidraw">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Rectangle</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>R</kbd> / <kbd>2</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing diamond d 3 excalidraw">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Diamond</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>D</kbd> / <kbd>3</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing ellipse o 4 excalidraw">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Ellipse</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>O</kbd> / <kbd>4</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing arrow a 5 excalidraw">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Arrow</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>A</kbd> / <kbd>5</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing line l 6 excalidraw">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Line</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>L</kbd> / <kbd>6</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing draw freedraw pen p 7 excalidraw">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Draw</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>P</kbd> / <kbd>7</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing text t 8 excalidraw">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Text</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>T</kbd> / <kbd>8</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing sticky note n excalidraw">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Sticky note</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>N</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing insert image 9 excalidraw">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Insert image</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>9</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing eraser e 0 excalidraw">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Eraser</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>E</kbd> / <kbd>0</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing frame tool f excalidraw">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Frame tool</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>F</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing laser pointer k excalidraw">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Laser pointer</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>K</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing bucket fill b excalidraw">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Bucket fill</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>B</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="drawing pick color from canvas i shift s shift g eyedropper excalidraw"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Pick color from canvas</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd>I</kbd> / <kbd>Shift</kbd> + <kbd>S</kbd> / <kbd>Shift</kbd> + <kbd>G</kbd>
+                  </div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="drawing keep selected tool active after drawing q lock excalidraw"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Keep selected tool active after drawing</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>Q</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing edit line arrow points ctrl enter">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Edit line/arrow points</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>Enter</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing edit text add label enter">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Edit text / add label</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>Enter</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="drawing add new line text editor enter shift"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Add new line (text editor)</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd>Enter</kbd> / <kbd>Shift</kbd> + <kbd>Enter</kbd>
+                  </div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="drawing finish editing text editor esc ctrl enter"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Finish editing (text editor)</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd>Esc</kbd> / <kbd data-mod-key>Ctrl</kbd> + <kbd>Enter</kbd>
+                  </div>
+                </div>
+                <div class="shortcut-row" data-search="drawing curved arrow a click click click">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Curved arrow</span>
+                    <span class="sc-row-hint">A, then click each bend point</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>A</kbd> + <kbd>click</kbd> × 3</div>
+                </div>
+                <div class="shortcut-row" data-search="drawing curved line l click click click">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Curved line</span>
+                    <span class="sc-row-hint">L, then click each bend point</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>L</kbd> + <kbd>click</kbd> × 3</div>
+                </div>
+                <div class="shortcut-row" data-search="drawing crop image double click enter">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Crop image</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>double-click</kbd> / <kbd>Enter</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing finish image cropping enter esc">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Finish image cropping</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>Enter</kbd> / <kbd>Esc</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing prevent arrow binding ctrl">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Prevent arrow binding</span>
+                    <span class="sc-row-hint">Hold while dragging the endpoint</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="drawing add update link selected shape ctrl k conflict sheet"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Add / Update link for a selected shape</span>
+                    <span class="sc-row-hint"
+                      >Inside the canvas; outside it Ctrl + K opens this sheet — the app keeps the
+                      chord</span
+                    >
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>K</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing toggle shape type tab shift tab">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Toggle shape type</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd>Tab</kbd> / <kbd>Shift</kbd> + <kbd>Tab</kbd>
+                  </div>
+                </div>
+              </div>
+              <div class="shortcut-card">
+                <h6 class="shortcut-group-title">View</h6>
+                <div class="shortcut-row" data-search="drawing zoom in ctrl plus">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Zoom in</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>+</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing zoom out ctrl minus">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Zoom out</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>-</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing reset zoom ctrl 0">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Reset zoom</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>0</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing zoom to fit all elements shift 1">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Zoom to fit all elements</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>Shift</kbd> + <kbd>1</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing zoom to selection shift 2">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Zoom to selection</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>Shift</kbd> + <kbd>2</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing move page up down pgup pgdn">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Move page up/down</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>PgUp</kbd> / <kbd>PgDn</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="drawing move page left right shift pgup pgdn"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Move page left/right</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd>Shift</kbd> + <kbd>PgUp</kbd> / <kbd>PgDn</kbd>
+                  </div>
+                </div>
+                <div class="shortcut-row" data-search="drawing zen mode alt z hide chrome">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Zen mode</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>Z</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing snap to objects alt s">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Snap to objects</span>
+                    <span class="sc-row-hint"
+                      >On a drawing note this chord is the canvas’s — the app’s PDF export steps
+                      aside here</span
+                    >
+                  </div>
+                  <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>S</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing toggle grid ctrl apostrophe quote">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Toggle grid</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>'</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing view mode alt r read only">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">View mode</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>R</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing canvas shape properties alt slash">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Canvas &amp; Shape properties</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>/</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing find on canvas ctrl f search">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Find on canvas</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>F</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing command palette ctrl slash shift p">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Command palette</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>/</kbd> / <kbd data-mod-key>Ctrl</kbd> +
+                    <kbd>Shift</kbd> + <kbd>P</kbd>
+                  </div>
+                </div>
+              </div>
+              <div class="shortcut-card">
+                <h6 class="shortcut-group-title">Editor</h6>
+                <div
+                  class="shortcut-row"
+                  data-search="drawing create flowchart generic element ctrl arrow"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Create a flowchart from a generic element</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>arrows</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing navigate flowchart alt arrow">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Navigate a flowchart</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>arrows</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing move canvas space drag wheel">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Move canvas</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd>Space</kbd> + <kbd>drag</kbd> / <kbd>wheel</kbd> + <kbd>drag</kbd>
+                  </div>
+                </div>
+                <div class="shortcut-row" data-search="drawing reset the canvas ctrl delete">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Reset the canvas</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>Delete</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing delete selection del">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Delete</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>Del</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing cut ctrl x">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Cut</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>X</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing copy ctrl c">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Copy</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>C</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing paste ctrl v">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Paste</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>V</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing paste as plaintext ctrl shift v">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Paste as plaintext</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>V</kbd>
+                  </div>
+                </div>
+                <div class="shortcut-row" data-search="drawing select all ctrl a">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Select all</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>A</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="drawing add element to selection shift click"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Add element to selection</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>Shift</kbd> + <kbd>click</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing deep select ctrl click">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Deep select</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>click</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="drawing deep select within box prevent dragging ctrl drag"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Deep select within box, and prevent dragging</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>drag</kbd></div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="drawing copy to clipboard as png shift alt c"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Copy to clipboard as PNG</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd>Shift</kbd> + <kbd data-alt-key>Alt</kbd> + <kbd>C</kbd>
+                  </div>
+                </div>
+                <div class="shortcut-row" data-search="drawing copy styles ctrl alt c">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Copy styles</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd data-alt-key>Alt</kbd> + <kbd>C</kbd>
+                  </div>
+                </div>
+                <div class="shortcut-row" data-search="drawing paste styles ctrl alt v">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Paste styles</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd data-alt-key>Alt</kbd> + <kbd>V</kbd>
+                  </div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="drawing send to back ctrl shift bracket left"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Send to back</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>[</kbd>
+                  </div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="drawing bring to front ctrl shift bracket right"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Bring to front</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>]</kbd>
+                  </div>
+                </div>
+                <div class="shortcut-row" data-search="drawing send backward ctrl bracket left">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Send backward</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>[</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing bring forward ctrl bracket right">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Bring forward</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>]</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing align top ctrl shift arrow up">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Align top</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>↑</kbd>
+                  </div>
+                </div>
+                <div class="shortcut-row" data-search="drawing align bottom ctrl shift arrow down">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Align bottom</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>↓</kbd>
+                  </div>
+                </div>
+                <div class="shortcut-row" data-search="drawing align left ctrl shift arrow left">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Align left</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>←</kbd>
+                  </div>
+                </div>
+                <div class="shortcut-row" data-search="drawing align right ctrl shift arrow right">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Align right</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>→</kbd>
+                  </div>
+                </div>
+                <div class="shortcut-row" data-search="drawing duplicate ctrl d alt drag">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Duplicate</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>D</kbd> / <kbd data-alt-key>Alt</kbd> +
+                    <kbd>drag</kbd>
+                  </div>
+                </div>
+                <div class="shortcut-row" data-search="drawing lock unlock selection ctrl shift l">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Lock/unlock selection</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>L</kbd>
+                  </div>
+                </div>
+                <div class="shortcut-row" data-search="drawing undo ctrl z">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Undo</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>Z</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing redo ctrl shift z ctrl y">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Redo</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd>
+                  </div>
+                </div>
+                <div class="shortcut-row" data-search="drawing group selection ctrl g">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Group selection</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>G</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing ungroup selection ctrl shift g">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Ungroup selection</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>G</kbd>
+                  </div>
+                </div>
+                <div class="shortcut-row" data-search="drawing wrap unwrap selection w">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Wrap or unwrap selection</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>W</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing toggle text auto resizing alt w">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Toggle text auto-resizing</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>W</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing flip horizontal shift h">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Flip horizontal</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>Shift</kbd> + <kbd>H</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing flip vertical shift v">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Flip vertical</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>Shift</kbd> + <kbd>V</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing show stroke color picker s">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Show stroke color picker</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>S</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing show background color picker g">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Show background color picker</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>G</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing show font picker shift f">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Show font picker</span>
+                  </div>
+                  <div class="shortcut-keys"><kbd>Shift</kbd> + <kbd>F</kbd></div>
+                </div>
+                <div class="shortcut-row" data-search="drawing decrease font size ctrl shift less">
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Decrease font size</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd><</kbd>
+                  </div>
+                </div>
+                <div
+                  class="shortcut-row"
+                  data-search="drawing increase font size ctrl shift greater"
+                >
+                  <div class="sc-row-copy">
+                    <span class="sc-row-title">Increase font size</span>
+                  </div>
+                  <div class="shortcut-keys">
+                    <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>></kbd>
+                  </div>
+                </div>
+              </div>
+            </section>
           </div>
-        </div>
-
-        <div id="shortcutList">
-          <!-- The sheet (#179, attempt 2): a wide, two-column flow of
-               category islands — the way excalidraw.com's own shortcuts
-               dialog breathes. Sections carry data-pane; the search
-               overrides the pane (a query looks everywhere). -->
-
-          <!-- General & Navigation -->
-          <section class="shortcut-section" aria-label="General and Navigation" data-pane="general">
-            <header class="shortcut-island-head">
-              <span class="shortcut-island-icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <rect width="18" height="18" x="3" y="3" rx="2" />
-                  <path d="M7 8h10" />
-                  <path d="M7 12h10" />
-                  <path d="M7 16h6" />
-                </svg>
-              </span>
-              <div class="shortcut-island-copy">
-                <h5 class="shortcut-island-title">General &amp; Navigation</h5>
-                <p class="shortcut-island-hint">File operations, note tabs, and app dialogs.</p>
-              </div>
-            </header>
-            <div class="shortcut-card">
-              <div
-                class="shortcut-row"
-                data-search="save note plain text ctrl cmd s export text file"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Save as plain text</span>
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>S</kbd></div>
-              </div>
-
-              <div
-                class="shortcut-row"
-                data-search="save note pdf alt option s export pdf document"
-              >
-                <div class="shortcut-info"><span class="shortcut-title">Save as PDF</span></div>
-                <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>S</kbd></div>
-              </div>
-
-              <div
-                class="shortcut-row"
-                data-search="copy note clipboard alt option c full note content system"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Copy to clipboard</span>
-                </div>
-                <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>C</kbd></div>
-              </div>
-
-              <div
-                class="shortcut-row"
-                data-search="preferences settings ctrl cmd comma access app customizations"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Open Preferences</span>
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>,</kbd></div>
-              </div>
-
-              <div
-                class="shortcut-row"
-                data-search="snapshot history version save capture ctrl cmd alt option s"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Take a snapshot</span>
-                  <span class="shortcut-description">Save a version of the note to History</span>
-                </div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd data-alt-key>Alt</kbd> + <kbd>S</kbd>
-                </div>
-              </div>
-
-              <div
-                class="shortcut-row"
-                data-search="delete notes ctrl cmd shift delete backspace remove active"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Delete current note</span>
-                </div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Del</kbd>
-                </div>
-              </div>
-
-              <div
-                class="shortcut-row"
-                data-search="switch note tab previous next ctrl cmd alt option left right arrow cycle"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Switch note tabs</span>
-                </div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd data-alt-key>Alt</kbd> + <kbd>←</kbd> /
-                  <kbd>→</kbd>
-                </div>
-              </div>
-
-              <div
-                class="shortcut-row"
-                data-search="close modal dialog menu escape esc dismiss popup dropdown"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Close popups &amp; menus</span>
-                </div>
-                <div class="shortcut-keys">
-                  <kbd>Esc</kbd>
-                </div>
-              </div>
-
-              <div class="shortcut-row" data-search="keyboard shortcuts sheet this help ctrl cmd k">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Keyboard shortcuts (this sheet)</span>
-                  <span class="shortcut-description"
-                    >Works anywhere except inside a rich or markdown note — there Ctrl + K is the
-                    link bubble</span
-                  >
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>K</kbd></div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Text Formatting -->
-          <section class="shortcut-section" aria-label="Text Formatting" data-pane="rich">
-            <header class="shortcut-island-head">
-              <span class="shortcut-island-icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M4 7V4h16v3" />
-                  <path d="M9 20h6" />
-                  <path d="M12 4v16" />
-                </svg>
-              </span>
-              <div class="shortcut-island-copy">
-                <h5 class="shortcut-island-title">Text Formatting</h5>
-                <p class="shortcut-island-hint">Styling and inline formatting for selected text.</p>
-              </div>
-            </header>
-            <div class="shortcut-card">
-              <div class="shortcut-row" data-search="bold text selection ctrl cmd b make selected">
-                <div class="shortcut-info"><span class="shortcut-title">Bold</span></div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>B</kbd></div>
-              </div>
-
-              <div class="shortcut-row" data-search="italic text selection ctrl cmd i italicize">
-                <div class="shortcut-info"><span class="shortcut-title">Italic</span></div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>I</kbd></div>
-              </div>
-
-              <div class="shortcut-row" data-search="underline text selection ctrl cmd u rich text">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">
-                    Underline <span class="shortcut-badge">Rich Text</span></span
-                  >
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>U</kbd></div>
-              </div>
-
-              <div
-                class="shortcut-row"
-                data-search="strikethrough strike text selection ctrl cmd shift x cross out"
-              >
-                <div class="shortcut-info"><span class="shortcut-title">Strikethrough</span></div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>X</kbd>
-                </div>
-              </div>
-
-              <div
-                class="shortcut-row"
-                data-search="superscript text selection ctrl cmd period dot rich text raise above baseline"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title"
-                    >Superscript <span class="shortcut-badge">Rich Text</span></span
-                  >
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>.</kbd></div>
-              </div>
-
-              <div
-                class="shortcut-row"
-                data-search="clear remove formatting ctrl cmd backslash rich text strip inline styles"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title"
-                    >Clear formatting <span class="shortcut-badge">Rich Text</span></span
-                  >
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>\</kbd></div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Structure & Layout -->
-          <section class="shortcut-section" aria-label="Structure and Layout" data-pane="rich">
-            <header class="shortcut-island-head">
-              <span class="shortcut-island-icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <line x1="21" x2="3" y1="6" y2="6" />
-                  <line x1="15" x2="3" y1="12" y2="12" />
-                  <line x1="17" x2="3" y1="18" y2="18" />
-                </svg>
-              </span>
-              <div class="shortcut-island-copy">
-                <h5 class="shortcut-island-title">Structure &amp; Layout</h5>
-                <p class="shortcut-island-hint">Alignments, list controls, and block elements.</p>
-              </div>
-            </header>
-            <div class="shortcut-card">
-              <div
-                class="shortcut-row"
-                data-search="align left center right justify ctrl cmd shift l e r j rich text"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title"
-                    >Text alignment <span class="shortcut-badge">Rich Text</span></span
-                  >
-                </div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>L</kbd> / <kbd>E</kbd> /
-                  <kbd>R</kbd> / <kbd>J</kbd>
-                </div>
-              </div>
-
-              <div
-                class="shortcut-row"
-                data-search="bulleted numbered checklist list ctrl cmd shift 7 8 9 rich text"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title"
-                    >Toggle lists <span class="shortcut-badge">Rich Text</span></span
-                  >
-                  <span class="shortcut-description"
-                    >Bulleted (7), Numbered (8), or Checklist (9)</span
-                  >
-                </div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>7</kbd> / <kbd>8</kbd> /
-                  <kbd>9</kbd>
-                </div>
-              </div>
-
-              <div class="shortcut-row" data-search="indent outdent list table cells tab shift tab">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Indent / Outdent &amp; Table Navigation</span>
-                  <span class="shortcut-description">Nests list items or walks table cells</span>
-                </div>
-                <div class="shortcut-keys"><kbd>Tab</kbd> / <kbd>Shift</kbd> + <kbd>Tab</kbd></div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Insert & Tools -->
-          <section class="shortcut-section" aria-label="Insert and Tools" data-pane="general">
-            <header class="shortcut-island-head">
-              <span class="shortcut-island-icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                </svg>
-              </span>
-              <div class="shortcut-island-copy">
-                <h5 class="shortcut-island-title">Insert &amp; Tools</h5>
-                <p class="shortcut-island-hint">Links, symbols, voice typing, and smart tools.</p>
-              </div>
-            </header>
-            <div class="shortcut-card">
-              <div class="shortcut-row" data-search="insert edit link ctrl cmd k">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Insert or edit link</span>
-                  <span class="shortcut-description"
-                    >In a rich or markdown note, opens the link bubble; elsewhere Ctrl + K opens
-                    this sheet</span
-                  >
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>K</kbd></div>
-              </div>
-
-              <div
-                class="shortcut-row"
-                data-search="unicode symbol character picker emoji ctrl cmd shift o"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Unicode symbol picker</span>
-                  <span class="shortcut-description">Browse 5,400+ symbols, math, and emojis</span>
-                </div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>O</kbd>
-                </div>
-              </div>
-
-              <div
-                class="shortcut-row"
-                data-search="voice typing dictation microphone alt option v dictate text speech"
-              >
-                <div class="shortcut-info"><span class="shortcut-title">Voice typing</span></div>
-                <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>V</kbd></div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Markdown -->
-          <section class="shortcut-section" aria-label="Markdown notes" data-pane="markdown">
-            <header class="shortcut-island-head">
-              <span class="shortcut-island-icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <rect width="20" height="16" x="2" y="4" rx="2" />
-                  <path d="M6 9l3 6 3-6 3 6 3-6" />
-                </svg>
-              </span>
-              <div class="shortcut-island-copy">
-                <h5 class="shortcut-island-title">Markdown</h5>
-                <p class="shortcut-island-hint">
-                  The source editor's GitHub-style chords — everything else rides the General pane.
-                </p>
-              </div>
-            </header>
-            <div class="shortcut-card">
-              <div class="shortcut-row" data-search="markdown bold ctrl cmd b source editor">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Bold</span>
-                  <span class="shortcut-description">Wrap the selection in ** in the source</span>
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>B</kbd></div>
-              </div>
-
-              <div class="shortcut-row" data-search="markdown italic ctrl cmd i source editor">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Italic</span>
-                  <span class="shortcut-description">Wrap the selection in * in the source</span>
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>I</kbd></div>
-              </div>
-
-              <div class="shortcut-row" data-search="markdown inline code ctrl cmd e source editor">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Inline code</span>
-                  <span class="shortcut-description">Wrap the selection in backticks</span>
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>E</kbd></div>
-              </div>
-
-              <div
-                class="shortcut-row"
-                data-search="markdown strikethrough strike ctrl cmd shift x source editor"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Strikethrough</span>
-                  <span class="shortcut-description">Wrap the selection in ~~</span>
-                </div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>X</kbd>
-                </div>
-              </div>
-
-              <div class="shortcut-row" data-search="markdown link ctrl cmd k bubble">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Link bubble</span>
-                  <span class="shortcut-description"
-                    >Insert a link, or edit the chip under the caret</span
-                  >
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>K</kbd></div>
-              </div>
-
-              <div class="shortcut-row" data-search="markdown indent outdent lines tab shift tab">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Indent / outdent lines</span>
-                  <span class="shortcut-description">Nests or unwinds the selected lines</span>
-                </div>
-                <div class="shortcut-keys"><kbd>Tab</kbd> / <kbd>Shift</kbd> + <kbd>Tab</kbd></div>
-              </div>
-
-              <div
-                class="shortcut-row"
-                data-search="markdown continue list enter bullet numbered todo marker"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Continue lists</span>
-                  <span class="shortcut-description"
-                    >Enter carries the -, 1. or - [ ] marker to the next line</span
-                  >
-                </div>
-                <div class="shortcut-keys"><kbd>Enter</kbd></div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Plain -->
-          <section class="shortcut-section" aria-label="Plain notes" data-pane="plain">
-            <header class="shortcut-island-head">
-              <span class="shortcut-island-icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M4 6h16" />
-                  <path d="M4 10h16" />
-                  <path d="M4 14h10" />
-                  <path d="M4 18h7" />
-                </svg>
-              </span>
-              <div class="shortcut-island-copy">
-                <h5 class="shortcut-island-title">Plain</h5>
-                <p class="shortcut-island-hint">
-                  The one chord the plain editor owns — everything else rides the General pane.
-                </p>
-              </div>
-            </header>
-            <div class="shortcut-card">
-              <div class="shortcut-row" data-search="plain indent line tab literal text">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Indent line</span>
-                  <span class="shortcut-description"
-                    >Steps the line in with a literal tab character</span
-                  >
-                </div>
-                <div class="shortcut-keys"><kbd>Tab</kbd></div>
-              </div>
-
-              <div class="shortcut-row" data-search="plain outdent line shift tab unwind">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Outdent line</span>
-                  <span class="shortcut-description">Unwinds one leading tab</span>
-                </div>
-                <div class="shortcut-keys"><kbd>Shift</kbd> + <kbd>Tab</kbd></div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Tasks -->
-          <section class="shortcut-section" aria-label="Tasks notes" data-pane="tasks">
-            <header class="shortcut-island-head">
-              <span class="shortcut-island-icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <rect x="3" y="5" width="6" height="6" rx="1" />
-                  <path d="m4 8 1.5 1.5L8 7" />
-                  <path d="M12 8h9" />
-                  <rect x="3" y="14" width="6" height="6" rx="1" />
-                  <path d="M12 17h9" />
-                </svg>
-              </span>
-              <div class="shortcut-island-copy">
-                <h5 class="shortcut-island-title">Tasks</h5>
-                <p class="shortcut-island-hint">
-                  The task editor's own gestures — everything else rides the General pane.
-                </p>
-              </div>
-            </header>
-            <div class="shortcut-card">
-              <div class="shortcut-row" data-search="tasks add task enter composer submit">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Add the task</span>
-                  <span class="shortcut-description">Submits the composer's draft</span>
-                </div>
-                <div class="shortcut-keys"><kbd>Enter</kbd></div>
-              </div>
-
-              <div class="shortcut-row" data-search="tasks commit rename enter title">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Commit a rename</span>
-                  <span class="shortcut-description"
-                    >Accepts the title edit, refocuses the composer</span
-                  >
-                </div>
-                <div class="shortcut-keys"><kbd>Enter</kbd></div>
-              </div>
-
-              <div class="shortcut-row" data-search="tasks close popovers editor escape esc">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Close popovers / the editor</span>
-                  <span class="shortcut-description"
-                    >Steps back one layer — a popover first, then the editor</span
-                  >
-                </div>
-                <div class="shortcut-keys"><kbd>Esc</kbd></div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Drawing Canvas — the vendor's own shortcut table, complete.
-               Rows mirror the canvas's HelpDialog verbatim (the pinned
-               vendor's Tools / View / Editor groups), so the sheet IS the
-               one place the shortcuts live (#179). The two chords the app
-               deliberately re-tasks say so inline. -->
-          <section class="shortcut-section" aria-label="Drawing Canvas" data-pane="drawing">
-            <header class="shortcut-island-head">
-              <span class="shortcut-island-icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M12 20h9" />
-                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                </svg>
-              </span>
-              <div class="shortcut-island-copy">
-                <h5 class="shortcut-island-title">Drawing Canvas</h5>
-                <p class="shortcut-island-hint">
-                  The canvas's complete chord table — the same keys excalidraw.com speaks. The app's
-                  own chords (save, this sheet, PDF) always win over the canvas's.
-                </p>
-              </div>
-            </header>
-
-            <div class="shortcut-card">
-              <h6 class="shortcut-group-title">Tools</h6>
-              <div class="shortcut-row" data-search="drawing hand panning tool h excalidraw">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Hand (panning tool)</span>
-                </div>
-                <div class="shortcut-keys"><kbd>H</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing selection tool v 1 excalidraw">
-                <div class="shortcut-info"><span class="shortcut-title">Selection</span></div>
-                <div class="shortcut-keys"><kbd>V</kbd> / <kbd>1</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing rectangle r 2 excalidraw">
-                <div class="shortcut-info"><span class="shortcut-title">Rectangle</span></div>
-                <div class="shortcut-keys"><kbd>R</kbd> / <kbd>2</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing diamond d 3 excalidraw">
-                <div class="shortcut-info"><span class="shortcut-title">Diamond</span></div>
-                <div class="shortcut-keys"><kbd>D</kbd> / <kbd>3</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing ellipse o 4 excalidraw">
-                <div class="shortcut-info"><span class="shortcut-title">Ellipse</span></div>
-                <div class="shortcut-keys"><kbd>O</kbd> / <kbd>4</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing arrow a 5 excalidraw">
-                <div class="shortcut-info"><span class="shortcut-title">Arrow</span></div>
-                <div class="shortcut-keys"><kbd>A</kbd> / <kbd>5</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing line l 6 excalidraw">
-                <div class="shortcut-info"><span class="shortcut-title">Line</span></div>
-                <div class="shortcut-keys"><kbd>L</kbd> / <kbd>6</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing draw freedraw pen p 7 excalidraw">
-                <div class="shortcut-info"><span class="shortcut-title">Draw</span></div>
-                <div class="shortcut-keys"><kbd>P</kbd> / <kbd>7</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing text t 8 excalidraw">
-                <div class="shortcut-info"><span class="shortcut-title">Text</span></div>
-                <div class="shortcut-keys"><kbd>T</kbd> / <kbd>8</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing sticky note n excalidraw">
-                <div class="shortcut-info"><span class="shortcut-title">Sticky note</span></div>
-                <div class="shortcut-keys"><kbd>N</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing insert image 9 excalidraw">
-                <div class="shortcut-info"><span class="shortcut-title">Insert image</span></div>
-                <div class="shortcut-keys"><kbd>9</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing eraser e 0 excalidraw">
-                <div class="shortcut-info"><span class="shortcut-title">Eraser</span></div>
-                <div class="shortcut-keys"><kbd>E</kbd> / <kbd>0</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing frame tool f excalidraw">
-                <div class="shortcut-info"><span class="shortcut-title">Frame tool</span></div>
-                <div class="shortcut-keys"><kbd>F</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing laser pointer k excalidraw">
-                <div class="shortcut-info"><span class="shortcut-title">Laser pointer</span></div>
-                <div class="shortcut-keys"><kbd>K</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing bucket fill b excalidraw">
-                <div class="shortcut-info"><span class="shortcut-title">Bucket fill</span></div>
-                <div class="shortcut-keys"><kbd>B</kbd></div>
-              </div>
-              <div
-                class="shortcut-row"
-                data-search="drawing pick color from canvas i shift s shift g eyedropper excalidraw"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Pick color from canvas</span>
-                </div>
-                <div class="shortcut-keys">
-                  <kbd>I</kbd> / <kbd>Shift</kbd> + <kbd>S</kbd> / <kbd>Shift</kbd> +
-                  <kbd>G</kbd>
-                </div>
-              </div>
-              <div
-                class="shortcut-row"
-                data-search="drawing keep selected tool active after drawing q lock excalidraw"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Keep selected tool active after drawing</span>
-                </div>
-                <div class="shortcut-keys"><kbd>Q</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing edit line arrow points ctrl enter">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Edit line/arrow points</span>
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>Enter</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing edit text add label enter">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Edit text / add label</span>
-                </div>
-                <div class="shortcut-keys"><kbd>Enter</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing add new line text editor enter shift">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Add new line (text editor)</span>
-                </div>
-                <div class="shortcut-keys">
-                  <kbd>Enter</kbd> / <kbd>Shift</kbd> + <kbd>Enter</kbd>
-                </div>
-              </div>
-              <div
-                class="shortcut-row"
-                data-search="drawing finish editing text editor esc ctrl enter"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Finish editing (text editor)</span>
-                </div>
-                <div class="shortcut-keys">
-                  <kbd>Esc</kbd> / <kbd data-mod-key>Ctrl</kbd> + <kbd>Enter</kbd>
-                </div>
-              </div>
-              <div class="shortcut-row" data-search="drawing curved arrow a click click click">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Curved arrow</span>
-                  <span class="shortcut-description">A, then click each bend point</span>
-                </div>
-                <div class="shortcut-keys"><kbd>A</kbd> + <kbd>click</kbd> × 3</div>
-              </div>
-              <div class="shortcut-row" data-search="drawing curved line l click click click">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Curved line</span>
-                  <span class="shortcut-description">L, then click each bend point</span>
-                </div>
-                <div class="shortcut-keys"><kbd>L</kbd> + <kbd>click</kbd> × 3</div>
-              </div>
-              <div class="shortcut-row" data-search="drawing crop image double click enter">
-                <div class="shortcut-info"><span class="shortcut-title">Crop image</span></div>
-                <div class="shortcut-keys"><kbd>double-click</kbd> / <kbd>Enter</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing finish image cropping enter esc">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Finish image cropping</span>
-                </div>
-                <div class="shortcut-keys"><kbd>Enter</kbd> / <kbd>Esc</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing prevent arrow binding ctrl">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Prevent arrow binding</span>
-                  <span class="shortcut-description">Hold while dragging the endpoint</span>
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd></div>
-              </div>
-            </div>
-
-            <div class="shortcut-card">
-              <h6 class="shortcut-group-title">View</h6>
-              <div class="shortcut-row" data-search="drawing zoom in ctrl plus">
-                <div class="shortcut-info"><span class="shortcut-title">Zoom in</span></div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>+</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing zoom out ctrl minus">
-                <div class="shortcut-info"><span class="shortcut-title">Zoom out</span></div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>-</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing reset zoom ctrl 0">
-                <div class="shortcut-info"><span class="shortcut-title">Reset zoom</span></div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>0</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing zoom to fit all elements shift 1">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Zoom to fit all elements</span>
-                </div>
-                <div class="shortcut-keys"><kbd>Shift</kbd> + <kbd>1</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing zoom to selection shift 2">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Zoom to selection</span>
-                </div>
-                <div class="shortcut-keys"><kbd>Shift</kbd> + <kbd>2</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing move page up down pgup pgdn">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Move page up/down</span>
-                </div>
-                <div class="shortcut-keys"><kbd>PgUp</kbd> / <kbd>PgDn</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing move page left right shift pgup pgdn">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Move page left/right</span>
-                </div>
-                <div class="shortcut-keys"><kbd>Shift</kbd> + <kbd>PgUp</kbd>/<kbd>PgDn</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing zen mode alt z hide chrome">
-                <div class="shortcut-info"><span class="shortcut-title">Zen mode</span></div>
-                <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>Z</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing snap to objects alt s">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Snap to objects</span>
-                  <span class="shortcut-description"
-                    >On a drawing note this chord is the canvas's — the app's PDF export steps aside
-                    here</span
-                  >
-                </div>
-                <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>S</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing toggle grid ctrl apostrophe quote">
-                <div class="shortcut-info"><span class="shortcut-title">Toggle grid</span></div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>'</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing view mode alt r read only">
-                <div class="shortcut-info"><span class="shortcut-title">View mode</span></div>
-                <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>R</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing canvas shape properties alt slash">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Canvas &amp; Shape properties</span>
-                </div>
-                <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>/</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing find on canvas ctrl f search">
-                <div class="shortcut-info"><span class="shortcut-title">Find on canvas</span></div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>F</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing command palette ctrl slash shift p">
-                <div class="shortcut-info"><span class="shortcut-title">Command palette</span></div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>/</kbd> / <kbd data-mod-key>Ctrl</kbd> +
-                  <kbd>Shift</kbd> + <kbd>P</kbd>
-                </div>
-              </div>
-            </div>
-
-            <div class="shortcut-card">
-              <h6 class="shortcut-group-title">Editor</h6>
-              <div
-                class="shortcut-row"
-                data-search="drawing create flowchart generic element ctrl arrow"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Create a flowchart from a generic element</span>
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>arrows</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing navigate flowchart alt arrow">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Navigate a flowchart</span>
-                </div>
-                <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>arrows</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing move canvas space drag wheel">
-                <div class="shortcut-info"><span class="shortcut-title">Move canvas</span></div>
-                <div class="shortcut-keys"><kbd>Space</kbd>+drag / wheel+drag</div>
-              </div>
-              <div class="shortcut-row" data-search="drawing reset the canvas ctrl delete">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Reset the canvas</span>
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>Delete</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing delete selection del">
-                <div class="shortcut-info"><span class="shortcut-title">Delete</span></div>
-                <div class="shortcut-keys"><kbd>Del</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing cut ctrl x">
-                <div class="shortcut-info"><span class="shortcut-title">Cut</span></div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>X</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing copy ctrl c">
-                <div class="shortcut-info"><span class="shortcut-title">Copy</span></div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>C</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing paste ctrl v">
-                <div class="shortcut-info"><span class="shortcut-title">Paste</span></div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>V</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing paste as plaintext ctrl shift v">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Paste as plaintext</span>
-                </div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>V</kbd>
-                </div>
-              </div>
-              <div class="shortcut-row" data-search="drawing select all ctrl a">
-                <div class="shortcut-info"><span class="shortcut-title">Select all</span></div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>A</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing add element to selection shift click">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Add element to selection</span>
-                </div>
-                <div class="shortcut-keys"><kbd>Shift</kbd> + <kbd>click</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing deep select ctrl click">
-                <div class="shortcut-info"><span class="shortcut-title">Deep select</span></div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>click</kbd></div>
-              </div>
-              <div
-                class="shortcut-row"
-                data-search="drawing deep select within box prevent dragging ctrl drag"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Deep select within box, and prevent dragging</span>
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>drag</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing copy to clipboard as png shift alt c">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Copy to clipboard as PNG</span>
-                </div>
-                <div class="shortcut-keys">
-                  <kbd>Shift</kbd> + <kbd data-alt-key>Alt</kbd> + <kbd>C</kbd>
-                </div>
-              </div>
-              <div class="shortcut-row" data-search="drawing copy styles ctrl alt c">
-                <div class="shortcut-info"><span class="shortcut-title">Copy styles</span></div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd data-alt-key>Alt</kbd> + <kbd>C</kbd>
-                </div>
-              </div>
-              <div class="shortcut-row" data-search="drawing paste styles ctrl alt v">
-                <div class="shortcut-info"><span class="shortcut-title">Paste styles</span></div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd data-alt-key>Alt</kbd> + <kbd>V</kbd>
-                </div>
-              </div>
-              <div class="shortcut-row" data-search="drawing send to back ctrl shift bracket left">
-                <div class="shortcut-info"><span class="shortcut-title">Send to back</span></div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>[</kbd>
-                </div>
-              </div>
-              <div
-                class="shortcut-row"
-                data-search="drawing bring to front ctrl shift bracket right"
-              >
-                <div class="shortcut-info"><span class="shortcut-title">Bring to front</span></div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>]</kbd>
-                </div>
-              </div>
-              <div class="shortcut-row" data-search="drawing send backward ctrl bracket left">
-                <div class="shortcut-info"><span class="shortcut-title">Send backward</span></div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>[</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing bring forward ctrl bracket right">
-                <div class="shortcut-info"><span class="shortcut-title">Bring forward</span></div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>]</kbd></div>
-              </div>
-              <div
-                class="shortcut-row"
-                data-search="drawing align top bottom left right ctrl shift arrows"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Align top / bottom / left / right</span>
-                </div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>arrows</kbd>
-                </div>
-              </div>
-              <div class="shortcut-row" data-search="drawing duplicate ctrl d alt drag">
-                <div class="shortcut-info"><span class="shortcut-title">Duplicate</span></div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>D</kbd> / <kbd data-alt-key>Alt</kbd>+
-                  <kbd>drag</kbd>
-                </div>
-              </div>
-              <div class="shortcut-row" data-search="drawing lock unlock selection ctrl shift l">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Lock/unlock selection</span>
-                </div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>L</kbd>
-                </div>
-              </div>
-              <div class="shortcut-row" data-search="drawing undo ctrl z">
-                <div class="shortcut-info"><span class="shortcut-title">Undo</span></div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>Z</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing redo ctrl shift z ctrl y">
-                <div class="shortcut-info"><span class="shortcut-title">Redo</span></div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd>
-                </div>
-              </div>
-              <div class="shortcut-row" data-search="drawing group selection ctrl g">
-                <div class="shortcut-info"><span class="shortcut-title">Group selection</span></div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>G</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing ungroup selection ctrl shift g">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Ungroup selection</span>
-                </div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>G</kbd>
-                </div>
-              </div>
-              <div class="shortcut-row" data-search="drawing wrap unwrap selection w">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Wrap or unwrap selection</span>
-                </div>
-                <div class="shortcut-keys"><kbd>W</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing toggle text auto resizing alt w">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Toggle text auto-resizing</span>
-                </div>
-                <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>W</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing flip horizontal shift h">
-                <div class="shortcut-info"><span class="shortcut-title">Flip horizontal</span></div>
-                <div class="shortcut-keys"><kbd>Shift</kbd> + <kbd>H</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing flip vertical shift v">
-                <div class="shortcut-info"><span class="shortcut-title">Flip vertical</span></div>
-                <div class="shortcut-keys"><kbd>Shift</kbd> + <kbd>V</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing show stroke color picker s">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Show stroke color picker</span>
-                </div>
-                <div class="shortcut-keys"><kbd>S</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing show background color picker g">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Show background color picker</span>
-                </div>
-                <div class="shortcut-keys"><kbd>G</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing show font picker shift f">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Show font picker</span>
-                </div>
-                <div class="shortcut-keys"><kbd>Shift</kbd> + <kbd>F</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing decrease font size ctrl shift less">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Decrease font size</span>
-                </div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>&lt;</kbd>
-                </div>
-              </div>
-              <div class="shortcut-row" data-search="drawing increase font size ctrl shift greater">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Increase font size</span>
-                </div>
-                <div class="shortcut-keys">
-                  <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>&gt;</kbd>
-                </div>
-              </div>
-              <div
-                class="shortcut-row"
-                data-search="drawing add update link selected shape ctrl k conflict sheet"
-              >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Add / Update link for a selected shape</span>
-                  <span class="shortcut-description"
-                    >Inside the canvas; outside it Ctrl + K opens this sheet — the app keeps the
-                    chord</span
-                  >
-                </div>
-                <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>K</kbd></div>
-              </div>
-              <div class="shortcut-row" data-search="drawing toggle shape type tab shift tab">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Toggle shape type</span>
-                </div>
-                <div class="shortcut-keys"><kbd>Tab</kbd> / <kbd>Shift</kbd> + <kbd>Tab</kbd></div>
-              </div>
-            </div>
-          </section>
         </div>
 
         <div id="shortcutNoResults" class="shortcut-no-results" style="display: none">

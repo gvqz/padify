@@ -107,24 +107,34 @@
    itself is gone; see docs/ARCHITECTURE-REVIEW.md and
    scripts/css-fold-plan.json for the verified mapping). */
 
-/* ---- the shortcuts sheet (#179, attempt 2) ------------------------------
-   A wide, two-column sheet of category islands — the flow excalidraw.com's
-   own shortcuts dialog uses — instead of one 720px stack of 111 rows.
-   Search + pane pills ride a sticky toolbar, so they stay pinned at the
-   bottom of the Drawing pane. Rows are single-line: label left, keycaps
-   right; a description only survives where it teaches something the label
-   and the keys cannot say. */
+/* ---- the shortcuts sheet (#179, attempt 3) ------------------------------
+   The Settings dialog's own two-pane shape: the search rides the header
+   (the same slot #prefSearch owns), a left icon nav switches panes, and
+   the active pane scrolls its own sections. Rows speak the Discord
+   keybind pattern — label left, keycap chips right, hairline dividers
+   between rows, a hint only where it teaches something the label and the
+   keys cannot say. A live query flattens every pane and the nav steps
+   aside, exactly the settings' is-searching flow. */
 #keyboardShortcutsModal .modal-dialog {
-  width: min(920px, calc(100vw - 32px));
-  max-width: 920px;
+  width: min(880px, calc(100vw - 32px));
+}
+
+/* The content clips to the viewport: header and footer stay put, the
+   layout between them flexes and each column scrolls on its own — the
+   settings modal's frame, shared so the two dialogs read as siblings. */
+#keyboardShortcutsModal .modal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 72px);
 }
 
 #keyboardShortcutsModal .modal-header {
-  padding: 18px 24px 12px;
+  padding: 18px 22px 14px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
+  flex: 0 0 auto;
 }
 
 #keyboardShortcutsModal .modal-header .close {
@@ -132,220 +142,246 @@
 }
 
 #keyboardShortcutsModal .modal-body {
-  padding: 0 20px 20px;
-  /* 190px underestimated the real header+footer chrome — the dialog poked
-     ~9px below an 800px viewport. 220px keeps the whole frame on screen. */
-  max-height: calc(100vh - 220px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  padding: 0;
+  min-height: 0;
+  overflow: hidden;
+  flex: 1 1 auto;
+  display: flex;
 }
 
 #keyboardShortcutsModal .modal-footer {
-  padding: 14px 24px 18px;
+  padding: 13px 22px 17px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex: 0 0 auto;
 }
 
-/* Sticky toolbar: search + pills pinned above the scrolling island list.
-   Same surface the vercel dialog frame paints (body .modal-content), so the
-   bar and the frame read as one chrome while rows scroll underneath. */
-.shortcut-toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  margin: 0 -20px 14px;
-  padding: 12px 20px 10px;
-  background: var(--vz-bg-elevated);
-  border-bottom: 1px solid var(--vz-border);
-}
-
-/* Search input */
-.shortcut-search-wrap {
-  position: relative;
-  margin-bottom: 10px;
-}
-
-.shortcut-search-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 15px;
-  height: 15px;
-  color: var(--vz-fg-muted);
-  pointer-events: none;
-}
-
-.shortcut-search-input {
-  width: 100%;
-  height: 34px;
-  padding: 0 14px 0 36px;
-  border-radius: var(--vz-radius);
-  border: 1px solid var(--vz-border);
-  background: var(--vz-bg-subtle);
-  color: var(--vz-fg);
-  font-size: 13px;
-  outline: none;
-  transition: border-color var(--vz-dur) ease, background-color var(--vz-dur) ease, box-shadow var(--vz-dur) ease;
-}
-
-.shortcut-search-input::placeholder {
-  color: var(--vz-fg-muted);
-}
-
-.shortcut-search-input:focus {
-  border-color: var(--vz-border-strong);
-  background: var(--vz-bg-elevated);
-  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
-}
-
-body.dark .shortcut-search-input:focus {
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
-}
-
-/* ---- the pane switcher ------------------------------------------------ */
-.shortcut-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.shortcut-tab {
+/* Search — the settings search's shape, scoped to this dialog's id the
+   way #prefSearch is scoped to its input. */
+#shortcutSearch {
   appearance: none;
+  -webkit-appearance: none;
+  height: 34px;
+  width: 230px;
+  padding: 0 30px 0 32px;
   border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  background-color: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+  font-size: 12.5px;
+  font-weight: 500;
+  box-shadow: none;
+  cursor: text;
+  transition: border-color var(--vz-dur) ease, box-shadow var(--vz-dur) ease;
+}
+
+#shortcutSearch::placeholder {
+  color: var(--vz-fg-muted);
+}
+
+#shortcutSearch:hover {
+  border-color: var(--vz-border-strong);
+}
+
+#shortcutSearch:focus {
+  border-color: var(--vz-border-strong);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
+  outline: none;
+}
+
+#shortcutSearch:focus-visible {
+  outline: none;
+}
+
+body.dark #shortcutSearch {
+  background-color: var(--vz-bg-subtle);
+  border-color: var(--vz-border);
+  color: var(--vz-fg);
+  box-shadow: none;
+}
+
+body.dark #shortcutSearch:focus {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+}
+
+#shortcutSearch::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  background: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23888888' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 4l8 8M12 4l-8 8'/%3E%3C/svg%3E")
+    center no-repeat;
+  background-size: 12px;
+}
+
+/* Two-pane layout — the settings workspace's grid. */
+.sc-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
+}
+
+/* Search mode: the nav steps aside and the panes take the full width. */
+.sc-layout.is-searching {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sc-layout.is-searching .sc-nav {
+  display: none;
+}
+
+/* Pane nav (left column) — the settings nav's visual language. */
+.sc-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 10px;
+  border-right: 1px solid var(--vz-border);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.sc-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 11px;
+  border: none;
+  border-radius: var(--vz-radius);
   background: transparent;
   color: var(--vz-fg-muted);
-  border-radius: 999px;
-  padding: 4px 12px;
   font-size: 12.5px;
   font-weight: 500;
   line-height: 1.2;
+  text-align: left;
+  white-space: nowrap;
   cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease;
+  position: relative;
+  box-shadow: none;
+  transition: background-color var(--vz-dur) ease, color var(--vz-dur) ease;
 }
 
-.shortcut-tab:hover {
-  color: var(--vz-fg);
-  border-color: var(--vz-fg-muted);
+.sc-nav-item svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
 }
 
-.shortcut-tab.is-active {
-  background: var(--vz-primary);
-  border-color: var(--vz-primary);
-  color: var(--vz-primary-fg);
-}
-
-.shortcut-tab:focus-visible {
-  outline: 2px solid var(--vz-primary);
-  outline-offset: 2px;
-}
-
-/* ---- the island list ----------------------------------------------------
-   Two balanced columns (multicol, so islands keep their own height and
-   reflow when a pane or a query hides siblings). */
-#shortcutList {
-  columns: 2;
-  column-gap: 12px;
-}
-
-#keyboardShortcutsModal .shortcut-section {
-  break-inside: avoid;
-  margin: 0 0 12px;
-  border: 1px solid var(--vz-border);
-  border-radius: 10px;
-  background: var(--vz-bg-elevated);
-  overflow: hidden;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-}
-
-/* Island header: icon + title (+ a hint that earns its line). */
-#keyboardShortcutsModal .shortcut-island-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 9px 12px 8px;
-  border-bottom: 1px solid var(--vz-border);
+.sc-nav-item:hover {
   background: var(--vz-bg-subtle);
+  color: var(--vz-fg);
 }
 
-#keyboardShortcutsModal .shortcut-island-icon {
-  flex: none;
-  width: 16px;
-  height: 16px;
+.sc-nav-item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--vz-border-strong);
+}
+
+.sc-nav-item.is-active {
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg);
+  font-weight: 600;
+}
+
+.sc-nav-item.is-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--vz-primary);
+}
+
+/* Panes (right column) — the active pane scrolls its own sections. */
+.sc-panes {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 20px 20px;
+}
+
+/* Sections — a floating head (icon chip + title + hint) above a bordered
+   card, the settings pane's own rhythm. The section itself carries no
+   chrome; every card does, so the Drawing pane's three groups read as
+   three cards under one head. */
+#keyboardShortcutsModal .shortcut-section {
+  margin: 0 0 18px;
+}
+
+#keyboardShortcutsModal .shortcut-section:last-child {
+  margin-bottom: 0;
+}
+
+.sc-section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 6px;
+  margin: 0 2px 10px;
+}
+
+.sc-section-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--vz-radius);
   color: var(--vz-fg-muted);
-  margin-top: 1px;
+  background: var(--vz-bg-subtle);
+  border: 1px solid var(--vz-border);
+  box-shadow: none;
 }
 
-#keyboardShortcutsModal .shortcut-island-icon svg {
-  width: 16px;
-  height: 16px;
-  display: block;
+.sc-section-icon svg {
+  width: 15px;
+  height: 15px;
 }
 
-#keyboardShortcutsModal .shortcut-island-copy {
+.sc-section-copy {
   min-width: 0;
 }
 
-#keyboardShortcutsModal .shortcut-island-title {
+.sc-section-title {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--vz-fg);
-  line-height: 1.3;
   letter-spacing: -0.005em;
 }
 
-#keyboardShortcutsModal .shortcut-island-hint {
+.sc-section-hint {
   margin: 1px 0 0;
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--vz-fg-muted);
   line-height: 1.4;
 }
 
+/* Cards — bordered row stacks with hairline dividers. */
 #keyboardShortcutsModal .shortcut-card {
-  margin: 0;
-}
-
-/* The Drawing pane is one section carrying the vendor's three cards
-   (Tools / View / Editor) — each card is its own island, and the section
-   itself dissolves so the cards flow through both columns. */
-#keyboardShortcutsModal .shortcut-section[data-pane='drawing'] {
-  break-inside: auto;
-  border: 0;
-  border-radius: 0;
-  background: none;
+  background: var(--vz-bg-elevated);
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius-md);
   box-shadow: none;
-  overflow: visible;
-  margin: 0;
-}
-
-#keyboardShortcutsModal .shortcut-section[data-pane='drawing'] > .shortcut-island-head {
-  border: 1px solid var(--vz-border);
-  border-radius: 10px;
-  background: var(--vz-bg-elevated);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  margin-bottom: 12px;
-  break-after: avoid;
-}
-
-#keyboardShortcutsModal .shortcut-section[data-pane='drawing'] > .shortcut-card {
-  break-inside: avoid;
-  border: 1px solid var(--vz-border);
-  border-radius: 10px;
-  background: var(--vz-bg-elevated);
   overflow: hidden;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  margin-bottom: 12px;
+  margin: 0 0 14px;
 }
 
-/* The group headings inside the Drawing pane (Tools / View / Editor) —
-   the vendor's own HelpDialog speaks these three cards. */
+#keyboardShortcutsModal .shortcut-section:last-child .shortcut-card:last-child {
+  margin-bottom: 0;
+}
+
+/* The Drawing pane's group headings (Tools / View / Editor) — the
+   vendor's own HelpDialog speaks these three cards. */
 #keyboardShortcutsModal .shortcut-group-title {
-  padding: 8px 12px;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--vz-border);
   background: var(--vz-bg-subtle);
   font-size: 11px;
@@ -356,52 +392,61 @@ body.dark .shortcut-search-input:focus {
   margin: 0;
 }
 
-/* ---- rows ---------------------------------------------------------------
-   Single line: label left (ellipsizing rather than breaking the rhythm),
-   keys right. Dividers live BETWEEN rows only, so a row that follows a
-   group title doesn't double the title's own border. */
+/* ---- rows — the keybind treatment ---------------------------------------
+   Label left, keys right, a hairline BETWEEN rows only (a row that
+   follows a group title doesn't double the title's own border). The
+   label keeps one line and ellipsizes rather than breaking the rhythm;
+   the hint below it can wrap. */
 #keyboardShortcutsModal .shortcut-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 6px 12px;
+  gap: 16px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--vz-border);
   transition: background-color 100ms ease;
 }
 
-#keyboardShortcutsModal .shortcut-row + .shortcut-row {
-  border-top: 1px solid var(--vz-border);
+#keyboardShortcutsModal .shortcut-row:first-child {
+  border-top: none;
 }
 
 #keyboardShortcutsModal .shortcut-row:hover {
   background-color: var(--vz-bg-subtle);
 }
 
-#keyboardShortcutsModal .shortcut-info {
+#keyboardShortcutsModal .sc-row-copy {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
   flex: 1 1 auto;
 }
 
-#keyboardShortcutsModal .shortcut-title {
+#keyboardShortcutsModal .sc-row-title {
   font-size: 13px;
   font-weight: 500;
   color: var(--vz-fg);
   line-height: 1.35;
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+#keyboardShortcutsModal .sc-row-title > :first-child {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-#keyboardShortcutsModal .shortcut-description {
-  font-size: 11px;
+#keyboardShortcutsModal .sc-row-hint {
+  font-size: 11.5px;
   color: var(--vz-fg-muted);
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
-#keyboardShortcutsModal .shortcut-badge {
+#keyboardShortcutsModal .sc-badge {
   font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.03em;
@@ -411,39 +456,42 @@ body.dark .shortcut-search-input:focus {
   background: var(--vz-bg-subtle);
   border: 1px solid var(--vz-border);
   white-space: nowrap;
+  flex: none;
 }
 
 #keyboardShortcutsModal .shortcut-keys {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 3px;
-  row-gap: 3px;
+  gap: 4px;
   color: var(--vz-fg-muted);
   font-size: 11px;
   font-weight: 500;
   justify-content: flex-end;
   flex-wrap: wrap;
+  max-width: 55%;
 }
 
-/* Keycaps */
+/* Keycaps — the keybind chip: a touch larger than the toolbar's, one
+   bottom edge for depth, monospaced so chords align down the column. */
 #keyboardShortcutsModal kbd {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
   font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--vz-fg);
   background: var(--vz-bg-subtle);
   border: 1px solid var(--vz-border-strong);
-  border-radius: 4.5px;
+  border-radius: 5px;
   box-shadow: 0 1px 0 var(--vz-border-strong);
   text-shadow: none;
   line-height: 1;
+  white-space: nowrap;
 }
 
 body.dark #keyboardShortcutsModal kbd {
@@ -484,23 +532,47 @@ body.dark #keyboardShortcutsModal kbd {
   margin: 0;
 }
 
-/* Mobile: one column, the toolbar still rides along. */
+/* Mobile: the nav becomes a horizontal rail above the panes. */
 @media (max-width: 640px) {
   #keyboardShortcutsModal .modal-dialog {
     width: calc(100vw - 16px);
   }
 
-  #keyboardShortcutsModal .modal-body {
-    padding: 0 12px 14px;
+  .sc-layout {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .shortcut-toolbar {
-    margin: 0 -12px 12px;
-    padding: 10px 12px 8px;
+  .sc-nav {
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none;
+    border-bottom: 1px solid var(--vz-border);
+    padding: 8px 10px;
+    flex: none;
   }
 
-  #shortcutList {
-    columns: 1;
+  .sc-nav-item {
+    flex: none;
+    width: auto;
+  }
+
+  .sc-nav-item.is-active::before {
+    left: 11px;
+    right: 11px;
+    top: auto;
+    bottom: 0;
+    width: auto;
+    height: 2px;
+  }
+
+  .sc-panes {
+    padding: 12px 12px 16px;
+  }
+
+  #keyboardShortcutsModal .shortcut-keys {
+    max-width: 50%;
   }
 }
 

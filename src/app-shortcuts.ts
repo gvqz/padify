@@ -35,8 +35,10 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
   // ---- Keyboard shortcuts search filtering & reset ------------------
   const shortcutSearchInput = document.getElementById('shortcutSearch') as HTMLInputElement | null;
   const shortcutNoResults = document.getElementById('shortcutNoResults');
+  const shortcutLayout = document.getElementById('scLayout');
+  const shortcutPanes = document.getElementById('shortcutList');
   const shortcutSections = document.querySelectorAll<HTMLElement>('.shortcut-section');
-  const shortcutTabs = document.querySelectorAll<HTMLButtonElement>('.shortcut-tab');
+  const shortcutTabs = document.querySelectorAll<HTMLButtonElement>('.sc-nav-item');
 
   /** The active pane: 'all' shows every section; a named pane shows only
    * its own. A non-empty SEARCH overrides the pane — a query looks
@@ -50,13 +52,41 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
       const on = tab.dataset.pane === pane;
       tab.classList.toggle('is-active', on);
       tab.setAttribute('aria-selected', String(on));
+      // The roving tabindex tracks the selection: only the active item
+      // joins the tab order (the settings nav's pattern).
+      tab.tabIndex = on ? 0 : -1;
     });
     filterShortcuts(shortcutSearchInput?.value ?? '');
+    // The pane switch lands the reader at its head, not wherever the
+    // previous pane's scroll happened to be.
+    if (shortcutPanes) shortcutPanes.scrollTop = 0;
   };
 
   shortcutTabs.forEach((tab) => {
     tab.addEventListener('click', () => setPane(tab.dataset.pane ?? 'all'));
   });
+
+  // The nav is a roving-tabindex tablist, the settings nav's pattern:
+  // arrows walk the items, focus follows the walk, Home/End jump.
+  const nav = document.getElementById('scNav');
+  if (nav) {
+    nav.addEventListener('keydown', (event) => {
+      const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'];
+      if (!keys.includes(event.key)) return;
+      const items = [...nav.querySelectorAll<HTMLButtonElement>('.sc-nav-item')];
+      if (items.length === 0) return;
+      const current = items.findIndex((item) => item.classList.contains('is-active'));
+      let next = current;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = current + 1;
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = current - 1;
+      if (event.key === 'Home') next = 0;
+      if (event.key === 'End') next = items.length - 1;
+      next = Math.max(0, Math.min(items.length - 1, next));
+      event.preventDefault();
+      setPane(items[next].dataset.pane ?? 'all');
+      items[next].focus();
+    });
+  }
 
   const filterShortcuts = (query: string): void => {
     const q = query.trim().toLowerCase();
@@ -90,6 +120,10 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
       section.style.display = paneOk && sectionVisibleCount > 0 ? 'block' : 'none';
       if (paneOk) totalVisible += sectionVisibleCount;
     });
+
+    // A live query flattens every pane — the nav steps aside (the
+    // settings' is-searching flow) so the matches use the full width.
+    shortcutLayout?.classList.toggle('is-searching', searching);
 
     if (shortcutNoResults) {
       shortcutNoResults.style.display = totalVisible === 0 ? 'flex' : 'none';

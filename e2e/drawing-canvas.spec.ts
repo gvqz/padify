@@ -582,11 +582,15 @@ test.describe('the drawing canvas', () => {
     await expect(undoRow).toContainText('Ctrl');
     await expect(undoRow).not.toContainText('⌘');
 
-    // The search door overrides the pane: from the Drawing pill, a query
-    // still finds rows everywhere in the sheet.
-    await page.locator('.shortcut-tab[data-pane="drawing"]').click();
+    // The search door overrides the pane: from the Drawing nav rail, a
+    // query still finds rows everywhere in the sheet.
+    await page.locator('.sc-nav-item[data-pane="drawing"]').click();
     await page.locator('#shortcutSearch').fill('sticky');
     await expect(modal.locator('[data-search="drawing sticky note n excalidraw"]')).toBeVisible();
+    // A live query flattens every pane — the nav steps aside (the
+    // settings' is-searching flow) and the matches take the full width.
+    await expect(modal.locator('.sc-layout')).toHaveClass(/is-searching/);
+    await expect(modal.locator('.sc-nav')).toBeHidden();
     // The search reaches the other panes too — the markdown pane's bold
     // row answers the same query family.
     await page.locator('#shortcutSearch').fill('strikethrough');
@@ -607,12 +611,13 @@ test.describe('the drawing canvas', () => {
       }),
     ).not.toBeVisible();
     await page.locator('#shortcutSearch').fill('');
+    await expect(modal.locator('.sc-layout')).not.toHaveClass(/is-searching/);
 
-    // The redesign's shape: the search + pills ride a sticky toolbar above a
-    // two-column island flow (one column on narrow viewports).
-    await expect(modal.locator('.shortcut-toolbar')).toHaveCSS('position', 'sticky');
-    await expect(modal.locator('#shortcutList')).toHaveCSS('column-count', '2');
+    // The redesign's shape: the Settings dialog's two-pane frame — the
+    // pane nav rails on the left on wide viewports and rides the top on
+    // narrow ones.
+    await expect(modal.locator('.sc-layout')).toHaveCSS('grid-template-columns', /^208px/);
     await page.setViewportSize({ width: 480, height: 800 });
-    await expect(modal.locator('#shortcutList')).toHaveCSS('column-count', '1');
+    await expect(modal.locator('.sc-nav')).toHaveCSS('flex-direction', 'row');
   });
 });
