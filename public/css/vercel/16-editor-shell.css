@@ -532,6 +532,35 @@ body:has(#note.drawing-zen-mode) #tabRail {
   box-shadow: none;
 }
 
+/* ---- The zoom menu opens UP, like the site's ----
+   A/B (2026-11-24, same viewport, same vendor pin vs excalidraw.com):
+   the site's zoom menu flips ABOVE the footer trigger (popper resolves
+   side=top, wrapper translate(16px, 546px), transform-origin 0% 194px);
+   inside the island this pin's popper resolves side=bottom — wrapper
+   translate(256px, 774px), --radix-popper-available-height: 26px — and
+   the menu renders 194px tall starting 5px under the 100% button,
+   clipping at the viewport bottom. The vendor passes no `side` prop
+   (DropdownMenuContent speaks align + sideOffset only), so the flip
+   belongs to the popper, and the popper is the vendor's. Replicating the
+   site's geometry here instead: radix anchors the wrapper 8px BELOW the
+   trigger (sideOffset), so an absolutely-positioned content pinned
+   bottom: (trigger height + sideOffset + gap) from the wrapper's top
+   edge grows upward and stays put as the menu reflows. The wrapper has
+   no height once its content leaves the flow, so `bottom` measures from
+   the anchor point: trigger var(--lg-button-size) (2.25rem) + 8px
+   sideOffset + 8px gap = calc(var(--lg-button-size) + 16px). Selector
+   sits one class above the generic reset below (and a mile above the
+   app-wide `.dropdown-menu { top: 124% }`, whose top would pin an
+   absolutely-positioned element 124% down). */
+#note [data-drawing-canvas] .excalidraw .dropdown-menu.zoom-menu {
+  position: absolute;
+  top: auto;
+  right: auto;
+  left: 0;
+  bottom: calc(var(--lg-button-size, 2.25rem) + 16px);
+  margin: 0;
+}
+
 #note [data-drawing-canvas] .excalidraw .container {
   width: auto;
   padding: 0;

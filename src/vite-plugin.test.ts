@@ -100,17 +100,104 @@ describe('stripDependencyEvalSinks', () => {
 describe('stubExcalidrawFontSubsetting', () => {
   const VENDOR = '/repo/node_modules/@excalidraw/excalidraw/dist/prod';
 
-  it('load() answers the pass-through stub for the resolved subset chunks', () => {
+  it('load() answers the subsetter stub for the shared chunk', () => {
     const plugin = stubExcalidrawFontSubsetting();
     const load = loadOf(plugin);
-    for (const name of ['subset-shared.chunk.js', 'subset-worker.chunk.js']) {
-      const code = load(`${VENDOR}/${name}`);
-      expect(code, name).not.toBeNull();
-      expect(code).toContain('export const subsetToBase64');
-      expect(code).toContain('export const toBase64');
-      expect(code).toContain('data:font/woff2;base64');
-      expect(code).not.toContain('throw new Error');
+    const code = load(`${VENDOR}/subset-shared.chunk.js`);
+    expect(code).not.toBeNull();
+    expect(code).toContain('export const subsetToBase64');
+    expect(code).toContain('export const toBase64');
+    expect(code).toContain('data:font/woff2;base64');
+    expect(code).not.toContain('throw new Error');
+  });
+
+  it('load() answers the worker chunk with a WorkerUrl export — the pool\u2019s one question', () => {
+    // The vendor destructures { WorkerUrl } from this chunk and hands it to
+    // WorkerPool.create; undefined made create throw WorkerUrlNotDefinedError
+    // on every export-dialog open (console.error — audited 2026-11-24). The
+    // stub answers with a URL derived from its own module URL: in prod the
+    // stub is inlined into the vendor's assets/ chunk, so stripping the last
+    // segment lands on the emitted padify-subset-worker.js sibling.
+    const plugin = stubExcalidrawFontSubsetting();
+    const code = loadOf(plugin)(`${VENDOR}/subset-worker.chunk.js`);
+    expect(code).not.toBeNull();
+    expect(code).toContain('export const WorkerUrl');
+    expect(code).toContain('padify-subset-worker.js');
+    expect(code).not.toContain('export const subsetToBase64');
+    expect(code).not.toContain('throw new Error');
+  });
+
+  it('generateBundle() emits the identity subset worker the WorkerUrl points at', () => {
+    const plugin = stubExcalidrawFontSubsetting();
+    const hook = plugin.generateBundle;
+    if (typeof hook !== 'function') throw new Error('generateBundle hook missing');
+    const emitted: Record<string, string> = {};
+    (
+      hook as unknown as (this: {
+        emitFile(file: { type: string; fileName: string; source: string }): void;
+      }) => void
+    ).call({
+      emitFile(file: { type: string; fileName: string; source: string }) {
+        emitted[file.fileName] = file.source;
+      },
+    });
+    const worker = emitted['assets/padify-subset-worker.js'];
+    expect(worker).toBeDefined();
+    expect(worker).toContain('self.onmessage');
+    // the vendor's job shape: {command, arrayBuffer, codePoints}, transfer in,
+    // the buffer answers transferred back — command 0 is the stub's Subset.
+    expect(worker).toContain('command === 0');
+    expect(worker).toContain('postMessage(arrayBuffer, { transfer: [arrayBuffer] })');
+  });
+
+  it('configureServer() answers any *padify-subset-worker.js request in dev', () => {
+    const plugin = stubExcalidrawFontSubsetting();
+    const hook = plugin.configureServer as unknown as
+      ((server: unknown) => void) | { handler: (server: unknown) => void };
+    const configure = typeof hook === 'function' ? hook : hook.handler;
+    let registered: ((req: { url?: string }, res: unknown, next: () => void) => void) | undefined;
+    configure({
+      middlewares: {
+        use: (handler: (req: { url?: string }, res: unknown, next: () => void) => void) => {
+          registered = handler;
+        },
+      },
+    });
+    if (!registered) throw new Error('no dev middleware registered');
+    const answer = registered;
+    // The virtual stub resolves the sibling under /@id/… — both spellings
+    // must answer, everything else passes through.
+    for (const url of [
+      '/@id/padify-subset-worker.js',
+      '/assets/padify-subset-worker.js',
+      '/padify-subset-worker.js',
+    ]) {
+      const headers: Record<string, string> = {};
+      let body: unknown = null;
+      let passed = false;
+      registered(
+        { url },
+        {
+          setHeader: (name: string, value: string) => (headers[name] = value),
+          end: (buf: unknown) => (body = buf),
+        },
+        () => {
+          passed = true;
+        },
+      );
+      expect(passed, url).toBe(false);
+      expect(headers['Content-Type'], url).toBe('text/javascript');
+      expect(String(body), url).toContain('self.onmessage');
     }
+    let passed = false;
+    answer(
+      { url: '/src/editor/drawing/canvas.ts' },
+      { setHeader: () => undefined, end: () => undefined },
+      () => {
+        passed = true;
+      },
+    );
+    expect(passed).toBe(true);
   });
 
   it('resolveId() claims the vendor\u2019s internal dynamic imports (the dev path)', () => {
