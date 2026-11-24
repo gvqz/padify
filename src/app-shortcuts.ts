@@ -39,15 +39,38 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
   const shortcutPanes = document.getElementById('shortcutList');
   const shortcutSections = document.querySelectorAll<HTMLElement>('.shortcut-section');
   const shortcutTabs = document.querySelectorAll<HTMLButtonElement>('.sc-nav-item');
+  const shortcutFlow = document.querySelector<HTMLElement>('.sc-flow');
 
   /** The active pane: 'all' shows every section; a named pane shows only
    * its own. A non-empty SEARCH overrides the pane — a query looks
    * everywhere (searching "zen" from General must find the canvas's
-   * chord, not hit a dead end). */
+   * chord, not hit a dead end). The choice persists across opens, the
+   * settings' own memory: reopen lands where the reader left off. */
   let activePane = 'all';
+
+  const PANE_MEMORY_KEY = 'padify.shortcutsPane';
+
+  /** The remembered pane — only one the nav actually speaks (a stale
+   * value from an older build falls through to All, never to a dead
+   * sheet). Storage off / private mode: no memory, no harm. */
+  const readSavedPane = (): string | null => {
+    try {
+      const saved = localStorage.getItem(PANE_MEMORY_KEY);
+      if (saved && nav?.querySelector(`.sc-nav-item[data-pane="${saved}"]`)) return saved;
+    } catch {
+      return null;
+    }
+    return null;
+  };
 
   const setPane = (pane: string): void => {
     activePane = pane;
+    try {
+      localStorage.setItem(PANE_MEMORY_KEY, pane);
+    } catch {
+      // The memory is a nicety, not a contract (the trash-view
+      // preference's own rule) — the sheet works without it.
+    }
     shortcutTabs.forEach((tab) => {
       const on = tab.dataset.pane === pane;
       tab.classList.toggle('is-active', on);
@@ -125,6 +148,12 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
     // settings' is-searching flow) so the matches use the full width.
     shortcutLayout?.classList.toggle('is-searching', searching);
 
+    // The two-column flow is content-gated: a wide frame around a
+    // five-row answer is scenery, not service. The named Drawing pane
+    // (75+ chords) and the full All pane earn it; a search's short
+    // answer reads better down one column.
+    shortcutFlow?.classList.toggle('is-wide', totalVisible >= 16);
+
     if (shortcutNoResults) {
       shortcutNoResults.style.display = totalVisible === 0 ? 'flex' : 'none';
     }
@@ -136,14 +165,15 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
     });
   }
 
-  // The pane the sheet opens on: Ctrl/Cmd+K resets to All; the canvas's
-  // "Keyboard shortcuts" menu row asks for its own pane (issue #179 —
-  // the vendor's shortcut story merged into this sheet, not beside it).
+  // The pane the sheet opens on — an explicit request wins (the canvas's
+  // "Keyboard shortcuts" menu row asks for its Drawing pane, issue #179 —
+  // the vendor's shortcut story merged into this sheet, not beside it);
+  // otherwise the pane the reader last visited; otherwise All.
   notepad.keyboardShortcutsModal.on('show.bs.modal', function () {
     if (shortcutSearchInput) {
       shortcutSearchInput.value = '';
     }
-    setPane(pendingPane ?? 'all');
+    setPane(pendingPane ?? readSavedPane() ?? 'all');
     pendingPane = null;
     if (shortcutSearchInput) {
       setTimeout(() => shortcutSearchInput.focus(), 150);
