@@ -511,6 +511,7 @@ body:has(#note.drawing-zen-mode) #tabRail {
 #note [data-drawing-canvas] .excalidraw .dropdown-menu {
   display: block;
   float: none;
+  position: static;
   min-width: 0;
   padding: 0;
   margin: 5px 0 0;
@@ -521,6 +522,32 @@ body:has(#note.drawing-zen-mode) #tabRail {
   border: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+/* position: static — bootstrap's .dropdown-menu carries position:absolute
+   (02-base.css), which no vendor rule cancels (the vendor expects static
+   and lets radix's popper wrapper own the positioning). An absolute child
+   contributes NOTHING to its parent's max-content sizing, so the popper
+   wrapper (min-width: max-content) collapsed to 0 and the toolbar's
+   extra-tools menu rendered as a 0px-wide sliver — the "⋯ button is
+   broken" report (audited 2026-11-25: padify wrapper w=0 vs the site's
+   197px, menu position absolute vs the site's static). Static puts the
+   menu back into the wrapper's intrinsic sizing, exactly as on the site.
+
+   The vendor's own min-widths, which the reset above out-cascades ((1,3,1)
+   beats every class rule the vendor can write). Mirrored verbatim from
+   the vendor's stylesheet — the site's numbers, so the menus that the
+   vendor sizes by hand keep the site's floor. */
+#note [data-drawing-canvas] .excalidraw .App-toolbar__extra-tools-dropdown {
+  min-width: 11.875rem;
+}
+
+#note [data-drawing-canvas] .excalidraw .mobile-toolbar .App-toolbar__extra-tools-dropdown {
+  min-width: 160px;
+}
+
+#note [data-drawing-canvas] .excalidraw .ttd-dialog-panel__header .dropdown-menu {
+  min-width: 280px;
 }
 
 #note [data-drawing-canvas] .excalidraw .popover {

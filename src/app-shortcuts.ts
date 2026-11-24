@@ -36,12 +36,35 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
   const shortcutSearchInput = document.getElementById('shortcutSearch') as HTMLInputElement | null;
   const shortcutNoResults = document.getElementById('shortcutNoResults');
   const shortcutSections = document.querySelectorAll<HTMLElement>('.shortcut-section');
+  const shortcutTabs = document.querySelectorAll<HTMLButtonElement>('.shortcut-tab');
+
+  /** The active pane: 'all' shows every section; a named pane shows only
+   * its own. A non-empty SEARCH overrides the pane — a query looks
+   * everywhere (searching "zen" from General must find the canvas's
+   * chord, not hit a dead end). */
+  let activePane = 'all';
+
+  const setPane = (pane: string): void => {
+    activePane = pane;
+    shortcutTabs.forEach((tab) => {
+      const on = tab.dataset.pane === pane;
+      tab.classList.toggle('is-active', on);
+      tab.setAttribute('aria-selected', String(on));
+    });
+    filterShortcuts(shortcutSearchInput?.value ?? '');
+  };
+
+  shortcutTabs.forEach((tab) => {
+    tab.addEventListener('click', () => setPane(tab.dataset.pane ?? 'all'));
+  });
 
   const filterShortcuts = (query: string): void => {
     const q = query.trim().toLowerCase();
+    const searching = q.length > 0;
     let totalVisible = 0;
 
     shortcutSections.forEach((section) => {
+      const paneOk = searching || activePane === 'all' || section.dataset.pane === activePane;
       const rows = section.querySelectorAll<HTMLElement>('.shortcut-row');
       let sectionVisibleCount = 0;
 
@@ -52,8 +75,8 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
         if (matches) sectionVisibleCount++;
       });
 
-      section.style.display = sectionVisibleCount > 0 ? 'block' : 'none';
-      totalVisible += sectionVisibleCount;
+      section.style.display = paneOk && sectionVisibleCount > 0 ? 'block' : 'none';
+      if (paneOk) totalVisible += sectionVisibleCount;
     });
 
     if (shortcutNoResults) {
@@ -67,12 +90,31 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
     });
   }
 
+  // The pane the sheet opens on: Ctrl/Cmd+K resets to All; the canvas's
+  // "Keyboard shortcuts" menu row asks for its own pane (issue #179 —
+  // the vendor's shortcut story merged into this sheet, not beside it).
   notepad.keyboardShortcutsModal.on('show.bs.modal', function () {
     if (shortcutSearchInput) {
       shortcutSearchInput.value = '';
-      filterShortcuts('');
+    }
+    setPane(pendingPane ?? 'all');
+    pendingPane = null;
+    if (shortcutSearchInput) {
       setTimeout(() => shortcutSearchInput.focus(), 150);
     }
+  });
+
+  let pendingPane: string | null = null;
+  document.addEventListener('padify:open-shortcuts', (event) => {
+    const detail = (event as CustomEvent<{ pane?: string }>).detail;
+    pendingPane = detail?.pane ?? 'all';
+    if (notepad.keyboardShortcutsModal.hasClass('in')) {
+      setPane(pendingPane);
+      pendingPane = null;
+      return;
+    }
+    closeAllModals();
+    openModal(notepad.keyboardShortcutsModal.get(0));
   });
 
   // ---- the document-level dispatcher --------------------------------
@@ -125,13 +167,18 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
     }
 
     // Alt+S without the primary modifier — exact match, so Ctrl+Alt+S
-    // (the snapshot chord, see snapshots.ts) never rides along.
+    // (the snapshot chord, see snapshots.ts) never rides along. On a
+    // DRAWING note the chord belongs to the canvas instead: the vendor's
+    // own "Snap to objects Alt+S" (its Preferences row and context menu
+    // both advertise it), and a PDF of a drawing note exports nothing —
+    // the deliberate conflict resolution #179 asks for, not an accident.
     if (
       event.altKey &&
       !event.ctrlKey &&
       !event.metaKey &&
       event.code === 'KeyS' &&
-      !altComboBlocked
+      !altComboBlocked &&
+      !document.querySelector('#note [data-drawing-canvas] .excalidraw')
     ) {
       exportNotesAsPDF(getEditorText(), getPdfFileName());
       event.preventDefault();

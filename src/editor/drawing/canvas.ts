@@ -45,7 +45,7 @@
 // this tree's imports run (see canvas-assets.ts — CSP blocks the vendor's
 // CDN fallback, so the same-origin copy is the only live source).
 import './canvas-assets';
-import { createElement, useEffect, useState } from 'react';
+import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import {
   Excalidraw,
@@ -127,92 +127,6 @@ export interface MountDrawingCanvasOptions {
   /** Fires on every canvas mutation (elements, appState — and the files
    * map rides the vendor's third argument, kept for getFiles()). */
   onChange(scene: DrawingCanvasScene): void;
-}
-
-/** The appState keys the Preferences group toggles, with the row labels
- * the native menu speaks. All three are whitelisted (zen + snap) or
- * already persisted (grid), so a toggle rides every future save.
- * View mode stays session-only on purpose — the vendor classifies it
- * {browser: false, export: false, server: false}, and a read-only note
- * that syncs read-only to every device is a trap, not a preference. */
-const PREFERENCE_ROWS: readonly { key: keyof AppState & string; label: string }[] = [
-  { key: 'objectsSnapModeEnabled', label: 'Snap to objects' },
-  { key: 'gridModeEnabled', label: 'Grid' },
-  { key: 'zenModeEnabled', label: 'Zen mode' },
-];
-
-/**
- * The Preferences group — the native menu's checkmark rows, composed from
- * the public menu API (the vendor's own fallback has no Preferences
- * section; excalidraw.com composes this at its app layer).
- *
- * The checkmarks read the LIVE appState: the component subscribes to the
- * vendor's onChange and refreshes its state ONLY when a watched key
- * actually flips (onChange fires for every pointer twitch — the compare
- * keeps the re-render at the row cadence the toggles need). The api
- * instance arrives through a prop: the mount re-renders once when the
- * vendor's callback fires (the first render's group renders nothing).
- */
-function PreferencesGroup({
-  api,
-}: {
-  api: ExcalidrawImperativeAPI | null;
-}): ReturnType<typeof createElement> | null {
-  const readPrefs = (instance: ExcalidrawImperativeAPI): Record<string, boolean> => {
-    const appState = instance.getAppState();
-    const prefs: Record<string, boolean> = {};
-    for (const row of PREFERENCE_ROWS) {
-      prefs[row.key] = appState[row.key] === true;
-    }
-    return prefs;
-  };
-  const [prefs, setPrefs] = useState<Record<string, boolean> | null>(null);
-  useEffect(() => {
-    if (!api) {
-      return;
-    }
-    let last = readPrefs(api);
-    setPrefs(last);
-    const unsubscribe = api.onChange(() => {
-      const next = readPrefs(api);
-      for (const row of PREFERENCE_ROWS) {
-        if (next[row.key] !== last[row.key]) {
-          last = next;
-          setPrefs(next);
-          return;
-        }
-      }
-    });
-    return () => {
-      unsubscribe();
-    };
-  }, [api]);
-  if (!api || !prefs) {
-    return null;
-  }
-  return createElement(
-    MainMenu.Group,
-    // The Group type demands children in the props object; the rows pass
-    // as createElement's child arguments (they win at render time).
-    { title: 'Preferences', children: null },
-    PREFERENCE_ROWS.map((row) =>
-      createElement(
-        MainMenu.Item,
-        {
-          key: row.key,
-          selected: prefs[row.key] === true,
-          children: null,
-          onSelect: () => {
-            const appState = api.getAppState();
-            void api.updateScene({
-              appState: { [row.key]: !(appState[row.key] === true) },
-            } as unknown as UpdateScenePayload);
-          },
-        },
-        row.label,
-      ),
-    ),
-  );
 }
 
 /**
@@ -302,7 +216,7 @@ function drawingCanvasElement(
     // site's own item does) and SearchMenu (Find on canvas) follows —
     // native chrome the curated build had off. The Preferences group (the
     // native menu's checkmark rows) renders once the vendor's API callback
-    // has fired — see PreferencesGroup.
+    // has fired — the menu re-renders once with the live instance.
     createElement(
       MainMenu,
       undefined,
@@ -327,8 +241,41 @@ function drawingCanvasElement(
           )
         : null,
       createElement(MainMenu.DefaultItems.SearchMenu, {}),
-      createElement(MainMenu.DefaultItems.Help),
-      createElement(PreferencesGroup, { api: apiForMenu }),
+      // The Help row is the app's unified shortcuts sheet, not the
+      // vendor's dialog: issue #179 folds the canvas's shortcut story
+      // into the one sheet (this pane opens on its Drawing tab), and the
+      // sheet carries the vendor's complete chord table — verified row by
+      // row against this pin's HelpDialog. The vendor's dialog survives
+      // only behind the welcome screen's hand-drawn help link.
+      createElement(
+        MainMenu.Item,
+        {
+          key: 'keyboard-shortcuts',
+          shortcut: 'Ctrl+K',
+          children: null,
+          onSelect: () => {
+            // document, not window — window-dispatched events never reach
+            // document-level listeners (the app's bridge lives there, the
+            // same bus padify:open-link rides).
+            document.dispatchEvent(
+              new CustomEvent('padify:open-shortcuts', { detail: { pane: 'drawing' } }),
+            );
+          },
+        },
+        'Keyboard shortcuts',
+      ),
+      // The vendor’s OWN Preferences submenu — the same component the
+      // site renders (MainMenu.DefaultItems.Preferences, exported by the
+      // pin all along). The previous build hand-composed three inline rows
+      // (snap, grid, zen) because the FALLBACK composition has no
+      // Preferences section — true, but the submenu component ships with
+      // the site’s full row set (tool lock, snap, grid, zen, view mode,
+      // minimap, element properties, arrow binding, midpoint snapping,
+      // hints). Persistence is unchanged: the toggles flip appState, the
+      // change rides onChange into the surface, and the whitelist carries
+      // zen + snap + grid exactly as before; the rest are session-only,
+      // same as the site.
+      createElement(MainMenu.DefaultItems.Preferences),
       createElement(MainMenu.Separator),
       createElement(MainMenu.DefaultItems.ChangeCanvasBackground),
     ),

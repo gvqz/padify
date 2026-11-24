@@ -184,22 +184,26 @@ test.describe('the drawing canvas', () => {
   test('the Preferences group toggles zen mode and the choice persists', async ({ page }) => {
     await openDrawingCanvas(page);
 
-    // The native menu's Preferences section — checkmark rows composed at
-    // the app layer, exactly like the site's.
+    // The native menu's Preferences SUBMENU — the vendor's own
+    // DefaultItems.Preferences, the same component the site renders. The
+    // rows live one click behind the trigger.
     await page.locator('[data-testid="main-menu-trigger"]').click();
-    const menu = page.locator('#note .excalidraw .dropdown-menu');
-    const zenRow = menu.locator('.dropdown-menu-item', { hasText: 'Zen mode' });
+    const menu = page.locator('#note .excalidraw .dropdown-menu.main-menu');
+    const submenu = page.locator('#note .excalidraw .dropdown-menu.dropdown-submenu');
+    await menu.locator('.dropdown-menu-item', { hasText: 'Preferences' }).click();
+    const zenRow = submenu.locator('.dropdown-menu-item', { hasText: 'Zen mode' });
     await expect(zenRow).toBeVisible();
-    await expect(menu.locator('.dropdown-menu-item', { hasText: 'Snap to objects' })).toBeVisible();
+    await expect(
+      submenu.locator('.dropdown-menu-item', { hasText: 'Snap to objects' }),
+    ).toBeVisible();
 
-    // Toggle zen: the checkmark flips live (the row reads the vendor's
-    // appState through its onChange subscription).
+    // Toggle zen: the submenu STAYS open on select, and the vendor marks
+    // the row with its own checkmark ICON (an svg injected into the row's
+    // icon slot — the site's checkmark, not the old hand-composed rows'
+    // --selected class).
     await zenRow.click();
-    await expect(menu).toBeHidden(); // the vendor closes the menu on select
-    await page.locator('[data-testid="main-menu-trigger"]').click();
-    await expect(menu.locator('.dropdown-menu-item', { hasText: 'Zen mode' })).toHaveClass(
-      /dropdown-menu-item--selected/,
-    );
+    await expect(zenRow.locator('.dropdown-menu-item__icon svg')).toHaveCount(1);
+    await page.keyboard.press('Escape');
 
     // Zen state is note content now (the whitelist): the save carries it.
     await page.waitForTimeout(2_000);
@@ -210,9 +214,12 @@ test.describe('the drawing canvas', () => {
     await page.reload();
     await expect(page.locator('#note .excalidraw')).toBeVisible({ timeout: 20_000 });
     await page.locator('[data-testid="main-menu-trigger"]').click();
-    await expect(menu.locator('.dropdown-menu-item', { hasText: 'Zen mode' })).toHaveClass(
-      /dropdown-menu-item--selected/,
-    );
+    await menu.locator('.dropdown-menu-item', { hasText: 'Preferences' }).click();
+    await expect(
+      submenu
+        .locator('.dropdown-menu-item', { hasText: 'Zen mode' })
+        .locator('.dropdown-menu-item__icon svg'),
+    ).toHaveCount(1);
   });
 
   test('the app chords still win while the canvas listens globally', async ({ page }) => {
@@ -240,9 +247,13 @@ test.describe('the drawing canvas', () => {
     // still receives keys after the app's branches.
     await page.keyboard.press('Alt+z');
     await page.locator('[data-testid="main-menu-trigger"]').click();
+    const prefsMenu = page.locator('#note .excalidraw .dropdown-menu.main-menu');
+    await prefsMenu.locator('.dropdown-menu-item', { hasText: 'Preferences' }).click();
     await expect(
       page
-        .locator('#note .excalidraw .dropdown-menu .dropdown-menu-item', { hasText: 'Zen mode' })
+        .locator('#note .excalidraw .dropdown-menu.dropdown-submenu .dropdown-menu-item', {
+          hasText: 'Zen mode',
+        })
         .first(),
     ).toBeVisible();
     await page.keyboard.press('Escape');
@@ -376,8 +387,10 @@ test.describe('the drawing canvas', () => {
 
     // The vendor's Preferences toggle — the same row the site speaks.
     await page.locator('[data-testid="main-menu-trigger"]').click();
-    const menu = page.locator('#note .excalidraw .dropdown-menu');
+    const menu = page.locator('#note .excalidraw .dropdown-menu.main-menu');
+    await menu.locator('.dropdown-menu-item', { hasText: 'Preferences' }).click();
     await menu.locator('.dropdown-menu-item', { hasText: 'Zen mode' }).click();
+    await page.keyboard.press('Escape'); // the submenu stays open on select
     await expect(menu).toBeHidden();
 
     // The host wears the zen state, and the shell's half of the deal:
@@ -415,6 +428,7 @@ test.describe('the drawing canvas', () => {
     // rail hidden it is the ONE in-app way out, the same trap-less
     // model excalidraw.com runs).
     await page.locator('[data-testid="main-menu-trigger"]').click();
+    await menu.locator('.dropdown-menu-item', { hasText: 'Preferences' }).click();
     await menu.locator('.dropdown-menu-item', { hasText: 'Zen mode' }).click();
     await expect(page.locator('#note')).not.toHaveClass(/drawing-zen-mode/);
     await expect(page.locator('.navbar-fixed-top')).toBeVisible();
@@ -535,30 +549,50 @@ test.describe('the drawing canvas', () => {
     const modal = page.locator('#keyboardShortcutsModal');
     await expect(modal).toHaveClass(/in/);
 
-    // The Drawing Canvas section lists the tool chords this build's
-    // canvas actually answers to (probe-verified against the installed
-    // vendor): the number row, the letter row, the eraser and the lock.
+    // The Drawing pane carries the vendor's COMPLETE chord table — the
+    // same Tools / View / Editor groups the canvas's HelpDialog speaks
+    // (dumped row-by-row from the mounted dialog when this pane was
+    // authored). The tool rows:
     const section = modal.locator('.shortcut-section', { hasText: 'Drawing Canvas' });
     await expect(section).toBeVisible();
-    await expect(section.locator('.shortcut-row', { hasText: 'Tools by number' })).toContainText(
-      '1 select · 2 rectangle · 3 diamond · 4 ellipse · 5 arrow · 6 line · 7 freedraw · 8 text',
+    await expect(section.locator('[data-search="drawing rectangle r 2 excalidraw"]')).toContainText(
+      'R',
     );
     await expect(
-      section.locator('.shortcut-row', { hasText: 'Same tools by letter' }),
-    ).toContainText('X or P freedraw');
-    await expect(section.locator('.shortcut-row', { hasText: 'Eraser' })).toContainText('0');
-    await expect(section.locator('.shortcut-row', { hasText: 'Lock tool' })).toContainText('Q');
+      section.locator('[data-search="drawing draw freedraw pen p 7 excalidraw"]'),
+    ).toContainText('P');
+    await expect(section.locator('[data-search="drawing eraser e 0 excalidraw"]')).toContainText(
+      '0',
+    );
+    await expect(
+      section.locator(
+        '[data-search="drawing keep selected tool active after drawing q lock excalidraw"]',
+      ),
+    ).toContainText('Q');
+    // The canvas-only chords the old drawing section never carried:
+    await expect(
+      section.locator('[data-search="drawing zen mode alt z hide chrome"]'),
+    ).toContainText('Alt');
+    await expect(section.locator('[data-search="drawing group selection ctrl g"]')).toBeVisible();
 
     // The chords the canvas shares with the app's platform labeling: the
     // history family speaks the hydrated Ctrl (never the Cmd hedge).
-    const undoRow = section.locator('.shortcut-row', { hasText: 'Undo / Redo' });
-    await expect(undoRow.locator('kbd[data-mod-key]')).toHaveCount(2);
+    const undoRow = section.locator('[data-search="drawing undo ctrl z"]');
+    await expect(undoRow.locator('kbd[data-mod-key]')).toHaveCount(1);
     await expect(undoRow).toContainText('Ctrl');
     await expect(undoRow).not.toContainText('⌘');
 
-    // The search door finds the canvas rows like any other.
+    // The search door overrides the pane: from the Drawing pill, a query
+    // still finds rows everywhere in the sheet.
+    await page.locator('.shortcut-tab[data-pane="drawing"]').click();
     await page.locator('#shortcutSearch').fill('sticky');
-    await expect(modal.locator('.shortcut-row', { hasText: 'Sticky note' })).toBeVisible();
-    await expect(modal.locator('.shortcut-row', { hasText: 'Bold' })).toBeHidden();
+    await expect(modal.locator('[data-search="drawing sticky note n excalidraw"]')).toBeVisible();
+    // The search reaches the other panes too — the markdown pane's bold
+    // row answers the same query family.
+    await page.locator('#shortcutSearch').fill('strikethrough');
+    await expect(
+      modal.locator('[data-search="markdown strikethrough strike ctrl cmd shift x source editor"]'),
+    ).toBeVisible();
+    await page.locator('#shortcutSearch').fill('');
   });
 });
