@@ -7,6 +7,14 @@
 > same notes pipeline, tombstoned by the same close flow. This document is
 > the contract the scaffold (this branch) put in place and the design the
 > canvas phase builds against.
+>
+> **2026-11-24, supersession:** the owner called the repair-or-restart
+> question (issue #172) — the chrome restarts native. The verdict, the
+> measured gap inventory and the phased plan are in ["The 2026-11-24 owner
+> call"](#the-2026-11-24-owner-call-restart-the-island-native-chrome-native-look)
+> below; the phase-2 record that follows stays accurate for the shell it
+> describes (surface, scene, images, exports plumbing — all of it
+> survives the restart untouched).
 
 ## Status of this branch
 
@@ -385,3 +393,135 @@ empty task list. If "hide" wins later it is a one-line gate in
       it as one more note kind — the scene envelope already carries its
       own version number for exactly this — shipped 2026-11-22 (the
       single-note envelope and the whole-pad workspace envelope).
+
+---
+
+## The 2026-11-24 owner call: restart the island — native chrome, native look
+
+> Owner (issue #172 + the direct call, 2026-11-24): the pad *"just threw
+> Excalidraw in and wrapped a skin over it"*, is *"very broken and missing
+> a lot of the things"*, and the experimental visuals get overhauled
+> anyway. **Verdict: RESTART** — *"I want it to look exactly like the
+> native one looks in its own website."* The Padify-side UI components
+> around the editor get replaced one by one afterwards, **starting with
+> the export**, so every note type gets the same treatment.
+
+This section is the verdict's record: what was measured, what survives,
+what dies, and the plan. It discharges the first two checklist items of
+issue #172 (the gap inventory; the repair-vs-restart call).
+
+### What was measured
+
+- **The native reference, live** (excalidraw.com, 2026-11-24, real browser
+  inventory): Shapes island = tool lock, hand, selection, rectangle,
+  diamond, ellipse, arrow, line, draw, text, sticky note, eraser,
+  **More tools** (insert image, frame, web embed, draw-to-shape, laser,
+  bucket fill, lasso). Canvas-actions island = zoom dropdown, **minimap**,
+  undo, redo. Main menu = Open, Save to…, Export image…, Live
+  collaboration…, Command palette, **Find on canvas**, Help,
+  **Reset the canvas**, Excalidraw+ (upsell), GitHub/X/Discord, Sign up,
+  **Preferences** (tool lock, snap to objects, grid, zen mode, view mode,
+  minimap, canvas & shape properties, arrow binding, snap to midpoints),
+  theme control, canvas background. Plus: the hand-drawn **welcome panel**
+  on empty scenes, the **HintViewer** banner, the **Library** button and
+  sidebar, live collaboration, and the **Export image dialog** (PNG/SVG,
+  Background ✓, Dark mode, Embed scene, export scale 1×/2×).
+- **The Padify island, live** (the dist build, same day): the Shapes and
+  canvas-actions islands are ALREADY the native set — the vendor renders
+  its own toolbar and Padify never curates it, so every tool the site has
+  (lasso, sticky notes, eraser, frame, laser, bucket fill…) is on the pad
+  too. The divergence is everywhere else: the menu carries only
+  Open / Export image… / canvas background; no welcome panel; no
+  HintViewer; no Library; no Preferences submenu; no command palette or
+  find; and the whole chrome speaks the skin's monochrome instead of the
+  vendor's own design language.
+
+### The structural finding: the pad is a shell with a costume
+
+The integration is three layers, and only one of them is the problem:
+
+1. **The shell (KEEP).** `surface.ts` (mount lifecycle, the announce
+   contract, capture/clear/dismiss discipline, the read-only card for
+   newer formats), `scene.ts` (the versioned envelope, deterministic
+   whitelist serialization), `canvas-images.ts` (the attachment spine:
+   insert→flush, load→hydrate, delete→GC), `thumb.ts`, the registry
+   wiring, the e2e tests. This is the hard, Padify-specific work and it
+   is sound.
+2. **The mount (KEEP, small edits).** `canvas.ts`'s prop bag — lazy
+   chunk, `EXCALIDRAW_ASSET_PATH` self-hosting, image gates, onChange
+   bridging. Fine as a seam; some props flip.
+3. **The costume (DIE).** `canvas-skin.css` (483 lines re-mapping the
+   vendor's palette/typography/islands onto Padify tokens) + the curated
+   three-item MainMenu + the off-props. This is what the owner is
+   looking at when they say "wrapped a skin over it". The restart is
+   almost entirely the removal of this layer plus a vendor bump.
+
+**Can it be replaced from scratch? Yes — and it is small.** The vendor
+component (`@excalidraw/excalidraw`, npm) is built for embedding; the
+hard parts (offline assets, fonts, React mounting, image persistence,
+scene round-trips, exports) are already proven by the shipped island.
+"Restart" here means: delete the costume, restore the vendor's own
+chrome, bump the vendor to stable, and extend the whitelist where native
+preferences need persistence. The shell's tests (scene contract, surface
+lifecycle, vendor pin) hold the floor while the chrome changes — the
+restart cannot corrupt a note.
+
+### The gap inventory
+
+**(a) Deliberately OFF by the phase-2 chrome — the keep/remove verdicts:**
+
+| What | Native behavior | Padify today | Verdict |
+|---|---|---|---|
+| `canvas-skin.css` | vendor's own look (purple accents, glass islands, Assistant typeface, hand-drawn wordmark) | full monochrome re-map, compressed islands | **REMOVE** — the owner wants the native look exactly |
+| Curated MainMenu (Open / Export image… / canvas background) | full default menu incl. Command palette, Find on canvas, Help, Reset, Preferences | three items | **REPLACE with the vendor default**, minus white-label policy items (Socials, Excalidraw+ upsell, Sign up) and Live collaboration (no backend — the trigger would dead-end) |
+| `clearCanvas: false` | "Reset the canvas" in the menu | Padify's context-menu clear with the confirm flow | **KEEP OFF** — the confirmed destructive flow stays app-owned; the menu item would bypass the confirm |
+| `export: false` (the JSON export dialog) | "Save to…"/Export dialog | `.excalidraw` save lives in the app's download menu (with attachments embedded) | **KEEP OFF** — the app's `.excalidraw` row is the same door with the Padify attachment spine; revisit only if the unified export pass wants it in-menu |
+| `toggleTheme: false` | theme control in the menu | the app's theme switch drives the canvas live (`padify:theme` broadcast) | **KEEP OFF** — one theme authority (the app), no second switch to drift |
+| HintViewer hidden | the "hold Scroll wheel…" banner | `display: none` | **RESTORE** — it is native chrome and genuinely helpful |
+| Library trigger hidden | Library button + sidebar | hidden | **RESTORE** — local-library works in the embedded component (no server needed) |
+| Search menu / Command palette off | native menu items | absent | **RESTORE** with the default menu |
+| WelcomeScreen | hand-drawn panel on empty scenes | absent (opt-in in the npm component) | **ADD** (`<WelcomeScreen>` child) |
+| `aiEnabled` unset (→ false) | site shows the mermaid Text-to-Diagram trigger | TTD trigger hidden | **ENABLE** — the mermaid dialog is client-side (bundled); audit the chunk-size delta when it lands; diagram-to-code stays off (needs keys) |
+| Text default font = Nunito (`FONT_FAMILY.Nunito` at both feed seams) | Excalifont (hand-drawn) is the default everywhere | scenes read differently from the site | **REVERT to the vendor default** — "exactly like native" includes the pen |
+| `handleKeyboardGlobally: false` | site binds globally | shortcuts die when the canvas loses focus | **REVISIT (R2)** — restore global bindings scoped to when a drawing note is active, with the app's own shortcuts still winning |
+| Excalidraw+ / Socials / Sign up | in the native menu | off | **KEEP OFF** — white-label policy |
+
+**(b) Genuinely missing or broken vs the site (not deliberate):**
+
+| Finding | Evidence | Where it lands |
+|---|---|---|
+| **Open glitch: the canvas sometimes never opens until a hard refresh** (owner, issue #172 comment) | the mount path has no retry: `import('./canvas')` rejection → error card, and the card offers no action; a deploy changes chunk hashes while a running tab (or the service worker's runtime cache) still resolves the old name — every retry then fails until the page itself re-fetches the index | **R3** — one-shot cache-busting retry, the SW never runtime-caches a non-OK chunk response, and the error card grows a Retry button |
+| Preferences missing entirely (snap to objects, zen mode, view mode, arrow binding, snap to midpoints, canvas & shape properties) | the curated menu dropped them; several are appState-level prefs | **R2** — they return with the default menu; persisted prefs need the whitelist (below) |
+| The appState whitelist does not carry the native prefs | `DRAWING_APP_STATE_KEYS` = 16 styling/grid keys only — zen/snap/binding choices reset every reload | **R2** — extend the whitelist, re-pin `scene-pin.test.ts` against the bumped vendor |
+| "Save to…" menu item absent | the vendor gates it on `appState.fileHandle` (a scene opened from a file) — the pad never opens from files, so the gate stays closed | none — the app's `.excalidraw` row is the door; the native gate behaves as designed |
+| App-side image rows bypass the export options | download-menu PNG/SVG call `exportScene` with fixed defaults (scale 1, background on, no embed) — no scale/dark/embed choice | **R1** — the unified export |
+| Drawings share as raw text | share modal/viewer carry the scene string (phase-3 milestone, unchecked) | **R4** — snapshot-export first (PNG via `exportScene` at share time), viewer-render later |
+| Skin seams (minimap island, vendor popovers, xv21 evidence) | BRAINSTORM's parked visual pass | **moot** — the skin they belong to dies in R0 |
+| Open time | warm open median ~350 ms (vendor mount ~60–90 ms of it); cold ~1.7 s first-ever run (2.6 MB chunk, idle-warmed at 4 s) | **R3** — keep lazy + idle warm; add `modulepreload`; re-measure with the item-8 harness discipline |
+
+### The restart plan (R0–R4)
+
+- **R0 — the native mount.** Vendor bump `0.18.0-9fbeaed` → `0.18.1`
+  (stable; the eval-sink stub re-pins against the new chunk names),
+  delete `canvas-skin.css`, drop the curated menu children, flip the
+  verdicts from table (a), add the WelcomeScreen child, revert the font
+  default, re-pin `scene-pin.test.ts`, update the e2e chrome assertions.
+  *Done when:* a side-by-side with excalidraw.com shows the same chrome
+  (modulo Padify's own navbar/rail around it) in both themes.
+- **R1 — the unified export (the owner's first component swap).** One
+  export surface for every note type: the drawing speaks the vendor's
+  exporter with the native options (PNG/SVG, background, dark mode,
+  embed scene, scale 1×/2×); the text family keeps TXT/PDF/DOCX/HTML/MD;
+  `.padify`/`.excalidraw` ride as-is. Same dialog, same flow, type-gated
+  rows — the download dropdown becomes its entry point.
+- **R2 — preferences & keyboard parity.** The default menu's Preferences
+  live, the whitelist grows (pinned), `handleKeyboardGlobally` gets the
+  scoped-global design.
+- **R3 — the open-glitch fix + open time.** The retry/lack-of-cache/card
+  work from table (b), measured with the item-8 harness before and after.
+- **R4 — shares.** The last unchecked phase-3 milestone, decided after
+  R1 (the snapshot exporter it needs is the unified one).
+
+Ordering note: R0 is the restart the owner called for; R1 is the owner's
+own first stop ("starting with the export"). R2–R4 sequence after the
+native mount exists to build against.
