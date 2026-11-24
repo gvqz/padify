@@ -359,6 +359,35 @@ body.dark #note[data-empty]::before {
   color: var(--fg-subtle);
 }
 
+/* The error card's action row (the drawing error card's Retry — the
+   deterministic hard refresh through the service worker). */
+#note .unsupported-note-actions {
+  margin-top: 16px;
+}
+
+#note .unsupported-note-action {
+  padding: 7px 20px;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    transform 100ms ease;
+}
+
+#note .unsupported-note-action:hover {
+  opacity: 0.92;
+}
+
+#note .unsupported-note-action:active {
+  transform: scale(0.98);
+}
+
 /* ---- Drawing note canvas ----
    The Excalidraw island mounts inside a wrapper ([data-drawing-canvas])
    the drawing surface owns; the vendor's own stylesheet handles

@@ -227,3 +227,50 @@ export function initInstallPrompt(): void {
     deferredPrompt = null;
   });
 }
+
+/**
+ * Reloads the page AFTER the service worker freshens the precache — the
+ * deterministic version of the hard refresh, and the drawing error card's
+ * Retry action (issue #172's open glitch).
+ *
+ * WHY THE FRESHEN FIRST: a deploy swaps every hashed asset while this
+ * running tab still resolves the OLD lazy-chunk names (the canvas chunk's
+ * name is baked into the running bundle). A plain reload serves the
+ * PRECACHED index — yesterday's build — cache-first, so the same 404
+ * comes back and only a second reload (or a real hard refresh) recovers.
+ * The REFRESH_SHELL message makes the worker re-fetch the whole precache
+ * network-first (HTTP cache bypassed too), so THIS reload boots the new
+ * build's index — the new chunks then fetch fresh from the network.
+ *
+ * No controller (first visit, dev server, the worker not yet active):
+ * there is nothing to freshen, and a plain reload is the honest answer.
+ * A worker that never acks (offline, a slow host) reloads anyway — the
+ * freshened subset is the best available shot either way.
+ */
+export async function reloadWithFreshShell(): Promise<void> {
+  const controller = navigator.serviceWorker?.controller;
+  if (!controller || import.meta.env.DEV) {
+    window.location.reload();
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    const channel = new MessageChannel();
+    let settled = false;
+    const settle = (): void => {
+      if (!settled) {
+        settled = true;
+        resolve();
+      }
+    };
+    // The ack, and a generous timeout — a reload must never hang on a
+    // silent worker; the freshened subset beats nothing at all.
+    channel.port1.onmessage = (event) => {
+      if ((event.data as { type?: string } | null)?.type === 'SHELL_REFRESHED') {
+        settle();
+      }
+    };
+    setTimeout(settle, 15_000);
+    controller.postMessage({ type: 'REFRESH_SHELL' }, [channel.port2]);
+  });
+  window.location.reload();
+}

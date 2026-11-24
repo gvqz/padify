@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync, cpSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, cpSync, existsSync, writeFileSync } from 'node:fs';
 import { join as joinSafe } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
@@ -241,6 +241,93 @@ export function copyExcalidrawFonts(): Plugin {
 }
 
 /**
+ * Injects a `modulepreload` hint for the drawing canvas chunk into the
+ * built index.html — R3's open-time lever (issue #172: "FIX how long it
+ * takes to open the canvas").
+ *
+ * WHY: the canvas rides a lazy chunk that the idle warm (surface.ts's
+ * requestIdleCallback) fetches only when the app goes idle — a user who
+ * opens a drawing in the first seconds of a session pays the full chunk
+ * download on the spot (the measured cold open, ~1.7 s first-ever run).
+ * A modulepreload link starts the same download at HTML parse time,
+ * parallel to boot, at low priority: by the time the first drawing opens,
+ * the bytes are in the HTTP cache and the open is a mount, not a fetch.
+ *
+ * The chunk is identified by CONTENT, not name: the island is the only
+ * module exporting `mountDrawingCanvas`, and the master vendor's chunk
+ * graph merges the island into a vendor-shared chunk whose emitted name
+ * follows Rollup's dedupe heuristics (it has already been "canvas-*" and
+ * "percentages-*" across vendor bumps). Scanning the built assets for
+ * that symbol finds the exact file whatever the name. No match = no
+ * injection, loud in the log (a renamed chunk layout must be noticed,
+ * not silently skipped).
+ *
+ * The link carries `data-padify-lazy-preload`: scripts/build-sw.mjs skips
+ * marked links when deriving the precache manifest, so the chunk keeps
+ * its RUNTIME-cached classification (fetched on demand, offline from the
+ * first use) instead of being precached into every install — users who
+ * never draw never download it twice.
+ */
+function preloadDrawingChunk(): Plugin {
+  return {
+    name: 'padify-preload-drawing-chunk',
+    closeBundle() {
+      const distDir = fileURLToPath(new URL('./dist', import.meta.url));
+      const indexPath = joinSafe(distDir, 'index.html');
+      if (!existsSync(indexPath)) {
+        console.warn('[vite] preloadDrawingChunk: dist/index.html not found — skipped.');
+        return;
+      }
+      let chunkName: string | null = null;
+      for (const file of walkJs(distDir)) {
+        // The island is content-keyed by two markers: it DEFINES
+        // `mountDrawingCanvas` (the surface's main chunk merely calls it —
+        // the string appears in both) AND carries the asset-path seam
+        // (canvas-assets.ts, imported only by the island). Both together
+        // match exactly one file, immune to the vendor's chunk-merge and
+        // rename heuristics.
+        const code = readFileSafe(file);
+        if (code?.includes('mountDrawingCanvas') && code.includes('EXCALIDRAW_ASSET_PATH')) {
+          chunkName = file.slice(distDir.length + 1);
+          break;
+        }
+      }
+      const html = readFileSync(indexPath, 'utf-8');
+      if (!chunkName) {
+        console.warn(
+          '[vite] preloadDrawingChunk: no chunk carrying mountDrawingCanvas found in dist — ' +
+            'the drawing chunk link was not injected (verify the chunk layout).',
+        );
+        return;
+      }
+      if (html.includes('data-padify-lazy-preload')) {
+        return; // idempotent against a re-run into a non-empty outDir
+      }
+      const base = (process.env.VITE_BASE_PATH || '/').replace(/\/+$/, '');
+      const href = `${base}/${chunkName}`;
+      const link = `<link rel="modulepreload" crossorigin href="${href}" data-padify-lazy-preload>`;
+      const withPreload = html.replace('</head>', `${link}\n  </head>`);
+      if (withPreload === html) {
+        console.warn('[vite] preloadDrawingChunk: no </head> to inject before — skipped.');
+        return;
+      }
+      writeFileSyncSafe(indexPath, withPreload);
+      console.warn(`[vite] injected modulepreload for the drawing chunk (${chunkName}).`);
+    },
+  };
+}
+
+function writeFileSyncSafe(path: string, content: string): void {
+  try {
+    writeFileSync(path, content);
+  } catch {
+    // The injection is an optimization, not a build gate — but a failure
+    // to write IS worth seeing in the log.
+    console.warn(`[vite] preloadDrawingChunk: could not write ${path}.`);
+  }
+}
+
+/**
  * Dev-only serving of the share viewer (public/share/) for /share/ links.
  *
  * WHY: production serves dist/share/ statically — /share/?t=<token>
@@ -391,6 +478,7 @@ export default defineConfig({
     stubExcalidrawFontSubsetting(),
     copyExcalidrawFonts(),
     serveShareViewerInDev(),
+    preloadDrawingChunk(),
     forbidEvalSinks(),
   ],
   publicDir: 'public',

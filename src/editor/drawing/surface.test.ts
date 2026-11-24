@@ -23,20 +23,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The vendor island, faked: every mount lands in the shared `mounts`
 // side-channel so tests drive the vendor through its real seam (the
-// handle + the options callbacks the surface owns). The one-shot
-// `__failNextMount` flag simulates the island crashing mid-mount (the
+// handle + the options callbacks the surface owns). The `__failNextMount`
+// counter simulates the island crashing mid-mount — once per crash, and
+// the surface's retry means a persistent crash asks for two (the
 // surface's .catch must answer with the honest error card).
 vi.mock('./canvas', () => {
   const mounts: RecordedMount[] = [];
-  let failNextMount = false;
+  /** How many upcoming mounts must fail — the mount path retries a
+   * transient failure once, so a crash-repeats test asks for two. */
+  let failNextCount = 0;
   return {
     mounts,
     mountDrawingCanvas: (
       mount: HTMLElement,
       options: RecordedMount['options'],
     ): RecordedMount['handle'] => {
-      if (failNextMount) {
-        failNextMount = false;
+      if (failNextCount > 0) {
+        failNextCount -= 1;
         throw new Error('canvas island crash');
       }
       const handle: RecordedMount['handle'] = {
@@ -60,10 +63,10 @@ vi.mock('./canvas', () => {
     ),
     __resetMounts: (): void => {
       mounts.length = 0;
-      failNextMount = false;
+      failNextCount = 0;
     },
     __failNextMount: (): void => {
-      failNextMount = true;
+      failNextCount += 1;
     },
   };
 });
@@ -280,11 +283,22 @@ describe('display — the mount lifecycle', () => {
   });
 
   it('an island crash swaps the loading card for an honest error card', async () => {
+    // The mount path retries a failure ONCE (R3's open-glitch work: a
+    // transient chunk-fetch failure recovers in place) — so the crash
+    // must repeat to reach the card. The fake fails both attempts.
+    canvasMock.__failNextMount();
     canvasMock.__failNextMount();
     const host = connectedHost();
     surface.display(host, { content: sceneWithElements, noteType: 'drawing' });
     await vi.advanceTimersByTimeAsync(10);
+    expect(host.querySelector('.unsupported-note')).toBeNull(); // still retrying
+    await vi.advanceTimersByTimeAsync(500);
     expect(host.querySelector('.unsupported-note')!.textContent).toContain('could not load');
+    // The card carries the Retry action — the deterministic hard refresh
+    // through the service worker (a deploy had renamed the chunk the
+    // running tab holds; no in-tab retry can fetch a name that is gone).
+    const retry = host.querySelector<HTMLButtonElement>('.unsupported-note-action');
+    expect(retry?.textContent).toBe('Retry');
     // The refused note stays honest: with no canvas there is nothing new
     // to save, and capture answers the fed bytes EXACTLY — a save against
     // them is a no-op, never a rewrite.

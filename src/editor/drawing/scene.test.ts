@@ -121,8 +121,8 @@ describe('the appState whitelist', () => {
     // background, stroke/background colors, fill style, stroke width and
     // style, roughness, opacity, font family and size, text align, start
     // and end arrowheads, roundness (edge kind), grid size, grid mode.
-    // The stroke width rides the vendor's NUMERIC key (the stable
-    // vendor's own spelling — scene-pin pins it).
+    // The stroke width rides the vendor's named key (master renamed the
+    // numeric currentItemStrokeWidth away — scene-pin pins the spelling).
     expect(DRAWING_APP_STATE_KEYS).toContain('viewBackgroundColor');
     expect(DRAWING_APP_STATE_KEYS).toContain('currentItemStartArrowhead');
     expect(DRAWING_APP_STATE_KEYS).toContain('currentItemEndArrowhead');
@@ -130,69 +130,48 @@ describe('the appState whitelist', () => {
     expect(DRAWING_APP_STATE_KEYS).toContain('gridModeEnabled');
   });
 
-  it('migrates the interim build’s named strokeWidth bytes to the numeric key at parse', () => {
-    // The interim master snapshot wrote scenes under the named key; the
-    // stable vendor answers the numeric one (STROKE_WIDTH: thin=1,
-    // bold=2, extraBold=4 — the numbers carry the same visual weight).
-    // The translation runs inside parse, so the fed bytes and the live
+  it('migrates legacy numeric strokeWidth bytes to the named key at parse', () => {
+    // Pre-master scenes carry currentItemStrokeWidth: 1|2|4 — exactly the
+    // numbers master's own STROKE_WIDTH table keeps visually identical.
+    // The migration runs inside parse, so the fed bytes and the live
     // appState agree canonically and "open never writes" stays true.
-    for (const [name, numeric] of [
-      ['thin', 1],
-      ['medium', 2],
-      ['bold', 4],
+    for (const [numeric, key] of [
+      [1, 'thin'],
+      [2, 'medium'],
+      [4, 'bold'],
     ] as const) {
       const bytes = JSON.stringify({
         version: 1,
         savedAt: 1,
         elements: [],
-        appState: { currentItemStrokeWidthKey: name, currentItemOpacity: 100 },
+        appState: { currentItemStrokeWidth: numeric, currentItemOpacity: 100 },
       });
       const scene = parseDrawingScene(bytes)!;
-      expect(scene.appState.currentItemStrokeWidth, `interim "${name}"`).toBe(numeric);
-      expect(scene.appState).not.toHaveProperty('currentItemStrokeWidthKey');
+      expect(scene.appState.currentItemStrokeWidthKey, `legacy ${numeric}`).toBe(key);
+      expect(scene.appState).not.toHaveProperty('currentItemStrokeWidth');
     }
   });
 
-  it('legacy numeric strokeWidth bytes are already canonical — they parse untouched', () => {
-    // Pre-master scenes carried the numeric key, and the stable vendor
-    // answers the same key: no translation, byte-exact round trips.
-    const bytes = JSON.stringify({
-      version: 1,
-      savedAt: 1,
-      elements: [],
-      appState: { currentItemStrokeWidth: 2, currentItemOpacity: 100 },
-    });
-    const scene = parseDrawingScene(bytes)!;
-    expect(scene.appState.currentItemStrokeWidth).toBe(2);
-    expect(serializeDrawingScene(scene)).toBe(bytes);
-  });
-
-  it('the stroke-width translation is idempotent — translated bytes parse untouched', () => {
-    const interim = JSON.stringify({
+  it('the stroke-width migration is idempotent — canonical bytes parse untouched', () => {
+    const canonical = JSON.stringify({
       version: 1,
       savedAt: 1,
       elements: [],
       appState: { currentItemStrokeWidthKey: 'bold' },
     });
-    const scene = parseDrawingScene(interim)!;
-    expect(scene.appState.currentItemStrokeWidth).toBe(4);
-    // And the translated scene serializes to bytes that parse back equal —
-    // the named key is gone, the numeric key is the only spelling left.
-    const canonical = serializeDrawingScene(scene);
-    expect(canonical).not.toContain('currentItemStrokeWidthKey');
-    const reparsed = parseDrawingScene(canonical)!;
+    const scene = parseDrawingScene(canonical)!;
+    expect(scene.appState.currentItemStrokeWidthKey).toBe('bold');
+    // And the canonical scene serializes to bytes that parse back equal.
+    const reparsed = parseDrawingScene(serializeDrawingScene(scene))!;
     expect(reparsed.appState).toEqual(scene.appState);
   });
 
-  it('un-mappable stroke-width values fall back by omission, never junk', () => {
-    // An unknown NAMED value cannot be translated — the key stays unset
-    // and the vendor applies its own default, the same degradation
-    // restoreAppState performs for a null match.
+  it('an un-mappable legacy strokeWidth falls back by omission, never junk', () => {
     const bytes = JSON.stringify({
       version: 1,
       savedAt: 1,
       elements: [],
-      appState: { currentItemStrokeWidthKey: 'ultra' },
+      appState: { currentItemStrokeWidth: 7 },
     });
     const scene = parseDrawingScene(bytes)!;
     expect(scene.appState).not.toHaveProperty('currentItemStrokeWidthKey');

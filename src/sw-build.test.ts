@@ -334,3 +334,45 @@ describe('subpath deployments (VITE_BASE_PATH)', () => {
     expect(source).toContain('const API_BYPASS_PREFIXES = ["/api/"]');
   });
 });
+
+describe('the drawing chunk preload hint (R3)', () => {
+  it('never precaches the modulepreload-marked drawing chunk', () => {
+    // vite.config.ts's preloadDrawingChunk injects the canvas chunk's
+    // modulepreload link with data-padify-lazy-preload. A preload hint is
+    // not a shell dependency: the chunk keeps its runtime-cached
+    // classification, so users who never draw never precache it.
+    write(
+      'index.html',
+      shellHtml() +
+        '<link rel="modulepreload" crossorigin href="/assets/canvas-abc123.js" data-padify-lazy-preload>',
+    );
+    write('assets/main.js', 'console.log("padify main");');
+    write('assets/canvas-abc123.js', 'console.log("canvas");');
+
+    const build = generateServiceWorker(fixtureDir);
+
+    expect(build.precacheUrls).toContain('/assets/main.js');
+    expect(build.precacheUrls).not.toContain('/assets/canvas-abc123.js');
+    expect(build.runtimeCachedFiles).toContain('assets/canvas-abc123.js');
+  });
+
+  it('the generated worker answers REFRESH_SHELL by refetching the manifest', () => {
+    // The stale-shell escape hatch (issue #172's open glitch): a deploy
+    // renames every hashed asset while a running tab still resolves the
+    // old names. The page asks the worker to re-fetch the precache
+    // network-first before its reload boots the new build.
+    write('index.html', shellHtml());
+    const { source } = generateServiceWorker(fixtureDir);
+
+    const messageHandler = source.slice(
+      source.indexOf("self.addEventListener('message'"),
+      source.indexOf("self.addEventListener('activate'"),
+    );
+    expect(messageHandler).toContain("event.data.type === 'REFRESH_SHELL'");
+    expect(messageHandler).toContain("fetch(url, { cache: 'reload' })");
+    // The same 200/basic guard the fetch handler enforces — a 404 (the
+    // old chunk gone) never lands in the cache.
+    expect(messageHandler).toContain("response.status === 200 && response.type === 'basic'");
+    expect(messageHandler).toContain("type: 'SHELL_REFRESHED'");
+  });
+});

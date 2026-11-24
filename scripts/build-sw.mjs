@@ -68,10 +68,21 @@ const isDotfile = (rel) => (rel.split('/').pop() ?? '').startsWith('.');
  * cross-origin references are none of the precache's
  * business. With a subpath build (VITE_BASE_PATH=/padify/) Vite emits
  * /padify/assets/…, so refs are only recognized under the configured base.
+ *
+ * One deliberate exclusion: `<link … data-padify-lazy-preload>` — the
+ * drawing chunk's modulepreload hint (vite.config.ts's
+ * preloadDrawingChunk). A preload hint is NOT a shell dependency: the
+ * chunk stays runtime-cached on first use (offline from the first
+ * drawing), and users who never draw never precache 1+ MB they will not
+ * open.
+ *
  * @returns {Set<string>} dist-relative paths
  */
 export function shellAssetPaths(distDir, basePath = '') {
-  const html = readFileSync(join(distDir, 'index.html'), 'utf-8');
+  const html = readFileSync(join(distDir, 'index.html'), 'utf-8')
+    // Strip the marked preload hint BEFORE scanning — one regex, one
+    // attribute, scoped to the links the drawing build injects.
+    .replace(/<link[^>]*data-padify-lazy-preload[^>]*>/g, '');
   const paths = new Set();
   const prefix = `${basePath}/`;
   for (const m of html.matchAll(/(?:src|href)=["']([^"']+)["']/g)) {
@@ -227,6 +238,43 @@ self.addEventListener('install', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
+    return;
+  }
+
+  // REFRESH_SHELL — the stale-shell escape hatch (issue #172's open
+  // glitch). A deploy swaps every hashed asset while a long-running tab
+  // still resolves the OLD lazy-chunk names: its next dynamic import
+  // 404s and no in-tab retry can help, because the names it holds no
+  // longer exist on the server. The page asks THIS handler to re-fetch
+  // the whole precache network-first (cache:'reload' bypasses the HTTP
+  // cache too), so the reload it performs afterwards boots the NEW build
+  // from the freshened cache — the deterministic version of the hard
+  // refresh. Only 200/basic answers land in the cache (same rule as the
+  // fetch handler below); anything else keeps its previous copy, and the
+  // ack reports what happened either way.
+  if (event.data && event.data.type === 'REFRESH_SHELL') {
+    const reply = (message) => {
+      if (event.source) event.source.postMessage(message);
+    };
+    event.waitUntil(
+      (async () => {
+        const cache = await caches.open(CACHE_VERSION);
+        let refreshed = 0;
+        for (const url of CACHE_FILES) {
+          try {
+            const response = await fetch(url, { cache: 'reload' });
+            if (response && response.status === 200 && response.type === 'basic') {
+              await cache.put(url, response);
+              refreshed += 1;
+            }
+          } catch (error) {
+            // Offline or a failed asset: keep the cached copy. The reload
+            // below still runs — the freshened subset is the best shot.
+          }
+        }
+        reply({ type: 'SHELL_REFRESHED', refreshed, total: CACHE_FILES.length });
+      })()
+    );
   }
 });
 

@@ -220,10 +220,10 @@ test.describe('the drawing canvas', () => {
 
     // With the drawing active, the vendor's global keyboard is live — a
     // tool chord arms the tool without any canvas focus. 'r' = rectangle.
-    const toolRectangle = page.locator('#note [data-testid="toolbar-button-rectangle"]');
+    const toolRectangle = page.locator('#note [data-testid="toolbar-rectangle"]');
     await expect(toolRectangle).toBeVisible();
     await page.keyboard.press('r');
-    await expect(toolRectangle).toHaveClass(/ToolIcon--selected|active|--selected/);
+    await expect(toolRectangle).toHaveClass(/ToolIcon--checked/);
 
     // The app's own chord (Ctrl+, → the preferences modal) must still fire
     // — the app's dispatcher answers it and stops the vendor from seeing
@@ -246,6 +246,44 @@ test.describe('the drawing canvas', () => {
         .first(),
     ).toBeVisible();
     await page.keyboard.press('Escape');
+  });
+
+  test('a failed chunk lands on the error card, whose Retry reloads', async ({ page }) => {
+    // R3's open-glitch: a deploy renames the chunk a running tab holds;
+    // the mount path retries once, then answers with the honest card —
+    // whose Retry action refreshes the shell and reloads (the
+    // deterministic version of the user's manual hard refresh). The
+    // block targets the canvas MODULE itself (the exact module the
+    // surface's import('./canvas') requests — dev serves it from src,
+    // production from a hashed asset; both spellings share the path).
+    await page.route(/editor\/drawing\/canvas\.ts/, (route) =>
+      route.fulfill({ status: 404, body: 'gone' }),
+    );
+    await page.goto('/');
+    await page.locator('#addTabTypeMenu').click();
+    await expect(page.locator('#addTabTypeMenuPopover')).toBeVisible();
+    await page
+      .locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Drawing' })
+      .click();
+
+    // The card, after the one-shot retry has come up empty.
+    const retry = page.locator('#note .unsupported-note-action', { hasText: 'Retry' });
+    await expect(retry).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('#note .unsupported-note-title')).toContainText(
+      'The canvas could not load',
+    );
+
+    // Retry reloads the page (the SW shell refresh is a no-op offline in
+    // this dev context — the reload itself is the observable contract).
+    const reloadPromise = page.waitForEvent('load', { timeout: 15_000 });
+    await retry.click();
+    await reloadPromise;
+    // The route still blocks the chunk (the route survives reloads), so
+    // the reloaded page shows the same honest card — proof the retry
+    // acted, not that the failure healed.
+    await expect(page.locator('#note .unsupported-note-action', { hasText: 'Retry' })).toBeVisible({
+      timeout: 20_000,
+    });
   });
 
   test('the main menu ships the native set — no vendor clear, no vendor links', async ({
@@ -271,12 +309,11 @@ test.describe('the drawing canvas', () => {
     await expect(menu.getByText('Clear canvas')).toHaveCount(0);
     await expect(menu.getByText('Excalidraw links')).toHaveCount(0);
 
-    // The native chrome the curated build had off: the command palette and
-    // Find on canvas are menu items again, and the welcome panel stands on
-    // an empty scene (the vendor's hand-drawn overlay).
-    await expect(menu.getByText('Command palette')).toBeVisible();
+    // The native chrome the curated build had off: Find on canvas is a
+    // menu item again, and the welcome panel stands on an empty scene
+    // (the vendor's hand-drawn overlay).
     await expect(menu.getByText('Find on canvas')).toBeVisible();
-    await expect(page.locator('#note .excalidraw .WelcomeScreen')).toBeVisible();
+    await expect(page.locator('#note .excalidraw .welcome-screen-center')).toBeVisible();
   });
 
   test('the canvas takes over the full stage — edge to edge, no bottom strip', async ({ page }) => {

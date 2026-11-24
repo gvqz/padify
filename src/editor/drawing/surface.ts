@@ -344,69 +344,81 @@ function mountLiveCanvas(
 
   live = current;
 
-  void import('./canvas')
-    .then((canvas) => {
-      if (current.disposed || !current.mount.isConnected || live !== current) {
-        return; // the stage moved on mid-download — this mount is dead
-      }
-      try {
-        loading.remove();
-        current.handle = canvas.mountDrawingCanvas(mount, {
-          initialScene: {
-            elements: current.snapshot.elements,
-            appState: current.snapshot.appState,
-          },
-          theme: current.theme,
-          name: current.noteName,
-          onChange: (next) => {
-            current.snapshot = next;
-            flushSceneImages(current);
-            scheduleAnnounce(current);
-          },
-        });
-        // Hydration results that queued while the chunk traveled, then
-        // the open scene's own shopping list (hydrateSceneImages marks
-        // the ids it answers, so this never double-loads).
-        if (current.pendingFiles.length > 0) {
-          current.handle.addFiles(current.pendingFiles);
-          current.pendingFiles = [];
-        }
-        hydrateSceneImages(current);
-      } catch {
-        // The island crashed mid-mount (or the environment beneath it is
-        // gone): the honest card replaces the loading paint when anything
-        // is left to paint on. A card is not a canvas — the host goes back
-        // to the padded reading column.
-        host.classList.remove(DRAWING_CANVAS_OPEN_CLASS);
-        try {
-          mount.replaceChildren(
-            buildCard(
-              'The canvas could not load',
-              'The drawing is safe and syncs like any other note. Check the connection and reopen the note to try again.',
-            ),
-          );
-        } catch {
-          /* the environment beneath the mount is gone — nothing to paint */
-        }
-      }
-    })
-    .catch(() => {
-      // A dead mount (dismissed, or the stage moved on) stays down; the
-      // isConnected check also covers a torn-down test environment — the
-      // island may take longer to REJECT than its suite takes to finish.
-      if (current.disposed || live !== current || !current.mount.isConnected) return;
-      host.classList.remove(DRAWING_CANVAS_OPEN_CLASS);
-      try {
-        mount.replaceChildren(
-          buildCard(
-            'The canvas could not load',
-            'The drawing is safe and syncs like any other note. Check the connection and reopen the note to try again.',
-          ),
-        );
-      } catch {
-        /* the environment beneath the mount is gone — nothing to paint */
-      }
+  // The mount path, as a promise: one import attempt, then the paint.
+  // Both the retry (below) and the callback re-entrancy guard read the
+  // same disposal checks the original .then body carried.
+  const importAndMount = async (): Promise<void> => {
+    const canvas = await import('./canvas');
+    if (current.disposed || !current.mount.isConnected || live !== current) {
+      return; // the stage moved on mid-download — this mount is dead
+    }
+    loading.remove();
+    current.handle = canvas.mountDrawingCanvas(mount, {
+      initialScene: {
+        elements: current.snapshot.elements,
+        appState: current.snapshot.appState,
+      },
+      theme: current.theme,
+      name: current.noteName,
+      onChange: (next) => {
+        current.snapshot = next;
+        flushSceneImages(current);
+        scheduleAnnounce(current);
+      },
     });
+    // Hydration results that queued while the chunk traveled, then
+    // the open scene's own shopping list (hydrateSceneImages marks
+    // the ids it answers, so this never double-loads).
+    if (current.pendingFiles.length > 0) {
+      current.handle.addFiles(current.pendingFiles);
+      current.pendingFiles = [];
+    }
+    hydrateSceneImages(current);
+  };
+
+  /** The honest failure card — the drawing is safe, and the Retry action
+   * is the deterministic hard refresh: the service worker re-fetches the
+   * whole precache network-first, then the page reloads into the NEW
+   * build (a deploy had renamed every chunk the running tab holds — no
+   * in-tab retry can ever fetch a name that no longer exists). */
+  const showCanvasErrorCard = (): void => {
+    host.classList.remove(DRAWING_CANVAS_OPEN_CLASS);
+    try {
+      mount.replaceChildren(
+        buildCard(
+          'The canvas could not load',
+          'The drawing is safe and syncs like any other note. Retry reopens it with the latest version of the app.',
+          {
+            label: 'Retry',
+            onClick: () => {
+              void import('../../install-pwa').then(({ reloadWithFreshShell }) =>
+                reloadWithFreshShell(),
+              );
+            },
+          },
+        ),
+      );
+    } catch {
+      /* the environment beneath the mount is gone — nothing to paint */
+    }
+  };
+
+  void importAndMount().catch(() => {
+    // A dead mount (dismissed, or the stage moved on) stays down; the
+    // isConnected check also covers a torn-down test environment — the
+    // island may take longer to REJECT than its suite takes to finish.
+    if (current.disposed || live !== current || !current.mount.isConnected) return;
+    // The one-shot retry (R3's open-glitch work): a transient failure —
+    // a racing service-worker update, one flaky fetch — recovers in
+    // place after a beat. Browsers do not memoize FAILED module fetches,
+    // so the second import() re-requests the chunk. A real miss (the
+    // old-hash-after-a-deploy case, a corrupt install) fails again and
+    // gets the card with the Retry action instead of a dead end.
+    setTimeout(() => {
+      if (current.disposed || live !== current || !current.mount.isConnected) return;
+      void importAndMount().catch(showCanvasErrorCard);
+    }, 400);
+  });
 }
 
 /**
@@ -430,8 +442,13 @@ export function warmCanvasIsland(): void {
   }
 }
 
-/** The load/error/read-only card — the unsupported-note look, reused. */
-function buildCard(title: string, body: string): HTMLElement {
+/** The load/error/read-only card — the unsupported-note look, reused.
+ * An optional action row (the error card's Retry) lands below the body. */
+function buildCard(
+  title: string,
+  body: string,
+  action?: { label: string; onClick: () => void },
+): HTMLElement {
   const card = document.createElement('div');
   card.className = 'unsupported-note';
   card.dataset.noteType = 'drawing';
@@ -442,9 +459,23 @@ function buildCard(title: string, body: string): HTMLElement {
 
   const bodyEl = document.createElement('p');
   bodyEl.className = 'unsupported-note-body';
-  bodyEl.textContent = body;
+  const text = document.createElement('span');
+  text.textContent = body;
+  bodyEl.append(text);
 
   card.append(titleEl, bodyEl);
+
+  if (action) {
+    const row = document.createElement('div');
+    row.className = 'unsupported-note-actions';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'unsupported-note-action';
+    button.textContent = action.label;
+    button.addEventListener('click', action.onClick);
+    row.append(button);
+    card.append(row);
+  }
   return card;
 }
 

@@ -49,10 +49,11 @@ import { createElement, useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import {
   Excalidraw,
+  CommandPalette,
   MainMenu,
   WelcomeScreen,
-  exportToBlob,
-  exportToSvg,
+  exportScene,
+  getCommonBounds,
 } from '@excalidraw/excalidraw';
 // Types-only subpath (the package's exports map points "/types" at its
 // d.ts tree) — no runtime cost, no phantom-module games.
@@ -64,6 +65,10 @@ import type {
 } from '@excalidraw/excalidraw/types';
 import '@excalidraw/excalidraw/index.css';
 import type { CanvasImageFile } from './canvas-images';
+// The vendor's insert-time byte gate speaks the wire contract's number
+// (shared/wire.ts) — the same 5 MB every capture path and the server's
+// upload route enforce.
+import { MAX_ATTACHMENT_BYTES } from '../../../shared/wire';
 
 /** The canvas's theme — the vendor's Theme, spelled without a type import
  * so this module owns its own contract ('light' | 'dark'). */
@@ -239,10 +244,6 @@ function drawingCanvasElement(
       // with stopImmediatePropagation, so the vendor's handler (registered
       // later, same phase) never sees them (app-shortcuts.ts).
       handleKeyboardGlobally: true,
-      // The AI triggers (the mermaid text-to-diagram dialog) are client-
-      // side — bundled with the vendor, no keys, no backend. Diagram-to-
-      // code stays off by omission (it needs keys the app does not hold).
-      aiEnabled: true,
       onChange: (elements: readonly object[], appState: AppState, files: BinaryFiles) => {
         onFiles(files);
         options.onChange({
@@ -263,27 +264,37 @@ function drawingCanvasElement(
         },
         // The image tool is ON — images are the attachment store's real
         // tenant (canvas-images.ts owns the persistence spine around
-        // whatever the vendor inserts). The vendor applies its own native
-        // insert gates: images resize to its canvas-size ceiling at insert
-        // and files over its byte ceiling refuse with the "too big" error —
-        // the same 5 MB the wire contract enforces, so an inserted image
-        // never fails at sync. The ids it mints are content hashes, so one
-        // image pasted twice is one store row.
+        // whatever the vendor inserts). The gates ride the master-only
+        // imageOptions prop: a 1920-px long edge and the wire contract's
+        // byte ceiling (shared/wire.ts — the same 5 MB every capture path
+        // and the server's upload route enforce). A file over either
+        // fails at insert, never at sync; the ids the vendor mints are
+        // content hashes, so one image pasted twice is one store row.
         tools: { image: true },
       },
-      // Stable's prop name for the imperative-API callback (master renamed
-      // it onExcalidrawAPI; the surface's queue-until-ready handle leans on
+      imageOptions: {
+        maxWidthOrHeight: 1920,
+        maxFileSizeBytes: MAX_ATTACHMENT_BYTES,
+      },
+      // Master's prop name for the imperative-API callback (stable renamed
+      // it excalidrawAPI; the surface's queue-until-ready handle leans on
       // this firing the moment the component is mounted).
-      excalidrawAPI: onApi,
+      onExcalidrawAPI: onApi,
     },
     // The hand-drawn welcome panel on empty scenes — native chrome the
     // curated build never mounted (the vendor's own default composition).
     createElement(WelcomeScreen),
+    // The command palette, self-wired: the component binds its own
+    // capture-phase chord (Ctrl/Cmd+Alt+Shift+P or Ctrl/Cmd+Alt+/) and
+    // answers through the vendor's dialog system. The site composes its
+    // menu item at its app layer; the pad reaches the same feature via
+    // the chord (and the SearchMenu item next to it covers Find).
+    createElement(CommandPalette),
     // The main menu, the vendor's way: the fallback composition minus the
-    // policy items. CommandPalette + SearchMenu ride along — the native
-    // menu's palette and Find on canvas, which the curated build had off.
-    // The Preferences group (the native menu's checkmark rows) renders
-    // once the vendor's API callback has fired — see PreferencesGroup.
+    // policy items. SearchMenu rides along — the native menu's Find on
+    // canvas, which the curated build had off. The Preferences group (the
+    // native menu's checkmark rows) renders once the vendor's API callback
+    // has fired — see PreferencesGroup.
     createElement(
       MainMenu,
       undefined,
@@ -291,7 +302,6 @@ function drawingCanvasElement(
       createElement(MainMenu.DefaultItems.SaveToActiveFile),
       createElement(MainMenu.DefaultItems.SaveAsImage),
       createElement(MainMenu.Separator),
-      createElement(MainMenu.DefaultItems.CommandPalette, {}),
       createElement(MainMenu.DefaultItems.SearchMenu, {}),
       createElement(MainMenu.DefaultItems.Help),
       createElement(PreferencesGroup, { api: apiForMenu }),
@@ -326,18 +336,19 @@ export function mountDrawingCanvas(
    * the moment it does (the queue is small: a scene's fileIds). */
   let pendingFiles: CanvasImageFile[] = [];
 
-  /** The master replacement for the removed setViewport(): navigate the
-   * viewport to the scene's non-deleted bounds through the stable API's
-   * scrollToContent — no fit (center, keep the zoom), the same semantics
-   * the master build asked of setViewport({fit: 'none'}). The elements go
-   * in as records: stable's scrollToContent resolves them through the
-   * scene map, so navigation works the same tick the elements are fed —
-   * updateScene applies on the next render, and the scroll lands after. */
+  /** The master's setViewport(): navigate the viewport to the scene's
+   * non-deleted bounds. The target goes in as BOUNDS (not element
+   * records) so navigation works the same tick the elements are fed —
+   * setViewport only resolves element records that are already on the
+   * canvas, and updateScene applies on the next render. */
   const centerOnContent = (elements: readonly Record<string, unknown>[]): void => {
     if (!api) return;
     const visible = elements.filter((element) => element.isDeleted !== true);
     if (visible.length === 0) return;
-    api.scrollToContent(visible as never);
+    api.setViewport({
+      target: getCommonBounds(visible as never),
+      fit: 'none', // center on the content, keep the zoom
+    });
   };
 
   const render = (): void => {
@@ -381,8 +392,14 @@ export function mountDrawingCanvas(
           // One re-render so the menu's Preferences group receives the
           // instance (its first render saw null and stood down). React
           // reconciles: same props except the children, initialData
-          // already consumed — a no-op for the canvas itself.
-          render();
+          // already consumed — a no-op for the canvas itself. The null
+          // call (the master vendor nulls the callback DURING unmount,
+          // from componentWillUnmount) must NOT render — the root is
+          // going away, and rendering into it throws "Cannot update an
+          // unmounted root".
+          if (instance) {
+            render();
+          }
         },
         (files: BinaryFiles) => {
           latestFiles = files;
@@ -468,23 +485,23 @@ export function mountDrawingCanvas(
  * image element exports as the vendor's gray placeholder, so the caller
  * always passes what it holds.
  *
- * The native export options (R1's dialog speaks them all): background,
- * dark mode, embed scene, scale. They ride the appState the vendor's
- * exporter reads — the same keys its own image-export dialog sets.
- * Defaults match what the vendor's dialogs default to: the scene's own
- * background, the scene's own mode, no embed, scale 1, 10px padding.
+ * The native export options (R1's dialog speaks them all) map onto the
+ * master exporter's own config — the same knobs its dialogs turn:
+ * background (canvasBackgroundColor: false = transparent), dark mode
+ * (theme), embed scene (the PNG/SVG re-opens as an editable drawing on
+ * excalidraw.com), and the export scale.
  */
 export interface DrawingImageExportOptions {
-  /** Paint the scene's canvas background color (the vendor's
-   * exportBackground). Off = transparent backdrop. */
+  /** Paint the scene's canvas background color. Off = transparent
+   * backdrop. */
   background?: boolean;
-  /** Render the export in the dark palette (the vendor's
-   * exportWithDarkMode) regardless of the live theme. */
+  /** Render the export in the dark palette regardless of the live
+   * theme. */
   dark?: boolean;
-  /** Embed the scene in the PNG metadata (the vendor's exportEmbedScene)
-   * — excalidraw.com re-opens the file as an editable drawing. */
+  /** Embed the scene in the file metadata — excalidraw.com re-opens it
+   * as an editable drawing. */
   embed?: boolean;
-  /** The export scale (the vendor's exportScale): 1 or 2. */
+  /** The export scale: 1 or 2. */
   scale?: 1 | 2;
 }
 
@@ -495,22 +512,23 @@ export async function renderDrawingImage(
   options?: DrawingImageExportOptions,
 ): Promise<Blob | string> {
   const elements = scene.elements.filter((element) => element.isDeleted !== true);
-  const appState = {
-    ...(scene.appState as unknown as Partial<AppState>),
-    exportBackground: options?.background ?? true,
-    exportWithDarkMode: options?.dark ?? false,
-    exportEmbedScene: options?.embed ?? false,
-    exportScale: options?.scale ?? 1,
-  } as Partial<AppState>;
   const payload = {
-    elements: elements as never,
-    appState: appState as never,
-    files: files ?? null,
-    exportPadding: 10,
+    data: {
+      elements: elements as never,
+      appState: scene.appState as never,
+      files: files ?? null,
+    },
+    type: kind,
+    config: {
+      canvasBackgroundColor: options?.background === false ? (false as const) : undefined,
+      theme: options?.dark === true ? ('dark' as const) : ('light' as const),
+      scale: options?.scale ?? 1,
+      embedScene: options?.embed ?? false,
+    },
   };
+  const output = await exportScene(payload as Parameters<typeof exportScene>[0]);
   if (kind === 'svg') {
-    const svg = await exportToSvg(payload);
-    return new XMLSerializer().serializeToString(svg);
+    return new XMLSerializer().serializeToString(output as unknown as SVGSVGElement);
   }
-  return exportToBlob({ ...payload, mimeType: 'image/png' });
+  return output as unknown as Blob;
 }
