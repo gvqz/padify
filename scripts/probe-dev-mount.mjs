@@ -24,7 +24,9 @@ const run = async () => {
   for (const e of errors.slice(0, 12)) console.log(e.slice(0, 300));
   // The unmount race: switch drawing → text and capture the error stack.
   await page.waitForTimeout(4_000);
-  page.on('pageerror', (e) => console.log('SWITCH pageerror stack:', (e.stack || e.message).slice(0, 900)));
+  page.on('pageerror', (e) =>
+    console.log('SWITCH pageerror stack:', (e.stack || e.message).slice(0, 900)),
+  );
   await page.locator('#tabStripTabs .tab-strip-tab').first().click();
   await page.waitForTimeout(1_500);
   const wrapperAfter = await page.locator('#note [data-drawing-canvas]').count();
