@@ -85,6 +85,22 @@ export const DRAWING_ANNOUNCE_DEBOUNCE_MS = 300;
  */
 export const DRAWING_CANVAS_OPEN_CLASS = 'drawing-canvas-open';
 
+/**
+ * The zen-mode state class the canvas paints on its host while the open
+ * drawing's zen mode is ON — the vendor's Preferences toggle (and its own
+ * keyboard chord) flip `zenModeEnabled`, which the whitelist already
+ * persists as note content. The shell answers through CSS
+ * (16-editor-shell.css, `body:has(#note.drawing-zen-mode)`): the navbar
+ * and the note rail step aside so a zen drawing owns the whole window —
+ * the host's half of the deal excalidraw.com's zen mode makes (the
+ * vendor hides its own chrome; the navbar and the rail are OURS). The
+ * class rides the host exactly like the takeover class above, so every
+ * stand-down path lifts it and the shell always comes back. Named in
+ * tests — surface.test.ts pins the paint/unpaint discipline,
+ * drawing-canvas.spec.ts pins the shell's answer.
+ */
+export const DRAWING_ZEN_MODE_CLASS = 'drawing-zen-mode';
+
 // ---------------------------------------------------------------------------
 // The live canvas
 // ---------------------------------------------------------------------------
@@ -129,6 +145,11 @@ interface LiveDrawingCanvas {
   pendingFiles: CanvasImageFile[];
   /** True once dismiss()/standDown took this instance down. */
   disposed: boolean;
+  /** The zen-mode state as last painted on the host — the flip tracker
+   * that keeps the shell's classList work at toggle cadence (the vendor's
+   * onChange fires for every pointer twitch; the shell must not follow
+   * that, only the actual flips). */
+  zenMode: boolean;
 }
 
 let live: LiveDrawingCanvas | null = null;
@@ -202,9 +223,18 @@ function standDownLive(): void {
   cancelAnnounce(current);
   current.disposed = true;
   document.removeEventListener('padify:theme', current.themeListener);
-  current.host.classList.remove(DRAWING_CANVAS_OPEN_CLASS);
+  current.host.classList.remove(DRAWING_CANVAS_OPEN_CLASS, DRAWING_ZEN_MODE_CLASS);
   current.handle?.unmount();
   live = null;
+}
+
+/** Paints the zen-mode state on the host — the shell's navbar and note
+ * rail answer through the `:has()` rules (16-editor-shell.css). Flips
+ * only: a scene re-fed without a zen change touches nothing. */
+function applyZenMode(current: LiveDrawingCanvas, on: boolean): void {
+  if (current.zenMode === on) return;
+  current.zenMode = on;
+  current.host.classList.toggle(DRAWING_ZEN_MODE_CLASS, on);
 }
 
 /**
@@ -273,6 +303,11 @@ function feedLiveScene(current: LiveDrawingCanvas, scene: DrawingScene, name: st
   current.savedAt = scene.savedAt;
   current.snapshot = { elements: scene.elements, appState: scene.appState };
   current.budgetWarned = false;
+  // A drawing → drawing switch re-reads the pick from the NEW note's
+  // bytes (a zen-on note handing the stage to a plain one brings the
+  // chrome back; the reverse hides it) — the same discipline the mount
+  // path applies below.
+  applyZenMode(current, scene.appState.zenModeEnabled === true);
   cancelAnnounce(current);
   current.handle?.updateScene({
     elements: scene.elements,
@@ -330,7 +365,14 @@ function mountLiveCanvas(
     persistedFileIds: new Set<string>(),
     pendingFiles: [],
     disposed: false,
+    // Initialized from the OPEN scene's whitelisted pick, then painted —
+    // the shell's chrome answers while the vendor chunk is still loading
+    // (a zen-saved note never flashes the full shell first).
+    zenMode: scene.appState.zenModeEnabled === true,
   };
+  if (current.zenMode) {
+    host.classList.add(DRAWING_ZEN_MODE_CLASS);
+  }
 
   // The app's one theme seam (theme-controller.ts broadcasts on every
   // switch, device mode included). The vendor's theme prop is a mount-
@@ -366,6 +408,10 @@ function mountLiveCanvas(
       name: current.noteName,
       onChange: (next) => {
         current.snapshot = next;
+        // The live toggle: the vendor's Preferences row and its keyboard
+        // chord both surface here — the shell follows the flip (the
+        // tracker keeps quiet flips free).
+        applyZenMode(current, next.appState.zenModeEnabled === true);
         flushSceneImages(current);
         scheduleAnnounce(current);
       },
@@ -386,7 +432,7 @@ function mountLiveCanvas(
    * build (a deploy had renamed every chunk the running tab holds — no
    * in-tab retry can ever fetch a name that no longer exists). */
   const showCanvasErrorCard = (): void => {
-    host.classList.remove(DRAWING_CANVAS_OPEN_CLASS);
+    host.classList.remove(DRAWING_CANVAS_OPEN_CLASS, DRAWING_ZEN_MODE_CLASS);
     try {
       mount.replaceChildren(
         buildCard(

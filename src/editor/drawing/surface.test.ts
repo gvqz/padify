@@ -92,6 +92,7 @@ import { showToast } from '../../ui/toast';
 import '../../features/tasks/note/surface';
 import {
   DRAWING_ANNOUNCE_DEBOUNCE_MS,
+  DRAWING_ZEN_MODE_CLASS,
   DrawingNoteSurface,
   exportActiveDrawingImage,
 } from './surface';
@@ -303,6 +304,90 @@ describe('display — the mount lifecycle', () => {
     // to save, and capture answers the fed bytes EXACTLY — a save against
     // them is a no-op, never a rewrite.
     expect(surface.capture(host)).toBe(sceneWithElements);
+  });
+});
+
+describe('zen mode — the shell contract', () => {
+  /** A scene saved with zen ON (the whitelisted pick rides the bytes). */
+  const zenScene = serializeDrawingScene({
+    version: 1,
+    savedAt: 1700000000000,
+    elements: [],
+    appState: { zenModeEnabled: true },
+  });
+
+  it('a scene saved with zen on paints the state class at mount', async () => {
+    const host = connectedHost();
+    surface.display(host, { content: zenScene, noteType: 'drawing' });
+    await canvasReady();
+    expect(host.classList.contains(DRAWING_ZEN_MODE_CLASS)).toBe(true);
+    surface.display(host, null);
+  });
+
+  it('a plain scene mounts without the state class', async () => {
+    const host = connectedHost();
+    surface.display(host, { content: sceneWithElements, noteType: 'drawing' });
+    await canvasReady();
+    expect(host.classList.contains(DRAWING_ZEN_MODE_CLASS)).toBe(false);
+    surface.display(host, null);
+  });
+
+  it('the live toggle answers the vendor onChange — on and back off', async () => {
+    const host = connectedHost();
+    surface.display(host, { content: sceneWithElements, noteType: 'drawing' });
+    await canvasReady();
+    const { options } = lastMount();
+
+    options.onChange({ elements: [], appState: { zenModeEnabled: true } });
+    expect(host.classList.contains(DRAWING_ZEN_MODE_CLASS)).toBe(true);
+
+    options.onChange({ elements: [], appState: { zenModeEnabled: false } });
+    expect(host.classList.contains(DRAWING_ZEN_MODE_CLASS)).toBe(false);
+
+    // A non-zen appState (the every-pointer-twitch shape) keeps the state
+    // where it was — the shell must not flicker.
+    options.onChange({ elements: [], appState: { viewBackgroundColor: '#ffffff' } });
+    expect(host.classList.contains(DRAWING_ZEN_MODE_CLASS)).toBe(false);
+    surface.display(host, null);
+  });
+
+  it('standing the canvas down lifts the state — the shell always comes back', async () => {
+    const host = connectedHost();
+    surface.display(host, { content: zenScene, noteType: 'drawing' });
+    await canvasReady();
+    expect(host.classList.contains(DRAWING_ZEN_MODE_CLASS)).toBe(true);
+
+    surface.dismiss(host);
+    expect(host.classList.contains(DRAWING_ZEN_MODE_CLASS)).toBe(false);
+  });
+
+  it('a drawing → drawing switch re-reads the pick from the new bytes', async () => {
+    const host = connectedHost();
+    surface.display(host, { content: zenScene, noteType: 'drawing' });
+    await canvasReady();
+    expect(host.classList.contains(DRAWING_ZEN_MODE_CLASS)).toBe(true);
+
+    // A zen-on note handing the stage to a plain one brings the shell
+    // chrome back without a remount (the reuse path feeds the scene).
+    surface.display(host, { content: sceneWithElements, noteType: 'drawing' });
+    await canvasReady();
+    expect(host.classList.contains(DRAWING_ZEN_MODE_CLASS)).toBe(false);
+
+    // And the reverse — the plain note's chrome yields to a zen-on one.
+    surface.display(host, { content: zenScene, noteType: 'drawing' });
+    await canvasReady();
+    expect(host.classList.contains(DRAWING_ZEN_MODE_CLASS)).toBe(true);
+    surface.display(host, null);
+  });
+
+  it('clear empties the scene and lifts the state with it', async () => {
+    const host = connectedHost();
+    surface.display(host, { content: zenScene, noteType: 'drawing' });
+    await canvasReady();
+    expect(host.classList.contains(DRAWING_ZEN_MODE_CLASS)).toBe(true);
+
+    surface.clear(host);
+    expect(host.classList.contains(DRAWING_ZEN_MODE_CLASS)).toBe(false);
   });
 });
 

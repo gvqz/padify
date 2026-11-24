@@ -452,6 +452,44 @@ body.dark #note[data-empty]::before {
   display: none;
 }
 
+/* ---- Zen mode takes the shell down with the vendor's chrome ----
+   excalidraw.com's zen mode hides the vendor's own furniture; the navbar
+   and the note rail are the HOST's furniture, and this is the host's half
+   of the same deal: a zen drawing owns the whole window, not just the
+   editor column. The class rides the host (surface.ts paints it from the
+   scene's whitelisted zenModeEnabled — mount time, live toggles, and
+   every stand-down lift it), so the state follows the editor wherever it
+   lives. The :has() scoping is the bottom-line strip's pattern above —
+   and for the navbar it is load-bearing, not stylistic: the navbar is
+   the shell's SIBLING (position:fixed, outside #editorShell), so no
+   descendant selector rooted at the host can ever reach it.
+
+   Specificity: :has() contributes its argument's weight — #note id +
+   class — so these out-cascade base.css's bare `body` rule and the
+   #editorShell/#tabRail ids without a single !important. body.pip-host
+   keeps its `padding: 0 !important` on purpose: a floating window has
+   no navbar to clear, and its zero padding is already the zen value. */
+body:has(#note.drawing-zen-mode) {
+  padding-top: 0;
+}
+
+body:has(#note.drawing-zen-mode) .navbar-fixed-top {
+  display: none;
+}
+
+body:has(#note.drawing-zen-mode) #tabRail {
+  display: none;
+}
+
+/* The shell filled the viewport minus the navbar; with the navbar gone
+   the drawing takes the full window (dvh — the same mobile-viewport
+   reasoning the #editorShell rule above carries; vh first as the
+   fallback for browsers without dvh). */
+#editorShell:has(#note.drawing-zen-mode) {
+  height: calc(100vh - 0px);
+  height: calc(100dvh - 0px);
+}
+
 /* ---- The island boundary: bootstrap's shared class names, neutralized ----
    Excalidraw ships radix widgets under the SAME class names bootstrap uses
    app-wide, and bootstrap's rules are written for its own open/close

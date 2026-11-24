@@ -368,6 +368,69 @@ test.describe('the drawing canvas', () => {
     await expect(page.locator('.bottom-line')).toBeVisible();
   });
 
+  test('zen mode takes the shell down with the vendor chrome — and gives it back', async ({
+    page,
+  }) => {
+    await openDrawingCanvas(page);
+    await page.waitForTimeout(500);
+
+    // The vendor's Preferences toggle — the same row the site speaks.
+    await page.locator('[data-testid="main-menu-trigger"]').click();
+    const menu = page.locator('#note .excalidraw .dropdown-menu');
+    await menu.locator('.dropdown-menu-item', { hasText: 'Zen mode' }).click();
+    await expect(menu).toBeHidden();
+
+    // The host wears the zen state, and the shell's half of the deal:
+    // the navbar and the note rail step aside — the drawing owns the
+    // whole window, the way zen reads on excalidraw.com (the vendor's
+    // own chrome is its business; the navbar and the rail are ours).
+    await expect(page.locator('#note')).toHaveClass(/drawing-zen-mode/);
+    await expect(page.locator('.navbar-fixed-top')).toBeHidden();
+    await expect(page.locator('#tabRail')).toBeHidden();
+
+    // The drawing re-measures for the wider stage (the vendor's
+    // ResizeObserver): the canvas box now fills the whole viewport —
+    // no navbar strip above, no rail column on the left.
+    const full = await page.evaluate(() => {
+      const canvas = document.querySelector('#note .excalidraw')?.getBoundingClientRect();
+      return canvas
+        ? {
+            x: Math.round(canvas.x),
+            y: Math.round(canvas.y),
+            w: Math.round(canvas.width),
+            h: Math.round(canvas.height),
+            vw: window.innerWidth,
+            vh: window.innerHeight,
+          }
+        : null;
+    });
+    expect(full).not.toBeNull();
+    expect(full!.x).toBeLessThanOrEqual(1);
+    expect(full!.y).toBeLessThanOrEqual(1);
+    expect(full!.w).toBeGreaterThanOrEqual(full!.vw - 2);
+    expect(full!.h).toBeGreaterThanOrEqual(full!.vh - 2);
+
+    // Toggling back hands the chrome home (the vendor's menu button
+    // survives zen — the escape hatch, exactly like the site; with the
+    // rail hidden it is the ONE in-app way out, the same trap-less
+    // model excalidraw.com runs).
+    await page.locator('[data-testid="main-menu-trigger"]').click();
+    await menu.locator('.dropdown-menu-item', { hasText: 'Zen mode' }).click();
+    await expect(page.locator('#note')).not.toHaveClass(/drawing-zen-mode/);
+    await expect(page.locator('.navbar-fixed-top')).toBeVisible();
+    await expect(page.locator('#tabRail')).toBeVisible();
+
+    // The shell survives the next stage change: leaving the drawing for
+    // a text note keeps the chrome (the zen-ON stand-down discipline —
+    // dismiss lifts the state whatever repainted the host — is pinned at
+    // unit level, where a programmatic stage change is honest).
+    await page.locator('#tabStripTabs .tab-strip-tab').first().click();
+    await expect(page.locator('#note [data-drawing-canvas]')).toHaveCount(0);
+    await expect(page.locator('.navbar-fixed-top')).toBeVisible();
+    await expect(page.locator('#tabRail')).toBeVisible();
+    await expect(page.locator('.bottom-line')).toBeVisible();
+  });
+
   test('the map starts closed — the footer toggle owns it — and the styles panel keeps its rows', async ({
     page,
   }) => {
