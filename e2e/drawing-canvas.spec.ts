@@ -593,6 +593,26 @@ test.describe('the drawing canvas', () => {
     await expect(
       modal.locator('[data-search="markdown strikethrough strike ctrl cmd shift x source editor"]'),
     ).toBeVisible();
+    // The pane's cards are islands of their own: a card whose rows all miss
+    // the query goes away instead of lingering as an empty shell.
+    await page.locator('#shortcutSearch').fill('zoom');
+    await expect(
+      modal.locator('.shortcut-section[data-pane="drawing"] .shortcut-card', {
+        hasText: 'Zoom in',
+      }),
+    ).toBeVisible();
+    await expect(
+      modal.locator('.shortcut-section[data-pane="drawing"] .shortcut-card', {
+        hasText: 'Rectangle',
+      }),
+    ).not.toBeVisible();
     await page.locator('#shortcutSearch').fill('');
+
+    // The redesign's shape: the search + pills ride a sticky toolbar above a
+    // two-column island flow (one column on narrow viewports).
+    await expect(modal.locator('.shortcut-toolbar')).toHaveCSS('position', 'sticky');
+    await expect(modal.locator('#shortcutList')).toHaveCSS('column-count', '2');
+    await page.setViewportSize({ width: 480, height: 800 });
+    await expect(modal.locator('#shortcutList')).toHaveCSS('column-count', '1');
   });
 });

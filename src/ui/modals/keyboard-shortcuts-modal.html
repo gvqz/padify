@@ -32,33 +32,30 @@
         </button>
       </div>
       <div class="modal-body">
-        <div class="shortcut-search-wrap">
-          <svg
-            class="shortcut-search-icon"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <circle cx="11" cy="11" r="8"></circle>
-            <path d="m21 21-4.35-4.35"></path>
-          </svg>
-          <input
-            type="text"
-            id="shortcutSearch"
-            class="shortcut-search-input"
-            placeholder="Search shortcuts (e.g., save, bold, tab, link)..."
-            aria-label="Search keyboard shortcuts"
-          />
-        </div>
+        <div class="shortcut-toolbar">
+          <div class="shortcut-search-wrap">
+            <svg
+              class="shortcut-search-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input
+              type="text"
+              id="shortcutSearch"
+              class="shortcut-search-input"
+              placeholder="Search shortcuts (e.g., save, bold, tab, link)..."
+              aria-label="Search keyboard shortcuts"
+            />
+          </div>
 
-        <div id="shortcutList">
-          <!-- The pane switcher (#179): one sheet, switchable from General to
-               per note type. Sections carry data-pane; the search overrides
-               the pane (a query looks everywhere). -->
           <div class="shortcut-tabs" role="tablist" aria-label="Shortcut sections">
             <button
               type="button"
@@ -124,15 +121,18 @@
               Drawing
             </button>
           </div>
+        </div>
+
+        <div id="shortcutList">
+          <!-- The sheet (#179, attempt 2): a wide, two-column flow of
+               category islands — the way excalidraw.com's own shortcuts
+               dialog breathes. Sections carry data-pane; the search
+               overrides the pane (a query looks everywhere). -->
 
           <!-- General & Navigation -->
-          <section
-            class="pref-section shortcut-section"
-            aria-label="General and Navigation"
-            data-pane="general"
-          >
-            <header class="pref-section-head">
-              <span class="pref-section-icon" aria-hidden="true">
+          <section class="shortcut-section" aria-label="General and Navigation" data-pane="general">
+            <header class="shortcut-island-head">
+              <span class="shortcut-island-icon" aria-hidden="true">
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -147,42 +147,46 @@
                   <path d="M7 16h6" />
                 </svg>
               </span>
-              <div>
-                <h5 class="pref-section-title">General &amp; Navigation</h5>
-                <p class="pref-section-hint">File operations, note tabs, and app dialogs.</p>
+              <div class="shortcut-island-copy">
+                <h5 class="shortcut-island-title">General &amp; Navigation</h5>
+                <p class="shortcut-island-hint">File operations, note tabs, and app dialogs.</p>
               </div>
             </header>
-            <div class="pref-card shortcut-card">
-              <div class="shortcut-row" data-search="save note plain text ctrl cmd s">
+            <div class="shortcut-card">
+              <div
+                class="shortcut-row"
+                data-search="save note plain text ctrl cmd s export text file"
+              >
                 <div class="shortcut-info">
                   <span class="shortcut-title">Save as plain text</span>
-                  <span class="shortcut-description">Export current note to a text file</span>
                 </div>
                 <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>S</kbd></div>
               </div>
 
-              <div class="shortcut-row" data-search="save note pdf alt option s">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Save as PDF</span>
-                  <span class="shortcut-description">Export current note as PDF document</span>
-                </div>
+              <div
+                class="shortcut-row"
+                data-search="save note pdf alt option s export pdf document"
+              >
+                <div class="shortcut-info"><span class="shortcut-title">Save as PDF</span></div>
                 <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>S</kbd></div>
               </div>
 
-              <div class="shortcut-row" data-search="copy note clipboard alt option c">
+              <div
+                class="shortcut-row"
+                data-search="copy note clipboard alt option c full note content system"
+              >
                 <div class="shortcut-info">
                   <span class="shortcut-title">Copy to clipboard</span>
-                  <span class="shortcut-description"
-                    >Copy full note content to system clipboard</span
-                  >
                 </div>
                 <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>C</kbd></div>
               </div>
 
-              <div class="shortcut-row" data-search="preferences settings ctrl cmd comma">
+              <div
+                class="shortcut-row"
+                data-search="preferences settings ctrl cmd comma access app customizations"
+              >
                 <div class="shortcut-info">
                   <span class="shortcut-title">Open Preferences</span>
-                  <span class="shortcut-description">Access app settings and customizations</span>
                 </div>
                 <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>,</kbd></div>
               </div>
@@ -193,19 +197,19 @@
               >
                 <div class="shortcut-info">
                   <span class="shortcut-title">Take a snapshot</span>
-                  <span class="shortcut-description"
-                    >Save a version of the current note to History</span
-                  >
+                  <span class="shortcut-description">Save a version of the note to History</span>
                 </div>
                 <div class="shortcut-keys">
                   <kbd data-mod-key>Ctrl</kbd> + <kbd data-alt-key>Alt</kbd> + <kbd>S</kbd>
                 </div>
               </div>
 
-              <div class="shortcut-row" data-search="delete notes ctrl cmd shift delete backspace">
+              <div
+                class="shortcut-row"
+                data-search="delete notes ctrl cmd shift delete backspace remove active"
+              >
                 <div class="shortcut-info">
                   <span class="shortcut-title">Delete current note</span>
-                  <span class="shortcut-description">Remove the active note</span>
                 </div>
                 <div class="shortcut-keys">
                   <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Del</kbd>
@@ -214,11 +218,10 @@
 
               <div
                 class="shortcut-row"
-                data-search="switch note tab previous next ctrl cmd alt option left right arrow"
+                data-search="switch note tab previous next ctrl cmd alt option left right arrow cycle"
               >
                 <div class="shortcut-info">
                   <span class="shortcut-title">Switch note tabs</span>
-                  <span class="shortcut-description">Cycle through open note tabs</span>
                 </div>
                 <div class="shortcut-keys">
                   <kbd data-mod-key>Ctrl</kbd> + <kbd data-alt-key>Alt</kbd> + <kbd>←</kbd> /
@@ -226,10 +229,12 @@
                 </div>
               </div>
 
-              <div class="shortcut-row" data-search="close modal dialog menu escape esc">
+              <div
+                class="shortcut-row"
+                data-search="close modal dialog menu escape esc dismiss popup dropdown"
+              >
                 <div class="shortcut-info">
                   <span class="shortcut-title">Close popups &amp; menus</span>
-                  <span class="shortcut-description">Dismiss open dialogs or dropdowns</span>
                 </div>
                 <div class="shortcut-keys">
                   <kbd>Esc</kbd>
@@ -240,8 +245,8 @@
                 <div class="shortcut-info">
                   <span class="shortcut-title">Keyboard shortcuts (this sheet)</span>
                   <span class="shortcut-description"
-                    >Open the sheet from anywhere — except inside a rich or markdown note, where
-                    Ctrl + K belongs to the link bubble</span
+                    >Works anywhere except inside a rich or markdown note — there Ctrl + K is the
+                    link bubble</span
                   >
                 </div>
                 <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>K</kbd></div>
@@ -250,13 +255,9 @@
           </section>
 
           <!-- Text Formatting -->
-          <section
-            class="pref-section shortcut-section"
-            aria-label="Text Formatting"
-            data-pane="rich"
-          >
-            <header class="pref-section-head">
-              <span class="pref-section-icon" aria-hidden="true">
+          <section class="shortcut-section" aria-label="Text Formatting" data-pane="rich">
+            <header class="shortcut-island-head">
+              <span class="shortcut-island-icon" aria-hidden="true">
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -270,46 +271,36 @@
                   <path d="M12 4v16" />
                 </svg>
               </span>
-              <div>
-                <h5 class="pref-section-title">Text Formatting</h5>
-                <p class="pref-section-hint">Styling and inline formatting for selected text.</p>
+              <div class="shortcut-island-copy">
+                <h5 class="shortcut-island-title">Text Formatting</h5>
+                <p class="shortcut-island-hint">Styling and inline formatting for selected text.</p>
               </div>
             </header>
-            <div class="pref-card shortcut-card">
-              <div class="shortcut-row" data-search="bold text selection ctrl cmd b">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Bold</span>
-                  <span class="shortcut-description">Make selected text bold</span>
-                </div>
+            <div class="shortcut-card">
+              <div class="shortcut-row" data-search="bold text selection ctrl cmd b make selected">
+                <div class="shortcut-info"><span class="shortcut-title">Bold</span></div>
                 <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>B</kbd></div>
               </div>
 
-              <div class="shortcut-row" data-search="italic text selection ctrl cmd i">
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Italic</span>
-                  <span class="shortcut-description">Italicize selected text</span>
-                </div>
+              <div class="shortcut-row" data-search="italic text selection ctrl cmd i italicize">
+                <div class="shortcut-info"><span class="shortcut-title">Italic</span></div>
                 <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>I</kbd></div>
               </div>
 
               <div class="shortcut-row" data-search="underline text selection ctrl cmd u rich text">
                 <div class="shortcut-info">
-                  <span class="shortcut-title"
-                    >Underline <span class="shortcut-badge">Rich Text</span></span
+                  <span class="shortcut-title">
+                    Underline <span class="shortcut-badge">Rich Text</span></span
                   >
-                  <span class="shortcut-description">Underline selected text</span>
                 </div>
                 <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>U</kbd></div>
               </div>
 
               <div
                 class="shortcut-row"
-                data-search="strikethrough strike text selection ctrl cmd shift x"
+                data-search="strikethrough strike text selection ctrl cmd shift x cross out"
               >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Strikethrough</span>
-                  <span class="shortcut-description">Cross out selected text</span>
-                </div>
+                <div class="shortcut-info"><span class="shortcut-title">Strikethrough</span></div>
                 <div class="shortcut-keys">
                   <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>X</kbd>
                 </div>
@@ -317,26 +308,24 @@
 
               <div
                 class="shortcut-row"
-                data-search="superscript text selection ctrl cmd period dot rich text"
+                data-search="superscript text selection ctrl cmd period dot rich text raise above baseline"
               >
                 <div class="shortcut-info">
                   <span class="shortcut-title"
                     >Superscript <span class="shortcut-badge">Rich Text</span></span
                   >
-                  <span class="shortcut-description">Raise selection above baseline</span>
                 </div>
                 <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>.</kbd></div>
               </div>
 
               <div
                 class="shortcut-row"
-                data-search="clear remove formatting ctrl cmd backslash rich text"
+                data-search="clear remove formatting ctrl cmd backslash rich text strip inline styles"
               >
                 <div class="shortcut-info">
                   <span class="shortcut-title"
                     >Clear formatting <span class="shortcut-badge">Rich Text</span></span
                   >
-                  <span class="shortcut-description">Strip inline styles from selection</span>
                 </div>
                 <div class="shortcut-keys"><kbd data-mod-key>Ctrl</kbd> + <kbd>\</kbd></div>
               </div>
@@ -344,13 +333,9 @@
           </section>
 
           <!-- Structure & Layout -->
-          <section
-            class="pref-section shortcut-section"
-            aria-label="Structure and Layout"
-            data-pane="rich"
-          >
-            <header class="pref-section-head">
-              <span class="pref-section-icon" aria-hidden="true">
+          <section class="shortcut-section" aria-label="Structure and Layout" data-pane="rich">
+            <header class="shortcut-island-head">
+              <span class="shortcut-island-icon" aria-hidden="true">
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -364,12 +349,12 @@
                   <line x1="17" x2="3" y1="18" y2="18" />
                 </svg>
               </span>
-              <div>
-                <h5 class="pref-section-title">Structure &amp; Layout</h5>
-                <p class="pref-section-hint">Alignments, list controls, and block elements.</p>
+              <div class="shortcut-island-copy">
+                <h5 class="shortcut-island-title">Structure &amp; Layout</h5>
+                <p class="shortcut-island-hint">Alignments, list controls, and block elements.</p>
               </div>
             </header>
-            <div class="pref-card shortcut-card">
+            <div class="shortcut-card">
               <div
                 class="shortcut-row"
                 data-search="align left center right justify ctrl cmd shift l e r j rich text"
@@ -378,7 +363,6 @@
                   <span class="shortcut-title"
                     >Text alignment <span class="shortcut-badge">Rich Text</span></span
                   >
-                  <span class="shortcut-description">Align left, center, right, or justify</span>
                 </div>
                 <div class="shortcut-keys">
                   <kbd data-mod-key>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>L</kbd> / <kbd>E</kbd> /
@@ -415,13 +399,9 @@
           </section>
 
           <!-- Insert & Tools -->
-          <section
-            class="pref-section shortcut-section"
-            aria-label="Insert and Tools"
-            data-pane="general"
-          >
-            <header class="pref-section-head">
-              <span class="pref-section-icon" aria-hidden="true">
+          <section class="shortcut-section" aria-label="Insert and Tools" data-pane="general">
+            <header class="shortcut-island-head">
+              <span class="shortcut-island-icon" aria-hidden="true">
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -434,12 +414,12 @@
                   <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                 </svg>
               </span>
-              <div>
-                <h5 class="pref-section-title">Insert &amp; Tools</h5>
-                <p class="pref-section-hint">Links, symbols, voice typing, and smart tools.</p>
+              <div class="shortcut-island-copy">
+                <h5 class="shortcut-island-title">Insert &amp; Tools</h5>
+                <p class="shortcut-island-hint">Links, symbols, voice typing, and smart tools.</p>
               </div>
             </header>
-            <div class="pref-card shortcut-card">
+            <div class="shortcut-card">
               <div class="shortcut-row" data-search="insert edit link ctrl cmd k">
                 <div class="shortcut-info">
                   <span class="shortcut-title">Insert or edit link</span>
@@ -466,25 +446,18 @@
 
               <div
                 class="shortcut-row"
-                data-search="voice typing dictation microphone alt option v"
+                data-search="voice typing dictation microphone alt option v dictate text speech"
               >
-                <div class="shortcut-info">
-                  <span class="shortcut-title">Voice typing</span>
-                  <span class="shortcut-description">Dictate text into the note using speech</span>
-                </div>
+                <div class="shortcut-info"><span class="shortcut-title">Voice typing</span></div>
                 <div class="shortcut-keys"><kbd data-alt-key>Alt</kbd> + <kbd>V</kbd></div>
               </div>
             </div>
           </section>
 
           <!-- Markdown -->
-          <section
-            class="pref-section shortcut-section"
-            aria-label="Markdown notes"
-            data-pane="markdown"
-          >
-            <header class="pref-section-head">
-              <span class="pref-section-icon" aria-hidden="true">
+          <section class="shortcut-section" aria-label="Markdown notes" data-pane="markdown">
+            <header class="shortcut-island-head">
+              <span class="shortcut-island-icon" aria-hidden="true">
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -497,14 +470,14 @@
                   <path d="M6 9l3 6 3-6 3 6 3-6" />
                 </svg>
               </span>
-              <div>
-                <h5 class="pref-section-title">Markdown</h5>
-                <p class="pref-section-hint">
+              <div class="shortcut-island-copy">
+                <h5 class="shortcut-island-title">Markdown</h5>
+                <p class="shortcut-island-hint">
                   The source editor's GitHub-style chords — everything else rides the General pane.
                 </p>
               </div>
             </header>
-            <div class="pref-card shortcut-card">
+            <div class="shortcut-card">
               <div class="shortcut-row" data-search="markdown bold ctrl cmd b source editor">
                 <div class="shortcut-info">
                   <span class="shortcut-title">Bold</span>
@@ -576,9 +549,9 @@
           </section>
 
           <!-- Plain -->
-          <section class="pref-section shortcut-section" aria-label="Plain notes" data-pane="plain">
-            <header class="pref-section-head">
-              <span class="pref-section-icon" aria-hidden="true">
+          <section class="shortcut-section" aria-label="Plain notes" data-pane="plain">
+            <header class="shortcut-island-head">
+              <span class="shortcut-island-icon" aria-hidden="true">
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -593,14 +566,14 @@
                   <path d="M4 18h7" />
                 </svg>
               </span>
-              <div>
-                <h5 class="pref-section-title">Plain</h5>
-                <p class="pref-section-hint">
+              <div class="shortcut-island-copy">
+                <h5 class="shortcut-island-title">Plain</h5>
+                <p class="shortcut-island-hint">
                   The one chord the plain editor owns — everything else rides the General pane.
                 </p>
               </div>
             </header>
-            <div class="pref-card shortcut-card">
+            <div class="shortcut-card">
               <div class="shortcut-row" data-search="plain indent line tab literal text">
                 <div class="shortcut-info">
                   <span class="shortcut-title">Indent line</span>
@@ -622,9 +595,9 @@
           </section>
 
           <!-- Tasks -->
-          <section class="pref-section shortcut-section" aria-label="Tasks notes" data-pane="tasks">
-            <header class="pref-section-head">
-              <span class="pref-section-icon" aria-hidden="true">
+          <section class="shortcut-section" aria-label="Tasks notes" data-pane="tasks">
+            <header class="shortcut-island-head">
+              <span class="shortcut-island-icon" aria-hidden="true">
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -640,14 +613,14 @@
                   <path d="M12 17h9" />
                 </svg>
               </span>
-              <div>
-                <h5 class="pref-section-title">Tasks</h5>
-                <p class="pref-section-hint">
+              <div class="shortcut-island-copy">
+                <h5 class="shortcut-island-title">Tasks</h5>
+                <p class="shortcut-island-hint">
                   The task editor's own gestures — everything else rides the General pane.
                 </p>
               </div>
             </header>
-            <div class="pref-card shortcut-card">
+            <div class="shortcut-card">
               <div class="shortcut-row" data-search="tasks add task enter composer submit">
                 <div class="shortcut-info">
                   <span class="shortcut-title">Add the task</span>
@@ -683,13 +656,9 @@
                vendor's Tools / View / Editor groups), so the sheet IS the
                one place the shortcuts live (#179). The two chords the app
                deliberately re-tasks say so inline. -->
-          <section
-            class="pref-section shortcut-section"
-            aria-label="Drawing Canvas"
-            data-pane="drawing"
-          >
-            <header class="pref-section-head">
-              <span class="pref-section-icon" aria-hidden="true">
+          <section class="shortcut-section" aria-label="Drawing Canvas" data-pane="drawing">
+            <header class="shortcut-island-head">
+              <span class="shortcut-island-icon" aria-hidden="true">
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -702,16 +671,16 @@
                   <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
                 </svg>
               </span>
-              <div>
-                <h5 class="pref-section-title">Drawing Canvas</h5>
-                <p class="pref-section-hint">
+              <div class="shortcut-island-copy">
+                <h5 class="shortcut-island-title">Drawing Canvas</h5>
+                <p class="shortcut-island-hint">
                   The canvas's complete chord table — the same keys excalidraw.com speaks. The app's
                   own chords (save, this sheet, PDF) always win over the canvas's.
                 </p>
               </div>
             </header>
 
-            <div class="pref-card shortcut-card">
+            <div class="shortcut-card">
               <h6 class="shortcut-group-title">Tools</h6>
               <div class="shortcut-row" data-search="drawing hand panning tool h excalidraw">
                 <div class="shortcut-info">
@@ -860,7 +829,7 @@
               </div>
             </div>
 
-            <div class="pref-card shortcut-card">
+            <div class="shortcut-card">
               <h6 class="shortcut-group-title">View</h6>
               <div class="shortcut-row" data-search="drawing zoom in ctrl plus">
                 <div class="shortcut-info"><span class="shortcut-title">Zoom in</span></div>
@@ -939,7 +908,7 @@
               </div>
             </div>
 
-            <div class="pref-card shortcut-card">
+            <div class="shortcut-card">
               <h6 class="shortcut-group-title">Editor</h6>
               <div
                 class="shortcut-row"

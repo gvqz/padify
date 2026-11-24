@@ -75,6 +75,18 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
         if (matches) sectionVisibleCount++;
       });
 
+      // The Drawing pane's three cards (Tools / View / Editor) are islands
+      // of their own — a card whose rows all miss the query goes away with
+      // them instead of lingering as an empty shell under the section head.
+      section.querySelectorAll<HTMLElement>('.shortcut-card').forEach((card) => {
+        const cardRows = card.querySelectorAll<HTMLElement>('.shortcut-row');
+        let visibleRows = 0;
+        cardRows.forEach((row) => {
+          if (row.style.display !== 'none') visibleRows++;
+        });
+        card.style.display = cardRows.length === 0 || visibleRows > 0 ? '' : 'none';
+      });
+
       section.style.display = paneOk && sectionVisibleCount > 0 ? 'block' : 'none';
       if (paneOk) totalVisible += sectionVisibleCount;
     });
