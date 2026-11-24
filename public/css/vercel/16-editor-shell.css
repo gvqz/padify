@@ -402,6 +402,19 @@ body.dark #note[data-empty]::before {
      wrapper sheds it so drawings get the whole stage. */
   width: 100%;
   max-width: none;
+  /* The NATIVE baseline. The editor column carries the note's own
+     font-size (the preferences setting, 18px by default) and the app's
+     old html baseline sat at 10px — both bled into the vendor's root and
+     broke every size it computes: its tokens are rem-based against the
+     WEB default 16px (--lg-button-size: 2.25rem is 36px on
+     excalidraw.com; at a 10px root it rendered 22.5px, at the editor's
+     inherited 18px its inherited text read large while its boxes read
+     small — the whole chrome a mismatched, cramped mishmash). The
+     wrapper pins the browser-default baseline, so the vendor's rem math
+     and inherited text both compute exactly like the native site,
+     whatever the note's font-size setting is. The loading/error cards
+     inherit it too — their own sizes are px and stay put. */
+  font-size: 16px;
 }
 
 #note [data-drawing-canvas]:focus,
@@ -462,7 +475,7 @@ body.dark #note[data-empty]::before {
   float: none;
   min-width: 0;
   padding: 0;
-  margin: 0.5rem 0 0;
+  margin: 5px 0 0;
   font-size: inherit;
   list-style: none;
   text-align: left;

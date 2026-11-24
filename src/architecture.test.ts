@@ -99,8 +99,19 @@ describe('bootstrap stays out entirely', () => {
     // in the commit (the 2026-11-16 prune removed the groups whose every
     // complex selector needed a class token the app can neither emit nor
     // show on live DOM — bootstrap's JS-only vocabulary).
+    //
+    // The ONE deliberate post-prune deviation, recorded 2026-11-24: the
+    // subset's `html{font-size:10px}` baseline is gone. That declaration
+    // was the whole app's rem scale (1rem = 10px), and it silently broke
+    // the drawing canvas — the vendor's design tokens are rem-based
+    // against the WEB default 16px (--lg-button-size: 2.25rem is 36px on
+    // excalidraw.com; here it computed 22.5px), so the entire native
+    // chrome rendered at 62.5% scale with mismatched text sizes. The app
+    // never consumed the 10px baseline anywhere else (its one rem
+    // consumer became a px literal), so the root now sits at the browser
+    // default and the vendor computes exactly like the site.
     const VENDORED_SUBSET_SHA256 =
-      '50eec79d2e792f6e1063cbe705369d52810462e7e7ae15ddb5eec1bc6d9285bd';
+      '681c78afa29bc0cea615e77b2a995f676ea64b0cd0421a7ff5463d6d8c4e4229';
     const base = read(join(process.cwd(), 'public', 'css', 'vercel', '02-base.css'));
     const start = base.indexOf('/* Bootstrap 3.4.1 — the surviving subset.');
     const end = base.indexOf('/* [phase-1 fold]');
@@ -109,6 +120,8 @@ describe('bootstrap stays out entirely', () => {
     const slice = base.slice(start, end);
     const digest = createHash('sha256').update(slice).digest('hex');
     expect(digest).toBe(VENDORED_SUBSET_SHA256);
+    // The deviation stays exactly that — the baseline must not creep back.
+    expect(slice).not.toContain('font-size:10px');
   });
 
   it('jquery and the bootstrap JS bundle stay out of the dependency tree', () => {

@@ -291,8 +291,10 @@ function drawingCanvasElement(
     // the chord (and the SearchMenu item next to it covers Find).
     createElement(CommandPalette),
     // The main menu, the vendor's way: the fallback composition minus the
-    // policy items. SearchMenu rides along — the native menu's Find on
-    // canvas, which the curated build had off. The Preferences group (the
+    // policy items. The command palette rides as a menu item (the site's
+    // row — it flips the vendor's openDialog appState exactly the way the
+    // site's own item does) and SearchMenu (Find on canvas) follows —
+    // native chrome the curated build had off. The Preferences group (the
     // native menu's checkmark rows) renders once the vendor's API callback
     // has fired — see PreferencesGroup.
     createElement(
@@ -302,6 +304,22 @@ function drawingCanvasElement(
       createElement(MainMenu.DefaultItems.SaveToActiveFile),
       createElement(MainMenu.DefaultItems.SaveAsImage),
       createElement(MainMenu.Separator),
+      apiForMenu
+        ? createElement(
+            MainMenu.Item,
+            {
+              key: 'command-palette',
+              shortcut: 'Ctrl+/',
+              children: null, // the type demands it; the label passes as the child arg
+              onSelect: () => {
+                void apiForMenu.updateScene({
+                  appState: { openDialog: { name: 'commandPalette' } },
+                } as unknown as UpdateScenePayload);
+              },
+            },
+            'Command palette',
+          )
+        : null,
       createElement(MainMenu.DefaultItems.SearchMenu, {}),
       createElement(MainMenu.DefaultItems.Help),
       createElement(PreferencesGroup, { api: apiForMenu }),
