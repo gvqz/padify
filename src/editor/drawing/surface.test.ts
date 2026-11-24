@@ -561,6 +561,7 @@ describe('the image-export seam', () => {
       'png',
       expect.objectContaining({ elements: [{ id: 'a', type: 'rectangle' }] }),
       {}, // the live files map (empty here) rides along for image elements
+      undefined, // no dialog options — the fixed-defaults caller's shape
     );
   });
 

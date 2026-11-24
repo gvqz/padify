@@ -14,8 +14,7 @@ export interface NotepadUI {
   downloadNotesDocx: Q;
   downloadNotesHtml: Q;
   downloadNotesMarkdown: Q;
-  downloadNotesPng: Q;
-  downloadNotesSvg: Q;
+  downloadNotesImage: Q;
   downloadNotesExcalidraw: Q;
   openNoteFile: Q;
   previewToggleButton: Q;
@@ -119,8 +118,7 @@ export function selector(): AppSelector {
       downloadNotesDocx: selectById('downloadNotesDocx'),
       downloadNotesHtml: selectById('downloadNotesHtml'),
       downloadNotesMarkdown: selectById('downloadNotesMarkdown'),
-      downloadNotesPng: selectById('downloadNotesPng'),
-      downloadNotesSvg: selectById('downloadNotesSvg'),
+      downloadNotesImage: selectById('downloadNotesImage'),
       downloadNotesExcalidraw: selectById('downloadNotesExcalidraw'),
       openNoteFile: selectById('openNoteFile'),
       previewToggleButton: selectById('previewToggleButton'),

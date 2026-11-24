@@ -18,7 +18,7 @@ import {
   getActiveNoteExportBody,
   type TabManager,
 } from './tabs';
-import { exportActiveDrawingImage } from './editor/drawing/surface';
+import { openDrawingExportUI } from './editor/drawing/surface';
 import { drawingSceneHasContent, parseDrawingScene } from './editor/drawing/scene';
 import { collectNoteAttachmentIds } from '../shared/att-refs';
 import {
@@ -124,25 +124,22 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
   syncMarkdownExportRow();
 
   // The drawing rows follow the same rule — a drawing with something in
-  // it can become a PNG or an SVG (the plan's canvas-phase export seam;
-  // the empty canvas has nothing to save as an image, same rule as the
-  // share modal's emptiness gate).
-  notepad.downloadNotesPng.click(function () {
-    void exportActiveDrawingImage('png');
-  });
-  notepad.downloadNotesSvg.click(function () {
-    void exportActiveDrawingImage('svg');
+  // it can become an image (the R1 unified export: the row opens the
+  // native-options dialog — PNG/SVG, background, dark mode, embed scene,
+  // scale — instead of two fixed-default rows) or the native
+  // .excalidraw file (the empty canvas has nothing to save, same rule as
+  // the share modal's emptiness gate).
+  notepad.downloadNotesImage.click(function () {
+    void openDrawingExportUI();
   });
   const syncDrawingExportRows = (): void => {
     const captured = getActiveNoteContent();
     const exportable = captured?.noteType === 'drawing' && drawingSceneHasContent(captured.content);
     if (exportable) {
-      notepad.downloadNotesPng.removeAttr('hidden');
-      notepad.downloadNotesSvg.removeAttr('hidden');
+      notepad.downloadNotesImage.removeAttr('hidden');
       notepad.downloadNotesExcalidraw.removeAttr('hidden');
     } else {
-      notepad.downloadNotesPng.attr('hidden', 'hidden');
-      notepad.downloadNotesSvg.attr('hidden', 'hidden');
+      notepad.downloadNotesImage.attr('hidden', 'hidden');
       notepad.downloadNotesExcalidraw.attr('hidden', 'hidden');
     }
   };

@@ -56,7 +56,12 @@ import {
   type DrawingScene,
   type DrawingSceneElement,
 } from './scene';
-import type { DrawingCanvasHandle, DrawingCanvasScene, DrawingCanvasTheme } from './canvas';
+import type {
+  DrawingCanvasHandle,
+  DrawingCanvasScene,
+  DrawingCanvasTheme,
+  DrawingImageExportOptions,
+} from './canvas';
 import {
   flushSceneFiles,
   idsNeedingHydration,
@@ -582,12 +587,16 @@ function exportFileName(name: string): string {
 }
 
 /**
- * Exports the OPEN drawing as PNG or SVG — the download menu's rows call
- * this (app.ts gates them on the active note). Refuses honestly when the
- * canvas is not mounted or holds nothing: the same rules the share modal
- * applies, in the same words the app uses elsewhere.
+ * Exports the OPEN drawing as PNG or SVG — the download menu's "Export
+ * image…" dialog answers this on Save, with the dialog's native options
+ * (format, background, dark mode, embed scene, scale). Refuses honestly
+ * when the canvas is not mounted or holds nothing: the same rules the
+ * share modal applies, in the same words the app uses elsewhere.
  */
-export async function exportActiveDrawingImage(kind: 'png' | 'svg'): Promise<void> {
+export async function exportActiveDrawingImage(
+  kind: 'png' | 'svg',
+  options?: DrawingImageExportOptions,
+): Promise<void> {
   const current = live;
   if (!current || !current.handle || current.disposed || !current.mount.isConnected) {
     showToast('Open the drawing note first, then export.');
@@ -607,15 +616,46 @@ export async function exportActiveDrawingImage(kind: 'png' | 'svg'): Promise<voi
   try {
     const canvas = await import('./canvas');
     if (kind === 'svg') {
-      const markup = await canvas.renderDrawingImage('svg', scene, files);
+      const markup = await canvas.renderDrawingImage('svg', scene, files, options);
       saveTextAsFile(markup as string, `${fileName}.svg`, 'image/svg+xml');
       return;
     }
-    const blob = await canvas.renderDrawingImage('png', scene, files);
+    const blob = await canvas.renderDrawingImage('png', scene, files, options);
     if (blob instanceof Blob) {
       downloadBlob(blob, `${fileName}.png`);
     }
   } catch {
     showToast('The image export failed — try again.');
   }
+}
+
+/**
+ * The unified export's drawing door (R1, the owner's first component
+ * swap): the download menu's "Export image…" row lands here, the dialog
+ * opens on the vendor's native option set, and each Save press answers
+ * exportActiveDrawingImage with the dialog's choices. The gates (a live
+ * canvas, something in it) fire BEFORE the dialog so an empty or closed
+ * drawing answers with the same toast it always did.
+ */
+export async function openDrawingExportUI(): Promise<void> {
+  const current = live;
+  if (!current || !current.handle || current.disposed || !current.mount.isConnected) {
+    showToast('Open the drawing note first, then export.');
+    return;
+  }
+  const scene = current.handle.getScene();
+  const visible = visibleElements(scene.elements as DrawingSceneElement[]);
+  if (visible.length === 0) {
+    showToast('Nothing to export yet — draw something first.');
+    return;
+  }
+  const { openDrawingExportDialog } = await import('./export-dialog');
+  openDrawingExportDialog(async (choices) => {
+    await exportActiveDrawingImage(choices.format, {
+      background: choices.background,
+      dark: choices.dark,
+      embed: choices.embed,
+      scale: choices.scale,
+    });
+  });
 }

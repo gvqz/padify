@@ -123,7 +123,7 @@ test.describe('the drawing canvas', () => {
     expect(JSON.parse(reloaded[0].content).elements).toHaveLength(1);
   });
 
-  test('the download menu offers PNG/SVG only once there is something to save', async ({
+  test('the download menu offers the export row only once there is something to save', async ({
     page,
   }) => {
     await openDrawingCanvas(page);
@@ -131,8 +131,7 @@ test.describe('the drawing canvas', () => {
     // An empty drawing: the rows stay hidden, exactly like the Markdown row.
     await page.locator('#downloadNotes').click();
     await expect(page.locator('#iconDropdown')).toHaveClass(/show/);
-    await expect(page.locator('#downloadNotesPng')).toBeHidden();
-    await expect(page.locator('#downloadNotesSvg')).toBeHidden();
+    await expect(page.locator('#downloadNotesImage')).toBeHidden();
     await page.keyboard.press('Escape');
 
     // Draw, wait for the save, reopen: both rows appear.
@@ -140,8 +139,46 @@ test.describe('the drawing canvas', () => {
     await page.waitForTimeout(2_000);
     await page.locator('#downloadNotes').click();
     await expect(page.locator('#iconDropdown')).toHaveClass(/show/);
-    await expect(page.locator('#downloadNotesPng')).toBeVisible();
-    await expect(page.locator('#downloadNotesSvg')).toBeVisible();
+    await expect(page.locator('#downloadNotesImage')).toBeVisible();
+    await expect(page.locator('#downloadNotesExcalidraw')).toBeVisible();
+  });
+
+  test('the export dialog speaks the native options and downloads the render', async ({ page }) => {
+    await openDrawingCanvas(page);
+    await drawRectangle(page);
+    await page.waitForTimeout(2_000);
+
+    await page.locator('#downloadNotes').click();
+    await page.locator('#downloadNotesImage').click();
+
+    // The dialog: format switch, the three option rows, the scale switch.
+    const dialog = page.locator('dialog.drawing-export-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('.drawing-export-seg-btn', { hasText: 'PNG' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(dialog.getByText('Background')).toBeVisible();
+    await expect(dialog.getByText('Dark mode')).toBeVisible();
+    await expect(dialog.getByText('Embed scene')).toBeVisible();
+
+    // Scale is PNG-only semantics — flip the format and the SVG-only rows
+    // step aside, exactly like the vendor's own dialog.
+    await dialog.locator('.drawing-export-seg-btn', { hasText: 'SVG' }).click();
+    await expect(dialog.locator('.drawing-export-scale-row')).toBeHidden();
+    await expect(dialog.locator('.drawing-export-option', { hasText: 'Embed scene' })).toBeHidden();
+    await dialog.locator('.drawing-export-seg-btn', { hasText: 'PNG' }).click();
+    await expect(dialog.locator('.drawing-export-scale-row')).toBeVisible();
+
+    // Save at 2× with the defaults otherwise: the download carries the
+    // note's file name and the PNG bytes.
+    await dialog.locator('.drawing-export-seg-btn', { hasText: '2×' }).click();
+    const download = page.waitForEvent('download');
+    await dialog.locator('button.vz-dialog-confirm').click();
+    const file = await download;
+    expect(file.suggestedFilename()).toMatch(/\.png$/);
+    // The dialog closed on the Save press.
+    await expect(dialog).toBeHidden();
   });
 
   test('the main menu ships the native set — no vendor clear, no vendor links', async ({
