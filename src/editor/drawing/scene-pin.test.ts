@@ -95,6 +95,19 @@ describe('the appState whitelist pins against the installed Excalidraw', () => {
     expect([1, 2, 4]).toContain(restored.currentItemStrokeWidth);
   });
 
+  it('the native preferences the whitelist persists exist in the vendor’s appState', () => {
+    // R2's extension: zen mode and snap-to-objects persist (view mode
+    // deliberately does not — session-only by the vendor's own
+    // classification). The pin keeps the names from drifting against the
+    // installed vendor, same as every other whitelisted key above.
+    const restored = restoreVendorDefaults();
+    expect(restored).toHaveProperty('zenModeEnabled', false);
+    expect(restored).toHaveProperty('objectsSnapModeEnabled', false);
+    expect(DRAWING_APP_STATE_KEYS).toContain('zenModeEnabled');
+    expect(DRAWING_APP_STATE_KEYS).toContain('objectsSnapModeEnabled');
+    expect(DRAWING_APP_STATE_KEYS).not.toContain('viewModeEnabled');
+  });
+
   it('the vendor’s own serializer agrees on every whitelisted key it keeps', () => {
     // The surface reads the LIVE appState at save time; this cross-check
     // pins that the vendor's export path and the whitelist name the same

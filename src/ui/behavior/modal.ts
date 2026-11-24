@@ -172,6 +172,15 @@ export function closeAllModals(): void {
   Array.from(shownModals).forEach((el) => closeModal(el));
 }
 
+/** True while any bootstrap modal is on stage — the keyboard dispatcher's
+ * "does this Escape belong to the app?" answer: an open modal's Escape
+ * closes IT (and wins the chord against the drawing canvas's global
+ * handler, see app-shortcuts.ts); a quiet page's Escape passes through to
+ * whatever has focus (the canvas deselects, vendor dialogs close). */
+export function hasOpenModal(): boolean {
+  return shownModals.size > 0;
+}
+
 // ---- delegated wiring -----------------------------------------------------------
 
 function modalTargetFromTrigger(trigger: HTMLElement): Element | null {

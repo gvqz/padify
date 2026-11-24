@@ -45,7 +45,7 @@
 // this tree's imports run (see canvas-assets.ts — CSP blocks the vendor's
 // CDN fallback, so the same-origin copy is the only live source).
 import './canvas-assets';
-import { createElement } from 'react';
+import { createElement, useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import {
   Excalidraw,
@@ -118,6 +118,92 @@ export interface MountDrawingCanvasOptions {
   onChange(scene: DrawingCanvasScene): void;
 }
 
+/** The appState keys the Preferences group toggles, with the row labels
+ * the native menu speaks. All three are whitelisted (zen + snap) or
+ * already persisted (grid), so a toggle rides every future save.
+ * View mode stays session-only on purpose — the vendor classifies it
+ * {browser: false, export: false, server: false}, and a read-only note
+ * that syncs read-only to every device is a trap, not a preference. */
+const PREFERENCE_ROWS: readonly { key: keyof AppState & string; label: string }[] = [
+  { key: 'objectsSnapModeEnabled', label: 'Snap to objects' },
+  { key: 'gridModeEnabled', label: 'Grid' },
+  { key: 'zenModeEnabled', label: 'Zen mode' },
+];
+
+/**
+ * The Preferences group — the native menu's checkmark rows, composed from
+ * the public menu API (the vendor's own fallback has no Preferences
+ * section; excalidraw.com composes this at its app layer).
+ *
+ * The checkmarks read the LIVE appState: the component subscribes to the
+ * vendor's onChange and refreshes its state ONLY when a watched key
+ * actually flips (onChange fires for every pointer twitch — the compare
+ * keeps the re-render at the row cadence the toggles need). The api
+ * instance arrives through a prop: the mount re-renders once when the
+ * vendor's callback fires (the first render's group renders nothing).
+ */
+function PreferencesGroup({
+  api,
+}: {
+  api: ExcalidrawImperativeAPI | null;
+}): ReturnType<typeof createElement> | null {
+  const readPrefs = (instance: ExcalidrawImperativeAPI): Record<string, boolean> => {
+    const appState = instance.getAppState();
+    const prefs: Record<string, boolean> = {};
+    for (const row of PREFERENCE_ROWS) {
+      prefs[row.key] = appState[row.key] === true;
+    }
+    return prefs;
+  };
+  const [prefs, setPrefs] = useState<Record<string, boolean> | null>(null);
+  useEffect(() => {
+    if (!api) {
+      return;
+    }
+    let last = readPrefs(api);
+    setPrefs(last);
+    const unsubscribe = api.onChange(() => {
+      const next = readPrefs(api);
+      for (const row of PREFERENCE_ROWS) {
+        if (next[row.key] !== last[row.key]) {
+          last = next;
+          setPrefs(next);
+          return;
+        }
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [api]);
+  if (!api || !prefs) {
+    return null;
+  }
+  return createElement(
+    MainMenu.Group,
+    // The Group type demands children in the props object; the rows pass
+    // as createElement's child arguments (they win at render time).
+    { title: 'Preferences', children: null },
+    PREFERENCE_ROWS.map((row) =>
+      createElement(
+        MainMenu.Item,
+        {
+          key: row.key,
+          selected: prefs[row.key] === true,
+          children: null,
+          onSelect: () => {
+            const appState = api.getAppState();
+            void api.updateScene({
+              appState: { [row.key]: !(appState[row.key] === true) },
+            } as unknown as UpdateScenePayload);
+          },
+        },
+        row.label,
+      ),
+    ),
+  );
+}
+
 /**
  * The native chrome, as a prop bag for the component. The canvasActions
  * gates keep the app-owned doors shut (clear-canvas — the Padify-confirmed
@@ -132,6 +218,7 @@ export interface MountDrawingCanvasOptions {
 function drawingCanvasElement(
   options: MountDrawingCanvasOptions,
   initialData: object,
+  apiForMenu: ExcalidrawImperativeAPI | null,
   onApi: (api: ExcalidrawImperativeAPI | null) => void,
   onFiles: (files: BinaryFiles) => void,
 ): ReturnType<typeof createElement> {
@@ -142,10 +229,16 @@ function drawingCanvasElement(
       theme: options.theme,
       name: options.name,
       autoFocus: true,
-      // The canvas reacts to keys only while it is focused — the app's
-      // own shortcuts (tab strip, menus) keep working around it. (The
-      // preferences-and-keyboard pass revisits this for native parity.)
-      handleKeyboardGlobally: false,
+      // Native keyboard parity (R2): the vendor binds at the document, so
+      // the tool chords answer while a drawing note is active even before
+      // the canvas takes focus — the same behavior the site has. The scope
+      // IS the mount lifetime: a dismissed drawing unmounts the component
+      // and the binding goes with it. The app's own chords still win: the
+      // app's dispatcher registers on the same node (document, bubble)
+      // at boot — before the canvas ever mounts — and answers its chords
+      // with stopImmediatePropagation, so the vendor's handler (registered
+      // later, same phase) never sees them (app-shortcuts.ts).
+      handleKeyboardGlobally: true,
       // The AI triggers (the mermaid text-to-diagram dialog) are client-
       // side — bundled with the vendor, no keys, no backend. Diagram-to-
       // code stays off by omission (it needs keys the app does not hold).
@@ -189,6 +282,8 @@ function drawingCanvasElement(
     // The main menu, the vendor's way: the fallback composition minus the
     // policy items. CommandPalette + SearchMenu ride along — the native
     // menu's palette and Find on canvas, which the curated build had off.
+    // The Preferences group (the native menu's checkmark rows) renders
+    // once the vendor's API callback has fired — see PreferencesGroup.
     createElement(
       MainMenu,
       undefined,
@@ -199,6 +294,7 @@ function drawingCanvasElement(
       createElement(MainMenu.DefaultItems.CommandPalette, {}),
       createElement(MainMenu.DefaultItems.SearchMenu, {}),
       createElement(MainMenu.DefaultItems.Help),
+      createElement(PreferencesGroup, { api: apiForMenu }),
       createElement(MainMenu.Separator),
       createElement(MainMenu.DefaultItems.ChangeCanvasBackground),
     ),
@@ -252,7 +348,10 @@ export function mountDrawingCanvas(
     // Excalifont, exactly like excalidraw.com ("exactly like native"
     // includes the pen). A scene that carries its own pick — every
     // previously saved scene does, the whitelist persists the key —
-    // wins through the verbatim appState spread.
+    // wins through the verbatim appState spread. The api-for-menu slot
+    // hands the Preferences group the live instance: null until the
+    // vendor's callback fires, the instance from then on (the callback
+    // re-renders once — see below).
     root.render(
       drawingCanvasElement(
         props,
@@ -272,12 +371,18 @@ export function mountDrawingCanvas(
             ...options.initialScene.appState,
           },
         },
+        api,
         (instance: ExcalidrawImperativeAPI | null) => {
           api = instance;
           if (instance && pendingFiles.length > 0) {
             instance.addFiles(pendingFiles as unknown as BinaryFileData[]);
             pendingFiles = [];
           }
+          // One re-render so the menu's Preferences group receives the
+          // instance (its first render saw null and stood down). React
+          // reconciles: same props except the children, initialData
+          // already consumed — a no-op for the canvas itself.
+          render();
         },
         (files: BinaryFiles) => {
           latestFiles = files;

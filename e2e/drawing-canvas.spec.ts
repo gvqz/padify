@@ -181,6 +181,73 @@ test.describe('the drawing canvas', () => {
     await expect(dialog).toBeHidden();
   });
 
+  test('the Preferences group toggles zen mode and the choice persists', async ({ page }) => {
+    await openDrawingCanvas(page);
+
+    // The native menu's Preferences section — checkmark rows composed at
+    // the app layer, exactly like the site's.
+    await page.locator('[data-testid="main-menu-trigger"]').click();
+    const menu = page.locator('#note .excalidraw .dropdown-menu');
+    const zenRow = menu.locator('.dropdown-menu-item', { hasText: 'Zen mode' });
+    await expect(zenRow).toBeVisible();
+    await expect(menu.locator('.dropdown-menu-item', { hasText: 'Snap to objects' })).toBeVisible();
+
+    // Toggle zen: the checkmark flips live (the row reads the vendor's
+    // appState through its onChange subscription).
+    await zenRow.click();
+    await expect(menu).toBeHidden(); // the vendor closes the menu on select
+    await page.locator('[data-testid="main-menu-trigger"]').click();
+    await expect(menu.locator('.dropdown-menu-item', { hasText: 'Zen mode' })).toHaveClass(
+      /dropdown-menu-item--selected/,
+    );
+
+    // Zen state is note content now (the whitelist): the save carries it.
+    await page.waitForTimeout(2_000);
+    const saved = await readDrawingNotes(page);
+    expect(JSON.parse(saved[0].content).appState.zenModeEnabled).toBe(true);
+
+    // And a reload restores it from the scene bytes.
+    await page.reload();
+    await expect(page.locator('#note .excalidraw')).toBeVisible({ timeout: 20_000 });
+    await page.locator('[data-testid="main-menu-trigger"]').click();
+    await expect(menu.locator('.dropdown-menu-item', { hasText: 'Zen mode' })).toHaveClass(
+      /dropdown-menu-item--selected/,
+    );
+  });
+
+  test('the app chords still win while the canvas listens globally', async ({ page }) => {
+    await openDrawingCanvas(page);
+
+    // With the drawing active, the vendor's global keyboard is live — a
+    // tool chord arms the tool without any canvas focus. 'r' = rectangle.
+    const toolRectangle = page.locator('#note [data-testid="toolbar-button-rectangle"]');
+    await expect(toolRectangle).toBeVisible();
+    await page.keyboard.press('r');
+    await expect(toolRectangle).toHaveClass(/ToolIcon--selected|active|--selected/);
+
+    // The app's own chord (Ctrl+, → the preferences modal) must still fire
+    // — the app's dispatcher answers it and stops the vendor from seeing
+    // the event.
+    await page.keyboard.press('Control+,');
+    const prefsModal = page.locator('#preferencesModal');
+    await expect(prefsModal).toHaveClass(/in/);
+    await page.keyboard.press('Escape');
+    await expect(prefsModal).not.toHaveClass(/in/);
+
+    // And Escape on a quiet page belongs to the canvas again (the app's
+    // modal-close branch only wins while an app modal is open) — the
+    // vendor's zen-mode chord Alt+Z answers, proving the global handler
+    // still receives keys after the app's branches.
+    await page.keyboard.press('Alt+z');
+    await page.locator('[data-testid="main-menu-trigger"]').click();
+    await expect(
+      page
+        .locator('#note .excalidraw .dropdown-menu .dropdown-menu-item', { hasText: 'Zen mode' })
+        .first(),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+  });
+
   test('the main menu ships the native set — no vendor clear, no vendor links', async ({
     page,
   }) => {

@@ -51,6 +51,17 @@ export type DrawingSceneElement = Record<string, unknown>;
  * the numeric key at parse time, so every scene ever written — legacy
  * numeric, interim named — reads and re-serializes canonically against
  * the stable vendor.
+ *
+ * R2 (the preferences pass) adds the native menu's session toggles that
+ * must survive a reload: zen mode and snap-to-objects. The vendor's own
+ * storage classification calls both "browser-level" prefs — but that is
+ * excalidraw.com's app-layer home (its localStorage), and the embedded
+ * component has no such layer: without the whitelist the choices reset
+ * on every reload, which is exactly the gap the gap-list flagged. They
+ * are note content here — synced like every other scene byte. View mode
+ * stays OUT on purpose: the vendor marks it {browser: false, export:
+ * false, server: false} — session-only by design — and a note that
+ * syncs read-only to every device is a trap, not a preference.
  */
 export const DRAWING_APP_STATE_KEYS: readonly string[] = [
   'viewBackgroundColor',
@@ -69,6 +80,8 @@ export const DRAWING_APP_STATE_KEYS: readonly string[] = [
   'currentItemRoundness',
   'gridSize',
   'gridModeEnabled',
+  'zenModeEnabled',
+  'objectsSnapModeEnabled',
 ] as const;
 
 /**

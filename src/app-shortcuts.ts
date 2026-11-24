@@ -1,7 +1,7 @@
 import { saveTextAsFile, exportNotesAsPDF, getFileName, getPdfFileName } from './exports';
 import { getEditorText, type TabManager } from './tabs';
 import { copyNotesToClipboard, deleteNotes } from './context-menu';
-import { openModal, closeAllModals } from './ui/behavior/modal';
+import { openModal, closeAllModals, hasOpenModal } from './ui/behavior/modal';
 import { toggleVoiceTyping } from './voice';
 import type { NotepadUI } from './selector';
 import type { UnicodePickerHandle } from './unicode/picker';
@@ -77,8 +77,22 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
 
   // ---- the document-level dispatcher --------------------------------
   document.addEventListener('keydown', (event: KeyboardEvent) => {
-    if (event.key === 'Escape') {
+    // The app's own shortcuts still win (R2 keyboard parity): the drawing
+    // canvas's vendor binds its global handler on this SAME node, bubble
+    // phase, but AFTER boot — so for every chord below,
+    // stopImmediatePropagation keeps it from ever seeing the event. The
+    // vendor's chords the app does not own (tools, undo, Alt+Z…) are
+    // untouched: they simply fall through to the later handler.
+    const winChord = (): void => {
+      event.stopImmediatePropagation();
+    };
+
+    // Escape belongs to the app only while an app modal is on stage — a
+    // quiet page's Escape passes through so the canvas keeps its native
+    // semantics (deselect, close the vendor's dialogs, leave text edit).
+    if (event.key === 'Escape' && hasOpenModal()) {
       closeAllModals();
+      winChord();
     }
 
     // On Apple keyboards Option+letter is ordinary character input. The
@@ -107,6 +121,7 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
     if ((event.ctrlKey || event.metaKey) && !event.altKey && event.code === 'KeyS') {
       saveTextAsFile(getEditorText(), getFileName());
       event.preventDefault();
+      winChord();
     }
 
     // Alt+S without the primary modifier — exact match, so Ctrl+Alt+S
@@ -120,10 +135,12 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
     ) {
       exportNotesAsPDF(getEditorText(), getPdfFileName());
       event.preventDefault();
+      winChord();
     }
 
     if ((event.ctrlKey || event.metaKey) && event.code === 'Comma') {
       event.preventDefault();
+      winChord();
 
       if (notepad.preferencesModal.hasClass('in')) return;
 
@@ -133,6 +150,7 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
 
     if ((event.ctrlKey || event.metaKey) && event.code === 'KeyK') {
       event.preventDefault();
+      winChord();
 
       if (notepad.keyboardShortcutsModal.hasClass('in')) return;
 
@@ -142,11 +160,13 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
 
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyO') {
       event.preventDefault();
+      winChord();
       unicodePicker.open();
     }
 
     if (event.altKey && event.code === 'KeyC' && !altComboBlocked) {
       event.preventDefault();
+      winChord();
       copyNotesToClipboard(getEditorText());
     }
 
@@ -155,12 +175,14 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
       (event.metaKey && event.shiftKey && event.code === 'Backspace')
     ) {
       event.preventDefault();
+      winChord();
       void deleteNotes();
     }
 
     // Alt/option + v toggles voice typing.
     if (event.altKey && event.code === 'KeyV' && !altComboBlocked) {
       event.preventDefault();
+      winChord();
       toggleVoiceTyping();
     }
 
@@ -171,6 +193,7 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
       (event.key === 'ArrowRight' || event.key === 'ArrowLeft')
     ) {
       event.preventDefault();
+      winChord();
       tabManager.cycle(event.key === 'ArrowRight' ? 1 : -1);
     }
   });
