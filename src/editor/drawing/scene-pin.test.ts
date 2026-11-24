@@ -31,8 +31,6 @@ import {
 
 let restoreVendorDefaults: () => Record<string, unknown>;
 let vendorSerialize: (elements: never[], appState: never, files: never, type: 'local') => string;
-let vendorModule: typeof import('@excalidraw/excalidraw') | undefined;
-
 beforeAll(async () => {
   const canvasProto = HTMLCanvasElement.prototype as unknown as {
     getContext: (type: string) => unknown;
@@ -47,9 +45,8 @@ beforeAll(async () => {
   };
 
   const vendor = await import('@excalidraw/excalidraw');
-  vendorModule = vendor;
-  // Master's restoreAppState IS the appState — the old consolidated
-  // restore() wrapped it in { elements, appState, files }.
+  // Stable 0.18.1's restoreAppState(null, …) answers the vendor's own
+  // defaults (the localAppState null falls back to the DEFAULT set).
   restoreVendorDefaults = () =>
     vendor.restoreAppState(null, null) as unknown as Record<string, unknown>;
   vendorSerialize = vendor.serializeAsJSON;
@@ -84,22 +81,18 @@ describe('the appState whitelist pins against the installed Excalidraw', () => {
     }
   });
 
-  it('the legacy numeric strokeWidth migrates to the same key the vendor computes', () => {
-    // scene.ts carries its own LEGACY_STROKE_WIDTH_TO_KEY table for the
-    // parse-time migration. This pin makes that table unable to drift
-    // from the vendor's restore-time getStrokeWidthKey: if master ever
-    // re-maps the numbers, this fails HERE, not in a user's drawing.
-    for (const [numeric, expected] of [
-      [1, 'thin'],
-      [2, 'medium'],
-      [4, 'bold'],
-    ] as const) {
-      const migrated = vendorModule!.restoreAppState(
-        { currentItemStrokeWidth: numeric } as never,
-        null,
-      ) as unknown as Record<string, unknown>;
-      expect(migrated.currentItemStrokeWidthKey, `legacy numeric ${numeric}`).toBe(expected);
-    }
+  it('the interim build’s named strokeWidth translates to the vendor’s numeric key', () => {
+    // scene.ts carries its own NAMED_STROKE_WIDTH_TO_NUMBER table for the
+    // parse-time migration. The interim master snapshot labeled the
+    // numbers thin/medium/bold; stable says thin/bold/extraBold over the
+    // SAME numbers — the rendered weight must survive the rename. The
+    // vendor's STROKE_WIDTH map is not on the stable export surface, so
+    // this pin reads the vendor's DEFAULT appState: its stroke width
+    // default must be one of the numbers the table answers.
+    const restored = restoreVendorDefaults();
+    expect(DRAWING_APP_STATE_KEYS).toContain('currentItemStrokeWidth');
+    expect(DRAWING_APP_STATE_KEYS).not.toContain('currentItemStrokeWidthKey');
+    expect([1, 2, 4]).toContain(restored.currentItemStrokeWidth);
   });
 
   it('the vendor’s own serializer agrees on every whitelisted key it keeps', () => {

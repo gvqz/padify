@@ -9,27 +9,31 @@
  * scripts/build-sw.mjs's three-way classification), so offline works from
  * the second drawing on.
  *
+ * THE 2026-11-24 RESTART (issue #172): the island ships the vendor's OWN
+ * chrome — the same chrome excalidraw.com renders — not a re-themed copy
+ * of it. The previous build wrapped the vendor in a 483-line skin
+ * (canvas-skin.css) and a curated three-item menu; the owner called that
+ * "wrapped a skin over it" and wanted it to "look exactly like the native
+ * one looks in its own website". So: no skin (the vendor's purple accents,
+ * glass islands and hand-drawn welcome panel stand), the menu is the
+ * vendor's own default composition minus the white-label policy items
+ * (Socials, Excalidraw+/Sign up, Live collaboration — no backend — and the
+ * theme toggle / clear-canvas / JSON-export actions, whose doors stay
+ * app-owned), the hand-drawn WelcomeScreen shows on empty scenes, and the
+ * AI/mermaid trigger is on (client-side, no keys). Padify keeps only what
+ * integration demands: the asset path (CSP: no CDN), the image gates
+ * (insert-time resize + the wire's byte ceiling), the theme follow (the
+ * app's switch reaches the mounted canvas), and the attachment spine
+ * around the vendor's files map (canvas-images.ts).
+ *
  * WHAT THE HOST OWNS vs WHAT THE VENDOR OWNS: the surface (surface.ts)
  * owns the note lifecycle — what scene is fed, when saves are announced,
  * what happens on switch/commit/clear. This module only adapts the
  * Excalidraw component to that contract:
- *  - `mountDrawingCanvas()` renders the component (via a react-dom root)
- *    with the Generation-2 chrome: open/save `.excalidraw`, save as
- *    PNG/SVG, canvas background — and with the vendor's clear-canvas,
- *    full-export, theme toggle, socials OFF (the Padify confirmed flow
- *    owns clearing; the image tool is ON — its inserts are the pixels the
- *    attachment store persists, see canvas-images.ts; the pad follows the
- *    app's theme at mount, exactly like the retired Drawingpad did).
+ *  - `mountDrawingCanvas()` renders the component with the native chrome
+ *    and bridges the vendor's onChange into the surface's announce.
  *  - `renderDrawingImage()` is the export API behind the download menu's
- *    "Save as image" rows (PNG/SVG) — the same exporter the vendor's own
- *    "Save as image" dialog uses.
- *
- * THE SKIN. The import right after the vendor's stylesheet re-maps the
- * vendor's whole theme-variable surface onto Padify's design tokens —
- * same chunk, later in the cascade, scoped under [data-drawing-canvas].
- * Without it the canvas ships the vendor's own chrome: purple accents,
- * floating glass islands, the Assistant typeface — a design language the
- * app's monochrome never invited. See canvas-skin.css for the full map.
+ *    image rows — the same exporter the vendor's own dialogs call.
  *
  * NO JSX BY DESIGN: the app is a vanilla-TS codebase with no JSX tooling;
  * `createElement` keeps this island a plain .ts file (no tsconfig/eslint
@@ -45,10 +49,10 @@ import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import {
   Excalidraw,
-  FONT_FAMILY,
   MainMenu,
-  exportScene,
-  getCommonBounds,
+  WelcomeScreen,
+  exportToBlob,
+  exportToSvg,
 } from '@excalidraw/excalidraw';
 // Types-only subpath (the package's exports map points "/types" at its
 // d.ts tree) — no runtime cost, no phantom-module games.
@@ -59,12 +63,7 @@ import type {
   ExcalidrawImperativeAPI,
 } from '@excalidraw/excalidraw/types';
 import '@excalidraw/excalidraw/index.css';
-import './canvas-skin.css';
 import type { CanvasImageFile } from './canvas-images';
-// The vendor's insert-time byte gate speaks the wire contract's number
-// (shared/wire.ts) — the same 5 MB every capture path and the server's
-// upload route enforce.
-import { MAX_ATTACHMENT_BYTES } from '../../../shared/wire';
 
 /** The canvas's theme — the vendor's Theme, spelled without a type import
  * so this module owns its own contract ('light' | 'dark'). */
@@ -90,8 +89,7 @@ export interface DrawingCanvasHandle {
   scrollToContent(): void;
   /** Follows the app's theme switch without a remount (the vendor's theme
    * prop is a controlled value — a stale one leaves vendor JS (popovers,
-   * exports) branching on the wrong mode even while the skin's tokens
-   * rescue the CSS). */
+   * exports) branching on the wrong mode even while the CSS follows). */
   setTheme(theme: DrawingCanvasTheme): void;
   /** The live scene (non-deleted elements are the caller's business). */
   getScene(): DrawingCanvasScene;
@@ -121,12 +119,15 @@ export interface MountDrawingCanvasOptions {
 }
 
 /**
- * The Gen-2 chrome, as a prop bag for the component. The curated MainMenu
- * (rendered as children) is the honest set: Open, Save, Save as image,
- * canvas background — no Clear canvas (the Padify-confirmed flow in the
- * context menu owns that), no vendor links, no search/palette, no theme
- * toggle. The deprecated Export action stays off too — "Save as image"
- * already carries PNG/SVG.
+ * The native chrome, as a prop bag for the component. The canvasActions
+ * gates keep the app-owned doors shut (clear-canvas — the Padify-confirmed
+ * flow owns it; the JSON export dialog — the app's `.excalidraw` row is the
+ * same door with the attachment spine; the theme toggle — the app's theme
+ * switch is the one authority), while the vendor's own Save as image, Open
+ * and canvas background stay native. The main menu children mirror the
+ * vendor's own fallback composition (Open, Save to…, Export image…, Search,
+ * Help, canvas background) minus the white-label policy items — see the
+ * module docstring.
  */
 function drawingCanvasElement(
   options: MountDrawingCanvasOptions,
@@ -142,8 +143,13 @@ function drawingCanvasElement(
       name: options.name,
       autoFocus: true,
       // The canvas reacts to keys only while it is focused — the app's
-      // own shortcuts (tab strip, menus) keep working around it.
+      // own shortcuts (tab strip, menus) keep working around it. (The
+      // preferences-and-keyboard pass revisits this for native parity.)
       handleKeyboardGlobally: false,
+      // The AI triggers (the mermaid text-to-diagram dialog) are client-
+      // side — bundled with the vendor, no keys, no backend. Diagram-to-
+      // code stays off by omission (it needs keys the app does not hold).
+      aiEnabled: true,
       onChange: (elements: readonly object[], appState: AppState, files: BinaryFiles) => {
         onFiles(files);
         options.onChange({
@@ -157,39 +163,42 @@ function drawingCanvasElement(
           saveToActiveFile: true,
           saveAsImage: true,
           changeViewBackgroundColor: true,
+          // The app-owned doors (see the module docstring).
           clearCanvas: false,
           export: false,
           toggleTheme: false,
         },
         // The image tool is ON — images are the attachment store's real
         // tenant (canvas-images.ts owns the persistence spine around
-        // whatever the vendor inserts). The vendor resizes at insert and
-        // refuses over-cap files; the ids it mints are content hashes,
-        // so one image pasted twice is one store row.
+        // whatever the vendor inserts). The vendor applies its own native
+        // insert gates: images resize to its canvas-size ceiling at insert
+        // and files over its byte ceiling refuse with the "too big" error —
+        // the same 5 MB the wire contract enforces, so an inserted image
+        // never fails at sync. The ids it mints are content hashes, so one
+        // image pasted twice is one store row.
         tools: { image: true },
       },
-      // The insert-time gates: the app's own capture discipline, spoken
-      // in the vendor's vocabulary — a 1920-px long edge and the wire
-      // contract's byte ceiling (every gate, one number). A file over
-      // either fails at insert, never at sync.
-      imageOptions: {
-        maxWidthOrHeight: 1920,
-        maxFileSizeBytes: MAX_ATTACHMENT_BYTES,
-      },
-      // Master's minimap stays: the pad opens on the same train as
-      // excalidraw.com, map island included (its footer toggle rides the
-      // zoom controls; see the minimapEnabled default below for why it is
-      // on at every open).
-      onExcalidrawAPI: onApi,
+      // Stable's prop name for the imperative-API callback (master renamed
+      // it onExcalidrawAPI; the surface's queue-until-ready handle leans on
+      // this firing the moment the component is mounted).
+      excalidrawAPI: onApi,
     },
-    // Children: the curated main menu replaces the vendor default (which
-    // ships search, help, "Excalidraw links" and the theme toggle).
+    // The hand-drawn welcome panel on empty scenes — native chrome the
+    // curated build never mounted (the vendor's own default composition).
+    createElement(WelcomeScreen),
+    // The main menu, the vendor's way: the fallback composition minus the
+    // policy items. CommandPalette + SearchMenu ride along — the native
+    // menu's palette and Find on canvas, which the curated build had off.
     createElement(
       MainMenu,
       undefined,
       createElement(MainMenu.DefaultItems.LoadScene),
       createElement(MainMenu.DefaultItems.SaveToActiveFile),
       createElement(MainMenu.DefaultItems.SaveAsImage),
+      createElement(MainMenu.Separator),
+      createElement(MainMenu.DefaultItems.CommandPalette, {}),
+      createElement(MainMenu.DefaultItems.SearchMenu, {}),
+      createElement(MainMenu.DefaultItems.Help),
       createElement(MainMenu.Separator),
       createElement(MainMenu.DefaultItems.ChangeCanvasBackground),
     ),
@@ -221,37 +230,35 @@ export function mountDrawingCanvas(
    * the moment it does (the queue is small: a scene's fileIds). */
   let pendingFiles: CanvasImageFile[] = [];
 
-  /** The master replacement for the removed scrollToContent(): navigate
-   * the viewport to the scene's non-deleted bounds. The target goes in as
-   * BOUNDS (not element records) so navigation works the same tick the
-   * elements are fed — setViewport only resolves element records that are
-   * already on the canvas, and updateScene applies on the next render. */
+  /** The master replacement for the removed setViewport(): navigate the
+   * viewport to the scene's non-deleted bounds through the stable API's
+   * scrollToContent — no fit (center, keep the zoom), the same semantics
+   * the master build asked of setViewport({fit: 'none'}). The elements go
+   * in as records: stable's scrollToContent resolves them through the
+   * scene map, so navigation works the same tick the elements are fed —
+   * updateScene applies on the next render, and the scroll lands after. */
   const centerOnContent = (elements: readonly Record<string, unknown>[]): void => {
     if (!api) return;
     const visible = elements.filter((element) => element.isDeleted !== true);
     if (visible.length === 0) return;
-    api.setViewport({
-      target: getCommonBounds(visible as never),
-      fit: 'none', // old scrollToContent semantics: center, keep the zoom
-    });
+    api.scrollToContent(visible as never);
   };
 
   const render = (): void => {
     if (!root) return;
     // initialData only takes effect on the FIRST render; the rename
     // re-render passes it unchanged (ignored) and swaps `name`. The font
-    // default is the PADIFY choice, not the vendor's: new text speaks
-    // the vendor's "normal" Nunito instead of the hand-drawn Excalifont
-    // (a minimalist notepad's canvas should read like the app). A scene
-    // that carries its own pick — every previously saved scene does, the
-    // whitelist persists the key — overrides the default via the spread.
+    // default is the vendor's own: new text speaks the hand-drawn
+    // Excalifont, exactly like excalidraw.com ("exactly like native"
+    // includes the pen). A scene that carries its own pick — every
+    // previously saved scene does, the whitelist persists the key —
+    // wins through the verbatim appState spread.
     root.render(
       drawingCanvasElement(
         props,
         {
           elements: options.initialScene.elements,
           appState: {
-            currentItemFontFamily: FONT_FAMILY.Nunito,
             // The map opens with the pad — the vendor's own default is off,
             // and the toggle is a browser-level viewport pref the vendor
             // classifies as {browser: true, export: false, server: false}:
@@ -284,13 +291,11 @@ export function mountDrawingCanvas(
     updateScene(scene: DrawingCanvasScene): void {
       api?.updateScene({
         elements: scene.elements,
-        // The same Padify defaults as initialData — the note-switch path
-        // (drawing→drawing reuse) never re-runs initialData, so a fresh
-        // scene (appState {}) would otherwise inherit the previous note's
-        // live tool state. A scene that carries its own pick wins the
-        // spread, exactly as at mount.
+        // The note-switch path (drawing→drawing reuse) never re-runs
+        // initialData, so a fresh scene (appState {}) would otherwise
+        // inherit the previous note's live tool state. A scene that
+        // carries its own pick wins the spread, exactly as at mount.
         appState: {
-          currentItemFontFamily: FONT_FAMILY.Nunito,
           minimapEnabled: true,
           ...scene.appState,
         },
@@ -350,42 +355,57 @@ export function mountDrawingCanvas(
 }
 
 /**
- * Renders the live scene to an image — the download menu's "Save as
- * image" rows. PNG answers a Blob; SVG answers the serialized markup.
- * Elements marked deleted (the undo ghost trail) never reach an export.
- * The scene's image bytes ride along (`files`, from the live handle or a
- * store hydration) — without them an image element exports as the
- * vendor's gray placeholder, so the caller always passes what it holds.
+ * Renders the live scene to an image — the download menu's image rows and
+ * (with options) the drawing export dialog. PNG answers a Blob; SVG
+ * answers the serialized markup. Elements marked deleted (the undo ghost
+ * trail) never reach an export. The scene's image bytes ride along
+ * (`files`, from the live handle or a store hydration) — without them an
+ * image element exports as the vendor's gray placeholder, so the caller
+ * always passes what it holds.
  *
- * Master folded exportToBlob/exportToSvg into one exportScene() with the
- * format as a discriminated member — the defaults (the scene's own
- * background, 10px padding, scale 1) match what the retired calls did.
+ * The native export options (R1's dialog speaks them all): background,
+ * dark mode, embed scene, scale. They ride the appState the vendor's
+ * exporter reads — the same keys its own image-export dialog sets.
+ * Defaults match what the vendor's dialogs default to: the scene's own
+ * background, the scene's own mode, no embed, scale 1, 10px padding.
  */
+export interface DrawingImageExportOptions {
+  /** Paint the scene's canvas background color (the vendor's
+   * exportBackground). Off = transparent backdrop. */
+  background?: boolean;
+  /** Render the export in the dark palette (the vendor's
+   * exportWithDarkMode) regardless of the live theme. */
+  dark?: boolean;
+  /** Embed the scene in the PNG metadata (the vendor's exportEmbedScene)
+   * — excalidraw.com re-opens the file as an editable drawing. */
+  embed?: boolean;
+  /** The export scale (the vendor's exportScale): 1 or 2. */
+  scale?: 1 | 2;
+}
+
 export async function renderDrawingImage(
   kind: 'png' | 'svg',
   scene: DrawingCanvasScene,
   files?: BinaryFiles | null,
+  options?: DrawingImageExportOptions,
 ): Promise<Blob | string> {
   const elements = scene.elements.filter((element) => element.isDeleted !== true);
-  const appState = scene.appState as unknown as Partial<AppState>;
+  const appState = {
+    ...(scene.appState as unknown as Partial<AppState>),
+    exportBackground: options?.background ?? true,
+    exportWithDarkMode: options?.dark ?? false,
+    exportEmbedScene: options?.embed ?? false,
+    exportScale: options?.scale ?? 1,
+  } as Partial<AppState>;
+  const payload = {
+    elements: elements as never,
+    appState: appState as never,
+    files: files ?? null,
+    exportPadding: 10,
+  };
   if (kind === 'svg') {
-    const svg = await exportScene({
-      data: {
-        elements: elements as never,
-        appState: appState as never,
-        files: files ?? null,
-      },
-      type: 'svg',
-    });
+    const svg = await exportToSvg(payload);
     return new XMLSerializer().serializeToString(svg);
   }
-  return exportScene({
-    data: {
-      elements: elements as never,
-      appState: appState as never,
-      files: files ?? null,
-    },
-    type: 'png',
-    config: { embedScene: false },
-  }) as Promise<Blob>;
+  return exportToBlob({ ...payload, mimeType: 'image/png' });
 }

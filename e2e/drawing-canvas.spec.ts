@@ -7,10 +7,11 @@ import { expect, test, type Page } from '@playwright/test';
  * canvas itself: the island mounts on a drawing note, a shape drawn with
  * the mouse persists through the full autosave chain (announce → input →
  * save) into the real IndexedDB as a version-1 scene envelope, a reload
- * restores it onto a remounted canvas, the download menu offers the
- * PNG/SVG rows only when there is something to export, and the curated
- * Gen-2 main menu keeps the vendor chrome out (no Clear canvas — the
- * Padify-confirmed flow owns that — and no vendor links).
+ * restores it onto a remounted canvas, the download menu offers the image
+ * export row only when there is something to export, and the main menu is
+ * the NATIVE set — the vendor's own chrome (palette, Find on canvas, Help,
+ * welcome panel) with the white-label policy doors still shut (no Clear
+ * canvas — the Padify-confirmed flow owns that — and no vendor links).
  *
  * The scene bytes are read straight from the padify IndexedDB store —
  * the same rows the sync pipeline ships — because the DOM alone cannot
@@ -143,7 +144,9 @@ test.describe('the drawing canvas', () => {
     await expect(page.locator('#downloadNotesSvg')).toBeVisible();
   });
 
-  test('the main menu ships the Gen-2 set — no vendor clear, no vendor links', async ({ page }) => {
+  test('the main menu ships the native set — no vendor clear, no vendor links', async ({
+    page,
+  }) => {
     await openDrawingCanvas(page);
 
     await page.locator('[data-testid="main-menu-trigger"]').click();
@@ -163,6 +166,13 @@ test.describe('the drawing canvas', () => {
     // owns clearing) and neither does the vendor's link group.
     await expect(menu.getByText('Clear canvas')).toHaveCount(0);
     await expect(menu.getByText('Excalidraw links')).toHaveCount(0);
+
+    // The native chrome the curated build had off: the command palette and
+    // Find on canvas are menu items again, and the welcome panel stands on
+    // an empty scene (the vendor's hand-drawn overlay).
+    await expect(menu.getByText('Command palette')).toBeVisible();
+    await expect(menu.getByText('Find on canvas')).toBeVisible();
+    await expect(page.locator('#note .excalidraw .WelcomeScreen')).toBeVisible();
   });
 
   test('the canvas takes over the full stage — edge to edge, no bottom strip', async ({ page }) => {

@@ -42,20 +42,22 @@ export type DrawingSceneElement = Record<string, unknown>;
  * collaborators — none of that is content).
  *
  * The names ARE the vendor's — pinned by scene-pin.test.ts against the
- * installed @excalidraw/excalidraw. Master 0.18.0-9fbeaed renamed the
- * stroke-width default from the numeric `currentItemStrokeWidth` (1/2/4
- * — thin/bold/extraBold) to the named `currentItemStrokeWidthKey`
- * ("thin"|"medium"|"bold"; the numbers 1/2/4 keep their visual weight,
- * "medium" joins at 2 and extraBold moves to 8). Legacy scenes carry the
- * numeric key; parseDrawingScene migrates it before the equality guard
- * ever sees it, so old bytes and the live appState answer canonically.
+ * installed @excalidraw/excalidraw. The vendor answers the stroke-width
+ * default under the NUMERIC `currentItemStrokeWidth` (1/2/4 — the vendor
+ * STROKE_WIDTH map's thin/bold/extraBold). The interim master snapshot
+ * this app once pinned (0.18.0-9fbeaed) wrote scenes under the named
+ * `currentItemStrokeWidthKey` ("thin"|"medium"|"bold" — same numbers,
+ * master's own labels); parseDrawingScene translates those bytes back to
+ * the numeric key at parse time, so every scene ever written — legacy
+ * numeric, interim named — reads and re-serializes canonically against
+ * the stable vendor.
  */
 export const DRAWING_APP_STATE_KEYS: readonly string[] = [
   'viewBackgroundColor',
   'currentItemStrokeColor',
   'currentItemBackgroundColor',
   'currentItemFillStyle',
-  'currentItemStrokeWidthKey',
+  'currentItemStrokeWidth',
   'currentItemStrokeStyle',
   'currentItemRoughness',
   'currentItemOpacity',
@@ -70,19 +72,18 @@ export const DRAWING_APP_STATE_KEYS: readonly string[] = [
 ] as const;
 
 /**
- * The legacy numeric strokeWidth → the vendor's named key. EXACTLY the
- * vendor's own mapping (restore.ts getStrokeWidthKey over STROKE_WIDTH):
- * 1→thin, 2→medium, 4→bold. Old extraBold bytes carried 4 — the closest
- * canonical key is "bold" (master's extraBold moved to 8); the stroke
- * renders at the same numeric weight it always did. Any other legacy
- * number (0, junk) falls back by omission: the key stays unset and the
- * vendor applies its own default, the same degradation restoreAppState
- * performs for a null match.
+ * The interim master build's named strokeWidth → the stable vendor's
+ * numeric key. The vendor's own STROKE_WIDTH map: thin=1, bold=2,
+ * extraBold=4 — and master's labels said thin/medium/bold over the SAME
+ * numbers, so the translation preserves the rendered weight exactly:
+ * "thin"→1, "medium"→2, "bold"→4. Unknown names fall back by omission:
+ * the key stays unset and the vendor applies its own default, the same
+ * degradation restoreAppState performs for a null match.
  */
-const LEGACY_STROKE_WIDTH_TO_KEY: Readonly<Record<number, string>> = {
-  1: 'thin',
-  2: 'medium',
-  4: 'bold',
+const NAMED_STROKE_WIDTH_TO_NUMBER: Readonly<Record<string, number>> = {
+  thin: 1,
+  medium: 2,
+  bold: 4,
 };
 
 /** The whitelisted appState subset (values verbatim). */
@@ -189,15 +190,20 @@ export function parseDrawingScene(content: string): DrawingScene | null {
     }
     // The stroke-width rename, one migration point upstream of everything
     // (the canvas's initialData, the updateScene feeds, the equality
-    // guard's fed bytes): legacy bytes carry the numeric key, the vendor
-    // answers in the named one. Without this, opening a pre-master note
-    // re-serialized the live scene into DIFFERENT bytes than were fed —
-    // the announce guard would file a save for a note nobody touched.
-    // The legacy number reads off the RAW appState — the whitelist no
-    // longer carries its name, so the loop above never copies it.
-    const legacyWidth = source['currentItemStrokeWidth'];
-    if (typeof legacyWidth === 'number' && LEGACY_STROKE_WIDTH_TO_KEY[legacyWidth] !== undefined) {
-      appState.currentItemStrokeWidthKey ??= LEGACY_STROKE_WIDTH_TO_KEY[legacyWidth];
+    // guard's fed bytes): the interim master build wrote the named key,
+    // the stable vendor answers in the numeric one. The named value is
+    // TRANSLATED (not copied) so the parsed scene carries only what the
+    // live appState will answer — re-serializing it reproduces the fed
+    // bytes, and the announce guard never files a save nobody touched.
+    // The named key reads off the RAW appState — the whitelist no longer
+    // carries its name, so the loop above never copies it.
+    const namedWidth = source['currentItemStrokeWidthKey'];
+    if (
+      typeof namedWidth === 'string' &&
+      NAMED_STROKE_WIDTH_TO_NUMBER[namedWidth] !== undefined &&
+      appState.currentItemStrokeWidth === undefined
+    ) {
+      appState.currentItemStrokeWidth = NAMED_STROKE_WIDTH_TO_NUMBER[namedWidth];
     }
   }
   return {
