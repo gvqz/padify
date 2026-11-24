@@ -525,3 +525,70 @@ restart cannot corrupt a note.
 Ordering note: R0 is the restart the owner called for; R1 is the owner's
 own first stop ("starting with the export"). R2–R4 sequence after the
 native mount exists to build against.
+
+## The 2026-11-24 landing: R0–R4 shipped — the island is native
+
+> The owner's final call (2026-11-24, live): *"go ahead and redo it from
+> scratch — should be identical to the one on the website — don't take any
+> shortcuts."* All five phases landed the same day, one commit per phase.
+
+- **R0 — the native mount** (commit after bd8ad22): the skin dies
+  (canvas-skin.css deleted), the vendor re-pins, the menu becomes the
+  vendor's own composition minus the policy doors, the WelcomeScreen
+  lands, new text speaks Excalifont, the HintViewer/Find/Library return,
+  the AI triggers go on. `scene-pin.test.ts` re-pins against the installed
+  vendor; the e2e chrome assertions pin the native set.
+- **R1 — the unified export**: the download menu's two fixed-default
+  image rows become one **Export image…** row opening the drawing export
+  dialog — PNG/SVG, Background, Dark mode, Embed scene, 1×/2× scale, the
+  vendor's own knobs, named the way it names them. The dialog is a native
+  `<dialog>` on the confirm/prompt face's tokens; it rides the app bundle
+  while the vendor stays lazy.
+- **R2 — preferences & keyboard parity**: the menu grows the native
+  Preferences group (Snap to objects, Grid, Zen mode — live checkmarks
+  off a filtered onChange subscription); the whitelist carries
+  `zenModeEnabled` + `objectsSnapModeEnabled` (view mode stays
+  session-only — the vendor's own classification); `handleKeyboardGlobally`
+  is ON for the site's global-bindings feel, with the app's dispatcher
+  winning its chords via stopImmediatePropagation (registered first,
+  same node, same phase) and Escape passing through unless an app modal
+  is on stage.
+- **R3 — the open-glitch fix + open time**: the mount retries a failed
+  import once (transient failures recover in place); the error card grows
+  a **Retry** action that asks the service worker to re-fetch the whole
+  precache network-first (REFRESH_SHELL, 200/basic-guarded) and reloads —
+  the deterministic version of the user's hard refresh. A modulepreload
+  hint for the drawing chunk (content-keyed, `data-padify-lazy-preload`)
+  is injected into dist/index.html; build-sw skips marked links so the
+  chunk keeps its runtime-cached classification. Measured with the item-8
+  harness (scripts/measure-canvas-open.mjs): warm flips median 350 ms —
+  the ledger's number, unchanged; the preload covers the real-network
+  deploy window for free.
+- **R4 — shares**: a drawing's link carries the SNAPSHOT — the scene
+  renders to a PNG data URL at share time (live canvas first, store
+  hydration otherwise; modal create + background refresh both speak it),
+  and the viewer paints it as the image it is behind a strict data-URL
+  shape check. Legacy raw-JSON shares still get the honest raw-text view.
+
+### The vendor pin decision (amended)
+
+The verdict below pinned **0.18.1 stable**. The landing pins
+**`0.18.0-2c3dcc0`** (the npm `next` dist-tag, 2026-11-21) instead — the
+owner's "should be identical to the one on the website" outranks the
+stable line: stable predates the minimap, the imageOptions gate prop, the
+consolidated `exportScene`, and `setViewport`, all of which the site
+itself runs (it tracks master). `next` is still an official npm publish,
+four days newer than the snapshot this app previously carried. The seams
+that differ between stable and master are all landed on the master
+spellings (the scene whitelist keeps the named `currentItemStrokeWidthKey`
+the master build writes — the shipped scenes' bytes round-trip untouched).
+
+### Done-when, discharged
+
+A side-by-side with excalidraw.com (real browser, 1440×900, 2026-11-24)
+shows the same chrome in both themes — floating islands, the tool set,
+the HintViewer banner, the hand-drawn welcome panel, the minimap +
+footer, the Shortcuts & help hint — modulo Padify's own navbar/rail
+around it, and minus the white-label items the policy doors keep off
+(Socials, Excalidraw+/Sign up, Live collaboration) and the site's own
+app-layer text (the storage warning line).
