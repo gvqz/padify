@@ -190,6 +190,27 @@ function render(row) {
     } catch {
       /* damaged payload — the raw fallback below is the honest answer */
     }
+  } else if (String(row.note_type) === 'drawing') {
+    // A shared drawing is the SNAPSHOT the owner's app rendered at share
+    // time (R4): the content is a `data:image/png;base64,…` payload, and
+    // the viewer paints it as the image it is. The strict shape check is
+    // the safety net — the content is server-held text, so it is parsed
+    // here as hostile: only the exact data-URL spelling with base64-only
+    // characters renders (built via DOM APIs, never innerHTML), anything
+    // else — including a pre-snapshot share's raw scene JSON — falls to
+    // the honest raw-text view below.
+    const body = String(row.content == null ? row.html : row.content || '');
+    const snapshot = /^data:image\/png;base64,([A-Za-z0-9+/=\s]+)$/.exec(body);
+    if (snapshot) {
+      const figure = document.createElement('figure');
+      figure.className = 'share-drawing';
+      const img = document.createElement('img');
+      img.alt = 'Shared drawing';
+      img.src = 'data:image/png;base64,' + snapshot[1].replace(/\s+/g, '');
+      figure.appendChild(img);
+      content.appendChild(figure);
+      rendered = true;
+    }
   }
 
   if (!rendered) {

@@ -662,3 +662,21 @@ body {
 .share-content .padify-voice[data-padify-missing] .padify-voice-btn {
   background-color: var(--s-fg-subtle);
 }
+
+/* ---- The drawing snapshot (R4) ----
+   A shared drawing renders as the image the owner's app rendered at
+   share time: centered, bordered like the note body's own media, and
+   never wider than the reading column. The figure wraps it so a tall
+   sketch scrolls instead of shrinking into a thumbnail. */
+.share-drawing {
+  margin: 12px 0;
+  text-align: center;
+}
+
+.share-drawing img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 8px;
+  background: #ffffff;
+}

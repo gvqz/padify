@@ -306,6 +306,58 @@ test.describe('share links (real API)', () => {
     await expect(page.locator('body')).toContainText('the round trip line');
   });
 
+  test('a shared drawing carries its snapshot: the viewer paints the PNG, not the scene JSON', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(90_000);
+    await signUp(page, freshAccount());
+
+    // A drawing with something in it (the emptiness gate must pass).
+    await page.locator('#addTabTypeMenu').click();
+    await page
+      .locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Drawing' })
+      .click();
+    await expect(page.locator('#note .excalidraw canvas.interactive')).toBeVisible({
+      timeout: 20_000,
+    });
+    const box = await page.locator('#note .excalidraw canvas.interactive').boundingBox();
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.keyboard.press('r');
+    await page.mouse.move(box!.x + box!.width * 0.3, box!.y + box!.height * 0.3);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.6, { steps: 8 });
+    await page.mouse.up();
+    // The announce + save chain settles before the share reads content.
+    await page.waitForTimeout(2_000);
+
+    await openSharePanel(page);
+    await page.locator('#shareCreateBtn').click();
+    await expect(page.locator('#shareActiveCard')).toBeVisible();
+    const displayed = (await page.locator('#shareActiveUrl').textContent()) ?? '';
+    expect(displayed).toContain('/share/?t=');
+
+    // The API serves the SNAPSHOT as the link's content — a data-URL PNG,
+    // never the raw scene envelope.
+    const token = new URL(displayed).searchParams.get('t') ?? '';
+    const apiResponse = await request.get(`/api/share/${token}`);
+    expect(apiResponse.status()).toBe(200);
+    const body = (await apiResponse.json()) as { content?: string; row?: { content?: string } };
+    const served = body.content ?? body.row?.content ?? '';
+    expect(served).toMatch(/^data:image\/png;base64,/);
+    expect(served).not.toContain('"elements"');
+
+    // And the public page paints it as the image it is — the drawing
+    // branch's figure, carrying the data URL (the legacy raw-JSON view
+    // is gone from this link).
+    await page.goto(displayed);
+    const img = page.locator('.share-content .share-drawing img');
+    await expect(img).toBeVisible();
+    const src = await img.getAttribute('src');
+    expect(src ?? '').toMatch(/^data:image\/png;base64,/);
+    await expect(page.locator('.share-content .share-raw-content')).toHaveCount(0);
+  });
+
   test('a shared note carries its images: real bytes render, a missing id degrades honestly', async ({
     page,
   }) => {

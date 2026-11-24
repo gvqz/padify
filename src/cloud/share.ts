@@ -20,6 +20,7 @@ import { getCloudUserId } from './sync';
 import { type NoteType } from '../editor/note-types';
 import { noteContentIsEmpty } from '../editor/note-projections';
 import { deriveTabTitle, type TabManager, type TabsSyncPayload } from '../tabs';
+import { snapshotDrawingContent } from '../editor/drawing/surface';
 // The PATCH input caps — the chunk sizes below (shared/wire.ts).
 import { MAX_SHARE_PATCH_NOTE_IDS, MAX_SHARE_REFRESH_ENTRIES } from '../../shared/wire';
 
@@ -265,19 +266,29 @@ async function flushShareUpdates(): Promise<void> {
 
     // Edited notes: refresh title + content on every still-active link —
     // same chunking against the server's refresh cap, same silent-drop
-    // trap if one body carried more than it accepts.
+    // trap if one body carried more than it accepts. A drawing refreshes
+    // as its SNAPSHOT (R4): the link's content is the rendered PNG, so an
+    // edit the owner makes re-ships the picture, not the scene JSON. A
+    // failed render keeps the old link content (the refresh row is
+    // dropped for that note — the next persist retries).
     if (noteIds.length > 0 && lastPayload) {
-      const refresh = noteIds
-        .map((noteId) => lastPayload?.tabs.find((entry) => entry.id === noteId))
-        .filter((tab): tab is NonNullable<typeof tab> => !!tab)
-        .map((tab) => ({
+      const refresh = [];
+      for (const noteId of noteIds) {
+        const tab = lastPayload?.tabs.find((entry) => entry.id === noteId);
+        if (!tab) continue;
+        const content =
+          tab.noteType === 'drawing'
+            ? ((await snapshotDrawingContent(tab.content, tab.id)) ?? tab.content)
+            : tab.content;
+        refresh.push({
           note_id: tab.id,
           title: deriveTabTitle(tab).slice(0, 200),
           // Both keys, same value — the transition contract (see ShareRecord).
-          content: tab.content,
-          html: tab.content,
+          content,
+          html: content,
           note_type: tab.noteType ?? null,
-        }));
+        });
+      }
 
       for (let at = 0; at < refresh.length; at += MAX_SHARE_REFRESH_ENTRIES) {
         await shareApi('/api/shares', {

@@ -41,6 +41,7 @@ import {
 // The share gate lives behind the projection seam now — the per-kind
 // emptiness dispatch is editor/note-projections.ts's to own.
 import { noteContentIsEmpty } from '../editor/note-projections';
+import { snapshotDrawingContent } from '../editor/drawing/surface';
 
 const DAY_MS = 86_400_000;
 /** How long a cancel button stays armed before it disarms itself. */
@@ -636,10 +637,18 @@ async function createOrUpdate(): Promise<void> {
   }
 
   renderLinksBusy(true);
+  // A drawing's link carries the SNAPSHOT (R4): the scene renders to a
+  // PNG data URL — the viewer paints the drawing, not a wall of JSON.
+  // A failed render falls back to the raw content (the legacy behavior),
+  // never to a broken link.
+  const sharedContent =
+    note.noteType === 'drawing'
+      ? ((await snapshotDrawingContent(note.content, note.id)) ?? note.content)
+      : note.content;
   const result = await createShare(
     note.id,
     note.title,
-    note.content,
+    sharedContent,
     selectedDays(),
     note.noteType ?? undefined,
   );

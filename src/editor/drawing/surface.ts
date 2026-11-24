@@ -62,9 +62,13 @@ import type {
   DrawingCanvasTheme,
   DrawingImageExportOptions,
 } from './canvas';
+// Type-only vendor import — erased at compile, no runtime cost to the
+// boot payload (the vendor stays lazy behind import('./canvas')).
+import type { BinaryFiles } from '@excalidraw/excalidraw/types';
 import {
   flushSceneFiles,
   idsNeedingHydration,
+  blobToDataURL,
   loadSceneFiles,
   type CanvasImageFile,
 } from './canvas-images';
@@ -689,4 +693,73 @@ export async function openDrawingExportUI(): Promise<void> {
       scale: choices.scale,
     });
   });
+}
+
+/**
+ * The share seam (R4, the plan's last unchecked phase-3 milestone): a
+ * drawing shared as a link must not carry the raw scene JSON — the
+ * viewer would show a wall of elements. This renders the scene to a PNG
+ * data URL (scale 1, the scene's own background) and hands it to the
+ * share pipeline as the link's content; the viewer's drawing branch
+ * paints it as the image it is.
+ *
+ * The FRESH source wins: a mounted canvas for the same note answers its
+ * live scene (the model lags the announce debounce); otherwise the
+ * passed content parses and the scene's fileIds hydrate from the
+ * attachment store (local first, the cloud's lazy pull), the same
+ * shopping list an open runs. Refuses honestly (null) when nothing
+ * renders: the caller keeps its previous behavior (the emptiness gate
+ * never let an empty scene reach a link anyway).
+ */
+export async function snapshotDrawingContent(
+  content: string,
+  noteId: string | null,
+): Promise<string | null> {
+  let scene: DrawingCanvasScene;
+  // Assigned on every path below (the live branch, the hydration try,
+  // and its catch — a failed hydration exports with a null map, the
+  // gray placeholder being the honest render).
+  let files: BinaryFiles | null;
+  const current = live;
+  const liveMatches =
+    current &&
+    current.handle &&
+    !current.disposed &&
+    current.mount.isConnected &&
+    (noteId === null || current.noteId === noteId);
+  if (liveMatches && current) {
+    scene = current.handle!.getScene();
+    files = current.handle!.getFiles();
+  } else {
+    const parsed = parseDrawingScene(content);
+    if (parsed === null || parsed.elements.length === 0) {
+      return null;
+    }
+    scene = { elements: parsed.elements, appState: parsed.appState };
+    try {
+      const loaded = await loadSceneFiles(idsNeedingHydration(parsed.elements, new Set<string>()));
+      // The structural mirror crosses into the vendor's files-map shape
+      // here — the same one cast the handle's addFiles carries.
+      files = Object.fromEntries(loaded.map((file) => [file.id, file])) as BinaryFiles;
+    } catch {
+      files = null; // an image element exports as the gray placeholder
+    }
+  }
+  const visible = visibleElements(scene.elements as DrawingSceneElement[]);
+  if (visible.length === 0) {
+    return null;
+  }
+  try {
+    const canvas = await import('./canvas');
+    const blob = await canvas.renderDrawingImage('png', scene, files, {
+      background: true,
+      scale: 1,
+    });
+    if (!(blob instanceof Blob)) {
+      return null;
+    }
+    return await blobToDataURL(blob);
+  } catch {
+    return null;
+  }
 }
