@@ -1,25 +1,60 @@
 name: CI
 
+# The gate a push must pass before the deploy workflow will ship it.
+#
+# SHAPE (rebuilt 2026-11-25 — "having to wait 1+ hours after every tiny
+# change is extremely unproductive"):
+#   - docs-only pushes (README, the issue ledger, qa findings, the notes
+#     under docs/) skip CI entirely — they change nothing the app ships;
+#   - a newer push to the same ref CANCELS the run it supersedes — the
+#     queue of stale full suites behind a burst of fixes was the loudest
+#     cost of every iteration;
+#   - bun's install cache and Playwright's browser cache persist between
+#     runs — cold installs were minutes tacked onto every job;
+#   - the e2e suite SHARDS across three runners: the 347-spec suite took
+#     20.6 minutes on one machine — the longest pole by far;
+#   - the gates run as parallel jobs, not serial steps of one job: a
+#     formatting nit fails in two minutes without waiting on e2e.
+#
+# The deploy workflow still fires only on a SUCCESSFUL CI completion, so
+# a skipped (docs-only) run ships nothing — nothing changed in dist.
+
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'qa/**'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'qa/**'
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
-  client:
-    name: Typecheck, Lint, Test, Build
+  checks:
+    name: Typecheck, Lint, Format
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
 
-      # Bun owns the lockfile: bun install --frozen-lockfile keeps CI in sync
-      # with local development. Everything else runs on Node/npm — running
-      # vitest under Bun's runtime shim is a compatibility minefield (jsdom
-      # 27 pulls undici's CacheStorage, which Bun's interposed undici breaks
-      # with "webidl.util.markAsUncloneable is not a function" depending on
-      # the Bun build).
+      # Bun owns the lockfile: bun install --frozen-lockfile keeps CI in
+      # sync with local development. Everything else runs on Node/npm —
+      # running vitest under Bun's runtime shim is a compatibility
+      # minefield (jsdom 27 pulls undici's CacheStorage, which Bun's
+      # interposed undici breaks with "webidl.util.markAsUncloneable is
+      # not a function" depending on the Bun build).
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
 
@@ -27,6 +62,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Restore bun's install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -46,8 +87,58 @@ jobs:
       - name: Check formatting
         run: npm run format:check
 
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Restore bun's install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
       - name: Test
         run: npm run test
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Restore bun's install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
       - name: Build
         run: npm run build
@@ -59,13 +150,18 @@ jobs:
       # code. Grab dist from a run's logs or rebuild locally if needed.
 
   e2e:
-    name: E2E (Playwright)
+    name: E2E (Playwright, shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
 
-      # Same toolchain split as the client job: Bun owns the lockfile,
+      # Same toolchain split as the other jobs: Bun owns the lockfile,
       # Node runs the tooling (Vite dev server + Playwright).
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
@@ -75,24 +171,37 @@ jobs:
         with:
           node-version: 22
 
+      - name: Restore bun's install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+
+      - name: Restore Playwright's browser cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Install Playwright's Chromium
+      - name: Install Playwright's Chromium (skips the download on a cache hit)
         run: npx playwright install --with-deps chromium
 
       # The suite starts its own servers (playwright.config.ts webServer):
       # Vite on :5199 plus the real API on :3041, running against a
       # throwaway SQLite DB in a per-run temp dir. The cloud-api spec
       # signs up, pushes, and pulls through that API — the wire protocol
-      # is pinned in CI, not just the offline core.
-      - name: Run the e2e suite
-        run: npm run test:e2e
+      # is pinned in CI, not just the offline core. Each shard runs the
+      # whole stack on its own runner.
+      - name: Run the e2e suite (shard ${{ matrix.shard }})
+        run: npx playwright test --shard=${{ matrix.shard }}/3
 
       - name: Upload traces of failures
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-traces
+          name: playwright-traces-shard-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
