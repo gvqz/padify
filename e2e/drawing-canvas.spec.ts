@@ -9,11 +9,14 @@ import { expect, test, type Page } from '@playwright/test';
  * save) into the real IndexedDB as a version-1 scene envelope, a reload
  * restores it onto a remounted canvas, the download menu offers the image
  * export row only when there is something to export, and the main menu is
- * the NATIVE set — the vendor's own chrome (Find on canvas, Help, welcome
- * panel) with the white-label policy doors still shut (no Clear canvas —
- * the Padify-confirmed flow owns that — and no vendor links) and the
- * command palette retired at the composition layer: the vendor exports
- * that component for HOSTS to mount, and this app no longer mounts it.
+ * the NATIVE set — the vendor's own chrome (Find on canvas, the sheet row,
+ * welcome panel) with the white-label policy doors still shut (no Clear
+ * canvas — the Padify-confirmed flow owns that — and no vendor links), the
+ * command palette retired at the composition layer (the vendor exports
+ * that component for HOSTS to mount, and this app no longer mounts it),
+ * and the vendor's help dialog deleted outright — the "?" chord, the
+ * welcome screen's Help row and the dialog itself all died in the same
+ * patch; the app's shortcuts sheet is the one help surface.
  *
  * The scene bytes are read straight from the padify IndexedDB store —
  * the same rows the sync pipeline ships — because the DOM alone cannot
@@ -328,11 +331,37 @@ test.describe('the drawing canvas', () => {
     // own capture-phase keys and it is not mounted).
     await expect(menu.getByText('Command palette')).toHaveCount(0);
 
+    // The help story is the sheet alone: the vendor's Help menu item is a
+    // DefaultItems property we never compose, and the vendor's fallback
+    // (which still references it in the pin's own source) is not rendered
+    // either.
+    await expect(menu.locator('[data-testid="help-menu-item"]')).toHaveCount(0);
+
     // The native chrome the curated build had off: Find on canvas is a
     // menu item again, and the welcome panel stands on an empty scene
     // (the vendor's hand-drawn overlay).
     await expect(menu.getByText('Find on canvas')).toBeVisible();
     await expect(page.locator('#note .excalidraw .welcome-screen-center')).toBeVisible();
+
+    // The welcome center's default menu carries an Open row (the vendor's
+    // load-scene item) and — since the help purge — NO Help row: the row
+    // opened the vendor's dialog, which the patch deletes outright.
+    const center = page.locator('#note .excalidraw .welcome-screen-center');
+    await expect(center.getByText('Help')).toHaveCount(0);
+  });
+
+  test('the "?" chord answers nothing — the vendor help dialog is deleted', async ({ page }) => {
+    await openDrawingCanvas(page);
+
+    // The vendor's App intercepted "?" with a direct setState into its
+    // help dialog; the patch deletes the branch. Press it on the live
+    // canvas and expect the dialog to never mount — and no page errors
+    // from the missing action (the afterEach guard would catch one).
+    await page.locator('#note .excalidraw').click({ position: { x: 400, y: 300 } });
+    await page.keyboard.press('Shift+Slash'); // the "?" key
+    await page.waitForTimeout(400);
+    await expect(page.locator('#note .HelpDialog')).toHaveCount(0);
+    await expect(page.locator('.excalidraw .HelpDialog')).toHaveCount(0);
   });
 
   test('the canvas takes over the full stage — edge to edge, no bottom strip', async ({ page }) => {
@@ -551,8 +580,11 @@ test.describe('the drawing canvas', () => {
 
     // The app's own shortcuts modal (the brand menu's reference), not the
     // vendor's help — the integration: the same sheet that teaches Ctrl+B
-    // teaches the canvas.
+    // teaches the canvas. The brand menu itself lost its Help entry (the
+    // onboarding tour it opened is deleted; the sheet is the one help
+    // surface) — assert the absence while the menu is open.
     await page.locator('#brandMenuButton').click();
+    await expect(page.locator('#brandMenu .brand-menu-item', { hasText: 'Help' })).toHaveCount(0);
     await page.locator('#brandMenu .brand-menu-item', { hasText: 'Keyboard shortcuts' }).click();
     const modal = page.locator('#keyboardShortcutsModal');
     await expect(modal).toHaveClass(/in/);

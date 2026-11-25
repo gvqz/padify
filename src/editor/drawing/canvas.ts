@@ -200,14 +200,14 @@ function drawingCanvasElement(
       onExcalidrawAPI: onApi,
     },
     // The hand-drawn welcome panel on empty scenes — native chrome the
-    // curated build never mounted. Composed minus the HelpHint: the hint
-    // is a hand-drawn arrow teaching the footer's "?" button, and that
-    // button is deleted at the vendor's render tree (patches/ — the
-    // Footer no longer mounts HelpButton; the app's sheet owns help on
-    // the canvas); an arrow pointing at nothing is the exact species of
-    // broken this whole effort exists to end. Center, MenuHint and
-    // ToolbarHint keep their own default children, so the panel renders
-    // the site's composition, one hint lighter.
+    // curated build never mounted. The help teaching is gone by the
+    // owner's verdict: the HelpHint arrow (it pointed at the footer's
+    // "?" button — deleted at the vendor's render tree, patches/) and
+    // the center menu's Help row (it opened the vendor's dialog — the
+    // dialog and every path to it are deleted in the same patch, so the
+    // row was an arrow to nothing too). Center, MenuHint and ToolbarHint
+    // keep their own default children, so the panel renders the site's
+    // composition minus every help surface.
     createElement(
       WelcomeScreen,
       undefined,
@@ -232,14 +232,13 @@ function drawingCanvasElement(
       createElement(MainMenu.DefaultItems.SaveAsImage),
       createElement(MainMenu.Separator),
       createElement(MainMenu.DefaultItems.SearchMenu, {}),
-      // The Help row is the app's unified shortcuts sheet, not the
-      // vendor's dialog: issue #179 folds the canvas's shortcut story
-      // into the one sheet (this pane opens on its Drawing tab), and the
-      // sheet carries the vendor's complete chord table — verified row by
-      // row against this pin's HelpDialog. The vendor's dialog itself is
-      // no longer pinned to any button — the footer's "?" is gone (the
-      // app's sheet owns help on the canvas) — and survives behind the
-      // "?" chord and the welcome screen's center menu on empty scenes.
+      // The Help row is the app's unified shortcuts sheet — the ONE help
+      // surface on the canvas: issue #179 folds the shortcut story into
+      // the sheet (this pane opens on its Drawing tab). The vendor's own
+      // dialog is deleted at the render tree (patches/): the footer's
+      // "?" button, the "?" chord, the welcome screen's Help row and the
+      // dialog component all went with it — nothing here or anywhere on
+      // the canvas answers to the vendor's help anymore.
       createElement(
         MainMenu.Item,
         {

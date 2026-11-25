@@ -27,7 +27,7 @@
  */
 
 import { initApp } from './app';
-import { initHelp } from './help';
+import { initBrandMenu } from './ui/brand-menu';
 import { initSnapshots } from './snapshots';
 import { initTimer } from './timer';
 import { mountMusicPlayer } from './features/music-player/markup';
@@ -81,7 +81,7 @@ export async function bootPadify(): Promise<void> {
   // 1. Markup + DOM-only feature wiring. The music MARKUP mounts here
   //    (from the pure-markup module, not the feature barrel); its engines
   //    load on first open — app.ts's initMusicSubsystem.
-  initHelp();
+  initBrandMenu();
   // The chime is music: it honors the SAME persisted volume the player
   //  restores from (issue #117) — injected here because the timer must
   //  not import the feature directly (the layering rule).

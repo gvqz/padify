@@ -26,7 +26,7 @@ export interface AppShortcutsDeps {
  *
  * Registered with addEventListener (never `document.onkeydown =`) so the
  * handler composes with the capture-phase listeners elsewhere in the
- * codebase (context-menu.ts, voice.ts, note-type-menu.ts, help.ts)
+ * codebase (context-menu.ts, voice.ts, note-type-menu.ts, ui/brand-menu.ts)
  * instead of clobbering the only `onkeydown` slot on the document.
  */
 export function initAppShortcuts(deps: AppShortcutsDeps): void {
