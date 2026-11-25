@@ -1,16 +1,9 @@
-import { $ } from './lib/q';
-import { registerLayer } from './ui/behavior/layers';
 import {
   saveTextAsFile,
   exportNotesAsPDF,
   exportNotesAsDocx,
   downloadHTML,
   getDatedFileStem,
-  getFileName,
-  getPdfFileName,
-  getDocxFileName,
-  getHtmlFileName,
-  getMarkdownFileName,
 } from './exports';
 import {
   getEditorText,
@@ -18,16 +11,13 @@ import {
   getActiveNoteExportBody,
   type TabManager,
 } from './tabs';
-import { openDrawingExportUI } from './editor/drawing/surface';
+import { drawingImageExportTypes, snapshotDrawingContent } from './editor/drawing/surface';
 import { drawingSceneHasContent, parseDrawingScene } from './editor/drawing/scene';
 import { collectNoteAttachmentIds } from '../shared/att-refs';
 import {
   PADIFY_MIME_TYPE,
   buildExcalidrawFile,
   bytesToBase64,
-  excalidrawFileName,
-  padifyFileName,
-  padifyWorkspaceFileName,
   serializePadifyNoteFile,
   serializePadifyWorkspaceFile,
   type PadifyFileAttachment,
@@ -39,119 +29,34 @@ import { getAttachmentBytes, getAttachmentMeta } from './storage/attachments';
 import { getSetting } from './state/settings';
 import { isMarkdownNote, DEFAULT_NOTE_TYPE } from './editor/note-types';
 import { deriveTabTitle } from './editor/note-content';
+import { openExportCenter, type ExportCenterHost, type ExportCenterType } from './ui/export-center';
 import type { NotepadUI } from './selector';
 
 /**
- * The download menu — every way a note leaves to disk, and the open door
- * that brings files back. The menu is a registered dismissable layer (the
- * registry closes every other menu when it opens — see ui/behavior/
- * layers.ts); the rows say what THIS note can become: the Markdown row
- * exists only under a Markdown note, the image rows only under a drawing
- * with something in it, and the .padify/.excalidraw saves carry the
- * note's attachments in their envelopes (the shared reference grammar
- * names the ids; this side fetches the bytes).
+ * The export center's wiring — every way a note leaves to disk, behind the
+ * ONE door.
+ *
+ * The old download dropdown answered "what can THIS note become" with nine
+ * rows (six always on, three note-conditional), each firing a fixed-default
+ * exporter with no preview and no name control. The owner consolidated:
+ * the download button now opens the export center (ui/export-center.ts —
+ * preview left, settings right, file name and file type editable in one
+ * place), and this module builds the type list for the ACTIVE note:
+ *
+ *   drawing          → PNG, SVG (the vendor's native options ride along),
+ *                      .excalidraw, .padify
+ *   markdown         → .md, .txt, PDF, DOCX, HTML, .padify
+ *   everything else  → .txt, PDF, DOCX, HTML, .padify
+ *   every note       → the whole pad as one .padify workspace file
+ *
+ * The canvas's own Export image row (canvas.ts) lands here too, over the
+ * `padify:open-export` bus — the same door, one dialog fewer to learn.
+ * The open door (a .padify/.excalidraw file back IN) rides the center's
+ * footer, so even the round trip answers from the one popup.
  */
 export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): void {
-  // The download menu is a registered dismissable layer — the registry
-  // closes every other menu when it opens (and closes it when another
-  // layer opens, or on an outside click / Escape). No stopPropagation:
-  // the capture-phase sweep has already run by the time this click
-  // toggles, so the click cannot stack menus anymore.
-  const downloadLayer = registerLayer({
-    elements: [
-      notepad.downloadNotes.get(0) as HTMLElement,
-      document.getElementById('iconDropdown')!,
-    ],
-    isOpen: () => $('#iconDropdown').hasClass('show'),
-    setOpen: (open) => {
-      $('#iconDropdown').toggleClass('show', open);
-    },
-  });
-
-  notepad.downloadNotes.click(function () {
-    downloadLayer.toggle();
-    // The drawing rows answer "is there anything to save as an image" —
-    // content, not just the active type — so they sync as the menu opens,
-    // fresh off the live surface (a draw since the last active-note
-    // change must be seen without waiting for any save debounce).
-    syncDrawingExportRows();
-  });
-
-  notepad.downloadNotesPlain.click(function () {
-    saveTextAsFile(getEditorText(), getFileName());
-  });
-
-  notepad.downloadNotesPdf.click(function () {
-    exportNotesAsPDF(getEditorText(), getPdfFileName());
-  });
-
-  notepad.downloadNotesDocx.click(function () {
-    const textToWrite = getEditorText();
-    const fileNameToSaveAs = getDocxFileName();
-
-    exportNotesAsDocx(textToWrite, fileNameToSaveAs);
-  });
-
-  notepad.downloadNotesHtml.click(function () {
-    // HTML export carries the note, not the editor surface: for a non-html
-    // note that surface is a read-only card, and the export must read the
-    // model instead (see getActiveNoteExportBody).
-    const body = getActiveNoteExportBody();
-    if (body !== null) {
-      downloadHTML(body, getHtmlFileName());
-    }
-  });
-
-  // The Markdown export ships the SOURCE — the .md a user would hand to
-  // any other tool — captured live through the active note's surface.
-  notepad.downloadNotesMarkdown.click(function () {
-    const captured = getActiveNoteContent();
-    if (captured && captured.noteType === 'markdown') {
-      saveTextAsFile(captured.content, getMarkdownFileName(), 'text/markdown');
-    }
-  });
-
-  // The Markdown row exists only while a Markdown note is active — the
-  // download menu says what THIS note can become, like the toolbar chrome.
-  const syncMarkdownExportRow = (): void => {
-    if (isMarkdownNote(tabManager.getActive())) {
-      notepad.downloadNotesMarkdown.removeAttr('hidden');
-    } else {
-      notepad.downloadNotesMarkdown.attr('hidden', 'hidden');
-    }
-  };
-  tabManager.addActiveListener(syncMarkdownExportRow);
-  syncMarkdownExportRow();
-
-  // The drawing rows follow the same rule — a drawing with something in
-  // it can become an image (the R1 unified export: the row opens the
-  // native-options dialog — PNG/SVG, background, dark mode, embed scene,
-  // scale — instead of two fixed-default rows) or the native
-  // .excalidraw file (the empty canvas has nothing to save, same rule as
-  // the share modal's emptiness gate).
-  notepad.downloadNotesImage.click(function () {
-    void openDrawingExportUI();
-  });
-  const syncDrawingExportRows = (): void => {
-    const captured = getActiveNoteContent();
-    const exportable = captured?.noteType === 'drawing' && drawingSceneHasContent(captured.content);
-    if (exportable) {
-      notepad.downloadNotesImage.removeAttr('hidden');
-      notepad.downloadNotesExcalidraw.removeAttr('hidden');
-    } else {
-      notepad.downloadNotesImage.attr('hidden', 'hidden');
-      notepad.downloadNotesExcalidraw.attr('hidden', 'hidden');
-    }
-  };
-  tabManager.addActiveListener(syncDrawingExportRows);
-  syncDrawingExportRows();
-
-  // ---- the .padify file — the note as a file ------------------------
-  // The app's own save: the whole note (type, name, content, stamps) in
-  // one strict envelope that opens back as the same kind of note. The
-  // file is named what the rail calls the note; an untitled note falls
-  // back to the download family's dated stem.
   const padifyOpen = initPadifyFileOpen(tabManager);
+
   // The export image pass, shared by every Padify/Excalidraw save: the
   // UNION of the attachment ids the given notes reference — a markdown
   // note's `padify-att:` refs, a drawing's scene fileIds — each fetched
@@ -188,109 +93,310 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
     }
     return attachments;
   };
-  notepad.downloadNotesPadify.click(function () {
-    void (async function () {
-      const active = tabManager.getActive();
-      const captured = getActiveNoteContent();
-      if (!active || !captured) {
-        return;
-      }
-      const attachments = await collectReferencedAttachments([captured]);
-      // The LIVE title: the model's content lags typing by the save
-      // debounce, and the file is named for the note as it stands — the
-      // share modal's live-title lesson, applied to the file family.
-      const title = deriveTabTitle({ ...active, content: captured.content });
-      saveTextAsFile(
-        serializePadifyNoteFile(
-          {
-            name: active.name,
-            noteType: captured.noteType ?? DEFAULT_NOTE_TYPE,
-            content: captured.content,
-            createdAt: active.createdAt,
-            updatedAt: active.updatedAt,
-          },
-          Date.now(),
-          attachments,
-        ),
-        padifyFileName(title === 'Untitled' ? null : title, getDatedFileStem()),
-        PADIFY_MIME_TYPE,
-      );
-    })();
-  });
 
-  // ---- the .padify workspace — the whole pad as one file ------------
-  // The pad-level save: every note in rail order, the pad's theming, one
-  // shared attachments pool (see padify-file.ts's workspace section). A
-  // pad always holds at least one note (the model's never-empty
-  // invariant), so the row is always meaningful — no visibility sync.
-  notepad.downloadNotesPadifyWorkspace.click(function () {
-    void (async function () {
-      // The duplicate gesture's discipline: flush the active note's live
-      // edits into the model FIRST, so the file carries what the surfaces
-      // show and every note reads from one honest snapshot.
-      tabManager.saveActiveFromEditor();
-      const tabs = tabManager.getTabs();
-      const notes: PadifyNotePayload[] = tabs.map((tab) => {
-        const note: PadifyNotePayload = {
-          name: tab.name,
-          noteType: tab.noteType ?? DEFAULT_NOTE_TYPE,
-          content: tab.content,
-          createdAt: tab.createdAt,
-          updatedAt: tab.updatedAt,
+  /** The file stem every type starts from: the note as the rail calls it
+   * (the share modal's live-title lesson), sanitized, with the download
+   * family's dated stem answering for an untitled note. */
+  const stemForActive = (): string => {
+    const active = tabManager.getActive();
+    const captured = getActiveNoteContent();
+    const title = active
+      ? deriveTabTitle({
+          ...active,
+          content: captured?.content ?? active.content,
+        })
+      : 'Untitled';
+    const cleaned = title
+      .replace(/[\\/:*?"<>|]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return cleaned === '' || cleaned === 'Untitled' ? getDatedFileStem() : cleaned;
+  };
+
+  /** The text the plain-text family exports — the editor surface's live
+   * text (the model lags the save debounce). */
+  const activeText = (): string => getEditorText();
+
+  /** The text delegates — plain text, Markdown source, PDF, DOCX, HTML.
+   * The preview shows what will ship (the markdown ships its SOURCE, the
+   * HTML ships the sanitized body rendered as it will read); the run is
+   * the same exporter the dropdown rows always called, now with the
+   * user's name. */
+  const textTypes = (): ExportCenterType[] => {
+    const markdown = isMarkdownNote(tabManager.getActive());
+    const body = (): string | null => getActiveNoteExportBody();
+    const mdType: ExportCenterType = {
+      id: 'md',
+      label: 'Markdown',
+      extension: 'md',
+      defaultStem: stemForActive(),
+      hint: 'The source, for any other Markdown tool',
+      preview: async () => {
+        const captured = getActiveNoteContent();
+        return {
+          text: captured?.noteType === 'markdown' ? captured.content : '',
+          note: 'The .md source ships verbatim.',
         };
-        if (tab.colorTheme !== undefined) {
-          note.colorTheme = tab.colorTheme;
-        }
-        return note;
-      });
-      const attachments = await collectReferencedAttachments(tabs);
-      // The manifest's theming is the pad's own persisted choice — a
-      // device that never picked one exports no theme field at all.
-      const mode = getSetting('mode');
-      const theme: PadifyWorkspaceTheme | null =
-        mode !== null ? { mode, userPreferred: getSetting('isUserPreferredTheme') !== null } : null;
-      saveTextAsFile(
-        serializePadifyWorkspaceFile({ notes, theme, attachments }, Date.now()),
-        padifyWorkspaceFileName(getDatedFileStem()),
-        PADIFY_MIME_TYPE,
-      );
-    })();
+      },
+      run: async (fileName) => {
+        const captured = getActiveNoteContent();
+        if (captured?.noteType !== 'markdown') return false;
+        saveTextAsFile(captured.content, fileName, 'text/markdown');
+        return true;
+      },
+    };
+    const txtType: ExportCenterType = {
+      id: 'txt',
+      label: 'Plain text',
+      extension: 'txt',
+      defaultStem: stemForActive(),
+      hint: 'The words, nothing else',
+      preview: async () => ({ text: activeText() }),
+      run: async (fileName) => {
+        saveTextAsFile(activeText(), fileName);
+        return true;
+      },
+    };
+    const pdfType: ExportCenterType = {
+      id: 'pdf',
+      label: 'PDF',
+      extension: 'pdf',
+      defaultStem: stemForActive(),
+      hint: 'A text document, paginated',
+      preview: async () => ({ text: activeText(), note: 'Paginated text layout (A4).' }),
+      run: async (fileName) => {
+        exportNotesAsPDF(activeText(), fileName);
+        return true;
+      },
+    };
+    const docxType: ExportCenterType = {
+      id: 'docx',
+      label: 'DOCX',
+      extension: 'docx',
+      defaultStem: stemForActive(),
+      hint: 'A Word document, one paragraph per line',
+      preview: async () => ({ text: activeText(), note: 'One paragraph per line, Word-shaped.' }),
+      run: async (fileName) => {
+        exportNotesAsDocx(activeText(), fileName);
+        return true;
+      },
+    };
+    const htmlType: ExportCenterType = {
+      id: 'html',
+      label: 'HTML',
+      extension: 'html',
+      defaultStem: stemForActive(),
+      hint: 'A standalone page that opens anywhere',
+      preview: async () => {
+        const content = body();
+        return content !== null
+          ? { html: content, note: 'The sanitized body, as the page renders it.' }
+          : { note: 'Nothing to export yet.' };
+      },
+      run: async (fileName) => {
+        const content = body();
+        if (content === null) return false;
+        downloadHTML(content, fileName);
+        return true;
+      },
+    };
+    return markdown
+      ? [mdType, txtType, pdfType, docxType, htmlType]
+      : [txtType, pdfType, docxType, htmlType];
+  };
+
+  /** The envelope delegates — the note out as a .padify file, the whole
+   * pad out as one workspace file, a drawing out as native .excalidraw. */
+  const envelopeTypes = (): ExportCenterType[] => {
+    const captured = getActiveNoteContent();
+    const active = tabManager.getActive();
+    const isDrawing = captured?.noteType === 'drawing';
+
+    const padifyType: ExportCenterType = {
+      id: 'padify',
+      label: 'Padify file',
+      extension: 'padify',
+      defaultStem: stemForActive(),
+      section: 'pad',
+      hint: 'The note as a file — opens back as the same kind of note',
+      preview: async () => {
+        // The id count answers without fetching any bytes — the run does
+        // the real attachment pass at export time.
+        const ids = new Set(captured ? collectNoteAttachmentIds(captured) : []);
+        return {
+          card: {
+            title: `${stemForActive()}.padify`,
+            meta: [
+              `Type: ${captured?.noteType ?? DEFAULT_NOTE_TYPE}`,
+              ids.size > 0
+                ? `${ids.size} attachment${ids.size === 1 ? '' : 's'} embedded`
+                : 'No attachments to embed',
+            ],
+          },
+        };
+      },
+      run: async (fileName) => {
+        const activeNow = tabManager.getActive();
+        const capturedNow = getActiveNoteContent();
+        if (!activeNow || !capturedNow) return false;
+        const attachments = await collectReferencedAttachments([capturedNow]);
+        saveTextAsFile(
+          serializePadifyNoteFile(
+            {
+              name: activeNow.name,
+              noteType: capturedNow.noteType ?? DEFAULT_NOTE_TYPE,
+              content: capturedNow.content,
+              createdAt: activeNow.createdAt,
+              updatedAt: activeNow.updatedAt,
+            },
+            Date.now(),
+            attachments,
+          ),
+          fileName,
+          PADIFY_MIME_TYPE,
+        );
+        return true;
+      },
+    };
+
+    const workspaceType: ExportCenterType = {
+      id: 'workspace',
+      label: 'Whole pad',
+      extension: 'padify',
+      defaultStem: getDatedFileStem(),
+      section: 'pad',
+      hint: 'Every note, the theming, one attachments pool — one file',
+      preview: async () => {
+        tabManager.saveActiveFromEditor();
+        const tabs = tabManager.getTabs();
+        return {
+          card: {
+            title: `${getDatedFileStem()}.padify`,
+            meta: [`${tabs.length} note${tabs.length === 1 ? '' : 's'} in rail order`],
+          },
+        };
+      },
+      run: async (fileName) => {
+        // The duplicate gesture's discipline: flush the active note's live
+        // edits into the model FIRST, so the file carries what the surfaces
+        // show and every note reads from one honest snapshot.
+        tabManager.saveActiveFromEditor();
+        const tabs = tabManager.getTabs();
+        const notes: PadifyNotePayload[] = tabs.map((tab) => {
+          const note: PadifyNotePayload = {
+            name: tab.name,
+            noteType: tab.noteType ?? DEFAULT_NOTE_TYPE,
+            content: tab.content,
+            createdAt: tab.createdAt,
+            updatedAt: tab.updatedAt,
+          };
+          if (tab.colorTheme !== undefined) {
+            note.colorTheme = tab.colorTheme;
+          }
+          return note;
+        });
+        const attachments = await collectReferencedAttachments(tabs);
+        // The manifest's theming is the pad's own persisted choice — a
+        // device that never picked one exports no theme field at all.
+        const mode = getSetting('mode');
+        const theme: PadifyWorkspaceTheme | null =
+          mode !== null
+            ? { mode, userPreferred: getSetting('isUserPreferredTheme') !== null }
+            : null;
+        saveTextAsFile(
+          serializePadifyWorkspaceFile({ notes, theme, attachments }, Date.now()),
+          fileName,
+          PADIFY_MIME_TYPE,
+        );
+        return true;
+      },
+    };
+
+    const excalidrawType: ExportCenterType | null =
+      isDrawing && captured
+        ? {
+            id: 'excalidraw',
+            label: 'Excalidraw file',
+            extension: 'excalidraw',
+            defaultStem: stemForActive(),
+            hint: 'Native .excalidraw — excalidraw.com opens it as-is',
+            preview: async () => {
+              const scene = parseDrawingScene(captured.content);
+              const elements = scene?.elements.filter((e) => e.isDeleted !== true).length ?? 0;
+              const thumb = await snapshotDrawingContent(captured.content, active?.id ?? null);
+              return {
+                image: thumb ?? undefined,
+                note:
+                  elements > 0
+                    ? `The scene, as Excalidraw will re-open it (${elements} element${elements === 1 ? '' : 's'}).`
+                    : 'Nothing to export yet — draw something first.',
+              };
+            },
+            run: async (fileName) => {
+              const activeNow = tabManager.getActive();
+              const capturedNow = getActiveNoteContent();
+              if (!activeNow || capturedNow?.noteType !== 'drawing') return false;
+              const scene = parseDrawingScene(capturedNow.content);
+              if (scene === null || scene.elements.length === 0) return false;
+              const attachments = await collectReferencedAttachments([capturedNow]);
+              saveTextAsFile(buildExcalidrawFile(scene, attachments), fileName, 'application/json');
+              return true;
+            },
+          }
+        : null;
+
+    return [...(excalidrawType ? [excalidrawType] : []), padifyType, workspaceType];
+  };
+
+  /** The host for the ACTIVE note — the type list says what it can become. */
+  const openCenter = (initialTypeId?: string): void => {
+    const active = tabManager.getActive();
+    const captured = getActiveNoteContent();
+    const title = active
+      ? deriveTabTitle({ ...active, content: captured?.content ?? active.content })
+      : 'Untitled';
+    const isDrawing = captured?.noteType === 'drawing';
+
+    const types: ExportCenterType[] = isDrawing
+      ? // The image types first — the drawing's headline exports — then the
+        // envelopes. An empty canvas still opens the center: the stage says
+        // what an export would need (the honest-gate wording), and the
+        // envelope types stay fully alive.
+        [...drawingImageExportTypes(stemForActive()), ...envelopeTypes()]
+      : [...textTypes(), ...envelopeTypes()];
+
+    const host: ExportCenterHost = {
+      heading: 'Export',
+      subheading:
+        title === 'Untitled'
+          ? 'Choose a file type and name — the file downloads to your device.'
+          : `${title} — choose a file type and name; the file downloads to your device.`,
+      types,
+      initialTypeId:
+        initialTypeId ??
+        (isDrawing && drawingSceneHasContent(captured?.content ?? '') ? 'png' : types[0]?.id),
+      door: {
+        label: 'Open a Padify or Excalidraw file…',
+        onOpen: () => padifyOpen.openNoteFilePicker(),
+      },
+    };
+    openExportCenter(host);
+  };
+
+  // The one door: the download button opens the center (the old dropdown
+  // layer is gone — no menu to toggle, one dialog to learn).
+  notepad.downloadNotes.on('click', () => {
+    openCenter();
   });
 
-  // The canvas's interop door: a drawing note out as a native
-  // .excalidraw file — excalidraw.com opens it as-is, the scene's image
-  // bytes riding the vendor's files map. Rides the same visibility rule
-  // as the PNG/SVG rows (something to save).
-  notepad.downloadNotesExcalidraw.click(function () {
-    void (async function () {
-      const active = tabManager.getActive();
-      const captured = getActiveNoteContent();
-      if (!active || captured?.noteType !== 'drawing') {
-        return;
-      }
-      const scene = parseDrawingScene(captured.content);
-      if (scene === null || scene.elements.length === 0) {
-        return;
-      }
-      // The image pass rides the same collector as the .padify save —
-      // the drawing branch, keyed on the same captured note.
-      const attachments = await collectReferencedAttachments([captured]);
-      // Live title, same as the Padify save (the model lags the canvas's
-      // announce debounce).
-      saveTextAsFile(
-        buildExcalidrawFile(scene, attachments),
-        excalidrawFileName(
-          deriveTabTitle({ ...active, content: captured.content }),
-          getDatedFileStem(),
-        ),
-        'application/json',
-      );
-    })();
-  });
-
-  // The open door: .padify (any note kind) and .excalidraw (a drawing
-  // waiting to happen) come back in as notes — see padify-file-ui.ts.
-  notepad.openNoteFile.click(function () {
-    padifyOpen.openNoteFilePicker();
+  // The canvas menu's Export image row rides the bus (canvas.ts dispatches
+  // it; document, not window — the app's bridge lives there, the same bus
+  // padify:open-shortcuts rides). The center presets to the drawing's PNG
+  // type, the row's promise on the site; the app's export chord (app-
+  // shortcuts.ts) dispatches the same bus with no preset — the active
+  // note's first type answers.
+  document.addEventListener('padify:open-export', (event) => {
+    const detail = (event as CustomEvent<{ initialTypeId?: string }>).detail;
+    openCenter(detail?.initialTypeId);
   });
 }

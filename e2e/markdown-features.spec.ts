@@ -221,16 +221,20 @@ test.describe('markdown notes — the feature act', () => {
     expect(await source.inputValue()).toBe('**menu words**');
   });
 
-  test('the download menu offers the .md export only for markdown notes', async ({ page }) => {
+  test('the export center offers the .md type only for markdown notes', async ({ page }) => {
     await bootSource(page, 'x');
 
     await page.locator('#downloadNotes').click();
-    await expect(page.locator('#downloadNotesMarkdown')).toBeVisible();
+    const dialog = page.locator('dialog.export-center');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('.export-center-type', { hasText: 'Markdown' })).toBeVisible();
+    await page.keyboard.press('Escape');
 
-    // A plain note: the row stands down.
+    // A plain note: the type stands down.
     await page.locator('#addTab').click();
     await page.locator('#downloadNotes').click();
-    await expect(page.locator('#downloadNotesMarkdown')).toBeHidden();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('.export-center-type', { hasText: 'Markdown' })).toHaveCount(0);
   });
 });
 

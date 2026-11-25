@@ -281,6 +281,18 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
       openModal(notepad.keyboardShortcutsModal.get(0));
     }
 
+    // Ctrl/Cmd+Shift+E — the export center, the ONE export popup. This is
+    // the vendor's own image-export chord, answered at the app layer: the
+    // dispatcher registers at boot, before the canvas ever mounts, and
+    // answers its chords with stopImmediatePropagation — so the SAME chord
+    // opens the SAME center on every note type (the canvas menu's Export
+    // image row rides the same bus with a PNG preset).
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyE') {
+      event.preventDefault();
+      winChord();
+      document.dispatchEvent(new CustomEvent('padify:open-export'));
+    }
+
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyO') {
       event.preventDefault();
       winChord();
