@@ -44,6 +44,7 @@ import { registerNoteSurfaceForType, type NoteSurface, type SurfaceNote } from '
 import { opaqueNoteSurface } from '../surface';
 import { showToast } from '../../ui/toast';
 import { saveTextAsFile } from '../../exports';
+import { sanitizeFileStem } from '../../ui/file-name';
 import {
   DRAWING_SCENE_SOFT_BUDGET_BYTES,
   DRAWING_SCENE_VERSION,
@@ -658,13 +659,44 @@ function downloadBlob(blob: Blob, fileName: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 5_000);
 }
 
-/** A file-name-safe rendering of the note's name. */
+/** A file-name-safe rendering of the note's name — the one rule every
+ * export surface speaks (ui/file-name.ts). */
 function exportFileName(name: string): string {
-  const cleaned = name
-    .replace(/[\\/:*?"<>|]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return cleaned === '' ? 'drawing' : cleaned;
+  return sanitizeFileStem(name, 'drawing');
+}
+
+/** The visible scene's natural bounds, if every element carries them —
+ * the dialog's facts line ("1,240 × 860 px") answers from here. */
+function visibleElementBounds(
+  elements: DrawingSceneElement[],
+): { width: number; height: number } | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const element of elements) {
+    const x = Number(element.x);
+    const y = Number(element.y);
+    const width = Number(element.width);
+    const height = Number(element.height);
+    if (
+      !Number.isFinite(x) ||
+      !Number.isFinite(y) ||
+      !Number.isFinite(width) ||
+      !Number.isFinite(height)
+    ) {
+      return null;
+    }
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x + width);
+    maxY = Math.max(maxY, y + height);
+  }
+  if (elements.length === 0 || minX === Infinity) return null;
+  return {
+    width: Math.max(1, Math.ceil(maxX - minX)),
+    height: Math.max(1, Math.ceil(maxY - minY)),
+  };
 }
 
 /**
@@ -681,6 +713,7 @@ function exportFileName(name: string): string {
 export async function exportActiveDrawingImage(
   kind: 'png' | 'svg',
   options?: DrawingImageExportOptions,
+  fileNameOverride?: string,
 ): Promise<boolean> {
   const current = live;
   if (!current || !current.handle || current.disposed || !current.mount.isConnected) {
@@ -697,21 +730,22 @@ export async function exportActiveDrawingImage(
   // inserted this session plus the hydration — without it an image
   // element exports as a gray placeholder.
   const files = current.handle.getFiles();
-  const fileName = exportFileName(current.noteName);
+  // The dialog owns the name now — the full stem + suffix (the embed's
+  // double extension included), sanitized at press time; the note's
+  // name plus the embed marker is the fallback when no face spoke.
+  const fileName =
+    fileNameOverride ??
+    `${exportFileName(current.noteName)}${options?.embed === true ? '.excalidraw' : ''}.${kind === 'svg' ? 'svg' : 'png'}`;
   try {
     const canvas = await import('./canvas');
     if (kind === 'svg') {
       const markup = await canvas.renderDrawingImage('svg', scene, files, options);
-      saveTextAsFile(
-        markup as string,
-        `${fileName}${options?.embed === true ? '.excalidraw' : ''}.svg`,
-        'image/svg+xml',
-      );
+      saveTextAsFile(markup as string, fileName, 'image/svg+xml');
       return true;
     }
     const blob = await canvas.renderDrawingImage('png', scene, files, options);
     if (blob instanceof Blob) {
-      downloadBlob(blob, `${fileName}${options?.embed === true ? '.excalidraw' : ''}.png`);
+      downloadBlob(blob, fileName);
       return true;
     }
     return false;
@@ -760,13 +794,15 @@ export async function copyActiveDrawingImage(
  * The drawing's image-export door: the download center's image rows hand
  * off here (the old dropdown's "Export image…" row did the same), the
  * dialog opens on the vendor's native option set — now speaking the
- * whole of it (3× scale, embed for both formats, the clipboard press) —
- * and each Save/Copy press answers exportActiveDrawingImage /
- * copyActiveDrawingImage with the dialog's choices. The gates (a live
- * canvas, something in it) fire BEFORE the dialog so an empty or closed
- * drawing answers with the same toast it always did. `presetFormat` lands
- * the launcher's ask (the center's PNG/SVG rows press their format
- * before the face shows).
+ * whole of it (3× scale, embed for both formats, the clipboard press)
+ * and the vendor's native FACE: the live preview (rendered from the
+ * frozen-at-open scene, honoring Background/Dark), the editable file
+ * name (the Save press owns it, the embed double extension included),
+ * and the scene's facts (element count, natural bounds, the scale-
+ * multiplied answer). The gates (a live canvas, something in it) fire
+ * BEFORE the dialog so an empty or closed drawing answers with the same
+ * toast it always did. `presetFormat` lands the launcher's ask (the
+ * center's PNG/SVG rows press their format before the face shows).
  */
 export async function openDrawingExportUI(presetFormat?: 'png' | 'svg'): Promise<void> {
   const current = live;
@@ -780,19 +816,51 @@ export async function openDrawingExportUI(presetFormat?: 'png' | 'svg'): Promise
     showToast('Nothing to export yet — draw something first.');
     return;
   }
+  // The modal freezes the canvas, so one capture answers the whole
+  // session: the scene, its files, and the facts line's numbers.
+  const files = current.handle.getFiles();
+  const bounds = visibleElementBounds(visible);
   const { openDrawingExportDialog } = await import('./export-dialog');
-  openDrawingExportDialog(async (choices, destination) => {
-    const options = {
-      background: choices.background,
-      dark: choices.dark,
-      embed: choices.embed,
-      scale: choices.scale,
-    };
-    if (destination === 'clipboard') {
-      return copyActiveDrawingImage(choices.format, options);
-    }
-    return exportActiveDrawingImage(choices.format, options);
-  }, presetFormat);
+  openDrawingExportDialog({
+    invoker: async (choices, destination, fileName) => {
+      const options = {
+        background: choices.background,
+        dark: choices.dark,
+        embed: choices.embed,
+        scale: choices.scale,
+      };
+      if (destination === 'clipboard') {
+        return copyActiveDrawingImage(choices.format, options);
+      }
+      return exportActiveDrawingImage(choices.format, options, fileName);
+    },
+    presetFormat,
+    defaultStem: exportFileName(current.noteName),
+    meta: {
+      elements: visible.length,
+      width: bounds?.width,
+      height: bounds?.height,
+    },
+    preview: async (choices) => {
+      // The thumbnail honors Background/Dark — the two options that
+      // change the pixels. Scale is the facts line's truth, not the
+      // thumbnail's (a 3× render of the same picture is the same
+      // picture, and not worth the wait).
+      try {
+        const canvas = await import('./canvas');
+        const blob = await canvas.renderDrawingImage('png', scene, files, {
+          background: choices.background,
+          dark: choices.dark,
+        });
+        if (blob instanceof Blob) {
+          return URL.createObjectURL(blob);
+        }
+      } catch {
+        return null;
+      }
+      return null;
+    },
+  });
 }
 
 /**

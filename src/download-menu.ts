@@ -219,7 +219,6 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
       label: 'Padify file',
       extension: 'padify',
       defaultStem: stemForActive(),
-      section: 'pad',
       hint: 'The note as a file — opens back as the same kind of note',
       preview: async () => {
         // The id count answers without fetching any bytes — the run does
@@ -354,14 +353,17 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
    * the center and opens the drawing's own export dialog (the native
    * options live there, not as inline rows here — the consolidation's
    * mistake, undone): PNG and SVG, background, dark mode, embed scene,
-   * the 3× scale, and the clipboard press. The dialog's own gates toast
-   * honestly on an empty or closed canvas. */
+   * the 3× scale, the live preview, and the clipboard press. The
+   * dialog's own gates toast honestly on an empty or closed canvas. */
   const drawingImageLaunchers = (): ExportCenterType[] =>
     (['png', 'svg'] as const).map((kind): ExportCenterType => ({
       id: `image-${kind}`,
       label: `${kind.toUpperCase()} image`,
       extension: kind,
-      hint: 'The canvas export dialog — the full native options',
+      hint:
+        kind === 'png'
+          ? 'A raster image — the full options dialog opens'
+          : 'A vector image — the full options dialog opens',
       launch: () => {
         void openDrawingExportUI(kind);
       },

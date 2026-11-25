@@ -155,7 +155,7 @@ test.describe('the drawing canvas', () => {
     ).toBeVisible();
     await expect(
       center.locator('.export-center-type', { hasText: 'Excalidraw file' }),
-    ).toHaveAttribute('aria-pressed', 'true');
+    ).toHaveAttribute('aria-checked', 'true');
     await expect(center.locator('.export-center-stage-note')).toContainText(
       'Nothing to export yet — draw something first.',
     );
@@ -191,6 +191,9 @@ test.describe('the drawing canvas', () => {
     await page.locator('#downloadNotes').click();
     const center = page.locator('dialog.export-center');
     await expect(center).toBeVisible();
+    // The groups are labeled now — the grouping is semantics, not a
+    // mystery hairline.
+    await expect(center.locator('.export-center-group-label')).toHaveCount(3);
     await center.locator('.export-center-type--launch', { hasText: 'PNG image' }).click();
 
     // The handoff closed the center and opened the drawing's own dialog:
@@ -209,6 +212,21 @@ test.describe('the drawing canvas', () => {
     await expect(dialog.getByText('Copy to clipboard')).toBeVisible();
     await expect(dialog.locator('.drawing-export-seg-btn', { hasText: '3×' })).toBeVisible();
 
+    // THE REFRESHED FACE: the live preview renders the thumbnail, the
+    // facts line answers "how big is this file going to be?", and the
+    // name is the dialog's own — the vendor's native dialog, spoken in
+    // the app's face.
+    await expect(dialog.locator('.drawing-export-preview-img')).toBeVisible();
+    await expect(dialog.locator('.drawing-export-meta')).toContainText('1 element');
+    const nameField = dialog.locator('.drawing-export-name-row input');
+    await expect(nameField).toHaveValue('drawing');
+
+    // Embed flips the suffix chip live — the double extension SEEN before
+    // the Save, not discovered in the Downloads folder.
+    await dialog.locator('.drawing-export-option', { hasText: 'Embed scene' }).click();
+    await expect(dialog.locator('.drawing-export-name-suffix')).toHaveText('.excalidraw.png');
+    await dialog.locator('.drawing-export-option', { hasText: 'Embed scene' }).click();
+
     // NATIVE PARITY, the part the old dialog got wrong: Embed scene and
     // Scale answer for BOTH formats — the vendor's own dialog shows them
     // whatever the export button will be (scale sizes the SVG, embed
@@ -220,13 +238,14 @@ test.describe('the drawing canvas', () => {
     ).toBeVisible();
     await dialog.locator('.drawing-export-seg-btn', { hasText: 'PNG' }).click();
 
-    // Save at 3× with the defaults otherwise: the download carries the
-    // PNG bytes and the note's file name.
+    // Save at 3× with the user's own name: the download carries the PNG
+    // bytes under the name the dialog owns.
+    await nameField.fill('blueprint');
     await dialog.locator('.drawing-export-seg-btn', { hasText: '3×' }).click();
     const download = page.waitForEvent('download');
     await dialog.locator('button.vz-dialog-confirm', { hasText: 'Save' }).click();
     const file = await download;
-    expect(file.suggestedFilename()).toMatch(/\.png$/);
+    expect(file.suggestedFilename()).toBe('blueprint.png');
     // The dialog closed on the Save press.
     await expect(dialog).toBeHidden();
   });

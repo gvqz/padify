@@ -777,27 +777,38 @@ describe('the clipboard seam — the native parity the R1 face gained', () => {
 });
 
 describe('the export dialog door — the handoff and the chord scope', () => {
-  it('opens the dialog on a live, non-empty drawing, with the launcher preset', async () => {
+  it('opens the dialog on a live, non-empty drawing: the preset, the name, the facts, the preview seam', async () => {
     const host = connectedHost();
     surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
     await canvasReady();
     const mounted = lastMount();
     mounted.handle.getScene = () => ({
-      elements: [{ id: 'a', type: 'rectangle' }],
+      elements: [{ id: 'a', type: 'rectangle', x: 10, y: 20, width: 100, height: 50 }],
       appState: {},
     });
 
     await openDrawingExportUI('svg');
     expect(openDrawingExportDialog).toHaveBeenCalledTimes(1);
-    const [invoker, preset] = vi.mocked(openDrawingExportDialog).mock.calls[0] as unknown as [
-      (choices: unknown, destination: string) => Promise<boolean>,
-      'svg',
-    ];
-    expect(preset).toBe('svg');
+    const setup = vi.mocked(openDrawingExportDialog).mock.calls[0][0] as unknown as {
+      invoker: (
+        choices: Record<string, unknown>,
+        destination: string,
+        fileName?: string,
+      ) => Promise<boolean>;
+      presetFormat: 'png' | 'svg';
+      defaultStem: string;
+      meta: { elements: number; width?: number; height?: number };
+      preview: (choices: Record<string, unknown>) => Promise<string | null>;
+    };
+    expect(setup.presetFormat).toBe('svg');
+    expect(setup.defaultStem).toBe('Sketch');
+    // The facts line's numbers, captured at the open (the modal freezes
+    // the canvas): one visible element, its natural bounds.
+    expect(setup.meta).toEqual({ elements: 1, width: 100, height: 50 });
 
-    // The invoker speaks both destinations: a Save press exports the
-    // file, a clipboard press copies it — one callback, both engines.
-    await invoker(
+    // The invoker speaks both destinations AND carries the dialog's own
+    // file name — a Save press exports under it verbatim.
+    await setup.invoker(
       {
         format: 'svg',
         background: false,
@@ -806,12 +817,33 @@ describe('the export dialog door — the handoff and the chord scope', () => {
         scale: 3,
       },
       'file',
+      'blueprint.excalidraw.svg',
     );
     expect(canvasMock.renderDrawingImage).toHaveBeenCalledWith(
       'svg',
       expect.anything(),
       {},
       { background: false, dark: true, embed: true, scale: 3 },
+    );
+
+    // The preview seam renders the PNG thumbnail honoring Background and
+    // Dark — the two options that change the pixels.
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn((): string => 'blob:preview');
+    URL.revokeObjectURL = vi.fn();
+    try {
+      const url = await setup.preview({ background: false, dark: true });
+      expect(url).toBe('blob:preview');
+    } finally {
+      URL.createObjectURL = originalCreateObjectURL;
+      URL.revokeObjectURL = originalRevokeObjectURL;
+    }
+    expect(canvasMock.renderDrawingImage).toHaveBeenCalledWith(
+      'png',
+      expect.anything(),
+      {},
+      { background: false, dark: true },
     );
   });
 

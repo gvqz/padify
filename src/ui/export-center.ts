@@ -38,9 +38,21 @@
  * not export (a toast has already explained why) and the dialog stays
  * open. The dialog closes only on a reported success, on Cancel, or on a
  * launcher's handoff. Object URLs die with the dialog that made them.
+ *
+ * THE REFINEMENT PASS (the visual audit's verdict, answered): the type
+ * list speaks RADIO — a leading dot on the selected row, role=radio +
+ * aria-checked, not a border inference; the groups are LABELED (Images /
+ * File types / The pad itself) instead of a mystery hairline; the
+ * keyboard is native — ArrowUp/ArrowDown walks the types (selection
+ * follows focus), Enter in the name field is an Export, the selected row
+ * takes focus on open; the footer's import door is a button that READS as
+ * one (a folder glyph, an outline), not quiet text; and the dialog owns
+ * its height — max-height, a scrolling body, a pinned footer, so a
+ * short or narrow viewport never buries the Export press below the fold.
  */
 
 import './export-center.css';
+import { sanitizeFileStem, stripExtension } from './file-name';
 
 /** What a type's preview() answers with. */
 export interface ExportPreview {
@@ -145,6 +157,7 @@ interface CenterFace {
   suffix: HTMLElement;
   optionsHost: HTMLElement;
   door: HTMLButtonElement;
+  doorLabel: HTMLElement;
   cancel: HTMLButtonElement;
   exportButton: HTMLButtonElement;
 }
@@ -165,20 +178,16 @@ let previewUrl: string | null = null;
  * user's stem survives the switches, minus the types' extensions. */
 let stemDirty = false;
 
-/** Strips characters the download family never allowed into file names. */
+/** Strips characters the download family never allowed into file names —
+ * the one rule every export surface speaks (ui/file-name.ts). */
 function sanitizeStem(raw: string): string {
-  const cleaned = raw
-    .replace(/[\\/:*?"<>|]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return cleaned === '' ? 'export' : cleaned;
+  return sanitizeFileStem(raw);
 }
 
 /** Drops a trailing extension equal to the type's own (the user typing
  * "note.png" into the stem must not export "note.png.png"). */
 function stripOwnExtension(stem: string, extension: string): string {
-  const suffix = `.${extension.toLowerCase()}`;
-  return stem.toLowerCase().endsWith(suffix) ? stem.slice(0, -suffix.length) : stem;
+  return stripExtension(stem, extension);
 }
 
 function optionValues(type: ExportCenterExporterType): ExportOptionValues {
@@ -202,6 +211,18 @@ function cancelPendingPreview(): void {
   if (previewTimer !== null) {
     window.clearTimeout(previewTimer);
     previewTimer = null;
+  }
+}
+
+/** Closes the dialog through the one path the environment has — a real
+ * <dialog> closes (its close event runs the cleanup); a jsdom-grade
+ * embed stands the open attribute down and speaks the event itself. */
+function closeCenterDialog(dialog: HTMLDialogElement): void {
+  if (typeof dialog.close === 'function') {
+    dialog.close();
+  } else {
+    dialog.removeAttribute('open');
+    dialog.dispatchEvent(new Event('close'));
   }
 }
 
@@ -245,9 +266,9 @@ function centerFace(): CenterFace {
   const settings = document.createElement('div');
   settings.className = 'export-center-settings';
 
-  const typeLabel = document.createElement('p');
-  typeLabel.className = 'export-center-label';
-  typeLabel.textContent = 'File type';
+  // The type list — its groups carry their own labels (Images / File
+  // types / The pad itself), so no outer "File type" caption sits over
+  // them: one hierarchy, not a label on a list of labels.
   const typeList = document.createElement('div');
   typeList.className = 'export-center-types';
   typeList.setAttribute('role', 'group');
@@ -271,15 +292,29 @@ function centerFace(): CenterFace {
   optionsHost.className = 'export-center-options';
   optionsHost.hidden = true;
 
-  settings.append(typeLabel, typeList, nameLabel, nameRow, optionsHost);
+  settings.append(typeList, nameLabel, nameRow, optionsHost);
   body.append(preview, settings);
   dialog.append(body);
 
   const foot = document.createElement('div');
   foot.className = 'export-center-foot';
+  // The import door — an outline button with a folder glyph, so it
+  // READS as the action it is (the audit called the quiet text "leftover
+  // debug text").
   const door = document.createElement('button');
   door.type = 'button';
   door.className = 'export-center-door';
+  const doorGlyph = document.createElement('span');
+  doorGlyph.className = 'export-center-door-glyph';
+  doorGlyph.setAttribute('aria-hidden', 'true');
+  doorGlyph.innerHTML =
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>' +
+    '<path d="M3 9h18"/></svg>';
+  const doorLabel = document.createElement('span');
+  doorLabel.className = 'export-center-door-label';
+  door.append(doorGlyph, doorLabel);
   const actions = document.createElement('div');
   actions.className = 'vz-dialog-actions';
   const cancel = document.createElement('button');
@@ -307,12 +342,13 @@ function centerFace(): CenterFace {
     suffix,
     optionsHost,
     door,
+    doorLabel,
     cancel,
     exportButton,
   };
 
   cancel.addEventListener('click', () => {
-    dialog.close();
+    closeCenterDialog(dialog);
   });
 
   // The dialog going away (Escape, cancel, a handoff) kills the pending
@@ -333,6 +369,16 @@ function centerFace(): CenterFace {
     stemDirty = true;
   });
 
+  // Enter in the name field is an Export — the native save-dialog
+  // discipline (the audit: no user reaches for a button when the field
+  // already has their hands on the keyboard).
+  stem.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      exportButton.click();
+    }
+  });
+
   // ONE typeList binding for the dialog's whole life (the consolidation
   // re-added this on every open — see the module docstring). It reads the
   // LIVE host, so a reopen can never fire a stale one.
@@ -347,13 +393,35 @@ function centerFace(): CenterFace {
     // closes, the type's own surface opens — the old dropdown's
     // single-click muscle memory, kept.
     if (type.launch) {
-      dialog.close();
+      closeCenterDialog(dialog);
       type.launch();
       return;
     }
     if (type !== activeType) {
       selectType(type, activeType);
     }
+  });
+
+  // ONE arrow-key binding for the dialog's whole life: the native
+  // save-dialog discipline — ArrowUp/ArrowDown walks the SELECTABLE
+  // rows (the launchers are not choices; they are doors), the selection
+  // follows the focus, and the list never scrolls under the keypress.
+  typeList.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    const host = activeHost;
+    if (!host) return;
+    const rows = Array.from(typeList.querySelectorAll<HTMLButtonElement>('.export-center-type'));
+    const selectable = rows.filter((row) => !row.classList.contains('export-center-type--launch'));
+    if (selectable.length < 2) return;
+    const focusedIndex = selectable.findIndex((row) => row === document.activeElement);
+    const checked = typeList.querySelector('.export-center-type[aria-checked="true"]');
+    const fromIndex =
+      focusedIndex !== -1 ? focusedIndex : selectable.findIndex((row) => row === checked);
+    const step = event.key === 'ArrowDown' ? 1 : -1;
+    const next = selectable[(fromIndex + step + selectable.length) % selectable.length];
+    event.preventDefault();
+    next.focus();
+    next.click();
   });
 
   // ONE export binding for the dialog's whole life.
@@ -371,7 +439,7 @@ function centerFace(): CenterFace {
         done = false;
       }
       exportButton.disabled = false;
-      if (done) dialog.close();
+      if (done) closeCenterDialog(dialog);
     })();
   });
 
@@ -520,13 +588,17 @@ function schedulePreview(type: ExportCenterExporterType): void {
   }, 220);
 }
 
-/** Selects one type: pressed states, name suffix, options section, preview. */
+/** Selects one type: the radio states, name suffix, options section,
+ * preview. */
 function selectType(type: ExportCenterExporterType, previousType: ExportCenterType | null): void {
   const f = face;
   if (!f) return;
   activeType = type;
-  for (const button of f.typeList.querySelectorAll('button')) {
-    button.setAttribute('aria-pressed', String(button.dataset.typeId === type.id));
+  // The radio states: the selectable rows answer aria-checked (their
+  // dot is CSS, the semantics are real); the launcher rows hold no
+  // pressed state at all — a door is never checked.
+  for (const button of f.typeList.querySelectorAll<HTMLButtonElement>('button[role="radio"]')) {
+    button.setAttribute('aria-checked', String(button.dataset.typeId === type.id));
   }
   // The stem survives a type switch once the user has edited it (their
   // naming is theirs, minus the types' own extensions — switching
@@ -568,9 +640,10 @@ export function openExportCenter(host: ExportCenterHost): void {
 
   // A still-open center (a reopen without a close) is stood down first —
   // through the dialog's own close event, so its cleanup runs exactly
-  // once, through the one path that knows how.
+  // once, through the one path that knows how. (jsdom-grade embeds have
+  // no close() — the attribute itself stands down there.)
   if (document.body.contains(f.dialog) && f.dialog.open) {
-    f.dialog.close();
+    closeCenterDialog(f.dialog);
   }
 
   activeHost = host;
@@ -578,27 +651,39 @@ export function openExportCenter(host: ExportCenterHost): void {
   f.subheading.textContent = host.subheading ?? '';
   f.subheading.hidden = !host.subheading;
 
-  // The type list — one row per type (a hairline before pad-level saves,
-  // a chevron on the launcher rows), the door wired for this session.
+  // The type list — one row per type, in groups that carry their own
+  // labels (Images / File types / The pad itself): the grouping is
+  // semantics now, not a mystery hairline. The launcher rows wear a
+  // chevron; the selectable rows wear the radio dot.
   f.typeList.replaceChildren();
-  let lastSection: string | null = null;
+  const groupLabelFor = (key: string): string =>
+    key === 'images' ? 'Images' : key === 'pad' ? 'The pad itself' : 'This note';
+  const groupKeyFor = (type: ExportCenterType): string =>
+    type.launch ? 'images' : (type.section ?? 'note');
+  let lastGroup: string | null = null;
   for (const type of host.types) {
-    if (type.section === 'pad' && lastSection !== 'pad') {
-      const sep = document.createElement('hr');
-      sep.className = 'export-center-types-sep';
-      f.typeList.append(sep);
+    const group = groupKeyFor(type);
+    if (group !== lastGroup) {
+      const groupLabel = document.createElement('p');
+      groupLabel.className = 'export-center-group-label';
+      groupLabel.textContent = groupLabelFor(group);
+      f.typeList.append(groupLabel);
     }
-    lastSection = type.section ?? 'note';
+    lastGroup = group;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = type.launch
       ? 'export-center-type export-center-type--launch'
-      : 'export-center-type';
+      : 'export-center-type export-center-type--select';
     button.dataset.typeId = type.id;
-    button.setAttribute('aria-pressed', 'false');
     if (type.launch) {
       // A handoff row: the chevron says the click opens another face.
       button.setAttribute('aria-haspopup', 'dialog');
+    } else {
+      // A selectable row: radio semantics — the dot is CSS, the
+      // aria-checked is real.
+      button.setAttribute('role', 'radio');
+      button.setAttribute('aria-checked', 'false');
     }
     const label = document.createElement('span');
     label.className = 'export-center-type-label';
@@ -624,10 +709,10 @@ export function openExportCenter(host: ExportCenterHost): void {
   }
 
   if (host.door) {
-    f.door.textContent = host.door.label;
+    f.doorLabel.textContent = host.door.label;
     f.door.hidden = false;
     f.door.onclick = () => {
-      f.dialog.close();
+      closeCenterDialog(f.dialog);
       host.door?.onOpen();
     };
   } else {
@@ -665,4 +750,8 @@ export function openExportCenter(host: ExportCenterHost): void {
     // rows reachable without the top-layer promise.
     f.dialog.setAttribute('open', '');
   }
+  // The selected row takes the focus on open — the keyboard lands on
+  // the primary control, not whichever button the UA picked first.
+  // (Both paths: the fallback open keeps the same discipline.)
+  f.typeList.querySelector<HTMLButtonElement>('.export-center-type[aria-checked="true"]')?.focus();
 }

@@ -9,12 +9,26 @@
  * one namespace.
  */
 
+/* The flex column is scoped to the OPEN state — an author display rule
+   on the bare selector would beat the UA's dialog:not([open]) display
+   rule and the closed dialog would keep rendering (the repo's own
+   [hidden] lesson, applied to the native dialog's own open state). */
 dialog.export-center {
   width: min(94vw, 780px);
+  max-height: min(88vh, 720px);
   padding: 0;
+  overscroll-behavior: contain;
 }
 
+dialog.export-center[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The body scrolls, the head and the footer stay pinned — a short or
+   narrow viewport never buries the Export press below the fold. */
 .export-center-head {
+  flex: none;
   padding: 18px 24px 12px;
   border-bottom: 1px solid var(--vz-border);
 }
@@ -38,6 +52,8 @@ dialog.export-center {
 .export-center-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  overflow: auto;
+  min-height: 0;
 }
 
 .export-center-preview {
@@ -178,7 +194,28 @@ dialog.export-center {
   text-transform: uppercase;
 }
 
-/* The file-type list — radio-flavored rows, pressed row tinted. */
+/* The type list's group captions — Images / File types / The pad
+   itself: the grouping is semantics, not a mystery hairline. */
+.export-center-group-label {
+  margin: 0 0 6px;
+  color: var(--vz-fg-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.export-center-group-label + .export-center-type {
+  margin-top: 0;
+}
+
+.export-center-types .export-center-group-label:not(:first-child) {
+  margin-top: 14px;
+}
+
+/* The file-type list — radio-flavored rows: the selectable rows wear
+   the leading dot, the selected row's dot fills; the launcher rows
+   (the doors to another face) carry no dot — a door is never checked. */
 .export-center-types {
   display: flex;
   flex-direction: column;
@@ -188,7 +225,7 @@ dialog.export-center {
 
 .export-center-type {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   padding: 8px 10px;
   border: 1px solid var(--vz-border);
@@ -208,10 +245,47 @@ dialog.export-center {
   border-color: var(--vz-border-strong);
 }
 
-.export-center-type[aria-pressed='true'] {
+.export-center-type:focus-visible {
+  outline: 2px solid var(--vz-primary);
+  outline-offset: 1px;
+}
+
+/* The radio dot — a leading circle on every selectable row, filled
+   when checked: selection is SEEN at a glance, not inferred from a
+   border weight. */
+.export-center-type--select::before {
+  content: '';
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border: 1.5px solid var(--vz-border-strong);
+  border-radius: 50%;
+  background: transparent;
+  transition:
+    border-color var(--vz-dur) ease,
+    background-color var(--vz-dur) ease;
+}
+
+.export-center-type--select[aria-checked='true'] {
   border-color: var(--vz-primary);
   background: var(--vz-bg);
   box-shadow: inset 0 0 0 1px var(--vz-primary);
+}
+
+.export-center-type--select[aria-checked='true']::before {
+  border-color: var(--vz-primary);
+  background: var(--vz-primary);
+  box-shadow: inset 0 0 0 2.5px var(--vz-bg-elevated);
+}
+
+/* The launcher rows carry no dot — their affordance is the chevron. */
+.export-center-type--launch::before {
+  content: none;
+}
+
+.export-center-type--launch {
+  align-items: center;
 }
 
 .export-center-type-label {
@@ -223,11 +297,13 @@ dialog.export-center {
   display: block;
   color: var(--vz-fg-muted);
   font-size: 11.5px;
-  margin-top: 1px;
+  margin-top: 2px;
+  line-height: 1.4;
 }
 
 .export-center-type-ext {
   flex: none;
+  margin-top: 1px;
   padding: 2px 7px;
   border: 1px solid var(--vz-border-strong);
   border-radius: calc(var(--vz-radius) - 2px);
@@ -235,12 +311,14 @@ dialog.export-center {
   color: var(--vz-fg-muted);
   font-family: var(--vz-font-mono, ui-monospace, monospace);
   font-size: 10.5px;
+  user-select: none;
 }
 
 /* The handoff rows (the drawing's images): the chevron speaks — one
    click hands the export to its own dialog. */
 .export-center-type-chevron {
   flex: none;
+  margin-top: 1px;
   color: var(--vz-fg-muted);
   font-size: 15px;
   line-height: 1;
@@ -250,13 +328,8 @@ dialog.export-center {
   color: var(--vz-primary);
 }
 
-.export-center-types-sep {
-  border: 0;
-  border-top: 1px solid var(--vz-border);
-  margin: 6px 0;
-}
-
-/* The file name — the shared input recipe plus the type's suffix chip. */
+/* The suffix chip rides the input, attached — never a separate
+   button. */
 .export-center-name-row {
   display: flex;
   align-items: stretch;
@@ -280,6 +353,7 @@ dialog.export-center {
   color: var(--vz-fg-muted);
   font-family: var(--vz-font-mono, ui-monospace, monospace);
   font-size: 12px;
+  user-select: none;
 }
 
 /* The options section — the drawing image knobs, shown per type. */
@@ -379,6 +453,7 @@ dialog.export-center {
 
 /* The footer — the open door on the quiet left, the actions on the right. */
 .export-center-foot {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -387,18 +462,38 @@ dialog.export-center {
   border-top: 1px solid var(--vz-border);
 }
 
+/* The import door — an outline button with a folder glyph: it READS as
+   the action it is (the audit called the quiet text leftover debug
+   text), quiet enough to lose to the actions but never to be missed. */
 .export-center-door {
-  border: 0;
-  background: none;
-  padding: 4px 2px;
-  color: var(--vz-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--vz-border-strong);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg-muted);
   font-family: inherit;
   font-size: 12.5px;
   cursor: pointer;
+  transition:
+    border-color var(--vz-dur) ease,
+    color var(--vz-dur) ease;
 }
 
 .export-center-door:hover {
-  text-decoration: underline;
+  border-color: var(--vz-primary);
+  color: var(--vz-primary);
+}
+
+.export-center-door-glyph {
+  display: inline-flex;
+  flex: none;
+}
+
+.export-center-door-label {
+  overflow-wrap: anywhere;
 }
 
 .export-center-door[hidden] {
@@ -414,7 +509,9 @@ dialog.export-center {
   cursor: default;
 }
 
-/* Narrow viewports fold the panes — the preview rides above the settings. */
+/* Narrow viewports fold the panes — the preview rides above the
+   settings, capped so the actionable controls never fall below the
+   fold for a thumbnail. */
 @media (max-width: 700px) {
   .export-center-body {
     grid-template-columns: minmax(0, 1fr);
@@ -423,10 +520,20 @@ dialog.export-center {
   .export-center-preview {
     border-right: 0;
     border-bottom: 1px solid var(--vz-border);
-    min-height: 240px;
+    min-height: 0;
+    padding: 12px 20px;
+  }
+
+  .export-center-stage {
+    min-height: 150px;
+  }
+
+  .export-center-stage-img {
+    max-height: 170px;
   }
 
   .export-center-settings {
     min-height: 0;
+    padding: 14px 20px;
   }
 }

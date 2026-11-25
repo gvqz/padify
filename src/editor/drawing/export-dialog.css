@@ -1,15 +1,144 @@
 /*
- * export-dialog.css — the drawing export dialog's option controls, on
- * the same design tokens the confirm/prompt face speaks (src/ui/dialog.css
- * carries the shell: width, surface, title, actions). The extra vocabulary
- * here is the two segmented switches and the checkbox rows.
+ * export-dialog.css — the drawing export dialog's face, on the same
+ * design tokens the confirm/prompt face speaks (src/ui/dialog.css
+ * carries the shell: surface, title, actions). The vocabulary here is
+ * the preview panel (stage + facts line), the name row with its live
+ * suffix chip, the two segmented switches, and the checkbox rows.
  */
+
+/* The shell rides the recipe but wider — the preview needs the room.
+   The flex column is scoped to the OPEN state: an author display rule on
+   the bare selector would beat the UA's dialog:not([open]) rule and the
+   closed dialog would keep rendering. */
+dialog.drawing-export-dialog {
+  width: min(92vw, 460px);
+  max-height: min(88vh, 720px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+dialog.drawing-export-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
 
 .drawing-export-dialog .vz-dialog-title {
   margin-bottom: 14px;
 }
 
-/* The segmented switch: a pill row, pressed segment inverted. */
+/* --- The preview panel — the live thumbnail the vendor's own dialog
+   leads with, plus the scene's facts under it. -------------------------- */
+
+.drawing-export-preview {
+  margin-bottom: 14px;
+}
+
+.drawing-export-preview[hidden] {
+  display: none;
+}
+
+.drawing-export-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--vz-border);
+  border-radius: var(--vz-radius);
+  background: var(--vz-bg-subtle);
+  padding: 12px;
+  min-height: 150px;
+}
+
+/* Background off: the stage wears the checkerboard, so a transparent
+   export is SEEN as transparent — not guessed at through white. */
+.drawing-export-stage--transparent {
+  background-image:
+    linear-gradient(45deg, var(--vz-border) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--vz-border) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--vz-border) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--vz-border) 75%);
+  background-size: 14px 14px;
+  background-position:
+    0 0,
+    0 7px,
+    7px -7px,
+    -7px 0;
+}
+
+.drawing-export-preview-img {
+  max-width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+}
+
+/* While the thumbnail renders (the first paint, an option flip), the
+   stage says so — quietly, in place of the image. */
+.drawing-export-stage-note {
+  margin: 0;
+  color: var(--vz-fg-muted);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.drawing-export-stage-note[hidden] {
+  display: none;
+}
+
+.drawing-export-preview-img:not([src]) {
+  display: none;
+}
+
+/* The facts line — element count, natural bounds, the scale-multiplied
+   answer: the answer to "how big is this file going to be?" */
+.drawing-export-meta {
+  margin: 6px 0 0;
+  color: var(--vz-fg-muted);
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* --- The file name — the stem is the user's, the suffix chip is the
+   truth of format + embed, live. --------------------------------------- */
+
+.drawing-export-label {
+  margin: 0 0 8px;
+  color: var(--vz-fg-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.drawing-export-name-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin-bottom: 14px;
+}
+
+.drawing-export-name-row .vz-dialog-input {
+  border-right: 0;
+  border-radius: var(--vz-radius) 0 0 var(--vz-radius);
+  min-width: 0;
+}
+
+.drawing-export-name-suffix {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--vz-border-strong);
+  border-radius: 0 var(--vz-radius) var(--vz-radius) 0;
+  background: var(--vz-bg-subtle);
+  color: var(--vz-fg-muted);
+  font-family: var(--vz-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  user-select: none;
+}
+
+/* --- The segmented switch: a pill row, pressed segment inverted. ------ */
+
 .drawing-export-seg {
   display: inline-flex;
   padding: 2px;
@@ -18,6 +147,12 @@
   border-radius: var(--vz-radius);
   background: var(--vz-bg-subtle);
   gap: 2px;
+}
+
+.drawing-export-format-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
 }
 
 .drawing-export-seg-btn {
@@ -44,10 +179,11 @@
   color: var(--vz-primary-fg);
 }
 
-/* The checkbox rows. */
+/* --- The checkbox rows. ------------------------------------------------ */
+
 .drawing-export-option {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   padding: 7px 2px;
   cursor: pointer;
@@ -75,17 +211,20 @@
 .drawing-export-check {
   width: 15px;
   height: 15px;
-  margin: 0;
+  margin: 2px 0 0;
   accent-color: var(--vz-primary);
   cursor: pointer;
+  flex: none;
 }
 
-/* The scale row. */
+/* --- The scale row. ------------------------------------------------------ */
+
 .drawing-export-scale-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 4px;
+  margin-top: 12px;
+  margin-bottom: 14px;
 }
 
 .drawing-export-scale-row[hidden] {
@@ -101,8 +240,9 @@
   margin-bottom: 0;
 }
 
-/* The clipboard action: a confirm-shaped button, one notch quieter —
-   the Save press is the primary answer, the copy rides beside it. */
+/* --- The clipboard action: a confirm-shaped button, one notch quieter —
+   the Save press is the primary answer, the copy rides beside it. ------- */
+
 .drawing-export-copy {
   background: var(--vz-bg-elevated);
   color: var(--vz-fg);
