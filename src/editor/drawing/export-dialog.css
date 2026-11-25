@@ -100,3 +100,20 @@
 .drawing-export-scale-row .drawing-export-seg {
   margin-bottom: 0;
 }
+
+/* The clipboard action: a confirm-shaped button, one notch quieter —
+   the Save press is the primary answer, the copy rides beside it. */
+.drawing-export-copy {
+  background: var(--vz-bg-elevated);
+  color: var(--vz-fg);
+  border: 1px solid var(--vz-border-strong);
+}
+
+.drawing-export-copy:hover {
+  border-color: var(--vz-primary);
+  color: var(--vz-primary);
+}
+
+.drawing-export-copy[hidden] {
+  display: none;
+}

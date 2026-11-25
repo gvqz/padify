@@ -7,16 +7,6 @@ export type StateKey = string;
 export interface NotepadUI {
   copyToClipboard: Q;
   downloadNotes: Q;
-  downloadNotesPadify: Q;
-  downloadNotesPadifyWorkspace: Q;
-  downloadNotesPlain: Q;
-  downloadNotesPdf: Q;
-  downloadNotesDocx: Q;
-  downloadNotesHtml: Q;
-  downloadNotesMarkdown: Q;
-  downloadNotesImage: Q;
-  downloadNotesExcalidraw: Q;
-  openNoteFile: Q;
   previewToggleButton: Q;
   previewToggleContainer: Q;
   fontSize: Q;
@@ -111,16 +101,6 @@ export function selector(): AppSelector {
     notepad: {
       copyToClipboard: selectById('copyToClipboard'),
       downloadNotes: selectById('downloadNotes'),
-      downloadNotesPadify: selectById('downloadNotesPadify'),
-      downloadNotesPadifyWorkspace: selectById('downloadNotesPadifyWorkspace'),
-      downloadNotesPlain: selectById('downloadNotesPlain'),
-      downloadNotesPdf: selectById('downloadNotesPdf'),
-      downloadNotesDocx: selectById('downloadNotesDocx'),
-      downloadNotesHtml: selectById('downloadNotesHtml'),
-      downloadNotesMarkdown: selectById('downloadNotesMarkdown'),
-      downloadNotesImage: selectById('downloadNotesImage'),
-      downloadNotesExcalidraw: selectById('downloadNotesExcalidraw'),
-      openNoteFile: selectById('openNoteFile'),
       previewToggleButton: selectById('previewToggleButton'),
       previewToggleContainer: selectById('previewToggleContainer'),
       fontSize: selectById('fontSize'),

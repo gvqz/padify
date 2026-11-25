@@ -32,8 +32,9 @@
  * Excalidraw component to that contract:
  *  - `mountDrawingCanvas()` renders the component with the native chrome
  *    and bridges the vendor's onChange into the surface's announce.
- *  - `renderDrawingImage()` is the export API behind the download menu's
- *    image rows — the same exporter the vendor's own dialogs call.
+ *  - `renderDrawingImage()` / `copyDrawingImage()` are the export APIs
+ *    behind the drawing's export dialog (surface.ts) — the same engines
+ *    the vendor's own dialogs call.
  *
  * NO JSX BY DESIGN: the app is a vanilla-TS codebase with no JSX tooling;
  * `createElement` keeps this island a plain .ts file (no tsconfig/eslint
@@ -52,6 +53,7 @@ import {
   MainMenu,
   WelcomeScreen,
   exportScene,
+  exportToClipboard,
   getCommonBounds,
 } from '@excalidraw/excalidraw';
 // Types-only subpath (the package's exports map points "/types" at its
@@ -429,19 +431,20 @@ export function mountDrawingCanvas(
 }
 
 /**
- * Renders the live scene to an image — the download menu's image rows and
- * (with options) the drawing export dialog. PNG answers a Blob; SVG
- * answers the serialized markup. Elements marked deleted (the undo ghost
- * trail) never reach an export. The scene's image bytes ride along
- * (`files`, from the live handle or a store hydration) — without them an
- * image element exports as the vendor's gray placeholder, so the caller
- * always passes what it holds.
+ * Renders the live scene to an image — the drawing export dialog's Save
+ * press (and the share/snapshot seams). PNG answers a Blob; SVG answers
+ * the serialized markup. Elements marked deleted (the undo ghost trail)
+ * never reach an export. The scene's image bytes ride along (`files`, from
+ * the live handle or a store hydration) — without them an image element
+ * exports as the vendor's gray placeholder, so the caller always passes
+ * what it holds.
  *
- * The native export options (R1's dialog speaks them all) map onto the
+ * The native export options (the dialog speaks them all) map onto the
  * master exporter's own config — the same knobs its dialogs turn:
  * background (canvasBackgroundColor: false = transparent), dark mode
  * (theme), embed scene (the PNG/SVG re-opens as an editable drawing on
- * excalidraw.com), and the export scale.
+ * excalidraw.com), and the export scale (1×/2×/3× — the vendor's
+ * EXPORT_SCALES verbatim).
  */
 export interface DrawingImageExportOptions {
   /** Paint the scene's canvas background color. Off = transparent
@@ -451,10 +454,23 @@ export interface DrawingImageExportOptions {
    * theme. */
   dark?: boolean;
   /** Embed the scene in the file metadata — excalidraw.com re-opens it
-   * as an editable drawing. */
+   * as an editable drawing (PNG tEXt chunk / SVG metadata element). */
   embed?: boolean;
-  /** The export scale: 1 or 2. */
-  scale?: 1 | 2;
+  /** The export scale: 1, 2 or 3. */
+  scale?: 1 | 2 | 3;
+}
+
+/** The config the two export paths share — the same keys the vendor's
+ * getExportConfigFromAppState turns from its dialog's switches. */
+function exportConfigFrom(
+  options?: DrawingImageExportOptions,
+): Parameters<typeof exportScene>[0]['config'] {
+  return {
+    canvasBackgroundColor: options?.background === false ? (false as const) : undefined,
+    theme: options?.dark === true ? ('dark' as const) : ('light' as const),
+    scale: options?.scale ?? 1,
+    embedScene: options?.embed ?? false,
+  };
 }
 
 export async function renderDrawingImage(
@@ -471,16 +487,37 @@ export async function renderDrawingImage(
       files: files ?? null,
     },
     type: kind,
-    config: {
-      canvasBackgroundColor: options?.background === false ? (false as const) : undefined,
-      theme: options?.dark === true ? ('dark' as const) : ('light' as const),
-      scale: options?.scale ?? 1,
-      embedScene: options?.embed ?? false,
-    },
+    config: exportConfigFrom(options),
   };
   const output = await exportScene(payload as Parameters<typeof exportScene>[0]);
   if (kind === 'svg') {
     return new XMLSerializer().serializeToString(output as unknown as SVGSVGElement);
   }
   return output as unknown as Blob;
+}
+
+/**
+ * Copies the live scene to the clipboard — the drawing export dialog's
+ * Copy press, on the vendor's own pipe: PNG rides as an image/png blob
+ * (exportToClipboard's `png` flavor — ClipboardItem on the vendor's own
+ * capability gates), SVG rides as the markup text (its `svg` flavor,
+ * the same path the vendor's copyAsSvg context action speaks). Throws on
+ * failure; the caller's toast answers.
+ */
+export async function copyDrawingImage(
+  kind: 'png' | 'svg',
+  scene: DrawingCanvasScene,
+  files?: BinaryFiles | null,
+  options?: DrawingImageExportOptions,
+): Promise<void> {
+  const elements = scene.elements.filter((element) => element.isDeleted !== true);
+  await exportToClipboard({
+    type: kind,
+    data: {
+      elements: elements as never,
+      appState: scene.appState as never,
+      files: files ?? null,
+    },
+    config: exportConfigFrom(options),
+  } as Parameters<typeof exportToClipboard>[0]);
 }

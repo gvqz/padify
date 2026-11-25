@@ -2,18 +2,30 @@
  * The drawing export dialog — the native options, spoken in the app's own
  * modal face.
  *
- * WHY THIS EXISTS (the R1 unified export, the owner's first component
- * swap): the download menu's drawing rows used to export with fixed
- * defaults baked in (scale 1, background on, no embed) — options the
- * vendor's own export dialog offers were unreachable from the app side.
- * This dialog is the one surface for the drawing's image exports: format
- * (PNG/SVG), background, dark mode, embed scene, scale — the same knobs
- * the vendor's dialog turns, named the way it names them.
+ * WHY THIS EXISTS (the R1 unified export, restored): the download menu's
+ * drawing rows used to export with fixed defaults baked in (scale 1,
+ * background on, no embed) — options the vendor's own export dialog
+ * offers were unreachable from the app side. This dialog is the one
+ * surface for the drawing's image exports, and the export center's image
+ * rows hand off to it: format (PNG/SVG), background, dark mode, embed
+ * scene, scale — the same knobs the vendor's dialog turns, named the way
+ * it names them.
  *
- * The dialog is pure UI. The exporter (gating, rendering, download,
- * toasts) stays in surface.ts (`exportActiveDrawingImage`) — it arrives
- * as a callback, so this module never imports the vendor island and the
- * dialog markup loads with the app, not with the 1.3 MB canvas chunk.
+ * NATIVE PARITY (the restore's second lesson — what even this dialog
+ * lacked while the vendor's own was the only complete face):
+ *   - the scale speaks 1×/2×/3× — the vendor's EXPORT_SCALES, all three
+ *   - Embed scene and Scale answer for BOTH formats, exactly as the
+ *     vendor's dialog shows them (scale sizes the SVG's width/height;
+ *     embed writes the scene into the SVG's metadata)
+ *   - Copy to clipboard: PNG rides as an image/png blob, SVG rides as
+ *     the markup text — the vendor's own two clipboard flavors (its
+ *     dialog's button + its copyAsSvg), with its 2-second "Copied" flash
+ *
+ * The dialog is pure UI. The exporter (gating, rendering, downloading,
+ * copying, toasts) stays in surface.ts (`exportActiveDrawingImage` /
+ `copyActiveDrawingImage`) — it arrives as a callback, so this module
+ * never imports the vendor island and the dialog markup loads with the
+ * app, not with the 1.3 MB canvas chunk.
  *
  * THE FACE: a native <dialog> on the design tokens (the confirm/prompt
  * dialog's recipe — src/ui/dialog.css), extended with the two controls
@@ -26,37 +38,63 @@ import './export-dialog.css';
 /** The chosen format — the vendor's own two image types. */
 export type DrawingExportFormat = 'png' | 'svg';
 
+/** The scale options — the vendor's EXPORT_SCALES ([1, 2, 3]), verbatim. */
+export type DrawingExportScale = 1 | 2 | 3;
+
 /** One dialog session's answers. */
 export interface DrawingExportChoices {
   format: DrawingExportFormat;
   background: boolean;
   dark: boolean;
   embed: boolean;
-  scale: 1 | 2;
+  scale: DrawingExportScale;
 }
 
-/** The exporter surface.ts hands in — one call per Export press. */
-export type DrawingExportInvoker = (choices: DrawingExportChoices) => Promise<void>;
+/** Where the answers go: a file on disk, or the clipboard. */
+export type DrawingExportDestination = 'file' | 'clipboard';
+
+/**
+ * The exporter surface.ts hands in — one call per Save press (after the
+ * dialog closed; the export may take a beat, and a closed dialog never
+ * covers the toasts that answer it) and one per Copy press (the dialog
+ * stays open for those, the vendor's own behavior). Answers whether the
+ * export actually happened — the copy press flashes "Copied" on a `true`.
+ */
+export type DrawingExportInvoker = (
+  choices: DrawingExportChoices,
+  destination: DrawingExportDestination,
+) => Promise<boolean>;
+
+/** The clipboard flavors this environment can hold, per format — the
+ * vendor's own capability checks (probablySupportsClipboardBlob for the
+ * PNG blob, probablySupportsClipboardWriteText for the SVG markup). */
+function clipboardSupports(format: DrawingExportFormat): boolean {
+  const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+  if (!clipboard) return false;
+  if (format === 'png') {
+    return 'write' in clipboard && typeof window !== 'undefined' && 'ClipboardItem' in window;
+  }
+  return 'writeText' in clipboard;
+}
 
 interface ExportDialogFace {
   dialog: HTMLDialogElement;
   formatPng: HTMLButtonElement;
   formatSvg: HTMLButtonElement;
-  backgroundRow: HTMLLabelElement;
   background: HTMLInputElement;
-  darkRow: HTMLLabelElement;
   dark: HTMLInputElement;
-  embedRow: HTMLLabelElement;
   embed: HTMLInputElement;
   scaleRow: HTMLElement;
-  scaleOne: HTMLButtonElement;
-  scaleTwo: HTMLButtonElement;
-  save: HTMLButtonElement;
+  scaleButtons: HTMLButtonElement[];
   cancel: HTMLButtonElement;
-  onExport: ((choices: DrawingExportChoices) => void) | null;
+  copy: HTMLButtonElement;
+  save: HTMLButtonElement;
+  onExport: ((choices: DrawingExportChoices, destination: DrawingExportDestination) => void) | null;
 }
 
 let face: ExportDialogFace | null = null;
+/** The copy button's 2s "Copied" flash — the vendor's useCopyStatus. */
+let copyFlashTimer: number | null = null;
 
 /** A pressed-state toggle button in a segmented switch. */
 function segmentButton(group: HTMLElement, label: string, title: string): HTMLButtonElement {
@@ -118,7 +156,10 @@ function dialogFace(): ExportDialogFace {
   const formatSvg = segmentButton(formatGroup, 'SVG', 'Export as an SVG image');
   dialog.append(formatGroup);
 
-  // The option rows — the vendor dialog's own labels and semantics.
+  // The option rows — the vendor dialog's own labels and semantics. Both
+  // rows answer for both formats: the vendor's dialog shows Embed scene
+  // and Scale whatever the export button will be, and both DO apply to
+  // the SVG (scale sizes it, embed writes its metadata).
   const background = checkboxRow(
     'Background',
     'Paint the canvas background color; off leaves a transparent backdrop',
@@ -126,12 +167,11 @@ function dialogFace(): ExportDialogFace {
   const dark = checkboxRow('Dark mode', 'Render the export in the dark palette');
   const embed = checkboxRow(
     'Embed scene',
-    'Carry the editable scene inside the PNG — excalidraw.com re-opens it',
+    'Carry the editable scene inside the file — excalidraw.com re-opens it',
   );
   dialog.append(background.row, dark.row, embed.row);
 
-  // The scale switch — PNG only (SVG is vector; the vendor hides scale
-  // there too).
+  // The scale switch — 1× / 2× / 3×, the vendor's EXPORT_SCALES.
   const scaleRow = document.createElement('div');
   scaleRow.className = 'drawing-export-scale-row';
   const scaleLabel = document.createElement('span');
@@ -141,8 +181,16 @@ function dialogFace(): ExportDialogFace {
   scaleGroup.className = 'drawing-export-seg';
   scaleGroup.setAttribute('role', 'group');
   scaleGroup.setAttribute('aria-label', 'Export scale');
-  const scaleOne = segmentButton(scaleGroup, '1×', 'Export at 1× size');
-  const scaleTwo = segmentButton(scaleGroup, '2×', 'Export at double size');
+  const scaleButtons: HTMLButtonElement[] = [];
+  const scales: DrawingExportScale[] = [1, 2, 3];
+  for (const scale of scales) {
+    const button = segmentButton(
+      scaleGroup,
+      `${scale}×`,
+      scale === 1 ? 'Export at natural size' : `Export at ${scale} times the natural size`,
+    );
+    scaleButtons.push(button);
+  }
   scaleRow.append(scaleLabel, scaleGroup);
   dialog.append(scaleRow);
 
@@ -152,11 +200,15 @@ function dialogFace(): ExportDialogFace {
   cancel.type = 'button';
   cancel.className = 'vz-dialog-cancel';
   cancel.textContent = 'Cancel';
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'vz-dialog-confirm drawing-export-copy';
+  copy.textContent = 'Copy to clipboard';
   const save = document.createElement('button');
   save.type = 'button';
   save.className = 'vz-dialog-confirm';
   save.textContent = 'Save';
-  actions.append(cancel, save);
+  actions.append(cancel, copy, save);
   dialog.append(actions);
 
   document.body.append(dialog);
@@ -164,17 +216,14 @@ function dialogFace(): ExportDialogFace {
     dialog,
     formatPng,
     formatSvg,
-    backgroundRow: background.row,
     background: background.input,
-    darkRow: dark.row,
     dark: dark.input,
-    embedRow: embed.row,
     embed: embed.input,
     scaleRow,
-    scaleOne,
-    scaleTwo,
-    save,
+    scaleButtons,
     cancel,
+    copy,
+    save,
     onExport: null,
   };
 
@@ -184,14 +233,11 @@ function dialogFace(): ExportDialogFace {
   const isPressed = (button: HTMLButtonElement): boolean =>
     button.getAttribute('aria-pressed') === 'true';
 
-  // The format switch flips the SVG-only rows with it (scale and embed
-  // are PNG semantics — the vendor's dialog hides both for SVG).
   const syncFormat = (): void => {
     const png = isPressed(formatPng);
     pressed(formatPng, png);
     pressed(formatSvg, !png);
-    scaleRow.hidden = !png;
-    embed.row.hidden = !png;
+    syncClipboardButton();
   };
   formatPng.addEventListener('click', () => {
     pressed(formatPng, true);
@@ -202,14 +248,26 @@ function dialogFace(): ExportDialogFace {
     syncFormat();
   });
 
-  face.scaleOne.addEventListener('click', () => {
-    pressed(scaleOne, true);
-    pressed(scaleTwo, false);
-  });
-  face.scaleTwo.addEventListener('click', () => {
-    pressed(scaleOne, false);
-    pressed(scaleTwo, true);
-  });
+  for (const button of scaleButtons) {
+    button.addEventListener('click', () => {
+      for (const other of scaleButtons) {
+        pressed(other, false);
+      }
+      pressed(button, true);
+    });
+  }
+
+  // The copy button's honesty: it speaks the CURRENT format's clipboard
+  // flavor (PNG blob / SVG text) and stands down when the environment
+  // holds neither — the vendor's own capability gates, the app's own
+  // words.
+  const syncClipboardButton = (): void => {
+    const format: DrawingExportFormat = isPressed(formatPng) ? 'png' : 'svg';
+    const supported = clipboardSupports(format);
+    const current = face;
+    if (!current) return;
+    current.copy.hidden = !supported;
+  };
 
   cancel.addEventListener('click', () => {
     face!.onExport = null;
@@ -219,20 +277,57 @@ function dialogFace(): ExportDialogFace {
     face!.onExport = null;
   });
   save.addEventListener('click', () => {
-    const choices: DrawingExportChoices = {
-      format: isPressed(formatPng) ? 'png' : 'svg',
-      background: background.input.checked,
-      dark: dark.input.checked,
-      embed: embed.input.checked && isPressed(formatPng),
-      scale: isPressed(scaleTwo) ? 2 : 1,
-    };
+    const choices = readChoices();
     const handler = face!.onExport;
     face!.onExport = null;
     closeDialog();
-    handler?.(choices);
+    handler?.(choices, 'file');
+  });
+  copy.addEventListener('click', () => {
+    const choices = readChoices();
+    const handler = face!.onExport;
+    // The dialog STAYS open on a copy — the vendor's own behavior: copy,
+    // see the flash, keep tuning, save when ready.
+    if (!handler) return;
+    flashCopied();
+    void handler(choices, 'clipboard');
   });
 
+  function readChoices(): DrawingExportChoices {
+    // The scale buttons are a one-pressed radio set (an open always
+    // presses 1× and every click re-presses exactly one); the floor
+    // guards a jsdom-grade poke that somehow left none pressed.
+    const scaleIndex = Math.max(
+      scaleButtons.findIndex((button) => isPressed(button)),
+      0,
+    );
+    return {
+      format: isPressed(formatPng) ? 'png' : 'svg',
+      background: background.input.checked,
+      dark: dark.input.checked,
+      embed: embed.input.checked,
+      scale: (scaleIndex + 1) as DrawingExportScale,
+    };
+  }
+
   return face;
+}
+
+/** The 2-second "Copied" flash on the copy button (the vendor's
+ * useCopyStatus, in the app's own voice). */
+function flashCopied(): void {
+  const current = face;
+  if (!current) return;
+  if (copyFlashTimer !== null) {
+    window.clearTimeout(copyFlashTimer);
+  }
+  current.copy.textContent = 'Copied';
+  copyFlashTimer = window.setTimeout(() => {
+    copyFlashTimer = null;
+    if (face) {
+      face.copy.textContent = 'Copy to clipboard';
+    }
+  }, 2_000);
 }
 
 function closeDialog(): void {
@@ -243,27 +338,31 @@ function closeDialog(): void {
 }
 
 /**
- * Opens the export dialog. `invoker` runs once per Save press, on the
- * dialog's own turn (after it closed — the export may take a beat, and a
- * closed dialog never covers the toasts that answer it).
+ * Opens the export dialog. `invoker` runs once per Save press (on the
+ * dialog's own turn, after it closed) and once per Copy press (the dialog
+ * still open). `presetFormat` lands the launcher's ask (the export
+ * center's PNG/SVG rows press their format before the face shows).
  */
-export function openDrawingExportDialog(invoker: DrawingExportInvoker): void {
+export function openDrawingExportDialog(
+  invoker: DrawingExportInvoker,
+  presetFormat?: DrawingExportFormat,
+): void {
   const current = dialogFace();
   // Defaults match the vendor dialog's: PNG, background on, dark off,
   // embed off, scale 1×. A previously used session's picks do not leak —
   // every open starts from the vendor's defaults, like the site's.
-  const isPng = current.formatPng.getAttribute('aria-pressed') === 'true';
+  const format = presetFormat ?? 'png';
+  current.formatPng.setAttribute('aria-pressed', format === 'png' ? 'true' : 'false');
+  current.formatSvg.setAttribute('aria-pressed', format === 'svg' ? 'true' : 'false');
   current.background.checked = true;
   current.dark.checked = false;
   current.embed.checked = false;
-  current.scaleOne.setAttribute('aria-pressed', 'true');
-  current.scaleTwo.setAttribute('aria-pressed', 'false');
-  current.formatPng.setAttribute('aria-pressed', isPng ? 'true' : 'true');
-  current.formatSvg.setAttribute('aria-pressed', 'false');
+  for (const [index, button] of current.scaleButtons.entries()) {
+    button.setAttribute('aria-pressed', index === 0 ? 'true' : 'false');
+  }
+  current.copy.textContent = 'Copy to clipboard';
 
-  current.onExport = (choices) => {
-    void invoker(choices);
-  };
+  current.onExport = (choices, destination) => invoker(choices, destination);
   if (typeof current.dialog.showModal === 'function') {
     current.dialog.showModal();
   } else {

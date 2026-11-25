@@ -668,26 +668,30 @@ function exportFileName(name: string): string {
 }
 
 /**
- * Exports the OPEN drawing as PNG or SVG — the download menu's "Export
- * image…" dialog answers this on Save, with the dialog's native options
- * (format, background, dark mode, embed scene, scale). Refuses honestly
- * when the canvas is not mounted or holds nothing: the same rules the
- * share modal applies, in the same words the app uses elsewhere.
+ * Exports the OPEN drawing as PNG or SVG — the drawing export dialog
+ * answers this on Save, with the dialog's native options (format,
+ * background, dark mode, embed scene, scale). Refuses honestly when the
+ * canvas is not mounted or holds nothing: the same rules the share modal
+ * applies, in the same words the app uses elsewhere.
+ *
+ * NATIVE PARITY: an embedded export carries the vendor's own double
+ * extension (`drawing.excalidraw.png` / `.excalidraw.svg`) — the marker
+ * excalidraw.com's loader recognizes when the file re-opens there.
  */
 export async function exportActiveDrawingImage(
   kind: 'png' | 'svg',
   options?: DrawingImageExportOptions,
-): Promise<void> {
+): Promise<boolean> {
   const current = live;
   if (!current || !current.handle || current.disposed || !current.mount.isConnected) {
     showToast('Open the drawing note first, then export.');
-    return;
+    return false;
   }
   const scene = current.handle.getScene();
   const visible = visibleElements(scene.elements as DrawingSceneElement[]);
   if (visible.length === 0) {
     showToast('Nothing to export yet — draw something first.');
-    return;
+    return false;
   }
   // The image bytes ride along: the live map holds whatever the vendor
   // inserted this session plus the hydration — without it an image
@@ -698,27 +702,73 @@ export async function exportActiveDrawingImage(
     const canvas = await import('./canvas');
     if (kind === 'svg') {
       const markup = await canvas.renderDrawingImage('svg', scene, files, options);
-      saveTextAsFile(markup as string, `${fileName}.svg`, 'image/svg+xml');
-      return;
+      saveTextAsFile(
+        markup as string,
+        `${fileName}${options?.embed === true ? '.excalidraw' : ''}.svg`,
+        'image/svg+xml',
+      );
+      return true;
     }
     const blob = await canvas.renderDrawingImage('png', scene, files, options);
     if (blob instanceof Blob) {
-      downloadBlob(blob, `${fileName}.png`);
+      downloadBlob(blob, `${fileName}${options?.embed === true ? '.excalidraw' : ''}.png`);
+      return true;
     }
+    return false;
   } catch {
     showToast('The image export failed — try again.');
+    return false;
   }
 }
 
 /**
- * The unified export's drawing door (R1, the owner's first component
- * swap): the download menu's "Export image…" row lands here, the dialog
- * opens on the vendor's native option set, and each Save press answers
- * exportActiveDrawingImage with the dialog's choices. The gates (a live
- * canvas, something in it) fire BEFORE the dialog so an empty or closed
- * drawing answers with the same toast it always did.
+ * Copies the OPEN drawing to the clipboard — the dialog's Copy button,
+ * the native parity the R1 face never had: PNG rides as an image/png
+ * blob (the vendor's own clipboard flavor), SVG rides as the markup text
+ * (its copyAsSvg flavor). The same gates, the same honest words.
  */
-export async function openDrawingExportUI(): Promise<void> {
+export async function copyActiveDrawingImage(
+  kind: 'png' | 'svg',
+  options?: DrawingImageExportOptions,
+): Promise<boolean> {
+  const current = live;
+  if (!current || !current.handle || current.disposed || !current.mount.isConnected) {
+    showToast('Open the drawing note first, then export.');
+    return false;
+  }
+  const scene = current.handle.getScene();
+  const visible = visibleElements(scene.elements as DrawingSceneElement[]);
+  if (visible.length === 0) {
+    showToast('Nothing to export yet — draw something first.');
+    return false;
+  }
+  const files = current.handle.getFiles();
+  try {
+    const canvas = await import('./canvas');
+    await canvas.copyDrawingImage(kind, scene, files, options);
+    showToast(
+      kind === 'png' ? 'Copied to clipboard as a PNG image.' : 'Copied to clipboard as SVG markup.',
+    );
+    return true;
+  } catch {
+    showToast('The clipboard copy failed — try again.');
+    return false;
+  }
+}
+
+/**
+ * The drawing's image-export door: the download center's image rows hand
+ * off here (the old dropdown's "Export image…" row did the same), the
+ * dialog opens on the vendor's native option set — now speaking the
+ * whole of it (3× scale, embed for both formats, the clipboard press) —
+ * and each Save/Copy press answers exportActiveDrawingImage /
+ * copyActiveDrawingImage with the dialog's choices. The gates (a live
+ * canvas, something in it) fire BEFORE the dialog so an empty or closed
+ * drawing answers with the same toast it always did. `presetFormat` lands
+ * the launcher's ask (the center's PNG/SVG rows press their format
+ * before the face shows).
+ */
+export async function openDrawingExportUI(presetFormat?: 'png' | 'svg'): Promise<void> {
   const current = live;
   if (!current || !current.handle || current.disposed || !current.mount.isConnected) {
     showToast('Open the drawing note first, then export.');
@@ -731,14 +781,29 @@ export async function openDrawingExportUI(): Promise<void> {
     return;
   }
   const { openDrawingExportDialog } = await import('./export-dialog');
-  openDrawingExportDialog(async (choices) => {
-    await exportActiveDrawingImage(choices.format, {
+  openDrawingExportDialog(async (choices, destination) => {
+    const options = {
       background: choices.background,
       dark: choices.dark,
       embed: choices.embed,
       scale: choices.scale,
-    });
-  });
+    };
+    if (destination === 'clipboard') {
+      return copyActiveDrawingImage(choices.format, options);
+    }
+    return exportActiveDrawingImage(choices.format, options);
+  }, presetFormat);
+}
+
+/**
+ * Whether a drawing canvas answers right now — the export chord's scope
+ * question. A live drawing means the VENDOR's own Ctrl+Shift+E answers
+ * (its dialog opens, native parity), so the app's dispatcher must stand
+ * aside on that chord; every other note answers the export center.
+ */
+export function drawingCanvasIsLive(): boolean {
+  const current = live;
+  return Boolean(current && current.handle && !current.disposed && current.mount.isConnected);
 }
 
 /**

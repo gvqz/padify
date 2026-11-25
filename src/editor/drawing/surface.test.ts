@@ -61,6 +61,10 @@ vi.mock('./canvas', () => {
     renderDrawingImage: vi.fn(async (kind: 'png' | 'svg') =>
       kind === 'svg' ? '<svg xmlns="x"></svg>' : new Blob(['png-bytes'], { type: 'image/png' }),
     ),
+    copyDrawingImage: vi.fn(async () => {
+      // The vendor's clipboard pipe — resolves in the happy path; tests
+      // that want the failure path reject it.
+    }),
     __resetMounts: (): void => {
       mounts.length = 0;
       failNextCount = 0;
@@ -90,11 +94,20 @@ import { showToast } from '../../ui/toast';
 // The tasks surface registers itself for the 'json' kind at import time
 // — importing it here is what makes the coexistence test honest.
 import '../../features/tasks/note/surface';
+// The export dialog is pure UI on the app bundle — the seam tests capture
+// the invoker it would receive, not the face itself (e2e owns the face).
+vi.mock('./export-dialog', () => ({
+  openDrawingExportDialog: vi.fn(),
+}));
+import { openDrawingExportDialog } from './export-dialog';
 import {
   DRAWING_ANNOUNCE_DEBOUNCE_MS,
   DRAWING_ZEN_MODE_CLASS,
   DrawingNoteSurface,
+  copyActiveDrawingImage,
+  drawingCanvasIsLive,
   exportActiveDrawingImage,
+  openDrawingExportUI,
 } from './surface';
 import { DRAWING_SCENE_SOFT_BUDGET_BYTES, emptyDrawingScene, serializeDrawingScene } from './scene';
 import { noteSurfaceFor, opaqueNoteSurface } from '../surface';
@@ -141,6 +154,7 @@ import * as canvasModule from './canvas';
 const canvasMock = canvasModule as unknown as {
   mounts: RecordedMount[];
   renderDrawingImage: (kind: 'png' | 'svg', scene: unknown) => Promise<unknown>;
+  copyDrawingImage: (kind: 'png' | 'svg', scene: unknown) => Promise<void>;
   __resetMounts: () => void;
   __failNextMount: () => void;
 };
@@ -706,5 +720,120 @@ describe('the image-export seam', () => {
 
     mounted.options.onChange({ elements: [{ id: 'img', type: 'image' }], appState: {} });
     expect(flushSceneFiles).toHaveBeenCalledWith(files, expect.any(Set));
+  });
+});
+
+describe('the clipboard seam — the native parity the R1 face gained', () => {
+  it('refuses when no drawing is open', async () => {
+    await copyActiveDrawingImage('png');
+    expect(showToast).toHaveBeenCalledWith('Open the drawing note first, then export.');
+    expect(canvasMock.copyDrawingImage).not.toHaveBeenCalled();
+  });
+
+  it('refuses an empty canvas honestly, without touching the clipboard', async () => {
+    const host = connectedHost();
+    surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
+    await canvasReady();
+
+    await copyActiveDrawingImage('svg');
+    expect(showToast).toHaveBeenCalledWith('Nothing to export yet — draw something first.');
+    expect(canvasMock.copyDrawingImage).not.toHaveBeenCalled();
+  });
+
+  it('copies the live scene through the vendor clipboard pipe and toasts', async () => {
+    const host = connectedHost();
+    surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
+    await canvasReady();
+    const mounted = lastMount();
+    mounted.handle.getScene = () => ({
+      elements: [{ id: 'a', type: 'rectangle' }],
+      appState: {},
+    });
+
+    await copyActiveDrawingImage('png', { background: true, scale: 3 });
+    expect(canvasMock.copyDrawingImage).toHaveBeenCalledWith(
+      'png',
+      expect.objectContaining({ elements: [{ id: 'a', type: 'rectangle' }] }),
+      {},
+      { background: true, scale: 3 },
+    );
+    expect(showToast).toHaveBeenCalledWith('Copied to clipboard as a PNG image.');
+  });
+
+  it('answers a failed copy with the honest toast, never a thrown one', async () => {
+    vi.mocked(canvasMock.copyDrawingImage).mockRejectedValueOnce(new Error('no clipboard'));
+    const host = connectedHost();
+    surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
+    await canvasReady();
+    const mounted = lastMount();
+    mounted.handle.getScene = () => ({
+      elements: [{ id: 'a', type: 'rectangle' }],
+      appState: {},
+    });
+
+    await expect(copyActiveDrawingImage('png')).resolves.toBe(false);
+    expect(showToast).toHaveBeenCalledWith('The clipboard copy failed — try again.');
+  });
+});
+
+describe('the export dialog door — the handoff and the chord scope', () => {
+  it('opens the dialog on a live, non-empty drawing, with the launcher preset', async () => {
+    const host = connectedHost();
+    surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
+    await canvasReady();
+    const mounted = lastMount();
+    mounted.handle.getScene = () => ({
+      elements: [{ id: 'a', type: 'rectangle' }],
+      appState: {},
+    });
+
+    await openDrawingExportUI('svg');
+    expect(openDrawingExportDialog).toHaveBeenCalledTimes(1);
+    const [invoker, preset] = vi.mocked(openDrawingExportDialog).mock.calls[0] as unknown as [
+      (choices: unknown, destination: string) => Promise<boolean>,
+      'svg',
+    ];
+    expect(preset).toBe('svg');
+
+    // The invoker speaks both destinations: a Save press exports the
+    // file, a clipboard press copies it — one callback, both engines.
+    await invoker(
+      {
+        format: 'svg',
+        background: false,
+        dark: true,
+        embed: true,
+        scale: 3,
+      },
+      'file',
+    );
+    expect(canvasMock.renderDrawingImage).toHaveBeenCalledWith(
+      'svg',
+      expect.anything(),
+      {},
+      { background: false, dark: true, embed: true, scale: 3 },
+    );
+  });
+
+  it('gates the door with the same honest words as the exporter', async () => {
+    const host = connectedHost();
+    surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
+    await canvasReady();
+
+    await openDrawingExportUI('png');
+    expect(openDrawingExportDialog).not.toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledWith('Nothing to export yet — draw something first.');
+  });
+
+  it('answers the chord-scope question: only a mounted, connected canvas is live', async () => {
+    expect(drawingCanvasIsLive()).toBe(false);
+
+    const host = connectedHost();
+    surface.display(host, { content: '', noteType: 'drawing' });
+    await canvasReady();
+    expect(drawingCanvasIsLive()).toBe(true);
+
+    surface.dismiss(host);
+    expect(drawingCanvasIsLive()).toBe(false);
   });
 });
