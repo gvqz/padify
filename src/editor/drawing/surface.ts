@@ -44,7 +44,6 @@ import { registerNoteSurfaceForType, type NoteSurface, type SurfaceNote } from '
 import { opaqueNoteSurface } from '../surface';
 import { showToast } from '../../ui/toast';
 import { saveTextAsFile } from '../../exports';
-import type { ExportCenterType, ExportOption, ExportOptionValues } from '../../ui/export-center';
 import {
   DRAWING_SCENE_SOFT_BUDGET_BYTES,
   DRAWING_SCENE_VERSION,
@@ -642,7 +641,7 @@ export class DrawingNoteSurface implements NoteSurface {
 registerNoteSurfaceForType('drawing', new DrawingNoteSurface());
 
 // ---------------------------------------------------------------------------
-// The image-export seam — the export center's drawing image types
+// The image-export seam — the download menu's "Save as image" rows
 // ---------------------------------------------------------------------------
 
 /** Downloads a binary export without leaking the blob URL (the exports
@@ -659,137 +658,87 @@ function downloadBlob(blob: Blob, fileName: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 5_000);
 }
 
+/** A file-name-safe rendering of the note's name. */
+function exportFileName(name: string): string {
+  const cleaned = name
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned === '' ? 'drawing' : cleaned;
+}
+
 /**
- * The honest gates for the image delegates, answered as data: a live
- * canvas with something in it, else the words the app has always used
- * (the same rules the share modal applies, in the same voice).
+ * Exports the OPEN drawing as PNG or SVG — the download menu's "Export
+ * image…" dialog answers this on Save, with the dialog's native options
+ * (format, background, dark mode, embed scene, scale). Refuses honestly
+ * when the canvas is not mounted or holds nothing: the same rules the
+ * share modal applies, in the same words the app uses elsewhere.
  */
-function imageExportGate(): { scene: DrawingCanvasScene; files: BinaryFiles } | { fail: string } {
+export async function exportActiveDrawingImage(
+  kind: 'png' | 'svg',
+  options?: DrawingImageExportOptions,
+): Promise<void> {
   const current = live;
   if (!current || !current.handle || current.disposed || !current.mount.isConnected) {
-    return { fail: 'Open the drawing note first, then export.' };
+    showToast('Open the drawing note first, then export.');
+    return;
   }
   const scene = current.handle.getScene();
   const visible = visibleElements(scene.elements as DrawingSceneElement[]);
   if (visible.length === 0) {
-    return { fail: 'Nothing to export yet — draw something first.' };
+    showToast('Nothing to export yet — draw something first.');
+    return;
   }
   // The image bytes ride along: the live map holds whatever the vendor
   // inserted this session plus the hydration — without it an image
   // element exports as a gray placeholder.
-  return { scene, files: current.handle.getFiles() };
-}
-
-/** The center's option model reads back into the vendor's render options. */
-function imageOptionsFrom(values: ExportOptionValues): DrawingImageExportOptions {
-  return {
-    background: values.background === true,
-    dark: values.dark === true,
-    embed: values.embed === true,
-    scale: values.scale === '2' ? 2 : 1,
-  };
+  const files = current.handle.getFiles();
+  const fileName = exportFileName(current.noteName);
+  try {
+    const canvas = await import('./canvas');
+    if (kind === 'svg') {
+      const markup = await canvas.renderDrawingImage('svg', scene, files, options);
+      saveTextAsFile(markup as string, `${fileName}.svg`, 'image/svg+xml');
+      return;
+    }
+    const blob = await canvas.renderDrawingImage('png', scene, files, options);
+    if (blob instanceof Blob) {
+      downloadBlob(blob, `${fileName}.png`);
+    }
+  } catch {
+    showToast('The image export failed — try again.');
+  }
 }
 
 /**
- * The drawing's image types for the export center — PNG and SVG share ONE
- * live option model (flipping between them keeps the toggles exactly the
- * way the vendor's own dialog behaves), and the vendor's
- * renderDrawingImage answers both. `stem` is the note's live title,
- * sanitized for a file name — the center's name field starts there and
- * the user takes it from. The gates fire as DATA in preview (an ungated
- * drawing says so in the stage) and as toasts in run.
+ * The unified export's drawing door (R1, the owner's first component
+ * swap): the download menu's "Export image…" row lands here, the dialog
+ * opens on the vendor's native option set, and each Save press answers
+ * exportActiveDrawingImage with the dialog's choices. The gates (a live
+ * canvas, something in it) fire BEFORE the dialog so an empty or closed
+ * drawing answers with the same toast it always did.
  */
-export function drawingImageExportTypes(stem: string): ExportCenterType[] {
-  const options: ExportOption[] = [
-    {
-      kind: 'toggle',
-      id: 'background',
-      label: 'Background',
-      hint: 'Paint the canvas background color; off leaves a transparent backdrop',
-      value: true,
-    },
-    {
-      kind: 'toggle',
-      id: 'dark',
-      label: 'Dark mode',
-      hint: 'Render the scene in the dark palette',
-      value: false,
-    },
-    {
-      kind: 'toggle',
-      id: 'embed',
-      label: 'Embed scene',
-      hint: 'Carry the scene inside the image for re-opening in Excalidraw',
-      value: false,
-      when: ['png'],
-    },
-    {
-      kind: 'segment',
-      id: 'scale',
-      label: 'Scale',
-      value: '1',
-      when: ['png'],
-      values: [
-        { id: '1', label: '1×', title: 'Export at natural size' },
-        { id: '2', label: '2×', title: 'Export at twice the natural size' },
-      ],
-    },
-  ];
-
-  const build = (kind: 'png' | 'svg'): ExportCenterType => ({
-    id: kind,
-    label: `${kind.toUpperCase()} image`,
-    extension: kind,
-    defaultStem: stem,
-    hint:
-      kind === 'png' ? 'A raster image at the chosen scale' : 'A vector image — crisp at any size',
-    options,
-    preview: async (values) => {
-      const gate = imageExportGate();
-      if ('fail' in gate) return { note: gate.fail };
-      const canvas = await import('./canvas');
-      const rendered = await canvas.renderDrawingImage(
-        kind,
-        gate.scene,
-        gate.files,
-        imageOptionsFrom(values),
-      );
-      if (typeof rendered === 'string') {
-        return { image: `data:image/svg+xml;utf8,${encodeURIComponent(rendered)}` };
-      }
-      return { image: URL.createObjectURL(rendered) };
-    },
-    run: async (fileName, values) => {
-      const gate = imageExportGate();
-      if ('fail' in gate) {
-        showToast(gate.fail);
-        return false;
-      }
-      try {
-        const canvas = await import('./canvas');
-        const rendered = await canvas.renderDrawingImage(
-          kind,
-          gate.scene,
-          gate.files,
-          imageOptionsFrom(values),
-        );
-        if (kind === 'svg') {
-          saveTextAsFile(rendered as string, fileName, 'image/svg+xml');
-          return true;
-        }
-        if (rendered instanceof Blob) {
-          downloadBlob(rendered, fileName);
-          return true;
-        }
-        return false;
-      } catch {
-        showToast('The image export failed — try again.');
-        return false;
-      }
-    },
+export async function openDrawingExportUI(): Promise<void> {
+  const current = live;
+  if (!current || !current.handle || current.disposed || !current.mount.isConnected) {
+    showToast('Open the drawing note first, then export.');
+    return;
+  }
+  const scene = current.handle.getScene();
+  const visible = visibleElements(scene.elements as DrawingSceneElement[]);
+  if (visible.length === 0) {
+    showToast('Nothing to export yet — draw something first.');
+    return;
+  }
+  const { openDrawingExportDialog } = await import('./export-dialog');
+  openDrawingExportDialog(async (choices) => {
+    await exportActiveDrawingImage(choices.format, {
+      background: choices.background,
+      dark: choices.dark,
+      embed: choices.embed,
+      scale: choices.scale,
+    });
   });
-
-  return [build('png'), build('svg')];
 }
 
 /**

@@ -94,7 +94,7 @@ import {
   DRAWING_ANNOUNCE_DEBOUNCE_MS,
   DRAWING_ZEN_MODE_CLASS,
   DrawingNoteSurface,
-  drawingImageExportTypes,
+  exportActiveDrawingImage,
 } from './surface';
 import { DRAWING_SCENE_SOFT_BUDGET_BYTES, emptyDrawingScene, serializeDrawingScene } from './scene';
 import { noteSurfaceFor, opaqueNoteSurface } from '../surface';
@@ -630,29 +630,22 @@ describe('visibleText — the projection stays the model’s', () => {
   });
 });
 
-describe("the image-export seam — the export center's drawing types", () => {
-  /** The center's default option readings (what an un-touched dialog sends). */
-  const defaults = { background: true, dark: false, embed: false, scale: '1' };
-
+describe('the image-export seam', () => {
   it('refuses when no drawing is open', async () => {
-    const [png] = drawingImageExportTypes('Sketch');
-    await expect(png.run('Sketch.png', defaults)).resolves.toBe(false);
+    await exportActiveDrawingImage('png');
     expect(showToast).toHaveBeenCalledWith('Open the drawing note first, then export.');
   });
 
-  it('refuses an empty canvas honestly — and says so in the preview', async () => {
+  it('refuses an empty canvas honestly', async () => {
     const host = connectedHost();
     surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
     await canvasReady();
-    const [, svg] = drawingImageExportTypes('Sketch');
-    await expect(svg.run('Sketch.svg', defaults)).resolves.toBe(false);
+
+    await exportActiveDrawingImage('svg');
     expect(showToast).toHaveBeenCalledWith('Nothing to export yet — draw something first.');
-    await expect(svg.preview(defaults)).resolves.toMatchObject({
-      note: 'Nothing to export yet — draw something first.',
-    });
   });
 
-  it('exports the live scene through the canvas module with the dialog options', async () => {
+  it('exports the live scene through the canvas module', async () => {
     const host = connectedHost();
     surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
     await canvasReady();
@@ -662,39 +655,12 @@ describe("the image-export seam — the export center's drawing types", () => {
       appState: {},
     });
 
-    // jsdom does not implement URL.createObjectURL at all — the download
-    // seam needs it, so the test hands the delegate a stub and asserts the
-    // seam actually reached it (the old fixed-defaults test could not: its
-    // void exporter swallowed the environment's throw).
-    const urlStatics = URL as unknown as {
-      createObjectURL?: (blob: Blob) => string;
-      revokeObjectURL?: (url: string) => void;
-    };
-    const previousCreate = urlStatics.createObjectURL;
-    const previousRevoke = urlStatics.revokeObjectURL;
-    let objectUrlCalls = 0;
-    urlStatics.createObjectURL = () => {
-      objectUrlCalls += 1;
-      return 'blob:mock-url';
-    };
-    urlStatics.revokeObjectURL = () => {};
-
-    const [png] = drawingImageExportTypes('Sketch');
-    try {
-      await expect(png.run('Sketch.png', defaults)).resolves.toBe(true);
-      expect(objectUrlCalls).toBe(1);
-    } finally {
-      if (previousCreate === undefined) delete urlStatics.createObjectURL;
-      else urlStatics.createObjectURL = previousCreate;
-      if (previousRevoke === undefined) delete urlStatics.revokeObjectURL;
-      else urlStatics.revokeObjectURL = previousRevoke;
-    }
-
+    await exportActiveDrawingImage('png');
     expect(canvasMock.renderDrawingImage).toHaveBeenCalledWith(
       'png',
       expect.objectContaining({ elements: [{ id: 'a', type: 'rectangle' }] }),
       {}, // the live files map (empty here) rides along for image elements
-      { background: true, dark: false, embed: false, scale: 1 },
+      undefined, // no dialog options — the fixed-defaults caller's shape
     );
   });
 

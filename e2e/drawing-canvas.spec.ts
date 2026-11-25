@@ -128,68 +128,61 @@ test.describe('the drawing canvas', () => {
     expect(JSON.parse(reloaded[0].content).elements).toHaveLength(1);
   });
 
-  test('the export center answers an empty canvas honestly and a drawn one with the rows', async ({
+  test('the download menu offers the export row only once there is something to save', async ({
     page,
   }) => {
     await openDrawingCanvas(page);
 
-    // An empty drawing: the center still opens (one door for every state)
-    // and the PNG type's stage says exactly what an export would need.
+    // An empty drawing: the rows stay hidden, exactly like the Markdown row.
     await page.locator('#downloadNotes').click();
-    const dialog = page.locator('dialog.export-center');
-    await expect(dialog).toBeVisible();
-    await expect(dialog.locator('.export-center-stage-note')).toContainText(
-      'Nothing to export yet — draw something first.',
-    );
+    await expect(page.locator('#iconDropdown')).toHaveClass(/show/);
+    await expect(page.locator('#downloadNotesImage')).toBeHidden();
     await page.keyboard.press('Escape');
-    await expect(dialog).toBeHidden();
 
-    // Draw, wait for the save chain, reopen: the stage renders the scene.
+    // Draw, wait for the save, reopen: both rows appear.
     await drawRectangle(page);
     await page.waitForTimeout(2_000);
     await page.locator('#downloadNotes').click();
-    await expect(dialog).toBeVisible();
-    await expect(dialog.locator('.export-center-stage-img')).toBeVisible();
+    await expect(page.locator('#iconDropdown')).toHaveClass(/show/);
+    await expect(page.locator('#downloadNotesImage')).toBeVisible();
+    await expect(page.locator('#downloadNotesExcalidraw')).toBeVisible();
   });
 
-  test('the export center speaks the native options and downloads the render', async ({ page }) => {
+  test('the export dialog speaks the native options and downloads the render', async ({ page }) => {
     await openDrawingCanvas(page);
     await drawRectangle(page);
     await page.waitForTimeout(2_000);
 
     await page.locator('#downloadNotes').click();
+    await page.locator('#downloadNotesImage').click();
 
-    // The center: the type list (PNG pressed, the name starts from the
-    // note's live title) and the drawing options — the vendor dialog's
-    // own knobs, in the one popup.
-    const dialog = page.locator('dialog.export-center');
+    // The dialog: format switch, the three option rows, the scale switch.
+    const dialog = page.locator('dialog.drawing-export-dialog');
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator('.export-center-type', { hasText: 'PNG image' })).toHaveAttribute(
+    await expect(dialog.locator('.drawing-export-seg-btn', { hasText: 'PNG' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
-    await expect(dialog.locator('.export-center-name-row .vz-dialog-input')).toHaveValue('Drawing');
     await expect(dialog.getByText('Background')).toBeVisible();
     await expect(dialog.getByText('Dark mode')).toBeVisible();
     await expect(dialog.getByText('Embed scene')).toBeVisible();
 
-    // Scale is PNG-only semantics — flip the type and the PNG-only rows
+    // Scale is PNG-only semantics — flip the format and the SVG-only rows
     // step aside, exactly like the vendor's own dialog.
-    await dialog.locator('.export-center-type', { hasText: 'SVG image' }).click();
-    await expect(dialog.locator('.export-center-scale-row')).toBeHidden();
-    await expect(dialog.locator('.export-center-option', { hasText: 'Embed scene' })).toBeHidden();
-    await dialog.locator('.export-center-type', { hasText: 'PNG image' }).click();
-    await expect(dialog.locator('.export-center-scale-row')).toBeVisible();
+    await dialog.locator('.drawing-export-seg-btn', { hasText: 'SVG' }).click();
+    await expect(dialog.locator('.drawing-export-scale-row')).toBeHidden();
+    await expect(dialog.locator('.drawing-export-option', { hasText: 'Embed scene' })).toBeHidden();
+    await dialog.locator('.drawing-export-seg-btn', { hasText: 'PNG' }).click();
+    await expect(dialog.locator('.drawing-export-scale-row')).toBeVisible();
 
-    // Export at 2× under a typed name: the download carries exactly what
-    // the name field said, extension chip included.
-    await dialog.locator('.export-center-seg-btn', { hasText: '2×' }).click();
-    await dialog.locator('.export-center-name-row .vz-dialog-input').fill('my drawing');
+    // Save at 2× with the defaults otherwise: the download carries the
+    // note's file name and the PNG bytes.
+    await dialog.locator('.drawing-export-seg-btn', { hasText: '2×' }).click();
     const download = page.waitForEvent('download');
-    await dialog.locator('.export-center-export').click();
+    await dialog.locator('button.vz-dialog-confirm').click();
     const file = await download;
-    expect(file.suggestedFilename()).toBe('my drawing.png');
-    // The dialog closed on the Export press.
+    expect(file.suggestedFilename()).toMatch(/\.png$/);
+    // The dialog closed on the Save press.
     await expect(dialog).toBeHidden();
   });
 
@@ -315,15 +308,11 @@ test.describe('the drawing canvas', () => {
     await openDrawingCanvas(page);
 
     await page.locator('[data-testid="main-menu-trigger"]').click();
-    // Scoped to the canvas's own menu — the app's export center is a
-    // <dialog>, no class shared.
+    // Scoped to the canvas's own menu — the app's download dropdown shares
+    // the .dropdown-menu class.
     const menu = page.locator('#note .excalidraw .dropdown-menu');
     await expect(menu.locator('[data-testid="load-button"]')).toBeVisible();
-    // The Export image row is app-owned now (it opens the export center —
-    // the ONE export popup), so the vendor's image-export-button testid is
-    // gone with the vendor dialog's last door.
-    await expect(menu.getByText('Export image')).toBeVisible();
-    await expect(menu.locator('[data-testid="image-export-button"]')).toHaveCount(0);
+    await expect(menu.locator('[data-testid="image-export-button"]')).toBeVisible();
 
     // "Save" (saveToActiveFile) only renders once a scene was OPENED from
     // a .excalidraw file (the vendor's fileHandle predicate) — a Padify

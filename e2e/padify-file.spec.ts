@@ -100,14 +100,11 @@ test.describe('the .padify file', () => {
     await page.locator('#note').click();
     await page.keyboard.type('hello padify file');
 
-    // The save: the export center's Padify-file type (the ONE export popup
-    // — the nine-row dropdown it replaces is gone).
+    // The save: the app's own row, first in the download menu.
     await page.locator('#downloadNotes').click();
-    const dialog = page.locator('dialog.export-center');
-    await expect(dialog).toBeVisible();
-    await dialog.locator('.export-center-type', { hasText: 'Padify file' }).click();
+    await expect(page.locator('#iconDropdown')).toHaveClass(/show/);
     const download = page.waitForEvent('download');
-    await dialog.locator('.export-center-export').click();
+    await page.locator('#downloadNotesPadify').click();
     const file = await download;
     // The file is named what the rail calls the note.
     expect(file.suggestedFilename()).toBe('hello padify file.padify');
@@ -239,30 +236,20 @@ test.describe('the .padify file', () => {
       .click();
     await expect(page.locator('#note .excalidraw')).toBeVisible({ timeout: 20_000 });
 
-    // Empty canvas: the center still opens — one door for every state —
-    // and the Excalidraw type's stage says what an export would need.
+    // Empty canvas: the interop row stays hidden with the PNG/SVG rows.
     await page.locator('#downloadNotes').click();
-    const dialog = page.locator('dialog.export-center');
-    await expect(dialog).toBeVisible();
-    await dialog.locator('.export-center-type', { hasText: 'Excalidraw file' }).click();
-    await expect(dialog.locator('.export-center-stage-note')).toContainText(
-      'Nothing to export yet',
-    );
+    await expect(page.locator('#iconDropdown')).toHaveClass(/show/);
+    await expect(page.locator('#downloadNotesExcalidraw')).toBeHidden();
     await page.keyboard.press('Escape');
-    await expect(dialog).toBeHidden();
 
-    // Draw, wait for the save chain, reopen: the stage renders the scene.
+    // Draw, wait for the save chain, reopen: the row appears.
     await drawRectangle(page);
     await page.waitForTimeout(2_000);
     await page.locator('#downloadNotes').click();
-    await expect(dialog).toBeVisible();
-    await dialog.locator('.export-center-type', { hasText: 'Excalidraw file' }).click();
-    await expect(dialog.locator('.export-center-stage-note')).toContainText(
-      'The scene, as Excalidraw will re-open it',
-    );
+    await expect(page.locator('#downloadNotesExcalidraw')).toBeVisible();
 
     const download = page.waitForEvent('download');
-    await dialog.locator('.export-center-export').click();
+    await page.locator('#downloadNotesExcalidraw').click();
     const file = await download;
     expect(file.suggestedFilename()).toBe('Drawing.excalidraw');
     const savedPath = testInfo.outputPath('drawing.excalidraw');
@@ -342,13 +329,11 @@ test.describe('the workspace file — a whole pad, as one file', () => {
     const before = await railCount(page);
     expect(before).toBe(2);
 
-    // The save: the center's Whole-pad type, after the hairline.
+    // The save: the pad-level row, second in the download menu.
     await page.locator('#downloadNotes').click();
-    const dialog = page.locator('dialog.export-center');
-    await expect(dialog).toBeVisible();
-    await dialog.locator('.export-center-type', { hasText: 'Whole pad' }).click();
+    await expect(page.locator('#iconDropdown')).toHaveClass(/show/);
     const download = page.waitForEvent('download');
-    await dialog.locator('.export-center-export').click();
+    await page.locator('#downloadNotesPadifyWorkspace').click();
     const file = await download;
     expect(file.suggestedFilename()).toMatch(/^Notes-\d{2}-\d{2}-\d{4}\.padify$/);
     const savedPath = testInfo.outputPath('pad.padify');

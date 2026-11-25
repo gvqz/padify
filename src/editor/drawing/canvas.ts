@@ -32,7 +32,7 @@
  * Excalidraw component to that contract:
  *  - `mountDrawingCanvas()` renders the component with the native chrome
  *    and bridges the vendor's onChange into the surface's announce.
- *  - `renderDrawingImage()` is the export API behind the export center's
+ *  - `renderDrawingImage()` is the export API behind the download menu's
  *    image rows — the same exporter the vendor's own dialogs call.
  *
  * NO JSX BY DESIGN: the app is a vanilla-TS codebase with no JSX tooling;
@@ -131,14 +131,13 @@ export interface MountDrawingCanvasOptions {
 /**
  * The native chrome, as a prop bag for the component. The canvasActions
  * gates keep the app-owned doors shut (clear-canvas — the Padify-confirmed
- * flow owns it; the theme toggle — the app's theme switch is the one
- * authority) while the vendor's own Open and canvas background stay native.
- * The vendor's image and JSON export dialogs are not gated but deleted —
- * the export center is the ONE export popup, and the vendor patch removes
- * their components, openers, chords, option actions and menu rows outright.
- * The main menu children mirror the vendor's own fallback composition
- * (Open, Save to…, Search, canvas background) minus the white-label policy
- * items — see the module docstring.
+ * flow owns it; the JSON export dialog — the app's `.excalidraw` row is the
+ * same door with the attachment spine; the theme toggle — the app's theme
+ * switch is the one authority), while the vendor's own Save as image, Open
+ * and canvas background stay native. The main menu children mirror the
+ * vendor's own fallback composition (Open, Save to…, Export image…, Search,
+ * Help, canvas background) minus the white-label policy items — see the
+ * module docstring.
  */
 function drawingCanvasElement(
   options: MountDrawingCanvasOptions,
@@ -174,11 +173,11 @@ function drawingCanvasElement(
         canvasActions: {
           loadScene: true,
           saveToActiveFile: true,
+          saveAsImage: true,
           changeViewBackgroundColor: true,
-          // The app-owned doors (see the module docstring). The vendor's
-          // image/JSON export dialogs are deleted outright in the vendor
-          // patch, so they take no gate here.
+          // The app-owned doors (see the module docstring).
           clearCanvas: false,
+          export: false,
           toggleTheme: false,
         },
         // The image tool is ON — images are the attachment store's real
@@ -230,28 +229,7 @@ function drawingCanvasElement(
       undefined,
       createElement(MainMenu.DefaultItems.LoadScene),
       createElement(MainMenu.DefaultItems.SaveToActiveFile),
-      // The Export image row — the site's row in label and position, but it
-      // opens the APP's export center over the padify bus (PNG/SVG with the
-      // native options, plus every other door the note has) instead of the
-      // vendor's own image-export dialog: the one-popup consolidation ends
-      // the two-export-dialogs confusion the owner called out.
-      createElement(
-        MainMenu.Item,
-        {
-          key: 'export-image',
-          shortcut: 'Ctrl+Shift+E',
-          children: null, // the type demands it; the label passes as the child arg
-          onSelect: () => {
-            // document, not window — window-dispatched events never reach
-            // document-level listeners (the app's bridge lives there, the
-            // same bus padify:open-shortcuts rides).
-            document.dispatchEvent(
-              new CustomEvent('padify:open-export', { detail: { initialTypeId: 'png' } }),
-            );
-          },
-        },
-        'Export image',
-      ),
+      createElement(MainMenu.DefaultItems.SaveAsImage),
       createElement(MainMenu.Separator),
       createElement(MainMenu.DefaultItems.SearchMenu, {}),
       // The Help row is the app's unified shortcuts sheet — the ONE help

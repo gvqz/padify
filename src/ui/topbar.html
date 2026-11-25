@@ -150,10 +150,7 @@
           </a>
         </span>
         <span class="downaload-notes-container">
-          <!-- The export center's door — the ONE popup every note exports
-               through (preview left, settings right; file name and type in
-               the same place). The nine-row dropdown it replaces is gone. -->
-          <a id="downloadNotes" class="download-icon nav-icon-btn" title="Export notes">
+          <a id="downloadNotes" class="download-icon nav-icon-btn" title="Download or open notes">
             <svg
               width="18"
               height="18"
@@ -170,6 +167,31 @@
               <path d="M12 15V3" />
             </svg>
           </a>
+          <!-- Dropdown Menu -->
+          <div id="iconDropdown" class="dropdown-menu">
+            <li><a class="dropdown-item" id="downloadNotesPadify">Save as Padify file</a></li>
+            <li>
+              <a class="dropdown-item" id="downloadNotesPadifyWorkspace"
+                >Save whole pad as a file</a
+              >
+            </li>
+            <li><a class="dropdown-item" id="downloadNotesPlain">Download as plain text</a></li>
+            <li><a class="dropdown-item" id="downloadNotesPdf">Download as PDF</a></li>
+            <li><a class="dropdown-item" id="downloadNotesDocx">Download as DOCX</a></li>
+            <li><a class="dropdown-item" id="downloadNotesHtml">Download as HTML</a></li>
+            <li>
+              <a class="dropdown-item" id="downloadNotesMarkdown" hidden>Download as Markdown</a>
+            </li>
+            <li>
+              <a class="dropdown-item" id="downloadNotesImage" hidden>Export image…</a>
+            </li>
+            <li>
+              <a class="dropdown-item" id="downloadNotesExcalidraw" hidden
+                >Download as Excalidraw file</a
+              >
+            </li>
+            <li><a class="dropdown-item" id="openNoteFile">Open a note file…</a></li>
+          </div>
         </span>
         <span>
           <a
