@@ -202,8 +202,20 @@ function drawingCanvasElement(
       onExcalidrawAPI: onApi,
     },
     // The hand-drawn welcome panel on empty scenes — native chrome the
-    // curated build never mounted (the vendor's own default composition).
-    createElement(WelcomeScreen),
+    // curated build never mounted. Composed minus the HelpHint: the hint
+    // is a hand-drawn arrow teaching the footer's "?" button, and that
+    // button is gone (16-editor-shell.css — the app's sheet owns help on
+    // the canvas); an arrow pointing at nothing is the exact species of
+    // broken this whole effort exists to end. Center, MenuHint and
+    // ToolbarHint keep their own default children, so the panel renders
+    // the site's composition, one hint lighter.
+    createElement(
+      WelcomeScreen,
+      undefined,
+      createElement(WelcomeScreen.Center),
+      createElement(WelcomeScreen.Hints.MenuHint),
+      createElement(WelcomeScreen.Hints.ToolbarHint),
+    ),
     // The command palette, self-wired: the component binds its own
     // capture-phase chord (Ctrl/Cmd+Alt+Shift+P or Ctrl/Cmd+Alt+/) and
     // answers through the vendor's dialog system. The site composes its
@@ -245,8 +257,10 @@ function drawingCanvasElement(
       // vendor's dialog: issue #179 folds the canvas's shortcut story
       // into the one sheet (this pane opens on its Drawing tab), and the
       // sheet carries the vendor's complete chord table — verified row by
-      // row against this pin's HelpDialog. The vendor's dialog survives
-      // only behind the welcome screen's hand-drawn help link.
+      // row against this pin's HelpDialog. The vendor's dialog itself is
+      // no longer pinned to any button — the footer's "?" is gone (the
+      // app's sheet owns help on the canvas) — and survives behind the
+      // "?" chord and the welcome screen's center menu on empty scenes.
       createElement(
         MainMenu.Item,
         {

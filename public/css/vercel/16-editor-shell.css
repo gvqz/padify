@@ -594,6 +594,20 @@ body:has(#note.drawing-zen-mode) #tabRail {
   margin: 0;
 }
 
+/* ---- Help on the canvas is the app's sheet, not the vendor's dialog ----
+   The footer's "?" button is the vendor's own HelpDialog trigger — the
+   ONLY help affordance it hard-codes onto the normal canvas (footer-right;
+   the render is gated on defaultUIEnabled alone, no UIOptions lever). It
+   opened a second shortcuts surface beside the app's unified sheet, which
+   already carries the vendor's complete chord table verified row by row
+   against this pin's HelpDialog (#179). One help surface, the app's: the
+   button goes. The "?" chord still toggles the vendor's dialog for
+   whoever types it, and the welcome screen's center menu keeps its Help
+   row on empty scenes — this rule is the button, not the dialog. */
+#note [data-drawing-canvas] .excalidraw .layer-ui__wrapper__footer-right .help-icon {
+  display: none;
+}
+
 /* ---- Rich text note vocabulary ----
    Headings, lists, quotes, code blocks and links inside the note surface.
    Sized to sit calmly inside the note's 15px line rhythm; tokens keep dark
