@@ -9,9 +9,11 @@ import { expect, test, type Page } from '@playwright/test';
  * save) into the real IndexedDB as a version-1 scene envelope, a reload
  * restores it onto a remounted canvas, the download menu offers the image
  * export row only when there is something to export, and the main menu is
- * the NATIVE set — the vendor's own chrome (palette, Find on canvas, Help,
- * welcome panel) with the white-label policy doors still shut (no Clear
- * canvas — the Padify-confirmed flow owns that — and no vendor links).
+ * the NATIVE set — the vendor's own chrome (Find on canvas, Help, welcome
+ * panel) with the white-label policy doors still shut (no Clear canvas —
+ * the Padify-confirmed flow owns that — and no vendor links) and the
+ * command palette retired at the composition layer: the vendor exports
+ * that component for HOSTS to mount, and this app no longer mounts it.
  *
  * The scene bytes are read straight from the padify IndexedDB store —
  * the same rows the sync pipeline ships — because the DOM alone cannot
@@ -319,6 +321,12 @@ test.describe('the drawing canvas', () => {
     // owns clearing) and neither does the vendor's link group.
     await expect(menu.getByText('Clear canvas')).toHaveCount(0);
     await expect(menu.getByText('Excalidraw links')).toHaveCount(0);
+
+    // The command palette is retired at the composition layer: the vendor
+    // exports the component for hosts to mount and this app no longer
+    // does — no menu row, and no chords either (the component bound its
+    // own capture-phase keys and it is not mounted).
+    await expect(menu.getByText('Command palette')).toHaveCount(0);
 
     // The native chrome the curated build had off: Find on canvas is a
     // menu item again, and the welcome panel stands on an empty scene

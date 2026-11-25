@@ -49,7 +49,6 @@ import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import {
   Excalidraw,
-  CommandPalette,
   MainMenu,
   WelcomeScreen,
   exportScene,
@@ -143,7 +142,6 @@ export interface MountDrawingCanvasOptions {
 function drawingCanvasElement(
   options: MountDrawingCanvasOptions,
   initialData: object,
-  apiForMenu: ExcalidrawImperativeAPI | null,
   onApi: (api: ExcalidrawImperativeAPI | null) => void,
   onFiles: (files: BinaryFiles) => void,
 ): ReturnType<typeof createElement> {
@@ -217,19 +215,15 @@ function drawingCanvasElement(
       createElement(WelcomeScreen.Hints.MenuHint),
       createElement(WelcomeScreen.Hints.ToolbarHint),
     ),
-    // The command palette, self-wired: the component binds its own
-    // capture-phase chord (Ctrl/Cmd+Alt+Shift+P or Ctrl/Cmd+Alt+/) and
-    // answers through the vendor's dialog system. The site composes its
-    // menu item at its app layer; the pad reaches the same feature via
-    // the chord (and the SearchMenu item next to it covers Find).
-    createElement(CommandPalette),
     // The main menu, the vendor's way: the fallback composition minus the
-    // policy items. The command palette rides as a menu item (the site's
-    // row — it flips the vendor's openDialog appState exactly the way the
-    // site's own item does) and SearchMenu (Find on canvas) follows —
-    // native chrome the curated build had off. The Preferences group (the
-    // native menu's checkmark rows) renders once the vendor's API callback
-    // has fired — the menu re-renders once with the live instance.
+    // policy items. SearchMenu (Find on canvas) rides in — native chrome
+    // the curated build had off. The command palette does NOT: the vendor
+    // exports the component for hosts to compose (excalidraw.com mounts it
+    // at its app layer; the vendor's own chrome never mounts one) and this
+    // file once did the same — the mount, its menu row and every chord it
+    // bound died with that composition. Its doors stay open where they
+    // already lived: Find is the row below, the export/background rows and
+    // the Preferences submenu keep theirs, and the sheet owns the chords.
     createElement(
       MainMenu,
       undefined,
@@ -237,22 +231,6 @@ function drawingCanvasElement(
       createElement(MainMenu.DefaultItems.SaveToActiveFile),
       createElement(MainMenu.DefaultItems.SaveAsImage),
       createElement(MainMenu.Separator),
-      apiForMenu
-        ? createElement(
-            MainMenu.Item,
-            {
-              key: 'command-palette',
-              shortcut: 'Ctrl+/',
-              children: null, // the type demands it; the label passes as the child arg
-              onSelect: () => {
-                void apiForMenu.updateScene({
-                  appState: { openDialog: { name: 'commandPalette' } },
-                } as unknown as UpdateScenePayload);
-              },
-            },
-            'Command palette',
-          )
-        : null,
       createElement(MainMenu.DefaultItems.SearchMenu, {}),
       // The Help row is the app's unified shortcuts sheet, not the
       // vendor's dialog: issue #179 folds the canvas's shortcut story
@@ -345,10 +323,7 @@ export function mountDrawingCanvas(
     // Excalifont, exactly like excalidraw.com ("exactly like native"
     // includes the pen). A scene that carries its own pick — every
     // previously saved scene does, the whitelist persists the key —
-    // wins through the verbatim appState spread. The api-for-menu slot
-    // hands the Preferences group the live instance: null until the
-    // vendor's callback fires, the instance from then on (the callback
-    // re-renders once — see below).
+    // wins through the verbatim appState spread.
     root.render(
       drawingCanvasElement(
         props,
@@ -365,24 +340,18 @@ export function mountDrawingCanvas(
             ...options.initialScene.appState,
           },
         },
-        api,
         (instance: ExcalidrawImperativeAPI | null) => {
           api = instance;
           if (instance && pendingFiles.length > 0) {
             instance.addFiles(pendingFiles as unknown as BinaryFileData[]);
             pendingFiles = [];
           }
-          // One re-render so the menu's Preferences group receives the
-          // instance (its first render saw null and stood down). React
-          // reconciles: same props except the children, initialData
-          // already consumed — a no-op for the canvas itself. The null
-          // call (the master vendor nulls the callback DURING unmount,
-          // from componentWillUnmount) must NOT render — the root is
-          // going away, and rendering into it throws "Cannot update an
-          // unmounted root".
-          if (instance) {
-            render();
-          }
+          // No re-render here: every menu child is unconditional — the one
+          // api-gated child (the command palette row) is gone, and the
+          // re-render existed only for it (the instance changes nothing the
+          // React tree can see). The null call is the vendor unmounting
+          // (it nulls the callback from componentWillUnmount); the
+          // assignment above is all the null call needs.
         },
         (files: BinaryFiles) => {
           latestFiles = files;
