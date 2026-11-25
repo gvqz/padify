@@ -46,5 +46,8 @@
     "typescript-eslint": "^8.70.1",
     "vite": "^5.4.11",
     "vitest": "^2.1.9"
+  },
+  "patchedDependencies": {
+    "@excalidraw/excalidraw@0.18.0-2c3dcc0": "patches/@excalidraw%2Fexcalidraw@0.18.0-2c3dcc0.patch"
   }
 }

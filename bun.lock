@@ -34,6 +34,9 @@
       },
     },
   },
+  "patchedDependencies": {
+    "@excalidraw/excalidraw@0.18.0-2c3dcc0": "patches/@excalidraw%2Fexcalidraw@0.18.0-2c3dcc0.patch",
+  },
   "packages": {
     "@asamuzakjp/css-color": ["@asamuzakjp/css-color@7.0.1", "", { "dependencies": { "@csstools/css-calc": "^3.4.0", "@csstools/css-color-parser": "^4.2.3", "@csstools/css-parser-algorithms": "^4.0.0", "@csstools/css-tokenizer": "^4.0.1", "lru-cache": "^11.5.3" } }, "sha512-C9duntabagkBZ1LebM7FKmphR4Q1pBclLxVbZETQV0akkFjV0ooFxo8FlvAQyKj9F6l8rEnmidgcTlpyxFYizg=="],
 

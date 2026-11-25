@@ -204,7 +204,8 @@ function drawingCanvasElement(
     // The hand-drawn welcome panel on empty scenes — native chrome the
     // curated build never mounted. Composed minus the HelpHint: the hint
     // is a hand-drawn arrow teaching the footer's "?" button, and that
-    // button is gone (16-editor-shell.css — the app's sheet owns help on
+    // button is deleted at the vendor's render tree (patches/ — the
+    // Footer no longer mounts HelpButton; the app's sheet owns help on
     // the canvas); an arrow pointing at nothing is the exact species of
     // broken this whole effort exists to end. Center, MenuHint and
     // ToolbarHint keep their own default children, so the panel renders
