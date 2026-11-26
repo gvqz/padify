@@ -56,6 +56,11 @@ import {
   exportToClipboard,
   getCommonBounds,
 } from '@excalidraw/excalidraw';
+// The island's error boundary — a vendor render error (the stale-build
+// menu-crash class, any edge case) becomes the app's error card with a
+// Retry instead of the whole tree unmounting (a white screen). This is
+// the module's ONLY other import beyond the vendor: react itself.
+import { IslandErrorBoundary, type IslandErrorCardSpec } from './island-boundary';
 // Types-only subpath (the package's exports map points "/types" at its
 // d.ts tree) — no runtime cost, no phantom-module games.
 import type {
@@ -141,6 +146,23 @@ export interface MountDrawingCanvasOptions {
  * Help, canvas background) minus the white-label policy items — see the
  * module docstring.
  */
+/** The island's error card — the same words the chunk-load failure's
+ * card speaks, the same Retry (the deterministic fresh-shell reload;
+ * see install-pwa.ts's reloadWithFreshShell for why an in-tab retry
+ * cannot refetch a chunk name a deploy renamed).
+ *
+ * Loaded lazily inside the press so the boundary module stays free of
+ * app-bundle edges — the click is the only moment it is needed. */
+const islandErrorCard: IslandErrorCardSpec = {
+  title: 'The canvas could not load',
+  body: 'The drawing is safe and syncs like any other note. Retry reopens it with the latest version of the app.',
+  retryLabel: 'Retry',
+};
+
+const reloadIsland = (): void => {
+  void import('../../install-pwa').then(({ reloadWithFreshShell }) => reloadWithFreshShell());
+};
+
 function drawingCanvasElement(
   options: MountDrawingCanvasOptions,
   initialData: object,
@@ -148,130 +170,134 @@ function drawingCanvasElement(
   onFiles: (files: BinaryFiles) => void,
 ): ReturnType<typeof createElement> {
   return createElement(
-    Excalidraw,
-    {
-      initialData,
-      theme: options.theme,
-      name: options.name,
-      autoFocus: true,
-      // Native keyboard parity (R2): the vendor binds at the document, so
-      // the tool chords answer while a drawing note is active even before
-      // the canvas takes focus — the same behavior the site has. The scope
-      // IS the mount lifetime: a dismissed drawing unmounts the component
-      // and the binding goes with it. The app's own chords still win: the
-      // app's dispatcher registers on the same node (document, bubble)
-      // at boot — before the canvas ever mounts — and answers its chords
-      // with stopImmediatePropagation, so the vendor's handler (registered
-      // later, same phase) never sees them (app-shortcuts.ts).
-      handleKeyboardGlobally: true,
-      onChange: (elements: readonly object[], appState: AppState, files: BinaryFiles) => {
-        onFiles(files);
-        options.onChange({
-          elements: elements as Record<string, unknown>[],
-          appState: appState as unknown as Record<string, unknown>,
-        });
-      },
-      UIOptions: {
-        canvasActions: {
-          loadScene: true,
-          saveToActiveFile: true,
-          saveAsImage: true,
-          changeViewBackgroundColor: true,
-          // The app-owned doors (see the module docstring).
-          clearCanvas: false,
-          export: false,
-          toggleTheme: false,
+    IslandErrorBoundary,
+    { card: islandErrorCard, onRetry: reloadIsland },
+    createElement(
+      Excalidraw,
+      {
+        initialData,
+        theme: options.theme,
+        name: options.name,
+        autoFocus: true,
+        // Native keyboard parity (R2): the vendor binds at the document, so
+        // the tool chords answer while a drawing note is active even before
+        // the canvas takes focus — the same behavior the site has. The scope
+        // IS the mount lifetime: a dismissed drawing unmounts the component
+        // and the binding goes with it. The app's own chords still win: the
+        // app's dispatcher registers on the same node (document, bubble)
+        // at boot — before the canvas ever mounts — and answers its chords
+        // with stopImmediatePropagation, so the vendor's handler (registered
+        // later, same phase) never sees them (app-shortcuts.ts).
+        handleKeyboardGlobally: true,
+        onChange: (elements: readonly object[], appState: AppState, files: BinaryFiles) => {
+          onFiles(files);
+          options.onChange({
+            elements: elements as Record<string, unknown>[],
+            appState: appState as unknown as Record<string, unknown>,
+          });
         },
-        // The image tool is ON — images are the attachment store's real
-        // tenant (canvas-images.ts owns the persistence spine around
-        // whatever the vendor inserts). The gates ride the master-only
-        // imageOptions prop: a 1920-px long edge and the wire contract's
-        // byte ceiling (shared/wire.ts — the same 5 MB every capture path
-        // and the server's upload route enforce). A file over either
-        // fails at insert, never at sync; the ids the vendor mints are
-        // content hashes, so one image pasted twice is one store row.
-        tools: { image: true },
-      },
-      imageOptions: {
-        maxWidthOrHeight: 1920,
-        maxFileSizeBytes: MAX_ATTACHMENT_BYTES,
-      },
-      // Master's prop name for the imperative-API callback (stable renamed
-      // it excalidrawAPI; the surface's queue-until-ready handle leans on
-      // this firing the moment the component is mounted).
-      onExcalidrawAPI: onApi,
-    },
-    // The hand-drawn welcome panel on empty scenes — native chrome the
-    // curated build never mounted. The help teaching is gone by the
-    // owner's verdict: the HelpHint arrow (it pointed at the footer's
-    // "?" button — deleted at the vendor's render tree, patches/) and
-    // the center menu's Help row (it opened the vendor's dialog — the
-    // dialog and every path to it are deleted in the same patch, so the
-    // row was an arrow to nothing too). Center, MenuHint and ToolbarHint
-    // keep their own default children, so the panel renders the site's
-    // composition minus every help surface.
-    createElement(
-      WelcomeScreen,
-      undefined,
-      createElement(WelcomeScreen.Center),
-      createElement(WelcomeScreen.Hints.MenuHint),
-      createElement(WelcomeScreen.Hints.ToolbarHint),
-    ),
-    // The main menu, the vendor's way: the fallback composition minus the
-    // policy items. SearchMenu (Find on canvas) rides in — native chrome
-    // the curated build had off. The command palette does NOT: the vendor
-    // exports the component for hosts to compose (excalidraw.com mounts it
-    // at its app layer; the vendor's own chrome never mounts one) and this
-    // file once did the same — the mount, its menu row and every chord it
-    // bound died with that composition. Its doors stay open where they
-    // already lived: Find is the row below, the export/background rows and
-    // the Preferences submenu keep theirs, and the sheet owns the chords.
-    createElement(
-      MainMenu,
-      undefined,
-      createElement(MainMenu.DefaultItems.LoadScene),
-      createElement(MainMenu.DefaultItems.SaveToActiveFile),
-      createElement(MainMenu.DefaultItems.SaveAsImage),
-      createElement(MainMenu.Separator),
-      createElement(MainMenu.DefaultItems.SearchMenu, {}),
-      // The Help row is the app's unified shortcuts sheet — the ONE help
-      // surface on the canvas: issue #179 folds the shortcut story into
-      // the sheet (this pane opens on its Drawing tab). The vendor's own
-      // dialog is deleted at the render tree (patches/): the footer's
-      // "?" button, the "?" chord, the welcome screen's Help row and the
-      // dialog component all went with it — nothing here or anywhere on
-      // the canvas answers to the vendor's help anymore.
-      createElement(
-        MainMenu.Item,
-        {
-          key: 'keyboard-shortcuts',
-          shortcut: 'Ctrl+K',
-          children: null,
-          onSelect: () => {
-            // document, not window — window-dispatched events never reach
-            // document-level listeners (the app's bridge lives there, the
-            // same bus padify:open-link rides).
-            document.dispatchEvent(
-              new CustomEvent('padify:open-shortcuts', { detail: { pane: 'drawing' } }),
-            );
+        UIOptions: {
+          canvasActions: {
+            loadScene: true,
+            saveToActiveFile: true,
+            saveAsImage: true,
+            changeViewBackgroundColor: true,
+            // The app-owned doors (see the module docstring).
+            clearCanvas: false,
+            export: false,
+            toggleTheme: false,
           },
+          // The image tool is ON — images are the attachment store's real
+          // tenant (canvas-images.ts owns the persistence spine around
+          // whatever the vendor inserts). The gates ride the master-only
+          // imageOptions prop: a 1920-px long edge and the wire contract's
+          // byte ceiling (shared/wire.ts — the same 5 MB every capture path
+          // and the server's upload route enforce). A file over either
+          // fails at insert, never at sync; the ids the vendor mints are
+          // content hashes, so one image pasted twice is one store row.
+          tools: { image: true },
         },
-        'Keyboard shortcuts',
+        imageOptions: {
+          maxWidthOrHeight: 1920,
+          maxFileSizeBytes: MAX_ATTACHMENT_BYTES,
+        },
+        // Master's prop name for the imperative-API callback (stable renamed
+        // it excalidrawAPI; the surface's queue-until-ready handle leans on
+        // this firing the moment the component is mounted).
+        onExcalidrawAPI: onApi,
+      },
+      // The hand-drawn welcome panel on empty scenes — native chrome the
+      // curated build never mounted. The help teaching is gone by the
+      // owner's verdict: the HelpHint arrow (it pointed at the footer's
+      // "?" button — deleted at the vendor's render tree, patches/) and
+      // the center menu's Help row (it opened the vendor's dialog — the
+      // dialog and every path to it are deleted in the same patch, so the
+      // row was an arrow to nothing too). Center, MenuHint and ToolbarHint
+      // keep their own default children, so the panel renders the site's
+      // composition minus every help surface.
+      createElement(
+        WelcomeScreen,
+        undefined,
+        createElement(WelcomeScreen.Center),
+        createElement(WelcomeScreen.Hints.MenuHint),
+        createElement(WelcomeScreen.Hints.ToolbarHint),
       ),
-      // The vendor’s OWN Preferences submenu — the same component the
-      // site renders (MainMenu.DefaultItems.Preferences, exported by the
-      // pin all along). The previous build hand-composed three inline rows
-      // (snap, grid, zen) because the FALLBACK composition has no
-      // Preferences section — true, but the submenu component ships with
-      // the site’s full row set (tool lock, snap, grid, zen, view mode,
-      // minimap, element properties, arrow binding, midpoint snapping,
-      // hints). Persistence is unchanged: the toggles flip appState, the
-      // change rides onChange into the surface, and the whitelist carries
-      // zen + snap + grid exactly as before; the rest are session-only,
-      // same as the site.
-      createElement(MainMenu.DefaultItems.Preferences),
-      createElement(MainMenu.Separator),
-      createElement(MainMenu.DefaultItems.ChangeCanvasBackground),
+      // The main menu, the vendor's way: the fallback composition minus the
+      // policy items. SearchMenu (Find on canvas) rides in — native chrome
+      // the curated build had off. The command palette does NOT: the vendor
+      // exports the component for hosts to compose (excalidraw.com mounts it
+      // at its app layer; the vendor's own chrome never mounts one) and this
+      // file once did the same — the mount, its menu row and every chord it
+      // bound died with that composition. Its doors stay open where they
+      // already lived: Find is the row below, the export/background rows and
+      // the Preferences submenu keep theirs, and the sheet owns the chords.
+      createElement(
+        MainMenu,
+        undefined,
+        createElement(MainMenu.DefaultItems.LoadScene),
+        createElement(MainMenu.DefaultItems.SaveToActiveFile),
+        createElement(MainMenu.DefaultItems.SaveAsImage),
+        createElement(MainMenu.Separator),
+        createElement(MainMenu.DefaultItems.SearchMenu, {}),
+        // The Help row is the app's unified shortcuts sheet — the ONE help
+        // surface on the canvas: issue #179 folds the shortcut story into
+        // the sheet (this pane opens on its Drawing tab). The vendor's own
+        // dialog is deleted at the render tree (patches/): the footer's
+        // "?" button, the "?" chord, the welcome screen's Help row and the
+        // dialog component all went with it — nothing here or anywhere on
+        // the canvas answers to the vendor's help anymore.
+        createElement(
+          MainMenu.Item,
+          {
+            key: 'keyboard-shortcuts',
+            shortcut: 'Ctrl+K',
+            children: null,
+            onSelect: () => {
+              // document, not window — window-dispatched events never reach
+              // document-level listeners (the app's bridge lives there, the
+              // same bus padify:open-link rides).
+              document.dispatchEvent(
+                new CustomEvent('padify:open-shortcuts', { detail: { pane: 'drawing' } }),
+              );
+            },
+          },
+          'Keyboard shortcuts',
+        ),
+        // The vendor’s OWN Preferences submenu — the same component the
+        // site renders (MainMenu.DefaultItems.Preferences, exported by the
+        // pin all along). The previous build hand-composed three inline rows
+        // (snap, grid, zen) because the FALLBACK composition has no
+        // Preferences section — true, but the submenu component ships with
+        // the site’s full row set (tool lock, snap, grid, zen, view mode,
+        // minimap, element properties, arrow binding, midpoint snapping,
+        // hints). Persistence is unchanged: the toggles flip appState, the
+        // change rides onChange into the surface, and the whitelist carries
+        // zen + snap + grid exactly as before; the rest are session-only,
+        // same as the site.
+        createElement(MainMenu.DefaultItems.Preferences),
+        createElement(MainMenu.Separator),
+        createElement(MainMenu.DefaultItems.ChangeCanvasBackground),
+      ),
     ),
   );
 }

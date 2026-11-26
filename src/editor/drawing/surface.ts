@@ -63,6 +63,10 @@ import type {
   DrawingCanvasTheme,
   DrawingImageExportOptions,
 } from './canvas';
+// The image-export options, re-exported for the export center's wiring
+// (download-menu.ts) — type-only, so the vendor chunk stays lazy: the
+// re-export erases at compile time, it never drags './canvas' in.
+export type { DrawingImageExportOptions } from './canvas';
 // Type-only vendor import — erased at compile, no runtime cost to the
 // boot payload (the vendor stays lazy behind import('./canvas')).
 import type { BinaryFiles } from '@excalidraw/excalidraw/types';
@@ -642,7 +646,8 @@ export class DrawingNoteSurface implements NoteSurface {
 registerNoteSurfaceForType('drawing', new DrawingNoteSurface());
 
 // ---------------------------------------------------------------------------
-// The image-export seam — the download menu's "Save as image" rows
+// The image-export seam — the export center's inline image rows (PNG and
+// SVG with the full native option set: export, copy, live preview)
 // ---------------------------------------------------------------------------
 
 /** Downloads a binary export without leaking the blob URL (the exports
@@ -790,77 +795,77 @@ export async function copyActiveDrawingImage(
   }
 }
 
+/** What the export center's image preview asks for and gets back. */
+export interface DrawingImagePreview {
+  /** The rendered PNG thumbnail's object URL (Background and Dark
+   * honored), or null when the gates refuse — the center's stage then
+   * speaks the honest note alone. */
+  image: string | null;
+  /** The stage's status line: the scene's facts at the live scale, or
+   * the refusing gate's words. */
+  note: string | null;
+  /** True when the thumbnail was rendered with the background OFF — the
+   * center paints the checkerboard behind it, so transparency is SEEN. */
+  transparent: boolean;
+}
+
 /**
- * The drawing's image-export door: the download center's image rows hand
- * off here (the old dropdown's "Export image…" row did the same), the
- * dialog opens on the vendor's native option set — now speaking the
- * whole of it (3× scale, embed for both formats, the clipboard press)
- * and the vendor's native FACE: the live preview (rendered from the
- * frozen-at-open scene, honoring Background/Dark), the editable file
- * name (the Save press owns it, the embed double extension included),
- * and the scene's facts (element count, natural bounds, the scale-
- * multiplied answer). The gates (a live canvas, something in it) fire
- * BEFORE the dialog so an empty or closed drawing answers with the same
- * toast it always did. `presetFormat` lands the launcher's ask (the
- * center's PNG/SVG rows press their format before the face shows).
+ * The export center's image rows' preview seam — the native dialog's
+ * live preview, spoken inline by the ONE menu (the standalone drawing
+ * dialog is retired; its whole option vocabulary lives in the center's
+ * rows now, and this is the face's part that needed the vendor island).
+ *
+ * The thumbnail honors Background and Dark — the two options that change
+ * the pixels; Scale is the facts line's truth, not the thumbnail's (a 3×
+ * render of the same picture is the same picture, and not worth the
+ * wait). The gates answer honestly instead of throwing: a closed canvas
+ * or an empty scene returns the same words the export press would toast.
  */
-export async function openDrawingExportUI(presetFormat?: 'png' | 'svg'): Promise<void> {
+export async function renderActiveDrawingImagePreview(
+  options: DrawingImageExportOptions,
+): Promise<DrawingImagePreview> {
   const current = live;
   if (!current || !current.handle || current.disposed || !current.mount.isConnected) {
-    showToast('Open the drawing note first, then export.');
-    return;
+    return { image: null, note: 'Open the drawing note first, then export.', transparent: false };
   }
   const scene = current.handle.getScene();
   const visible = visibleElements(scene.elements as DrawingSceneElement[]);
   if (visible.length === 0) {
-    showToast('Nothing to export yet — draw something first.');
-    return;
+    return {
+      image: null,
+      note: 'Nothing to export yet — draw something first.',
+      transparent: false,
+    };
   }
-  // The modal freezes the canvas, so one capture answers the whole
-  // session: the scene, its files, and the facts line's numbers.
   const files = current.handle.getFiles();
   const bounds = visibleElementBounds(visible);
-  const { openDrawingExportDialog } = await import('./export-dialog');
-  openDrawingExportDialog({
-    invoker: async (choices, destination, fileName) => {
-      const options = {
-        background: choices.background,
-        dark: choices.dark,
-        embed: choices.embed,
-        scale: choices.scale,
+  const scale = options.scale ?? 1;
+  // The scene's facts: the natural bounds and their scale-multiplied
+  // answer ("1,240 × 860 px — 3,720 × 2,580 px at 3×") — the answer to
+  // "how big is this file going to be?"
+  const countWord = `${visible.length} element${visible.length === 1 ? '' : 's'}`;
+  const facts = bounds
+    ? `${bounds.width} × ${bounds.height} px${scale > 1 ? ` — ${bounds.width * scale} × ${bounds.height * scale} px at ${scale}×` : ''}`
+    : null;
+  const note = facts ? `${countWord} — ${facts}` : countWord;
+  try {
+    const canvas = await import('./canvas');
+    const blob = await canvas.renderDrawingImage('png', scene, files, {
+      background: options.background,
+      dark: options.dark,
+    });
+    if (blob instanceof Blob) {
+      return {
+        image: URL.createObjectURL(blob),
+        note,
+        transparent: options.background === false,
       };
-      if (destination === 'clipboard') {
-        return copyActiveDrawingImage(choices.format, options);
-      }
-      return exportActiveDrawingImage(choices.format, options, fileName);
-    },
-    presetFormat,
-    defaultStem: exportFileName(current.noteName),
-    meta: {
-      elements: visible.length,
-      width: bounds?.width,
-      height: bounds?.height,
-    },
-    preview: async (choices) => {
-      // The thumbnail honors Background/Dark — the two options that
-      // change the pixels. Scale is the facts line's truth, not the
-      // thumbnail's (a 3× render of the same picture is the same
-      // picture, and not worth the wait).
-      try {
-        const canvas = await import('./canvas');
-        const blob = await canvas.renderDrawingImage('png', scene, files, {
-          background: choices.background,
-          dark: choices.dark,
-        });
-        if (blob instanceof Blob) {
-          return URL.createObjectURL(blob);
-        }
-      } catch {
-        return null;
-      }
-      return null;
-    },
-  });
+    }
+  } catch {
+    // The thumbnail failed — the stage still speaks the facts; the
+    // export press owns the real failure handling.
+  }
+  return { image: null, note, transparent: options.background === false };
 }
 
 /**

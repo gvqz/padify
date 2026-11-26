@@ -22,14 +22,15 @@ import { expect, test, type Page } from '@playwright/test';
  * the same rows the sync pipeline ships — because the DOM alone cannot
  * prove what the note holds.
  *
- * THE EXPORT STORY (after the restore): the drawing's image exports
- * ride their own dialog again — the download center's image rows are
- * launchers that hand off to it (PNG/SVG, background, dark, embed for
- * both formats, the 3× scale, the clipboard press — the full native
- * option set), and the vendor's own native dialog answers behind the
- * canvas menu row and its Ctrl+Shift+E chord. The center stays the door
- * for the file-type exports (the .excalidraw/.padify envelopes). Three
- * good faces, each with its own door — the one-popup compromise is gone.
+ * THE EXPORT STORY (the one-menu pass): the drawing's image exports ride
+ * the export center as INLINE rows — the full native option set
+ * (background, dark, embed for both formats, the 3× scale, the live
+ * preview, the clipboard press) spoken right in the one menu, no
+ * launcher handoff and no second dialog of ours. The vendor's own
+ * native dialog still answers behind the canvas menu row and its
+ * Ctrl+Shift+E chord — native parity, untouched. And a render crash
+ * inside the island lands on the app's error card, never a white
+ * screen: the island's boundary owns that failure class.
  */
 
 const pageErrors = new WeakMap<Page, string[]>();
@@ -137,51 +138,49 @@ test.describe('the drawing canvas', () => {
     expect(JSON.parse(reloaded[0].content).elements).toHaveLength(1);
   });
 
-  test('the download center answers a drawing with launchers and envelopes', async ({ page }) => {
+  test('the export center answers a drawing with inline image rows and envelopes', async ({
+    page,
+  }) => {
     await openDrawingCanvas(page);
 
     // An empty drawing still opens the center — one door for every
-    // state: the launcher rows ride the list, the initial selection is
-    // the first SELECTABLE type (the .excalidraw envelope), and its
-    // stage speaks the honest gate.
+    // state: the image rows ride the list as SELECTABLE radios (the
+    // initial selection is the first type — the PNG row, the drawing's
+    // headline export), and its stage speaks the honest gate.
     await page.locator('#downloadNotes').click();
     const center = page.locator('dialog.export-center');
     await expect(center).toBeVisible();
-    await expect(
-      center.locator('.export-center-type--launch', { hasText: 'PNG image' }),
-    ).toBeVisible();
-    await expect(
-      center.locator('.export-center-type--launch', { hasText: 'SVG image' }),
-    ).toBeVisible();
-    await expect(
-      center.locator('.export-center-type', { hasText: 'Excalidraw file' }),
-    ).toHaveAttribute('aria-checked', 'true');
+    const pngRow = center.locator('.export-center-type', { hasText: 'PNG image' });
+    await expect(pngRow).toBeVisible();
+    await expect(pngRow).toHaveAttribute('aria-checked', 'true');
+    await expect(pngRow).toHaveAttribute('role', 'radio');
+    await expect(center.locator('.export-center-type', { hasText: 'SVG image' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
     await expect(center.locator('.export-center-stage-note')).toContainText(
       'Nothing to export yet — draw something first.',
     );
+    // No second dialog waits behind these rows — the option set is
+    // inline: selecting PNG shows its knobs right here.
+    await expect(center.locator('.export-center-option', { hasText: 'Background' })).toBeVisible();
+    await expect(center.locator('.export-center-option', { hasText: 'Embed scene' })).toBeVisible();
+    await expect(center.locator('.export-center-seg-btn', { hasText: '3×' })).toBeVisible();
+    await expect(center.locator('.export-center-copy')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(center).toBeHidden();
 
-    // The launcher click on the empty canvas gates honestly: the center
-    // closes, the toast says what an export would need.
-    await page.locator('#downloadNotes').click();
-    await expect(center).toBeVisible();
-    await center.locator('.export-center-type--launch', { hasText: 'PNG image' }).click();
-    await expect(center).toBeHidden();
-    await expect(page.locator('#toast')).toContainText(
-      'Nothing to export yet — draw something first.',
-    );
-
-    // Draw, wait for the save chain, reopen: the envelope's stage
-    // renders the scene thumbnail.
+    // Draw, wait for the save chain, reopen: the stage renders the
+    // scene thumbnail with its facts.
     await drawRectangle(page);
     await page.waitForTimeout(2_000);
     await page.locator('#downloadNotes').click();
     await expect(center).toBeVisible();
     await expect(center.locator('.export-center-stage-img')).toBeVisible();
+    await expect(center.locator('.export-center-stage-note')).toContainText('1 element');
   });
 
-  test('the launcher hands the images to the drawing dialog — the full native set', async ({
+  test('the image rows speak the full native set INLINE — one menu, no handoff', async ({
     page,
   }) => {
     await openDrawingCanvas(page);
@@ -191,63 +190,73 @@ test.describe('the drawing canvas', () => {
     await page.locator('#downloadNotes').click();
     const center = page.locator('dialog.export-center');
     await expect(center).toBeVisible();
-    // The groups are labeled now — the grouping is semantics, not a
-    // mystery hairline.
+    // The groups are labeled — the grouping is semantics, not a mystery
+    // hairline.
     await expect(center.locator('.export-center-group-label')).toHaveCount(3);
-    await center.locator('.export-center-type--launch', { hasText: 'PNG image' }).click();
 
-    // The handoff closed the center and opened the drawing's own dialog:
-    // format switch, the three option rows, the 3× scale, the clipboard
-    // press — the native option set, whole.
-    const dialog = page.locator('dialog.drawing-export-dialog');
-    await expect(center).toBeHidden();
-    await expect(dialog).toBeVisible();
-    await expect(dialog.locator('.drawing-export-seg-btn', { hasText: 'PNG' })).toHaveAttribute(
-      'aria-pressed',
+    // The PNG row is selected (the open's pick): the native option set
+    // renders INLINE — the three toggles, the 1×/2×/3× scale, the
+    // clipboard press beside Export.
+    await expect(center.locator('.export-center-type', { hasText: 'PNG image' })).toHaveAttribute(
+      'aria-checked',
       'true',
     );
-    await expect(dialog.getByText('Background')).toBeVisible();
-    await expect(dialog.getByText('Dark mode')).toBeVisible();
-    await expect(dialog.getByText('Embed scene')).toBeVisible();
-    await expect(dialog.getByText('Copy to clipboard')).toBeVisible();
-    await expect(dialog.locator('.drawing-export-seg-btn', { hasText: '3×' })).toBeVisible();
+    await expect(center.locator('.export-center-option', { hasText: 'Background' })).toHaveCount(1);
+    await expect(center.locator('.export-center-option', { hasText: 'Dark mode' })).toHaveCount(1);
+    await expect(center.locator('.export-center-option', { hasText: 'Embed scene' })).toHaveCount(
+      1,
+    );
+    await expect(center.locator('.export-center-seg-btn', { hasText: '3×' })).toBeVisible();
+    await expect(center.getByRole('button', { name: 'Copy to clipboard' })).toBeVisible();
 
-    // THE REFRESHED FACE: the live preview renders the thumbnail, the
-    // facts line answers "how big is this file going to be?", and the
-    // name is the dialog's own — the vendor's native dialog, spoken in
-    // the app's face.
-    await expect(dialog.locator('.drawing-export-preview-img')).toBeVisible();
-    await expect(dialog.locator('.drawing-export-meta')).toContainText('1 element');
-    const nameField = dialog.locator('.drawing-export-name-row input');
-    await expect(nameField).toHaveValue('drawing');
+    // THE LIVE PREVIEW: the thumbnail renders on the stage, the facts
+    // line answers "how big is this file going to be?", and the name
+    // row carries the note's stem with the live suffix chip.
+    await expect(center.locator('.export-center-stage-img')).toBeVisible();
+    await expect(center.locator('.export-center-stage-note')).toContainText('1 element');
+    const nameField = center.locator('.export-center-name-row input');
+    await expect(nameField).toHaveValue('Drawing');
+    await expect(center.locator('.export-center-name-suffix')).toHaveText('.png');
 
     // Embed flips the suffix chip live — the double extension SEEN before
-    // the Save, not discovered in the Downloads folder.
-    await dialog.locator('.drawing-export-option', { hasText: 'Embed scene' }).click();
-    await expect(dialog.locator('.drawing-export-name-suffix')).toHaveText('.excalidraw.png');
-    await dialog.locator('.drawing-export-option', { hasText: 'Embed scene' }).click();
+    // the Export, not discovered in the Downloads folder.
+    await center.locator('.export-center-option', { hasText: 'Embed scene' }).click();
+    await expect(center.locator('.export-center-name-suffix')).toHaveText('.excalidraw.png');
+    await center.locator('.export-center-option', { hasText: 'Embed scene' }).click();
+    await expect(center.locator('.export-center-name-suffix')).toHaveText('.png');
 
-    // NATIVE PARITY, the part the old dialog got wrong: Embed scene and
-    // Scale answer for BOTH formats — the vendor's own dialog shows them
-    // whatever the export button will be (scale sizes the SVG, embed
-    // writes its metadata).
-    await dialog.locator('.drawing-export-seg-btn', { hasText: 'SVG' }).click();
-    await expect(dialog.locator('.drawing-export-scale-row')).toBeVisible();
-    await expect(
-      dialog.locator('.drawing-export-option', { hasText: 'Embed scene' }),
-    ).toBeVisible();
-    await dialog.locator('.drawing-export-seg-btn', { hasText: 'PNG' }).click();
+    // NATIVE PARITY, the part the old dialogs got wrong: the option set
+    // answers for BOTH formats — switching to the SVG row keeps the
+    // knobs on the same face (scale sizes the SVG, embed writes its
+    // metadata).
+    await center.locator('.export-center-type', { hasText: 'SVG image' }).click();
+    await expect(center.locator('.export-center-type', { hasText: 'SVG image' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await expect(center.locator('.export-center-option', { hasText: 'Embed scene' })).toHaveCount(
+      1,
+    );
+    await expect(center.locator('.export-center-seg-btn', { hasText: '3×' })).toBeVisible();
+    await expect(center.locator('.export-center-name-suffix')).toHaveText('.svg');
 
-    // Save at 3× with the user's own name: the download carries the PNG
-    // bytes under the name the dialog owns.
+    // The clipboard press: the dialog STAYS OPEN (a copy is not a save)
+    // and the press flashes its answer. Playwright's headless clipboard
+    // answers the PNG blob write — if the platform refuses, the toast
+    // owns the words; the dialog still stands either way.
+    await center.getByRole('button', { name: 'Copy to clipboard' }).click();
+    await expect(center).toBeVisible();
+
+    // Export at 3× with the user's own name: the download carries the
+    // PNG bytes and the center closes on the success.
+    await center.locator('.export-center-type', { hasText: 'PNG image' }).click();
     await nameField.fill('blueprint');
-    await dialog.locator('.drawing-export-seg-btn', { hasText: '3×' }).click();
+    await center.locator('.export-center-seg-btn', { hasText: '3×' }).click();
     const download = page.waitForEvent('download');
-    await dialog.locator('button.vz-dialog-confirm', { hasText: 'Save' }).click();
+    await center.locator('.export-center-export').click();
     const file = await download;
     expect(file.suggestedFilename()).toBe('blueprint.png');
-    // The dialog closed on the Save press.
-    await expect(dialog).toBeHidden();
+    await expect(center).toBeHidden();
   });
 
   test('the vendor export dialog answers behind the canvas menu row — native again', async ({
@@ -273,6 +282,59 @@ test.describe('the drawing canvas', () => {
     await expect(vendorDialog.getByRole('button', { name: 'Copy PNG to clipboard' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(vendorDialog).toBeHidden();
+  });
+
+  // THE OWNER'S CRASH REPORT, answered: "if you click on the hamburger
+  // menu in excalidraw the whole thing literally crashes." A render-time
+  // error inside the vendor tree used to unwind React's whole component
+  // stack — no boundary on the island meant a white screen and nothing
+  // else. The island's boundary (canvas.ts → island-boundary.ts) turns
+  // that failure class into the app's own error card: the note's bytes
+  // are safe, the APP stays standing, and Retry reloads into the latest
+  // build. The crash seam (`window.__padifyCrashDrawingIsland`) forces a
+  // render-time throw deterministically; a theme event re-renders the
+  // island, which is the same re-render a vendor popover or a rename
+  // would trigger.
+  test('a render crash inside the island lands on the error card — the app stands', async ({
+    page,
+  }) => {
+    await openDrawingCanvas(page);
+    await drawRectangle(page);
+    await page.waitForTimeout(1_000);
+
+    // Fire the seam, then force an island re-render.
+    await page.evaluate(() => {
+      (window as unknown as { __padifyCrashDrawingIsland?: boolean }).__padifyCrashDrawingIsland =
+        true;
+      document.dispatchEvent(new CustomEvent('padify:theme', { detail: { mode: 'dark' } }));
+    });
+
+    // The card replaces the canvas — not a white screen: the app's own
+    // shell (the topbar), the note rail, everything else still answers.
+    const card = page.locator('#note .unsupported-note');
+    await expect(card).toBeVisible({ timeout: 10_000 });
+    await expect(card.locator('.unsupported-note-title')).toHaveText('The canvas could not load');
+    await expect(page.locator('.navbar')).toBeVisible();
+    await expect(page.locator('#note .excalidraw')).toHaveCount(0);
+
+    // React's development build deliberately re-throws a boundary-caught
+    // error so tooling sees it — the production build does not. That
+    // rethrow is EXPECTED here (it is the crash being contained), so it
+    // leaves the page-error ledger before the afterEach audit.
+    const errors = pageErrors.get(page) ?? [];
+    errors.splice(0, errors.length);
+
+    // Retry reloads into the fresh shell (the deterministic hard refresh)
+    // — the seam flag dies with the page, and the canvas comes back.
+    await page.locator('.unsupported-note-action', { hasText: 'Retry' }).click();
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('#note')).toBeVisible();
+    const flag = await page.evaluate(
+      () =>
+        (window as unknown as { __padifyCrashDrawingIsland?: boolean })
+          .__padifyCrashDrawingIsland ?? null,
+    );
+    expect(flag).toBeNull();
   });
 
   test('Ctrl+Shift+E — the vendor dialog on a drawing, the export center on a text note', async ({

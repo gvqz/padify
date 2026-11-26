@@ -1,30 +1,35 @@
 /**
  * The export center — the app's ONE popup for the file-type exports.
  *
- * THE STORY AFTER THE RESTORE: the consolidation (9ba973e) replaced every
- * export with this popup alone — the drawing's option-bearing dialog died
- * for it and the vendor's own native dialog was deleted from the dist
- * (e6a173b), which the owner called the model's worst mistake: users lost
- * the native export options, and the popup itself was broken half the
- * time. Both commits are reverted whole; the center EARNS its way back
- * with a narrower contract and its real bugs fixed:
+ * THE STORY AFTER THE CONSOLIDATION'S FALL (the one-menu answer): the
+ * consolidation (9ba973e) replaced every export with a popup alone and
+ * deleted the vendor's native dialog from the dist (e6a173b) — the
+ * owner called it the model's worst mistake. Both were reverted, and
+ * the center then earned a narrower contract (the launcher rows + the
+ * drawing's own option-bearing dialog — TWO faces of ours for one
+ * export, the owner's next verdict: "two separate menus that do the
+ * same thing"). THIS pass is the one-menu answer:
  *
- *   - text-family notes (txt/md/pdf/docx/html), the .padify envelopes and
- *     the whole-pad save export HERE — preview left, file type + name
- *     right, exactly the consolidation's one genuine win
- *   - the drawing's IMAGE exports do NOT ride the center: its rows are
- *     launchers that hand off to the drawing's own export dialog
- *     (export-dialog.ts — PNG/SVG, background, dark, embed, scale,
- *     clipboard — the native options), the way the old dropdown's
- *     "Export image…" row always did. The vendor's own native dialog
- *     answers behind the canvas menu and its chord.
+ *   - the drawing's image exports are INLINE rows here — PNG and SVG as
+ *     full exporter types carrying the whole native option set
+ *     (Background, Dark mode, Embed scene, 1×/2×/3× Scale), the live
+ *     preview on the stage (the checkerboard when Background is off),
+ *     the file name with the embed double extension (.excalidraw.png,
+ *     live as the toggle flips), and a Copy-to-clipboard press beside
+ *     the Export. No handoff, no second dialog — the standalone drawing
+ *     export dialog is retired (its option vocabulary and its face's
+ *     preview seam live in these rows).
+ *   - the file-type exports (txt/md/pdf/docx/html), the .padify
+ *     envelopes and the whole-pad save ride the same list — ONE menu,
+ *     one muscle memory, every note type.
+ *   - the vendor's own native dialog still answers behind the canvas
+ *     menu and its chord (canvas.ts) — native parity, untouched.
  *
  * THE CONTRACT: the center is pure UI and vendor-free — the host hands in
  * one ExportCenterType per file type the ACTIVE NOTE can become, each
- * with its own preview() and run(stem, values), or a launch() handoff for
- * the types that belong to another surface. The drawing's renderers
- * arrive from surface.ts as delegates, so the canvas chunk never rides
- * this module.
+ * with its own preview() and run(stem, values) and, for the image rows,
+ * copy(). The drawing's renderers arrive from surface.ts as delegates,
+ * so the canvas chunk never rides this module.
  *
  * THE BINDING DISCIPLINE (the bug the consolidation shipped): the face is
  * built ONCE, so every listener binds ONCE at build and reads the LIVE
@@ -36,8 +41,8 @@
  * HONESTY RULES: preview() answers for an ungated state with a note (an
  * empty drawing says so in the stage); run() answers false when it did
  * not export (a toast has already explained why) and the dialog stays
- * open. The dialog closes only on a reported success, on Cancel, or on a
- * launcher's handoff. Object URLs die with the dialog that made them.
+ * open. The dialog closes only on a reported success or on Cancel.
+ * Object URLs die with the dialog that made them.
  *
  * THE REFINEMENT PASS (the visual audit's verdict, answered): the type
  * list speaks RADIO — a leading dot on the selected row, role=radio +
@@ -66,6 +71,10 @@ export interface ExportPreview {
   card?: { title: string; meta: string[] };
   /** A muted status line under the stage (rendering notes, honest gates). */
   note?: string;
+  /** True when the image was rendered with transparency (Background
+   * off) — the stage paints the checkerboard behind it, so the
+   * transparency is SEEN, not guessed. */
+  imageTransparent?: boolean;
 }
 
 /** One toggle row (the drawing's background / dark / embed). */
@@ -94,46 +103,40 @@ export type ExportOption = ExportOptionToggle | ExportOptionSegment;
 /** The live option readings a type's preview()/run() receive. */
 export type ExportOptionValues = Record<string, boolean | string>;
 
-/** One file type the active note can become — an exporter (preview + run)
- * or a handoff to another surface (the drawing's image dialog): a launcher
- * row closes the center and opens the type's own face on click; it never
- * selects, never previews, never exports from here. */
-export interface ExportCenterExporterType {
+/** One file type the active note can become — preview + run + (for
+ * images) copy, all inline: selecting the row shows its options, its
+ * preview, and its presses right here. No handoffs; no type opens
+ * another face from this dialog. */
+export interface ExportCenterType {
   id: string;
   label: string;
-  /** The suffix chip and the appended extension. */
+  /** The suffix chip and the appended extension at the option's
+   * current values (the base extension when the type has none). */
   extension: string;
+  /** The extension as the live option values shape it — the embed
+   * double extension (.excalidraw.png). Recomputed on every option
+   * flip, so the suffix chip never lies. */
+  extensionFor?(values: ExportOptionValues): string;
   /** The prefilled file name, WITHOUT the extension. */
   defaultStem: string;
   /** A one-liner under the type's label. */
   hint?: string;
-  /** 'pad' types render after a hairline (the pad-level saves). */
-  section?: 'note' | 'pad';
+  /** The list's group: images (the drawing's PNG/SVG), note (the
+   * file-type/envelope rows), pad (the whole-pad save). */
+  section?: 'images' | 'note' | 'pad';
   /** The option model this type shows (shared instances share live state). */
   options?: ExportOption[];
   preview(values: ExportOptionValues): Promise<ExportPreview>;
   /** Exports with the (already sanitized + suffixed) file name. True = done. */
   run(fileName: string, values: ExportOptionValues): Promise<boolean>;
-  /** Exporter rows never hand off — the discriminator. */
-  launch?: undefined;
+  /** Copies instead of saving (the image rows' clipboard press). True =
+   * copied — the press flashes "Copied" and the dialog stays open, the
+   * vendor's own behavior. Absent = no copy press for this type. */
+  copy?(values: ExportOptionValues): Promise<boolean>;
+  /** The clipboard capability gate — false hides the copy press (the
+   * environment cannot hold this flavor). Absent = assumed supported. */
+  copySupported?(): boolean;
 }
-
-/** A handoff row — the drawing's image exports, whose option-bearing face
- * is their own dialog (export-dialog.ts), not this center. */
-export interface ExportCenterLauncherType {
-  id: string;
-  label: string;
-  /** The suffix chip (informational — the handoff names its own files). */
-  extension: string;
-  /** A one-liner under the type's label. */
-  hint?: string;
-  /** 'pad' types render after a hairline. */
-  section?: 'note' | 'pad';
-  /** The handoff: closes the center and opens the type's own surface. */
-  launch: () => void;
-}
-
-export type ExportCenterType = ExportCenterExporterType | ExportCenterLauncherType;
 
 export interface ExportCenterHost {
   /** The dialog's heading — the note's live title. */
@@ -159,6 +162,9 @@ interface CenterFace {
   door: HTMLButtonElement;
   doorLabel: HTMLElement;
   cancel: HTMLButtonElement;
+  /** The image rows' clipboard press — hidden for types without a copy
+   * or when this environment cannot hold the flavor. */
+  copy: HTMLButtonElement;
   exportButton: HTMLButtonElement;
 }
 
@@ -166,11 +172,13 @@ let face: CenterFace | null = null;
 /** The LIVE open's host — the single source every binding reads (the
  * listener-accumulation bug's cure: no per-open closures exist). */
 let activeHost: ExportCenterHost | null = null;
-let activeType: ExportCenterExporterType | null = null;
+let activeType: ExportCenterType | null = null;
 let previewToken = 0;
 let previewTimer: number | null = null;
 /** The object URL the image preview currently shows — revoked on replace. */
 let previewUrl: string | null = null;
+/** The copy press's 2s "Copied" flash — the vendor's useCopyStatus. */
+let copyFlashTimer: number | null = null;
 /** Whether the user has edited the file-name field this session. Until
  * they do, every type switch adopts the type's own default stem (the old
  * dropdown named each row's file by its own rule — the workspace save was
@@ -190,12 +198,20 @@ function stripOwnExtension(stem: string, extension: string): string {
   return stripExtension(stem, extension);
 }
 
-function optionValues(type: ExportCenterExporterType): ExportOptionValues {
+function optionValues(type: ExportCenterType): ExportOptionValues {
   const values: ExportOptionValues = {};
   for (const option of type.options ?? []) {
     values[option.id] = option.value;
   }
   return values;
+}
+
+/** The extension the type's current option values shape — the suffix
+ * chip and the export's file name both answer this, never the static
+ * one when a dynamic voice speaks (the embed double extension). */
+function extensionFor(type: ExportCenterType): string {
+  const values = optionValues(type);
+  return type.extensionFor?.(values) ?? type.extension;
 }
 
 function revokePreviewUrl(): void {
@@ -205,7 +221,7 @@ function revokePreviewUrl(): void {
   }
 }
 
-/** Cancels any pending/in-flight preview render (a close, a handoff). */
+/** Cancels any pending/in-flight preview render (a close). */
 function cancelPendingPreview(): void {
   previewToken++;
   if (previewTimer !== null) {
@@ -298,9 +314,9 @@ function centerFace(): CenterFace {
 
   const foot = document.createElement('div');
   foot.className = 'export-center-foot';
-  // The import door — an outline button with a folder glyph, so it
-  // READS as the action it is (the audit called the quiet text "leftover
-  // debug text").
+  // The import door — a quiet ghost link with a folder glyph, clearly
+  // tertiary to the actions: the round-trip door belongs here (open is
+  // the other half of export), but never as a peer of Cancel/Export.
   const door = document.createElement('button');
   door.type = 'button';
   door.className = 'export-center-door';
@@ -321,11 +337,18 @@ function centerFace(): CenterFace {
   cancel.type = 'button';
   cancel.className = 'vz-dialog-cancel';
   cancel.textContent = 'Cancel';
+  // The image rows' clipboard press — an outline button between Cancel
+  // and Export, hidden unless the selected type speaks it.
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'vz-dialog-cancel export-center-copy';
+  copy.textContent = 'Copy to clipboard';
+  copy.hidden = true;
   const exportButton = document.createElement('button');
   exportButton.type = 'button';
   exportButton.className = 'vz-dialog-confirm export-center-export';
   exportButton.textContent = 'Export';
-  actions.append(cancel, exportButton);
+  actions.append(cancel, copy, exportButton);
   foot.append(door, actions);
   dialog.append(foot);
 
@@ -344,6 +367,7 @@ function centerFace(): CenterFace {
     door,
     doorLabel,
     cancel,
+    copy,
     exportButton,
   };
 
@@ -351,12 +375,18 @@ function centerFace(): CenterFace {
     closeCenterDialog(dialog);
   });
 
-  // The dialog going away (Escape, cancel, a handoff) kills the pending
-  // preview and the object URL it left on the table — the old build let
-  // both leak until the NEXT render replaced them.
+  // The dialog going away (Escape, cancel, an export's success) kills
+  // the pending preview, the object URL it left on the table, and the
+  // copy press's flash — the old build let the first two leak until the
+  // NEXT render replaced them.
   dialog.addEventListener('close', () => {
     cancelPendingPreview();
     revokePreviewUrl();
+    if (copyFlashTimer !== null) {
+      window.clearTimeout(copyFlashTimer);
+      copyFlashTimer = null;
+    }
+    copy.textContent = 'Copy to clipboard';
     activeHost = null;
     activeType = null;
     face?.stageBody.replaceChildren();
@@ -389,36 +419,26 @@ function centerFace(): CenterFace {
     if (!host) return;
     const type = host.types.find((item) => item.id === button.dataset.typeId);
     if (!type) return;
-    // The handoff rows (the drawing's images): one click, the center
-    // closes, the type's own surface opens — the old dropdown's
-    // single-click muscle memory, kept.
-    if (type.launch) {
-      closeCenterDialog(dialog);
-      type.launch();
-      return;
-    }
     if (type !== activeType) {
       selectType(type, activeType);
     }
   });
 
   // ONE arrow-key binding for the dialog's whole life: the native
-  // save-dialog discipline — ArrowUp/ArrowDown walks the SELECTABLE
-  // rows (the launchers are not choices; they are doors), the selection
-  // follows the focus, and the list never scrolls under the keypress.
+  // save-dialog discipline — ArrowUp/ArrowDown walks the rows, the
+  // selection follows the focus, and the list never scrolls under the
+  // keypress.
   typeList.addEventListener('keydown', (event) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     const host = activeHost;
     if (!host) return;
     const rows = Array.from(typeList.querySelectorAll<HTMLButtonElement>('.export-center-type'));
-    const selectable = rows.filter((row) => !row.classList.contains('export-center-type--launch'));
-    if (selectable.length < 2) return;
-    const focusedIndex = selectable.findIndex((row) => row === document.activeElement);
+    if (rows.length < 2) return;
+    const focusedIndex = rows.findIndex((row) => row === document.activeElement);
     const checked = typeList.querySelector('.export-center-type[aria-checked="true"]');
-    const fromIndex =
-      focusedIndex !== -1 ? focusedIndex : selectable.findIndex((row) => row === checked);
+    const fromIndex = focusedIndex !== -1 ? focusedIndex : rows.findIndex((row) => row === checked);
     const step = event.key === 'ArrowDown' ? 1 : -1;
-    const next = selectable[(fromIndex + step + selectable.length) % selectable.length];
+    const next = rows[(fromIndex + step + rows.length) % rows.length];
     event.preventDefault();
     next.focus();
     next.click();
@@ -427,19 +447,47 @@ function centerFace(): CenterFace {
   // ONE export binding for the dialog's whole life.
   exportButton.addEventListener('click', () => {
     const type = activeType;
-    if (!type || type.launch) return;
-    const stemValue = sanitizeStem(stripOwnExtension(stem.value, type.extension));
+    if (!type) return;
+    const ext = extensionFor(type);
+    const stemValue = sanitizeStem(stripOwnExtension(stem.value, ext));
     if (stem.value.trim() === '') stem.value = stemValue;
     exportButton.disabled = true;
     void (async () => {
       let done: boolean;
       try {
-        done = await type.run(`${stemValue}.${type.extension}`, optionValues(type));
+        done = await type.run(`${stemValue}.${ext}`, optionValues(type));
       } catch {
         done = false;
       }
       exportButton.disabled = false;
       if (done) closeCenterDialog(dialog);
+    })();
+  });
+
+  // ONE copy binding for the dialog's whole life — the image rows'
+  // clipboard press: the dialog STAYS OPEN (the vendor's own behavior —
+  // a copy is not a save), a true answer flashes "Copied" for 2s, and
+  // the surface's toast explains either way.
+  copy.addEventListener('click', () => {
+    const type = activeType;
+    const copyRun = type?.copy;
+    if (!type || !copyRun) return;
+    copy.disabled = true;
+    void (async () => {
+      let done: boolean;
+      try {
+        done = await copyRun(optionValues(type));
+      } catch {
+        done = false;
+      }
+      copy.disabled = false;
+      if (!done) return;
+      if (copyFlashTimer !== null) window.clearTimeout(copyFlashTimer);
+      copy.textContent = 'Copied';
+      copyFlashTimer = window.setTimeout(() => {
+        copyFlashTimer = null;
+        copy.textContent = 'Copy to clipboard';
+      }, 2_000);
     })();
   });
 
@@ -450,7 +498,7 @@ function centerFace(): CenterFace {
 function renderToggle(
   host: HTMLElement,
   option: Extract<ExportOption, { kind: 'toggle' }>,
-  rerenderPreview: () => void,
+  refreshSelection: () => void,
 ): HTMLElement {
   const row = document.createElement('label');
   row.className = 'export-center-option';
@@ -460,15 +508,20 @@ function renderToggle(
   input.checked = option.value;
   input.addEventListener('change', () => {
     option.value = input.checked;
-    rerenderPreview();
+    refreshSelection();
   });
   const text = document.createElement('span');
   text.className = 'export-center-option-text';
-  text.textContent = option.label;
+  // The label wears its own weight — the hint beside it stays a size
+  // down and two shades quieter (the audit's hierarchy nit: a bare text
+  // node and the hint read as one gray band).
+  const label = document.createElement('span');
+  label.className = 'export-center-option-label';
+  label.textContent = option.label;
   const hint = document.createElement('span');
   hint.className = 'export-center-option-hint';
   hint.textContent = option.hint;
-  text.append(hint);
+  text.append(label, hint);
   row.append(input, text);
   host.append(row);
   return row;
@@ -478,7 +531,7 @@ function renderToggle(
 function renderSegment(
   host: HTMLElement,
   option: Extract<ExportOption, { kind: 'segment' }>,
-  rerenderPreview: () => void,
+  refreshSelection: () => void,
 ): HTMLElement {
   const row = document.createElement('div');
   row.className = 'export-center-scale-row';
@@ -502,7 +555,7 @@ function renderSegment(
         other.setAttribute('aria-pressed', 'false');
       }
       button.setAttribute('aria-pressed', 'true');
-      rerenderPreview();
+      refreshSelection();
     });
     group.append(button);
     return button;
@@ -513,24 +566,27 @@ function renderSegment(
 }
 
 /** Paints the stage from one preview answer. */
-function paintPreview(face: CenterFace, preview: ExportPreview): void {
-  face.stageBody.replaceChildren();
+function paintPreview(f: CenterFace, preview: ExportPreview): void {
+  f.stageBody.replaceChildren();
+  // The checkerboard — transparency is SEEN, not guessed: an image
+  // rendered with its background off rides the transparency stage.
+  f.stage.classList.toggle('export-center-stage--transparent', preview.imageTransparent === true);
   if (preview.image) {
     const img = document.createElement('img');
     img.className = 'export-center-stage-img';
     img.alt = 'Export preview';
     img.src = preview.image;
-    face.stageBody.append(img);
+    f.stageBody.append(img);
   } else if (preview.html) {
     const doc = document.createElement('div');
     doc.className = 'export-center-stage-html';
     doc.innerHTML = preview.html;
-    face.stageBody.append(doc);
+    f.stageBody.append(doc);
   } else if (preview.text !== undefined) {
     const pre = document.createElement('pre');
     pre.className = 'export-center-stage-text';
     pre.textContent = preview.text;
-    face.stageBody.append(pre);
+    f.stageBody.append(pre);
   } else if (preview.card) {
     const card = document.createElement('div');
     card.className = 'export-center-stage-card';
@@ -552,14 +608,14 @@ function paintPreview(face: CenterFace, preview: ExportPreview): void {
       meta.append(item);
     }
     card.append(glyph, title, meta);
-    face.stageBody.append(card);
+    f.stageBody.append(card);
   }
-  face.stageNote.textContent = preview.note ?? '';
-  face.stageNote.hidden = (preview.note ?? '') === '';
+  f.stageNote.textContent = preview.note ?? '';
+  f.stageNote.hidden = (preview.note ?? '') === '';
 }
 
 /** The debounced, token-guarded preview render. */
-function schedulePreview(type: ExportCenterExporterType): void {
+function schedulePreview(type: ExportCenterType): void {
   const f = face;
   if (!f) return;
   const token = ++previewToken;
@@ -588,46 +644,61 @@ function schedulePreview(type: ExportCenterExporterType): void {
   }, 220);
 }
 
-/** Selects one type: the radio states, name suffix, options section,
- * preview. */
-function selectType(type: ExportCenterExporterType, previousType: ExportCenterType | null): void {
+/** Selects one type: the radio states, name suffix (the live option
+ * values' extension — the embed double extension included), the copy
+ * press, options section, preview. */
+function selectType(type: ExportCenterType, previousType: ExportCenterType | null): void {
   const f = face;
   if (!f) return;
   activeType = type;
-  // The radio states: the selectable rows answer aria-checked (their
-  // dot is CSS, the semantics are real); the launcher rows hold no
-  // pressed state at all — a door is never checked.
+  // The radio states: the rows answer aria-checked (their dot is CSS,
+  // the semantics are real).
   for (const button of f.typeList.querySelectorAll<HTMLButtonElement>('button[role="radio"]')) {
     button.setAttribute('aria-checked', String(button.dataset.typeId === type.id));
   }
+  // The copy press — an image type in a clipboard-capable environment
+  // speaks it; every other type hides it.
+  f.copy.hidden = !(type.copy && (type.copySupported?.() ?? true));
+  if (f.copy.hidden && copyFlashTimer !== null) {
+    window.clearTimeout(copyFlashTimer);
+    copyFlashTimer = null;
+  }
+  if (f.copy.hidden) f.copy.textContent = 'Copy to clipboard';
   // The stem survives a type switch once the user has edited it (their
   // naming is theirs, minus the types' own extensions — switching
   // PNG→SVG must not export "note.png.svg"). Until the first edit, each
   // type adopts its own default — the old dropdown named every row's file
   // by its own rule, and that discipline keeps the workspace save dated.
+  const previousExt = previousType ? extensionFor(previousType) : type.extension;
   let stem = f.stem.value;
   if (stemDirty) {
-    if (previousType) stem = stripOwnExtension(stem, previousType.extension);
-    stem = stripOwnExtension(stem, type.extension);
+    if (previousType) stem = stripOwnExtension(stem, previousExt);
+    stem = stripOwnExtension(stem, extensionFor(type));
   }
   f.stem.value = stem.trim() === '' || !stemDirty ? type.defaultStem : stem;
-  f.suffix.textContent = `.${type.extension}`;
+  f.suffix.textContent = `.${extensionFor(type)}`;
 
   f.optionsHost.replaceChildren();
   const options = type.options ?? [];
   for (const option of options) {
     if (option.when && !option.when.includes(type.id)) continue;
-    if (option.kind === 'toggle') renderToggle(f.optionsHost, option, rerenderPreview);
-    else renderSegment(f.optionsHost, option, rerenderPreview);
+    if (option.kind === 'toggle') renderToggle(f.optionsHost, option, refreshSelection);
+    else renderSegment(f.optionsHost, option, refreshSelection);
   }
   f.optionsHost.hidden = options.every((option) => option.when && !option.when.includes(type.id));
 
   schedulePreview(type);
 }
 
-/** Re-renders the active type's preview (an option flipped). */
-function rerenderPreview(): void {
-  if (activeType && !activeType.launch) schedulePreview(activeType);
+/** Re-reads the active type's option-dependent state — an option
+ * flipped: the suffix chip (the embed double extension lands live),
+ * then the preview. */
+function refreshSelection(): void {
+  const type = activeType;
+  const f = face;
+  if (!type || !f) return;
+  f.suffix.textContent = `.${extensionFor(type)}`;
+  schedulePreview(type);
 }
 
 /**
@@ -651,15 +722,14 @@ export function openExportCenter(host: ExportCenterHost): void {
   f.subheading.textContent = host.subheading ?? '';
   f.subheading.hidden = !host.subheading;
 
-  // The type list — one row per type, in groups that carry their own
-  // labels (Images / File types / The pad itself): the grouping is
-  // semantics now, not a mystery hairline. The launcher rows wear a
-  // chevron; the selectable rows wear the radio dot.
+  // The type list — one RADIO row per type, in groups that carry their
+  // own labels (Images / This note / The pad itself): every row is
+  // selectable, every selection speaks inline (the options, the preview,
+  // the presses) — no handoffs, no chevrons.
   f.typeList.replaceChildren();
   const groupLabelFor = (key: string): string =>
     key === 'images' ? 'Images' : key === 'pad' ? 'The pad itself' : 'This note';
-  const groupKeyFor = (type: ExportCenterType): string =>
-    type.launch ? 'images' : (type.section ?? 'note');
+  const groupKeyFor = (type: ExportCenterType): string => type.section ?? 'note';
   let lastGroup: string | null = null;
   for (const type of host.types) {
     const group = groupKeyFor(type);
@@ -672,19 +742,11 @@ export function openExportCenter(host: ExportCenterHost): void {
     lastGroup = group;
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = type.launch
-      ? 'export-center-type export-center-type--launch'
-      : 'export-center-type export-center-type--select';
+    button.className = 'export-center-type export-center-type--select';
     button.dataset.typeId = type.id;
-    if (type.launch) {
-      // A handoff row: the chevron says the click opens another face.
-      button.setAttribute('aria-haspopup', 'dialog');
-    } else {
-      // A selectable row: radio semantics — the dot is CSS, the
-      // aria-checked is real.
-      button.setAttribute('role', 'radio');
-      button.setAttribute('aria-checked', 'false');
-    }
+    // Radio semantics — the dot is CSS, the aria-checked is real.
+    button.setAttribute('role', 'radio');
+    button.setAttribute('aria-checked', 'false');
     const label = document.createElement('span');
     label.className = 'export-center-type-label';
     label.textContent = type.label;
@@ -698,13 +760,6 @@ export function openExportCenter(host: ExportCenterHost): void {
     ext.className = 'export-center-type-ext';
     ext.textContent = `.${type.extension}`;
     button.append(label, ext);
-    if (type.launch) {
-      const chevron = document.createElement('span');
-      chevron.className = 'export-center-type-chevron';
-      chevron.textContent = '›';
-      chevron.setAttribute('aria-hidden', 'true');
-      button.append(chevron);
-    }
     f.typeList.append(button);
   }
 
@@ -722,15 +777,13 @@ export function openExportCenter(host: ExportCenterHost): void {
 
   f.exportButton.disabled = false;
 
-  // Initial selection: the host's pick (a launcher id falls through to
-  // the first selectable type — a handoff row never holds the stage).
-  // The stem starts from that type's default and the dirty flag resets —
-  // a fresh open names the file by the type's rule, the first edit makes
-  // it the user's.
+  // Initial selection: the host's pick, or the first row — every row is
+  // a choice now. The stem starts from that type's default and the dirty
+  // flag resets — a fresh open names the file by the type's rule, the
+  // first edit makes it the user's.
   stemDirty = false;
-  const selectable = host.types.filter((type) => !type.launch);
   const initial =
-    selectable.find((type) => type.id === host.initialTypeId) ?? selectable[0] ?? null;
+    host.types.find((type) => type.id === host.initialTypeId) ?? host.types[0] ?? null;
   f.stem.value = initial?.defaultStem ?? '';
   if (initial) {
     selectType(initial, null);

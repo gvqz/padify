@@ -1,12 +1,22 @@
 /*
- * export-center.css — the one export dialog's face.
+ * export-center.css — the ONE export menu's face.
  *
  * The shell rides the owned dialog recipe (src/ui/dialog.css — native
- * <dialog>, focus trap, Escape, top layer) widened into the two-pane body
- * the owner specced: the preview on the left, the settings on the right.
- * The option vocabulary (toggle rows, the scale segment) carries over from
- * the drawing export dialog this center supersedes, renamed to the center's
- * one namespace.
+ * <dialog>, focus trap, Escape, top layer) widened into the two-pane body:
+ * the preview on the left, the type list + options + name on the right.
+ *
+ * THE REDESIGN DISCIPLINE (the visual audit's verdict, answered):
+ *   - no divider wall between the panes — spacing is the separation
+ *   - the selection is UNMISTAKABLE: the radio dot fills, the row's
+ *     border and tint follow — never a hairline inference
+ *   - the preview column never mints dead space: the stage is content-
+ *     sized (a floor, a cap), the image contained and centered
+ *   - transparency is SEEN — the checkerboard stage behind a
+ *     background-off image preview
+ *   - one type scale with rhythm: heading / row label / hint, each at
+ *     its own weight and size, never a flat gray band
+ *   - the footer's import door is a quiet ghost link — tertiary, not a
+ *     peer of Cancel / Copy / Export
  */
 
 /* The flex column is scoped to the OPEN state — an author display rule
@@ -14,8 +24,8 @@
    rule and the closed dialog would keep rendering (the repo's own
    [hidden] lesson, applied to the native dialog's own open state). */
 dialog.export-center {
-  width: min(94vw, 780px);
-  max-height: min(88vh, 720px);
+  width: min(94vw, 860px);
+  max-height: min(92vh, 780px);
   padding: 0;
   overscroll-behavior: contain;
 }
@@ -25,53 +35,58 @@ dialog.export-center[open] {
   flex-direction: column;
 }
 
-/* The body scrolls, the head and the footer stay pinned — a short or
-   narrow viewport never buries the Export press below the fold. */
+/* The head is the title block — the note's name is the sentence, the
+   rest of the dialog is the choices. */
 .export-center-head {
   flex: none;
-  padding: 18px 24px 12px;
-  border-bottom: 1px solid var(--vz-border);
+  padding: 16px 24px 8px;
 }
 
 .export-center-heading {
   margin: 0;
   color: var(--vz-fg);
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 650;
   letter-spacing: -0.01em;
   line-height: 1.3;
 }
 
 .export-center-subheading {
-  margin: 2px 0 0;
+  margin: 3px 0 0;
   color: var(--vz-fg-muted);
   font-size: 12.5px;
   overflow-wrap: anywhere;
 }
 
+/* The body scrolls, the head and the footer stay pinned — a short or
+   narrow viewport never buries the Export press below the fold. The two
+   panes are separated by SPACE (the grid's gap), not a border wall. */
 .export-center-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 24px;
   overflow: auto;
   min-height: 0;
 }
 
 .export-center-preview {
-  padding: 16px 20px;
-  border-right: 1px solid var(--vz-border);
-  min-height: 340px;
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+  padding: 10px 0 10px 24px;
 }
 
 .export-center-settings {
-  padding: 16px 20px;
-  min-height: 340px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  padding: 14px 24px 10px 0;
 }
 
-/* The stage — whatever the chosen type previews as. */
+/* The stage — whatever the chosen type previews as. Content-sized: a
+   floor so an empty scene still reads as a stage, a cap so a tall note
+   never balloons the dialog past its own max-height. */
 .export-center-stage {
   flex: 1;
   display: flex;
@@ -82,18 +97,39 @@ dialog.export-center[open] {
   border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius);
   background: var(--vz-bg-subtle);
-  padding: 16px;
+  padding: 14px;
   overflow: hidden;
-  min-height: 240px;
+  min-height: 160px;
+}
+
+/* Transparency is SEEN, not guessed — the checkerboard sits behind an
+   image rendered with its background off (the drawing's PNG with
+   Background unchecked). */
+.export-center-stage--transparent {
+  background-color: var(--vz-bg-elevated);
+  background-image: conic-gradient(
+    rgb(127 127 127 / 0.18) 0 25%,
+    transparent 0 50%,
+    rgb(127 127 127 / 0.18) 0 75%,
+    transparent 0
+  );
+  background-size: 16px 16px;
 }
 
 .export-center-stage-img {
   max-width: 100%;
-  max-height: 280px;
+  max-height: 300px;
   object-fit: contain;
   border-radius: calc(var(--vz-radius) - 1px);
   background: #ffffff;
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+
+/* A transparent preview must NOT paint a white plate — the checkerboard
+   behind it is the honest backdrop. */
+.export-center-stage--transparent .export-center-stage-img {
+  background: transparent;
+  box-shadow: none;
 }
 
 .export-center-stage-text {
@@ -111,7 +147,7 @@ dialog.export-center[open] {
   border: 1px solid var(--vz-border);
   border-radius: calc(var(--vz-radius) - 1px);
   padding: 12px 14px;
-  max-height: 280px;
+  max-height: 300px;
 }
 
 /* The rendered-HTML flavor (the HTML/DOCX body preview). */
@@ -123,7 +159,7 @@ dialog.export-center[open] {
   border: 1px solid var(--vz-border);
   border-radius: calc(var(--vz-radius) - 1px);
   padding: 12px 14px;
-  max-height: 280px;
+  max-height: 300px;
   font-size: 13px;
   line-height: 1.6;
   color: var(--vz-fg);
@@ -178,8 +214,10 @@ dialog.export-center[open] {
 }
 
 .export-center-stage-note {
+  flex: none;
+  margin-top: 10px;
   color: var(--vz-fg-muted);
-  font-size: 12.5px;
+  font-size: 12px;
   text-align: center;
   line-height: 1.5;
 }
@@ -194,8 +232,9 @@ dialog.export-center[open] {
   text-transform: uppercase;
 }
 
-/* The type list's group captions — Images / File types / The pad
-   itself: the grouping is semantics, not a mystery hairline. */
+/* The type list's group captions — Images / This note / The pad itself:
+   the grouping is semantics, spoken at the caption weight and then left
+   alone. */
 .export-center-group-label {
   margin: 0 0 6px;
   color: var(--vz-fg-muted);
@@ -205,35 +244,32 @@ dialog.export-center[open] {
   text-transform: uppercase;
 }
 
-.export-center-group-label + .export-center-type {
-  margin-top: 0;
-}
-
 .export-center-types .export-center-group-label:not(:first-child) {
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
-/* The file-type list — radio-flavored rows: the selectable rows wear
-   the leading dot, the selected row's dot fills; the launcher rows
-   (the doors to another face) carry no dot — a door is never checked. */
+/* The file-type list — radio rows. */
 .export-center-types {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
+/* The row: the label carries the weight, the hint sits under it a size
+   down and two shades quieter — hierarchy inside the card, and short
+   enough copy that every hint stays ONE line (two-line rows priced the
+   option knobs below the fold). */
 .export-center-type {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 8px 11px;
   border: 1px solid var(--vz-border);
   border-radius: var(--vz-radius);
   background: var(--vz-bg-elevated);
   color: var(--vz-fg);
   font-family: inherit;
-  font-size: 13px;
   text-align: left;
   cursor: pointer;
   transition:
@@ -250,15 +286,13 @@ dialog.export-center[open] {
   outline-offset: 1px;
 }
 
-/* The radio dot — a leading circle on every selectable row, filled
-   when checked: selection is SEEN at a glance, not inferred from a
-   border weight. */
+/* The radio dot — a leading circle on every row, filled when checked:
+   selection is SEEN at a glance, not inferred from a border weight. */
 .export-center-type--select::before {
   content: '';
   flex: none;
   width: 14px;
   height: 14px;
-  margin-top: 2px;
   border: 1.5px solid var(--vz-border-strong);
   border-radius: 50%;
   background: transparent;
@@ -267,6 +301,9 @@ dialog.export-center[open] {
     background-color var(--vz-dur) ease;
 }
 
+/* The selected row: the dot fills with the accent, the border takes the
+   accent, and a whisper of the accent tints the card — unmistakable at
+   any zoom, day or night. */
 .export-center-type--select[aria-checked='true'] {
   border-color: var(--vz-primary);
   background: var(--vz-bg);
@@ -279,62 +316,47 @@ dialog.export-center[open] {
   box-shadow: inset 0 0 0 2.5px var(--vz-bg-elevated);
 }
 
-/* The launcher rows carry no dot — their affordance is the chevron. */
-.export-center-type--launch::before {
-  content: none;
-}
-
-.export-center-type--launch {
-  align-items: center;
-}
-
 .export-center-type-label {
   flex: 1;
   min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
 }
 
 .export-center-type-hint {
   display: block;
+  margin-top: 1px;
   color: var(--vz-fg-muted);
   font-size: 11.5px;
-  margin-top: 2px;
-  line-height: 1.4;
+  font-weight: 400;
+  line-height: 1.35;
 }
 
+/* The extension chip — the type's identity tag, quiet by design: the
+   name row's suffix chip owns the LIVE extension story. */
 .export-center-type-ext {
   flex: none;
-  margin-top: 1px;
-  padding: 2px 7px;
-  border: 1px solid var(--vz-border-strong);
+  margin-top: 2px;
+  padding: 1px 6px;
+  border: 1px solid var(--vz-border);
   border-radius: calc(var(--vz-radius) - 2px);
-  background: var(--vz-bg-subtle);
+  background: transparent;
   color: var(--vz-fg-muted);
   font-family: var(--vz-font-mono, ui-monospace, monospace);
   font-size: 10.5px;
   user-select: none;
 }
 
-/* The handoff rows (the drawing's images): the chevron speaks — one
-   click hands the export to its own dialog. */
-.export-center-type-chevron {
-  flex: none;
-  margin-top: 1px;
-  color: var(--vz-fg-muted);
-  font-size: 15px;
-  line-height: 1;
-}
-
-.export-center-type--launch:hover .export-center-type-chevron {
-  color: var(--vz-primary);
-}
-
 /* The suffix chip rides the input, attached — never a separate
-   button. */
+   button. It speaks the LIVE extension (embed doubles it), which is why
+   it stays even beside the row badges: the row says what the type IS,
+   this says what the file WILL BE. */
 .export-center-name-row {
   display: flex;
   align-items: stretch;
   gap: 0;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .export-center-name-row .vz-dialog-input {
@@ -358,8 +380,8 @@ dialog.export-center[open] {
 
 /* The options section — the drawing image knobs, shown per type. */
 .export-center-options {
-  margin-top: 12px;
-  padding-top: 12px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid var(--vz-border);
 }
 
@@ -367,26 +389,32 @@ dialog.export-center[open] {
   display: none;
 }
 
+/* The toggle row is ONE line — the label and its hint side by side; a
+   two-line row (label above, hint under) priced the section below the
+   fold at the drawing's five-row type list. */
 .export-center-option {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 2px;
+  gap: 8px;
+  padding: 4px 2px;
   cursor: pointer;
   color: var(--vz-fg);
-  font-size: 13.5px;
+  font-size: 13px;
+  line-height: 1.3;
 }
 
 .export-center-option-text {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
 }
 
 .export-center-option-hint {
   color: var(--vz-fg-muted);
-  font-size: 11.5px;
-  line-height: 1.4;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 /* Author display rule beats the UA [hidden] — spell the hidden state. */
@@ -451,39 +479,33 @@ dialog.export-center[open] {
   font-size: 12.5px;
 }
 
-/* The footer — the open door on the quiet left, the actions on the right. */
+/* The footer — the import door is a GHOST button on the quiet left (the
+   round-trip door belongs here, but never as a peer of the actions),
+   the actions on the right. */
 .export-center-foot {
   flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 24px 18px;
-  border-top: 1px solid var(--vz-border);
+  padding: 10px 24px 14px;
 }
 
-/* The import door — an outline button with a folder glyph: it READS as
-   the action it is (the audit called the quiet text leftover debug
-   text), quiet enough to lose to the actions but never to be missed. */
 .export-center-door {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid var(--vz-border-strong);
-  border-radius: var(--vz-radius);
-  background: var(--vz-bg-elevated);
+  padding: 4px 2px;
+  border: 0;
+  background: transparent;
   color: var(--vz-fg-muted);
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 12px;
   cursor: pointer;
-  transition:
-    border-color var(--vz-dur) ease,
-    color var(--vz-dur) ease;
+  transition: color var(--vz-dur) ease;
 }
 
 .export-center-door:hover {
-  border-color: var(--vz-primary);
   color: var(--vz-primary);
 }
 
@@ -504,6 +526,13 @@ dialog.export-center[open] {
   margin-left: auto;
 }
 
+/* The clipboard press — the outline button vocabulary (vz-dialog-cancel)
+ * is exactly right: a peer action, never the primary one. */
+.export-center-copy[hidden] {
+  display: none;
+}
+
+.export-center-copy:disabled,
 .export-center-export[disabled] {
   opacity: 0.6;
   cursor: default;
@@ -518,14 +547,11 @@ dialog.export-center[open] {
   }
 
   .export-center-preview {
-    border-right: 0;
-    border-bottom: 1px solid var(--vz-border);
-    min-height: 0;
-    padding: 12px 20px;
+    padding: 12px 20px 4px;
   }
 
   .export-center-stage {
-    min-height: 150px;
+    min-height: 140px;
   }
 
   .export-center-stage-img {
@@ -533,7 +559,13 @@ dialog.export-center[open] {
   }
 
   .export-center-settings {
-    min-height: 0;
-    padding: 14px 20px;
+    padding: 12px 20px;
   }
+}
+
+/* The option label — its own weight, so the hint beside it reads as
+   the explanation it is, never a peer of the word it explains. */
+.export-center-option-label {
+  flex: none;
+  font-weight: 600;
 }

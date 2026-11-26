@@ -94,12 +94,6 @@ import { showToast } from '../../ui/toast';
 // The tasks surface registers itself for the 'json' kind at import time
 // — importing it here is what makes the coexistence test honest.
 import '../../features/tasks/note/surface';
-// The export dialog is pure UI on the app bundle — the seam tests capture
-// the invoker it would receive, not the face itself (e2e owns the face).
-vi.mock('./export-dialog', () => ({
-  openDrawingExportDialog: vi.fn(),
-}));
-import { openDrawingExportDialog } from './export-dialog';
 import {
   DRAWING_ANNOUNCE_DEBOUNCE_MS,
   DRAWING_ZEN_MODE_CLASS,
@@ -107,7 +101,7 @@ import {
   copyActiveDrawingImage,
   drawingCanvasIsLive,
   exportActiveDrawingImage,
-  openDrawingExportUI,
+  renderActiveDrawingImagePreview,
 } from './surface';
 import { DRAWING_SCENE_SOFT_BUDGET_BYTES, emptyDrawingScene, serializeDrawingScene } from './scene';
 import { noteSurfaceFor, opaqueNoteSurface } from '../surface';
@@ -776,8 +770,8 @@ describe('the clipboard seam — the native parity the R1 face gained', () => {
   });
 });
 
-describe('the export dialog door — the handoff and the chord scope', () => {
-  it('opens the dialog on a live, non-empty drawing: the preset, the name, the facts, the preview seam', async () => {
+describe("the export center's image preview seam — the one-menu pass", () => {
+  it("renders the thumbnail honoring Background and Dark, with the scene's facts", async () => {
     const host = connectedHost();
     surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
     await canvasReady();
@@ -787,58 +781,26 @@ describe('the export dialog door — the handoff and the chord scope', () => {
       appState: {},
     });
 
-    await openDrawingExportUI('svg');
-    expect(openDrawingExportDialog).toHaveBeenCalledTimes(1);
-    const setup = vi.mocked(openDrawingExportDialog).mock.calls[0][0] as unknown as {
-      invoker: (
-        choices: Record<string, unknown>,
-        destination: string,
-        fileName?: string,
-      ) => Promise<boolean>;
-      presetFormat: 'png' | 'svg';
-      defaultStem: string;
-      meta: { elements: number; width?: number; height?: number };
-      preview: (choices: Record<string, unknown>) => Promise<string | null>;
-    };
-    expect(setup.presetFormat).toBe('svg');
-    expect(setup.defaultStem).toBe('Sketch');
-    // The facts line's numbers, captured at the open (the modal freezes
-    // the canvas): one visible element, its natural bounds.
-    expect(setup.meta).toEqual({ elements: 1, width: 100, height: 50 });
-
-    // The invoker speaks both destinations AND carries the dialog's own
-    // file name — a Save press exports under it verbatim.
-    await setup.invoker(
-      {
-        format: 'svg',
-        background: false,
-        dark: true,
-        embed: true,
-        scale: 3,
-      },
-      'file',
-      'blueprint.excalidraw.svg',
-    );
-    expect(canvasMock.renderDrawingImage).toHaveBeenCalledWith(
-      'svg',
-      expect.anything(),
-      {},
-      { background: false, dark: true, embed: true, scale: 3 },
-    );
-
-    // The preview seam renders the PNG thumbnail honoring Background and
-    // Dark — the two options that change the pixels.
     const originalCreateObjectURL = URL.createObjectURL;
     const originalRevokeObjectURL = URL.revokeObjectURL;
     URL.createObjectURL = vi.fn((): string => 'blob:preview');
     URL.revokeObjectURL = vi.fn();
     try {
-      const url = await setup.preview({ background: false, dark: true });
-      expect(url).toBe('blob:preview');
+      const answer = await renderActiveDrawingImagePreview({
+        background: false,
+        dark: true,
+        scale: 3,
+      });
+      expect(answer.image).toBe('blob:preview');
+      expect(answer.transparent).toBe(true);
+      // The facts line: one element, its natural bounds, the 3x answer.
+      expect(answer.note).toBe('1 element — 100 × 50 px — 300 × 150 px at 3×');
     } finally {
       URL.createObjectURL = originalCreateObjectURL;
       URL.revokeObjectURL = originalRevokeObjectURL;
     }
+    // The thumbnail honors Background and Dark — the two options that
+    // change the pixels (scale rides the facts line, not the render).
     expect(canvasMock.renderDrawingImage).toHaveBeenCalledWith(
       'png',
       expect.anything(),
@@ -847,14 +809,32 @@ describe('the export dialog door — the handoff and the chord scope', () => {
     );
   });
 
-  it('gates the door with the same honest words as the exporter', async () => {
+  it('gates the preview with the same honest words as the exporter', async () => {
     const host = connectedHost();
     surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
     await canvasReady();
 
-    await openDrawingExportUI('png');
-    expect(openDrawingExportDialog).not.toHaveBeenCalled();
-    expect(showToast).toHaveBeenCalledWith('Nothing to export yet — draw something first.');
+    const answer = await renderActiveDrawingImagePreview({});
+    expect(answer.image).toBeNull();
+    expect(answer.note).toBe('Nothing to export yet — draw something first.');
+    expect(answer.transparent).toBe(false);
+  });
+
+  it('a render failure answers the facts, not a thrown one', async () => {
+    const host = connectedHost();
+    surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
+    await canvasReady();
+    const mounted = lastMount();
+    mounted.handle.getScene = () => ({
+      elements: [{ id: 'a', type: 'rectangle', x: 10, y: 20, width: 100, height: 50 }],
+      appState: {},
+    });
+    vi.mocked(canvasMock.renderDrawingImage).mockRejectedValueOnce(new Error('boom'));
+
+    const answer = await renderActiveDrawingImagePreview({ scale: 2 });
+    expect(answer.image).toBeNull();
+    expect(answer.note).toBe('1 element — 100 × 50 px — 200 × 100 px at 2×');
+    expect(answer.transparent).toBe(false);
   });
 
   it('answers the chord-scope question: only a mounted, connected canvas is live', async () => {
