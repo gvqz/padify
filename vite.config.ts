@@ -19,10 +19,7 @@ const VENDOR_ELEMENT_ENTRY = joinSafe(VENDOR_ROOT, 'element/src/index.ts');
 const VENDOR_MATH_ENTRY = joinSafe(VENDOR_ROOT, 'math/src/index.ts');
 const VENDOR_UTILS_ENTRY = joinSafe(VENDOR_ROOT, 'utils/src/index.ts');
 const VENDOR_LASER_ENTRY = joinSafe(VENDOR_ROOT, 'laser-pointer/src/index.ts');
-const VENDOR_FRACTIONAL_ENTRY = joinSafe(
-  VENDOR_ROOT,
-  'fractional-indexing/src/index.ts',
-);
+const VENDOR_FRACTIONAL_ENTRY = joinSafe(VENDOR_ROOT, 'fractional-indexing/src/index.ts');
 /** Prefix replacement bases — absolute, with the trailing slash kept so the
  * subpath remainder appends cleanly. */
 const VENDOR_MAIN_BASE = joinSafe(VENDOR_ROOT, 'excalidraw') + '/';
@@ -122,7 +119,7 @@ export function emitExcalidrawSubsetWorker(): Plugin {
     ' */',
     'self.onmessage = (event) => {',
     '  const { command, arrayBuffer } = event.data;',
-    "  if (command === 0 /* Commands.Subset, per the vendored stub */) {",
+    '  if (command === 0 /* Commands.Subset, per the vendored stub */) {',
     '    self.postMessage(arrayBuffer, { transfer: [arrayBuffer] });',
     '  }',
     '};',

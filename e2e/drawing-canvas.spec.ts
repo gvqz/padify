@@ -452,45 +452,48 @@ test.describe('the drawing canvas', () => {
     test.use({ serviceWorkers: 'block' });
 
     test('a failed chunk lands on the error card, whose Retry reloads', async ({ page }) => {
-    // R3's open-glitch: a deploy renames the chunk a running tab holds;
-    // the mount path retries once, then answers with the honest card —
-    // whose Retry action refreshes the shell and reloads (the
-    // deterministic version of the user's manual hard refresh). The
-    // block targets the canvas MODULE itself (the exact module the
-    // surface's import('./canvas') requests). The route must catch BOTH
-    // spellings: the dev server serves the module from src
-    // (…/editor/drawing/canvas.ts), the production artifact serves it as
-    // the hashed chunk the bundle emits (assets/canvas-<hash>.js) — the
-    // prod e2e lane (PADIFY_E2E_TARGET=prod) rides the second spelling.
-    await page.route(/(editor\/drawing\/canvas\.ts|\/assets\/canvas-[A-Za-z0-9_-]+\.js)/, (route) =>
-      route.fulfill({ status: 404, body: 'gone' }),
-    );
+      // R3's open-glitch: a deploy renames the chunk a running tab holds;
+      // the mount path retries once, then answers with the honest card —
+      // whose Retry action refreshes the shell and reloads (the
+      // deterministic version of the user's manual hard refresh). The
+      // block targets the canvas MODULE itself (the exact module the
+      // surface's import('./canvas') requests). The route must catch BOTH
+      // spellings: the dev server serves the module from src
+      // (…/editor/drawing/canvas.ts), the production artifact serves it as
+      // the hashed chunk the bundle emits (assets/canvas-<hash>.js) — the
+      // prod e2e lane (PADIFY_E2E_TARGET=prod) rides the second spelling.
+      await page.route(
+        /(editor\/drawing\/canvas\.ts|\/assets\/canvas-[A-Za-z0-9_-]+\.js)/,
+        (route) => route.fulfill({ status: 404, body: 'gone' }),
+      );
 
-    await page.goto('/');
-    await page.locator('#addTabTypeMenu').click();
-    await expect(page.locator('#addTabTypeMenuPopover')).toBeVisible();
-    await page
-      .locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Drawing' })
-      .click();
+      await page.goto('/');
+      await page.locator('#addTabTypeMenu').click();
+      await expect(page.locator('#addTabTypeMenuPopover')).toBeVisible();
+      await page
+        .locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Drawing' })
+        .click();
 
-    // The card, after the one-shot retry has come up empty.
-    const retry = page.locator('#note .unsupported-note-action', { hasText: 'Retry' });
-    await expect(retry).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('#note .unsupported-note-title')).toContainText(
-      'The canvas could not load',
-    );
+      // The card, after the one-shot retry has come up empty.
+      const retry = page.locator('#note .unsupported-note-action', { hasText: 'Retry' });
+      await expect(retry).toBeVisible({ timeout: 15_000 });
+      await expect(page.locator('#note .unsupported-note-title')).toContainText(
+        'The canvas could not load',
+      );
 
-    // Retry reloads the page (the SW shell refresh is a no-op offline in
-    // this dev context — the reload itself is the observable contract).
-    const reloadPromise = page.waitForEvent('load', { timeout: 15_000 });
-    await retry.click();
-    await reloadPromise;
-    // The route still blocks the chunk (the route survives reloads), so
-    // the reloaded page shows the same honest card — proof the retry
-    // acted, not that the failure healed.
-    await expect(page.locator('#note .unsupported-note-action', { hasText: 'Retry' })).toBeVisible({
-      timeout: 20_000,
-    });
+      // Retry reloads the page (the SW shell refresh is a no-op offline in
+      // this dev context — the reload itself is the observable contract).
+      const reloadPromise = page.waitForEvent('load', { timeout: 15_000 });
+      await retry.click();
+      await reloadPromise;
+      // The route still blocks the chunk (the route survives reloads), so
+      // the reloaded page shows the same honest card — proof the retry
+      // acted, not that the failure healed.
+      await expect(
+        page.locator('#note .unsupported-note-action', { hasText: 'Retry' }),
+      ).toBeVisible({
+        timeout: 20_000,
+      });
     });
   });
 

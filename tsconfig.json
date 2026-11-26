@@ -47,12 +47,8 @@
       "@excalidraw/utils/*": ["./vendor/excalidraw/utils/src/*"],
       "@excalidraw/laser-pointer": ["./vendor/excalidraw/laser-pointer/src/index.ts"],
       "@excalidraw/laser-pointer/*": ["./vendor/excalidraw/laser-pointer/src/*"],
-      "@excalidraw/fractional-indexing": [
-        "./vendor/excalidraw/fractional-indexing/src/index.ts"
-      ],
-      "@excalidraw/fractional-indexing/*": [
-        "./vendor/excalidraw/fractional-indexing/src/*"
-      ]
+      "@excalidraw/fractional-indexing": ["./vendor/excalidraw/fractional-indexing/src/index.ts"],
+      "@excalidraw/fractional-indexing/*": ["./vendor/excalidraw/fractional-indexing/src/*"]
     }
   },
   "include": [

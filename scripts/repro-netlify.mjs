@@ -1,10 +1,14 @@
 /** Evidence run: the live netlify hamburger crash — card, console errors, shot. */
 import { chromium } from '@playwright/test';
 const TARGET = process.env.REPRO_URL ?? 'https://padify.netlify.app/';
-const browser = await chromium.launch({ executablePath: '/home/z/.cache/ms-playwright/chromium-1200/chrome-linux64/chrome' });
+const browser = await chromium.launch({
+  executablePath: '/home/z/.cache/ms-playwright/chromium-1200/chrome-linux64/chrome',
+});
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 const consoleErrs = [];
-page.on('console', (m) => { if (m.type() === 'error') consoleErrs.push(m.text().slice(0, 500)); });
+page.on('console', (m) => {
+  if (m.type() === 'error') consoleErrs.push(m.text().slice(0, 500));
+});
 await page.goto(TARGET, { waitUntil: 'load' });
 await page.locator('#addTabTypeMenu').click();
 await page.locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Drawing' }).click();
@@ -16,7 +20,11 @@ const card = await page.locator('.unsupported-note-title').count();
 const menu = await page.locator('.dropdown-menu.main-menu').count();
 console.log(`[${new URL(TARGET).host}] crash card: ${card} | menu open: ${menu}`);
 if (card) {
-  const txt = await page.locator('.unsupported-note-card, .unsupported-note-title').first().textContent().catch(() => null);
+  const txt = await page
+    .locator('.unsupported-note-card, .unsupported-note-title')
+    .first()
+    .textContent()
+    .catch(() => null);
   console.log('card title text:', txt);
 }
 console.log('console errors (first 3):');
