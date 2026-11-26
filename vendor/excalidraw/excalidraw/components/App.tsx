@@ -5224,20 +5224,9 @@ class App extends React.Component<AppProps, AppState> {
         }
       }
 
-      if (
-        event[KEYS.CTRL_OR_CMD] &&
-        event.key === KEYS.P &&
-        !event.shiftKey &&
-        !event.altKey
-      ) {
-        this.setToast({
-          message: t("commandPalette.shortcutHint", {
-            shortcut: getShortcutFromShortcutName("commandPalette"),
-          }),
-        });
-        event.preventDefault();
-        return;
-      }
+      // PADIFY FORK — the CtrlOrCmd+P "open the command palette" hint
+      // toast is deleted: the vendor's palette chord entries are gone from
+      // the fork's shortcuts map and the app's own palette owns its key.
 
       if (event[KEYS.CTRL_OR_CMD] && event.key.toLowerCase() === KEYS.V) {
         this.clipboard.onPasteShortcut(event);
@@ -5263,12 +5252,9 @@ class App extends React.Component<AppProps, AppState> {
         return;
       }
 
-      if (event.key === KEYS.QUESTION_MARK) {
-        this.setState({
-          openDialog: { name: "help" },
-        });
-        return;
-      } else if (
+      // PADIFY FORK — the "?" chord (the vendor's help dialog) is deleted;
+      // the app's own shortcuts sheet owns help.
+      if (
         event.key.toLowerCase() === KEYS.E &&
         event.shiftKey &&
         event[KEYS.CTRL_OR_CMD]

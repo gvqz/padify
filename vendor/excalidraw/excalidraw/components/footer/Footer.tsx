@@ -1,10 +1,8 @@
 import clsx from "clsx";
 
-import { actionShortcuts } from "../../actions";
 import { useTunnels } from "../../context/tunnels";
 import { ExitZenModeButton, UndoRedoActions, ZoomActions } from "../Actions";
 import { useApp } from "../App";
-import { HelpButton } from "../HelpButton";
 import { Minimap } from "../Minimap/Minimap";
 import { Section } from "../Section";
 import Stack from "../Stack";
@@ -87,11 +85,10 @@ const Footer = ({
         >
           <div style={{ position: "relative" }}>
             {renderWelcomeScreen && <WelcomeScreenHelpHintTunnel.Out />}
-            {defaultUIEnabled && (
-              <HelpButton
-                onClick={() => actionManager.executeAction(actionShortcuts)}
-              />
-            )}
+            {/* PADIFY FORK — the footer's "?" HelpButton is deleted: it
+                fired the vendor's help dialog (actionShortcuts — the whole
+                help surface is deleted in this fork; the app's own
+                shortcuts sheet is the one help door). */}
           </div>
         </div>
       )}

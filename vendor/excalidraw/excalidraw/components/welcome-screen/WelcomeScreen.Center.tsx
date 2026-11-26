@@ -1,11 +1,11 @@
-import { actionLoadScene, actionShortcuts } from "../../actions";
+import { actionLoadScene } from "../../actions";
 import { getShortcutFromShortcutName } from "../../actions/shortcuts";
 import { useTunnels } from "../../context/tunnels";
 import { useUIAppState } from "../../context/ui-appState";
 import { t, useI18n } from "../../i18n";
 import { useEditorInterface, useExcalidrawActionManager } from "../App";
 import { ExcalidrawLogo } from "../ExcalidrawLogo";
-import { HelpIcon, LoadIcon, usersIcon } from "../icons";
+import { LoadIcon, usersIcon } from "../icons";
 
 import type { JSX } from "react";
 
@@ -99,7 +99,6 @@ const Center = ({ children }: { children?: React.ReactNode }) => {
             <Heading>{t("welcomeScreen.defaults.center_heading")}</Heading>
             <Menu>
               <MenuItemLoadScene />
-              <MenuItemHelp />
             </Menu>
           </>
         )}
@@ -132,20 +131,9 @@ const Menu = ({ children }: { children?: React.ReactNode }) => {
 };
 Menu.displayName = "Menu";
 
-const MenuItemHelp = () => {
-  const actionManager = useExcalidrawActionManager();
-
-  return (
-    <WelcomeScreenMenuItem
-      onSelect={() => actionManager.executeAction(actionShortcuts)}
-      shortcut="?"
-      icon={HelpIcon}
-    >
-      {t("helpDialog.title")}
-    </WelcomeScreenMenuItem>
-  );
-};
-MenuItemHelp.displayName = "MenuItemHelp";
+// PADIFY FORK — the MenuItemHelp component is deleted (the dist-patch
+// port): its onSelect fired the vendor's help dialog, which this fork
+// deleted wholesale — the app's own shortcuts sheet is the help door.
 
 const MenuItemLoadScene = () => {
   const appState = useUIAppState();
@@ -189,7 +177,6 @@ Center.Heading = Heading;
 Center.Menu = Menu;
 Center.MenuItem = WelcomeScreenMenuItem;
 Center.MenuItemLink = WelcomeScreenMenuItemLink;
-Center.MenuItemHelp = MenuItemHelp;
 Center.MenuItemLoadScene = MenuItemLoadScene;
 Center.MenuItemLiveCollaborationTrigger = MenuItemLiveCollaborationTrigger;
 

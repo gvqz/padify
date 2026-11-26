@@ -321,17 +321,9 @@ export const HelpDialog = ({ onClose }: { onClose?: () => void }) => {
               label={t("search.title")}
               shortcuts={[getShortcutFromShortcutName("searchMenu")]}
             />
-            <Shortcut
-              label={t("commandPalette.title")}
-              shortcuts={
-                isFirefox
-                  ? [getShortcutFromShortcutName("commandPalette")]
-                  : [
-                      getShortcutFromShortcutName("commandPalette"),
-                      getShortcutFromShortcutName("commandPalette", 1),
-                    ]
-              }
-            />
+            {/* PADIFY FORK — the commandPalette shortcut row is deleted:
+                the shortcut entry itself is gone from the fork's
+                actions/shortcuts.ts (the app's palette owns its chord). */}
           </ShortcutIsland>
           <ShortcutIsland
             className="HelpDialog__island--editor"

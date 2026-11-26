@@ -55,7 +55,6 @@ import ElementLinkDialog from "./ElementLinkDialog";
 import { ErrorDialog } from "./ErrorDialog";
 import { EyeDropper, activeEyeDropperAtom } from "./EyeDropper";
 import { FixedSideContainer } from "./FixedSideContainer";
-import { HelpDialog } from "./HelpDialog";
 import { ImageExportDialog } from "./ImageExportDialog";
 import { Island } from "./Island";
 import { JSONExportDialog } from "./JSONExportDialog";
@@ -129,7 +128,10 @@ const DefaultMainMenu: React.FC<{
         <MainMenu.DefaultItems.SaveAsImage />
       )}
       <MainMenu.DefaultItems.SearchMenu />
-      <MainMenu.DefaultItems.Help />
+      {/* PADIFY FORK — the Help row is deleted from the fallback
+          composition: the app's canvas.ts composes its own menu (the
+          "Keyboard shortcuts" row opens the app's sheet) and the vendor's
+          Help DefaultItem no longer exists in this fork. */}
       <MainMenu.DefaultItems.ClearCanvas />
       <MainMenu.Separator />
       <MainMenu.Group title="Excalidraw links">
@@ -595,13 +597,6 @@ const LayerUI = ({
             }}
           />
         )}
-      {appState.openDialog?.name === "help" && (
-        <HelpDialog
-          onClose={() => {
-            setAppState({ openDialog: null });
-          }}
-        />
-      )}
       <ActiveConfirmDialog />
       {defaultUIEnabled && appState.openDialog?.name === "elementLinkSelector" && (
         <ElementLinkDialog

@@ -1,7 +1,6 @@
 import { useTunnels } from "../../context/tunnels";
 import { t } from "../../i18n";
 import {
-  WelcomeScreenHelpArrow,
   WelcomeScreenMenuArrow,
   WelcomeScreenTopToolbarArrow,
 } from "../icons";
@@ -36,17 +35,8 @@ const ToolbarHint = ({ children }: { children?: React.ReactNode }) => {
 };
 ToolbarHint.displayName = "ToolbarHint";
 
-const HelpHint = ({ children }: { children?: React.ReactNode }) => {
-  const { WelcomeScreenHelpHintTunnel } = useTunnels();
-  return (
-    <WelcomeScreenHelpHintTunnel.In>
-      <div className="excalifont welcome-screen-decor welcome-screen-decor-hint welcome-screen-decor-hint--help">
-        <div>{children || t("welcomeScreen.defaults.helpHint")}</div>
-        {WelcomeScreenHelpArrow}
-      </div>
-    </WelcomeScreenHelpHintTunnel.In>
-  );
-};
-HelpHint.displayName = "HelpHint";
+// PADIFY FORK — the HelpHint component is deleted (the dist-patch port):
+// it decorated the welcome screen with an arrow toward the footer's "?"
+// help button — deleted with the rest of the vendor's help surface.
 
-export { HelpHint, MenuHint, ToolbarHint };
+export { MenuHint, ToolbarHint };

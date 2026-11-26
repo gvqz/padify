@@ -8,7 +8,6 @@ import {
   actionClearCanvas,
   actionLoadScene,
   actionSaveToActiveFile,
-  actionShortcuts,
   actionToggleArrowBinding,
   actionToggleGridMode,
   actionToggleMidpointSnapping,
@@ -51,11 +50,9 @@ import {
   emptyIcon,
 } from "../icons";
 import {
-  boltIcon,
   DeviceDesktopIcon,
   ExportIcon,
   ExportImageIcon,
-  HelpIcon,
   LoadIcon,
   MoonIcon,
   save,
@@ -149,27 +146,10 @@ export const SaveAsImage = () => {
 };
 SaveAsImage.displayName = "SaveAsImage";
 
-export const CommandPalette = (opts?: { className?: string }) => {
-  const setAppState = useExcalidrawSetAppState();
-  const { t } = useI18n();
-
-  return (
-    <DropdownMenuItem
-      icon={boltIcon}
-      data-testid="command-palette-button"
-      onSelect={() => {
-        trackEvent("command_palette", "open", "menu");
-        setAppState({ openDialog: { name: "commandPalette" } });
-      }}
-      shortcut={getShortcutFromShortcutName("commandPalette")}
-      aria-label={t("commandPalette.title")}
-      className={opts?.className}
-    >
-      {t("commandPalette.title")}
-    </DropdownMenuItem>
-  );
-};
-CommandPalette.displayName = "CommandPalette";
+// PADIFY FORK — the CommandPalette and Help DefaultItems are deleted
+// here (the dist-patch port): the app owns its command palette and its
+// shortcuts sheet; the menu composition in the app's canvas.ts is the
+// one that names which rows ride. Upstream's versions are in git history.
 
 export const SearchMenu = (opts?: { className?: string }) => {
   const { t } = useI18n();
@@ -191,25 +171,6 @@ export const SearchMenu = (opts?: { className?: string }) => {
   );
 };
 SearchMenu.displayName = "SearchMenu";
-
-export const Help = () => {
-  const { t } = useI18n();
-
-  const actionManager = useExcalidrawActionManager();
-
-  return (
-    <DropdownMenuItem
-      data-testid="help-menu-item"
-      icon={HelpIcon}
-      onSelect={() => actionManager.executeAction(actionShortcuts)}
-      shortcut="?"
-      aria-label={t("helpDialog.title")}
-    >
-      {t("helpDialog.title")}
-    </DropdownMenuItem>
-  );
-};
-Help.displayName = "Help";
 
 export const ClearCanvas = () => {
   const { t } = useI18n();

@@ -46,14 +46,12 @@ export type ShortcutName =
       | "zoomToFitSelection"
       | "saveFileToDisk"
       | "saveToActiveFile"
-      | "toggleShortcuts"
       | "wrapSelectionInFrame"
       | "toggleWrap"
       | "autoResize"
     >
   | "saveScene"
   | "imageExport"
-  | "commandPalette"
   | "searchMenu"
   | "toolLock";
 
@@ -63,10 +61,6 @@ const shortcutMap: Record<ShortcutName, string[]> = {
   loadScene: [getShortcutKey("CtrlOrCmd+O")],
   clearCanvas: [getShortcutKey("CtrlOrCmd+Delete")],
   imageExport: [getShortcutKey("CtrlOrCmd+Shift+E")],
-  commandPalette: [
-    getShortcutKey("CtrlOrCmd+/"),
-    getShortcutKey("CtrlOrCmd+Shift+P"),
-  ],
   cut: [getShortcutKey("CtrlOrCmd+X")],
   copy: [getShortcutKey("CtrlOrCmd+C")],
   paste: [getShortcutKey("CtrlOrCmd+V")],
@@ -111,7 +105,6 @@ const shortcutMap: Record<ShortcutName, string[]> = {
   zoomToFitSelectionInViewport: [getShortcutKey("Shift+2")],
   saveFileToDisk: [getShortcutKey("CtrlOrCmd+S")],
   saveToActiveFile: [getShortcutKey("CtrlOrCmd+S")],
-  toggleShortcuts: [getShortcutKey("?")],
   searchMenu: [getShortcutKey("CtrlOrCmd+F")],
   wrapSelectionInFrame: [],
   toggleWrap: [getShortcutKey("W")],

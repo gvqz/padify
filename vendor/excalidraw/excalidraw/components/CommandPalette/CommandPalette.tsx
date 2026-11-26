@@ -72,7 +72,6 @@ import {
   useLibraryItemSvg,
 } from "../../hooks/useLibraryItemSvg";
 
-import * as defaultItems from "./defaultCommandPaletteItems";
 import "./CommandPalette.scss";
 
 import type { CommandPaletteItem } from "./types";
@@ -151,8 +150,10 @@ type CommandPaletteProps = {
   customCommandPaletteItems?: CommandPaletteItem[];
 };
 
-export const CommandPalette = Object.assign(
-  (props: CommandPaletteProps) => {
+// PADIFY FORK — the `defaultItems` static is gone (the dist-patch port):
+// padify composes no command palette and the app's own palette owns its
+// items; the export stays a plain component for hosts that mount one.
+export const CommandPalette = (props: CommandPaletteProps) => {
     const uiAppState = useUIAppState();
     const setAppState = useExcalidrawSetAppState();
 
@@ -190,12 +191,8 @@ export const CommandPalette = Object.assign(
       return null;
     }
 
-    return <CommandPaletteInner {...props} />;
-  },
-  {
-    defaultItems,
-  },
-);
+  return <CommandPaletteInner {...props} />;
+};
 
 function CommandPaletteInner({
   customCommandPaletteItems,
@@ -371,7 +368,6 @@ function CommandPaletteInner({
         actionManager.actions.minimap,
         actionManager.actions.objectsSnapMode,
         actionManager.actions.showHints,
-        actionManager.actions.toggleShortcuts,
         actionManager.actions.selectAll,
         actionManager.actions.toggleElementLock,
         actionManager.actions.unlockAllElements,

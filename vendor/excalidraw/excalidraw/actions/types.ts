@@ -101,7 +101,6 @@ export type ActionName =
   | "changeTextAlign"
   | "changeVerticalAlign"
   | "toggleFullScreen"
-  | "toggleShortcuts"
   | "group"
   | "ungroup"
   | "goToCollaborator"
