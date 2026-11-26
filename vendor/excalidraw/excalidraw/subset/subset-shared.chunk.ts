@@ -46,7 +46,10 @@ export const toBase64 = async (arrayBuffer: ArrayBuffer): Promise<string> => {
   let binary = "";
   const step = 0x8000;
   for (let i = 0; i < bytes.length; i += step) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+    binary += String.fromCharCode.apply(
+      null,
+      bytes.subarray(i, i + step) as unknown as number[],
+    );
   }
   return `data:font/woff2;base64,${btoa(binary)}`;
 };

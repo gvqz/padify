@@ -3,6 +3,36 @@ import { join as joinSafe } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 
+/** The repo root — the base every vendored-tree path below builds on. */
+const REPO_ROOT = fileURLToPath(new URL('./', import.meta.url));
+
+/**
+ * The vendored Excalidraw tree — the fork's own source of the drawing
+ * canvas (see vendor/ and the baseline commit's message). The aliases in
+ * resolve.alias below land here; these constants spell each package's entry
+ * file so the bare import never depends on a directory's index probing.
+ */
+const VENDOR_ROOT = joinSafe(REPO_ROOT, 'vendor/excalidraw');
+const VENDOR_MAIN_ENTRY = joinSafe(VENDOR_ROOT, 'excalidraw/index.tsx');
+const VENDOR_COMMON_ENTRY = joinSafe(VENDOR_ROOT, 'common/src/index.ts');
+const VENDOR_ELEMENT_ENTRY = joinSafe(VENDOR_ROOT, 'element/src/index.ts');
+const VENDOR_MATH_ENTRY = joinSafe(VENDOR_ROOT, 'math/src/index.ts');
+const VENDOR_UTILS_ENTRY = joinSafe(VENDOR_ROOT, 'utils/src/index.ts');
+const VENDOR_LASER_ENTRY = joinSafe(VENDOR_ROOT, 'laser-pointer/src/index.ts');
+const VENDOR_FRACTIONAL_ENTRY = joinSafe(
+  VENDOR_ROOT,
+  'fractional-indexing/src/index.ts',
+);
+/** Prefix replacement bases — absolute, with the trailing slash kept so the
+ * subpath remainder appends cleanly. */
+const VENDOR_MAIN_BASE = joinSafe(VENDOR_ROOT, 'excalidraw') + '/';
+const VENDOR_COMMON_BASE = joinSafe(VENDOR_ROOT, 'common/src') + '/';
+const VENDOR_ELEMENT_BASE = joinSafe(VENDOR_ROOT, 'element/src') + '/';
+const VENDOR_MATH_BASE = joinSafe(VENDOR_ROOT, 'math/src') + '/';
+const VENDOR_UTILS_BASE = joinSafe(VENDOR_ROOT, 'utils/src') + '/';
+const VENDOR_LASER_BASE = joinSafe(VENDOR_ROOT, 'laser-pointer/src') + '/';
+const VENDOR_FRACTIONAL_BASE = joinSafe(VENDOR_ROOT, 'fractional-indexing/src') + '/';
+
 /**
  * Strips the shipped eval sink — the dependency code path that constructs
  * functions from strings:
@@ -46,89 +76,30 @@ export function stripDependencyEvalSinks(): Plugin {
 }
 
 /**
- * Neuters Excalidraw's font-subsetting chunks out of the shipped bundle —
- * and degrades the vendor's subset pipeline GRACEFULLY.
+ * Emits the identity font-subset worker the vendored stub points at.
  *
- * @excalidraw/excalidraw embeds a HarfBuzz-wasm font subsetter: the
- * vendor's `subset-shared.chunk.js` re-exports `chunk-EIO257PC.js`, whose
- * Emscripten glue constructs functions from strings (`new Function(...)`
- * — twice) — the exact CSP-incompatible eval sink forbidEvalSinks() exists
- * to keep out of dist. The subsetter only shrinks the font payload a
- * canvas text render loads to the glyphs actually used.
+ * The dist era intercepted the vendor's COMPILED chunks here and swapped
+ * them for stubs at build time — an interception nobody could review. The
+ * source-vendor era moved that stub INTO the vendored tree, where it is an
+ * ordinary reviewed edit: subset/subset-shared.chunk.ts answers with the
+ * identity pass-through (the wasm subsetter's Emscripten glue was the exact
+ * CSP-incompatible eval sink forbidEvalSinks() keeps out of dist), and
+ * subset/subset-worker.chunk.ts exports a WorkerUrl pointing at the file
+ * this plugin owns — the identity worker below.
  *
- * WHY THE STUB ANSWERS, NOT THROWS: the vendor's font manager fetches a
- * family's woff2 from the URL list (first match wins — the same-origin
- * copy, see copyExcalidrawFonts) and then subsets it. A throwing stub
- * turns that SUCCESSFUL fetch into a failure, and the manager walks its
- * URL list to the vendor's esm.sh CDN fallback — which Padify's CSP
- * (font-src 'self' data:) blocks, leaving text on fallback metrics (the
- * upgrade audit's loudest console fire). So the stub exports the chunk's
- * own surface (Commands, subsetToBase64, subsetToBinary, toBase64) with
- * subsetting as an identity pass-through: the FULL font loads from a
- * data URL — a few hundred KB on first use per family, offline-safe,
- * CSP-clean, no CDN contact.
- *
- * The redirect is scoped to the vendor's internal dynamic imports of
- * `./subset-shared.chunk.js` / `./subset-worker.chunk.js`; the wasm chunk
- * behind them becomes unreachable and Rollup drops it. If a future
- * version renames the chunks the stub stops matching — and the build
- * fails loudly on the eval sink, so the miss can never ship silently.
+ * What still belongs to the BUILD (not the vendor tree): shipping the
+ * worker script itself. The vendored stub module cannot be the worker
+ * script — it evaluates in the main graph, and a Worker script must be a
+ * plain same-origin file speaking the vendor's postMessage protocol
+ * ({command, arrayBuffer, codePoints} in, the buffer transferred back).
+ * So: prod emits assets/padify-subset-worker.js (the stub's URL math —
+ * strip the last segment of its own chunk URL — lands on this sibling),
+ * and dev's middleware answers any *padify-subset-worker.js request. The
+ * buffer returns untouched: the font loads in full, a few hundred KB on
+ * first use per family, offline-safe, CSP-clean, no CDN, no wasm, no eval.
  */
-export function stubExcalidrawFontSubsetting(): Plugin {
-  const STUB_ID = '\0padify-excalidraw-subset-stub';
-  const STUB_CODE = [
-    '// Padify stub: Excalidraw font subsetting is not shipped (eval-free',
-    "// builds). The chunk's own surface answers with an identity",
-    '// pass-through — the full font loads un-subsetted from the',
-    '// same-origin copy; no CDN, no wasm, no eval. The return shapes',
-    "// mirror the vendor's own (toBase64 answers a data: URL, all three",
-    "// async) so the font manager's injected @font-face rules stay valid.",
-    'const PASS = (buffer) => buffer;',
-    'export const Commands = { Subset: 0 };',
-    'export const toBase64 = async (buffer) => {',
-    '  const bytes = new Uint8Array(buffer);',
-    '  let binary = "";',
-    '  const step = 0x8000;',
-    '  for (let i = 0; i < bytes.length; i += step) {',
-    '    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + step));',
-    '  }',
-    '  return `data:font/woff2;base64,${btoa(binary)}`;',
-    '};',
-    'export const subsetToBase64 = async (buffer) => toBase64(PASS(buffer));',
-    'export const subsetToBinary = async (buffer) => PASS(buffer);',
-  ].join('\n');
-
-  /**
-   * The worker chunk's stub — the OTHER half of the vendor's subsetter
-   * surface. The vendor's font manager imports this chunk FIRST and
-   * destructures { WorkerUrl }: undefined here made WorkerPool.create
-   * throw WorkerUrlNotDefinedError on every export-dialog open, and the
-   * vendor's catch logged the fallback to console.error (audited
-   * 2026-11-24). The stub exports a WorkerUrl pointing at the emitted
-   * worker file (assets/padify-subset-worker.js — see WORKER_FILE below),
-   * so the pool constructs a real same-origin Worker (CSP worker-src
-   * 'self') whose onmessage answers the identity pass-through — the same
-   * contract the shared chunk's stub speaks, one context over. The URL is
-   * derived from import.meta.url: in dev the stub module lives at the
-   * virtual /@id/__x00__… address (the configureServer middleware answers
-   * any *padify-subset-worker.js request), in prod the stub is inlined
-   * into the vendor's chunk under assets/, so stripping the last segment
-   * lands on the emitted sibling. No `new URL(x, import.meta.url)` here —
-   * Vite tries to statically rewrite that shape and logs a warning it
-   * cannot resolve for a virtual module.
-   */
-  const WORKER_STUB_CODE = [
-    '// Padify stub (worker chunk): the vendor destructures { WorkerUrl }',
-    '// from this module to build its subset Worker. The identity worker',
-    '// lives next to this module (see padify-subset-worker.js emission) —',
-    '// same-origin, CSP-clean, no wasm, no eval.',
-    'export const WorkerUrl = import.meta.url.replace(',
-    '  /[^/]*$/,',
-    '  "padify-subset-worker.js",',
-    ');',
-  ].join('\n');
-
-  /** The worker file's leaf name — the URL stub + both servers agree on it. */
+export function emitExcalidrawSubsetWorker(): Plugin {
+  /** The worker file's leaf name — the stub's URL math + both servers agree on it. */
   const WORKER_FILE = 'padify-subset-worker.js';
   /** The emitted asset path under dist (Rollup writes fileName verbatim). */
   const WORKER_EMIT_PATH = `assets/${WORKER_FILE}`;
@@ -137,8 +108,8 @@ export function stubExcalidrawFontSubsetting(): Plugin {
    * The worker itself: the vendor's protocol (post {command, arrayBuffer,
    * codePoints}, transfer the buffer in; answer postMessage(buffer),
    * transfer it back) with the identity subsetter — the buffer returns
-   * untouched, and the font loads in full. Command 0 is the stub's
-   * Commands.Subset (the shared chunk's stub owns the constant).
+   * untouched, and the font loads in full. Command 0 is the vendored stub's
+   * Commands.Subset (subset-shared.chunk.ts owns the constant).
    */
   const WORKER_SOURCE = [
     '/* Padify font-subsetting worker — identity pass-through.',
@@ -147,102 +118,29 @@ export function stubExcalidrawFontSubsetting(): Plugin {
     ' * APIs the CSP forbids); this stand-in speaks the same postMessage',
     ' * protocol and returns the buffer untouched — the font loads in',
     ' * full, same-origin, offline-safe. Regenerated by vite.config.ts',
-    ' * (stubExcalidrawFontSubsetting); do not edit by hand.',
+    ' * (emitExcalidrawSubsetWorker); do not edit by hand.',
     ' */',
     'self.onmessage = (event) => {',
     '  const { command, arrayBuffer } = event.data;',
-    "  if (command === 0 /* Commands.Subset, per the shared chunk's stub */) {",
+    "  if (command === 0 /* Commands.Subset, per the vendored stub */) {",
     '    self.postMessage(arrayBuffer, { transfer: [arrayBuffer] });',
     '  }',
     '};',
     '',
   ].join('\n');
 
-  /** The vendor's subsetter chunks, however the resolver spelled them. */
-  const isSubsetChunk = (id: string): boolean =>
-    id.includes('@excalidraw/excalidraw/dist/') &&
-    /subset-(shared|worker)\.chunk\.[cm]?js/.test(id);
-  const isWorkerChunk = (id: string): boolean =>
-    id.includes('@excalidraw/excalidraw/dist/') && /subset-worker\.chunk\.[cm]?js/.test(id);
   return {
-    name: 'padify-stub-excalidraw-font-subsetting',
-    resolveId(source, importer) {
-      if (
-        (source === './subset-shared.chunk.js' || source === './subset-worker.chunk.js') &&
-        typeof importer === 'string' &&
-        importer.includes('@excalidraw/excalidraw/dist/')
-      ) {
-        return STUB_ID;
-      }
-      return null;
-    },
-    load(id) {
-      // Rollup resolves the vendor's internal relative imports natively —
-      // the resolveId hook never sees them — so the interception happens
-      // at load time, on the resolved absolute path (dev keeps the
-      // resolveId path above).
-      if (isWorkerChunk(id)) {
-        console.warn(
-          `[vite] stubbed Excalidraw font subsetting worker (${id.split('/').pop()}) — ` +
-            'WorkerUrl points at the identity pass-through worker.',
-        );
-        return WORKER_STUB_CODE;
-      }
-      if (isSubsetChunk(id)) {
-        console.warn(
-          `[vite] stubbed Excalidraw font subsetting (${id.split('/').pop()}) — ` +
-            'the subset pipeline passes fonts through un-subsetted, same-origin, no CDN.',
-        );
-        return STUB_CODE;
-      }
-      if (id === STUB_ID) {
-        // Both vendor imports funnel here in dev; the worker import needs
-        // the WorkerUrl variant, the shared import the subsetter surface.
-        // The vendor's import specifiers are indistinguishable at this
-        // point, so the module answers with BOTH surfaces — the extra
-        // WorkerUrl export is inert for the shared importer.
-        return `${STUB_CODE}\n${WORKER_STUB_CODE}`;
-      }
-      return null;
-    },
-    transform(code, id) {
-      // The vendor's font-face builder appends the esm.sh CDN to EVERY
-      // face's URL list as a last-resort fallback. Under Padify's CSP the
-      // CDN is unreachable by policy — the attempts are 230 wasted loads
-      // per session and 230 console errors. The same-origin copy (see
-      // copyExcalidrawFonts) is the one live source, so the fallback push
-      // goes away entirely; scoped to the vendor's own chunk, loud on a
-      // future version that renames the line.
-      const isJsModule = /\.(js|mjs|cjs)$/.test(id) || id.includes('/index.mjs?');
-      if (
-        isJsModule &&
-        id.includes('@excalidraw/excalidraw/dist/') &&
-        code.includes('ASSETS_FALLBACK_URL')
-      ) {
-        const stripped = code.replace(
-          /\w+\.push\(new URL\(\w+,\s*\w+\.ASSETS_FALLBACK_URL\)\),?/g,
-          '',
-        );
-        if (stripped === code) {
-          console.warn(
-            `[vite] ${id}: ASSETS_FALLBACK_URL present but the CDN fallback push was not found to strip — ` +
-              'verify the font-face URL list still has no CDN entry.',
-          );
-          return null;
-        }
-        return { code: stripped, map: null };
-      }
-      return null;
-    },
+    name: 'padify-emit-excalidraw-subset-worker',
     generateBundle() {
       // Prod: the worker file ships as a plain same-origin asset next to
-      // the chunks (assets/) — the stub's import.meta.url math lands here.
+      // the chunks (assets/) — the vendored stub's URL math lands here.
       this.emitFile({ type: 'asset', fileName: WORKER_EMIT_PATH, source: WORKER_SOURCE });
     },
     configureServer(server) {
-      // Dev twin: answer any *padify-subset-worker.js request (the virtual
-      // stub resolves the sibling URL under /@id/…, the plain path covers
-      // hand-typed URLs) with the worker source, JS content-type.
+      // Dev twin: answer any *padify-subset-worker.js request (the stub
+      // module resolves its sibling URL wherever vite served it from, the
+      // plain path covers hand-typed URLs) with the worker source, JS
+      // content-type.
       server.middlewares.use((req, res, next) => {
         if (!req.url?.endsWith(WORKER_FILE)) {
           next();
@@ -264,45 +162,44 @@ export function stubExcalidrawFontSubsetting(): Plugin {
 export const EXCALIDRAW_FONTS_DIR = 'vendor/excalidraw';
 
 /**
- * Copies the vendor's canvas fonts into the dist tree, same-origin.
+ * Copies the vendored canvas fonts into the dist tree, same-origin.
  *
  * WHY: master's font manager resolves every FontFace through
- * `window.EXCALIDRAW_ASSET_PATH` and falls back to the esm.sh CDN
- * (`ASSETS_FALLBACK_URL`) when the host sets nothing. Padify's CSP is
- * `font-src 'self' data:` — every CDN font 404s at the policy layer and
- * canvas text renders with fallback metrics (the upgrade audit's loudest
- * console fire). Pointing the asset path at a copied
+ * `window.EXCALIDRAW_ASSET_PATH`. Padify's CSP is `font-src 'self' data:`
+ * — a CDN font 404s at the policy layer and canvas text renders on
+ * fallback metrics. Pointing the asset path at a copied
  * `dist/vendor/excalidraw/` is the vendor's own documented escape hatch,
- * no CSP loosening.
+ * no CSP loosening — and the fork's tree already carries the font families
+ * (vendor/excalidraw/excalidraw/fonts), so the copy source is the tree
+ * itself: no build-time resolution that can drift, and the fonts the
+ * vendored family registrations name ("./fonts/<family>/<file>.woff2") are
+ * byte-identical to what ships.
  *
- * dist-only: the repo never carries 14 MB of woff2 files (Xiaolai alone
- * is 13 MB of CJK subsets); the copy runs on every production build,
- * after the bundle is written. Dev serves the SAME fonts straight out of
- * node_modules via the configureServer middleware below — the CDN
- * fallback no longer exists to degrade to (stubExcalidrawFontSubsetting
- * strips the CDN push from the vendor chunk), so the middleware is dev's
- * one live source, and the dev twin is pinned by test (the first mount
- * double-prepended `fonts/` onto a root that already ended in it — every
- * dev font request fell through to the SPA fallback and the browser
- * decoded index.html as a woff2).
+ * dist-only: the copy runs on every production build, after the bundle is
+ * written. Dev serves the SAME fonts from the vendored tree via the
+ * configureServer middleware below — the CDN fallback no longer exists to
+ * degrade to (the vendored ExcalidrawFontFace has no CDN entry), so this
+ * middleware is dev's one live source, and the dev twin is pinned by test
+ * (the first mount double-prepended `fonts/` onto a root that already
+ * ended in it — every dev font request fell through to the SPA fallback
+ * and the browser decoded index.html as a woff2).
  */
 export function copyExcalidrawFonts(): Plugin {
   return {
     name: 'padify-copy-excalidraw-fonts',
     configureServer(server) {
       // Dev twin of the closeBundle copy: serve the fonts straight out of
-      // node_modules so canvas-assets.ts's EXCALIDRAW_ASSET_PATH is valid
-      // in every mode (dev has no dist to copy into).
+      // the vendored tree so canvas-assets.ts's EXCALIDRAW_ASSET_PATH is
+      // valid in every mode (dev has no dist to copy into).
       //
       // The mount MUST include the /fonts segment: the vendor requests
       // every face as `${EXCALIDRAW_ASSET_PATH}fonts/<family>/<file>` —
       // connect strips the mount from req.url, so a shorter mount leaves
       // `fonts/...` in the remainder and the join below would look for
-      // .../dist/prod/fonts/fonts/<family>/<file> (the double-fonts bug:
-      // silently falls through to the SPA fallback, HTML bytes where a
-      // woff2 belongs).
-      const repoRoot = fileURLToPath(new URL('./', import.meta.url));
-      const fontsRoot = joinSafe(repoRoot, 'node_modules/@excalidraw/excalidraw/dist/prod/fonts');
+      // .../fonts/fonts/<family>/<file> (the double-fonts bug: silently
+      // falls through to the SPA fallback, HTML bytes where a woff2
+      // belongs).
+      const fontsRoot = joinSafe(VENDOR_ROOT, 'excalidraw/fonts');
       server.middlewares.use(`/${EXCALIDRAW_FONTS_DIR}/fonts`, (req, res, next) => {
         const url = (req.url ?? '').split('?')[0];
         const file = joinSafe(fontsRoot, url.replace(/^\/+/, ''));
@@ -315,13 +212,12 @@ export function copyExcalidrawFonts(): Plugin {
       });
     },
     closeBundle() {
-      const repoRoot = fileURLToPath(new URL('./', import.meta.url));
-      const source = joinSafe(repoRoot, 'node_modules/@excalidraw/excalidraw/dist/prod/fonts');
-      const target = joinSafe(repoRoot, 'dist', EXCALIDRAW_FONTS_DIR, 'fonts');
+      const source = joinSafe(VENDOR_ROOT, 'excalidraw/fonts');
+      const target = joinSafe(REPO_ROOT, 'dist', EXCALIDRAW_FONTS_DIR, 'fonts');
       if (!existsSync(source)) {
         throw new Error(
-          `[vite] @excalidraw/excalidraw fonts not found at ${source} — ` +
-            'install the dependency before building.',
+          `[vite] the vendored canvas fonts were not found at ${source} — ` +
+            'the vendor tree is part of the repo; a missing fonts/ means it was tampered with.',
         );
       }
       cpSync(source, target, { recursive: true });
@@ -559,6 +455,52 @@ function htmlIncludes(): Plugin {
   };
 }
 
+/**
+ * The alias table that lands every @excalidraw/* bare specifier onto the
+ * vendored source tree — shared by vite.config (build + dev) and
+ * vitest.config (which REPLACES vite.config when present, so it needs its
+ * own copy of the table; the scene-format pin imports the vendor).
+ *
+ * Every @excalidraw/* bare specifier, wherever it comes from (the app's
+ * canvas island or the vendor's own internals), resolves onto
+ * vendor/excalidraw/<pkg>/… source. The exact-match regexes keep the bare
+ * import at each package's index; the prefix regexes carry subpaths
+ * (@excalidraw/excalidraw/types, @excalidraw/element/binding,
+ * @excalidraw/common/utility-types, the self-referencing
+ * @excalidraw/excalidraw/scene/types …) into the same tree, extensionless
+ * — the resolver applies its usual extension probing on the result.
+ *
+ * THE POINT: this replaces the dist-patch era's npm pin + hand-written
+ * patch on compiled output — every environment (bun, npm, netlify) now
+ * resolves THE SAME vendor this repo carries, and every fork delta is a
+ * visible source edit under vendor/. The dep that wore this name is gone
+ * from package.json — nothing resolves from node_modules anymore.
+ */
+export const EXCALIDRAW_VENDOR_ALIASES: { find: RegExp; replacement: string }[] = [
+  // The main package: bare → index.tsx, subpath → the tree root.
+  { find: /^@excalidraw\/excalidraw$/, replacement: VENDOR_MAIN_ENTRY },
+  { find: /^@excalidraw\/excalidraw\//, replacement: VENDOR_MAIN_BASE },
+  // Workspace packages the main package reaches into.
+  { find: /^@excalidraw\/common$/, replacement: VENDOR_COMMON_ENTRY },
+  { find: /^@excalidraw\/common\//, replacement: VENDOR_COMMON_BASE },
+  { find: /^@excalidraw\/element$/, replacement: VENDOR_ELEMENT_ENTRY },
+  { find: /^@excalidraw\/element\//, replacement: VENDOR_ELEMENT_BASE },
+  { find: /^@excalidraw\/math$/, replacement: VENDOR_MATH_ENTRY },
+  { find: /^@excalidraw\/math\//, replacement: VENDOR_MATH_BASE },
+  { find: /^@excalidraw\/utils$/, replacement: VENDOR_UTILS_ENTRY },
+  { find: /^@excalidraw\/utils\//, replacement: VENDOR_UTILS_BASE },
+  { find: /^@excalidraw\/laser-pointer$/, replacement: VENDOR_LASER_ENTRY },
+  { find: /^@excalidraw\/laser-pointer\//, replacement: VENDOR_LASER_BASE },
+  {
+    find: /^@excalidraw\/fractional-indexing$/,
+    replacement: VENDOR_FRACTIONAL_ENTRY,
+  },
+  {
+    find: /^@excalidraw\/fractional-indexing\//,
+    replacement: VENDOR_FRACTIONAL_BASE,
+  },
+];
+
 export default defineConfig({
   // The app is location-agnostic: every emitted URL is rebased onto this.
   // Root deploys (Netlify, a bare domain) leave it at the default '/'; hosts
@@ -566,10 +508,13 @@ export default defineConfig({
   // build with VITE_BASE_PATH=/padify/ and everything (index.html refs,
   // asset URLs, the manifest link) moves with it.
   base: process.env.VITE_BASE_PATH || '/',
+  resolve: {
+    alias: EXCALIDRAW_VENDOR_ALIASES,
+  },
   plugins: [
     htmlIncludes(),
     stripDependencyEvalSinks(),
-    stubExcalidrawFontSubsetting(),
+    emitExcalidrawSubsetWorker(),
     copyExcalidrawFonts(),
     serveShareViewerInDev(),
     preloadDrawingChunk(),

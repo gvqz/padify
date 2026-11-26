@@ -3,7 +3,12 @@
     "target": "ES2020",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    // The vendored Excalidraw tree is written against upstream's ESNext
+    // universe (WeakRef, findLast, Error cause…); the runtime is modern
+    // browsers (the dist era shipped the same), and the app's own code
+    // transpiles to ES2020 by target below — the lib only widens what
+    // typechecks, what ships is esbuild's decision.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
 
     "moduleResolution": "bundler",
@@ -13,11 +18,51 @@
     "moduleDetection": "force",
     "noEmit": true,
 
+    // The vendored Excalidraw tree carries .tsx island sources (the fork
+    // owns the vendor as source, vendor/excalidraw/ — see the baseline
+    // commit); the app itself stays plain .ts with no JSX of its own.
+    "jsx": "react-jsx",
+
     "strict": true,
     "noFallthroughCasesInSwitch": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+
+    // The vendored Excalidraw packages, as SOURCE: the same tree the vite
+    // resolve.alias lands on (see vite.config.ts). The app's imports
+    // (@excalidraw/excalidraw, /types) and the vendor's own cross-package
+    // imports (@excalidraw/element/binding, @excalidraw/common/utility-types,
+    // the self-referencing @excalidraw/excalidraw/scene/types …) typecheck
+    // against the fork's actual code — the dist-patch era's twin bundles
+    // (dev and prod, patched separately) are gone: ONE tree, one truth.
+    "paths": {
+      "@excalidraw/excalidraw": ["./vendor/excalidraw/excalidraw/index.tsx"],
+      "@excalidraw/excalidraw/*": ["./vendor/excalidraw/excalidraw/*"],
+      "@excalidraw/common": ["./vendor/excalidraw/common/src/index.ts"],
+      "@excalidraw/common/*": ["./vendor/excalidraw/common/src/*"],
+      "@excalidraw/element": ["./vendor/excalidraw/element/src/index.ts"],
+      "@excalidraw/element/*": ["./vendor/excalidraw/element/src/*"],
+      "@excalidraw/math": ["./vendor/excalidraw/math/src/index.ts"],
+      "@excalidraw/math/*": ["./vendor/excalidraw/math/src/*"],
+      "@excalidraw/utils": ["./vendor/excalidraw/utils/src/index.ts"],
+      "@excalidraw/utils/*": ["./vendor/excalidraw/utils/src/*"],
+      "@excalidraw/laser-pointer": ["./vendor/excalidraw/laser-pointer/src/index.ts"],
+      "@excalidraw/laser-pointer/*": ["./vendor/excalidraw/laser-pointer/src/*"],
+      "@excalidraw/fractional-indexing": [
+        "./vendor/excalidraw/fractional-indexing/src/index.ts"
+      ],
+      "@excalidraw/fractional-indexing/*": [
+        "./vendor/excalidraw/fractional-indexing/src/*"
+      ]
+    }
   },
-  "include": ["src", "shared", "vite.config.ts"],
+  "include": [
+    "src",
+    "shared",
+    "vite.config.ts",
+    "vendor/excalidraw/excalidraw/global.d.ts",
+    "vendor/excalidraw/excalidraw/css.d.ts",
+    "vendor/excalidraw/excalidraw/pwacompat.d.ts"
+  ],
   // The server contract tests import the API directly (../server/*), which
   // would drag the Bun-typed server program into this one. They are
   // typechecked by server/tsconfig.json instead, alongside the server.

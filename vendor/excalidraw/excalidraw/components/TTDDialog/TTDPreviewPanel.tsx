@@ -8,7 +8,10 @@ import type { TTDPanelAction } from "./TTDDialogPanel";
 import type { MermaidToExcalidrawLibProps } from "./types";
 
 interface TTDPreviewPanelProps {
-  canvasRef: React.RefObject<HTMLDivElement | null>;
+  // PADIFY FORK (typing-only): see TTDDialogOutput's note — React 18's
+  // RefObject<T> = { current: T | null } wants the un-or-null'd
+  // instantiation here; the creator hands one down of exactly this shape.
+  canvasRef: React.RefObject<HTMLDivElement>;
   error: Error | null;
   loadStatus: MermaidToExcalidrawLibProps["status"];
   loadErrorReloadRequired?: boolean;

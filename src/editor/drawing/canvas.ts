@@ -69,12 +69,13 @@ import type {
   BinaryFiles,
   ExcalidrawImperativeAPI,
 } from '@excalidraw/excalidraw/types';
-import '@excalidraw/excalidraw/index.css';
-// The leak shield — loads AFTER the vendor css (import order is injection
-// order, and both land after the app's <link>s: the drawing chunk's css is
-// appended to the head when the chunk loads), so its order-tied rollbacks
-// win against the app's global element rules while its :where() scoping
-// keeps it strictly below every vendor declaration. See the file header.
+// The vendor's styles ride the source import itself: the vendored
+// index.tsx imports its own css (css/app.scss, css/styles.scss,
+// fonts/fonts.css — plus every component's scss), so importing
+// '@excalidraw/excalidraw' above injects the vendor css as part of the
+// module graph — the dist era's separate index.css entry (the compiled
+// flat file) does not exist in the source tree, and the app does not
+// import it anymore. Import order below is still what matters:
 import './island-shield.css';
 import type { CanvasImageFile } from './canvas-images';
 // The vendor's insert-time byte gate speaks the wire contract's number

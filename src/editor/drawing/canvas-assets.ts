@@ -22,7 +22,11 @@
  */
 declare global {
   interface Window {
-    EXCALIDRAW_ASSET_PATH?: string | string[];
+    // The vendored vendor's own global.d.ts spells this member
+    // `string | string[] | undefined` (required, undefined-able); the two
+    // declarations merge — the modifiers must be identical, so this side
+    // matches that spelling.
+    EXCALIDRAW_ASSET_PATH: string | string[] | undefined;
   }
 }
 

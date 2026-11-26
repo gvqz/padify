@@ -91,8 +91,12 @@ declare module "image-blob-reduce" {
       (options?: any): ImageBlobReduce;
     }
 
+    // PADIFY FORK — `alpha` is not in upstream's own declaration, but the
+    // vendored call site (data/blob.ts resizeImageFile) passes it: pica's
+    // toBlob option set, through image-blob-reduce.
     interface ImageBlobReduceOptions extends PicaResizeOptions {
       max: number;
+      alpha?: boolean;
     }
   }
   const reduce: ImageBlobReduce.ImageBlobReduceStatic;
@@ -110,4 +114,22 @@ interface CustomMatchers {
 declare namespace jest {
   interface Expect extends CustomMatchers {}
   interface Matchers extends CustomMatchers {}
+}
+
+// PADIFY FORK — the third-party modules upstream left untyped (their
+// monorepo never typechecked these paths against strict tsc). The fork's
+// program typechecks the whole vendored tree, so the surface the app's
+// graph actually reaches gets minimal declarations here — deliberately
+// loose: the runtime modules are pinned in the app's package.json, the
+// vendored call sites are the upstream code verbatim, and these stubs
+// exist only to keep tsc honest about what crosses the boundary.
+
+// pako ships no bundled types at the pinned 2.0.3. The signatures are the
+// ones the vendored call sites speak (data/encode.ts deflates strings and
+// inflates-to-string) — pako accepts both, the declares keep tsc honest
+// about the boundary without over-constraining.
+declare module "pako" {
+  export function deflate(data: string | Uint8Array): Uint8Array;
+  export function inflate(data: Uint8Array): Uint8Array;
+  export function inflate(data: Uint8Array, options: { to: "string" }): string;
 }

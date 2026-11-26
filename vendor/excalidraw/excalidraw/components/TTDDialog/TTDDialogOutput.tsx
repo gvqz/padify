@@ -17,7 +17,14 @@ import type { MermaidToExcalidrawLibProps } from "./types";
 
 interface TTDDialogOutputProps {
   error: Error | null;
-  canvasRef: React.RefObject<HTMLDivElement | null>;
+  // PADIFY FORK (typing-only): upstream spells this as RefObject<HTMLDivElement | null>
+  // — written against React 19's RefObject<T> = { current: T }. Under the app's
+  // React 18 types (RefObject<T> = { current: T | null }) the <div ref={…}> below
+  // rejects that instantiation, while RefObject<HTMLDivElement> — the very shape
+  // the creator (MermaidToExcalidraw's useRef<HTMLDivElement>(null)) produces —
+  // satisfies both sides. Zero behavior change: the ref still carries null until
+  // the canvas mounts.
+  canvasRef: React.RefObject<HTMLDivElement>;
   loadStatus: MermaidToExcalidrawLibProps["status"];
   loadErrorReloadRequired?: boolean;
   onRetryLoad?: () => void;

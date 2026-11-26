@@ -3,6 +3,12 @@ node_modules
 dist
 coverage
 
+# The vendored Excalidraw tree — upstream's code at a pinned baseline with
+# the fork's deltas. Prettier must not rewrite the baseline (the delta
+# against it is the review surface) and upstream's own formatting stays
+# authorial. The subset/font stubs carry hand-set comment columns too.
+vendor
+
 # Legacy static islands (being folded into the main app or deleted)
 public
 
