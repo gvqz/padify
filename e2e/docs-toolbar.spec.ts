@@ -32,6 +32,37 @@ async function noteHtml(page: import('@playwright/test').Page): Promise<string> 
   return page.evaluate(() => document.querySelector('#note')!.innerHTML);
 }
 
+/** The pad's STORED note bytes from IndexedDB — the persisted truth the
+ * reload will boot from. Waiting on this (not a timed sleep) keeps the
+ * storage round trips below deterministic: a fixed 900 ms raced the
+ * persist chain under load and the reload could cut the write off. */
+async function storedNoteHtml(page: import('@playwright/test').Page): Promise<string> {
+  return page.evaluate(
+    () =>
+      new Promise<string>((resolve, reject) => {
+        const request = indexedDB.open('padify');
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction('notes', 'readonly');
+          const cursorRequest = tx.objectStore('notes').openCursor();
+          const rows: string[] = [];
+          cursorRequest.onerror = () => reject(cursorRequest.error);
+          cursorRequest.onsuccess = () => {
+            const cursor = cursorRequest.result;
+            if (cursor) {
+              rows.push(String((cursor.value as { content?: unknown }).content ?? ''));
+              cursor.continue();
+            } else {
+              resolve(rows.join('\n'));
+              db.close();
+            }
+          };
+        };
+      }),
+  );
+}
+
 test.describe('docs toolbar', () => {
   test('size, color, alignment, divider and superscript survive a reload', async ({ page }) => {
     await page.goto('/');
@@ -94,9 +125,14 @@ test.describe('docs toolbar', () => {
     await expect(editor.locator('sup')).toHaveText('4');
 
     // Persist, reload, everything comes back through the sanitizer.
-    await page.waitForTimeout(900);
+    // The stored bytes carry the LAST mutations (the sup'd run) before
+    // the reload — no timed sleep to race the persist chain.
+    await expect.poll(() => storedNoteHtml(page), { timeout: 10_000 }).toContain('<sup>');
     await page.reload();
     const reloaded = page.locator('#note');
+    // The boot paints the stored content asynchronously — the run must
+    // exist before its styles can be read.
+    await expect(reloaded.locator('span', { hasText: 'Styled line' }).first()).toBeVisible();
     expect(await runStyle('font-size')).toBe('24px');
     expect(await runStyle('color')).toBe('rgb(66, 133, 244)');
     await expect(reloaded.locator('div', { hasText: 'Styled line' }).first()).toHaveCSS(
@@ -268,7 +304,7 @@ test.describe('docs toolbar', () => {
     await expect(editor.locator('span')).toHaveCSS('font-size', '24px');
 
     // The styled run survives the storage round trip (span subset).
-    await page.waitForTimeout(900);
+    await expect.poll(() => storedNoteHtml(page), { timeout: 10_000 }).toContain('AFTER24');
     await page.reload();
     const runStyle = (prop: string): Promise<string> =>
       page.evaluate((p) => {
@@ -277,7 +313,9 @@ test.describe('docs toolbar', () => {
         );
         return span ? getComputedStyle(span).getPropertyValue(p) : '';
       }, prop);
-    expect(await runStyle('font-size')).toBe('24px');
+    // The boot paints the stored span asynchronously — poll the style,
+    // don't read once (the read could outrun the paint).
+    await expect.poll(() => runStyle('font-size'), { timeout: 5_000 }).toBe('24px');
   });
 
   test('the size menu marks the value the caret sits in', async ({ page }) => {

@@ -53,7 +53,16 @@ export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 5_000 },
   fullyParallel: true,
-  retries: 0,
+  // The two lanes answer different questions, so they tolerate different
+  // noise: the DEV lane is the sharded fast-feedback path — its Vite dev
+  // server transforms modules WHILE the specs run, a load profile that
+  // reliably trips the timing-sensitive set (boot-rail reads, persist
+  // chains, async re-inks) under contention; one retry absorbs that
+  // environmental class. The PROD lane is the shipping gate against the
+  // exact deployed artifact — it runs the whole suite on ONE runner with
+  // zero retries, and CI holds it to every failure (2026-11-26: 351/351
+  // green there while the dev shards flaked two).
+  retries: PROD_TARGET ? 0 : 1,
   reporter: 'list',
   use: {
     baseURL: 'http://localhost:5199',
