@@ -294,7 +294,14 @@ test.describe('attachments (real API)', () => {
             const body = (await response.json()) as { rows: Array<{ id: string }> };
             return body.rows.some((row) => row.id === attachmentId);
           }, id),
-        { message: 'the flush uploads the pending attachment' },
+        {
+          message: 'the flush uploads the pending attachment',
+          // The poll body is a full API round trip (token + fetch + JSON)
+          // — under a loaded shard one cycle can outrun the 5s default,
+          // failing a test whose own budget is 60s. Poll as long as the
+          // test lives.
+          timeout: 45_000,
+        },
       )
       .toBe(true);
 

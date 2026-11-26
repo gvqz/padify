@@ -45,6 +45,17 @@ async function railCount(page: Page): Promise<number> {
   return page.locator('#tabStripTabs .tab-strip-tab').count();
 }
 
+/** The rail AFTER boot settles. The never-empty invariant mints the first
+ *  note during async IndexedDB hydration — after `load`, not before — so a
+ *  railCount read straight after goto() races it: under load the import
+ *  specs read before=0 and then compared against the settled 1, failing
+ *  a correct refusal. The first tab is the boot note on any fresh pad,
+ *  so waiting for it is the deterministic steady state. */
+async function settledRailCount(page: Page): Promise<number> {
+  await expect(page.locator('#tabStripTabs .tab-strip-tab').first()).toBeVisible();
+  return railCount(page);
+}
+
 /** The drawing notes' rows from the app's IndexedDB (name 'padify'). */
 async function readDrawingNotes(page: Page): Promise<{ id: string; content: string }[]> {
   return page.evaluate(
@@ -95,7 +106,7 @@ test.describe('the .padify file', () => {
     page,
   }, testInfo) => {
     await page.goto('/');
-    const before = await railCount(page);
+    const before = await settledRailCount(page);
 
     await page.locator('#note').click();
     await page.keyboard.type('hello padify file');
@@ -190,7 +201,7 @@ test.describe('the .padify file', () => {
     page,
   }, testInfo) => {
     await page.goto('/');
-    const before = await railCount(page);
+    const before = await settledRailCount(page);
 
     const nativePath = testInfo.outputPath('my-sketch.excalidraw');
     writeFileSync(
@@ -284,7 +295,7 @@ test.describe('the .padify file', () => {
 
   test('the open door refuses what it cannot open honestly', async ({ page }, testInfo) => {
     await page.goto('/');
-    const before = await railCount(page);
+    const before = await settledRailCount(page);
 
     // A newer format version: "update the app", not a mangled note.
     const newerPath = testInfo.outputPath('future.padify');
@@ -383,7 +394,7 @@ test.describe('the workspace file — a whole pad, as one file', () => {
 
   test('a newer-format workspace is refused with the same honesty', async ({ page }, testInfo) => {
     await page.goto('/');
-    const before = await railCount(page);
+    const before = await settledRailCount(page);
 
     const newerPath = testInfo.outputPath('future-pad.padify');
     writeFileSync(
@@ -401,7 +412,7 @@ test.describe('the workspace file — a whole pad, as one file', () => {
 
   test('a workspace whose entries are junk says the honest nothing', async ({ page }, testInfo) => {
     await page.goto('/');
-    const before = await railCount(page);
+    const before = await settledRailCount(page);
 
     const emptyPath = testInfo.outputPath('empty-pad.padify');
     writeFileSync(

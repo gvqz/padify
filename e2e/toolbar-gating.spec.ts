@@ -39,6 +39,38 @@ async function noteHtml(page: Page): Promise<string> {
   return page.evaluate(() => document.querySelector('#note')!.innerHTML);
 }
 
+/** The pad's STORED note bytes from IndexedDB — the persisted truth the
+ *  reload will boot from. Waiting on this (not a timed sleep) makes the
+ *  storage round trip below deterministic: the fixed 900 ms raced the
+ *  400 ms input debounce + persist chain under load and the reload cut
+ *  the write off. */
+async function storedNoteHtml(page: Page): Promise<string> {
+  return page.evaluate(
+    () =>
+      new Promise<string>((resolve, reject) => {
+        const request = indexedDB.open('padify');
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction('notes', 'readonly');
+          const cursorRequest = tx.objectStore('notes').openCursor();
+          const rows: string[] = [];
+          cursorRequest.onerror = () => reject(cursorRequest.error);
+          cursorRequest.onsuccess = () => {
+            const cursor = cursorRequest.result;
+            if (cursor) {
+              rows.push(String((cursor.value as { content?: unknown }).content ?? ''));
+              cursor.continue();
+            } else {
+              resolve(rows.join('\n'));
+              db.close();
+            }
+          };
+        };
+      }),
+  );
+}
+
 /** Selects every occurrence-free text range `find`..+len inside the note. */
 async function selectWord(page: Page, find: string): Promise<void> {
   await page.evaluate((needle) => {
@@ -142,16 +174,22 @@ test.describe('caret-following color bars', () => {
     await expect.poll(() => hiliteBar(page)).toBe('');
     expect(await inkBar(page)).toBe('');
 
-    // Storage round trip: reload, park the caret in each run — both bars
-    // read the STORED colors with no pick this session.
-    await page.waitForTimeout(900); // autosave debounce settles
+    // Storage round trip: wait for the debounced persist to actually
+    // land its bytes (the stored highlight run is the last pick), then
+    // reload, park the caret in each run — both bars read the STORED
+    // colors with no pick this session.
+    await expect
+      .poll(() => storedNoteHtml(page), { timeout: 10_000 })
+      .toContain('background-color: #fff3bf');
     await page.reload();
     await placeCaret(page, 'span[style*="color"]', 3);
-    expect(await inkBar(page)).toBe('#ea4335');
-    expect(await hiliteBar(page)).toBe('');
+    // The bars follow the caret through an async selectionchange — poll,
+    // don't read once (under load the read outran the engine).
+    await expect.poll(() => inkBar(page)).toBe('#ea4335');
+    await expect.poll(() => hiliteBar(page)).toBe('');
     await placeCaret(page, 'span[style*="background-color"]', 2);
-    expect(await inkBar(page)).toBe('');
-    expect(await hiliteBar(page)).toBe('#fff3bf');
+    await expect.poll(() => inkBar(page)).toBe('');
+    await expect.poll(() => hiliteBar(page)).toBe('#fff3bf');
   });
 
   test('a theme flip re-reads the caret ink (the engine re-inks the run)', async ({ page }) => {
