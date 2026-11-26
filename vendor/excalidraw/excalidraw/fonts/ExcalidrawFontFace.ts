@@ -8,11 +8,13 @@ export class ExcalidrawFontFace {
   public readonly urls: URL[] | DataURL[];
   public readonly fontFace: FontFace;
 
-  private static readonly ASSETS_FALLBACK_URL = `https://esm.sh/${
-    import.meta.env.PKG_NAME
-      ? `${import.meta.env.PKG_NAME}@${import.meta.env.PKG_VERSION}` // is provided during package build
-      : "@excalidraw/excalidraw" // fallback to the latest package version (i.e. for app)
-  }/dist/prod/`;
+  // PADIFY FORK — no esm.sh CDN fallback URL. Upstream appends
+  // `https://esm.sh/<pkg>/dist/prod/` to every face's URL list as a
+  // last-resort source. Under Padify's CSP (font-src 'self' data:) the CDN
+  // is unreachable by policy — the attempts are wasted loads per session
+  // and console errors on every miss. The same-origin copy behind
+  // window.EXCALIDRAW_ASSET_PATH (see the app's canvas-assets.ts) is the
+  // one live source, so the fallback push does not exist here.
 
   constructor(family: string, uri: string, descriptors?: FontFaceDescriptors) {
     this.urls = ExcalidrawFontFace.createUrls(uri);
@@ -163,9 +165,8 @@ export class ExcalidrawFontFace {
       });
     }
 
-    // fallback url for bundled fonts
-    urls.push(new URL(assetUrl, ExcalidrawFontFace.ASSETS_FALLBACK_URL));
-
+    // PADIFY FORK — no CDN fallback entry (see the class note above); the
+    // URL list ends with the same-origin sources.
     return urls;
   }
 

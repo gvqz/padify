@@ -7,75 +7,58 @@
  * In the future consider separating common utils into a separate shared chunk.
  */
 
-import loadHbSubset from "./harfbuzz/harfbuzz-loader";
-import loadWoff2 from "./woff2/woff2-loader";
+// PADIFY FORK — font-subsetting stub (the CSP decision, at the source level).
+//
+// Upstream's version of this chunk embeds a HarfBuzz-wasm font subsetter:
+// the Emscripten glue constructs functions from strings (`new Function(...)`
+// — twice) — the exact CSP-incompatible eval sink that forbidEvalSinks()
+// exists to keep out of dist. The wasm binaries themselves ride upstream's
+// own subset/harfbuzz + subset/woff2 directories, which this fork
+// deliberately does not vendor (see the vendor baseline commit).
+//
+// WHY THE STUB ANSWERS, NOT THROWS: the vendor's font manager fetches a
+// family's woff2 from the URL list (first match wins — the same-origin copy
+// behind window.EXCALIDRAW_ASSET_PATH) and then subsets it. A throwing stub
+// turns that SUCCESSFUL fetch into a failure, and the manager walks its URL
+// list looking for the next source (the esm.sh CDN upstream pushes — removed
+// from this fork at ExcalidrawFontFace) — which Padify's CSP
+// (font-src 'self' data:) blocks, leaving text on fallback metrics. So the
+// stub exports the chunk's own surface with subsetting as an identity
+// pass-through: the FULL font loads as a data URL — a few hundred KB on
+// first use per family, offline-safe, CSP-clean, no CDN contact.
+//
+// The return shapes mirror upstream's own (toBase64 answers a data: URL,
+// all three async) so the font manager's injected @font-face rules stay
+// valid. Signatures match upstream's (the codepoints are accepted and
+// ignored — an identity subsetter has nothing to say about them), so the
+// chunk's consumers typecheck unchanged.
 
-/**
- * Shared commands between the main thread and worker threads.
- */
+/** Identity: the "subset" of a font is the font. */
+const PASS = (buffer: ArrayBuffer): ArrayBuffer => buffer;
+
 export const Commands = {
-  Subset: "SUBSET",
+  Subset: 0,
 } as const;
 
-/**
- * Used by browser (main thread), node and jsdom, to subset the font based on the passed codepoints.
- *
- * @returns woff2 font as a base64 encoded string
- */
+/** A full font as a data: URL, chunked so huge fonts cannot blow the stack. */
+export const toBase64 = async (arrayBuffer: ArrayBuffer): Promise<string> => {
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = "";
+  const step = 0x8000;
+  for (let i = 0; i < bytes.length; i += step) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+  }
+  return `data:font/woff2;base64,${btoa(binary)}`;
+};
+
+/** Upstream's main-thread path: subset → base64. Identity: base64 of the whole font. */
 export const subsetToBase64 = async (
   arrayBuffer: ArrayBuffer,
-  codePoints: Array<number>,
-): Promise<string> => {
-  try {
-    const buffer = await subsetToBinary(arrayBuffer, codePoints);
-    return toBase64(buffer);
-  } catch (e) {
-    console.error("Skipped glyph subsetting", e);
-    // Fallback to encoding whole font in case of errors
-    return toBase64(arrayBuffer);
-  }
-};
+  _codePoints: Array<number>,
+): Promise<string> => toBase64(PASS(arrayBuffer));
 
-/**
- * Used by browser (worker thread) and as part of `subsetToBase64`, to subset the font based on the passed codepoints.
- *
- * @eturns woff2 font as an ArrayBuffer, to avoid copying large strings between worker threads and the main thread.
- */
+/** Upstream's worker path: subset → binary. Identity: the buffer itself. */
 export const subsetToBinary = async (
   arrayBuffer: ArrayBuffer,
-  codePoints: Array<number>,
-): Promise<ArrayBuffer> => {
-  // lazy loaded wasm modules to avoid multiple initializations in case of concurrent triggers
-  // IMPORTANT: could be expensive, as each new worker instance lazy loads these to their own memory ~ keep the # of workes small!
-  const { compress, decompress } = await loadWoff2();
-  const { subset } = await loadHbSubset();
-
-  const decompressedBinary = decompress(arrayBuffer).buffer;
-  const snftSubset = subset(decompressedBinary, new Set(codePoints));
-  const compressedBinary = compress(snftSubset.buffer);
-
-  return compressedBinary.buffer;
-};
-
-/**
- * Util for isomoprhic browser (main thread), node and jsdom usage.
- *
- * Isn't used inside the worker to avoid copying large binary strings (as dataurl) between worker threads and the main thread.
- */
-export const toBase64 = async (arrayBuffer: ArrayBuffer) => {
-  let base64: string;
-
-  if (typeof Buffer !== "undefined") {
-    // node, jsdom
-    base64 = Buffer.from(arrayBuffer).toString("base64");
-  } else {
-    // browser (main thread)
-    // it's perfectly fine to treat each byte independently,
-    // as we care only about turning individual bytes into codepoints,
-    // not about multi-byte unicode characters
-    const byteString = String.fromCharCode(...new Uint8Array(arrayBuffer));
-    base64 = btoa(byteString);
-  }
-
-  return `data:font/woff2;base64,${base64}`;
-};
+  _codePoints: Array<number>,
+): Promise<ArrayBuffer> => PASS(arrayBuffer);
