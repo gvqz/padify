@@ -66,7 +66,15 @@ async function writeUntilReminderShows(page: Page): Promise<void> {
   await page.waitForTimeout(600);
 }
 
-test.describe('break reminder popup', () => {
+// The prod e2e lane skips this suite: the threshold hook
+// (window.__padifyBreakReminder, see break-reminder.ts) is DEV-ONLY BY
+// DESIGN — production keeps the real 30-minute threshold and no shipped
+// test seam — and without the hook the popup never arrives in test time.
+const describeBreakReminder = process.env.PADIFY_E2E_TARGET === 'prod'
+  ? test.describe.skip
+  : test.describe;
+
+describeBreakReminder('break reminder popup', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await enableReminders(page);

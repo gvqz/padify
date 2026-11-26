@@ -205,3 +205,56 @@ jobs:
           name: playwright-traces-shard-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
+
+  # THE PROD LANE: the same e2e suite, against the PRODUCTION artifact.
+  #
+  # The dist-patch era shipped its worst bug through exactly this gap: the
+  # dev-server suite was green while the deployed bundle crashed (the
+  # vendor resolved differently once compiled — the netlify hamburger
+  # crash, React #130 on every menu open). This lane builds the real dist
+  # (typecheck + bundle + headers + SW) and runs the whole suite against
+  # `vite preview` of it: hashed chunks, the CSP meta, the SW, the copied
+  # fonts — the exact artifact a deployment ships. The lane already paid
+  # for itself on its first run (the shell-refresh ack bug it caught).
+  # One runner, one build (sharding would rebuild per shard); the dev lane
+  # stays the sharded fast-feedback path.
+  e2e-prod:
+    name: E2E against the production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Restore bun's install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+
+      - name: Restore Playwright's browser cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright's Chromium (skips the download on a cache hit)
+        run: npx playwright install --with-deps chromium
+
+      # The webServer config builds (npm run build) and serves dist/ via
+      # vite preview — see playwright.config.ts's PADIFY_E2E_TARGET=prod.
+      - name: Run the e2e suite against the production build
+        run: npx playwright test
+        env:
+          PADIFY_E2E_TARGET: prod

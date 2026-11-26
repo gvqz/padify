@@ -324,10 +324,14 @@ test.describe('the drawing canvas', () => {
     const errors = pageErrors.get(page) ?? [];
     errors.splice(0, errors.length);
 
-    // Retry reloads into the fresh shell (the deterministic hard refresh)
-    // — the seam flag dies with the page, and the canvas comes back.
+    // Retry reloads the page — under the DEV lane the reload is
+    // immediate, under the PROD lane the retry first walks the SW's
+    // REFRESH_SHELL handshake (the fresh-cache reload), so the wait is
+    // for the load EVENT, not a lifecycle state (which would resolve
+    // against the still-current document and race the handshake).
+    const reloadPromise = page.waitForEvent('load', { timeout: 30_000 });
     await page.locator('.unsupported-note-action', { hasText: 'Retry' }).click();
-    await page.waitForLoadState('domcontentloaded');
+    await reloadPromise;
     await expect(page.locator('#note')).toBeVisible();
     const flag = await page.evaluate(
       () =>
@@ -439,17 +443,29 @@ test.describe('the drawing canvas', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('a failed chunk lands on the error card, whose Retry reloads', async ({ page }) => {
+  // The chunk-failure spec runs in the WORKER-LESS world: the service
+  // worker heals the sabotage (its own network fetches bypass page.route,
+  // so the "missing" chunk re-enters through its runtime cache — and the
+  // route cannot intercept the worker's own script fetch either). This
+  // mirrors the dev lane, where the app never registers the worker at all.
+  test.describe('worker-less (serviceWorkers blocked)', () => {
+    test.use({ serviceWorkers: 'block' });
+
+    test('a failed chunk lands on the error card, whose Retry reloads', async ({ page }) => {
     // R3's open-glitch: a deploy renames the chunk a running tab holds;
     // the mount path retries once, then answers with the honest card —
     // whose Retry action refreshes the shell and reloads (the
     // deterministic version of the user's manual hard refresh). The
     // block targets the canvas MODULE itself (the exact module the
-    // surface's import('./canvas') requests — dev serves it from src,
-    // production from a hashed asset; both spellings share the path).
-    await page.route(/editor\/drawing\/canvas\.ts/, (route) =>
+    // surface's import('./canvas') requests). The route must catch BOTH
+    // spellings: the dev server serves the module from src
+    // (…/editor/drawing/canvas.ts), the production artifact serves it as
+    // the hashed chunk the bundle emits (assets/canvas-<hash>.js) — the
+    // prod e2e lane (PADIFY_E2E_TARGET=prod) rides the second spelling.
+    await page.route(/(editor\/drawing\/canvas\.ts|\/assets\/canvas-[A-Za-z0-9_-]+\.js)/, (route) =>
       route.fulfill({ status: 404, body: 'gone' }),
     );
+
     await page.goto('/');
     await page.locator('#addTabTypeMenu').click();
     await expect(page.locator('#addTabTypeMenuPopover')).toBeVisible();
@@ -474,6 +490,7 @@ test.describe('the drawing canvas', () => {
     // acted, not that the failure healed.
     await expect(page.locator('#note .unsupported-note-action', { hasText: 'Retry' })).toBeVisible({
       timeout: 20_000,
+    });
     });
   });
 

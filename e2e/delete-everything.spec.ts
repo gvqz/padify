@@ -35,6 +35,16 @@ async function createRichNote(page: Page): Promise<void> {
  * in IndexedDB without the page's pagehide flush re-persisting over them.
  */
 async function settleSaves(page: Page): Promise<void> {
+  // The prod e2e lane (vite preview of the real dist) has no /src/ module
+  // URLs to import — the bundle is built. The dev lane's determinism levers
+  // (the forced sync, the pending-persist drain, whenNotesIdle) have no
+  // prod spelling, so the lane settles the same pipeline the way a user
+  // leaves it: the 400ms input debounce and the save chain run their own
+  // course.
+  if (process.env.PADIFY_E2E_TARGET === 'prod') {
+    await page.waitForTimeout(1_500);
+    return;
+  }
   await page.evaluate(async () => {
     const tabs = (await import('/src/tabs.ts')) as typeof import('/src/tabs.ts');
     tabs.getTabManager()?.syncAfterExternalEdit();

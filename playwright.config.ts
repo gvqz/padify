@@ -28,6 +28,26 @@ import { defineConfig, devices } from '@playwright/test';
 const runDir = mkdtempSync(join(tmpdir(), 'padify-e2e-'));
 export const apiDbPath = join(runDir, 'api.db');
 
+/**
+ * The target the suite runs against. Default: the Vite DEV server. Set
+ * PADIFY_E2E_TARGET=prod and the app server becomes a PRODUCTION build
+ * served by `vite preview` — the same dist/ a deployment ships (the built
+ * bundle, the hashed chunks, the SW, the copied fonts), not the dev
+ * bundle.
+ *
+ * WHY THE LANE EXISTS: the dist-patch era's worst class of failure lived
+ * ONLY in the prod artifact — the dev and prod vendor bundles were patched
+ * separately, and e2e ran dev only, so "351 green" and "the deployed
+ * hamburger crashes" were both true at once (the netlify deployment
+ * resolved an unpatched vendor; React #130 on every menu open). The prod
+ * lane keeps the exact artifact a user receives under the same suite the
+ * dev lane runs. The build itself (tsc + vite build + headers + sw) rides
+ * the webServer command — the suite starts only when dist/ is complete,
+ * and `vite preview` inherits the dev proxy config, so the real-API
+ * webServer below is reachable same-origin exactly as in dev.
+ */
+const PROD_TARGET = process.env.PADIFY_E2E_TARGET === 'prod';
+
 export default defineConfig({
   testDir: './e2e',
   timeout: 45_000,
@@ -42,12 +62,25 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
-    {
-      command: 'npx vite --port 5199 --strictPort',
-      url: 'http://localhost:5199',
-      reuseExistingServer: true,
-      timeout: 60_000,
-    },
+    PROD_TARGET
+      ? {
+          // The production artifact lane: build, then serve dist/ exactly
+          // as a static host would. The build's full pipeline (typecheck,
+          // bundle, headers, SW) gates the suite — a red build never
+          // starts it.
+          command: 'npm run build && npx vite preview --port 5199 --strictPort',
+          url: 'http://localhost:5199',
+          // Build (~1 min cold) + preview boot; the suite itself has its
+          // own per-test timeouts.
+          reuseExistingServer: false,
+          timeout: 300_000,
+        }
+      : {
+          command: 'npx vite --port 5199 --strictPort',
+          url: 'http://localhost:5199',
+          reuseExistingServer: true,
+          timeout: 60_000,
+        },
     {
       // The health endpoint answers 200 — readiness probes only accept
       // success statuses, and the router 404s unknown paths by design.

@@ -257,18 +257,34 @@ export async function reloadWithFreshShell(): Promise<void> {
     const channel = new MessageChannel();
     let settled = false;
     const settle = (): void => {
-      if (!settled) {
-        settled = true;
-        resolve();
-      }
+      if (settled) return;
+      settled = true;
+      // Both listeners go with the settle: the ack rides whichever path
+      // the worker's build speaks, and the first one wins.
+      navigator.serviceWorker.removeEventListener('message', onWorkerMessage);
+      resolve();
     };
     // The ack, and a generous timeout — a reload must never hang on a
     // silent worker; the freshened subset beats nothing at all.
+    //
+    // THE ACK LISTENS ON BOTH PATHS: the message channel above is the
+    // intent, but the worker's reply (build-sw.mjs's REFRESH_SHELL
+    // handler) posts a PLAIN message to the page — event.source
+    // .postMessage(...) — not on the transferred port. Listening only on
+    // the channel meant the ack never arrived and every shell refresh
+    // burned the whole 15 s timeout before reloading (found by the prod
+    // e2e lane — invisible under dev, where Retry reloads directly).
+    const onWorkerMessage = (event: MessageEvent): void => {
+      if ((event.data as { type?: string } | null)?.type === 'SHELL_REFRESHED') {
+        settle();
+      }
+    };
     channel.port1.onmessage = (event) => {
       if ((event.data as { type?: string } | null)?.type === 'SHELL_REFRESHED') {
         settle();
       }
     };
+    navigator.serviceWorker.addEventListener('message', onWorkerMessage);
     setTimeout(settle, 15_000);
     controller.postMessage({ type: 'REFRESH_SHELL' }, [channel.port2]);
   });

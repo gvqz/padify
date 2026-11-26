@@ -74,7 +74,13 @@ const TRACKS = [
 /** Stubs the music wire: capabilities on, a two-track catalog, a silent
  *  stream. Returns the stream URL the resolve stub hands out. */
 async function stubMusicWire(page: Page): Promise<string> {
-  const streamUrl = 'http://127.0.0.1:5199/__test-audio/silence.wav';
+  // Same-origin on purpose: the prod e2e lane (vite preview of the real
+  // dist) enforces the app's CSP meta — media-src 'self' … — and the
+  // 127.0.0.1 spelling this used to carry is a different ORIGIN to the
+  // CSP engine, so the audio element would be blocked there (the dev
+  // server serves no CSP, which is why the cross-origin spelling ever
+  // worked). localhost matches the page origin both lanes share.
+  const streamUrl = 'http://localhost:5199/__test-audio/silence.wav';
   await page.route('**/api/music/capabilities', (route) =>
     route.fulfill({ json: { search: true, resolve: true } }),
   );

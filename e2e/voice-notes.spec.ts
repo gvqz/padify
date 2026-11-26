@@ -68,10 +68,39 @@ test.describe('voice notes', () => {
     // The bytes are really in the store: the attachment layer answers
     // with the recorded take (this is the same IDB store the upload
     // flush reads).
+    // Under the dev lane the app's own module answers (the dev server
+    // serves /src/ URLs); under the prod lane the bundle is built, so the
+    // same store is read straight out of IndexedDB — the same rows, the
+    // same assertion.
     const stored = await page.evaluate(async () => {
-      const { listAttachmentMetas } = await import('/src/storage/attachments.ts');
-      const metas = await listAttachmentMetas();
-      return metas.find((meta) => meta.mime.startsWith('audio/')) ?? null;
+      try {
+        // The dev server serves this /src/ URL; the prod lane's built
+        // bundle does not (the import rejects) and falls to the raw read.
+        const { listAttachmentMetas } = await import('/src/storage/attachments.ts');
+        const metas = await listAttachmentMetas();
+        return metas.find((meta) => meta.mime.startsWith('audio/')) ?? null;
+      } catch {
+        // prod lane: no /src/ URLs in the built bundle
+      }
+      return new Promise<{ name: string; mime: string; size: number } | null>((resolve) => {
+        const open = indexedDB.open('padify');
+        open.onerror = () => resolve(null);
+        open.onsuccess = () => {
+          const tx = open.result.transaction('attachments', 'readonly');
+          const req = tx.objectStore('attachments').openCursor();
+          const metas: { name: string; mime: string; size: number }[] = [];
+          req.onsuccess = () => {
+            const cursor = req.result;
+            if (cursor) {
+              metas.push(cursor.value as { name: string; mime: string; size: number });
+              cursor.continue();
+            } else {
+              resolve(metas.find((m) => m.mime.startsWith('audio/')) ?? null);
+            }
+          };
+          req.onerror = () => resolve(null);
+        };
+      });
     });
     expect(stored).not.toBeNull();
     expect(stored?.size).toBeGreaterThan(0);

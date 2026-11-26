@@ -46,6 +46,7 @@ import shlex
 import subprocess
 import sys
 import time
+import urllib.parse
 import urllib.request
 
 import paramiko
@@ -525,6 +526,81 @@ def revive_main():
         client.close()
 
 
+# The public face of the SITE — the deploy's fingerprint verification fetches
+# it after the server restart (see verify_public_site).
+SITE_URL = os.environ.get(
+    "AD_SITE_URL", "https://functionhost.alwaysdata.net/padify/"
+)
+
+
+def verify_public_site(site):
+    """The deploy's last word: the PUBLIC site serves exactly this build.
+
+    The md5 verification above proves the FILES on the box are this build;
+    this proves the HOST serves them: the live index.html answers
+    byte-identical to the built one, and every asset URL it references
+    (entry chunk, css, manifest, the modulepreload hints — the drawing
+    chunk rides one) answers with the exact bytes dist/ holds. A stale
+    host cache, a panel pointing at another tree, a half-applied deploy —
+    any of those now FAILS the deploy instead of surfacing days later as
+    "the site runs an old build" (the 2026-11 confusion: HEAD was never
+    pushed, the deploy said green, and nothing compared what users
+    actually downloaded).
+    """
+    import re
+
+    base = SITE_URL if SITE_URL.endswith("/") else SITE_URL + "/"
+    # The base path the build baked in (VITE_BASE_PATH=/padify/ on the box
+    # recipe) — asset refs in the html spell it out; the local rel-path is
+    # the same string minus that prefix.
+    prefix = urllib.parse.urlparse(base).path
+
+    live = urllib.request.urlopen(base, timeout=30).read()
+    with open(os.path.join(DIST, "index.html"), "rb") as f:
+        local = f.read()
+    if live != local:
+        raise SystemExit(
+            "LIVE INDEX MISMATCH — the public shell is not this build "
+            "(fetch the site root and compare against dist/index.html)"
+        )
+    print("[live] the public index.html is byte-identical to the build")
+
+    refs = sorted(set(re.findall(r'(?:src|href)="([^"]+)"', live.decode("utf-8"))))
+    checked = 0
+    for ref in refs:
+        if not ref or ref.startswith(("#", "data:", "mailto:", "tel:")):
+            continue
+        # Only same-build assets on this host: absolute base-path refs and
+        # root-relative refs; anything else (full URLs elsewhere) is not
+        # this deploy's fingerprint to check.
+        if ref.startswith("/"):
+            remote_rel = ref[len(prefix):] if ref.startswith(prefix) else ref.lstrip("/")
+            url = urllib.parse.urljoin(base, ref)
+        elif ref.startswith("http"):
+            continue
+        else:
+            remote_rel = ref
+            url = base + ref
+        local_path = site.get(remote_rel)
+        if not local_path:
+            continue  # not part of the built tree (favicon or similar)
+        live_asset = urllib.request.urlopen(url, timeout=30).read()
+        with open(local_path, "rb") as f:
+            local_asset = f.read()
+        if live_asset != local_asset:
+            raise SystemExit(
+                f"LIVE ASSET MISMATCH — {url} does not serve the built bytes "
+                "(a stale cache or a host pointing at another tree)"
+            )
+        checked += 1
+    if checked == 0:
+        raise SystemExit(
+            "LIVE ASSET CHECK FOUND NOTHING — the index references no site "
+            "assets; the fingerprint parse is broken and must be fixed"
+        )
+    print(f"[live] {checked} referenced assets serve the exact built bytes")
+
+
 def main():
     if "--revive-only" in sys.argv:
         revive_main()
@@ -638,6 +714,10 @@ def main():
         print("[bridge] NOTE: this process is SSH-owned and self-expires after 24 h. "
               "A panel restart (Web > Sites > Restart) remains the durable fix; "
               "the next deploy kills the bridge and converges on its own.")
+
+    # The site's fingerprint check — the last word after the API's own
+    # health verification: what the PUBLIC host serves is this build.
+    verify_public_site(site)
 
     client.close()
     print("DEPLOY DONE")
