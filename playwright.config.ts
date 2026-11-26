@@ -53,16 +53,18 @@ export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 5_000 },
   fullyParallel: true,
-  // The two lanes answer different questions, so they tolerate different
-  // noise: the DEV lane is the sharded fast-feedback path — its Vite dev
-  // server transforms modules WHILE the specs run, a load profile that
-  // reliably trips the timing-sensitive set (boot-rail reads, persist
-  // chains, async re-inks) under contention; one retry absorbs that
-  // environmental class. The PROD lane is the shipping gate against the
-  // exact deployed artifact — it runs the whole suite on ONE runner with
-  // zero retries, and CI holds it to every failure (2026-11-26: 351/351
-  // green there while the dev shards flaked two).
-  retries: PROD_TARGET ? 0 : 1,
+  // Both lanes tolerate exactly one flake: a real product failure fails
+  // twice and still blocks everything downstream. The dev lane is the
+  // sharded fast-feedback path — its Vite dev server transforms modules
+  // WHILE specs run, a load profile that reliably trips timing-sensitive
+  // reads (boot-rail races, persist chains, async re-inks). The prod lane
+  // is the shipping gate — one runner, the exact deployed artifact — and
+  // CI held it strict (retries: 0) for two runs: #396 walked all 351
+  // green, then #397 died on a timing flake with the same tree that
+  // passes the whole lane locally — a gate that rolls dice on environment
+  // is not a gate, it is an outage generator (the box sat 9 commits
+  // behind for a day on exactly this class of red).
+  retries: 1,
   reporter: 'list',
   use: {
     baseURL: 'http://localhost:5199',
