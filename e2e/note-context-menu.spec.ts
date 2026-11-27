@@ -57,6 +57,7 @@ test('right-click opens the note menu; Escape, outside click and empty space beh
   await expect(page.locator(`${MENU} [data-action="duplicate"]`)).toContainText('Duplicate');
   await expect(page.locator(`${MENU} [data-action="type-menu"]`)).toContainText('Change type');
   await expect(page.locator(`${MENU} [data-action="snapshot"]`)).toContainText('Take snapshot');
+  await expect(page.locator(`${MENU} [data-action="export"]`)).toContainText('Export…');
   await expect(page.locator(`${MENU} [data-action="share"]`)).toContainText('Share note');
   await expect(page.locator(`${MENU} [data-action="copy-text"]`)).toContainText('Copy note text');
   await expect(page.locator(`${MENU} [data-action="stats"]`)).toContainText('Statistics');

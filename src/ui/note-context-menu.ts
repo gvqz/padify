@@ -3,16 +3,22 @@
  *
  * Right-clicking a note in the rail opens this menu instead of the
  * browser's: the actions a note row can take, in one place — open,
- * rename, duplicate, change type, snapshot, share, copy, statistics,
- * close. It rides the editor context menu's `.padify-ctx` vocabulary
- * (same items, separators, submenu mechanics, fonts), so the two menus
- * read as siblings of one design system rather than two features.
+ * rename, duplicate, change type, snapshot, export, share, copy,
+ * statistics, close. It rides the editor context menu's `.padify-ctx`
+ * vocabulary (same items, separators, submenu mechanics, fonts), so the
+ * two menus read as siblings of one design system rather than two
+ * features.
  *
  * The menu targets the note UNDER THE CURSOR, not the active note —
  * background notes get the same treatment. Items that only make sense
- * for what is open (Share, Statistics) switch to the note first; items
- * that read content (Take snapshot, Copy note text) work from the model
- * directly, like the close flow does.
+ * for what is open (Export, Share, Statistics) switch to the note first;
+ * items that read content (Take snapshot, Copy note text) work from the
+ * model directly, like the close flow does.
+ *
+ * THE EXPORT ROW is the export center's rail-side door — the one door
+ * that answers on EVERY note, including a live drawing (whose toolbar
+ * download button answers the vendor's own native export dialog instead;
+ * the center carries the Padify file envelopes there).
  *
  * Desktop: opens at the cursor (viewport-clamped), hover opens the type
  * submenu, Escape/outside click/scroll closes. Keyboard: arrows rove,
@@ -43,6 +49,8 @@ const ICONS = {
   type: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7V5h16v2"/><path d="M12 5v14"/><path d="M9 19h6"/></svg>',
   snapshot:
     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="14" r="3.5"/></svg>',
+  export:
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>',
   share:
     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>',
   copy: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
@@ -113,6 +121,9 @@ function buildMenuMarkup(): string {
       </button>
       <button type="button" class="padify-ctx-item" role="menuitem" data-action="snapshot">
         ${ICONS.snapshot}<span>Take snapshot</span>
+      </button>
+      <button type="button" class="padify-ctx-item" role="menuitem" data-action="export">
+        ${ICONS.export}<span>Export…</span>
       </button>
       <button type="button" class="padify-ctx-item" role="menuitem" data-action="share">
         ${ICONS.share}<span>Share note</span>
@@ -285,6 +296,15 @@ export function initNoteContextMenu(): void {
           .catch(() => showToast('Could not take the snapshot.'));
         break;
       }
+      case 'export':
+        // The export center reads the ACTIVE note — open the note, then
+        // its center, through the same bus the app's export chord rides.
+        // On a live drawing this is the center's one reachable door (the
+        // toolbar button answers the vendor's own native export dialog
+        // there); the center answers with the Padify envelopes.
+        tabs.switchTo(tabId);
+        document.dispatchEvent(new CustomEvent('padify:open-export'));
+        break;
       case 'share':
         // The share panel reads the ACTIVE note — open the note, then
         // its panel, through the same trigger the topbar uses.

@@ -11,18 +11,10 @@ import {
   getActiveNoteExportBody,
   type TabManager,
 } from './tabs';
-import {
-  exportActiveDrawingImage,
-  copyActiveDrawingImage,
-  renderActiveDrawingImagePreview,
-  snapshotDrawingContent,
-  type DrawingImageExportOptions,
-} from './editor/drawing/surface';
-import { parseDrawingScene } from './editor/drawing/scene';
+import { openDrawingImageExportDialog } from './editor/drawing/surface';
 import { collectNoteAttachmentIds } from '../shared/att-refs';
 import {
   PADIFY_MIME_TYPE,
-  buildExcalidrawFile,
   bytesToBase64,
   serializePadifyNoteFile,
   serializePadifyWorkspaceFile,
@@ -39,27 +31,25 @@ import { openExportCenter, type ExportCenterHost, type ExportCenterType } from '
 import type { NotepadUI } from './selector';
 
 /**
- * The export center's wiring — the ONE menu every note exports through.
+ * The export center's wiring — the file-type exports' one door.
  *
- * The one-menu answer to the owner's verdict ("two separate menus that
- * do the same thing"): the drawing's image exports are INLINE rows in
- * the center now — the full native option set (Background, Dark mode,
- * Embed scene, 1×/2×/3× Scale), the live preview on the stage (the
- * checkerboard when Background is off), the file name with the embed
- * double extension (.excalidraw.png, live as the toggle flips), and the
- * Copy-to-clipboard press beside Export. No launcher handoff, no second
- * dialog — the standalone drawing export dialog is retired, and its
- * engines (surface.ts's exporters) answer behind these rows directly.
- * The vendor's own native dialog still answers behind the canvas menu
- * and its chord (native parity, untouched).
+ * THE DRAWINGPAD'S EXPORT IS THE VENDOR'S OWN (the owner's verdict on the
+ * unified popup: "it looks horrible … need 100% of features and done in
+ * the exact same way"): on a live drawing, the download button opens the
+ * vendor's own ImageExportDialog — the exact face excalidraw.com opens —
+ * with every built-in feature (only-selected, background, dark mode,
+ * embed scene, the 1×/2×/3× scale, the live preview, the PNG/SVG/
+ * clipboard presses), and the canvas's own doors answer the same way (its
+ * "Export image…" menu row, its Ctrl+Shift+E chord, and now the vendor's
+ * own Export row — the jsonExport dialog that saves the scene as
+ * .excalidraw). No re-implemented option rows, no second face.
  *
- * The canvas menu's Export row is the vendor's own again (canvas.ts —
- * the dist surgery is reverted); the app's export chord (app-shortcuts)
- * rides the `padify:open-export` bus to open THIS center on every note
- * that is not a live drawing (on a drawing the vendor's chord wins —
- * native parity). The open door (a .padify/.excalidraw file back IN)
- * rides the center's footer, so the round trip still answers from the
- * one popup.
+ * THE CENTER'S REMAINING CONTRACT: every note that is NOT a live drawing
+ * answers here — the text family (txt/md/pdf/docx/html), the .padify
+ * envelopes and the whole-pad save; a drawing whose canvas cannot
+ * answer (the error card, the load card) falls back to its envelope rows
+ * until the canvas is live again. The open door (a .padify/.excalidraw
+ * file back IN) keeps riding the footer.
  */
 export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): void {
   const padifyOpen = initPadifyFileOpen(tabManager);
@@ -213,11 +203,11 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
   };
 
   /** The envelope delegates — the note out as a .padify file, the whole
-   * pad out as one workspace file, a drawing out as native .excalidraw. */
+   * pad out as one workspace file. (A drawing's .excalidraw save is the
+   * vendor's own door now — the canvas menu's "Save to…" row, the native
+   * jsonExport dialog — so no center row duplicates it.) */
   const envelopeTypes = (): ExportCenterType[] => {
     const captured = getActiveNoteContent();
-    const active = tabManager.getActive();
-    const isDrawing = captured?.noteType === 'drawing';
 
     const padifyType: ExportCenterType = {
       id: 'padify',
@@ -318,130 +308,8 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
       },
     };
 
-    const excalidrawType: ExportCenterType | null =
-      isDrawing && captured
-        ? {
-            id: 'excalidraw',
-            label: 'Excalidraw file',
-            extension: 'excalidraw',
-            defaultStem: stemForActive(),
-            hint: 'The scene — editable on excalidraw.com',
-            preview: async () => {
-              const scene = parseDrawingScene(captured.content);
-              const elements = scene?.elements.filter((e) => e.isDeleted !== true).length ?? 0;
-              const thumb = await snapshotDrawingContent(captured.content, active?.id ?? null);
-              return {
-                image: thumb ?? undefined,
-                note:
-                  elements > 0
-                    ? `The scene, as Excalidraw will re-open it (${elements} element${elements === 1 ? '' : 's'}).`
-                    : 'Nothing to export yet — draw something first.',
-              };
-            },
-            run: async (fileName) => {
-              const activeNow = tabManager.getActive();
-              const capturedNow = getActiveNoteContent();
-              if (!activeNow || capturedNow?.noteType !== 'drawing') return false;
-              const scene = parseDrawingScene(capturedNow.content);
-              if (scene === null || scene.elements.length === 0) return false;
-              const attachments = await collectReferencedAttachments([capturedNow]);
-              saveTextAsFile(buildExcalidrawFile(scene, attachments), fileName, 'application/json');
-              return true;
-            },
-          }
-        : null;
-
-    return [...(excalidrawType ? [excalidrawType] : []), padifyType, workspaceType];
+    return [padifyType, workspaceType];
   };
-
-  /** The drawing's image rows — INLINE exporters carrying the full native
-   * option set (the standalone dialog's whole vocabulary, spoken in the
-   * one menu): Background / Dark mode / Embed scene toggles, the 1×/2×/3×
-   * Scale segment, the live preview (the checkerboard when Background is
-   * off), the embed double extension (.excalidraw.png, live as the toggle
-   * flips), and the clipboard press beside Export. The engines and their
-   * honest gates live in surface.ts; the rows only speak the options and
-   * hand the answers over. */
-  const drawingImageTypes = (): ExportCenterType[] =>
-    (['png', 'svg'] as const).map((kind): ExportCenterType => {
-      /** The live option readings, translated to the surface's options. */
-      const imageOptions = (
-        values: Record<string, boolean | string>,
-      ): DrawingImageExportOptions => ({
-        background: values.background !== false,
-        dark: values.dark === true,
-        embed: values.embed === true,
-        scale: (Number(values.scale) || 1) as 1 | 2 | 3,
-      });
-      return {
-        id: `image-${kind}`,
-        label: kind === 'png' ? 'PNG image' : 'SVG image',
-        extension: kind,
-        // Embed scene doubles the extension — the vendor's own marker,
-        // live on the suffix chip as the toggle flips.
-        extensionFor: (values) => (values.embed === true ? `excalidraw.${kind}` : kind),
-        defaultStem: stemForActive(),
-        hint: kind === 'png' ? 'Every pixel, opens anywhere' : 'Vector — sharp at any size',
-        section: 'images',
-        options: [
-          {
-            kind: 'toggle',
-            id: 'background',
-            label: 'Background',
-            hint: 'the canvas background',
-            value: true,
-          },
-          {
-            kind: 'toggle',
-            id: 'dark',
-            label: 'Dark mode',
-            hint: 'the dark palette',
-            value: false,
-          },
-          {
-            kind: 'toggle',
-            id: 'embed',
-            label: 'Embed scene',
-            hint: 'editable on excalidraw.com',
-            value: false,
-          },
-          {
-            kind: 'segment',
-            id: 'scale',
-            label: 'Scale',
-            values: [
-              { id: '1', label: '1×', title: 'Natural size' },
-              { id: '2', label: '2×', title: 'Twice the pixels' },
-              { id: '3', label: '3×', title: 'Three times the pixels' },
-            ],
-            value: '1',
-          },
-        ],
-        preview: async (values) => {
-          const answer = await renderActiveDrawingImagePreview(imageOptions(values));
-          return {
-            image: answer.image ?? undefined,
-            note: answer.note ?? undefined,
-            imageTransparent: answer.transparent,
-          };
-        },
-        run: async (fileName, values) =>
-          exportActiveDrawingImage(kind, imageOptions(values), fileName),
-        copy: async (values) => copyActiveDrawingImage(kind, imageOptions(values)),
-        // The vendor's own capability gates (probablySupportsClipboardBlob
-        // for the PNG blob, writeText for the SVG markup).
-        copySupported: () => {
-          const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
-          if (!clipboard) return false;
-          if (kind === 'png') {
-            return (
-              'write' in clipboard && typeof window !== 'undefined' && 'ClipboardItem' in window
-            );
-          }
-          return 'writeText' in clipboard;
-        },
-      };
-    });
 
   /** The host for the ACTIVE note — the type list says what it can become. */
   const openCenter = (initialTypeId?: string): void => {
@@ -453,12 +321,11 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
     const isDrawing = captured?.noteType === 'drawing';
 
     const types: ExportCenterType[] = isDrawing
-      ? // The image rows first (the drawing's headline exports, with
-        // the full native option set inline), then the envelopes. An
-        // empty canvas still opens the center: the image rows' preview
-        // and presses answer with the honest gates, and the envelope
-        // types stay alive.
-        [...drawingImageTypes(), ...envelopeTypes()]
+      ? // The fallback face (the native dialog owns the image exports on
+        // a live canvas): the drawing's Padify envelopes alone. An empty
+        // canvas or an error card still opens the center — the envelopes
+        // serialize from the note's saved bytes and keep working.
+        [...envelopeTypes()]
       : [...textTypes(), ...envelopeTypes()];
 
     const host: ExportCenterHost = {
@@ -477,17 +344,24 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
     openExportCenter(host);
   };
 
-  // The one door: the download button opens the center (the old dropdown
-  // layer is gone — no menu to toggle, one dialog to learn).
+  // The one door: on a LIVE drawing the download button answers the
+  // VENDOR's own image-export dialog (openDrawingImageExportDialog — the
+  // owner's verdict: 100% of the built-in features, the exact built-in
+  // way); every other note — and a drawing whose canvas cannot answer —
+  // opens the center.
   notepad.downloadNotes.on('click', () => {
+    if (openDrawingImageExportDialog()) {
+      return;
+    }
     openCenter();
   });
 
   // The app's export chord rides the bus (app-shortcuts.ts dispatches it
   // when NO drawing canvas is live — on a live drawing the vendor's own
-  // Ctrl+Shift+E answers, native parity); document, not window — the app's
-  // bridge lives there, the same bus padify:open-shortcuts rides. No
-  // preset: the active note's first selectable type answers.
+  // Ctrl+Shift+E opens the vendor's own dialog, native parity); document,
+  // not window — the app's bridge lives there, the same bus
+  // padify:open-shortcuts rides. No preset: the active note's first
+  // selectable type answers.
   document.addEventListener('padify:open-export', (event) => {
     const detail = (event as CustomEvent<{ initialTypeId?: string }>).detail;
     openCenter(detail?.initialTypeId);

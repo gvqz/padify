@@ -42,9 +42,8 @@
 
 import { registerNoteSurfaceForType, type NoteSurface, type SurfaceNote } from '../surface';
 import { opaqueNoteSurface } from '../surface';
+import { deriveTabTitle } from '../note-content';
 import { showToast } from '../../ui/toast';
-import { saveTextAsFile } from '../../exports';
-import { sanitizeFileStem } from '../../ui/file-name';
 import {
   DRAWING_SCENE_SOFT_BUDGET_BYTES,
   DRAWING_SCENE_VERSION,
@@ -57,16 +56,7 @@ import {
   type DrawingScene,
   type DrawingSceneElement,
 } from './scene';
-import type {
-  DrawingCanvasHandle,
-  DrawingCanvasScene,
-  DrawingCanvasTheme,
-  DrawingImageExportOptions,
-} from './canvas';
-// The image-export options, re-exported for the export center's wiring
-// (download-menu.ts) — type-only, so the vendor chunk stays lazy: the
-// re-export erases at compile time, it never drags './canvas' in.
-export type { DrawingImageExportOptions } from './canvas';
+import type { DrawingCanvasHandle, DrawingCanvasScene, DrawingCanvasTheme } from './canvas';
 // Type-only vendor import — erased at compile, no runtime cost to the
 // boot payload (the vendor stays lazy behind import('./canvas')).
 import type { BinaryFiles } from '@excalidraw/excalidraw/types';
@@ -578,7 +568,12 @@ export class DrawingNoteSurface implements NoteSurface {
     }
 
     const scene = parseDrawingScene(note.content) ?? emptyDrawingScene();
-    const name = typeof note.name === 'string' && note.name.trim() !== '' ? note.name : 'drawing';
+    // The name the VENDOR's own faces speak (its export dialogs' file
+    // names, its ProjectName field) is the note as the rail calls it —
+    // the display title, so a fresh drawing's exports answer
+    // "Drawing.excalidraw", the same name every Padify export surface
+    // has always spoken.
+    const name = deriveTabTitle({ ...note, name: note.name ?? null });
     const noteId = typeof note.id === 'string' ? note.id : null;
 
     const current = liveFor(host);
@@ -646,226 +641,29 @@ export class DrawingNoteSurface implements NoteSurface {
 registerNoteSurfaceForType('drawing', new DrawingNoteSurface());
 
 // ---------------------------------------------------------------------------
-// The image-export seam — the export center's inline image rows (PNG and
-// SVG with the full native option set: export, copy, live preview)
+// The native export door — the drawingpad's export is the VENDOR's own
+// dialog, opened from every app-level door (the owner's verdict)
 // ---------------------------------------------------------------------------
 
-/** Downloads a binary export without leaking the blob URL (the exports
- * module's revoke pattern, local so this module stays self-contained). */
-function downloadBlob(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  link.style.display = 'none';
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 5_000);
-}
-
-/** A file-name-safe rendering of the note's name — the one rule every
- * export surface speaks (ui/file-name.ts). */
-function exportFileName(name: string): string {
-  return sanitizeFileStem(name, 'drawing');
-}
-
-/** The visible scene's natural bounds, if every element carries them —
- * the dialog's facts line ("1,240 × 860 px") answers from here. */
-function visibleElementBounds(
-  elements: DrawingSceneElement[],
-): { width: number; height: number } | null {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const element of elements) {
-    const x = Number(element.x);
-    const y = Number(element.y);
-    const width = Number(element.width);
-    const height = Number(element.height);
-    if (
-      !Number.isFinite(x) ||
-      !Number.isFinite(y) ||
-      !Number.isFinite(width) ||
-      !Number.isFinite(height)
-    ) {
-      return null;
-    }
-    minX = Math.min(minX, x);
-    minY = Math.min(minY, y);
-    maxX = Math.max(maxX, x + width);
-    maxY = Math.max(maxY, y + height);
-  }
-  if (elements.length === 0 || minX === Infinity) return null;
-  return {
-    width: Math.max(1, Math.ceil(maxX - minX)),
-    height: Math.max(1, Math.ceil(maxY - minY)),
-  };
-}
-
 /**
- * Exports the OPEN drawing as PNG or SVG — the drawing export dialog
- * answers this on Save, with the dialog's native options (format,
- * background, dark mode, embed scene, scale). Refuses honestly when the
- * canvas is not mounted or holds nothing: the same rules the share modal
- * applies, in the same words the app uses elsewhere.
+ * Opens the VENDOR's own image-export dialog on the live drawing — the
+ * exact face excalidraw.com opens from its own menu row and its
+ * Ctrl+Shift+E chord: only-selected, background, dark mode, embed scene,
+ * the 1×/2×/3× scale, the live preview, the PNG/SVG/clipboard presses —
+ * 100% of the built-in features, done in the built-in way.
  *
- * NATIVE PARITY: an embedded export carries the vendor's own double
- * extension (`drawing.excalidraw.png` / `.excalidraw.svg`) — the marker
- * excalidraw.com's loader recognizes when the file re-opens there.
+ * Answers true when the native dialog was opened on a mounted, connected
+ * canvas; false when no live canvas owns the host — the caller then falls
+ * back to the export center's envelope rows (the honest face when the
+ * canvas itself cannot answer).
  */
-export async function exportActiveDrawingImage(
-  kind: 'png' | 'svg',
-  options?: DrawingImageExportOptions,
-  fileNameOverride?: string,
-): Promise<boolean> {
+export function openDrawingImageExportDialog(): boolean {
   const current = live;
   if (!current || !current.handle || current.disposed || !current.mount.isConnected) {
-    showToast('Open the drawing note first, then export.');
     return false;
   }
-  const scene = current.handle.getScene();
-  const visible = visibleElements(scene.elements as DrawingSceneElement[]);
-  if (visible.length === 0) {
-    showToast('Nothing to export yet — draw something first.');
-    return false;
-  }
-  // The image bytes ride along: the live map holds whatever the vendor
-  // inserted this session plus the hydration — without it an image
-  // element exports as a gray placeholder.
-  const files = current.handle.getFiles();
-  // The dialog owns the name now — the full stem + suffix (the embed's
-  // double extension included), sanitized at press time; the note's
-  // name plus the embed marker is the fallback when no face spoke.
-  const fileName =
-    fileNameOverride ??
-    `${exportFileName(current.noteName)}${options?.embed === true ? '.excalidraw' : ''}.${kind === 'svg' ? 'svg' : 'png'}`;
-  try {
-    const canvas = await import('./canvas');
-    if (kind === 'svg') {
-      const markup = await canvas.renderDrawingImage('svg', scene, files, options);
-      saveTextAsFile(markup as string, fileName, 'image/svg+xml');
-      return true;
-    }
-    const blob = await canvas.renderDrawingImage('png', scene, files, options);
-    if (blob instanceof Blob) {
-      downloadBlob(blob, fileName);
-      return true;
-    }
-    return false;
-  } catch {
-    showToast('The image export failed — try again.');
-    return false;
-  }
-}
-
-/**
- * Copies the OPEN drawing to the clipboard — the dialog's Copy button,
- * the native parity the R1 face never had: PNG rides as an image/png
- * blob (the vendor's own clipboard flavor), SVG rides as the markup text
- * (its copyAsSvg flavor). The same gates, the same honest words.
- */
-export async function copyActiveDrawingImage(
-  kind: 'png' | 'svg',
-  options?: DrawingImageExportOptions,
-): Promise<boolean> {
-  const current = live;
-  if (!current || !current.handle || current.disposed || !current.mount.isConnected) {
-    showToast('Open the drawing note first, then export.');
-    return false;
-  }
-  const scene = current.handle.getScene();
-  const visible = visibleElements(scene.elements as DrawingSceneElement[]);
-  if (visible.length === 0) {
-    showToast('Nothing to export yet — draw something first.');
-    return false;
-  }
-  const files = current.handle.getFiles();
-  try {
-    const canvas = await import('./canvas');
-    await canvas.copyDrawingImage(kind, scene, files, options);
-    showToast(
-      kind === 'png' ? 'Copied to clipboard as a PNG image.' : 'Copied to clipboard as SVG markup.',
-    );
-    return true;
-  } catch {
-    showToast('The clipboard copy failed — try again.');
-    return false;
-  }
-}
-
-/** What the export center's image preview asks for and gets back. */
-export interface DrawingImagePreview {
-  /** The rendered PNG thumbnail's object URL (Background and Dark
-   * honored), or null when the gates refuse — the center's stage then
-   * speaks the honest note alone. */
-  image: string | null;
-  /** The stage's status line: the scene's facts at the live scale, or
-   * the refusing gate's words. */
-  note: string | null;
-  /** True when the thumbnail was rendered with the background OFF — the
-   * center paints the checkerboard behind it, so transparency is SEEN. */
-  transparent: boolean;
-}
-
-/**
- * The export center's image rows' preview seam — the native dialog's
- * live preview, spoken inline by the ONE menu (the standalone drawing
- * dialog is retired; its whole option vocabulary lives in the center's
- * rows now, and this is the face's part that needed the vendor island).
- *
- * The thumbnail honors Background and Dark — the two options that change
- * the pixels; Scale is the facts line's truth, not the thumbnail's (a 3×
- * render of the same picture is the same picture, and not worth the
- * wait). The gates answer honestly instead of throwing: a closed canvas
- * or an empty scene returns the same words the export press would toast.
- */
-export async function renderActiveDrawingImagePreview(
-  options: DrawingImageExportOptions,
-): Promise<DrawingImagePreview> {
-  const current = live;
-  if (!current || !current.handle || current.disposed || !current.mount.isConnected) {
-    return { image: null, note: 'Open the drawing note first, then export.', transparent: false };
-  }
-  const scene = current.handle.getScene();
-  const visible = visibleElements(scene.elements as DrawingSceneElement[]);
-  if (visible.length === 0) {
-    return {
-      image: null,
-      note: 'Nothing to export yet — draw something first.',
-      transparent: false,
-    };
-  }
-  const files = current.handle.getFiles();
-  const bounds = visibleElementBounds(visible);
-  const scale = options.scale ?? 1;
-  // The scene's facts: the natural bounds and their scale-multiplied
-  // answer ("1,240 × 860 px — 3,720 × 2,580 px at 3×") — the answer to
-  // "how big is this file going to be?"
-  const countWord = `${visible.length} element${visible.length === 1 ? '' : 's'}`;
-  const facts = bounds
-    ? `${bounds.width} × ${bounds.height} px${scale > 1 ? ` — ${bounds.width * scale} × ${bounds.height * scale} px at ${scale}×` : ''}`
-    : null;
-  const note = facts ? `${countWord} — ${facts}` : countWord;
-  try {
-    const canvas = await import('./canvas');
-    const blob = await canvas.renderDrawingImage('png', scene, files, {
-      background: options.background,
-      dark: options.dark,
-    });
-    if (blob instanceof Blob) {
-      return {
-        image: URL.createObjectURL(blob),
-        note,
-        transparent: options.background === false,
-      };
-    }
-  } catch {
-    // The thumbnail failed — the stage still speaks the facts; the
-    // export press owns the real failure handling.
-  }
-  return { image: null, note, transparent: options.background === false };
+  current.handle.openImageExportDialog();
+  return true;
 }
 
 /**

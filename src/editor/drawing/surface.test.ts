@@ -51,6 +51,7 @@ vi.mock('./canvas', () => {
           elements: [],
           appState: {},
         })),
+        openImageExportDialog: vi.fn(),
         addFiles: vi.fn(),
         getFiles: vi.fn((): Record<string, unknown> => ({})),
         unmount: vi.fn(),
@@ -61,10 +62,6 @@ vi.mock('./canvas', () => {
     renderDrawingImage: vi.fn(async (kind: 'png' | 'svg') =>
       kind === 'svg' ? '<svg xmlns="x"></svg>' : new Blob(['png-bytes'], { type: 'image/png' }),
     ),
-    copyDrawingImage: vi.fn(async () => {
-      // The vendor's clipboard pipe — resolves in the happy path; tests
-      // that want the failure path reject it.
-    }),
     __resetMounts: (): void => {
       mounts.length = 0;
       failNextCount = 0;
@@ -98,10 +95,8 @@ import {
   DRAWING_ANNOUNCE_DEBOUNCE_MS,
   DRAWING_ZEN_MODE_CLASS,
   DrawingNoteSurface,
-  copyActiveDrawingImage,
   drawingCanvasIsLive,
-  exportActiveDrawingImage,
-  renderActiveDrawingImagePreview,
+  openDrawingImageExportDialog,
 } from './surface';
 import { DRAWING_SCENE_SOFT_BUDGET_BYTES, emptyDrawingScene, serializeDrawingScene } from './scene';
 import { noteSurfaceFor, opaqueNoteSurface } from '../surface';
@@ -120,6 +115,7 @@ interface RecordedMount {
     rename: (name: string) => void;
     scrollToContent: () => void;
     getScene: () => { elements: Record<string, unknown>[]; appState: unknown };
+    openImageExportDialog: () => void;
     addFiles: (files: unknown[]) => void;
     getFiles: () => Record<string, unknown>;
     unmount: () => void;
@@ -148,7 +144,6 @@ import * as canvasModule from './canvas';
 const canvasMock = canvasModule as unknown as {
   mounts: RecordedMount[];
   renderDrawingImage: (kind: 'png' | 'svg', scene: unknown) => Promise<unknown>;
-  copyDrawingImage: (kind: 'png' | 'svg', scene: unknown) => Promise<void>;
   __resetMounts: () => void;
   __failNextMount: () => void;
 };
@@ -225,7 +220,9 @@ describe('display — the mount lifecycle', () => {
     expect(options.initialScene.elements).toEqual([{ id: 'a', type: 'rectangle' }]);
     expect(options.initialScene.appState).toEqual({ viewBackgroundColor: '#ffffff' });
     expect(options.theme).toBe('light');
-    expect(options.name).toBe('drawing');
+    // The vendor's faces (its export dialogs' file names) speak the
+    // display title — the note as the rail calls it.
+    expect(options.name).toBe('Drawing');
     expect(wrapper!.querySelector('.unsupported-note')).toBeNull(); // loading card gone
   });
 
@@ -638,40 +635,7 @@ describe('visibleText — the projection stays the model’s', () => {
   });
 });
 
-describe('the image-export seam', () => {
-  it('refuses when no drawing is open', async () => {
-    await exportActiveDrawingImage('png');
-    expect(showToast).toHaveBeenCalledWith('Open the drawing note first, then export.');
-  });
-
-  it('refuses an empty canvas honestly', async () => {
-    const host = connectedHost();
-    surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
-    await canvasReady();
-
-    await exportActiveDrawingImage('svg');
-    expect(showToast).toHaveBeenCalledWith('Nothing to export yet — draw something first.');
-  });
-
-  it('exports the live scene through the canvas module', async () => {
-    const host = connectedHost();
-    surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
-    await canvasReady();
-    const mounted = lastMount();
-    mounted.handle.getScene = () => ({
-      elements: [{ id: 'a', type: 'rectangle' }],
-      appState: {},
-    });
-
-    await exportActiveDrawingImage('png');
-    expect(canvasMock.renderDrawingImage).toHaveBeenCalledWith(
-      'png',
-      expect.objectContaining({ elements: [{ id: 'a', type: 'rectangle' }] }),
-      {}, // the live files map (empty here) rides along for image elements
-      undefined, // no dialog options — the fixed-defaults caller's shape
-    );
-  });
-
+describe('the image spine — hydration and flush (the export face itself is the vendor’s own dialog)', () => {
   it('hydrates the scene fileIds through the canvas handle', async () => {
     const host = connectedHost();
     const file = {
@@ -717,124 +681,28 @@ describe('the image-export seam', () => {
   });
 });
 
-describe('the clipboard seam — the native parity the R1 face gained', () => {
-  it('refuses when no drawing is open', async () => {
-    await copyActiveDrawingImage('png');
-    expect(showToast).toHaveBeenCalledWith('Open the drawing note first, then export.');
-    expect(canvasMock.copyDrawingImage).not.toHaveBeenCalled();
+describe('the native export door — the drawingpad’s export is the vendor’s own dialog', () => {
+  it('answers false when no drawing is live (the caller falls back to the center)', () => {
+    expect(openDrawingImageExportDialog()).toBe(false);
   });
 
-  it('refuses an empty canvas honestly, without touching the clipboard', async () => {
+  it('opens the vendor’s own dialog on the live handle, and answers true', async () => {
     const host = connectedHost();
     surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
     await canvasReady();
 
-    await copyActiveDrawingImage('svg');
-    expect(showToast).toHaveBeenCalledWith('Nothing to export yet — draw something first.');
-    expect(canvasMock.copyDrawingImage).not.toHaveBeenCalled();
+    expect(openDrawingImageExportDialog()).toBe(true);
+    expect(lastMount().handle.openImageExportDialog).toHaveBeenCalledTimes(1);
   });
 
-  it('copies the live scene through the vendor clipboard pipe and toasts', async () => {
+  it('a stood-down canvas answers false again', async () => {
     const host = connectedHost();
-    surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
+    surface.display(host, { content: '', noteType: 'drawing' });
     await canvasReady();
-    const mounted = lastMount();
-    mounted.handle.getScene = () => ({
-      elements: [{ id: 'a', type: 'rectangle' }],
-      appState: {},
-    });
+    expect(openDrawingImageExportDialog()).toBe(true);
 
-    await copyActiveDrawingImage('png', { background: true, scale: 3 });
-    expect(canvasMock.copyDrawingImage).toHaveBeenCalledWith(
-      'png',
-      expect.objectContaining({ elements: [{ id: 'a', type: 'rectangle' }] }),
-      {},
-      { background: true, scale: 3 },
-    );
-    expect(showToast).toHaveBeenCalledWith('Copied to clipboard as a PNG image.');
-  });
-
-  it('answers a failed copy with the honest toast, never a thrown one', async () => {
-    vi.mocked(canvasMock.copyDrawingImage).mockRejectedValueOnce(new Error('no clipboard'));
-    const host = connectedHost();
-    surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
-    await canvasReady();
-    const mounted = lastMount();
-    mounted.handle.getScene = () => ({
-      elements: [{ id: 'a', type: 'rectangle' }],
-      appState: {},
-    });
-
-    await expect(copyActiveDrawingImage('png')).resolves.toBe(false);
-    expect(showToast).toHaveBeenCalledWith('The clipboard copy failed — try again.');
-  });
-});
-
-describe("the export center's image preview seam — the one-menu pass", () => {
-  it("renders the thumbnail honoring Background and Dark, with the scene's facts", async () => {
-    const host = connectedHost();
-    surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
-    await canvasReady();
-    const mounted = lastMount();
-    mounted.handle.getScene = () => ({
-      elements: [{ id: 'a', type: 'rectangle', x: 10, y: 20, width: 100, height: 50 }],
-      appState: {},
-    });
-
-    const originalCreateObjectURL = URL.createObjectURL;
-    const originalRevokeObjectURL = URL.revokeObjectURL;
-    URL.createObjectURL = vi.fn((): string => 'blob:preview');
-    URL.revokeObjectURL = vi.fn();
-    try {
-      const answer = await renderActiveDrawingImagePreview({
-        background: false,
-        dark: true,
-        scale: 3,
-      });
-      expect(answer.image).toBe('blob:preview');
-      expect(answer.transparent).toBe(true);
-      // The facts line: one element, its natural bounds, the 3x answer.
-      expect(answer.note).toBe('1 element — 100 × 50 px — 300 × 150 px at 3×');
-    } finally {
-      URL.createObjectURL = originalCreateObjectURL;
-      URL.revokeObjectURL = originalRevokeObjectURL;
-    }
-    // The thumbnail honors Background and Dark — the two options that
-    // change the pixels (scale rides the facts line, not the render).
-    expect(canvasMock.renderDrawingImage).toHaveBeenCalledWith(
-      'png',
-      expect.anything(),
-      {},
-      { background: false, dark: true },
-    );
-  });
-
-  it('gates the preview with the same honest words as the exporter', async () => {
-    const host = connectedHost();
-    surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
-    await canvasReady();
-
-    const answer = await renderActiveDrawingImagePreview({});
-    expect(answer.image).toBeNull();
-    expect(answer.note).toBe('Nothing to export yet — draw something first.');
-    expect(answer.transparent).toBe(false);
-  });
-
-  it('a render failure answers the facts, not a thrown one', async () => {
-    const host = connectedHost();
-    surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
-    await canvasReady();
-    const mounted = lastMount();
-    mounted.handle.getScene = () => ({
-      elements: [{ id: 'a', type: 'rectangle', x: 10, y: 20, width: 100, height: 50 }],
-      appState: {},
-    });
-    vi.mocked(canvasMock.renderDrawingImage).mockRejectedValueOnce(new Error('boom'));
-
-    const answer = await renderActiveDrawingImagePreview({ scale: 2 });
-    expect(answer.image).toBeNull();
-    expect(answer.note).toBe('1 element — 100 × 50 px — 200 × 100 px at 2×');
-    expect(answer.transparent).toBe(false);
+    surface.dismiss(host);
+    expect(openDrawingImageExportDialog()).toBe(false);
   });
 
   it('answers the chord-scope question: only a mounted, connected canvas is live', async () => {

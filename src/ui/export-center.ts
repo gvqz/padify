@@ -1,35 +1,31 @@
 /**
- * The export center — the app's ONE popup for the file-type exports.
+ * The export center — the file-type exports' one popup.
  *
- * THE STORY AFTER THE CONSOLIDATION'S FALL (the one-menu answer): the
- * consolidation (9ba973e) replaced every export with a popup alone and
- * deleted the vendor's native dialog from the dist (e6a173b) — the
- * owner called it the model's worst mistake. Both were reverted, and
- * the center then earned a narrower contract (the launcher rows + the
- * drawing's own option-bearing dialog — TWO faces of ours for one
- * export, the owner's next verdict: "two separate menus that do the
- * same thing"). THIS pass is the one-menu answer:
+ * THE STORY AFTER THE OWNER'S THIRD VERDICT: the consolidation (9ba973e)
+ * replaced every export with a popup alone and deleted the vendor's
+ * native dialog from the dist (e6a173b) — "the model's worst mistake",
+ * reverted. The center then carried the drawing's image exports as
+ * INLINE rows (the one-menu pass) — the owner's verdict on THAT face:
+ * "I do not approve of the new unified export popup — it looks
+ * horrible … the built in export does a lot more and does it a lot
+ * different … need 100% of features and done in the exact same way."
+ * So the drawing's image exports left for good: on a live drawing the
+ * download button and every canvas door open the VENDOR's own
+ * ImageExportDialog (surface.ts's openDrawingImageExportDialog —
+ * only-selected, background, dark mode, embed scene, the scale, the
+ * live preview, the PNG/SVG/clipboard presses, all of it native).
  *
- *   - the drawing's image exports are INLINE rows here — PNG and SVG as
- *     full exporter types carrying the whole native option set
- *     (Background, Dark mode, Embed scene, 1×/2×/3× Scale), the live
- *     preview on the stage (the checkerboard when Background is off),
- *     the file name with the embed double extension (.excalidraw.png,
- *     live as the toggle flips), and a Copy-to-clipboard press beside
- *     the Export. No handoff, no second dialog — the standalone drawing
- *     export dialog is retired (its option vocabulary and its face's
- *     preview seam live in these rows).
- *   - the file-type exports (txt/md/pdf/docx/html), the .padify
- *     envelopes and the whole-pad save ride the same list — ONE menu,
- *     one muscle memory, every note type.
- *   - the vendor's own native dialog still answers behind the canvas
- *     menu and its chord (canvas.ts) — native parity, untouched.
+ * WHAT RIDES THE CENTER NOW: the file-type exports (txt/md/pdf/docx/
+ * html), the .padify envelopes, the .excalidraw envelope, and the
+ * whole-pad save — every note that is not a live drawing, plus a
+ * drawing whose canvas cannot answer (the envelope-only fallback).
  *
  * THE CONTRACT: the center is pure UI and vendor-free — the host hands in
  * one ExportCenterType per file type the ACTIVE NOTE can become, each
- * with its own preview() and run(stem, values) and, for the image rows,
- * copy(). The drawing's renderers arrive from surface.ts as delegates,
- * so the canvas chunk never rides this module.
+ * with its own preview() and run(stem, values) and, where a type can
+ * copy, copy(). The drawing's thumbnail renders from a data URL the
+ * host supplies (surface.ts's snapshot seam), so the canvas chunk
+ * never rides this module.
  *
  * THE BINDING DISCIPLINE (the bug the consolidation shipped): the face is
  * built ONCE, so every listener binds ONCE at build and reads the LIVE

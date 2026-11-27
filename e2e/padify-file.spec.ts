@@ -23,6 +23,28 @@ test.beforeEach(({ page }) => {
   const errors: string[] = [];
   pageErrors.set(page, errors);
   page.on('pageerror', (error) => errors.push(String(error)));
+  // The vendor's own fileSave (browser-fs-access) must take its
+  // <a download> fallback — the drawing's native export doors then
+  // answer real download events.
+  void page.addInitScript(() => {
+    // localhost is a SECURE context, so Chromium exposes the FS Access
+    // API here (an own window property) — the vendor's fileSave would open
+    // a picker no headless run can answer. Kill the API outright so the
+    // feature check (`'showOpenFilePicker' in self`) fails and the
+    // legacy <a download> path answers real download events.
+    for (const key of ['showOpenFilePicker', 'showSaveFilePicker', 'showDirectoryPicker']) {
+      try {
+        delete window[key];
+      } catch {
+        /* not an own property — the prototype hop below owns it */
+      }
+      try {
+        delete Window.prototype[key];
+      } catch {
+        /* nothing to delete there */
+      }
+    }
+  });
 });
 
 test.afterEach(async ({ page }) => {
@@ -242,7 +264,9 @@ test.describe('the .padify file', () => {
     expect(scene.appState.viewModeEnabled).toBeUndefined();
   });
 
-  test('a drawing note exports as a native .excalidraw file', async ({ page }, testInfo) => {
+  test("a drawing note exports as a native .excalidraw file — through the vendor's own door", async ({
+    page,
+  }, testInfo) => {
     await page.goto('/');
     await page.locator('#addTabTypeMenu').click();
     await page
@@ -250,30 +274,25 @@ test.describe('the .padify file', () => {
       .click();
     await expect(page.locator('#note .excalidraw')).toBeVisible({ timeout: 20_000 });
 
-    // Empty canvas: the center still opens — one door for every state —
-    // and the Excalidraw type's stage says what an export would need.
-    await page.locator('#downloadNotes').click();
-    const dialog = page.locator('dialog.export-center');
-    await expect(dialog).toBeVisible();
-    await dialog.locator('.export-center-type', { hasText: 'Excalidraw file' }).click();
-    await expect(dialog.locator('.export-center-stage-note')).toContainText(
-      'Nothing to export yet',
-    );
-    await page.keyboard.press('Escape');
-    await expect(dialog).toBeHidden();
-
-    // Draw, wait for the save chain, reopen: the stage renders the scene.
+    // Draw, wait for the save chain: the scene envelope must exist before
+    // an export means anything.
     await drawRectangle(page);
     await page.waitForTimeout(2_000);
-    await page.locator('#downloadNotes').click();
-    await expect(dialog).toBeVisible();
-    await dialog.locator('.export-center-type', { hasText: 'Excalidraw file' }).click();
-    await expect(dialog.locator('.export-center-stage-note')).toContainText(
-      'The scene, as Excalidraw will re-open it',
-    );
+
+    // The drawingpad's export is the vendor's own: the canvas menu's
+    // "Save to…" row opens the native jsonExport dialog, and its
+    // Save-to-disk card writes the .excalidraw file through the vendor's
+    // own saveAsJSON (elements, files, appState).
+    await page.locator('[data-testid="main-menu-trigger"]').click();
+    const menu = page.locator('#note .excalidraw .dropdown-menu');
+    await expect(menu.locator('[data-testid="json-export-button"]')).toBeVisible();
+    await menu.locator('[data-testid="json-export-button"]').click();
+    const jsonDialog = page.locator('.ExportDialog--json');
+    await expect(jsonDialog).toBeVisible();
+    await expect(jsonDialog.getByText('Save to disk')).toBeVisible();
 
     const download = page.waitForEvent('download');
-    await dialog.locator('.export-center-export').click();
+    await jsonDialog.getByRole('button', { name: 'Save to file' }).click();
     const file = await download;
     expect(file.suggestedFilename()).toBe('Drawing.excalidraw');
     const savedPath = testInfo.outputPath('drawing.excalidraw');
@@ -291,6 +310,42 @@ test.describe('the .padify file', () => {
     expect(native.elements).toHaveLength(1);
     expect(native.elements[0].type).toBe('rectangle');
     expect(typeof native.appState).toBe('object');
+  });
+
+  test("the rail's Export… row keeps the Padify envelopes reachable on a live drawing", async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.locator('#addTabTypeMenu').click();
+    await page
+      .locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Drawing' })
+      .click();
+    await expect(page.locator('#note .excalidraw')).toBeVisible({ timeout: 20_000 });
+    await drawRectangle(page);
+    await page.waitForTimeout(2_000);
+
+    // The toolbar's download button answers the vendor's native dialog on
+    // a live drawing — so the center (the Padify envelopes' face) rides
+    // the note menu's Export… row instead. Right-click the drawing's tab.
+    const tab = page.locator('#tabStripTabs .tab-strip-tab').first();
+    await tab.click({ button: 'right' });
+    const ctxMenu = page.locator('#noteCtxMenu');
+    await expect(ctxMenu).toBeVisible();
+    await ctxMenu.locator('[data-action="export"]').click();
+
+    const center = page.locator('dialog.export-center');
+    await expect(center).toBeVisible();
+    // The Padify envelopes answer — and no row duplicates the native
+    // doors (no image rows, no .excalidraw row).
+    await expect(center.locator('.export-center-type', { hasText: 'Padify file' })).toBeVisible();
+    await expect(center.locator('.export-center-type', { hasText: 'Whole pad' })).toBeVisible();
+    await expect(center.locator('.export-center-type', { hasText: 'PNG image' })).toHaveCount(0);
+    await expect(center.locator('.export-center-type', { hasText: 'SVG image' })).toHaveCount(0);
+    await expect(center.locator('.export-center-type', { hasText: 'Excalidraw file' })).toHaveCount(
+      0,
+    );
+    await page.keyboard.press('Escape');
+    await expect(center).toBeHidden();
   });
 
   test('the open door refuses what it cannot open honestly', async ({ page }, testInfo) => {

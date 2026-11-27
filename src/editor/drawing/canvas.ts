@@ -32,9 +32,15 @@
  * Excalidraw component to that contract:
  *  - `mountDrawingCanvas()` renders the component with the native chrome
  *    and bridges the vendor's onChange into the surface's announce.
- *  - `renderDrawingImage()` / `copyDrawingImage()` are the export APIs
- *    behind the drawing's export dialog (surface.ts) — the same engines
- *    the vendor's own dialogs call.
+ *  - `renderDrawingImage()` is the render engine behind the share/snapshot
+ *    seams (surface.ts) — the same engine the vendor's own dialogs call.
+ *  - `openImageExportDialog()` is the app-level door into the VENDOR's own
+ *    image-export dialog — the exact face excalidraw.com opens (its
+ *    menu row and its Ctrl+Shift+E chord open this same dialog; the
+ *    owner's verdict: the drawingpad's export is the built-in one, 100%
+ *    of its features, done in its exact way — only-selected, background,
+ *    dark mode, embed scene, the 1×/2×/3× scale, the live preview, the
+ *    PNG/SVG/clipboard presses).
  *
  * NO JSX BY DESIGN: the app is a vanilla-TS codebase with no JSX tooling;
  * `createElement` keeps this island a plain .ts file (no tsconfig/eslint
@@ -53,7 +59,6 @@ import {
   MainMenu,
   WelcomeScreen,
   exportScene,
-  exportToClipboard,
   getCommonBounds,
 } from '@excalidraw/excalidraw';
 // The island's error boundary — a vendor render error (the stale-build
@@ -111,6 +116,13 @@ export interface DrawingCanvasHandle {
   setTheme(theme: DrawingCanvasTheme): void;
   /** The live scene (non-deleted elements are the caller's business). */
   getScene(): DrawingCanvasScene;
+  /** Opens the VENDOR's own image-export dialog — the app-level export
+   * door for a live drawing (surface.ts answers it; download-menu.ts
+   * calls when the active note is a live canvas). The same face the
+   * vendor's menu row and its Ctrl+Shift+E chord open:
+   * appState.openDialog = imageExport, and the vendor's LayerUI renders
+   * its own ImageExportDialog on it. No-op when the API is not ready. */
+  openImageExportDialog(): void;
   /** Feeds the vendor image bytes the scene's fileIds reference (the
    * hydration pass — canvas-images.ts loads them from the attachment
    * store). Calls that land before the vendor API is ready queue and
@@ -139,13 +151,14 @@ export interface MountDrawingCanvasOptions {
 /**
  * The native chrome, as a prop bag for the component. The canvasActions
  * gates keep the app-owned doors shut (clear-canvas — the Padify-confirmed
- * flow owns it; the JSON export dialog — the app's `.excalidraw` row is the
- * same door with the attachment spine; the theme toggle — the app's theme
- * switch is the one authority), while the vendor's own Save as image, Open
- * and canvas background stay native. The main menu children mirror the
- * vendor's own fallback composition (Open, Save to…, Export image…, Search,
- * Help, canvas background) minus the white-label policy items — see the
- * module docstring.
+ * flow owns it; the theme toggle — the app's theme switch is the one
+ * authority), while the vendor's own export doors stand OPEN, native: Save
+ * as image (the ImageExportDialog) AND Export-to-file (the JSONExportDialog
+ * that saves the live scene — elements, files, appState — as .excalidraw),
+ * plus Open and canvas background. The main menu children mirror the
+ * vendor's own fallback composition (Open, Save to…, Export, Export
+ * image…, Search, Help, canvas background) minus the white-label policy
+ * items — see the module docstring.
  */
 /** The island's error card — the same words the chunk-load failure's
  * card speaks, the same Retry (the deterministic fresh-shell reload;
@@ -203,9 +216,12 @@ function drawingCanvasElement(
             saveToActiveFile: true,
             saveAsImage: true,
             changeViewBackgroundColor: true,
+            // The vendor's own save-to-disk dialog (the JSONExportDialog:
+            // the live scene out as .excalidraw, images included through
+            // the files map) — the native Export row rides the menu below.
+            export: { saveFileToDisk: true },
             // The app-owned doors (see the module docstring).
             clearCanvas: false,
-            export: false,
             toggleTheme: false,
           },
           // The image tool is ON — images are the attachment store's real
@@ -257,6 +273,10 @@ function drawingCanvasElement(
         undefined,
         createElement(MainMenu.DefaultItems.LoadScene),
         createElement(MainMenu.DefaultItems.SaveToActiveFile),
+        // The vendor's own Export row — the jsonExport dialog that saves
+        // the scene as .excalidraw, in the fallback composition's own
+        // order (LayerUI: Open, Save, Export, Export image…).
+        createElement(MainMenu.DefaultItems.Export),
         createElement(MainMenu.DefaultItems.SaveAsImage),
         createElement(MainMenu.Separator),
         createElement(MainMenu.DefaultItems.SearchMenu, {}),
@@ -433,6 +453,12 @@ export function mountDrawingCanvas(
       >;
       return { elements, appState };
     },
+    openImageExportDialog(): void {
+      if (!api) return;
+      api.updateScene({
+        appState: { openDialog: { name: 'imageExport' } },
+      } as unknown as UpdateScenePayload);
+    },
     addFiles(files: CanvasImageFile[]): void {
       if (files.length === 0) return;
       if (api) {
@@ -458,20 +484,19 @@ export function mountDrawingCanvas(
 }
 
 /**
- * Renders the live scene to an image — the drawing export dialog's Save
- * press (and the share/snapshot seams). PNG answers a Blob; SVG answers
- * the serialized markup. Elements marked deleted (the undo ghost trail)
- * never reach an export. The scene's image bytes ride along (`files`, from
- * the live handle or a store hydration) — without them an image element
- * exports as the vendor's gray placeholder, so the caller always passes
- * what it holds.
+ * Renders the live scene to an image — the share/snapshot seams'
+ * engine (the vendor's own dialogs call the same exporter). PNG answers
+ * a Blob; SVG answers the serialized markup. Elements marked deleted
+ * (the undo ghost trail) never reach an export. The scene's image bytes
+ * ride along (`files`, from the live handle or a store hydration) —
+ * without them an image element exports as the vendor's gray
+ * placeholder, so the caller always passes what it holds.
  *
- * The native export options (the dialog speaks them all) map onto the
- * master exporter's own config — the same knobs its dialogs turn:
- * background (canvasBackgroundColor: false = transparent), dark mode
- * (theme), embed scene (the PNG/SVG re-opens as an editable drawing on
- * excalidraw.com), and the export scale (1×/2×/3× — the vendor's
- * EXPORT_SCALES verbatim).
+ * The native export options map onto the master exporter's own config
+ * — the same knobs its dialogs turn: background (canvasBackgroundColor:
+ * false = transparent), dark mode (theme), embed scene (the PNG/SVG
+ * re-opens as an editable drawing on excalidraw.com), and the export
+ * scale (1×/2×/3× — the vendor's EXPORT_SCALES verbatim).
  */
 export interface DrawingImageExportOptions {
   /** Paint the scene's canvas background color. Off = transparent
@@ -521,30 +546,4 @@ export async function renderDrawingImage(
     return new XMLSerializer().serializeToString(output as unknown as SVGSVGElement);
   }
   return output as unknown as Blob;
-}
-
-/**
- * Copies the live scene to the clipboard — the drawing export dialog's
- * Copy press, on the vendor's own pipe: PNG rides as an image/png blob
- * (exportToClipboard's `png` flavor — ClipboardItem on the vendor's own
- * capability gates), SVG rides as the markup text (its `svg` flavor,
- * the same path the vendor's copyAsSvg context action speaks). Throws on
- * failure; the caller's toast answers.
- */
-export async function copyDrawingImage(
-  kind: 'png' | 'svg',
-  scene: DrawingCanvasScene,
-  files?: BinaryFiles | null,
-  options?: DrawingImageExportOptions,
-): Promise<void> {
-  const elements = scene.elements.filter((element) => element.isDeleted !== true);
-  await exportToClipboard({
-    type: kind,
-    data: {
-      elements: elements as never,
-      appState: scene.appState as never,
-      files: files ?? null,
-    },
-    config: exportConfigFrom(options),
-  } as Parameters<typeof exportToClipboard>[0]);
 }
