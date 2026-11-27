@@ -4999,6 +4999,19 @@ class App extends React.Component<AppProps, AppState> {
       }
 
       if (appState) {
+        // PADIFY FORK — the imperative exportWithDarkMode write mirrors
+        // actionExportWithDarkMode: the session export-theme override must
+        // ride along, or the auto-sync one layer below (componentDidUpdate:
+        // exportWithDarkMode follows the live theme unless overridden)
+        // would snap the host's explicit choice right back to the canvas
+        // theme. The host's unified export dialog writes the toggle through
+        // this path — the exact built-in way, override included.
+        if ("exportWithDarkMode" in (appState as Record<string, unknown>)) {
+          this.sessionExportThemeOverride = (appState as Pick<AppState, "exportWithDarkMode">)
+            .exportWithDarkMode
+            ? THEME.DARK
+            : THEME.LIGHT;
+        }
         this.setState(appState as Pick<AppState, K> | null);
       }
 
@@ -5254,13 +5267,25 @@ class App extends React.Component<AppProps, AppState> {
 
       // PADIFY FORK — the "?" chord (the vendor's help dialog) is deleted;
       // the app's own shortcuts sheet owns help.
+      //
+      // PADIFY FORK (the unified export pass) — this chord no longer opens
+      // the vendor's own ImageExportDialog: the host's ONE export popup
+      // (every note type, one face) owns the drawingpad's exports now,
+      // with the built-in feature set driven by the built-in pipeline
+      // (index.tsx's fork-export block). The chord rides the host's bus —
+      // the same event the app-level dispatcher and every canvas door
+      // speak — so one chord, one dialog, whichever handler sees it first.
       if (
         event.key.toLowerCase() === KEYS.E &&
         event.shiftKey &&
         event[KEYS.CTRL_OR_CMD]
       ) {
         event.preventDefault();
-        this.setState({ openDialog: { name: "imageExport" } });
+        document.dispatchEvent(
+          new CustomEvent("padify:open-export", {
+            detail: { initialTypeId: "png" },
+          }),
+        );
         return;
       }
 

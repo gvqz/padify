@@ -3,7 +3,6 @@ import { getEditorText, type TabManager } from './tabs';
 import { copyNotesToClipboard, deleteNotes } from './context-menu';
 import { openModal, closeAllModals, hasOpenModal } from './ui/behavior/modal';
 import { toggleVoiceTyping } from './voice';
-import { drawingCanvasIsLive } from './editor/drawing/surface';
 import type { NotepadUI } from './selector';
 import type { UnicodePickerHandle } from './unicode/picker';
 
@@ -282,19 +281,17 @@ export function initAppShortcuts(deps: AppShortcutsDeps): void {
       openModal(notepad.keyboardShortcutsModal.get(0));
     }
 
-    // Ctrl/Cmd+Shift+E — export. On a LIVE drawing the chord is the
-    // canvas's own: the dispatcher stands aside (no preventDefault, no
-    // stopImmediatePropagation) so the vendor's later handler opens its
-    // own image-export dialog — native parity, the restore's point. On
-    // every other note the app answers: the export center opens over the
-    // padify bus (download-menu.ts listens — the drawing's image exports
-    // live in their own dialog, the center carries the file-type rows).
+    // Ctrl/Cmd+Shift+E — export. ONE chord, ONE dialog (the owner's
+    // fourth verdict — "1 unified ui for all note/note types"): the app
+    // claims the chord on every note kind and the unified export dialog
+    // answers — the drawingpad's image exports ride it on the built-in
+    // pipeline. winChord keeps the vendor's own handler from ever seeing
+    // the event (its chord branch rides the same bus — either handler
+    // opens the same dialog).
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyE') {
-      if (!drawingCanvasIsLive()) {
-        event.preventDefault();
-        winChord();
-        document.dispatchEvent(new CustomEvent('padify:open-export'));
-      }
+      event.preventDefault();
+      winChord();
+      document.dispatchEvent(new CustomEvent('padify:open-export'));
     }
 
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyO') {

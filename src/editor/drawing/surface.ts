@@ -641,36 +641,124 @@ export class DrawingNoteSurface implements NoteSurface {
 registerNoteSurfaceForType('drawing', new DrawingNoteSurface());
 
 // ---------------------------------------------------------------------------
-// The native export door — the drawingpad's export is the VENDOR's own
-// dialog, opened from every app-level door (the owner's verdict)
+// The unified export dialog's drawing seams — the vendor dialogs' own
+// engine, delegated from the app's ONE export popup
 // ---------------------------------------------------------------------------
 
 /**
- * Opens the VENDOR's own image-export dialog on the live drawing — the
- * exact face excalidraw.com opens from its own menu row and its
- * Ctrl+Shift+E chord: only-selected, background, dark mode, embed scene,
- * the 1×/2×/3× scale, the live preview, the PNG/SVG/clipboard presses —
- * 100% of the built-in features, done in the built-in way.
- *
- * Answers true when the native dialog was opened on a mounted, connected
- * canvas; false when no live canvas owns the host — the caller then falls
- * back to the export center's envelope rows (the honest face when the
- * canvas itself cannot answer).
+ * One drawing export session — what the unified export dialog's drawing
+ * rows hold from open: the clone-at-open snapshot (the native dialog's
+ * own discipline — the exported state cannot shift under the dialog) plus
+ * the live seams that drive the built-in pipeline (resolve = the
+ * only-selected semantics, prefs = the native switch actions' writes,
+ * preview = the native preview's own render, image/sceneJSON = the native
+ * presses). Every seam IS the function the vendor's own dialogs call —
+ * canvas.ts hands them over from the fork's export block; nothing here is
+ * re-implemented.
  */
-export function openDrawingImageExportDialog(): boolean {
-  const current = live;
-  if (!current || !current.handle || current.disposed || !current.mount.isConnected) {
-    return false;
-  }
-  current.handle.openImageExportDialog();
-  return true;
+export interface DrawingExportSession {
+  /** The cloned-at-open appState (the option defaults ride in it). */
+  appState: Record<string, unknown>;
+  /** The cloned-at-open elements. */
+  elements: Record<string, unknown>[];
+  /** The cloned-at-open files map (image bytes — the preview and the
+   * PNG/SVG presses need them for image elements). */
+  files: Record<string, unknown>;
+  /** Whether any element is selected in the snapshot — the native
+   * dialog's own hasSelection (the only-selected row's gate and its
+   * default: a selection present means only-selected STARTS checked). */
+  hasSelection: boolean;
+  /** The clipboard press's visibility rule, the vendor's own
+   * (probablySupportsClipboardBlob || isFirefox). */
+  clipboardSupported: boolean;
+  /** The built-in selection/frame resolution for the current values. */
+  resolveElements(selectionOnly: boolean): {
+    elements: Record<string, unknown>[];
+    exportingFrame: unknown;
+  };
+  /** The native switch actions' write-through (appState, live). */
+  setPrefs(prefs: {
+    background?: boolean;
+    embedScene?: boolean;
+    scale?: 1 | 2 | 3;
+    dark?: boolean;
+    name?: string;
+  }): void;
+  /** The native preview's own render — answers the canvas element. */
+  renderPreview(request: {
+    elements: Record<string, unknown>[];
+    exportingFrame: unknown;
+    background: boolean;
+    dark: boolean;
+    maxWidthOrHeight: number;
+  }): Promise<HTMLCanvasElement>;
+  /** The native press — App.onExportImage's own body (the live appState
+   * and files are the config; the name is the dialog's stem). */
+  exportImage(
+    kind: 'png' | 'svg' | 'clipboard',
+    name: string,
+    elements: Record<string, unknown>[],
+    exportingFrame: unknown,
+  ): Promise<void>;
+  /** The JSON dialog's own save — the live scene out as .excalidraw. */
+  exportSceneJSON(name: string): Promise<void>;
 }
 
 /**
- * Whether a drawing canvas answers right now — the export chord's scope
- * question. A live drawing means the VENDOR's own Ctrl+Shift+E answers
- * (its dialog opens, native parity), so the app's dispatcher must stand
- * aside on that chord; every other note answers the export center.
+ * Opens a drawing export session on the live canvas — the unified export
+ * dialog's drawing rows call this at open. Null when no live canvas
+ * answers (the error card, the load card, another surface's stage): the
+ * caller falls back to the envelope rows — the honest face when the
+ * canvas itself cannot answer.
+ */
+export function getDrawingExportSession(): DrawingExportSession | null {
+  const current = live;
+  if (!current || !current.handle || current.disposed || !current.mount.isConnected) {
+    return null;
+  }
+  const snapshot = current.handle.getExportSnapshot();
+  if (!snapshot) return null;
+  const handle = current.handle;
+  // hasSelection, the vendor's own semantics spelled structurally: some
+  // element in the snapshot carries a truthy selectedElementIds entry.
+  const selectedIds = snapshot.appState.selectedElementIds;
+  const hasSelection =
+    !!selectedIds &&
+    typeof selectedIds === 'object' &&
+    snapshot.elements.some((element) => {
+      const id = (element as { id?: unknown }).id;
+      return typeof id === 'string' && Boolean((selectedIds as Record<string, unknown>)[id]);
+    });
+  return {
+    appState: snapshot.appState,
+    elements: snapshot.elements,
+    files: snapshot.files,
+    hasSelection,
+    clipboardSupported: snapshot.clipboardSupported,
+    resolveElements: (selectionOnly) => handle.resolveExportElements(snapshot, selectionOnly),
+    setPrefs: (prefs) => handle.setExportPrefs(prefs),
+    renderPreview: (request) =>
+      handle.renderExportPreview({
+        elements: request.elements,
+        appState: snapshot.appState,
+        files: snapshot.files,
+        exportingFrame: request.exportingFrame,
+        background: request.background,
+        dark: request.dark,
+        maxWidthOrHeight: request.maxWidthOrHeight,
+      }),
+    exportImage: (kind, name, elements, exportingFrame) =>
+      handle.exportImage(kind, name, elements, exportingFrame),
+    exportSceneJSON: (name) => handle.exportSceneJSON(name),
+  };
+}
+
+/**
+ * Whether a drawing canvas answers right now — the generic "is the
+ * drawing live" answer (tests pin it; the unified export dialog asks the
+ * sharper getDrawingExportSession() instead). The app-level export chord
+ * (app-shortcuts.ts) now claims Ctrl+Shift+E on EVERY note kind — the
+ * unified dialog answers everywhere, the drawing rows included.
  */
 export function drawingCanvasIsLive(): boolean {
   const current = live;

@@ -22,18 +22,21 @@ import { expect, test, type Page } from '@playwright/test';
  * the same rows the sync pipeline ships — because the DOM alone cannot
  * prove what the note holds.
  *
- * THE EXPORT STORY (the owner's third verdict — 100% native): the
- * drawingpad's export IS the vendor's own dialog now, from every door.
- * The app-level download button on a live drawing opens the vendor's
- * ImageExportDialog (openDrawingImageExportDialog — the same face the
- * canvas's own "Export image…" menu row and its Ctrl+Shift+E chord open),
- * with every built-in feature: only-selected (the owner's named example),
+ * THE EXPORT STORY (the owner's fourth verdict — ONE unified ui for
+ * all note/note types, restarted visuals, the built-in feature set
+ * intact): the drawingpad's exports ride the ONE export dialog now —
+ * every door (the app-level download button, the canvas's own "Export
+ * image…"/"Export…" menu rows, the Ctrl+Shift+E chord) opens the same
+ * face every note type opens. The drawing's rows inside it drive the
+ * built-in pipeline through the session seam: only-selected (the
+ * owner's named example, the built-in prepareElementsForExport),
  * background, dark mode, embed scene, the 1×/2×/3× scale, the live
- * preview, the PNG/SVG/clipboard presses, and the file name — plus the
- * vendor's own "Save to…" row (the jsonExport dialog) that saves the
- * scene as .excalidraw. The export center keeps the file-type exports
- * (text family + the Padify envelopes); a drawing whose canvas cannot
- * answer falls back to its envelope rows. And a render crash
+ * canvas preview (the native preview's own exportScene call), the
+ * PNG/SVG presses (App.onExportImage's own exportCanvas — the
+ * .excalidraw.png double extension included), the clipboard copy, and
+ * the .excalidraw scene save (the JSON dialog's own saveAsJSON). The
+ * vendor's own dialogs never open anymore; a drawing whose canvas
+ * cannot answer falls back to its envelope rows. And a render crash
  * inside the island lands on the app's error card, never a white
  * screen: the island's boundary owns that failure class.
  */
@@ -167,46 +170,45 @@ test.describe('the drawing canvas', () => {
     expect(JSON.parse(reloaded[0].content).elements).toHaveLength(1);
   });
 
-  test('the download button on a live drawing answers the vendor’s own export dialog', async ({
-    page,
-  }) => {
+  test('the download button on a live drawing answers the ONE export dialog', async ({ page }) => {
     await openDrawingCanvas(page);
 
-    // An empty drawing still answers — with the NATIVE face: the
-    // app-level download door defers to the canvas's own export dialog,
-    // and the export center never opens (no unified popup on drawings).
+    // An empty drawing still answers — with the ONE face: the app-level
+    // download door opens the unified dialog, and the vendor's native
+    // modal never rides.
     await page.locator('#downloadNotes').click();
-    const modal = page.locator('.ImageExportModal');
-    await expect(modal).toBeVisible();
-    await expect(page.locator('dialog.export-center')).toHaveCount(0);
+    const center = page.locator('dialog.export-center');
+    await expect(center).toBeVisible();
+    await expect(page.locator('.ImageExportModal')).toHaveCount(0);
     // No selection rides the empty scene — the Only-selected row is
     // absent, exactly the built-in behavior.
-    await expect(modal.locator('#exportOnlySelected')).toHaveCount(0);
-    // The full native set is already spoken on this face.
-    await expect(modal.locator('#exportBackgroundSwitch')).toBeVisible();
-    await expect(modal.locator('#exportDarkModeSwitch')).toBeVisible();
-    await expect(modal.locator('#exportEmbedSwitch')).toBeVisible();
-    await expect(
-      modal.locator('.ImageExportModal__settings .RadioGroup__choice', { hasText: '3×' }),
-    ).toBeVisible();
-    await expect(modal.getByRole('button', { name: 'Export to PNG' })).toBeVisible();
-    await expect(modal.getByRole('button', { name: 'Export to SVG' })).toBeVisible();
-    await expect(modal.getByRole('button', { name: 'Copy PNG to clipboard' })).toBeVisible();
+    await expect(center.locator('#export-option-selection')).toHaveCount(0);
+    // The full built-in set is already spoken on this face.
+    await expect(center.locator('#export-option-background')).toBeVisible();
+    await expect(center.locator('#export-option-dark')).toBeVisible();
+    await expect(center.locator('#export-option-embed')).toBeVisible();
+    await expect(center.locator('.export-center-seg-btn', { hasText: '3×' })).toBeVisible();
+    await expect(center.locator('.export-center-chip', { hasText: 'PNG' })).toBeVisible();
+    await expect(center.locator('.export-center-chip', { hasText: 'SVG' })).toBeVisible();
+    await expect(center.locator('.export-center-copy')).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(modal).toBeHidden();
+    await expect(center).toBeHidden();
 
     // Draw, wait for the save chain, reopen: the built-in live preview
-    // renders the scene on the modal's own stage.
+    // renders the scene on the stage — the native preview's own canvas
+    // output, placed whole.
     await drawRectangle(page);
     await page.waitForTimeout(2_000);
     await page.locator('#downloadNotes').click();
-    await expect(modal).toBeVisible();
-    await expect(modal.locator('.ImageExportModal__preview__canvas canvas')).toBeVisible();
+    await expect(center).toBeVisible();
+    await expect(center.locator('.export-center-stage canvas')).toBeVisible({
+      timeout: 10_000,
+    });
     await page.keyboard.press('Escape');
-    await expect(modal).toBeHidden();
+    await expect(center).toBeHidden();
   });
 
-  test('the native dialog speaks 100% of the built-in set — selected-items, scale, embed, the name, real bytes', async ({
+  test('the one dialog speaks 100% of the built-in set — selected-items, scale, embed, the name, real bytes', async ({
     page,
   }) => {
     await openDrawingCanvas(page);
@@ -214,115 +216,99 @@ test.describe('the drawing canvas', () => {
     await page.waitForTimeout(2_000);
 
     await page.locator('#downloadNotes').click();
-    const modal = page.locator('.ImageExportModal');
-    await expect(modal).toBeVisible();
+    const center = page.locator('dialog.export-center');
+    await expect(center).toBeVisible();
 
     // THE FEATURE THE OWNER NAMED: "the built in export allows you to only
     // export selected items" — the row appears because the drawn shape is
-    // still selected, and defaults ON (the built-in behavior, the built-in
-    // switch).
-    const onlySelected = modal.locator('#exportOnlySelected');
+    // still selected, and defaults ON (the built-in behavior, driven by
+    // the built-in prepareElementsForExport through the session seam).
+    const onlySelected = center.locator('#export-option-selection');
     await expect(onlySelected).toBeVisible();
     await expect(onlySelected).toBeChecked();
 
-    // The filename input speaks the note's name; typing owns the file
-    // name the presses answer with.
-    const nameInput = modal.locator('.ImageExportModal__preview__filename input');
+    // The name field speaks the note's name; typing owns the file name
+    // the press answers with.
+    const nameInput = center.locator('.export-center-stem');
     await expect(nameInput).toHaveValue('Drawing');
     await nameInput.fill('blueprint');
 
-    // The scale rides the vendor's own RadioGroup — 3× for the real bytes.
-    await modal.locator('input[name="exportScale"]').nth(2).check();
-    await expect(
-      modal.locator('.ImageExportModal__settings .RadioGroup__choice', { hasText: '3×' }),
-    ).toHaveClass(/active/);
+    // The scale rides the built-in segmented control — 3× for the real
+    // bytes.
+    await center.locator('.export-center-seg-btn', { hasText: '3×' }).click();
+    await expect(center.locator('.export-center-seg-btn[aria-checked="true"]')).toHaveText('3×');
 
-    // Export to PNG at 3× with the user's own name: real bytes ride the
-    // vendor's own fileSave path — the download carries the PNG.
+    // The Export press at 3× with the user's own name: real bytes ride
+    // the vendor's own exportCanvas path — the download carries the PNG.
     const download = page.waitForEvent('download');
-    await modal.getByRole('button', { name: 'Export to PNG' }).click();
+    await center.locator('.export-center-export').click();
     const file = await download;
     expect(file.suggestedFilename()).toBe('blueprint.png');
-    // The vendor's own behavior: a save does not close the dialog.
-    await expect(modal).toBeVisible();
+    // The native dialogs' own behavior: a save does not close the
+    // dialog (keepOpen — an export is not a dismissal).
+    await expect(center).toBeVisible();
 
     // Embed scene doubles the extension — the vendor's own marker,
-    // answered in the file name of the very next export.
-    await modal.locator('#exportEmbedSwitch').check();
+    // answered in the file name of the very next export and spoken live
+    // by the suffix chip.
+    await center.locator('#export-option-embed').check();
+    await expect(center.locator('.export-center-name-suffix')).toHaveText('.excalidraw.png');
     const embedDownload = page.waitForEvent('download');
-    await modal.getByRole('button', { name: 'Export to PNG' }).click();
+    await center.locator('.export-center-export').click();
     expect((await embedDownload).suggestedFilename()).toBe('blueprint.excalidraw.png');
 
     // The clipboard press rides the vendor's own pipe — a headless run
-    // that refuses the write stacks the vendor's own honest error card
-    // ("Couldn't copy to clipboard."), exactly what excalidraw.com shows
-    // on refusal; either way the export dialog stands.
-    await modal.getByRole('button', { name: 'Copy PNG to clipboard' }).click();
-    await expect(modal).toBeVisible();
-    // The write's refusal is async — let the honest error card (if one
-    // is coming) land before reading the stack.
+    // that refuses the write gets the honest toast; either way the
+    // dialog stands (a copy is not a save).
+    await center.locator('.export-center-copy').click();
+    await expect(center).toBeVisible();
     await page.waitForTimeout(1_000);
 
-    // Close what is on stage through the vendor's own doors: the error
-    // card first (if the clipboard was refused — its outside-click),
-    // then the export dialog itself (its own outside-click). Focus rode
-    // to the body with the error card, so an Escape press would reach
-    // neither modal.
-    const errorCard = page.locator('.excalidraw-modal-container', {
-      hasText: "Couldn't copy to clipboard.",
-    });
-    if ((await errorCard.count()) > 0) {
-      await errorCard.locator('.Modal__background').click({ position: { x: 30, y: 200 } });
-    }
-    await page
-      .locator('.excalidraw-modal-container', { hasText: 'Export image' })
-      .locator('.Modal__background')
-      .first()
-      .click({ position: { x: 30, y: 200 } });
-    await expect(modal).toBeHidden();
+    // Close what is on stage through the dialog's own ×.
+    await center.locator('.export-center-close').click();
+    await expect(center).toBeHidden();
   });
 
-  test('the vendor export dialog answers behind the canvas menu row — native again', async ({
+  test('the canvas menu rows answer the one dialog — the image door and the scene door', async ({
     page,
   }) => {
     await openDrawingCanvas(page);
     await drawRectangle(page);
     await page.waitForTimeout(2_000);
 
-    // The restored native face: the menu row opens the VENDOR's dialog —
-    // its own switches, its own preview, its own Export/Copy buttons.
+    // "Export image…" opens the ONE dialog on its PNG format — the row
+    // that always opened the vendor's own image-export door (the same
+    // destination, the same feature set on the same pipeline).
     await page.locator('[data-testid="main-menu-trigger"]').click();
     const menu = page.locator('#note .excalidraw .dropdown-menu');
     await expect(menu.locator('[data-testid="image-export-button"]')).toBeVisible();
     await menu.locator('[data-testid="image-export-button"]').click();
 
-    const vendorDialog = page.locator('.ImageExportModal');
-    await expect(vendorDialog).toBeVisible();
-    // The vendor's own switches ride along — the full native set (its
-    // buttons' text is the short word; the long name is the title).
-    await expect(vendorDialog.getByRole('button', { name: 'Export to PNG' })).toBeVisible();
-    await expect(vendorDialog.getByRole('button', { name: 'Export to SVG' })).toBeVisible();
-    await expect(vendorDialog.getByRole('button', { name: 'Copy PNG to clipboard' })).toBeVisible();
+    const center = page.locator('dialog.export-center');
+    await expect(center).toBeVisible();
+    await expect(center.locator('.export-center-chip[aria-checked="true"]')).toHaveText('PNG');
+    await expect(center.locator('#export-option-background')).toBeVisible();
+    await expect(center.locator('.export-center-copy')).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(vendorDialog).toBeHidden();
+    await expect(center).toBeHidden();
 
-    // The vendor's own Save-to… row (the jsonExport dialog) — the native
-    // .excalidraw door, in the fallback composition's own order: the
-    // scene out as a real .excalidraw file through the vendor's own
-    // saveAsJSON (elements, files, appState — the same file
-    // excalidraw.com writes).
+    // "Export…" lands on the scene format — the row that always opened
+    // the vendor's own jsonExport dialog — and the press saves the scene
+    // as a real .excalidraw file through the JSON dialog's own
+    // saveAsJSON.
     await page.locator('[data-testid="main-menu-trigger"]').click();
     const menuAgain = page.locator('#note .excalidraw .dropdown-menu');
     await expect(menuAgain.locator('[data-testid="json-export-button"]')).toBeVisible();
     await menuAgain.locator('[data-testid="json-export-button"]').click();
-    const jsonDialog = page.locator('.ExportDialog--json');
-    await expect(jsonDialog).toBeVisible();
-    await expect(jsonDialog.getByText('Save to disk')).toBeVisible();
+    await expect(center.locator('.export-center-chip[aria-checked="true"]')).toHaveText(
+      'Excalidraw scene',
+    );
     const sceneDownload = page.waitForEvent('download');
-    await jsonDialog.getByRole('button', { name: 'Save to file' }).click();
+    await center.locator('.export-center-export').click();
     expect((await sceneDownload).suggestedFilename()).toBe('Drawing.excalidraw');
-    await page.keyboard.press('Escape');
-    await expect(page.locator('.ExportDialog--json')).toBeHidden();
+    // A plain save closes on its success (the scene row is not an image
+    // press — the native JSON dialog's own dismissal).
+    await expect(center).toBeHidden();
   });
 
   // THE OWNER'S CRASH REPORT, answered: "if you click on the hamburger
@@ -382,28 +368,27 @@ test.describe('the drawing canvas', () => {
     expect(flag).toBeNull();
   });
 
-  test('Ctrl+Shift+E — the vendor dialog on a drawing, the export center on a text note', async ({
-    page,
-  }) => {
+  test('Ctrl+Shift+E — the one dialog answers on every note kind', async ({ page }) => {
     await openDrawingCanvas(page);
     await drawRectangle(page);
     await page.waitForTimeout(2_000);
 
-    // A live drawing: the chord is the canvas's own (the app's dispatcher
-    // stands aside) — the vendor's native dialog answers.
+    // A live drawing: the app's dispatcher claims the chord (one chord,
+    // one dialog) — the unified dialog answers on the PNG format, with
+    // the built-in feature set riding.
     await page.keyboard.press('Control+Shift+E');
-    await expect(page.locator('.ImageExportModal')).toBeVisible();
+    const center = page.locator('dialog.export-center');
+    await expect(center).toBeVisible();
+    await expect(center.locator('.export-center-chip[aria-checked="true"]')).toHaveText('PNG');
+    await expect(page.locator('.ImageExportModal')).toHaveCount(0);
     await page.keyboard.press('Escape');
-    await expect(page.locator('.ImageExportModal')).toBeHidden();
+    await expect(center).toBeHidden();
 
-    // A text note: the app answers — the export center opens on its
-    // file-type rows.
+    // A text note: the same chord, the same face — its own formats.
     await page.locator('#addTab').click();
     await page.keyboard.press('Control+Shift+E');
-    await expect(page.locator('dialog.export-center')).toBeVisible();
-    await expect(
-      page.locator('dialog.export-center .export-center-type', { hasText: 'Plain text' }),
-    ).toBeVisible();
+    await expect(center).toBeVisible();
+    await expect(center.locator('.export-center-chip', { hasText: 'Plain text' })).toBeVisible();
   });
 
   test('the Preferences group toggles zen mode and the choice persists', async ({ page }) => {

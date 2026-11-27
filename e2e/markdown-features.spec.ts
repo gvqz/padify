@@ -227,14 +227,14 @@ test.describe('markdown notes — the feature act', () => {
     await page.locator('#downloadNotes').click();
     const dialog = page.locator('dialog.export-center');
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator('.export-center-type', { hasText: 'Markdown' })).toBeVisible();
+    await expect(dialog.locator('.export-center-chip', { hasText: 'Markdown' })).toBeVisible();
     await page.keyboard.press('Escape');
 
-    // A plain note: the type stands down.
+    // A plain note: the format stands down.
     await page.locator('#addTab').click();
     await page.locator('#downloadNotes').click();
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator('.export-center-type', { hasText: 'Markdown' })).toHaveCount(0);
+    await expect(dialog.locator('.export-center-chip', { hasText: 'Markdown' })).toHaveCount(0);
   });
 });
 

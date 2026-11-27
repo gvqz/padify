@@ -2,23 +2,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openExportCenter, type ExportCenterHost, type ExportCenterType } from './export-center';
 
 /**
- * The export center's one-menu pass, unit-grade (the e2e owns the
- * integrated face):
+ * The export center's restart, unit-grade (the e2e owns the integrated
+ * face):
  *
- *   - every row is a RADIO (role + aria-checked) — the drawing's image
- *     rows are selectable exporters now, not launcher handoffs; no row
- *     ever closes the center to open another face;
- *   - the image rows speak the native option set inline: the live
- *     suffix honors the dynamic extension (the embed double extension
- *     `.excalidraw.png` lands as the toggle flips), the preview paints
- *     the checkerboard when the answer says transparency, and the
- *     clipboard press rides beside Export with its capability gate;
- *   - the keyboard is native: ArrowDown/ArrowUp walk the rows
- *     (selection follows focus), Enter in the name field is an Export;
- *   - the open focuses the SELECTED row.
+ *   - every format is a CHIP in one radio group — one wrapped row, the
+ *     selected chip aria-checked, no group labels, no handoffs;
+ *   - the selected format speaks ONCE — the description line under the
+ *     chips;
+ *   - the drawing-style rows speak the native option set inline: the
+ *     live suffix honors the dynamic extension (the embed double
+ *     extension `.excalidraw.png` lands as the toggle flips), the
+ *     option's write-through fires, the preview paints the canvas
+ *     element and the checkerboard when the answer says transparency,
+ *     and the clipboard press rides beside Export with its capability
+ *     gate;
+ *   - keepOpen — the native image dialogs' own behavior: an export is
+ *     not a dismissal;
+ *   - the keyboard is native: the arrows walk the chips (selection
+ *     follows focus), Enter in the name field is an Export;
+ *   - the × closes; the open focuses the SELECTED chip.
  *
  * jsdom has no native <dialog> methods (the module's own fallback keeps
- * the rows reachable); the close-event cleanup is the e2e's to prove.
+ * the chips reachable); the close-event cleanup is the e2e's to prove.
  */
 
 const dialog = (): HTMLDialogElement => {
@@ -27,19 +32,16 @@ const dialog = (): HTMLDialogElement => {
   return node!;
 };
 
-const typeRows = (): HTMLButtonElement[] =>
-  Array.from(dialog().querySelectorAll<HTMLButtonElement>('.export-center-type'));
+const chips = (): HTMLButtonElement[] =>
+  Array.from(dialog().querySelectorAll<HTMLButtonElement>('.export-center-chip'));
 
-const rowFor = (label: string): HTMLButtonElement => {
-  const found = typeRows().find((row) => row.textContent?.includes(label));
-  expect(found, `row ${label}`).not.toBeUndefined();
+const chipFor = (label: string): HTMLButtonElement => {
+  const found = chips().find((chip) => chip.textContent?.includes(label));
+  expect(found, `chip ${label}`).not.toBeUndefined();
   return found!;
 };
 
-const groupLabels = (): string[] =>
-  Array.from(dialog().querySelectorAll<HTMLElement>('.export-center-group-label')).map(
-    (label) => label.textContent ?? '',
-  );
+const description = (): HTMLElement => dialog().querySelector<HTMLElement>('.export-center-desc')!;
 
 const nameInput = (): HTMLInputElement =>
   dialog().querySelector<HTMLInputElement>('.export-center-name-row input')!;
@@ -50,6 +52,12 @@ const suffixChip = (): HTMLElement =>
 const copyButton = (): HTMLButtonElement =>
   dialog().querySelector<HTMLButtonElement>('.export-center-copy')!;
 
+const exportButton = (): HTMLButtonElement =>
+  dialog().querySelector<HTMLButtonElement>('.export-center-export')!;
+
+const closeButton = (): HTMLButtonElement =>
+  dialog().querySelector<HTMLButtonElement>('.export-center-close')!;
+
 const stage = (): HTMLElement => dialog().querySelector<HTMLElement>('.export-center-stage')!;
 
 const makeType = (id: string, over: Partial<ExportCenterType> = {}): ExportCenterType => ({
@@ -57,30 +65,32 @@ const makeType = (id: string, over: Partial<ExportCenterType> = {}): ExportCente
   label: id.toUpperCase(),
   extension: id,
   defaultStem: `note-${id}`,
+  hint: `the ${id} description`,
   preview: vi.fn(async () => ({ text: `preview of ${id}` })),
   run: vi.fn(async () => true),
   ...over,
 });
 
-/** An image row — the drawing's PNG, with the native option model. */
+/** The drawing's PNG row — the native option model, shared with SVG. */
 const pngType = (over: Partial<ExportCenterType> = {}): ExportCenterType => ({
-  id: 'image-png',
-  label: 'PNG image',
+  id: 'png',
+  label: 'PNG',
   extension: 'png',
   defaultStem: 'sketch',
-  section: 'images',
+  hint: 'a lossless image of the scene',
   options: [
-    { kind: 'toggle', id: 'background', label: 'Background', hint: '', value: true },
-    { kind: 'toggle', id: 'embed', label: 'Embed scene', hint: '', value: false },
+    { kind: 'toggle', id: 'background', label: 'Background', value: true },
+    { kind: 'toggle', id: 'embed', label: 'Embed scene', value: false },
   ],
   extensionFor: (values) => (values.embed === true ? 'excalidraw.png' : 'png'),
-  preview: vi.fn(async () => ({ image: 'blob:preview', imageTransparent: false })),
+  preview: vi.fn(async () => ({ text: 'rendered' })),
   run: vi.fn(async () => true),
   copy: vi.fn(async () => true),
+  keepOpen: true,
   ...over,
 });
 
-const toggleFor = (label: string): HTMLInputElement => {
+const switchFor = (label: string): HTMLInputElement => {
   const rows = Array.from(dialog().querySelectorAll<HTMLLabelElement>('.export-center-option'));
   const found = rows.find((row) => row.textContent?.includes(label));
   expect(found, `option ${label}`).not.toBeUndefined();
@@ -106,72 +116,74 @@ function open(host: ExportCenterHost): void {
   openExportCenter(host);
 }
 
-describe('the export center — the one-menu pass', () => {
-  it('the groups carry their labels: Images, This note, The pad itself', () => {
+describe('the export center — the restarted ONE face', () => {
+  it('every format is a chip in one radio group — no group labels, one row', () => {
     open({
       heading: 'Export',
       types: [
         pngType(),
-        makeType('excalidraw', { label: 'Excalidraw file' }),
-        makeType('padify', { label: 'Padify file' }),
-        makeType('workspace', { section: 'pad' }),
+        makeType('svg'),
+        makeType('excalidraw'),
+        makeType('padify'),
+        makeType('workspace'),
       ],
     });
-    expect(groupLabels()).toEqual(['Images', 'This note', 'The pad itself']);
-  });
-
-  it("a text note's groups: This note, The pad itself", () => {
-    open({
-      heading: 'Export',
-      types: [
-        makeType('txt'),
-        makeType('pdf'),
-        makeType('padify', { section: 'note' }),
-        makeType('workspace', { section: 'pad' }),
-      ],
-    });
-    expect(groupLabels()).toEqual(['This note', 'The pad itself']);
-  });
-
-  it('EVERY row speaks radio — the image rows are choices, not doors', () => {
-    open({
-      heading: 'Export',
-      types: [pngType(), makeType('excalidraw', { label: 'Excalidraw file' })],
-    });
-    for (const row of typeRows()) {
-      expect(row.getAttribute('role')).toBe('radio');
-      expect(row.hasAttribute('aria-checked')).toBe(true);
+    expect(chips()).toHaveLength(5);
+    for (const chip of chips()) {
+      expect(chip.getAttribute('role')).toBe('radio');
+      expect(chip.hasAttribute('aria-checked')).toBe(true);
     }
-    // The first row holds the selection on open (the drawing's headline
-    // export), and no row carries a chevron or a handoff affordance.
-    expect(rowFor('PNG image').getAttribute('aria-checked')).toBe('true');
-    expect(dialog().querySelector('.export-center-type-chevron')).toBeNull();
+    expect(dialog().querySelector('.export-center-group-label')).toBeNull();
   });
 
-  it('an image row click SELECTS — the center never closes to open another face', async () => {
-    const excalidraw = makeType('excalidraw', { label: 'Excalidraw file' });
-    open({ heading: 'Export', types: [pngType(), excalidraw] });
-    rowFor('PNG image').click();
-    expect(rowFor('PNG image').getAttribute('aria-checked')).toBe('true');
-    expect(rowFor('Excalidraw file').getAttribute('aria-checked')).toBe('false');
-    // Still open — one menu, no handoff.
+  it('the selected chip fills the selection; a chip click SELECTS, never hands off', () => {
+    const svg = makeType('svg');
+    open({ heading: 'Export', types: [pngType(), svg] });
+    expect(chipFor('PNG').getAttribute('aria-checked')).toBe('true');
+    expect(chipFor('SVG').getAttribute('aria-checked')).toBe('false');
+    chipFor('SVG').click();
+    expect(chipFor('SVG').getAttribute('aria-checked')).toBe('true');
+    expect(chipFor('PNG').getAttribute('aria-checked')).toBe('false');
+    // Still open — one dialog, no handoff.
     expect(dialog().hasAttribute('open')).toBe(true);
   });
 
-  it('the embed toggle flips the suffix chip to the double extension, live', async () => {
+  it('the selected format speaks ONCE — the description line under the chips', () => {
+    open({ heading: 'Export', types: [pngType(), makeType('svg')] });
+    expect(description().textContent).toBe('a lossless image of the scene');
+    chipFor('SVG').click();
+    expect(description().textContent).toBe('the svg description');
+  });
+
+  it('the embed switch flips the suffix chip to the double extension, live', () => {
     open({ heading: 'Export', types: [pngType()] });
     expect(suffixChip().textContent).toBe('.png');
-    toggleFor('Embed scene').click();
+    switchFor('Embed scene').click();
     expect(suffixChip().textContent).toBe('.excalidraw.png');
-    // The refreshed preview rides the same refresh.
-    await vi.advanceTimersByTimeAsync(220);
-    expect(pngType().preview as ReturnType<typeof vi.fn>).toBeDefined();
+  });
+
+  it("the option's write-through fires — the native switch actions' delegation", () => {
+    const onFlip = vi.fn();
+    const png = pngType({
+      options: [{ kind: 'toggle', id: 'background', label: 'Background', value: true, onFlip }],
+    });
+    open({ heading: 'Export', types: [png] });
+    switchFor('Background').click();
+    expect(onFlip).toHaveBeenCalledWith(false);
+  });
+
+  it("the name field's keystrokes write through — the drawing rows' scene-name parity", () => {
+    const onNameChange = vi.fn();
+    open({ heading: 'Export', types: [pngType({ onNameChange })] });
+    nameInput().value = 'renamed sketch';
+    nameInput().dispatchEvent(new Event('input', { bubbles: true }));
+    expect(onNameChange).toHaveBeenCalledWith('renamed sketch');
   });
 
   it('the export press speaks the dynamic extension in the file name', async () => {
     const png = pngType();
     open({ heading: 'Export', types: [png] });
-    toggleFor('Embed scene').click();
+    switchFor('Embed scene').click();
     nameInput().dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
     );
@@ -179,14 +191,43 @@ describe('the export center — the one-menu pass', () => {
     expect(png.run).toHaveBeenCalledWith('sketch.excalidraw.png', expect.anything());
   });
 
+  it('keepOpen — the native image dialogs’ own behavior: an export is not a dismissal', async () => {
+    const txt = makeType('txt');
+    open({ heading: 'Export', types: [pngType()] });
+    exportButton().click();
+    await vi.advanceTimersByTimeAsync(0);
+    // The drawing's image row stays standing.
+    expect(dialog().hasAttribute('open')).toBe(true);
+
+    // A plain row (keepOpen absent) closes on its success.
+    open({ heading: 'Export', types: [txt] });
+    exportButton().click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dialog().hasAttribute('open')).toBe(false);
+  });
+
+  it('the × closes the dialog', () => {
+    open({ heading: 'Export', types: [pngType()] });
+    closeButton().click();
+    expect(dialog().hasAttribute('open')).toBe(false);
+  });
+
+  it('the canvas preview rides the stage — the live drawing render itself', async () => {
+    const canvas = document.createElement('canvas');
+    const png = pngType({ preview: vi.fn(async () => ({ canvas, transparent: true })) });
+    open({ heading: 'Export', types: [png] });
+    await vi.advanceTimersByTimeAsync(160);
+    expect(stage().querySelector('canvas')).toBe(canvas);
+    // Transparency is SEEN — the checkerboard rides the stage.
+    expect(stage().classList.contains('export-center-stage--transparent')).toBe(true);
+  });
+
   it('a transparent preview paints the checkerboard stage', async () => {
     open({
       heading: 'Export',
-      types: [
-        pngType({ preview: vi.fn(async () => ({ image: 'blob:x', imageTransparent: true })) }),
-      ],
+      types: [pngType({ preview: vi.fn(async () => ({ text: 'x', transparent: true })) })],
     });
-    await vi.advanceTimersByTimeAsync(220);
+    await vi.advanceTimersByTimeAsync(160);
     expect(stage().classList.contains('export-center-stage--transparent')).toBe(true);
   });
 
@@ -204,7 +245,7 @@ describe('the export center — the one-menu pass', () => {
     expect(copyButton().textContent).toBe('Copy to clipboard');
   });
 
-  it('copySupported=false hides the press; a type without copy hides it too', () => {
+  it('copySupported=false hides the press; a format without copy hides it too', () => {
     open({ heading: 'Export', types: [pngType({ copySupported: () => false })] });
     expect(copyButton().hidden).toBe(true);
     open({ heading: 'Export', types: [makeType('txt')] });
@@ -230,52 +271,55 @@ describe('the export center — the one-menu pass', () => {
     expect(txt.run).toHaveBeenCalledWith('quarterly review.txt', {});
   });
 
-  it('the open focuses the SELECTED row, not whichever button the UA picked first', () => {
-    open({
-      heading: 'Export',
-      types: [pngType(), makeType('excalidraw', { label: 'Excalidraw file' })],
-    });
-    expect(document.activeElement).toBe(rowFor('PNG image'));
+  it('the open focuses the SELECTED chip, not whichever button the UA picked first', () => {
+    open({ heading: 'Export', types: [pngType(), makeType('svg')] });
+    expect(document.activeElement).toBe(chipFor('PNG'));
   });
 
-  it('ArrowDown/ArrowUp walk the rows — selection follows focus', () => {
+  it('the arrows walk the chips — selection follows focus', () => {
     open({
       heading: 'Export',
-      types: [
-        pngType(),
-        makeType('excalidraw', { label: 'Excalidraw file' }),
-        makeType('padify', { label: 'Padify file' }),
-      ],
+      types: [pngType(), makeType('svg'), makeType('excalidraw')],
     });
-    // Focus starts on the selected row (the open's discipline).
-    const png = rowFor('PNG image');
+    // Focus starts on the selected chip (the open's discipline).
+    const png = chipFor('PNG');
     expect(document.activeElement).toBe(png);
 
-    // ArrowDown walks to the excalidraw row.
+    // ArrowRight walks to the svg chip.
     png.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+      new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }),
     );
-    const excalidraw = rowFor('Excalidraw file');
-    expect(excalidraw.getAttribute('aria-checked')).toBe('true');
-    expect(document.activeElement).toBe(excalidraw);
+    const svg = chipFor('svg'.toUpperCase());
+    expect(svg.getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(svg);
 
-    // ArrowUp wraps back.
-    excalidraw.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }),
+    // ArrowLeft wraps back.
+    svg.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }),
     );
     expect(png.getAttribute('aria-checked')).toBe('true');
     expect(document.activeElement).toBe(png);
   });
 
-  it("the file-name edit survives the type switch, minus the previous type's extension", async () => {
-    const txt = makeType('txt', { label: 'Plain text' });
-    const pdf = makeType('pdf', { label: 'PDF' });
+  it("the file-name edit survives the format switch, minus the previous format's extension", async () => {
+    const txt = makeType('txt');
+    const pdf = makeType('pdf');
     open({ heading: 'Export', types: [txt, pdf] });
     nameInput().value = 'report.txt';
     nameInput().dispatchEvent(new Event('input', { bubbles: true }));
-    rowFor('PDF').click();
+    chipFor('pdf'.toUpperCase()).click();
     expect(nameInput().value).toBe('report');
-    await vi.advanceTimersByTimeAsync(220);
+    await vi.advanceTimersByTimeAsync(160);
     expect(pdf.preview).toHaveBeenCalledTimes(1);
+  });
+
+  it('the initialTypeId picks the chip the door named (the canvas menu rows)', () => {
+    open({
+      heading: 'Export',
+      types: [pngType(), makeType('excalidraw')],
+      initialTypeId: 'excalidraw',
+    });
+    expect(chipFor('excalidraw'.toUpperCase()).getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(chipFor('excalidraw'.toUpperCase()));
   });
 });

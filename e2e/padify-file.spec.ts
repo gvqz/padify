@@ -138,7 +138,7 @@ test.describe('the .padify file', () => {
     await page.locator('#downloadNotes').click();
     const dialog = page.locator('dialog.export-center');
     await expect(dialog).toBeVisible();
-    await dialog.locator('.export-center-type', { hasText: 'Padify file' }).click();
+    await dialog.locator('.export-center-chip', { hasText: 'Padify file' }).click();
     const download = page.waitForEvent('download');
     await dialog.locator('.export-center-export').click();
     const file = await download;
@@ -279,20 +279,24 @@ test.describe('the .padify file', () => {
     await drawRectangle(page);
     await page.waitForTimeout(2_000);
 
-    // The drawingpad's export is the vendor's own: the canvas menu's
-    // "Save to…" row opens the native jsonExport dialog, and its
-    // Save-to-disk card writes the .excalidraw file through the vendor's
-    // own saveAsJSON (elements, files, appState).
+    // The drawingpad's export is the ONE dialog's own row: the canvas
+    // menu's "Export…" row opens the unified export dialog on its
+    // Excalidraw-scene format — the row that always opened the native
+    // jsonExport door (the same destination), and the press rides the
+    // vendor's own saveAsJSON (elements, files, appState) through the
+    // session seam.
     await page.locator('[data-testid="main-menu-trigger"]').click();
     const menu = page.locator('#note .excalidraw .dropdown-menu');
     await expect(menu.locator('[data-testid="json-export-button"]')).toBeVisible();
     await menu.locator('[data-testid="json-export-button"]').click();
-    const jsonDialog = page.locator('.ExportDialog--json');
-    await expect(jsonDialog).toBeVisible();
-    await expect(jsonDialog.getByText('Save to disk')).toBeVisible();
+    const center = page.locator('dialog.export-center');
+    await expect(center).toBeVisible();
+    await expect(center.locator('.export-center-chip[aria-checked="true"]')).toHaveText(
+      'Excalidraw scene',
+    );
 
     const download = page.waitForEvent('download');
-    await jsonDialog.getByRole('button', { name: 'Save to file' }).click();
+    await center.locator('.export-center-export').click();
     const file = await download;
     expect(file.suggestedFilename()).toBe('Drawing.excalidraw');
     const savedPath = testInfo.outputPath('drawing.excalidraw');
@@ -312,7 +316,7 @@ test.describe('the .padify file', () => {
     expect(typeof native.appState).toBe('object');
   });
 
-  test("the rail's Export… row keeps the Padify envelopes reachable on a live drawing", async ({
+  test("the rail's Export… row and the download button both answer the one dialog on a live drawing", async ({
     page,
   }) => {
     await page.goto('/');
@@ -324,26 +328,34 @@ test.describe('the .padify file', () => {
     await drawRectangle(page);
     await page.waitForTimeout(2_000);
 
-    // The toolbar's download button answers the vendor's native dialog on
-    // a live drawing — so the center (the Padify envelopes' face) rides
-    // the note menu's Export… row instead. Right-click the drawing's tab.
-    const tab = page.locator('#tabStripTabs .tab-strip-tab').first();
+    // The ONE dialog carries everything a drawing can become: the image
+    // formats and the scene save on the built-in pipeline, AND the Padify
+    // envelopes — no second face, no fallback split.
+    await page.locator('#downloadNotes').click();
+    const center = page.locator('dialog.export-center');
+    await expect(center).toBeVisible();
+    await expect(center.locator('.export-center-chip', { hasText: 'PNG' })).toBeVisible();
+    await expect(center.locator('.export-center-chip', { hasText: 'SVG' })).toBeVisible();
+    await expect(
+      center.locator('.export-center-chip', { hasText: 'Excalidraw scene' }),
+    ).toBeVisible();
+    await expect(center.locator('.export-center-chip', { hasText: 'Padify file' })).toBeVisible();
+    await expect(center.locator('.export-center-chip', { hasText: 'Whole pad' })).toBeVisible();
+    // The native dialog never rides — one face only.
+    await expect(page.locator('.ImageExportModal')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(center).toBeHidden();
+
+    // The rail's Export… row (the note context menu) answers the same
+    // face — right-click the DRAWING's tab (the first tab is the fresh
+    // pad's original text note).
+    const tab = page.locator('#tabStripTabs .tab-strip-tab', { hasText: 'Drawing' });
     await tab.click({ button: 'right' });
     const ctxMenu = page.locator('#noteCtxMenu');
     await expect(ctxMenu).toBeVisible();
     await ctxMenu.locator('[data-action="export"]').click();
-
-    const center = page.locator('dialog.export-center');
     await expect(center).toBeVisible();
-    // The Padify envelopes answer — and no row duplicates the native
-    // doors (no image rows, no .excalidraw row).
-    await expect(center.locator('.export-center-type', { hasText: 'Padify file' })).toBeVisible();
-    await expect(center.locator('.export-center-type', { hasText: 'Whole pad' })).toBeVisible();
-    await expect(center.locator('.export-center-type', { hasText: 'PNG image' })).toHaveCount(0);
-    await expect(center.locator('.export-center-type', { hasText: 'SVG image' })).toHaveCount(0);
-    await expect(center.locator('.export-center-type', { hasText: 'Excalidraw file' })).toHaveCount(
-      0,
-    );
+    await expect(center.locator('.export-center-chip', { hasText: 'PNG' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(center).toBeHidden();
   });
@@ -412,7 +424,7 @@ test.describe('the workspace file — a whole pad, as one file', () => {
     await page.locator('#downloadNotes').click();
     const dialog = page.locator('dialog.export-center');
     await expect(dialog).toBeVisible();
-    await dialog.locator('.export-center-type', { hasText: 'Whole pad' }).click();
+    await dialog.locator('.export-center-chip', { hasText: 'Whole pad' }).click();
     const download = page.waitForEvent('download');
     await dialog.locator('.export-center-export').click();
     const file = await download;

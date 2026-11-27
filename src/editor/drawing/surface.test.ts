@@ -51,7 +51,34 @@ vi.mock('./canvas', () => {
           elements: [],
           appState: {},
         })),
-        openImageExportDialog: vi.fn(),
+        getExportSnapshot: vi.fn(
+          (): {
+            appState: Record<string, unknown>;
+            elements: Record<string, unknown>[];
+            files: Record<string, unknown>;
+            clipboardSupported: boolean;
+          } | null => ({
+            appState: { selectedElementIds: {} },
+            elements: [],
+            files: {},
+            clipboardSupported: true,
+          }),
+        ),
+        resolveExportElements: vi.fn(
+          (
+            _snapshot: unknown,
+            _selectionOnly: boolean,
+          ): { elements: Record<string, unknown>[]; exportingFrame: unknown } => ({
+            elements: [],
+            exportingFrame: null,
+          }),
+        ),
+        setExportPrefs: vi.fn(),
+        renderExportPreview: vi.fn(async (): Promise<HTMLCanvasElement> =>
+          document.createElement('canvas'),
+        ),
+        exportImage: vi.fn(async (): Promise<void> => undefined),
+        exportSceneJSON: vi.fn(async (): Promise<void> => undefined),
         addFiles: vi.fn(),
         getFiles: vi.fn((): Record<string, unknown> => ({})),
         unmount: vi.fn(),
@@ -96,7 +123,7 @@ import {
   DRAWING_ZEN_MODE_CLASS,
   DrawingNoteSurface,
   drawingCanvasIsLive,
-  openDrawingImageExportDialog,
+  getDrawingExportSession,
 } from './surface';
 import { DRAWING_SCENE_SOFT_BUDGET_BYTES, emptyDrawingScene, serializeDrawingScene } from './scene';
 import { noteSurfaceFor, opaqueNoteSurface } from '../surface';
@@ -115,7 +142,31 @@ interface RecordedMount {
     rename: (name: string) => void;
     scrollToContent: () => void;
     getScene: () => { elements: Record<string, unknown>[]; appState: unknown };
-    openImageExportDialog: () => void;
+    getExportSnapshot: () => {
+      appState: Record<string, unknown>;
+      elements: Record<string, unknown>[];
+      files: Record<string, unknown>;
+      clipboardSupported: boolean;
+    } | null;
+    resolveExportElements: (
+      snapshot: unknown,
+      selectionOnly: boolean,
+    ) => { elements: Record<string, unknown>[]; exportingFrame: unknown };
+    setExportPrefs: (prefs: {
+      background?: boolean;
+      embedScene?: boolean;
+      scale?: 1 | 2 | 3;
+      dark?: boolean;
+      name?: string;
+    }) => void;
+    renderExportPreview: (request: unknown) => Promise<HTMLCanvasElement>;
+    exportImage: (
+      kind: 'png' | 'svg' | 'clipboard',
+      name: string,
+      elements: Record<string, unknown>[],
+      exportingFrame: unknown,
+    ) => Promise<void>;
+    exportSceneJSON: (name: string) => Promise<void>;
     addFiles: (files: unknown[]) => void;
     getFiles: () => Record<string, unknown>;
     unmount: () => void;
@@ -681,28 +732,86 @@ describe('the image spine — hydration and flush (the export face itself is the
   });
 });
 
-describe('the native export door — the drawingpad’s export is the vendor’s own dialog', () => {
-  it('answers false when no drawing is live (the caller falls back to the center)', () => {
-    expect(openDrawingImageExportDialog()).toBe(false);
+describe('the unified export dialog’s drawing session — the vendor dialogs’ engine, delegated', () => {
+  it('answers null when no drawing is live (the caller falls back to the envelope rows)', () => {
+    expect(getDrawingExportSession()).toBe(null);
   });
 
-  it('opens the vendor’s own dialog on the live handle, and answers true', async () => {
+  it('builds the session on the live handle: the snapshot, the selection gate, the seams', async () => {
     const host = connectedHost();
-    surface.display(host, { content: '', noteType: 'drawing', name: 'Sketch' });
+    surface.display(host, {
+      content: sceneWithElements,
+      noteType: 'drawing',
+      name: 'Sketch',
+    });
     await canvasReady();
+    const mounted = lastMount();
+    mounted.handle.getExportSnapshot = vi.fn(
+      (): {
+        appState: Record<string, unknown>;
+        elements: Record<string, unknown>[];
+        files: Record<string, unknown>;
+        clipboardSupported: boolean;
+      } => ({
+        appState: { selectedElementIds: { a: true } },
+        elements: [{ id: 'a', type: 'rectangle' }],
+        files: {},
+        clipboardSupported: true,
+      }),
+    );
 
-    expect(openDrawingImageExportDialog()).toBe(true);
-    expect(lastMount().handle.openImageExportDialog).toHaveBeenCalledTimes(1);
+    const session = getDrawingExportSession();
+    expect(session).not.toBe(null);
+    // The snapshot rides verbatim.
+    expect(session!.elements).toEqual([{ id: 'a', type: 'rectangle' }]);
+    // hasSelection — the native dialog’s own gate for the only-selected
+    // row and its default.
+    expect(session!.hasSelection).toBe(true);
+    // The seams delegate to the live handle.
+    session!.setPrefs({ background: false });
+    expect(mounted.handle.setExportPrefs).toHaveBeenCalledWith({ background: false });
+    await session!.exportImage('png', 'Sketch', session!.elements, null);
+    expect(mounted.handle.exportImage).toHaveBeenCalledWith(
+      'png',
+      'Sketch',
+      session!.elements,
+      null,
+    );
   });
 
-  it('a stood-down canvas answers false again', async () => {
+  it('hasSelection reads the snapshot honestly: no ids in the elements, no selection', async () => {
+    const host = connectedHost();
+    surface.display(host, {
+      content: sceneWithElements,
+      noteType: 'drawing',
+    });
+    await canvasReady();
+    lastMount().handle.getExportSnapshot = vi.fn(
+      (): {
+        appState: Record<string, unknown>;
+        elements: Record<string, unknown>[];
+        files: Record<string, unknown>;
+        clipboardSupported: boolean;
+      } => ({
+        appState: { selectedElementIds: { ghost: true } },
+        elements: [{ id: 'a', type: 'rectangle' }],
+        files: {},
+        clipboardSupported: false,
+      }),
+    );
+    const session = getDrawingExportSession();
+    expect(session!.hasSelection).toBe(false);
+    expect(session!.clipboardSupported).toBe(false);
+  });
+
+  it('a stood-down canvas answers null again', async () => {
     const host = connectedHost();
     surface.display(host, { content: '', noteType: 'drawing' });
     await canvasReady();
-    expect(openDrawingImageExportDialog()).toBe(true);
+    expect(getDrawingExportSession()).not.toBe(null);
 
     surface.dismiss(host);
-    expect(openDrawingImageExportDialog()).toBe(false);
+    expect(getDrawingExportSession()).toBe(null);
   });
 
   it('answers the chord-scope question: only a mounted, connected canvas is live', async () => {

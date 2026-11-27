@@ -446,6 +446,50 @@ export type {
   ExportSceneOptions,
 } from "./scene/export";
 
+// ---------------------------------------------------------------------------
+// PADIFY FORK — the export pipeline, re-exported for the host's unified
+// export dialog.
+//
+// The host's ONE export popup (every note type, one face) carries the
+// drawingpad's image exports itself. To keep them "100% of the built-in
+// features, done in the exact built-in way" (the owner's verdict), the
+// host does not re-implement the pipeline — it calls the very functions
+// the vendor's own ImageExportDialog and JSONExportDialog call, through
+// this block:
+//   • prepareElementsForExport — the dialog's selection/frame resolution
+//     (the "only export selected items" feature, exactly the built-in
+//     semantics: bound texts ride along, a lone frame exports its
+//     contents, multi-select pulls in whole frames).
+//   • getExportConfigFromAppState + EXPORT_SCALES +
+//     DEFAULT_EXPORT_PADDING — the same knobs the dialog's switches and
+//     the preview turn.
+//   • exportCanvas — App.onExportImage's own engine: the PNG/SVG/
+//     clipboard presses, the .excalidraw.png/.excalidraw.svg double
+//     extensions when the scene is embedded, the canvas-too-big and
+//     clipboard error classes.
+//   • saveAsJSON — the JSONExportDialog's own save (the live scene out
+//     as .excalidraw, files included).
+//   • canvasToBlob — the preview's canvas-size viability check.
+//   • probablySupportsClipboardBlob + isFirefox — the clipboard press's
+//     own visibility rule.
+//   • cloneJSON — the open-time snapshot the dialog takes so the
+//     exported state cannot shift under it.
+// Upstream never shipped these; upstream ships the dialogs instead. The
+// host ships the dialogs' engine behind its one popup.
+// ---------------------------------------------------------------------------
+export { prepareElementsForExport, exportCanvas } from "./data";
+export { saveAsJSON } from "./data/json";
+export { canvasToBlob } from "./data/blob";
+export { probablySupportsClipboardBlob } from "./clipboard";
+export { getExportConfigFromAppState } from "./scene/export";
+export { ExportIcon, ExportImageIcon } from "./components/icons";
+export {
+  EXPORT_SCALES,
+  DEFAULT_EXPORT_PADDING,
+  isFirefox,
+  cloneJSON,
+} from "@excalidraw/common";
+
 export { serializeAsJSON, serializeLibraryAsJSON } from "./data/json";
 export {
   loadFromBlob,

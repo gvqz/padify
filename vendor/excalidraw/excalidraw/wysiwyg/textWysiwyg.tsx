@@ -1010,10 +1010,10 @@ export const textWysiwyg = ({
       event.preventDefault();
       handleSubmit();
       app.actionManager.executeAction(actionSaveToActiveFile, "keyboard");
-    } else if (actionSaveFileToDisk.keyTest(event)) {
-      event.preventDefault();
-      handleSubmit();
-      app.actionManager.executeAction(actionSaveFileToDisk, "keyboard");
+      // PADIFY FORK (the unified export pass) — the save-to-disk chord's
+      // branch is deleted: the action's keyTest answers false (see
+      // actionExport.tsx's fork note — every export path rides the host's
+      // ONE export dialog), so this branch could only ever be dead code.
     } else if (event.key === KEYS.ENTER && event[KEYS.CTRL_OR_CMD]) {
       event.preventDefault();
       if (event.isComposing || event.keyCode === 229) {

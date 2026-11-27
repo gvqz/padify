@@ -34,13 +34,15 @@
  *    and bridges the vendor's onChange into the surface's announce.
  *  - `renderDrawingImage()` is the render engine behind the share/snapshot
  *    seams (surface.ts) — the same engine the vendor's own dialogs call.
- *  - `openImageExportDialog()` is the app-level door into the VENDOR's own
- *    image-export dialog — the exact face excalidraw.com opens (its
- *    menu row and its Ctrl+Shift+E chord open this same dialog; the
- *    owner's verdict: the drawingpad's export is the built-in one, 100%
- *    of its features, done in its exact way — only-selected, background,
- *    dark mode, embed scene, the 1×/2×/3× scale, the live preview, the
- *    PNG/SVG/clipboard presses).
+ *  - the export seams (getExportSnapshot / resolveExportElements /
+ *    setExportPrefs / renderExportPreview / exportImage / exportSceneJSON)
+ *    are the vendor dialogs' own engine, handed to the app's ONE unified
+ *    export dialog: 100% of the built-in features (only-selected,
+ *    background, dark mode, embed scene, the 1×/2×/3× scale, the live
+ *    preview, the PNG/SVG/clipboard presses, the .excalidraw scene save),
+ *    done in the exact built-in way — the same functions the vendor's own
+ *    ImageExportDialog and JSONExportDialog call, through the fork's
+ *    index.tsx re-export block.
  *
  * NO JSX BY DESIGN: the app is a vanilla-TS codebase with no JSX tooling;
  * `createElement` keeps this island a plain .ts file (no tsconfig/eslint
@@ -60,6 +62,27 @@ import {
   WelcomeScreen,
   exportScene,
   getCommonBounds,
+  // The fork's export-pipeline re-exports (vendor/excalidraw/excalidraw/
+  // index.tsx's PADIFY FORK block) — the vendor dialogs' own engine,
+  // driven behind the app's ONE unified export dialog: exportCanvas is
+  // App.onExportImage's body (the PNG/SVG/clipboard presses, the
+  // .excalidraw.png double extension, the error classes),
+  // prepareElementsForExport is the built-in selection/frame resolution
+  // (the "only export selected items" feature), getExportConfigFromAppState
+  // turns the same switches, canvasToBlob is the preview's viability
+  // check, saveAsJSON is the JSON dialog's own .excalidraw save, and
+  // probablySupportsClipboardBlob gates the clipboard press the same way.
+  exportCanvas,
+  prepareElementsForExport,
+  getExportConfigFromAppState,
+  canvasToBlob,
+  saveAsJSON,
+  probablySupportsClipboardBlob,
+  isFirefox,
+  cloneJSON,
+  DEFAULT_EXPORT_PADDING,
+  ExportIcon,
+  ExportImageIcon,
 } from '@excalidraw/excalidraw';
 // The island's error boundary — a vendor render error (the stale-build
 // menu-crash class, any edge case) becomes the app's error card with a
@@ -116,13 +139,64 @@ export interface DrawingCanvasHandle {
   setTheme(theme: DrawingCanvasTheme): void;
   /** The live scene (non-deleted elements are the caller's business). */
   getScene(): DrawingCanvasScene;
-  /** Opens the VENDOR's own image-export dialog — the app-level export
-   * door for a live drawing (surface.ts answers it; download-menu.ts
-   * calls when the active note is a live canvas). The same face the
-   * vendor's menu row and its Ctrl+Shift+E chord open:
-   * appState.openDialog = imageExport, and the vendor's LayerUI renders
-   * its own ImageExportDialog on it. No-op when the API is not ready. */
-  openImageExportDialog(): void;
+  /** The unified export dialog's open-time snapshot — the native dialog's
+   * own cloneJSON discipline (appState + elements + files cloned at open,
+   * so the exported state cannot shift under the dialog). The clipboard
+   * gate rides along (the vendor's own rule: probablySupportsClipboardBlob
+   * || isFirefox). Null while the API is not ready. */
+  getExportSnapshot(): {
+    appState: Record<string, unknown>;
+    elements: Record<string, unknown>[];
+    files: Record<string, unknown>;
+    clipboardSupported: boolean;
+  } | null;
+  /** The built-in selection/frame resolution for the current option values
+   * — prepareElementsForExport itself, on the SNAPSHOT (the "only export
+   * selected items" feature, the exact built-in semantics). */
+  resolveExportElements(
+    snapshot: { appState: Record<string, unknown>; elements: Record<string, unknown>[] },
+    selectionOnly: boolean,
+  ): { elements: Record<string, unknown>[]; exportingFrame: unknown };
+  /** Writes the export preferences into the live appState — the native
+   * dialog's own switch actions (actionChangeExportBackground/
+   * EmbedScene/Scale/ProjectName, actionExportWithDarkMode with its
+   * session override via the vendor-side fork edit). */
+  setExportPrefs(prefs: {
+    background?: boolean;
+    embedScene?: boolean;
+    scale?: 1 | 2 | 3;
+    dark?: boolean;
+    name?: string;
+  }): void;
+  /** The native preview's own render — exportScene('canvas') on the
+   * snapshot elements with the live toggle values and scale 1 (the
+   * preview fits the stage), the padding and the stage's own box as
+   * maxWidthOrHeight; canvasToBlob's CANVAS_POSSIBLY_TOO_BIG check rides
+   * along. Answers the canvas element (the caller centers it). */
+  renderExportPreview(request: {
+    elements: Record<string, unknown>[];
+    appState: Record<string, unknown>;
+    files: Record<string, unknown>;
+    exportingFrame: unknown;
+    background: boolean;
+    dark: boolean;
+    maxWidthOrHeight: number;
+  }): Promise<HTMLCanvasElement>;
+  /** The native presses — App.onExportImage's own body: exportCanvas over
+   * the LIVE appState/files/name (so the option writes above are the
+   * config), the PNG/SVG file saves (the .excalidraw.png/.excalidraw.svg
+   * double extension when the scene is embedded) and the clipboard copy
+   * (the built-in error classes ride along as the thrown message). */
+  exportImage(
+    kind: 'png' | 'svg' | 'clipboard',
+    name: string,
+    elements: Record<string, unknown>[],
+    exportingFrame: unknown,
+  ): Promise<void>;
+  /** The JSON dialog's own save — saveAsJSON on the LIVE scene (elements
+   * including the deleted undo trail, appState, files) out as a
+   * .excalidraw file. */
+  exportSceneJSON(name: string): Promise<void>;
   /** Feeds the vendor image bytes the scene's fileIds reference (the
    * hydration pass — canvas-images.ts loads them from the attachment
    * store). Calls that land before the vendor API is ready queue and
@@ -268,16 +342,53 @@ function drawingCanvasElement(
       // bound died with that composition. Its doors stay open where they
       // already lived: Find is the row below, the export/background rows and
       // the Preferences submenu keep theirs, and the sheet owns the chords.
+      //
+      // THE EXPORT ROWS (the unified export pass): both rows now open the
+      // app's ONE export dialog — the same face every note type's export
+      // answers — instead of the vendor's own ImageExportDialog/
+      // JSONExportDialog pair. The rows keep their identity (glyph, label,
+      // test ids, the Ctrl+Shift+E shortcut hint on the image row); the
+      // dialog they open carries the built-in feature set on the built-in
+      // pipeline (the seams at the handle below). "Export…" lands on the
+      // .excalidraw row, "Export image…" on the PNG row — the same
+      // destinations the vendor's own dialogs were.
       createElement(
         MainMenu,
         undefined,
         createElement(MainMenu.DefaultItems.LoadScene),
         createElement(MainMenu.DefaultItems.SaveToActiveFile),
-        // The vendor's own Export row — the jsonExport dialog that saves
-        // the scene as .excalidraw, in the fallback composition's own
-        // order (LayerUI: Open, Save, Export, Export image…).
-        createElement(MainMenu.DefaultItems.Export),
-        createElement(MainMenu.DefaultItems.SaveAsImage),
+        createElement(
+          MainMenu.Item,
+          {
+            key: 'export-image',
+            icon: ExportImageIcon,
+            'data-testid': 'image-export-button',
+            shortcut: 'Ctrl+Shift+E',
+            onSelect: () => {
+              document.dispatchEvent(
+                new CustomEvent('padify:open-export', { detail: { initialTypeId: 'png' } }),
+              );
+            },
+            // data-testid rides JSX's own data-* allowance in the
+            // vendor's rows; createElement's object literal takes the one
+            // boundary cast every vendor crossing in this module takes.
+          } as never,
+          'Export image…',
+        ),
+        createElement(
+          MainMenu.Item,
+          {
+            key: 'export-scene',
+            icon: ExportIcon,
+            'data-testid': 'json-export-button',
+            onSelect: () => {
+              document.dispatchEvent(
+                new CustomEvent('padify:open-export', { detail: { initialTypeId: 'excalidraw' } }),
+              );
+            },
+          } as never,
+          'Export…',
+        ),
         createElement(MainMenu.Separator),
         createElement(MainMenu.DefaultItems.SearchMenu, {}),
         // The Help row is the app's unified shortcuts sheet — the ONE help
@@ -453,11 +564,143 @@ export function mountDrawingCanvas(
       >;
       return { elements, appState };
     },
-    openImageExportDialog(): void {
+    getExportSnapshot() {
+      if (!api) return null;
+      // The native dialog's own discipline: the exported state is cloned
+      // at open so it cannot shift under the dialog (cloneJSON, the
+      // vendor's deep clone). The clipboard gate rides along — the
+      // vendor dialog's own visibility rule for its clipboard press.
+      return {
+        appState: cloneJSON(api.getAppState()) as Record<string, unknown>,
+        elements: cloneJSON(api.getSceneElements()) as unknown as Record<string, unknown>[],
+        files: cloneJSON(latestFiles) as Record<string, unknown>,
+        clipboardSupported: probablySupportsClipboardBlob || isFirefox,
+      };
+    },
+    resolveExportElements(
+      snapshot: { appState: Record<string, unknown>; elements: Record<string, unknown>[] },
+      selectionOnly: boolean,
+    ) {
+      if (!api) return { elements: [], exportingFrame: null };
+      // prepareElementsForExport itself — the built-in "only export
+      // selected items" semantics (bound texts ride the selection, a lone
+      // frame exports its contents, a multi-selection pulls whole frames
+      // in). The snapshot's records cross with the one boundary cast.
+      const answer = prepareElementsForExport(
+        snapshot.elements as never,
+        snapshot.appState as never,
+        selectionOnly,
+      );
+      return {
+        elements: answer.exportedElements as unknown as Record<string, unknown>[],
+        exportingFrame: answer.exportingFrame as unknown,
+      };
+    },
+    setExportPrefs(prefs: {
+      background?: boolean;
+      embedScene?: boolean;
+      scale?: 1 | 2 | 3;
+      dark?: boolean;
+      name?: string;
+    }): void {
       if (!api) return;
+      // The native dialog's own switch actions, one updateScene — on
+      // the appState keys the export pipeline actually reads (the seam's
+      // field names map here: background → exportBackground, dark →
+      // exportWithDarkMode (whose session override rides the vendor-side
+      // fork edit — the auto-sync otherwise snaps an explicit choice back
+      // to the canvas theme), embedScene → exportEmbedScene).
+      const appState: Record<string, unknown> = {};
+      if (prefs.background !== undefined) appState.exportBackground = prefs.background;
+      if (prefs.embedScene !== undefined) appState.exportEmbedScene = prefs.embedScene;
+      if (prefs.scale !== undefined) appState.exportScale = prefs.scale;
+      if (prefs.dark !== undefined) appState.exportWithDarkMode = prefs.dark;
+      if (prefs.name !== undefined) appState.name = prefs.name;
       api.updateScene({
-        appState: { openDialog: { name: 'imageExport' } },
+        appState: appState as UpdateScenePayload['appState'],
       } as unknown as UpdateScenePayload);
+    },
+    async renderExportPreview(request: {
+      elements: Record<string, unknown>[];
+      appState: Record<string, unknown>;
+      files: Record<string, unknown>;
+      exportingFrame: unknown;
+      background: boolean;
+      dark: boolean;
+      maxWidthOrHeight: number;
+    }): Promise<HTMLCanvasElement> {
+      // The native preview's own call, verbatim in shape: exportScene
+      // 'canvas' on the SNAPSHOT elements with the live toggle values and
+      // a fixed scale of 1 (the preview fits the stage), the vendor's
+      // default padding, the stage's own box as maxWidthOrHeight. The
+      // canvasToBlob check rides along — CANVAS_POSSIBLY_TOO_BIG answers
+      // the same error the native preview shows its ErrorCanvasPreview
+      // for, and the caller shows the honest note instead.
+      const canvas = await exportScene({
+        type: 'canvas',
+        data: {
+          elements: request.elements as never,
+          appState: {
+            ...request.appState,
+            exportBackground: request.background,
+            exportWithDarkMode: request.dark,
+            exportScale: 1,
+          } as never,
+          files: request.files as never,
+        },
+        config: {
+          ...getExportConfigFromAppState({
+            ...request.appState,
+            exportBackground: request.background,
+            exportWithDarkMode: request.dark,
+            exportScale: 1,
+          } as never),
+          padding: DEFAULT_EXPORT_PADDING,
+          maxWidthOrHeight: request.maxWidthOrHeight,
+          exportingFrame: request.exportingFrame as never,
+        },
+      } as Parameters<typeof exportScene>[0]);
+      // The viability check — the native preview's own: a canvas too big
+      // to blob is too big to trust, and the error propagates to the
+      // caller's honest-note path.
+      await canvasToBlob(canvas as HTMLCanvasElement);
+      return canvas as unknown as HTMLCanvasElement;
+    },
+    async exportImage(
+      kind: 'png' | 'svg' | 'clipboard',
+      name: string,
+      elements: Record<string, unknown>[],
+      exportingFrame: unknown,
+    ): Promise<void> {
+      if (!api) return;
+      // App.onExportImage's own body: exportCanvas over the LIVE appState
+      // and files (so the option writes above ARE the config) with the
+      // dialog's name — the same engine the native presses ride, the
+      // same file names (the .excalidraw.png/.excalidraw.svg double
+      // extension when the scene is embedded), the same error classes
+      // (the empty canvas, the too-big canvas, the clipboard failures —
+      // they throw here and the caller's toast explains them).
+      await exportCanvas(kind, elements as never, api.getAppState() as never, latestFiles, {
+        name,
+        exportingFrame: exportingFrame as never,
+      });
+    },
+    async exportSceneJSON(name: string): Promise<void> {
+      if (!api) return;
+      // The JSON dialog's own save: the LIVE scene — elements including
+      // the deleted undo trail (the .excalidraw file restores the
+      // history), the live appState, the live files — serialized and
+      // saved as .excalidraw through saveAsJSON, exactly as
+      // actionSaveFileToDisk does it.
+      await saveAsJSON({
+        data: {
+          elements: api.getSceneElementsIncludingDeleted() as never,
+          appState: api.getAppState() as never,
+          files: latestFiles,
+        },
+        filename: name,
+        fileHandle: null,
+      });
     },
     addFiles(files: CanvasImageFile[]): void {
       if (files.length === 0) return;

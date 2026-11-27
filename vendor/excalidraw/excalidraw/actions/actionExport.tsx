@@ -372,10 +372,14 @@ export const actionSaveFileToDisk = register({
       onExportInProgress = false;
     }
   },
-  keyTest: (event) =>
-    event.key.toLowerCase() === KEYS.S &&
-    event.shiftKey &&
-    event[KEYS.CTRL_OR_CMD],
+  // PADIFY FORK (the unified export pass) — the chord is deleted: every
+  // export path rides the host's ONE export dialog (the .excalidraw row
+  // carries this very save through the host's seam). The menu row that
+  // opened this action is gone from the composition too; only the
+  // keyboard path remained, and one dialog owns exports now. keyTest
+  // answers false so the wysiwyg branch that still references it falls
+  // through without firing.
+  keyTest: (_event, _appState, _elements, _app) => false,
   PanelComponent: ({ updateData }) => (
     <IconButton
       type="button"

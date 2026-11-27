@@ -1,55 +1,56 @@
 /**
- * The export center — the file-type exports' one popup.
+ * The export center — the ONE export dialog, every note type, one face.
  *
- * THE STORY AFTER THE OWNER'S THIRD VERDICT: the consolidation (9ba973e)
- * replaced every export with a popup alone and deleted the vendor's
- * native dialog from the dist (e6a173b) — "the model's worst mistake",
- * reverted. The center then carried the drawing's image exports as
- * INLINE rows (the one-menu pass) — the owner's verdict on THAT face:
- * "I do not approve of the new unified export popup — it looks
- * horrible … the built in export does a lot more and does it a lot
- * different … need 100% of features and done in the exact same way."
- * So the drawing's image exports left for good: on a live drawing the
- * download button and every canvas door open the VENDOR's own
- * ImageExportDialog (surface.ts's openDrawingImageExportDialog —
- * only-selected, background, dark mode, embed scene, the scale, the
- * live preview, the PNG/SVG/clipboard presses, all of it native).
+ * THE OWNER'S FOURTH VERDICT (the restart): "visually I want ONE popup for
+ * ALL note/types. The current visuals for both of them aren't good — have
+ * to restart the ui. remember — 1 unified ui for all note/note types."
+ * The two faces that stood were the vendor's own ImageExportDialog (the
+ * drawingpad's, restored for "100% of features, done in the exact same
+ * way") and this center's first build (file-type exports only). Both died
+ * visually; ONE dialog rises here for everything — and the drawingpad's
+ * rows inside it keep the built-in feature set on the built-in pipeline
+ * (the vendor dialogs' own engine, delegated through surface.ts's
+ * session seam): only-selected, background, dark mode, embed scene, the
+ * 1×/2×/3× scale, the live canvas preview, the PNG/SVG/clipboard
+ * presses, the .excalidraw scene save.
  *
- * WHAT RIDES THE CENTER NOW: the file-type exports (txt/md/pdf/docx/
- * html), the .padify envelopes, the .excalidraw envelope, and the
- * whole-pad save — every note that is not a live drawing, plus a
- * drawing whose canvas cannot answer (the envelope-only fallback).
+ * THE RESTART'S ANSWERS TO THE AUDIT (the two faces' measured sins):
+ *   - one format row of WRAPPED CHIPS (radio semantics) — no stacked
+ *     card rows, no extension chips, no double-ring selection: the
+ *     selected chip fills with the accent, one soft state
+ *   - the selected format speaks ONCE, in one description line under the
+ *     chips — not a hint stacked on every row
+ *   - the preview stage is content-driven (a live drawing render, the
+ *     text's own words, a card for envelopes) — never a box-in-a-box of
+ *     nothing; transparency rides the checkerboard behind a
+ *     background-off render
+ *   - switches are switches (pill toggles), the scale is a segmented
+ *     control, the options own one labeled section in even rhythm
+ *   - a close × rides the header; the footer's import door sits under a
+ *     hairline, clearly tertiary, never a peer of Copy/Export
  *
- * THE CONTRACT: the center is pure UI and vendor-free — the host hands in
- * one ExportCenterType per file type the ACTIVE NOTE can become, each
- * with its own preview() and run(stem, values) and, where a type can
- * copy, copy(). The drawing's thumbnail renders from a data URL the
- * host supplies (surface.ts's snapshot seam), so the canvas chunk
- * never rides this module.
+ * THE CONTRACT (kept from the proven build): the center is pure UI —
+ * the host hands in one ExportCenterType per format the ACTIVE note can
+ * become, each with its own preview()/run(stem, values) and, where a
+ * format can copy, copy(). The drawing rows' previews render from the
+ * vendor's own exportScene through the surface seam; no vendor code rides
+ * this module.
  *
- * THE BINDING DISCIPLINE (the bug the consolidation shipped): the face is
- * built ONCE, so every listener binds ONCE at build and reads the LIVE
- * host through `activeHost` — the old build added a fresh typeList click
- * listener on every open, each closing over that open's host: the second
- * open double-fired selections, the third ran stale hosts' exporters
- * against the wrong note. One binding, one live host, no accumulation.
+ * THE BINDING DISCIPLINE (kept): the face is built ONCE, every listener
+ * binds ONCE at build and reads the LIVE host through `activeHost` —
+ * per-open closures were the consolidation's accumulation bug, and they
+ * never come back.
  *
- * HONESTY RULES: preview() answers for an ungated state with a note (an
- * empty drawing says so in the stage); run() answers false when it did
- * not export (a toast has already explained why) and the dialog stays
- * open. The dialog closes only on a reported success or on Cancel.
- * Object URLs die with the dialog that made them.
+ * HONESTY RULES (kept): preview() answers for an ungated state with a
+ * note; run() answers false when it did not export (a toast has already
+ * explained why) and the dialog stays open. The dialog closes only on a
+ * reported success or on the ×/Escape — except a keepOpen type (the
+ * drawing's image presses, the native dialogs' own behavior: an export
+ * is not a dismissal).
  *
- * THE REFINEMENT PASS (the visual audit's verdict, answered): the type
- * list speaks RADIO — a leading dot on the selected row, role=radio +
- * aria-checked, not a border inference; the groups are LABELED (Images /
- * File types / The pad itself) instead of a mystery hairline; the
- * keyboard is native — ArrowUp/ArrowDown walks the types (selection
- * follows focus), Enter in the name field is an Export, the selected row
- * takes focus on open; the footer's import door is a button that READS as
- * one (a folder glyph, an outline), not quiet text; and the dialog owns
- * its height — max-height, a scrolling body, a pinned footer, so a
- * short or narrow viewport never buries the Export press below the fold.
+ * KEYBOARD (kept, widened): ArrowUp/Down/Left/Right walk the chips,
+ * selection follows focus; Enter in the name field is an Export; Escape
+ * and × close.
  */
 
 import './export-center.css';
@@ -57,9 +58,13 @@ import { sanitizeFileStem, stripExtension } from './file-name';
 
 /** What a type's preview() answers with. */
 export interface ExportPreview {
+  /** A rendered canvas ELEMENT (the drawing rows' live render — the
+   * vendor's own exportScene output, placed and CSS-scaled by the
+   * stage). */
+  canvas?: HTMLCanvasElement;
   /** An image URL (object URL or data URL) — the stage shows an <img>. */
   image?: string;
-  /** Plain-text preview — the stage shows a paper text card. */
+  /** Plain-text preview — the stage shows the text itself. */
   text?: string;
   /** Pre-rendered HTML body — the stage shows a mini document. */
   html?: string;
@@ -67,31 +72,36 @@ export interface ExportPreview {
   card?: { title: string; meta: string[] };
   /** A muted status line under the stage (rendering notes, honest gates). */
   note?: string;
-  /** True when the image was rendered with transparency (Background
-   * off) — the stage paints the checkerboard behind it, so the
-   * transparency is SEEN, not guessed. */
-  imageTransparent?: boolean;
+  /** True when the render is transparent (Background off) — the stage
+   * paints the checkerboard behind it, so the transparency is SEEN. */
+  transparent?: boolean;
 }
 
-/** One toggle row (the drawing's background / dark / embed). */
+/** One switch row (the drawing's only-selected / background / dark /
+ * embed — the native dialog's own controls, restyled). */
 export interface ExportOptionToggle {
   kind: 'toggle';
   id: string;
   label: string;
-  hint: string;
+  /** The one-line explanation beside the label. */
+  hint?: string;
+  /** The ⓘ tooltip's text (the embed-scene help — the vendor's own words
+   * ride the row the adapter builds). */
+  tooltip?: string;
   value: boolean;
-  /** Show the row only for these type ids (default: every type sharing the model). */
-  when?: readonly string[];
+  /** Fires after the flip (the drawing rows' write-through — the native
+   * dialog's switch actions persisting the same appState keys). */
+  onFlip?(value: boolean): void;
 }
 
-/** One segmented row (the drawing's scale). */
+/** One segmented row (the drawing's scale — 1× / 2× / 3×). */
 export interface ExportOptionSegment {
   kind: 'segment';
   id: string;
   label: string;
   values: { id: string; label: string; title?: string }[];
   value: string;
-  when?: readonly string[];
+  onPick?(value: string): void;
 }
 
 export type ExportOption = ExportOptionToggle | ExportOptionSegment;
@@ -99,10 +109,7 @@ export type ExportOption = ExportOptionToggle | ExportOptionSegment;
 /** The live option readings a type's preview()/run() receive. */
 export type ExportOptionValues = Record<string, boolean | string>;
 
-/** One file type the active note can become — preview + run + (for
- * images) copy, all inline: selecting the row shows its options, its
- * preview, and its presses right here. No handoffs; no type opens
- * another face from this dialog. */
+/** One export format the active note can become. */
 export interface ExportCenterType {
   id: string;
   label: string;
@@ -115,23 +122,35 @@ export interface ExportCenterType {
   extensionFor?(values: ExportOptionValues): string;
   /** The prefilled file name, WITHOUT the extension. */
   defaultStem: string;
-  /** A one-liner under the type's label. */
+  /** The selected format's description — the ONE line under the chips. */
   hint?: string;
-  /** The list's group: images (the drawing's PNG/SVG), note (the
-   * file-type/envelope rows), pad (the whole-pad save). */
-  section?: 'images' | 'note' | 'pad';
-  /** The option model this type shows (shared instances share live state). */
+  /** The option model this type shows (shared instances share live
+   * state across formats — the native image dialog's own discipline:
+   * one set of switches for PNG and SVG). */
   options?: ExportOption[];
-  preview(values: ExportOptionValues): Promise<ExportPreview>;
-  /** Exports with the (already sanitized + suffixed) file name. True = done. */
+  /** True = a successful export does NOT close the dialog (the native
+   * image dialogs' own behavior — an export is not a dismissal; the
+   * PNG press leaves the dialog standing for the SVG press). */
+  keepOpen?: boolean;
+  /** Renders what the export will carry. `stage` is the measured box
+   * the render must fit (the drawing preview passes it as the native
+   * dialog's own maxWidthOrHeight). */
+  preview(
+    values: ExportOptionValues,
+    stage: { width: number; height: number },
+  ): Promise<ExportPreview>;
+  /** Exports with the (already sanitized + suffixed) file name. True =
+   * done (and the dialog closes unless keepOpen). */
   run(fileName: string, values: ExportOptionValues): Promise<boolean>;
-  /** Copies instead of saving (the image rows' clipboard press). True =
-   * copied — the press flashes "Copied" and the dialog stays open, the
-   * vendor's own behavior. Absent = no copy press for this type. */
+  /** Copies instead of saving (the PNG row's clipboard press). True =
+   * copied — the press flashes "Copied" and the dialog stays open. */
   copy?(values: ExportOptionValues): Promise<boolean>;
-  /** The clipboard capability gate — false hides the copy press (the
-   * environment cannot hold this flavor). Absent = assumed supported. */
+  /** The clipboard capability gate — false hides the copy press. */
   copySupported?(): boolean;
+  /** Fires on every keystroke in the name field (the drawing rows write
+   * the scene name through — the native dialog's own
+   * actionChangeProjectName parity). */
+  onNameChange?(stem: string): void;
 }
 
 export interface ExportCenterHost {
@@ -141,55 +160,53 @@ export interface ExportCenterHost {
   types: ExportCenterType[];
   initialTypeId?: string;
   /** The footer's open door (null hides it). */
-  door?: { label: string; onOpen: () => void };
+  door?: { label: string; onOpen: () => void } | null;
 }
 
 interface CenterFace {
   dialog: HTMLDialogElement;
   heading: HTMLElement;
   subheading: HTMLElement;
+  close: HTMLButtonElement;
   stage: HTMLElement;
   stageBody: HTMLElement;
   stageNote: HTMLElement;
-  typeList: HTMLElement;
+  chips: HTMLElement;
+  desc: HTMLElement;
+  optionsHost: HTMLElement;
+  optionsLabel: HTMLElement;
   stem: HTMLInputElement;
   suffix: HTMLElement;
-  optionsHost: HTMLElement;
   door: HTMLButtonElement;
   doorLabel: HTMLElement;
-  cancel: HTMLButtonElement;
-  /** The image rows' clipboard press — hidden for types without a copy
-   * or when this environment cannot hold the flavor. */
   copy: HTMLButtonElement;
   exportButton: HTMLButtonElement;
 }
 
 let face: CenterFace | null = null;
-/** The LIVE open's host — the single source every binding reads (the
- * listener-accumulation bug's cure: no per-open closures exist). */
+/** The LIVE open's host — the single source every binding reads. */
 let activeHost: ExportCenterHost | null = null;
 let activeType: ExportCenterType | null = null;
 let previewToken = 0;
 let previewTimer: number | null = null;
 /** The object URL the image preview currently shows — revoked on replace. */
 let previewUrl: string | null = null;
-/** The copy press's 2s "Copied" flash — the vendor's useCopyStatus. */
+/** The copy press's 2s "Copied" flash — the native useCopyStatus's own
+ * TIMEOUT verbatim. */
+const COPY_FLASH_MS = 2_000;
 let copyFlashTimer: number | null = null;
 /** Whether the user has edited the file-name field this session. Until
- * they do, every type switch adopts the type's own default stem (the old
- * dropdown named each row's file by its own rule — the workspace save was
- * always the dated pad stem, never the note's title); after an edit the
- * user's stem survives the switches, minus the types' extensions. */
+ * they do, every format switch adopts the type's own default stem;
+ * after an edit the user's stem survives the switches, minus the
+ * formats' extensions. */
 let stemDirty = false;
 
-/** Strips characters the download family never allowed into file names —
- * the one rule every export surface speaks (ui/file-name.ts). */
+/** Strips characters the download family never allowed into file names. */
 function sanitizeStem(raw: string): string {
   return sanitizeFileStem(raw);
 }
 
-/** Drops a trailing extension equal to the type's own (the user typing
- * "note.png" into the stem must not export "note.png.png"). */
+/** Drops a trailing extension equal to the type's own. */
 function stripOwnExtension(stem: string, extension: string): string {
   return stripExtension(stem, extension);
 }
@@ -203,8 +220,7 @@ function optionValues(type: ExportCenterType): ExportOptionValues {
 }
 
 /** The extension the type's current option values shape — the suffix
- * chip and the export's file name both answer this, never the static
- * one when a dynamic voice speaks (the embed double extension). */
+ * chip and the export's file name both answer this. */
 function extensionFor(type: ExportCenterType): string {
   const values = optionValues(type);
   return type.extensionFor?.(values) ?? type.extension;
@@ -238,7 +254,7 @@ function closeCenterDialog(dialog: HTMLDialogElement): void {
   }
 }
 
-/** Builds (once) the one dialog the app exports through — with every
+/** Builds (once) the one dialog the app exports through — every
  * listener bound ONCE, reading the live host at event time. */
 function centerFace(): CenterFace {
   if (face) {
@@ -249,23 +265,33 @@ function centerFace(): CenterFace {
   dialog.className = 'vz-dialog export-center';
   dialog.setAttribute('aria-label', 'Export');
 
+  // ---- the head: the title block on the left, the × on the right -----
   const head = document.createElement('div');
   head.className = 'export-center-head';
+  const headText = document.createElement('div');
+  headText.className = 'export-center-head-text';
   const heading = document.createElement('h2');
   heading.className = 'export-center-heading';
   const subheading = document.createElement('p');
   subheading.className = 'export-center-subheading';
-  head.append(heading, subheading);
+  headText.append(heading, subheading);
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'export-center-close';
+  close.setAttribute('aria-label', 'Close export dialog');
+  close.innerHTML =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M18 6 6 18M6 6l12 12"/></svg>';
+  head.append(headText, close);
   dialog.append(head);
 
+  // ---- the body: the preview stage on the left, the settings column ---
   const body = document.createElement('div');
   body.className = 'export-center-body';
 
   const preview = document.createElement('div');
   preview.className = 'export-center-preview';
-  const label = document.createElement('p');
-  label.className = 'export-center-label';
-  label.textContent = 'Preview';
   const stage = document.createElement('div');
   stage.className = 'export-center-stage';
   const stageBody = document.createElement('div');
@@ -273,19 +299,34 @@ function centerFace(): CenterFace {
   const stageNote = document.createElement('p');
   stageNote.className = 'export-center-stage-note';
   stage.append(stageBody, stageNote);
-  preview.append(label, stage);
+  preview.append(stage);
 
   const settings = document.createElement('div');
   settings.className = 'export-center-settings';
 
-  // The type list — its groups carry their own labels (Images / File
-  // types / The pad itself), so no outer "File type" caption sits over
-  // them: one hierarchy, not a label on a list of labels.
-  const typeList = document.createElement('div');
-  typeList.className = 'export-center-types';
-  typeList.setAttribute('role', 'group');
-  typeList.setAttribute('aria-label', 'File type');
+  // The format chips — ONE wrapped radio group, every format a peer.
+  const formatLabel = document.createElement('p');
+  formatLabel.className = 'export-center-label';
+  formatLabel.textContent = 'Format';
+  const chips = document.createElement('div');
+  chips.className = 'export-center-chips';
+  chips.setAttribute('role', 'radiogroup');
+  chips.setAttribute('aria-label', 'File type');
 
+  // The selected format's one description line.
+  const desc = document.createElement('p');
+  desc.className = 'export-center-desc';
+
+  // The options section — one labeled block, even rhythm.
+  const optionsHost = document.createElement('div');
+  optionsHost.className = 'export-center-options';
+  optionsHost.hidden = true;
+  const optionsLabel = document.createElement('p');
+  optionsLabel.className = 'export-center-label';
+  optionsLabel.textContent = 'Options';
+  optionsHost.append(optionsLabel);
+
+  // The file name row — the input with the live suffix attached.
   const nameLabel = document.createElement('p');
   nameLabel.className = 'export-center-label';
   nameLabel.textContent = 'File name';
@@ -293,26 +334,20 @@ function centerFace(): CenterFace {
   nameRow.className = 'export-center-name-row';
   const stem = document.createElement('input');
   stem.type = 'text';
-  stem.className = 'vz-dialog-input';
+  stem.className = 'vz-dialog-input export-center-stem';
   stem.setAttribute('aria-label', 'File name');
   stem.spellcheck = false;
   const suffix = document.createElement('span');
   suffix.className = 'export-center-name-suffix';
   nameRow.append(stem, suffix);
 
-  const optionsHost = document.createElement('div');
-  optionsHost.className = 'export-center-options';
-  optionsHost.hidden = true;
-
-  settings.append(typeList, nameLabel, nameRow, optionsHost);
+  settings.append(formatLabel, chips, desc, optionsHost, nameLabel, nameRow);
   body.append(preview, settings);
   dialog.append(body);
 
+  // ---- the footer: the open door (tertiary, left) + the actions -------
   const foot = document.createElement('div');
   foot.className = 'export-center-foot';
-  // The import door — a quiet ghost link with a folder glyph, clearly
-  // tertiary to the actions: the round-trip door belongs here (open is
-  // the other half of export), but never as a peer of Cancel/Export.
   const door = document.createElement('button');
   door.type = 'button';
   door.className = 'export-center-door';
@@ -329,12 +364,6 @@ function centerFace(): CenterFace {
   door.append(doorGlyph, doorLabel);
   const actions = document.createElement('div');
   actions.className = 'vz-dialog-actions';
-  const cancel = document.createElement('button');
-  cancel.type = 'button';
-  cancel.className = 'vz-dialog-cancel';
-  cancel.textContent = 'Cancel';
-  // The image rows' clipboard press — an outline button between Cancel
-  // and Export, hidden unless the selected type speaks it.
   const copy = document.createElement('button');
   copy.type = 'button';
   copy.className = 'vz-dialog-cancel export-center-copy';
@@ -344,7 +373,7 @@ function centerFace(): CenterFace {
   exportButton.type = 'button';
   exportButton.className = 'vz-dialog-confirm export-center-export';
   exportButton.textContent = 'Export';
-  actions.append(cancel, copy, exportButton);
+  actions.append(copy, exportButton);
   foot.append(door, actions);
   dialog.append(foot);
 
@@ -353,28 +382,48 @@ function centerFace(): CenterFace {
     dialog,
     heading,
     subheading,
+    close,
     stage,
     stageBody,
     stageNote,
-    typeList,
+    chips,
+    desc,
+    optionsHost,
+    optionsLabel,
     stem,
     suffix,
-    optionsHost,
     door,
     doorLabel,
-    cancel,
     copy,
     exportButton,
   };
 
-  cancel.addEventListener('click', () => {
+  // ONE binding each, for the dialog's whole life — reading the LIVE
+  // host at event time (the accumulation bug's cure, kept from the
+  // proven build).
+  //
+  // The dialog OWNS Escape while it is on stage: a native <dialog> would
+  // close itself on the keydown's cancel, but the drawingpad's vendor
+  // binds its own global key handler at the document — over a live
+  // canvas its actionManager matches the Escape and preventDefaults it,
+  // killing the UA's cancel before it fires. So the close happens here,
+  // on the dialog's own node, before the bubble ever reaches the
+  // vendor — and with stopPropagation the canvas behind never
+  // deselects on a key that was aimed at the dialog.
+  dialog.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
     closeCenterDialog(dialog);
   });
 
-  // The dialog going away (Escape, cancel, an export's success) kills
-  // the pending preview, the object URL it left on the table, and the
-  // copy press's flash — the old build let the first two leak until the
-  // NEXT render replaced them.
+  close.addEventListener('click', () => {
+    closeCenterDialog(dialog);
+  });
+
+  // The dialog going away (×, Escape, a success that closes) kills the
+  // pending preview, the object URL it left on the table, and the copy
+  // press's flash.
   dialog.addEventListener('close', () => {
     cancelPendingPreview();
     revokePreviewUrl();
@@ -389,15 +438,15 @@ function centerFace(): CenterFace {
     face?.stageNote.replaceChildren();
   });
 
-  // The first edit makes the file name the user's — type switches stop
-  // adopting defaults from that point on (see stemDirty).
+  // The first edit makes the file name the user's — format switches stop
+  // adopting defaults from that point on. The active type may write the
+  // name through (the drawing rows' scene-name parity).
   stem.addEventListener('input', () => {
     stemDirty = true;
+    activeType?.onNameChange?.(stem.value);
   });
 
-  // Enter in the name field is an Export — the native save-dialog
-  // discipline (the audit: no user reaches for a button when the field
-  // already has their hands on the keyboard).
+  // Enter in the name field is an Export.
   stem.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -405,42 +454,35 @@ function centerFace(): CenterFace {
     }
   });
 
-  // ONE typeList binding for the dialog's whole life (the consolidation
-  // re-added this on every open — see the module docstring). It reads the
-  // LIVE host, so a reopen can never fire a stale one.
-  typeList.addEventListener('click', (event) => {
-    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('.export-center-type');
+  // ONE chips binding: a chip press selects its type.
+  chips.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('.export-center-chip');
     if (!button?.dataset.typeId) return;
     const host = activeHost;
     if (!host) return;
     const type = host.types.find((item) => item.id === button.dataset.typeId);
-    if (!type) return;
-    if (type !== activeType) {
-      selectType(type, activeType);
-    }
+    if (!type || type === activeType) return;
+    selectType(type, activeType);
   });
 
-  // ONE arrow-key binding for the dialog's whole life: the native
-  // save-dialog discipline — ArrowUp/ArrowDown walks the rows, the
-  // selection follows the focus, and the list never scrolls under the
-  // keypress.
-  typeList.addEventListener('keydown', (event) => {
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+  // ONE arrow-key binding: the radiogroup's native walk — the arrows
+  // move focus and the selection follows (all four arrows; the chips
+  // wrap, so up/down and left/right both walk the same order).
+  chips.addEventListener('keydown', (event) => {
+    if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
     const host = activeHost;
     if (!host) return;
-    const rows = Array.from(typeList.querySelectorAll<HTMLButtonElement>('.export-center-type'));
-    if (rows.length < 2) return;
-    const focusedIndex = rows.findIndex((row) => row === document.activeElement);
-    const checked = typeList.querySelector('.export-center-type[aria-checked="true"]');
-    const fromIndex = focusedIndex !== -1 ? focusedIndex : rows.findIndex((row) => row === checked);
-    const step = event.key === 'ArrowDown' ? 1 : -1;
-    const next = rows[(fromIndex + step + rows.length) % rows.length];
+    const buttons = Array.from(chips.querySelectorAll<HTMLButtonElement>('.export-center-chip'));
+    if (buttons.length < 2) return;
     event.preventDefault();
+    const fromIndex = buttons.findIndex((chip) => chip === document.activeElement);
+    const step = event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : -1;
+    const next = buttons[(fromIndex + step + buttons.length) % buttons.length] ?? buttons[0];
     next.focus();
     next.click();
   });
 
-  // ONE export binding for the dialog's whole life.
+  // ONE export binding.
   exportButton.addEventListener('click', () => {
     const type = activeType;
     if (!type) return;
@@ -456,14 +498,17 @@ function centerFace(): CenterFace {
         done = false;
       }
       exportButton.disabled = false;
-      if (done) closeCenterDialog(dialog);
+      // keepOpen — the native image dialogs' own behavior: the PNG
+      // press leaves the dialog standing for the SVG press. An export
+      // is not a dismissal.
+      if (done && !type.keepOpen) closeCenterDialog(dialog);
     })();
   });
 
-  // ONE copy binding for the dialog's whole life — the image rows'
-  // clipboard press: the dialog STAYS OPEN (the vendor's own behavior —
-  // a copy is not a save), a true answer flashes "Copied" for 2s, and
-  // the surface's toast explains either way.
+  // ONE copy binding — the clipboard press: the dialog STAYS OPEN (the
+  // native behavior — a copy is not a save), a true answer flashes
+  // "Copied" for the native's own 2s, and the surface's toast explains
+  // either way.
   copy.addEventListener('click', () => {
     const type = activeType;
     const copyRun = type?.copy;
@@ -483,14 +528,14 @@ function centerFace(): CenterFace {
       copyFlashTimer = window.setTimeout(() => {
         copyFlashTimer = null;
         copy.textContent = 'Copy to clipboard';
-      }, 2_000);
+      }, COPY_FLASH_MS);
     })();
   });
 
   return face;
 }
 
-/** One toggle row, bound live to its model. */
+/** One switch row, bound live to its model. */
 function renderToggle(
   host: HTMLElement,
   option: Extract<ExportOption, { kind: 'toggle' }>,
@@ -500,24 +545,40 @@ function renderToggle(
   row.className = 'export-center-option';
   const input = document.createElement('input');
   input.type = 'checkbox';
+  input.id = `export-option-${option.id}`;
   input.className = 'export-center-check';
   input.checked = option.value;
   input.addEventListener('change', () => {
     option.value = input.checked;
+    option.onFlip?.(input.checked);
     refreshSelection();
   });
   const text = document.createElement('span');
   text.className = 'export-center-option-text';
-  // The label wears its own weight — the hint beside it stays a size
-  // down and two shades quieter (the audit's hierarchy nit: a bare text
-  // node and the hint read as one gray band).
   const label = document.createElement('span');
   label.className = 'export-center-option-label';
+  label.setAttribute('for', input.id);
   label.textContent = option.label;
-  const hint = document.createElement('span');
-  hint.className = 'export-center-option-hint';
-  hint.textContent = option.hint;
-  text.append(label, hint);
+  if (option.tooltip) {
+    // The ⓘ rides the label line's tail — the embed-scene help, the
+    // vendor's own words (a title tooltip: the app's tooltip kit rides
+    // modals, this is one word of help beside a switch, not a popover
+    // surface).
+    const info = document.createElement('span');
+    info.className = 'export-center-option-info';
+    info.setAttribute('role', 'img');
+    info.setAttribute('aria-label', option.tooltip);
+    info.title = option.tooltip;
+    info.textContent = 'i';
+    label.append(info);
+  }
+  text.append(label);
+  if (option.hint) {
+    const hint = document.createElement('span');
+    hint.className = 'export-center-option-hint';
+    hint.textContent = option.hint;
+    text.append(hint);
+  }
   row.append(input, text);
   host.append(row);
   return row;
@@ -536,7 +597,7 @@ function renderSegment(
   label.textContent = option.label;
   const group = document.createElement('div');
   group.className = 'export-center-seg';
-  group.setAttribute('role', 'group');
+  group.setAttribute('role', 'radiogroup');
   group.setAttribute('aria-label', option.label);
   const buttons = option.values.map((value) => {
     const button = document.createElement('button');
@@ -544,13 +605,14 @@ function renderSegment(
     button.className = 'export-center-seg-btn';
     button.textContent = value.label;
     if (value.title) button.title = value.title;
-    button.setAttribute('aria-pressed', String(option.value === value.id));
+    button.setAttribute('aria-checked', String(option.value === value.id));
     button.addEventListener('click', () => {
       option.value = value.id;
+      option.onPick?.(value.id);
       for (const other of buttons) {
-        other.setAttribute('aria-pressed', 'false');
+        other.setAttribute('aria-checked', 'false');
       }
-      button.setAttribute('aria-pressed', 'true');
+      button.setAttribute('aria-checked', 'true');
       refreshSelection();
     });
     group.append(button);
@@ -564,10 +626,14 @@ function renderSegment(
 /** Paints the stage from one preview answer. */
 function paintPreview(f: CenterFace, preview: ExportPreview): void {
   f.stageBody.replaceChildren();
-  // The checkerboard — transparency is SEEN, not guessed: an image
-  // rendered with its background off rides the transparency stage.
-  f.stage.classList.toggle('export-center-stage--transparent', preview.imageTransparent === true);
-  if (preview.image) {
+  // The checkerboard — transparency is SEEN, not guessed: a render
+  // with its background off rides the transparency stage.
+  f.stage.classList.toggle('export-center-stage--transparent', preview.transparent === true);
+  if (preview.canvas) {
+    const canvas = preview.canvas;
+    canvas.className = 'export-center-stage-canvas';
+    f.stageBody.append(canvas);
+  } else if (preview.image) {
     const img = document.createElement('img');
     img.className = 'export-center-stage-img';
     img.alt = 'Export preview';
@@ -610,7 +676,9 @@ function paintPreview(f: CenterFace, preview: ExportPreview): void {
   f.stageNote.hidden = (preview.note ?? '') === '';
 }
 
-/** The debounced, token-guarded preview render. */
+/** The debounced, token-guarded preview render. The stage's own box is
+ * measured at render time and handed to the preview (the drawing rows
+ * pass it as the native dialog's own maxWidthOrHeight). */
 function schedulePreview(type: ExportCenterType): void {
   const f = face;
   if (!f) return;
@@ -622,14 +690,26 @@ function schedulePreview(type: ExportCenterType): void {
   }
   previewTimer = window.setTimeout(() => {
     void (async () => {
+      const stage = {
+        width: f.stage.offsetWidth,
+        height: f.stage.offsetHeight,
+      };
       let answer: ExportPreview;
       try {
-        answer = await type.preview(optionValues(type));
-      } catch {
-        answer = { note: 'The preview failed — the export can still try.' };
+        answer = await type.preview(optionValues(type), stage);
+      } catch (error) {
+        // The native preview's own honest answer for an unrenderable
+        // canvas — the note explains and the export can still try.
+        const message = error instanceof Error ? error.message : String(error);
+        answer = {
+          note: message.includes('canvas may be too big')
+            ? 'The canvas may be too big — the export can still try.'
+            : 'The preview failed — the export can still try.',
+        };
       }
       if (token !== previewToken || activeType !== type) {
-        // A stale render: discard, and release its object URL if it made one.
+        // A stale render: discard, and release its object URL if it
+        // made one.
         if (answer.image?.startsWith('blob:')) URL.revokeObjectURL(answer.image);
         return;
       }
@@ -637,34 +717,33 @@ function schedulePreview(type: ExportCenterType): void {
       if (answer.image?.startsWith('blob:')) previewUrl = answer.image;
       paintPreview(f, answer);
     })();
-  }, 220);
+  }, 150);
 }
 
-/** Selects one type: the radio states, name suffix (the live option
- * values' extension — the embed double extension included), the copy
- * press, options section, preview. */
+/** Selects one type: the chip radios, the description line, the name
+ * suffix (the live option values' extension — the embed double
+ * extension included), the copy press, the options section, preview. */
 function selectType(type: ExportCenterType, previousType: ExportCenterType | null): void {
   const f = face;
   if (!f) return;
   activeType = type;
-  // The radio states: the rows answer aria-checked (their dot is CSS,
-  // the semantics are real).
-  for (const button of f.typeList.querySelectorAll<HTMLButtonElement>('button[role="radio"]')) {
-    button.setAttribute('aria-checked', String(button.dataset.typeId === type.id));
+  for (const chip of f.chips.querySelectorAll<HTMLButtonElement>('button[role="radio"]')) {
+    chip.setAttribute('aria-checked', String(chip.dataset.typeId === type.id));
   }
-  // The copy press — an image type in a clipboard-capable environment
-  // speaks it; every other type hides it.
+  f.desc.textContent = type.hint ?? '';
+  f.desc.hidden = !type.hint;
+  // The copy press — a format with a copy in a clipboard-capable
+  // environment speaks it; every other format hides it.
   f.copy.hidden = !(type.copy && (type.copySupported?.() ?? true));
   if (f.copy.hidden && copyFlashTimer !== null) {
     window.clearTimeout(copyFlashTimer);
     copyFlashTimer = null;
   }
   if (f.copy.hidden) f.copy.textContent = 'Copy to clipboard';
-  // The stem survives a type switch once the user has edited it (their
-  // naming is theirs, minus the types' own extensions — switching
-  // PNG→SVG must not export "note.png.svg"). Until the first edit, each
-  // type adopts its own default — the old dropdown named every row's file
-  // by its own rule, and that discipline keeps the workspace save dated.
+  // The stem survives a format switch once the user has edited it (the
+  // user's naming is theirs, minus the formats' own extensions —
+  // switching PNG→SVG must not export "note.png.svg"). Until the first
+  // edit, each format adopts its own default.
   const previousExt = previousType ? extensionFor(previousType) : type.extension;
   let stem = f.stem.value;
   if (stemDirty) {
@@ -674,14 +753,17 @@ function selectType(type: ExportCenterType, previousType: ExportCenterType | nul
   f.stem.value = stem.trim() === '' || !stemDirty ? type.defaultStem : stem;
   f.suffix.textContent = `.${extensionFor(type)}`;
 
-  f.optionsHost.replaceChildren();
+  f.optionsHost.replaceChildren(f.optionsLabel);
   const options = type.options ?? [];
   for (const option of options) {
-    if (option.when && !option.when.includes(type.id)) continue;
     if (option.kind === 'toggle') renderToggle(f.optionsHost, option, refreshSelection);
     else renderSegment(f.optionsHost, option, refreshSelection);
   }
-  f.optionsHost.hidden = options.every((option) => option.when && !option.when.includes(type.id));
+  f.optionsHost.hidden = options.length === 0;
+  // A format with no option rows is a COMPACT face: the stage shrinks
+  // with it, so a text note's dialog never carries a drawing's height
+  // (the audit's dead-space verdict).
+  f.dialog.classList.toggle('export-center--bare', options.length === 0);
 
   schedulePreview(type);
 }
@@ -699,16 +781,15 @@ function refreshSelection(): void {
 
 /**
  * Opens the export center for the given host. Safe to call repeatedly:
- * the face is built once, every binding reads the LIVE host, and a fresh
- * open replaces the previous session's state wholesale.
+ * the face is built once, every binding reads the LIVE host, and a
+ * fresh open replaces the previous session's state wholesale.
  */
 export function openExportCenter(host: ExportCenterHost): void {
   const f = centerFace();
 
   // A still-open center (a reopen without a close) is stood down first —
   // through the dialog's own close event, so its cleanup runs exactly
-  // once, through the one path that knows how. (jsdom-grade embeds have
-  // no close() — the attribute itself stands down there.)
+  // once, through the one path that knows how.
   if (document.body.contains(f.dialog) && f.dialog.open) {
     closeCenterDialog(f.dialog);
   }
@@ -718,45 +799,17 @@ export function openExportCenter(host: ExportCenterHost): void {
   f.subheading.textContent = host.subheading ?? '';
   f.subheading.hidden = !host.subheading;
 
-  // The type list — one RADIO row per type, in groups that carry their
-  // own labels (Images / This note / The pad itself): every row is
-  // selectable, every selection speaks inline (the options, the preview,
-  // the presses) — no handoffs, no chevrons.
-  f.typeList.replaceChildren();
-  const groupLabelFor = (key: string): string =>
-    key === 'images' ? 'Images' : key === 'pad' ? 'The pad itself' : 'This note';
-  const groupKeyFor = (type: ExportCenterType): string => type.section ?? 'note';
-  let lastGroup: string | null = null;
+  // The format chips — one wrapped radio row, every format a peer.
+  f.chips.replaceChildren();
   for (const type of host.types) {
-    const group = groupKeyFor(type);
-    if (group !== lastGroup) {
-      const groupLabel = document.createElement('p');
-      groupLabel.className = 'export-center-group-label';
-      groupLabel.textContent = groupLabelFor(group);
-      f.typeList.append(groupLabel);
-    }
-    lastGroup = group;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'export-center-type export-center-type--select';
-    button.dataset.typeId = type.id;
-    // Radio semantics — the dot is CSS, the aria-checked is real.
-    button.setAttribute('role', 'radio');
-    button.setAttribute('aria-checked', 'false');
-    const label = document.createElement('span');
-    label.className = 'export-center-type-label';
-    label.textContent = type.label;
-    if (type.hint) {
-      const hint = document.createElement('span');
-      hint.className = 'export-center-type-hint';
-      hint.textContent = type.hint;
-      label.append(hint);
-    }
-    const ext = document.createElement('span');
-    ext.className = 'export-center-type-ext';
-    ext.textContent = `.${type.extension}`;
-    button.append(label, ext);
-    f.typeList.append(button);
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'export-center-chip';
+    chip.dataset.typeId = type.id;
+    chip.setAttribute('role', 'radio');
+    chip.setAttribute('aria-checked', 'false');
+    chip.textContent = type.label;
+    f.chips.append(chip);
   }
 
   if (host.door) {
@@ -773,10 +826,7 @@ export function openExportCenter(host: ExportCenterHost): void {
 
   f.exportButton.disabled = false;
 
-  // Initial selection: the host's pick, or the first row — every row is
-  // a choice now. The stem starts from that type's default and the dirty
-  // flag resets — a fresh open names the file by the type's rule, the
-  // first edit makes it the user's.
+  // Initial selection: the host's pick, or the first chip.
   stemDirty = false;
   const initial =
     host.types.find((type) => type.id === host.initialTypeId) ?? host.types[0] ?? null;
@@ -786,7 +836,7 @@ export function openExportCenter(host: ExportCenterHost): void {
   } else {
     activeType = null;
     f.suffix.textContent = '';
-    f.optionsHost.replaceChildren();
+    f.optionsHost.replaceChildren(f.optionsLabel);
     f.optionsHost.hidden = true;
     f.stageBody.replaceChildren();
     f.stageNote.replaceChildren();
@@ -796,11 +846,10 @@ export function openExportCenter(host: ExportCenterHost): void {
     f.dialog.showModal();
   } else {
     // jsdom-grade embeds: no native <dialog> — the attribute keeps the
-    // rows reachable without the top-layer promise.
+    // chips reachable without the top-layer promise.
     f.dialog.setAttribute('open', '');
   }
-  // The selected row takes the focus on open — the keyboard lands on
-  // the primary control, not whichever button the UA picked first.
-  // (Both paths: the fallback open keeps the same discipline.)
-  f.typeList.querySelector<HTMLButtonElement>('.export-center-type[aria-checked="true"]')?.focus();
+  // The selected chip takes the focus on open — the keyboard lands on
+  // the primary control.
+  f.chips.querySelector<HTMLButtonElement>('.export-center-chip[aria-checked="true"]')?.focus();
 }

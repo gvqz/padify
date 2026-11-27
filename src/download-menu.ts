@@ -11,7 +11,8 @@ import {
   getActiveNoteExportBody,
   type TabManager,
 } from './tabs';
-import { openDrawingImageExportDialog } from './editor/drawing/surface';
+import { getDrawingExportSession, type DrawingExportSession } from './editor/drawing/surface';
+import { showToast } from './ui/toast';
 import { collectNoteAttachmentIds } from '../shared/att-refs';
 import {
   PADIFY_MIME_TYPE,
@@ -27,29 +28,37 @@ import { getAttachmentBytes, getAttachmentMeta } from './storage/attachments';
 import { getSetting } from './state/settings';
 import { isMarkdownNote, DEFAULT_NOTE_TYPE } from './editor/note-types';
 import { deriveTabTitle } from './editor/note-content';
-import { openExportCenter, type ExportCenterHost, type ExportCenterType } from './ui/export-center';
+import {
+  openExportCenter,
+  type ExportCenterHost,
+  type ExportCenterType,
+  type ExportOption,
+} from './ui/export-center';
 import type { NotepadUI } from './selector';
 
 /**
- * The export center's wiring — the file-type exports' one door.
+ * The export center's wiring — the ONE export dialog, every door.
  *
- * THE DRAWINGPAD'S EXPORT IS THE VENDOR'S OWN (the owner's verdict on the
- * unified popup: "it looks horrible … need 100% of features and done in
- * the exact same way"): on a live drawing, the download button opens the
- * vendor's own ImageExportDialog — the exact face excalidraw.com opens —
- * with every built-in feature (only-selected, background, dark mode,
- * embed scene, the 1×/2×/3× scale, the live preview, the PNG/SVG/
- * clipboard presses), and the canvas's own doors answer the same way (its
- * "Export image…" menu row, its Ctrl+Shift+E chord, and now the vendor's
- * own Export row — the jsonExport dialog that saves the scene as
- * .excalidraw). No re-implemented option rows, no second face.
+ * THE OWNER'S FOURTH VERDICT: "1 unified ui for all note/note types" —
+ * the download button, the export chord, and the canvas's own two menu
+ * rows all open the one dialog now. The drawingpad's rows inside it
+ * keep the standing verdict whole ("100% of the built-in features,
+ * done in the exact built-in way"): every row is the vendor dialogs'
+ * own engine, delegated through the surface's session seam —
+ * only-selected (the built-in selection/frame resolution), background,
+ * dark mode, embed scene (the .excalidraw.png/.excalidraw.svg double
+ * extension), the 1×/2×/3× scale, the live canvas preview (the native
+ * preview's own exportScene call), the PNG/SVG presses
+ * (App.onExportImage's own exportCanvas), the clipboard copy with the
+ * built-in visibility rule and error classes, and the .excalidraw
+ * scene save (the JSON dialog's own saveAsJSON).
  *
- * THE CENTER'S REMAINING CONTRACT: every note that is NOT a live drawing
- * answers here — the text family (txt/md/pdf/docx/html), the .padify
- * envelopes and the whole-pad save; a drawing whose canvas cannot
- * answer (the error card, the load card) falls back to its envelope rows
- * until the canvas is live again. The open door (a .padify/.excalidraw
- * file back IN) keeps riding the footer.
+ * THE CENTER'S REMAINING CONTRACT: every note that is NOT a live
+ * drawing answers here too — the text family (txt/md/pdf/docx/html),
+ * the .padify envelopes and the whole-pad save. A drawing whose canvas
+ * cannot answer (the error card, the load card) falls back to its
+ * envelope rows until the canvas is live again. The open door (a
+ * .padify/.excalidraw file back IN) keeps riding the footer.
  */
 export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): void {
   const padifyOpen = initPadifyFileOpen(tabManager);
@@ -91,7 +100,7 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
     return attachments;
   };
 
-  /** The file stem every type starts from: the note as the rail calls it
+  /** The file stem every format starts from: the note as the rail calls it
    * (the share modal's live-title lesson), sanitized, with the download
    * family's dated stem answering for an untitled note. */
   const stemForActive = (): string => {
@@ -114,6 +123,14 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
    * text (the model lags the save debounce). */
   const activeText = (): string => getEditorText();
 
+  /** One honest failure line — the native dialogs' own words where they
+   * have them (the empty canvas, the clipboard), the error's own message
+   * where they do not. */
+  const exportFailureText = (error: unknown): string => {
+    if (error instanceof Error && error.message) return error.message;
+    return 'The export could not finish.';
+  };
+
   /** The text delegates — plain text, Markdown source, PDF, DOCX, HTML.
    * The preview shows what will ship (the markdown ships its SOURCE, the
    * HTML ships the sanitized body rendered as it will read); the run is
@@ -127,7 +144,7 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
       label: 'Markdown',
       extension: 'md',
       defaultStem: stemForActive(),
-      hint: 'The source, for any other Markdown tool',
+      hint: 'The .md source, verbatim — download or copy to the clipboard',
       preview: async () => {
         const captured = getActiveNoteContent();
         return {
@@ -141,17 +158,40 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
         saveTextAsFile(captured.content, fileName, 'text/markdown');
         return true;
       },
+      copy: async () => {
+        const captured = getActiveNoteContent();
+        if (captured?.noteType !== 'markdown') return false;
+        try {
+          await navigator.clipboard.writeText(captured.content);
+          return true;
+        } catch {
+          showToast('Fail to copy. Check permissions for clipboard.', 'error');
+          return false;
+        }
+      },
     };
     const txtType: ExportCenterType = {
       id: 'txt',
       label: 'Plain text',
       extension: 'txt',
       defaultStem: stemForActive(),
-      hint: 'The words, nothing else',
+      hint: 'The words, nothing else — download or copy to the clipboard',
       preview: async () => ({ text: activeText() }),
       run: async (fileName) => {
         saveTextAsFile(activeText(), fileName);
         return true;
+      },
+      // The clipboard press, the app's own copy discipline — the same
+      // Alt+C pipe (its toast speaks both ways; the press flashes only on
+      // the real copy).
+      copy: async () => {
+        try {
+          await navigator.clipboard.writeText(activeText());
+          return true;
+        } catch {
+          showToast('Fail to copy. Check permissions for clipboard.', 'error');
+          return false;
+        }
       },
     };
     const pdfType: ExportCenterType = {
@@ -202,10 +242,228 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
       : [txtType, pdfType, docxType, htmlType];
   };
 
+  // ---------------------------------------------------------------------------
+  // The drawing's rows — the built-in feature set on the built-in pipeline
+  // ---------------------------------------------------------------------------
+
+  /**
+   * The drawing's export rows: the two image formats + the .excalidraw
+   * scene save, all on the vendor dialogs' own engine (the session
+   * seam). One option set shared by PNG and SVG (the native dialog's
+   * own discipline — the switches do not reset between formats), every
+   * flip writing the native dialog's own appState keys through the
+   * seam (the switch actions' write-through, dark mode included via the
+   * session override), the selection row gated by the snapshot's own
+   * selection and defaulted to it (the native default).
+   */
+  const drawingImageTypes = (session: DrawingExportSession): ExportCenterType[] => {
+    const appState = session.appState;
+
+    // The option model — the native dialog's own control set. The
+    // only-selected row is gated by the snapshot's selection (the native
+    // dialog's own {hasSelection && …} mount rule: no selection at open,
+    // no row — and its default IS the selection when one rides).
+    const onlySelected: ExportOption = {
+      kind: 'toggle',
+      id: 'selection',
+      label: 'Only selected',
+      hint: 'Export the selected elements alone',
+      value: session.hasSelection,
+    };
+    const background: ExportOption = {
+      kind: 'toggle',
+      id: 'background',
+      label: 'Background',
+      hint: 'Transparent when off',
+      value: appState.exportBackground !== false,
+      onFlip: (value) => session.setPrefs({ background: value }),
+    };
+    const dark: ExportOption = {
+      kind: 'toggle',
+      id: 'dark',
+      label: 'Dark mode',
+      hint: 'Render in the dark palette',
+      value: appState.exportWithDarkMode === true,
+      onFlip: (value) => session.setPrefs({ dark: value }),
+    };
+    const embed: ExportOption = {
+      kind: 'toggle',
+      id: 'embed',
+      label: 'Embed scene',
+      hint: 'The file re-opens as an editable drawing',
+      // The vendor's own tooltip words — the native dialog's help.
+      tooltip:
+        'Scene data will be saved into the exported PNG/SVG file so that the scene can be restored from it.\nWill increase exported file size.',
+      value: appState.exportEmbedScene === true,
+      onFlip: (value) => session.setPrefs({ embedScene: value }),
+    };
+    const scale: ExportOption = {
+      kind: 'segment',
+      id: 'scale',
+      label: 'Scale',
+      values: [
+        { id: '1', label: '1×' },
+        { id: '2', label: '2×' },
+        { id: '3', label: '3×' },
+      ],
+      value: String(
+        appState.exportScale === 2 || appState.exportScale === 3 ? appState.exportScale : 1,
+      ),
+      onPick: (value) => session.setPrefs({ scale: Number(value) as 1 | 2 | 3 }),
+    };
+    const options: ExportOption[] = [
+      ...(session.hasSelection ? [onlySelected] : []),
+      background,
+      dark,
+      embed,
+      scale,
+    ];
+
+    /** The built-in selection/frame resolution for the live values. */
+    const resolve = (values: Record<string, boolean | string>) =>
+      session.resolveElements(values.selection === true);
+
+    /** The stem the run hands the pipeline (fileSave appends its own
+     * extension — the built-in way the file name is built). */
+    const stemOf = (fileName: string, extension: string): string =>
+      fileName.toLowerCase().endsWith(`.${extension}`)
+        ? fileName.slice(0, -(extension.length + 1))
+        : fileName;
+
+    const stem = stemForActive();
+
+    /** The native preview's own render on the live values — the actual
+     * canvas element, the stage's box as the native's
+     * maxWidthOrHeight, the honest notes where there is nothing to
+     * show. */
+    const imagePreview = async (
+      values: Record<string, boolean | string>,
+      stage: { width: number; height: number },
+    ) => {
+      const { elements, exportingFrame } = resolve(values);
+      if (elements.length === 0) {
+        return { note: 'The scene is empty — nothing to export yet.' };
+      }
+      const canvas = await session.renderPreview({
+        elements,
+        exportingFrame,
+        background: values.background !== false,
+        dark: values.dark === true,
+        maxWidthOrHeight: Math.max(stage.width, stage.height),
+      });
+      return {
+        canvas,
+        transparent: values.background === false,
+      };
+    };
+
+    const pngType: ExportCenterType = {
+      id: 'png',
+      label: 'PNG',
+      extension: 'png',
+      extensionFor: (values) => (values.embed === true ? 'excalidraw.png' : 'png'),
+      defaultStem: stem,
+      hint: 'A lossless image of the scene — download or copy to the clipboard',
+      options,
+      // The native image dialog's own behavior: an export is not a
+      // dismissal — the dialog stands for the next press.
+      keepOpen: true,
+      preview: imagePreview,
+      run: async (fileName, values) => {
+        const { elements, exportingFrame } = resolve(values);
+        // The built-in empty gate — the vendor's own words.
+        if (elements.length === 0) {
+          showToast('Cannot export empty canvas.');
+          return false;
+        }
+        const extension = values.embed === true ? 'excalidraw.png' : 'png';
+        try {
+          await session.exportImage('png', stemOf(fileName, extension), elements, exportingFrame);
+          return true;
+        } catch (error) {
+          showToast(exportFailureText(error));
+          return false;
+        }
+      },
+      copy: async (values) => {
+        const { elements, exportingFrame } = resolve(values);
+        if (elements.length === 0) {
+          showToast('Cannot export empty canvas.');
+          return false;
+        }
+        try {
+          // The clipboard press's own body — App.onExportImage on the
+          // clipboard type; the name is unused on this path.
+          await session.exportImage('clipboard', '', elements, exportingFrame);
+          return true;
+        } catch (error) {
+          showToast(exportFailureText(error));
+          return false;
+        }
+      },
+      copySupported: () => session.clipboardSupported,
+      onNameChange: (nameStem) => session.setPrefs({ name: nameStem }),
+    };
+
+    const svgType: ExportCenterType = {
+      id: 'svg',
+      label: 'SVG',
+      extension: 'svg',
+      extensionFor: (values) => (values.embed === true ? 'excalidraw.svg' : 'svg'),
+      defaultStem: stem,
+      hint: 'Vector markup that scales without limits',
+      options,
+      keepOpen: true,
+      preview: imagePreview,
+      run: async (fileName, values) => {
+        const { elements, exportingFrame } = resolve(values);
+        if (elements.length === 0) {
+          showToast('Cannot export empty canvas.');
+          return false;
+        }
+        const extension = values.embed === true ? 'excalidraw.svg' : 'svg';
+        try {
+          await session.exportImage('svg', stemOf(fileName, extension), elements, exportingFrame);
+          return true;
+        } catch (error) {
+          showToast(exportFailureText(error));
+          return false;
+        }
+      },
+      onNameChange: (nameStem) => session.setPrefs({ name: nameStem }),
+    };
+
+    const sceneType: ExportCenterType = {
+      id: 'excalidraw',
+      label: 'Excalidraw scene',
+      extension: 'excalidraw',
+      defaultStem: stem,
+      hint: 'The live scene as an .excalidraw file — opens in any Excalidraw',
+      preview: async () => ({
+        card: {
+          title: `${stem}.excalidraw`,
+          meta: [
+            'The whole scene, images and undo trail included',
+            'The JSON dialog\u2019s own save, unchanged',
+          ],
+        },
+      }),
+      run: async (fileName) => {
+        try {
+          await session.exportSceneJSON(stemOf(fileName, 'excalidraw'));
+          return true;
+        } catch (error) {
+          showToast(exportFailureText(error));
+          return false;
+        }
+      },
+    };
+
+    return [pngType, svgType, sceneType];
+  };
+
   /** The envelope delegates — the note out as a .padify file, the whole
-   * pad out as one workspace file. (A drawing's .excalidraw save is the
-   * vendor's own door now — the canvas menu's "Save to…" row, the native
-   * jsonExport dialog — so no center row duplicates it.) */
+   * pad out as one workspace file. */
   const envelopeTypes = (): ExportCenterType[] => {
     const captured = getActiveNoteContent();
 
@@ -260,7 +518,6 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
       label: 'Whole pad',
       extension: 'padify',
       defaultStem: getDatedFileStem(),
-      section: 'pad',
       hint: 'Every note in one file',
       preview: async () => {
         tabManager.saveActiveFromEditor();
@@ -320,20 +577,23 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
       : 'Untitled';
     const isDrawing = captured?.noteType === 'drawing';
 
-    const types: ExportCenterType[] = isDrawing
-      ? // The fallback face (the native dialog owns the image exports on
-        // a live canvas): the drawing's Padify envelopes alone. An empty
-        // canvas or an error card still opens the center — the envelopes
-        // serialize from the note's saved bytes and keep working.
-        [...envelopeTypes()]
-      : [...textTypes(), ...envelopeTypes()];
+    // The drawing's rows: a live canvas answers with the image formats
+    // and the scene save (the built-in pipeline); a canvas that cannot
+    // answer (the error card, the load card) falls back to its envelope
+    // rows — the honest face until the canvas is live again.
+    const session = isDrawing ? getDrawingExportSession() : null;
+    const types: ExportCenterType[] = session
+      ? [...drawingImageTypes(session), ...envelopeTypes()]
+      : isDrawing
+        ? [...envelopeTypes()]
+        : [...textTypes(), ...envelopeTypes()];
 
     const host: ExportCenterHost = {
       heading: 'Export',
       subheading:
         title === 'Untitled'
-          ? 'Choose a file type and name — the file downloads to your device.'
-          : `${title} — choose a file type and name; the file downloads to your device.`,
+          ? 'Choose a format and a name — the file downloads to your device.'
+          : `${title} — choose a format and a name; the file downloads to your device.`,
       types,
       initialTypeId: initialTypeId ?? undefined,
       door: {
@@ -344,24 +604,19 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
     openExportCenter(host);
   };
 
-  // The one door: on a LIVE drawing the download button answers the
-  // VENDOR's own image-export dialog (openDrawingImageExportDialog — the
-  // owner's verdict: 100% of the built-in features, the exact built-in
-  // way); every other note — and a drawing whose canvas cannot answer —
-  // opens the center.
+  // The one door: the download button opens the unified center for every
+  // note kind — the drawingpad's image exports ride it on the built-in
+  // pipeline (the canvas's own menu rows and the chord land here too,
+  // through the padify:open-export bus).
   notepad.downloadNotes.on('click', () => {
-    if (openDrawingImageExportDialog()) {
-      return;
-    }
     openCenter();
   });
 
-  // The app's export chord rides the bus (app-shortcuts.ts dispatches it
-  // when NO drawing canvas is live — on a live drawing the vendor's own
-  // Ctrl+Shift+E opens the vendor's own dialog, native parity); document,
-  // not window — the app's bridge lives there, the same bus
-  // padify:open-shortcuts rides. No preset: the active note's first
-  // selectable type answers.
+  // The app's export chord rides the bus (app-shortcuts.ts claims
+  // Ctrl+Shift+E on EVERY note kind now — one chord, one dialog); the
+  // canvas's own menu rows ride it with their initial type (the PNG row
+  // and the .excalidraw row). document, not window — the app's bridge
+  // lives there, the same bus padify:open-shortcuts rides.
   document.addEventListener('padify:open-export', (event) => {
     const detail = (event as CustomEvent<{ initialTypeId?: string }>).detail;
     openCenter(detail?.initialTypeId);
