@@ -14,6 +14,25 @@ const context = await browser.newContext({
   permissions: ['clipboard-read', 'clipboard-write'],
 });
 const page = await context.newPage();
+// A live HTTPS origin is a secure context: Chromium exposes the FS
+// Access API there and the vendor's fileSave would open a picker no
+// headless run can answer (a headless artifact, not a product bug).
+// Kill it so the presses take the <a download> fallback the e2e suite
+// proves.
+await page.addInitScript(() => {
+  for (const key of ['showOpenFilePicker', 'showSaveFilePicker', 'showDirectoryPicker']) {
+    try {
+      delete window[key];
+    } catch {
+      /* not own */
+    }
+    try {
+      delete Window.prototype[key];
+    } catch {
+      /* not there */
+    }
+  }
+});
 const errs = [];
 const netFails = [];
 page.on('pageerror', (e) => errs.push('PAGEERROR: ' + String(e).split('\n')[0].slice(0, 200)));
@@ -46,7 +65,7 @@ ok('drawing created');
 const CANVAS = 'canvas.interactive.canvas, .excalidraw__canvas.canvas';
 const island = (name) => page.locator(`.excalidraw .Island button[data-testid="${name}"]`);
 
-const TOOL_IDS = ['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw', 'text', 'image'];
+const TOOL_IDS = ['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw', 'text'];
 let toolsFound = 0;
 for (const id of TOOL_IDS) {
   await step('tool button present: ' + id, async () => {
@@ -55,7 +74,19 @@ for (const id of TOOL_IDS) {
     toolsFound++;
   });
 }
-ok(`island tool buttons found: ${toolsFound}/${TOOL_IDS.length}`);
+// The image tool rides the extra-tools dropdown in this vendor build —
+// open it, assert the row, close it.
+await step('tool button present: image (the extra-tools dropdown)', async () => {
+  const more = page.locator('.excalidraw button.App-toolbar__extra-tools-trigger');
+  if ((await more.count()) === 0) throw new Error('no extra-tools trigger');
+  await more.click();
+  await page.waitForTimeout(300);
+  const btn = page.locator('.excalidraw [data-testid="toolbar-image"]');
+  if ((await btn.count()) === 0) throw new Error('image row not in the dropdown');
+  toolsFound++;
+  await page.keyboard.press('Escape');
+});
+ok(`island tool buttons found: ${toolsFound}/${TOOL_IDS.length + 1}`);
 
 const focusCanvas = async () => {
   const box = await page.locator('#note .excalidraw canvas.interactive').boundingBox();
@@ -157,7 +188,7 @@ await step('context menu opens', async () => {
 });
 // text tool: double-click to edit the rectangle's nothing — instead create a text
 await step('text tool types a label', async () => {
-  const textBtn = page.locator('.excalidraw button[data-testid="text"]');
+  const textBtn = page.locator('.excalidraw button[data-testid="toolbar-text"]');
   if ((await textBtn.count()) === 0) throw new Error('no text tool');
   await textBtn.click();
   await page.mouse.click(360, 200);
@@ -186,14 +217,12 @@ await step('hamburger → Find on canvas', async () => {
 // export dialog: PNG download event
 await step('export dialog PNG download fires', async () => {
   try {
-    await page.locator('[data-testid="main-menu-trigger"]').click();
-    await page.waitForTimeout(300);
-    await page
-      .locator('.dropdown-menu.main-menu .dropdown-menu-item', { hasText: 'Export image' })
-      .first()
-      .click();
+    // The app-level download button opens the vendor's own dialog on a
+    // live drawing now — the owner's export verdict, live.
+    await page.locator('#downloadNotes').click();
     const modal = page.locator('.ImageExportModal');
     await modal.waitFor({ timeout: 5000 });
+    const viaButton = 'the download button opened the native dialog';
     const dl = page.waitForEvent('download', { timeout: 8000 }).catch(() => null);
     await modal
       .getByRole('button', { name: /PNG|Export to PNG|Export/ })
@@ -202,6 +231,7 @@ await step('export dialog PNG download fires', async () => {
     const d = await dl;
     if (!d) throw new Error('no download event');
     ok('download filename: ' + (d.suggestedFilename?.() ?? 'n/a'));
+    ok(viaButton);
   } finally {
     await page.keyboard.press('Escape').catch(() => {});
     await page.waitForTimeout(300);
@@ -224,7 +254,25 @@ await step('export dialog Copy to clipboard', async () => {
       .click();
     await page.waitForTimeout(1200);
   } finally {
-    await page.keyboard.press('Escape').catch(() => {});
+    // A refused clipboard stacks the vendor's error card; focus rode to
+    // the body, so Escape reaches neither modal. Close through the
+    // outside-click doors (the left margin, below the fixed navbar):
+    // the error card first if it stood up, then the export dialog.
+    const errorCard = page.locator('.excalidraw-modal-container', {
+      hasText: "Couldn't copy to clipboard.",
+    });
+    if ((await errorCard.count()) > 0) {
+      await errorCard
+        .locator('.Modal__background')
+        .click({ position: { x: 30, y: 200 }, timeout: 5_000 })
+        .catch(() => {});
+    }
+    await page
+      .locator('.excalidraw-modal-container', { hasText: 'Export image' })
+      .locator('.Modal__background')
+      .first()
+      .click({ position: { x: 30, y: 200 }, timeout: 5_000 })
+      .catch(() => {});
     await page.waitForTimeout(300);
   }
 });

@@ -106,3 +106,35 @@
 - Result: the public share page for the DISPLAYED URL says "This link isn't available" (API 404). The CORRECT token URL renders perfectly (title, dates, content, Read-only badge, footer).
 - **Net effect: every share link a user copies is DEAD. Feature works only if the URL is hand-corrected. Highest-priority fix.**
 - Also noted: share page favicon requests 404 (share/favicon.png, share/favicon.ico) — cosmetic.
+
+## [PF3] 2026-11-27 — the native export verdict, live on both hosts (build 5b60404)
+
+The owner's export verdict ("I do not approve of the new unified export
+popup … the built in export allows you to only export selected items …
+need 100% of features and done in the exact same way") shipped as
+5b60404 and is verified live on BOTH hosts — netlify (sw app-v5064c0cde6)
+and the alwaysdata box (sw app-v2ff0711387, /api/health build 5b604046…;
+the two hosts carry the same commit, built per their own base paths).
+
+- The drawingpad's export is the vendor's own: the toolbar download
+  button on a live drawing opens the ImageExportDialog (the same face
+  the canvas menu's "Export image…" row and Ctrl+Shift+E open) —
+  only-selected, background, dark mode, embed scene, 1×/2×/3×, the live
+  preview, PNG/SVG/clipboard, the file name; "Drawing.png" downloads
+  verified live on both hosts.
+- The canvas menu carries the vendor's own "Save to…" row (the
+  jsonExport dialog) — live rows verified: Open | Save to... | Export
+  image... | Find on canvas | Keyboard shortcuts | Preferences.
+- The deep drawing sweep (every tool incl. the image tool in the
+  extra-tools dropdown, shapes, text, select/move, undo/redo, delete,
+  zoom, pan, context menu, export, clipboard, theme, note switches,
+  reload): ALL GREEN on both hosts — zero page/console errors, zero
+  failed requests, zero crash cards.
+- The final walkthrough (menu rows, export dialog full option sweep,
+  chord, theme, shortcuts sheet, note switch, SW reload, Excalifont):
+  ALL GREEN on both hosts, errors: none.
+- Known environment artifact (not a product bug): a refused clipboard
+  write in headless stacks the vendor's own error card; Playwright's
+  retrying clicks cannot punch through the overlay (a real user's click
+  closes a layer) — the sweeps close it through the vendor's own
+  outside-click.

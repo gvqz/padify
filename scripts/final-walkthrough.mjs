@@ -4,9 +4,7 @@
  */
 import { chromium } from '@playwright/test';
 const URL = process.env.REPRO_URL ?? 'http://localhost:5199/';
-const browser = await chromium.launch({
-  executablePath: '/home/z/.cache/ms-playwright/chromium-1200/chrome-linux64/chrome',
-});
+const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
 const page = await context.newPage();
 const errs = [];
@@ -17,7 +15,7 @@ page.on('console', (m) => {
 const ok = (name) => console.log('  ✓ ' + name);
 const fail = (name, detail) => console.log('  ✗ ' + name + (detail ? ' — ' + detail : ''));
 
-await page.goto(URL, { waitUntil: 'load' });
+await page.goto(URL, { waitUntil: 'load', timeout: 60_000 });
 // create drawing + draw
 await page.locator('#addTabTypeMenu').click();
 await page.locator('#addTabTypeMenuPopover .tab-type-menu-item', { hasText: 'Drawing' }).click();
@@ -144,5 +142,6 @@ const fontOk = await page.evaluate(async () => {
 });
 ok('Excalifont loads from the same-origin copy: ' + fontOk);
 console.log('\nerrors captured:', errs.length ? errs.slice(0, 6) : 'none');
-await page.screenshot({ path: 'qa/evidence/bt22-vendored-final-sweep.png', fullPage: false });
+const SHOT = process.env.SHOT ?? 'bt22-vendored-final-sweep.png';
+await page.screenshot({ path: 'qa/evidence/' + SHOT, fullPage: false });
 await browser.close();
