@@ -14,20 +14,25 @@
  * 1×/2×/3× scale, the live canvas preview, the PNG/SVG/clipboard
  * presses, the .excalidraw scene save.
  *
- * THE RESTART'S ANSWERS TO THE AUDIT (the two faces' measured sins):
- *   - one format row of WRAPPED CHIPS (radio semantics) — no stacked
- *     card rows, no extension chips, no double-ring selection: the
- *     selected chip fills with the accent, one soft state
- *   - the selected format speaks ONCE, in one description line under the
- *     chips — not a hint stacked on every row
- *   - the preview stage is content-driven (a live drawing render, the
- *     text's own words, a card for envelopes) — never a box-in-a-box of
- *     nothing; transparency rides the checkerboard behind a
- *     background-off render
- *   - switches are switches (pill toggles), the scale is a segmented
- *     control, the options own one labeled section in even rhythm
- *   - a close × rides the header; the footer's import door sits under a
- *     hairline, clearly tertiary, never a peer of Copy/Export
+ * THE SECOND RESTART (the measured audit of the first face, 5.5/10):
+ *   - the chips ride ONE full-width band under the head — never a
+ *     wrapped orphan row in a cramped column; every format a peer at
+ *     6px radii, the selected chip FILLED with the accent, one state
+ *   - the body is two columns with the preview DOMINANT: the stage
+ *     fills its column's height (no dead band under it), the options
+ *     rail keeps the switches, and the file-name group rides the rail's
+ *     foot — aligned with the stage's bottom edge
+ *   - a format with no options folds to ONE column (stage over the name
+ *     group) — the compact face is the fold the narrow viewport already
+ *     knew, so every note kind wears the same design language
+ *   - the stage's empty answer is a quiet ghost glyph + its note, never
+ *     a blank box; a render in flight pulses the ghost
+ *   - switches are pill toggles (white knob, primary when on), the
+ *     scale is a segmented control, ONE radius language (6px controls,
+ *     12px dialog), the entry is one 160ms scale-in
+ *   - a close × rides the header at a 32px hit target; the footer's
+ *     import door sits under a hairline, clearly tertiary, never a peer
+ *     of Copy/Export
  *
  * THE CONTRACT (kept from the proven build): the center is pure UI —
  * the host hands in one ExportCenterType per format the ACTIVE note can
@@ -174,7 +179,6 @@ interface CenterFace {
   chips: HTMLElement;
   desc: HTMLElement;
   optionsHost: HTMLElement;
-  optionsLabel: HTMLElement;
   stem: HTMLInputElement;
   suffix: HTMLElement;
   door: HTMLButtonElement;
@@ -286,7 +290,25 @@ function centerFace(): CenterFace {
   head.append(headText, close);
   dialog.append(head);
 
-  // ---- the body: the preview stage on the left, the settings column ---
+  // ---- the format band: ONE full-width chip row + the one description
+  // line under it (the audit's orphaned-wrap cure — the whole dialog's
+  // width carries the formats, so they never wrap alone in a corner).
+  const band = document.createElement('div');
+  band.className = 'export-center-band';
+  const chips = document.createElement('div');
+  chips.className = 'export-center-chips';
+  chips.setAttribute('role', 'radiogroup');
+  chips.setAttribute('aria-label', 'File type');
+
+  // The selected format's one description line.
+  const desc = document.createElement('p');
+  desc.className = 'export-center-desc';
+  band.append(chips, desc);
+  dialog.append(band);
+
+  // ---- the body: the preview stage dominant, the options rail on the
+  // right (a format with no options folds the body to one column — the
+  // compact face is the narrow-viewport fold the CSS already knew).
   const body = document.createElement('div');
   body.className = 'export-center-body';
 
@@ -296,40 +318,23 @@ function centerFace(): CenterFace {
   stage.className = 'export-center-stage';
   const stageBody = document.createElement('div');
   stageBody.style.display = 'contents';
+  stage.append(stageBody);
+  // The caption line rides UNDER the stage (a caption, not a child the
+  // stage would have to center against its content).
   const stageNote = document.createElement('p');
   stageNote.className = 'export-center-stage-note';
-  stage.append(stageBody, stageNote);
-  preview.append(stage);
+  preview.append(stage, stageNote);
 
   const settings = document.createElement('div');
   settings.className = 'export-center-settings';
 
-  // The format chips — ONE wrapped radio group, every format a peer.
-  const formatLabel = document.createElement('p');
-  formatLabel.className = 'export-center-label';
-  formatLabel.textContent = 'Format';
-  const chips = document.createElement('div');
-  chips.className = 'export-center-chips';
-  chips.setAttribute('role', 'radiogroup');
-  chips.setAttribute('aria-label', 'File type');
-
-  // The selected format's one description line.
-  const desc = document.createElement('p');
-  desc.className = 'export-center-desc';
-
-  // The options section — one labeled block, even rhythm.
+  // The options section — the drawing's switches, one even rhythm.
   const optionsHost = document.createElement('div');
   optionsHost.className = 'export-center-options';
   optionsHost.hidden = true;
-  const optionsLabel = document.createElement('p');
-  optionsLabel.className = 'export-center-label';
-  optionsLabel.textContent = 'Options';
-  optionsHost.append(optionsLabel);
 
-  // The file name row — the input with the live suffix attached.
-  const nameLabel = document.createElement('p');
-  nameLabel.className = 'export-center-label';
-  nameLabel.textContent = 'File name';
+  // The file name row — the input with the live suffix attached, riding
+  // the rail's foot (the input's own aria-label speaks the group).
   const nameRow = document.createElement('div');
   nameRow.className = 'export-center-name-row';
   const stem = document.createElement('input');
@@ -341,7 +346,7 @@ function centerFace(): CenterFace {
   suffix.className = 'export-center-name-suffix';
   nameRow.append(stem, suffix);
 
-  settings.append(formatLabel, chips, desc, optionsHost, nameLabel, nameRow);
+  settings.append(optionsHost, nameRow);
   body.append(preview, settings);
   dialog.append(body);
 
@@ -389,7 +394,6 @@ function centerFace(): CenterFace {
     chips,
     desc,
     optionsHost,
-    optionsLabel,
     stem,
     suffix,
     door,
@@ -623,12 +627,56 @@ function renderSegment(
   return row;
 }
 
+/** The stage's empty answer — a quiet ghost glyph carrying the note,
+ * never a blank box (the audit's dead-preview verdict). A render in
+ * flight pulses the same ghost; a still-empty ANSWER collapses the
+ * stage to the ghost's own height (content-driven, never a slab of
+ * nothing), while a loading ghost keeps the stage's full box so the
+ * layout never jumps when the answer lands. */
+function paintEmpty(f: CenterFace, text: string, loading = false): void {
+  f.stage.classList.remove('export-center-stage--transparent');
+  f.stage.classList.toggle('export-center-stage--empty', !loading);
+  const empty = document.createElement('div');
+  empty.className = 'export-center-stage-empty';
+  if (loading) empty.classList.add('is-loading');
+  const glyph = document.createElement('span');
+  glyph.className = 'export-center-stage-empty-glyph';
+  glyph.setAttribute('aria-hidden', 'true');
+  glyph.innerHTML =
+    '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>' +
+    '<path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>';
+  const line = document.createElement('p');
+  line.className = 'export-center-stage-empty-text';
+  line.textContent = text;
+  empty.append(glyph, line);
+  f.stageBody.replaceChildren(empty);
+}
+
 /** Paints the stage from one preview answer. */
 function paintPreview(f: CenterFace, preview: ExportPreview): void {
   f.stageBody.replaceChildren();
   // The checkerboard — transparency is SEEN, not guessed: a render
   // with its background off rides the transparency stage.
+  f.stage.classList.remove('export-center-stage--empty');
   f.stage.classList.toggle('export-center-stage--transparent', preview.transparent === true);
+  const hasText = preview.text !== undefined && preview.text.trim() !== '';
+  const hasContent =
+    Boolean(preview.canvas) ||
+    Boolean(preview.image) ||
+    Boolean(preview.html) ||
+    Boolean(preview.card) ||
+    hasText;
+  if (!hasContent) {
+    // Nothing to carry: the ghost answers (with the note's own words
+    // when it has them), and the caption stands down — one voice, not
+    // the same line twice.
+    paintEmpty(f, preview.note ?? 'Nothing to preview yet.');
+    f.stageNote.textContent = '';
+    f.stageNote.hidden = true;
+    return;
+  }
   if (preview.canvas) {
     const canvas = preview.canvas;
     canvas.className = 'export-center-stage-canvas';
@@ -655,7 +703,7 @@ function paintPreview(f: CenterFace, preview: ExportPreview): void {
     const glyph = document.createElement('span');
     glyph.className = 'export-center-card-glyph';
     glyph.innerHTML =
-      '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
       'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
       '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>' +
       '</svg>';
@@ -683,8 +731,12 @@ function schedulePreview(type: ExportCenterType): void {
   const f = face;
   if (!f) return;
   const token = ++previewToken;
+  // A render in flight: the caption speaks under the stage, and a
+  // still-empty stage carries the pulsing ghost — an already-painted
+  // stage keeps its content until the answer lands (the live swap).
   f.stageNote.textContent = 'Rendering the preview…';
   f.stageNote.hidden = false;
+  if (!f.stageBody.firstElementChild) paintEmpty(f, 'Rendering the preview…', true);
   if (previewTimer !== null) {
     window.clearTimeout(previewTimer);
   }
@@ -753,16 +805,16 @@ function selectType(type: ExportCenterType, previousType: ExportCenterType | nul
   f.stem.value = stem.trim() === '' || !stemDirty ? type.defaultStem : stem;
   f.suffix.textContent = `.${extensionFor(type)}`;
 
-  f.optionsHost.replaceChildren(f.optionsLabel);
+  f.optionsHost.replaceChildren();
   const options = type.options ?? [];
   for (const option of options) {
     if (option.kind === 'toggle') renderToggle(f.optionsHost, option, refreshSelection);
     else renderSegment(f.optionsHost, option, refreshSelection);
   }
   f.optionsHost.hidden = options.length === 0;
-  // A format with no option rows is a COMPACT face: the stage shrinks
-  // with it, so a text note's dialog never carries a drawing's height
-  // (the audit's dead-space verdict).
+  // A format with no option rows is a COMPACT face: the body folds to
+  // one column (the narrow-viewport fold, reused), the stage shrinks
+  // with it — a text note's dialog never carries a drawing's height.
   f.dialog.classList.toggle('export-center--bare', options.length === 0);
 
   schedulePreview(type);
@@ -799,7 +851,7 @@ export function openExportCenter(host: ExportCenterHost): void {
   f.subheading.textContent = host.subheading ?? '';
   f.subheading.hidden = !host.subheading;
 
-  // The format chips — one wrapped radio row, every format a peer.
+  // The format chips — one full-width radio row, every format a peer.
   f.chips.replaceChildren();
   for (const type of host.types) {
     const chip = document.createElement('button');
@@ -836,7 +888,7 @@ export function openExportCenter(host: ExportCenterHost): void {
   } else {
     activeType = null;
     f.suffix.textContent = '';
-    f.optionsHost.replaceChildren(f.optionsLabel);
+    f.optionsHost.replaceChildren();
     f.optionsHost.hidden = true;
     f.stageBody.replaceChildren();
     f.stageNote.replaceChildren();
