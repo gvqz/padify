@@ -56,9 +56,16 @@
  * KEYBOARD (kept, widened): ArrowUp/Down/Left/Right walk the chips,
  * selection follows focus; Enter in the name field is an Export; Escape
  * and × close.
+ *
+ * THE OUTSIDE (the app's one rule, finally everywhere): a click on the
+ * dark outside closes, like every bootstrap modal, panel and menu here.
+ * The dismiss is exact — the press must begin on the backdrop and land
+ * outside the box, so a text-selection drag from the stage never throws
+ * the user out of a render they are inspecting.
  */
 
 import './export-center.css';
+import { attachBackdropDismiss } from './backdrop-dismiss';
 import { sanitizeFileStem, stripExtension } from './file-name';
 
 /** What a type's preview() answers with. */
@@ -420,6 +427,12 @@ function centerFace(): CenterFace {
     event.stopPropagation();
     closeCenterDialog(dialog);
   });
+
+  // The backdrop click — the app's one close rule (bootstrap modals,
+  // panels, menus: a click on the dark outside is a dismissal). The
+  // close rides the dialog's own close event, so the cleanup below runs
+  // once, on the one path.
+  attachBackdropDismiss(dialog, () => closeCenterDialog(dialog));
 
   close.addEventListener('click', () => {
     closeCenterDialog(dialog);

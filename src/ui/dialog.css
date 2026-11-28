@@ -19,7 +19,10 @@ dialog.vz-dialog {
 }
 
 dialog.vz-dialog::backdrop {
-  background: rgb(0 0 0 / 0.45);
+  /* The app's one backdrop — the same black 0.55 veil the bootstrap
+     modals paint (05-dialogs.css), so the native dialogs never read
+     as a lighter room than the rest. */
+  background: rgb(0 0 0 / 0.55);
 }
 
 .vz-dialog-title {

@@ -42,4 +42,27 @@ describe('the owned dialog — one question at a time', () => {
     document.querySelector<HTMLButtonElement>('.vz-dialog-cancel')!.click();
     await expect(second).resolves.toBe(false);
   });
+
+  it('a backdrop click answers the standing question cancelled — the one dismiss rule', async () => {
+    const ask = confirmDialog({ title: 'Clear page?' });
+    const dialog = document.querySelector<HTMLDialogElement>('dialog.vz-dialog')!;
+    expect(dialog).not.toBeNull();
+    // jsdom gives the dialog a 0×0 box, so (−40,−40) is honestly "outside"
+    // — the coordinates are the browser's contract; what this pins is the
+    // press-on-shell + outside rule answering cancelled, Escape's twin.
+    dialog.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    dialog.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: -40, clientY: -40 }));
+    await expect(ask).resolves.toBe(false);
+  });
+
+  it('a click on the dialog’s own surface never dismisses — the buttons still answer', async () => {
+    const ask = confirmDialog({ title: 'Clear page?' });
+    const dialog = document.querySelector<HTMLDialogElement>('dialog.vz-dialog')!;
+    // jsdom's 0×0 box makes (0,0) the box itself — a padding-strip click,
+    // not a backdrop one. The ask must survive it.
+    dialog.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    dialog.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 0, clientY: 0 }));
+    document.querySelector<HTMLButtonElement>('.vz-dialog-confirm')!.click();
+    await expect(ask).resolves.toBe(true);
+  });
 });

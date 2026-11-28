@@ -443,8 +443,8 @@ export function initDownloadMenu(notepad: NotepadUI, tabManager: TabManager): vo
         card: {
           title: `${stem}.excalidraw`,
           meta: [
-            'The whole scene, images and undo trail included',
-            'The JSON dialog\u2019s own save, unchanged',
+            'Elements, images and canvas settings included',
+            'Re-opens as an editable drawing',
           ],
         },
       }),

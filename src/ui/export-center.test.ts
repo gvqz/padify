@@ -212,6 +212,27 @@ describe('the export center — the restarted ONE face', () => {
     expect(dialog().hasAttribute('open')).toBe(false);
   });
 
+  it('a backdrop click closes — the one dismiss rule every popup speaks', () => {
+    open({ heading: 'Export', types: [pngType()] });
+    const d = dialog();
+    // jsdom's 0×0 box makes (−40,−40) honestly outside — the browser owns
+    // the real coordinates; this pins the press-on-shell + outside rule.
+    d.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    d.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: -40, clientY: -40 }));
+    expect(d.hasAttribute('open')).toBe(false);
+  });
+
+  it('a drag from the surface never dismisses — the press must begin on the backdrop', () => {
+    open({ heading: 'Export', types: [pngType()] });
+    const d = dialog();
+    // The press begins on a child (a selection drag on the stage), the
+    // click lands on the dialog element after leaving the box — the room
+    // stays standing, the render stays put.
+    chips()[0].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    d.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: -40, clientY: -40 }));
+    expect(d.hasAttribute('open')).toBe(true);
+  });
+
   it('the canvas preview rides the stage — the live drawing render itself', async () => {
     const canvas = document.createElement('canvas');
     const png = pngType({ preview: vi.fn(async () => ({ canvas, transparent: true })) });

@@ -13,8 +13,13 @@
  * API (Promise-shaped, one call per question):
  *   const ok = await confirmDialog({ title, text?, danger?, confirm?, cancel? });
  *   const name = await promptDialog({ title, label?, value?, confirm? });
+ *
+ * The close family is the app's one rule: the buttons, Escape AND the
+ * backdrop (a click on the dark outside answers cancelled — the same
+ * semantic every bootstrap modal here already speaks).
  */
 import './dialog.css';
+import { attachBackdropDismiss } from './backdrop-dismiss';
 
 export interface ConfirmOptions {
   title: string;
@@ -102,6 +107,10 @@ function dialogFace(): DialogFace {
   form.append(actions);
 
   document.body.append(dialog);
+  // The backdrop click answers the standing question cancelled — the
+  // ask()'s own activeSettle path, so the semantics match Escape exactly
+  // (and a question already superseded by a newer ask is left alone).
+  attachBackdropDismiss(dialog, () => activeSettle?.('cancel'));
   face = { dialog, title, body, confirm, cancel, input, inputRow, form };
   return face;
 }
